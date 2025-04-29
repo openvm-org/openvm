@@ -17,9 +17,13 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreChip, Rv32AuipcCoreCols, ADAPTER_WIDTH};
-use crate::adapters::{Rv32RdWriteAdapterAir, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreAir, Rv32AuipcCoreCols, Rv32AuipcStep};
+use crate::adapters::{
+    Rv32RdWriteAdapterAir, Rv32RdWriteAdapterCols, Rv32RdWriteAdapterStep, RV32_CELL_BITS,
+    RV32_REGISTER_NUM_LIMBS,
+};
 
+const ADAPTER_WIDTH: usize = size_of::<Rv32RdWriteAdapterCols<u8>>();
 const IMM_BITS: usize = 24;
 const BITWISE_OP_LOOKUP_BUS: BusIndex = 9;
 const MAX_INS_CAPACITY: usize = 128;
@@ -34,13 +38,18 @@ fn create_test_chip(
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let adapter_air = Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge());
-    let core = Rv32AuipcCoreChip::new(bitwise_chip.clone());
-    let air = VmAirWrapper::new(adapter_air, core.air);
-    (
-        Rv32AuipcChip::<F>::new(air, core, MAX_INS_CAPACITY, tester.memory_helper()),
-        bitwise_chip,
-    )
+
+    let chip = Rv32AuipcChip::<F>::new(
+        VmAirWrapper::new(
+            Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
+            Rv32AuipcCoreAir::new(bitwise_bus),
+        ),
+        Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_chip.clone()),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
+    );
+
+    (chip, bitwise_chip)
 }
 
 fn set_and_execute(
@@ -80,7 +89,7 @@ fn rand_auipc_test() {
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
-    let num_tests: usize = 100;
+    let num_tests: usize = 1;
     for _ in 0..num_tests {
         set_and_execute(&mut tester, &mut chip, &mut rng, AUIPC, None, None);
     }

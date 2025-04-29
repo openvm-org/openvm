@@ -113,6 +113,104 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
     }
 }
 
+#[proc_macro_derive(InsExecutorE1)]
+pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
+    let ast: syn::DeriveInput = syn::parse(input).unwrap();
+
+    let name = &ast.ident;
+    let generics = &ast.generics;
+    let (impl_generics, ty_generics, _) = generics.split_for_impl();
+
+    match &ast.data {
+        Data::Struct(inner) => {
+            // Check if the struct has only one unnamed field
+            let inner_ty = match &inner.fields {
+                Fields::Unnamed(fields) => {
+                    if fields.unnamed.len() != 1 {
+                        panic!("Only one unnamed field is supported");
+                    }
+                    fields.unnamed.first().unwrap().ty.clone()
+                }
+                _ => panic!("Only unnamed fields are supported"),
+            };
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+            // crate. Assume F is already generic of the field.
+            let mut new_generics = generics.clone();
+            let where_clause = new_generics.make_where_clause();
+            where_clause
+                .predicates
+                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InsExecutorE1<F> });
+            quote! {
+                impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<F> for #name #ty_generics #where_clause {
+                    fn execute_e1<Mem, Ctx>(
+                        &mut self,
+                        state: ::openvm_circuit::arch::execution::VmStateMut<Mem, Ctx>,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                    ) -> ::openvm_circuit::arch::Result<()>
+                    where
+                        Mem: ::openvm_circuit::system::memory::online::GuestMemory,
+                        F: ::openvm_stark_backend::p3_field::PrimeField32
+                    {
+                        self.0.execute_e1(state, instruction)
+                    }
+                }
+            }
+            .into()
+        }
+        Data::Enum(e) => {
+            let variants = e
+                .variants
+                .iter()
+                .map(|variant| {
+                    let variant_name = &variant.ident;
+
+                    let mut fields = variant.fields.iter();
+                    let field = fields.next().unwrap();
+                    assert!(fields.next().is_none(), "Only one field is supported");
+                    (variant_name, field)
+                })
+                .collect::<Vec<_>>();
+            let first_ty_generic = ast
+                .generics
+                .params
+                .first()
+                .and_then(|param| match param {
+                    GenericParam::Type(type_param) => Some(&type_param.ident),
+                    _ => None,
+                })
+                .expect("First generic must be type for Field");
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+            // crate. Assume F is already generic of the field.
+            let execute_arms = variants.iter().map(|(variant_name, field)| {
+                let field_ty = &field.ty;
+                quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_e1(x, state, instruction)
+                }
+            }).collect::<Vec<_>>();
+
+            quote! {
+                impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic> for #name #ty_generics {
+                    fn execute_e1<Mem, Ctx>(
+                        &mut self,
+                        state: ::openvm_circuit::arch::execution::VmStateMut<Mem, Ctx>,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
+                    ) -> ::openvm_circuit::arch::Result<()>
+                    where
+                        Mem: ::openvm_circuit::system::memory::online::GuestMemory,
+                        #first_ty_generic: ::openvm_stark_backend::p3_field::PrimeField32
+                    {
+                        match self {
+                            #(#execute_arms,)*
+                        }
+                    }
+                }
+            }
+            .into()
+        }
+        Data::Union(_) => unimplemented!("Unions are not supported"),
+    }
+}
+
 /// Derives `AnyEnum` trait on an enum type.
 /// By default an enum arm will just return `self` as `&dyn Any`.
 ///
@@ -347,7 +445,7 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
             let periphery_type = Ident::new(&format!("{}Periphery", name), name.span());
 
             TokenStream::from(quote! {
-                #[derive(::openvm_circuit::circuit_derive::ChipUsageGetter, ::openvm_circuit::circuit_derive::Chip, ::openvm_circuit::derive::InstructionExecutor, ::derive_more::derive::From, ::openvm_circuit::derive::AnyEnum)]
+                #[derive(::openvm_circuit::circuit_derive::ChipUsageGetter, ::openvm_circuit::circuit_derive::Chip, ::openvm_circuit::derive::InstructionExecutor, ::openvm_circuit::derive::InsExecutorE1, ::derive_more::derive::From, ::openvm_circuit::derive::AnyEnum)]
                 pub enum #executor_type<F: PrimeField32> {
                     #[any_enum]
                     #source_name_upper(#source_executor_type<F>),

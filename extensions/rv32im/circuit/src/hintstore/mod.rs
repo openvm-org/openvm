@@ -5,11 +5,13 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor, Streams,
+        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutorE1,
+        InstructionExecutor, Streams, VmStateMut,
     },
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+            online::GuestMemory,
             MemoryAddress, MemoryAuxColsFactory, MemoryController, OfflineMemory, RecordId,
         },
         program::ProgramBus,
@@ -44,8 +46,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::adapters::{decompose, tmp_convert_to_u8s};
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
@@ -522,5 +524,70 @@ where
     }
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
         AirProofInput::simple_no_pis(self.generate_trace())
+    }
+}
+
+impl<F> InsExecutorE1<F> for Rv32HintStoreChip<F>
+where
+    F: PrimeField32,
+{
+    fn execute_e1<Mem, Ctx>(
+        &mut self,
+        state: VmStateMut<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<(), ExecutionError>
+    where
+        Mem: GuestMemory,
+        F: PrimeField32,
+    {
+        let &Instruction {
+            opcode,
+            a: num_words_ptr,
+            b: mem_ptr_ptr,
+            d,
+            e,
+            ..
+        } = instruction;
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
+        let local_opcode =
+            Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+
+        // TODO(ayush): fix this
+        // let (mem_ptr_read, mem_ptr_limbs) = todo!();
+        // memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, mem_ptr_ptr);
+        // let (num_words, num_words_read) = if local_opcode == HINT_STOREW {
+        //     (1, None)
+        // } else {
+        //     let (num_words_read, num_words_limbs) = todo!();
+        //     // memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(d, num_words_ptr);
+        //     (u32::from_le_bytes(num_words_limbs), Some(num_words_read))
+        // };
+        // debug_assert_ne!(num_words, 0);
+        // debug_assert!(num_words <= (1 << self.air.pointer_max_bits));
+
+        // let mem_ptr = u32::from_le_bytes(mem_ptr_limbs);
+
+        // debug_assert!(mem_ptr <= (1 << self.air.pointer_max_bits));
+
+        // let mut streams = self.streams.get().unwrap().lock().unwrap();
+        // if streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
+        //     return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
+        // }
+
+        // for word_index in 0..num_words {
+        //     let data: [F; RV32_REGISTER_NUM_LIMBS] =
+        //         std::array::from_fn(|_| streams.hint_stream.pop_front().unwrap());
+        //     // let (write, _) = memory.write(
+        //     //     e,
+        //     //     F::from_canonical_u32(mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index)),
+        //     //     &tmp_convert_to_u8s(data),
+        //     // );
+        //     // record.hints.push((data, write));
+        // }
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 }

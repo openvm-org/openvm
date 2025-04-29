@@ -2,12 +2,12 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterTraceStep, BasicAdapterInterface, ExecutionBridge,
-        ExecutionState, MinimalInstruction, VmAdapterAir,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface,
+        ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-        online::TracingMemory,
+        online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
@@ -17,7 +17,9 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS,
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -26,8 +28,7 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    tracing_read_reg, tracing_read_reg_or_imm, tracing_write_reg, RV32_CELL_BITS,
-    RV32_REGISTER_NUM_LIMBS,
+    tracing_read, tracing_read_imm, tracing_write, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
 
 #[repr(C)]
@@ -165,7 +166,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     for Rv32BaseAluAdapterStep<LIMB_BITS>
 {
     const WIDTH: usize = size_of::<Rv32BaseAluAdapterCols<u8>>();
-    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
+    type ReadData = ([u8; RV32_REGISTER_NUM_LIMBS], [u8; RV32_REGISTER_NUM_LIMBS]);
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
     type TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>;
 
@@ -178,56 +179,85 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
 
     #[inline(always)]
     fn read(
+        &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
     ) -> Self::ReadData {
         let &Instruction { b, c, d, e, .. } = instruction;
+
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert!(
+            e.as_canonical_u32() == RV32_REGISTER_AS || e.as_canonical_u32() == RV32_IMM_AS
+        );
+
         let adapter_row: &mut Rv32BaseAluAdapterCols<F> = adapter_row.borrow_mut();
-        let rs1_idx = b.as_canonical_u32();
-        let rs1 = tracing_read_reg(
+
+        adapter_row.rs1_ptr = b;
+        let rs1 = tracing_read(
             memory,
-            rs1_idx,
-            (&mut adapter_row.rs1_ptr, &mut adapter_row.reads_aux[0]),
+            d.as_canonical_u32(),
+            b.as_canonical_u32(),
+            &mut adapter_row.reads_aux[0],
         );
-        let rs2 = tracing_read_reg_or_imm(
-            memory,
-            e.as_canonical_u32(),
-            c.as_canonical_u32(),
-            &mut adapter_row.rs2_as,
-            (&mut adapter_row.rs2, &mut adapter_row.reads_aux[1]),
-        );
-        [rs1, rs2]
+
+        let rs2 = if e.as_canonical_u32() == RV32_REGISTER_AS {
+            adapter_row.rs2_as = e;
+            adapter_row.rs2 = c;
+
+            tracing_read(
+                memory,
+                e.as_canonical_u32(),
+                c.as_canonical_u32(),
+                &mut adapter_row.reads_aux[1],
+            )
+        } else {
+            adapter_row.rs2_as = e;
+
+            tracing_read_imm(memory, c.as_canonical_u32(), &mut adapter_row.rs2)
+        };
+
+        (rs1, rs2)
     }
 
     #[inline(always)]
     fn write(
+        &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
         data: &Self::WriteData,
     ) {
+        let &Instruction { a, d, .. } = instruction;
+
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+
         let adapter_row: &mut Rv32BaseAluAdapterCols<F> = adapter_row.borrow_mut();
-        let rd_ptr = instruction.a.as_canonical_u32();
-        tracing_write_reg(
+
+        adapter_row.rd_ptr = a;
+        tracing_write(
             memory,
-            rd_ptr,
+            d.as_canonical_u32(),
+            a.as_canonical_u32(),
             data,
-            (&mut adapter_row.rd_ptr, &mut adapter_row.writes_aux),
+            &mut adapter_row.writes_aux,
         );
     }
 
     #[inline(always)]
     fn fill_trace_row(
+        &self,
         mem_helper: &MemoryAuxColsFactory<F>,
         bitwise_lookup_chip: &BitwiseOperationLookupChip<LIMB_BITS>,
         adapter_row: &mut [F],
     ) {
         let adapter_row: &mut Rv32BaseAluAdapterCols<F> = adapter_row.borrow_mut();
+
         let mut timestamp = adapter_row.from_state.timestamp.as_canonical_u32();
+
         mem_helper.fill_from_prev(timestamp, adapter_row.reads_aux[0].as_mut());
         timestamp += 1;
+
         if !adapter_row.rs2_as.is_zero() {
             mem_helper.fill_from_prev(timestamp, adapter_row.reads_aux[1].as_mut());
         } else {
@@ -236,6 +266,59 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
             bitwise_lookup_chip.request_range(rs2_imm & mask, (rs2_imm >> 8) & mask);
         }
         timestamp += 1;
+
         mem_helper.fill_from_prev(timestamp, adapter_row.writes_aux.as_mut());
+    }
+}
+
+impl<F, const LIMB_BITS: usize> AdapterExecutorE1<F> for Rv32BaseAluAdapterStep<LIMB_BITS>
+where
+    F: PrimeField32,
+{
+    // TODO(ayush): directly use u32
+    type ReadData = ([u8; RV32_REGISTER_NUM_LIMBS], [u8; RV32_REGISTER_NUM_LIMBS]);
+    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+
+    #[inline(always)]
+    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
+    where
+        Mem: GuestMemory,
+    {
+        let Instruction { b, c, d, e, .. } = instruction;
+
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert!(
+            e.as_canonical_u32() == RV32_IMM_AS || e.as_canonical_u32() == RV32_REGISTER_AS
+        );
+
+        let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
+            unsafe { memory.read(d.as_canonical_u32(), b.as_canonical_u32()) };
+
+        let rs2 = if e.as_canonical_u32() == RV32_REGISTER_AS {
+            let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
+                unsafe { memory.read(e.as_canonical_u32(), c.as_canonical_u32()) };
+            rs2
+        } else {
+            let imm = c.as_canonical_u32();
+            debug_assert_eq!(imm >> 24, 0);
+            // TODO(ayush): why this?
+            let mut imm_le = imm.to_le_bytes();
+            imm_le[3] = imm_le[2];
+            imm_le
+        };
+
+        (rs1, rs2)
+    }
+
+    #[inline(always)]
+    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData)
+    where
+        Mem: GuestMemory,
+    {
+        let Instruction { a, d, .. } = instruction;
+
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+
+        unsafe { memory.write(d.as_canonical_u32(), a.as_canonical_u32(), rd) };
     }
 }

@@ -1,11 +1,13 @@
-use cargo_openvm::{default::DEFAULT_APP_CONFIG_PATH, util::read_config_toml_or_default};
 use clap::{Parser, ValueEnum};
 use eyre::Result;
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
 use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
-use openvm_sdk::StdIn;
-use openvm_stark_sdk::bench::run_with_metric_collection;
-use openvm_transpiler::FromElf;
+use openvm_rv32im_circuit::Rv32ImConfig;
+use openvm_rv32im_transpiler::{
+    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+};
+use openvm_stark_sdk::{bench::run_with_metric_collection, p3_baby_bear::BabyBear};
+use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
 #[derive(Debug, Clone, ValueEnum)]
 enum BuildProfile {
@@ -13,18 +15,20 @@ enum BuildProfile {
     Release,
 }
 
+// const DEFAULT_APP_CONFIG_PATH: &str = "./openvm.toml";
+
 static AVAILABLE_PROGRAMS: &[&str] = &[
-    "fibonacci_recursive",
-    "fibonacci_iterative",
+    // "fibonacci_recursive",
+    // "fibonacci_iterative",
     "quicksort",
-    "bubblesort",
-    "pairing",
-    "keccak256",
-    "keccak256_iter",
-    "sha256",
-    "sha256_iter",
-    "revm_transfer",
-    "revm_snailtracer",
+    // "bubblesort",
+    // "pairing",
+    // "keccak256",
+    // "keccak256_iter",
+    // "sha256",
+    // "sha256_iter",
+    // "revm_transfer",
+    // "revm_snailtracer",
 ];
 
 #[derive(Parser)]
@@ -106,13 +110,22 @@ fn main() -> Result<()> {
             let elf_path = get_elf_path(&program_dir);
             let elf = read_elf_file(&elf_path)?;
 
-            let config_path = program_dir.join(DEFAULT_APP_CONFIG_PATH);
-            let vm_config = read_config_toml_or_default(&config_path)?.app_vm_config;
+            // let config_path = program_dir.join(DEFAULT_APP_CONFIG_PATH);
+            // let vm_config = read_config_toml_or_default(&config_path)?.app_vm_config;
+            // let transpiler = vm_config.transpiler;
+            let vm_config = Rv32ImConfig::default();
 
-            let exe = VmExe::from_elf(elf, vm_config.transpiler())?;
+            let transpiler = Transpiler::<BabyBear>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension);
+
+            let exe = VmExe::from_elf(elf, transpiler)?;
 
             let executor = VmExecutor::new(vm_config);
-            executor.execute(exe, StdIn::default())?;
+            executor
+                .execute_e1(exe, vec![])
+                .expect("Failed to execute program");
             tracing::info!("Completed program: {}", program);
         }
         tracing::info!("All programs executed successfully");

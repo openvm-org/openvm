@@ -22,12 +22,12 @@ use openvm_stark_backend::{
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{
-    ExecutionError, ExecutionState, InsExecutorE1, InstructionExecutor, Result, VmExecutionState,
-    VmStateMut,
+    ExecutionError, ExecutionState, InsExecutorE1, InstructionExecutor, Result, VmStateMut,
 };
 use crate::system::memory::{
     online::{GuestMemory, TracingMemory},
-    MemoryAuxColsFactory, MemoryController, OfflineMemory, SharedMemoryHelper,
+    AddressMap, MemoryAuxColsFactory, MemoryController, OfflineMemory, SharedMemoryHelper,
+    PAGE_SIZE,
 };
 
 /// The interface between primitive AIR and machine adapter AIR.
@@ -246,6 +246,7 @@ pub trait SingleTraceStep<F, CTX> {
     fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
+// TODO(ayush): rename to ChipWithExecutionContext or something
 pub struct NewVmChipWrapper<F, AIR, STEP> {
     pub air: AIR,
     pub step: STEP,
@@ -278,7 +279,8 @@ where
 impl<F, AIR, STEP> InstructionExecutor<F> for NewVmChipWrapper<F, AIR, STEP>
 where
     F: PrimeField32,
-    STEP: SingleTraceStep<F, ()>, // TODO: CTX?
+    STEP: SingleTraceStep<F, ()> // TODO: CTX?
+        + StepExecutorE1<F>,
 {
     fn execute(
         &mut self,
@@ -306,6 +308,7 @@ where
                 .get_unchecked_mut(start_idx..self.buffer_idx)
         };
         self.step.execute(state, instruction, row_slice)?;
+
         Ok(ExecutionState {
             pc,
             timestamp: memory.memory.timestamp,
@@ -391,12 +394,14 @@ pub trait AdapterTraceStep<F, CTX> {
     fn start(pc: u32, memory: &TracingMemory, adapter_row: &mut [F]);
 
     fn read(
+        &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
     ) -> Self::ReadData;
 
     fn write(
+        &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
@@ -406,10 +411,38 @@ pub trait AdapterTraceStep<F, CTX> {
     // Note[jpw]: should we reuse TraceSubRowGenerator trait instead?
     /// Post-execution filling of rest of adapter row.
     fn fill_trace_row(
+        &self,
         mem_helper: &MemoryAuxColsFactory<F>,
         ctx: Self::TraceContext<'_>,
         adapter_row: &mut [F],
     );
+}
+
+pub trait AdapterExecutorE1<F>
+where
+    F: PrimeField32,
+{
+    type ReadData;
+    type WriteData;
+
+    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
+    where
+        Mem: GuestMemory;
+
+    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData)
+    where
+        Mem: GuestMemory;
+}
+
+// TODO: Rename core/step to operator
+pub trait StepExecutorE1<F> {
+    fn execute_e1<Mem, Ctx>(
+        &mut self,
+        state: VmStateMut<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Mem: GuestMemory;
 }
 
 pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A::Interface>> {
@@ -464,34 +497,38 @@ where
     }
 }
 
-// TODO(ayush): delete
-impl<Mem, Ctx, F, A, M> InsExecutorE1<Mem, Ctx, F> for VmChipWrapper<F, A, M>
+// // TODO(ayush): delete
+impl<F, A, M> InsExecutorE1<F> for VmChipWrapper<F, A, M>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
     A: VmAdapterChip<F> + Send + Sync,
-    M: VmCoreChip<F, A::Interface> + InsExecutorE1<Mem, Ctx, F> + Send + Sync,
+    M: VmCoreChip<F, A::Interface> + StepExecutorE1<F> + Send + Sync,
 {
-    fn execute_e1(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
+        state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
         self.core.execute_e1(state, instruction)
     }
 }
 
-impl<Mem, Ctx, F, A, S> InsExecutorE1<Mem, Ctx, F> for NewVmChipWrapper<F, A, S>
+impl<F, A, S> InsExecutorE1<F> for NewVmChipWrapper<F, A, S>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
-    S: InsExecutorE1<Mem, Ctx, F>,
+    S: StepExecutorE1<F>,
 {
-    fn execute_e1(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
+        state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
         self.step.execute_e1(state, instruction)
     }
 }

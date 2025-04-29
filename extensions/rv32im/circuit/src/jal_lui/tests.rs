@@ -19,11 +19,12 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{run_jal_lui, Rv32JalLuiChip, Rv32JalLuiCoreChip, ADAPTER_WIDTH};
+use super::{run_jal_lui, Rv32JalLuiChip, Rv32JalLuiCoreAir, Rv32JalLuiStep};
 use crate::{
     adapters::{
-        Rv32CondRdWriteAdapterAir, Rv32CondRdWriteAdapterCols, Rv32RdWriteAdapterAir,
-        RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS,
+        Rv32CondRdWriteAdapterAir, Rv32CondRdWriteAdapterCols, Rv32CondRdWriteAdapterStep,
+        Rv32RdWriteAdapterAir, Rv32RdWriteAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+        RV_IS_TYPE_IMM_BITS,
     },
     jal_lui::Rv32JalLuiCoreCols,
 };
@@ -31,6 +32,7 @@ use crate::{
 const IMM_BITS: usize = 20;
 const LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
 const MAX_INS_CAPACITY: usize = 256;
+const ADAPTER_WIDTH: usize = size_of::<Rv32CondRdWriteAdapterCols<u8>>();
 
 type F = BabyBear;
 
@@ -42,16 +44,23 @@ fn create_test_chip(
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let adapter_air = Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(
-        tester.memory_bridge(),
-        tester.execution_bridge(),
-    ));
-    let core = Rv32JalLuiCoreChip::new(bitwise_chip.clone());
-    let air = VmAirWrapper::new(adapter_air, core.air);
-    (
-        Rv32JalLuiChip::<F>::new(air, core, MAX_INS_CAPACITY, tester.memory_helper()),
-        bitwise_chip,
-    )
+
+    let chip = Rv32JalLuiChip::<F>::new(
+        VmAirWrapper::new(
+            Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(
+                tester.memory_bridge(),
+                tester.execution_bridge(),
+            )),
+            Rv32JalLuiCoreAir::new(bitwise_bus),
+        ),
+        Rv32JalLuiStep::new(
+            Rv32CondRdWriteAdapterStep::new(Rv32RdWriteAdapterStep::new()),
+            bitwise_chip.clone(),
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
+    );
+    (chip, bitwise_chip)
 }
 
 fn set_and_execute(

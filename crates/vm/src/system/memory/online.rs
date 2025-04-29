@@ -22,22 +22,25 @@ pub trait GuestMemory {
     /// and it must be the exact type used to represent a single memory cell in
     /// address space `address_space`. For standard usage,
     /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
-    unsafe fn read<T: Copy, const BLOCK_SIZE: usize>(
+    unsafe fn read<T, const BLOCK_SIZE: usize>(
         &self,
         address_space: u32,
         pointer: u32,
-    ) -> [T; BLOCK_SIZE];
+    ) -> [T; BLOCK_SIZE]
+    where
+        T: Copy + Debug;
 
     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}`
     ///
     /// # Safety
     /// See [`GuestMemory::read`].
-    unsafe fn write<T: Copy, const BLOCK_SIZE: usize>(
+    unsafe fn write<T, const BLOCK_SIZE: usize>(
         &mut self,
         address_space: u32,
         pointer: u32,
         values: &[T; BLOCK_SIZE],
-    );
+    ) where
+        T: Copy + Debug;
 
     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}` and returns
     /// the previous values.
@@ -45,12 +48,15 @@ pub trait GuestMemory {
     /// # Safety
     /// See [`GuestMemory::read`].
     #[inline(always)]
-    unsafe fn replace<T: Copy, const BLOCK_SIZE: usize>(
+    unsafe fn replace<T, const BLOCK_SIZE: usize>(
         &mut self,
         address_space: u32,
         pointer: u32,
         values: &[T; BLOCK_SIZE],
-    ) -> [T; BLOCK_SIZE] {
+    ) -> [T; BLOCK_SIZE]
+    where
+        T: Copy + Debug,
+    {
         let prev = self.read(address_space, pointer);
         self.write(address_space, pointer, values);
         prev
@@ -91,7 +97,7 @@ pub struct TracingMemory {
     /// The underlying data memory, with memory cells typed by address space: see [AddressMap].
     // TODO: make generic in GuestMemory
     #[getset(get = "pub")]
-    pub(super) data: AddressMap<PAGE_SIZE>,
+    pub data: AddressMap<PAGE_SIZE>,
     /// A map of `addr_space -> (ptr / min_block_size[addr_space] -> (timestamp: u32, block_size:
     /// u32))` for the timestamp and block size of the latest access.
     pub(super) meta: Vec<PagedVec<PAGE_SIZE>>,
@@ -111,6 +117,7 @@ impl TracingMemory {
         // TMP: hardcoding for now
         min_block_size[1] = 4;
         min_block_size[2] = 4;
+        min_block_size[3] = 4;
         let meta = min_block_size
             .iter()
             .map(|&min_block_size| {
@@ -133,19 +140,22 @@ impl TracingMemory {
     /// Instantiates a new `Memory` data structure from an image.
     pub fn from_image(image: MemoryImage, access_capacity: usize) -> Self {
         let mut meta = vec![PagedVec::new(0); image.as_offset as usize];
-        let mut min_block_size = vec![1; meta.len()];
-        // TMP: hardcoding for now
-        min_block_size[1] = 4;
-        min_block_size[2] = 4;
-        for (paged_vec, cell_size, &min_block_size) in
-            izip!(&image.paged_vecs, &image.cell_size, &min_block_size)
-        {
+        let mut min_block_size = vec![1; image.as_offset as usize];
+        for (i, (paged_vec, cell_size)) in izip!(&image.paged_vecs, &image.cell_size).enumerate() {
             let num_cells = paged_vec.bytes_capacity() / cell_size;
+
+            // TMP: hardcoding for now
+            if i <= 3 {
+                min_block_size.push(4);
+            } else {
+                min_block_size.push(1);
+            }
+
             meta.push(PagedVec::new(
                 num_cells
                     .checked_mul(size_of::<AccessMetadata>())
                     .unwrap()
-                    .div_ceil(PAGE_SIZE * min_block_size as usize),
+                    .div_ceil(PAGE_SIZE * min_block_size[i] as usize),
             ));
         }
         Self {
@@ -191,11 +201,14 @@ impl TracingMemory {
     /// In addition:
     /// - `address_space` must be valid.
     #[inline(always)]
-    pub unsafe fn read<T: Copy, const BLOCK_SIZE: usize, const ALIGN: usize>(
+    pub unsafe fn read<T, const BLOCK_SIZE: usize, const ALIGN: usize>(
         &mut self,
         address_space: u32,
         pointer: u32,
-    ) -> (u32, [T; BLOCK_SIZE]) {
+    ) -> (u32, [T; BLOCK_SIZE])
+    where
+        T: Copy + Debug,
+    {
         self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
         let values = self.data.read(address_space, pointer);
         let t_curr = self.timestamp;
@@ -242,12 +255,15 @@ impl TracingMemory {
     /// In addition:
     /// - `address_space` must be valid.
     #[inline(always)]
-    pub unsafe fn write<T: Copy, const BLOCK_SIZE: usize, const ALIGN: usize>(
+    pub unsafe fn write<T, const BLOCK_SIZE: usize, const ALIGN: usize>(
         &mut self,
         address_space: u32,
         pointer: u32,
         values: &[T; BLOCK_SIZE],
-    ) -> (u32, [T; BLOCK_SIZE]) {
+    ) -> (u32, [T; BLOCK_SIZE])
+    where
+        T: Copy + Debug,
+    {
         self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
         let values_prev = self.data.replace(address_space, pointer, values);
         let t_curr = self.timestamp;

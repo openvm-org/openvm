@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, mem::MaybeUninit, ptr};
+use std::{fmt::Debug, marker::PhantomData, mem::MaybeUninit, ptr};
 
 use itertools::{zip_eq, Itertools};
 use openvm_instructions::exe::SparseMemoryImage;
@@ -252,7 +252,7 @@ impl<const PAGE_SIZE: usize> Default for AddressMap<PAGE_SIZE> {
 impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
     pub fn new(as_offset: u32, as_cnt: usize, mem_size: usize) -> Self {
         // TMP: hardcoding for now
-        let mut cell_size = vec![1, 1];
+        let mut cell_size = vec![1, 1, 1];
         cell_size.resize(as_cnt, 4);
         let paged_vecs = cell_size
             .iter()
@@ -359,26 +359,29 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
 }
 
 impl<const PAGE_SIZE: usize> GuestMemory for AddressMap<PAGE_SIZE> {
-    unsafe fn read<T: Copy, const BLOCK_SIZE: usize>(
-        &self,
-        addr_space: u32,
-        ptr: u32,
-    ) -> [T; BLOCK_SIZE] {
+    unsafe fn read<T, const BLOCK_SIZE: usize>(&self, addr_space: u32, ptr: u32) -> [T; BLOCK_SIZE]
+    where
+        T: Copy + Debug,
+    {
         debug_assert_eq!(
             size_of::<T>(),
             self.cell_size[(addr_space - self.as_offset) as usize]
         );
-        self.paged_vecs
+        let read = self
+            .paged_vecs
             .get_unchecked((addr_space - self.as_offset) as usize)
-            .get((ptr as usize) * size_of::<T>())
+            .get((ptr as usize) * size_of::<T>());
+        read
     }
 
-    unsafe fn write<T: Copy, const BLOCK_SIZE: usize>(
+    unsafe fn write<T, const BLOCK_SIZE: usize>(
         &mut self,
         addr_space: u32,
         ptr: u32,
         values: &[T; BLOCK_SIZE],
-    ) {
+    ) where
+        T: Copy + Debug,
+    {
         debug_assert_eq!(
             size_of::<T>(),
             self.cell_size[(addr_space - self.as_offset) as usize],

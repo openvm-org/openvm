@@ -2,18 +2,17 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, InsExecutorE1, Result, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, VmExecutionState,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, Result, SingleTraceStep,
+        StepExecutorE1, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
-    system::memory::online::GuestMemory,
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
+use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode,
-};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -79,7 +78,7 @@ pub struct LoadStoreCoreRecord<F, const NUM_CELLS: usize> {
     pub write_data: [F; NUM_CELLS],
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct LoadStoreCoreAir<const NUM_CELLS: usize> {
     pub offset: usize,
 }
@@ -255,70 +254,69 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct LoadStoreCoreChip<const NUM_CELLS: usize> {
-    pub air: LoadStoreCoreAir<NUM_CELLS>,
+pub struct LoadStoreStep<A, const NUM_CELLS: usize> {
+    adapter: A,
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
+    pub offset: usize,
 }
 
-impl<const NUM_CELLS: usize> LoadStoreCoreChip<NUM_CELLS> {
-    pub fn new(offset: usize) -> Self {
+impl<A, const NUM_CELLS: usize> LoadStoreStep<A, NUM_CELLS> {
+    pub fn new(
+        adapter: A,
+        range_checker_chip: SharedVariableRangeCheckerChip,
+        offset: usize,
+    ) -> Self {
         Self {
-            air: LoadStoreCoreAir { offset },
+            adapter,
+            range_checker_chip,
+            offset,
         }
     }
 }
 
-impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_CELLS: usize> VmCoreChip<F, I>
-    for LoadStoreCoreChip<NUM_CELLS>
+impl<F, CTX, A, const NUM_CELLS: usize> SingleTraceStep<F, CTX> for LoadStoreStep<A, NUM_CELLS>
 where
-    I::Reads: Into<([[F; NUM_CELLS]; 2], F)>,
-    I::Writes: From<[[F; NUM_CELLS]; 1]>,
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            CTX,
+            ReadData = (([u8; NUM_CELLS], [u8; NUM_CELLS]), u32),
+            WriteData = [u8; NUM_CELLS],
+            TraceContext<'a> = &'a SharedVariableRangeCheckerChip,
+        >,
 {
-    type Record = LoadStoreCoreRecord<F, NUM_CELLS>;
-    type Air = LoadStoreCoreAir<NUM_CELLS>;
-
-    #[allow(clippy::type_complexity)]
-    fn execute_instruction(
-        &self,
-        instruction: &Instruction<F>,
-        _from_pc: u32,
-        reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let local_opcode =
-            Rv32LoadStoreOpcode::from_usize(instruction.opcode.local_opcode_idx(self.air.offset));
-
-        let (reads, shift_amount) = reads.into();
-        let shift = shift_amount.as_canonical_u32();
-        let prev_data = reads[0];
-        let read_data = reads[1];
-        let write_data = run_write_data(local_opcode, read_data, prev_data, shift);
-        let output = AdapterRuntimeContext::without_pc([write_data]);
-
-        Ok((
-            output,
-            LoadStoreCoreRecord {
-                opcode: local_opcode,
-                shift,
-                prev_data,
-                read_data,
-                write_data,
-            },
-        ))
-    }
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            Rv32LoadStoreOpcode::from_usize(opcode - self.air.offset)
+            Rv32LoadStoreOpcode::from_usize(opcode - self.offset)
         )
     }
 
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let core_cols: &mut LoadStoreCoreCols<F, NUM_CELLS> = row_slice.borrow_mut();
-        let opcode = record.opcode;
+    fn execute(
+        &mut self,
+        state: VmStateMut<TracingMemory, CTX>,
+        instruction: &Instruction<F>,
+        row_slice: &mut [F],
+    ) -> Result<()> {
+        let Instruction { opcode, .. } = instruction;
+
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        let ((prev_data, read_data), shift) =
+            self.adapter.read(state.memory, instruction, adapter_row);
+        let prev_data = prev_data.map(F::from_canonical_u8);
+        let read_data = read_data.map(F::from_canonical_u8);
+
+        let write_data = run_write_data(local_opcode, read_data, prev_data, shift);
+
+        let core_cols: &mut LoadStoreCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
+
         let flags = &mut core_cols.flags;
         *flags = [F::ZERO; 4];
-        match (opcode, record.shift) {
+        match (local_opcode, shift) {
             (LOADW, 0) => flags[0] = F::TWO,
             (LOADHU, 0) => flags[1] = F::TWO,
             (LOADHU, 2) => flags[2] = F::TWO,
@@ -337,109 +335,154 @@ where
             (STOREB, 3) => (flags[2], flags[3]) = (F::ONE, F::ONE),
             _ => unreachable!(),
         };
-        core_cols.prev_data = record.prev_data;
-        core_cols.read_data = record.read_data;
+        core_cols.prev_data = prev_data;
+        core_cols.read_data = read_data;
         core_cols.is_valid = F::ONE;
-        core_cols.is_load = F::from_bool([LOADW, LOADHU, LOADBU].contains(&opcode));
-        core_cols.write_data = record.write_data;
+        core_cols.is_load = F::from_bool([LOADW, LOADHU, LOADBU].contains(&local_opcode));
+        core_cols.write_data = write_data;
+
+        self.adapter.write(
+            state.memory,
+            instruction,
+            adapter_row,
+            &write_data.map(|x| x.as_canonical_u32() as u8),
+        );
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 
-    fn air(&self) -> &Self::Air {
-        &self.air
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let _core_row: &mut LoadStoreCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
+
+        self.adapter
+            .fill_trace_row(mem_helper, &self.range_checker_chip, adapter_row);
     }
 }
 
-impl<Mem, Ctx, F, const NUM_CELLS: usize> InsExecutorE1<Mem, Ctx, F>
-    for LoadStoreCoreChip<NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> StepExecutorE1<F> for LoadStoreStep<A, NUM_CELLS>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterExecutorE1<
+            F,
+            ReadData = (([u8; NUM_CELLS], [u8; NUM_CELLS]), u32),
+            WriteData = [u8; NUM_CELLS],
+        >,
 {
-    fn execute_e1(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
+        state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
-        let Instruction {
-            opcode,
-            a,
-            b,
-            c,
-            g,
-            f: enabled,
-            ..
-        } = instruction;
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
+        let Instruction { opcode, .. } = instruction;
 
         // Get the local opcode for this instruction
-        let local_opcode =
-            Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let rs1_addr = b.as_canonical_u32();
-        let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
-        let rs1_val = u32::from_le_bytes(rs1_bytes);
-
-        let imm = c.as_canonical_u32();
-        let imm_sign = g.as_canonical_u32();
-        let imm_extended = imm + imm_sign * 0xffff0000;
-
-        let ptr_val = rs1_val.wrapping_add(imm_extended);
-        let shift_amount = ptr_val % 4;
-        let ptr_val = ptr_val - shift_amount; // aligned ptr
-
-        let read_bytes: [u8; RV32_REGISTER_NUM_LIMBS] = match local_opcode {
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                // For loads, read from memory
-                unsafe { state.memory.read(RV32_MEMORY_AS, ptr_val) }
-            }
-            STOREW | STOREH | STOREB => {
-                // For stores, read the register value to be stored
-                let rs2_addr = a.as_canonical_u32();
-                unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) }
-            }
-        };
-
-        // For stores, we need the previous memory content to preserve unchanged bytes
-        let prev_bytes: [u8; RV32_REGISTER_NUM_LIMBS] = match local_opcode {
-            STOREW | STOREH | STOREB => {
-                // For stores, read current memory content
-                unsafe { state.memory.read(RV32_MEMORY_AS, ptr_val) }
-            }
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                // For loads, read current register content
-                let rd_addr = a.as_canonical_u32();
-                unsafe { state.memory.read(RV32_REGISTER_AS, rd_addr) }
-            }
-        };
-
-        let read_data = read_bytes.map(F::from_canonical_u8);
-        let prev_data = prev_bytes.map(F::from_canonical_u8);
+        let ((prev_data, read_data), shift_amount) = self.adapter.read(state.memory, instruction);
+        let prev_data = prev_data.map(F::from_canonical_u8);
+        let read_data = read_data.map(F::from_canonical_u8);
 
         // Process the data according to the load/store type and alignment
         let write_data = run_write_data(local_opcode, read_data, prev_data, shift_amount);
-        let write_bytes = write_data.map(|x| x.as_canonical_u32() as u8);
+        let write_data = write_data.map(|x| x.as_canonical_u32() as u8);
 
-        if *enabled != F::ZERO {
-            match local_opcode {
-                STOREW | STOREH | STOREB => {
-                    // For stores, write to memory
-                    unsafe { state.memory.write(RV32_MEMORY_AS, ptr_val, &write_data) };
-                }
-                LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                    let rd_addr = a.as_canonical_u32();
-                    unsafe {
-                        state.memory.write(RV32_REGISTER_AS, rd_addr, &write_bytes);
-                    }
-                }
-            }
-        }
+        self.adapter.write(state.memory, instruction, &write_data);
 
-        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }
 }
 
+// impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_CELLS: usize> VmCoreChip<F, I>
+//     for LoadStoreCoreChip<NUM_CELLS>
+// where
+//     I::Reads: Into<([[F; NUM_CELLS]; 2], F)>,
+//     I::Writes: From<[[F; NUM_CELLS]; 1]>,
+// {
+//     type Record = LoadStoreCoreRecord<F, NUM_CELLS>;
+//     type Air = LoadStoreCoreAir<NUM_CELLS>;
+
+//     #[allow(clippy::type_complexity)]
+//     fn execute_instruction(
+//         &self,
+//         instruction: &Instruction<F>,
+//         _from_pc: u32,
+//         reads: I::Reads,
+//     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
+//         let local_opcode =
+//             Rv32LoadStoreOpcode::from_usize(instruction.opcode.local_opcode_idx(self.air.offset));
+
+//         let (reads, shift_amount) = reads.into();
+//         let shift = shift_amount.as_canonical_u32();
+//         let prev_data = reads[0];
+//         let read_data = reads[1];
+//         let write_data = run_write_data(local_opcode, read_data, prev_data, shift);
+//         let output = AdapterRuntimeContext::without_pc([write_data]);
+
+//         Ok((
+//             output,
+//             LoadStoreCoreRecord {
+//                 opcode: local_opcode,
+//                 shift,
+//                 prev_data,
+//                 read_data,
+//                 write_data,
+//             },
+//         ))
+//     }
+
+//     fn get_opcode_name(&self, opcode: usize) -> String {
+//         format!(
+//             "{:?}",
+//             Rv32LoadStoreOpcode::from_usize(opcode - self.air.offset)
+//         )
+//     }
+
+//     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+//         let core_cols: &mut LoadStoreCoreCols<F, NUM_CELLS> = row_slice.borrow_mut();
+//         let opcode = record.opcode;
+//         let flags = &mut core_cols.flags;
+//         *flags = [F::ZERO; 4];
+//         match (opcode, record.shift) {
+//             (LOADW, 0) => flags[0] = F::TWO,
+//             (LOADHU, 0) => flags[1] = F::TWO,
+//             (LOADHU, 2) => flags[2] = F::TWO,
+//             (LOADBU, 0) => flags[3] = F::TWO,
+
+//             (LOADBU, 1) => flags[0] = F::ONE,
+//             (LOADBU, 2) => flags[1] = F::ONE,
+//             (LOADBU, 3) => flags[2] = F::ONE,
+//             (STOREW, 0) => flags[3] = F::ONE,
+
+//             (STOREH, 0) => (flags[0], flags[1]) = (F::ONE, F::ONE),
+//             (STOREH, 2) => (flags[0], flags[2]) = (F::ONE, F::ONE),
+//             (STOREB, 0) => (flags[0], flags[3]) = (F::ONE, F::ONE),
+//             (STOREB, 1) => (flags[1], flags[2]) = (F::ONE, F::ONE),
+//             (STOREB, 2) => (flags[1], flags[3]) = (F::ONE, F::ONE),
+//             (STOREB, 3) => (flags[2], flags[3]) = (F::ONE, F::ONE),
+//             _ => unreachable!(),
+//         };
+//         core_cols.prev_data = record.prev_data;
+//         core_cols.read_data = record.read_data;
+//         core_cols.is_valid = F::ONE;
+//         core_cols.is_load = F::from_bool([LOADW, LOADHU, LOADBU].contains(&opcode));
+//         core_cols.write_data = record.write_data;
+//     }
+
+//     fn air(&self) -> &Self::Air {
+//         &self.air
+//     }
+// }
+
+#[inline(always)]
 pub(super) fn run_write_data<F: PrimeField32, const NUM_CELLS: usize>(
     opcode: Rv32LoadStoreOpcode,
     read_data: [F; NUM_CELLS],

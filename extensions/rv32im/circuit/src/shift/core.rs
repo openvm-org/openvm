@@ -1,13 +1,12 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
 };
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterTraceStep, InsExecutorE1, MinimalInstruction, Result,
-        SingleTraceStep, VmAdapterInterface, VmCoreAir, VmExecutionState, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
+        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -22,12 +21,7 @@ use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
-    LocalOpcode,
-};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_transpiler::ShiftOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -63,7 +57,7 @@ pub struct ShiftCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bit_shift_carry: [T; NUM_LIMBS],
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, derive_new::new)]
 pub struct ShiftCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,
@@ -249,58 +243,94 @@ where
     }
 }
 
-pub struct ShiftCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: ShiftCoreAir<NUM_LIMBS, LIMB_BITS>,
+pub struct ShiftStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
+    pub offset: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftCoreChip<NUM_LIMBS, LIMB_BITS> {
+impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, LIMB_BITS> {
     pub fn new(
+        adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         range_checker_chip: SharedVariableRangeCheckerChip,
         offset: usize,
     ) -> Self {
         assert_eq!(NUM_LIMBS % 2, 0, "Number of limbs must be divisible by 2");
         Self {
-            air: ShiftCoreAir {
-                bitwise_lookup_bus: bitwise_lookup_chip.bus(),
-                range_bus: range_checker_chip.bus(),
-                offset,
-            },
+            adapter,
+            offset,
             bitwise_lookup_chip,
             range_checker_chip,
         }
     }
+}
 
-    #[inline]
-    pub fn execute<F: PrimeField32>(
-        &self,
+impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> SingleTraceStep<F, CTX>
+    for ShiftStep<A, NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            CTX,
+            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
+            WriteData = [u8; NUM_LIMBS],
+            TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>,
+        >,
+{
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", ShiftOpcode::from_usize(opcode - self.offset))
+    }
+
+    fn execute(
+        &mut self,
+        state: VmStateMut<TracingMemory, CTX>,
         instruction: &Instruction<F>,
-        [b, c]: [[u8; NUM_LIMBS]; 2],
-        core_row: &mut [F],
-    ) -> [u8; NUM_LIMBS] {
-        let opcode = instruction.opcode;
-        let local_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+        row_slice: &mut [F],
+    ) -> Result<()> {
+        let Instruction { opcode, .. } = instruction;
 
-        let (a, limb_shift, bit_shift) = run_shift::<NUM_LIMBS, LIMB_BITS>(local_opcode, &b, &c);
+        let local_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        A::start(*state.pc, state.memory, adapter_row);
+
+        let (rs1, rs2) = self.adapter.read(state.memory, instruction, adapter_row);
+
+        let (output, limb_shift, bit_shift) =
+            run_shift::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
 
         let core_row: &mut ShiftCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        core_row.a = a.map(F::from_canonical_u8);
-        core_row.b = b.map(F::from_canonical_u8);
-        core_row.c = c.map(F::from_canonical_u8);
+        core_row.a = output.map(F::from_canonical_u8);
+        core_row.b = rs1.map(F::from_canonical_u8);
+        core_row.c = rs2.map(F::from_canonical_u8);
         // To be transformed later in fill_trace_row:
         core_row.opcode_sll_flag = F::from_canonical_usize(local_opcode as usize);
         core_row.bit_shift_marker[0] = F::from_canonical_usize(bit_shift);
         core_row.limb_shift_marker[0] = F::from_canonical_usize(limb_shift);
 
-        a
+        self.adapter
+            .write(state.memory, instruction, adapter_row, &output);
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 
-    pub fn fill_trace_row<F: PrimeField32>(&self, core_row: &mut [F]) {
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        self.adapter
+            .fill_trace_row(mem_helper, self.bitwise_lookup_chip.as_ref(), adapter_row);
+
         let core_row: &mut ShiftCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
+
         let local_opcode =
             ShiftOpcode::from_usize(core_row.opcode_sll_flag.as_canonical_u32() as usize);
+
         let bit_shift = core_row.bit_shift_marker[0].as_canonical_u32() as usize;
         let limb_shift = core_row.limb_shift_marker[0].as_canonical_u32() as usize;
         let b = core_row.b.map(|x| x.as_canonical_u32());
@@ -351,113 +381,43 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftCoreChip<NUM_LIMBS, LI
     }
 }
 
-#[derive(derive_new::new)]
-pub struct ShiftStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub core: ShiftCoreChip<NUM_LIMBS, LIMB_BITS>,
-    phantom: PhantomData<A>,
-}
-
-impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> SingleTraceStep<F, CTX>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
     for ShiftStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
+        + for<'a> AdapterExecutorE1<
             F,
-            CTX,
-            ReadData = [[u8; NUM_LIMBS]; 2],
+            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
             WriteData = [u8; NUM_LIMBS],
-            TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>,
         >,
 {
-    fn execute(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
-        state: VmStateMut<TracingMemory, CTX>,
+        state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
-        row_slice: &mut [F],
-    ) -> Result<()> {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
+        let Instruction { opcode, .. } = instruction;
 
-        A::start(*state.pc, state.memory, adapter_row);
-        let [rs1, rs2] = A::read(state.memory, instruction, adapter_row);
-        let output = self.core.execute(instruction, [rs1, rs2], core_row);
-        A::write(state.memory, instruction, adapter_row, &output);
+        let shift_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        *state.pc += DEFAULT_PC_STEP;
-        Ok(())
-    }
+        let (rs1, rs2) = self.adapter.read(state.memory, instruction);
 
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            ShiftOpcode::from_usize(opcode - self.core.air.offset)
-        )
-    }
+        let (rd, _, _) = run_shift::<NUM_LIMBS, LIMB_BITS>(shift_opcode, &rs1, &rs2);
 
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        A::fill_trace_row(
-            mem_helper,
-            self.core.bitwise_lookup_chip.as_ref(),
-            adapter_row,
-        );
-        self.core.fill_trace_row(core_row);
-    }
-}
+        self.adapter.write(state.memory, instruction, &rd);
 
-impl<Mem, Ctx, F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<Mem, Ctx, F>
-    for ShiftCoreChip<NUM_LIMBS, LIMB_BITS>
-where
-    Mem: GuestMemory,
-    F: PrimeField32,
-{
-    fn execute_e1(
-        &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()> {
-        let Instruction {
-            opcode, a, b, c, e, ..
-        } = instruction;
-
-        let shift_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
-
-        let rs1_addr = b.as_canonical_u32();
-        let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
-
-        let rs2_bytes = if e.as_canonical_u32() == RV32_IMM_AS {
-            // Use immediate value
-            let imm = c.as_canonical_u32();
-            // Convert imm from u32 to [u8; NUM_LIMBS]
-            let imm_bytes = imm.to_le_bytes();
-            // TODO(ayush): remove this
-            let mut rs2_bytes = [0u8; NUM_LIMBS];
-            rs2_bytes[..NUM_LIMBS].copy_from_slice(&imm_bytes[..NUM_LIMBS]);
-            rs2_bytes
-        } else {
-            // Read from register
-            let rs2_addr = c.as_canonical_u32();
-            let rs2_bytes: [u8; NUM_LIMBS] =
-                unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
-            rs2_bytes
-        };
-
-        // Execute the shift operation
-        let (rd_bytes, _, _) =
-            run_shift::<NUM_LIMBS, LIMB_BITS>(shift_opcode, &rs1_bytes, &rs2_bytes);
-
-        let rd_addr = a.as_canonical_u32();
-        unsafe {
-            state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes);
-        }
-
-        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }
 }
 
 // Returns (result, limb_shift, bit_shift)
+#[inline(always)]
 pub(super) fn run_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     opcode: ShiftOpcode,
     x: &[u8; NUM_LIMBS],
@@ -470,6 +430,7 @@ pub(super) fn run_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     }
 }
 
+#[inline(always)]
 fn run_shift_left<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],
@@ -490,6 +451,7 @@ fn run_shift_left<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     (result, limb_shift, bit_shift)
 }
 
+#[inline(always)]
 fn run_shift_right<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],
@@ -518,6 +480,7 @@ fn run_shift_right<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     (result, limb_shift, bit_shift)
 }
 
+#[inline(always)]
 fn get_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(y: &[u8]) -> (usize, usize) {
     debug_assert!(NUM_LIMBS * LIMB_BITS <= (1 << LIMB_BITS));
     // We assume `NUM_LIMBS * LIMB_BITS <= 2^LIMB_BITS` so the shift is defined

@@ -11,7 +11,7 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{Streams, VmExecutionState};
+use super::Streams;
 use crate::system::{
     memory::{
         online::{GuestMemory, TracingMemory},
@@ -79,6 +79,7 @@ pub enum ExecutionError {
 /// Global VM state accessible during instruction execution.
 /// The state is generic in guest memory `MEM` and additional host state `CTX`.
 /// The host state is execution context specific.
+#[derive(derive_new::new)]
 pub struct VmStateMut<'a, MEM, CTX> {
     pub pc: &'a mut u32,
     pub memory: &'a mut MEM,
@@ -111,16 +112,32 @@ pub trait InstructionExecutor<F> {
 }
 
 /// New trait for instruction execution
-pub trait InsExecutorE1<Mem, Ctx, F>
-where
-    Mem: GuestMemory,
-    F: PrimeField32,
-{
-    fn execute_e1(
+pub trait InsExecutorE1<F> {
+    fn execute_e1<Mem, Ctx>(
         &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
+        state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>;
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+        F: PrimeField32;
+}
+
+impl<F, C> InsExecutorE1<F> for RefCell<C>
+where
+    C: InsExecutorE1<F>,
+{
+    fn execute_e1<Mem, Ctx>(
+        &mut self,
+        state: VmStateMut<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+        F: PrimeField32,
+    {
+        self.borrow_mut().execute_e1(state, instruction)
+    }
 }
 
 impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {

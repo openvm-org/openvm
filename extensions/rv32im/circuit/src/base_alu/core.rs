@@ -2,13 +2,12 @@ use std::{
     array,
     borrow::{Borrow, BorrowMut},
     iter::zip,
-    marker::PhantomData,
 };
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterTraceStep, InsExecutorE1, MinimalInstruction, Result,
-        SingleTraceStep, VmAdapterInterface, VmCoreAir, VmExecutionState, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
+        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -22,12 +21,7 @@ use openvm_circuit_primitives::{
     utils::not,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
-    LocalOpcode,
-};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -51,10 +45,10 @@ pub struct BaseAluCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub opcode_and_flag: T,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, derive_new::new)]
 pub struct BaseAluCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: BitwiseOperationLookupBus,
-    offset: usize,
+    pub offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
@@ -178,52 +172,85 @@ where
     }
 }
 
-pub struct BaseAluCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>,
+pub struct BaseAluStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
+    pub offset: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluCoreChip<NUM_LIMBS, LIMB_BITS> {
+impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluStep<A, NUM_LIMBS, LIMB_BITS> {
     pub fn new(
+        adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         offset: usize,
     ) -> Self {
         Self {
-            air: BaseAluCoreAir {
-                bus: bitwise_lookup_chip.bus(),
-                offset,
-            },
+            adapter,
+            offset,
             bitwise_lookup_chip,
         }
     }
+}
 
-    #[inline]
-    pub fn execute<F: PrimeField32>(
-        &self,
+impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> SingleTraceStep<F, CTX>
+    for BaseAluStep<A, NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            CTX,
+            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
+            WriteData = [u8; NUM_LIMBS],
+            TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>,
+        >,
+{
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", BaseAluOpcode::from_usize(opcode - self.offset))
+    }
+
+    fn execute(
+        &mut self,
+        state: VmStateMut<TracingMemory, CTX>,
         instruction: &Instruction<F>,
-        [x, y]: [[u8; NUM_LIMBS]; 2],
-        core_row: &mut [F],
-    ) -> [u8; NUM_LIMBS] {
-        let opcode = instruction.opcode;
-        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+        row_slice: &mut [F],
+    ) -> Result<()> {
+        let Instruction { opcode, .. } = instruction;
 
-        let z = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &x, &y);
-        println!("{local_opcode:?} {x:?}, {y:?}: {z:?}");
+        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        A::start(*state.pc, state.memory, adapter_row);
+
+        let (rs1, rs2) = self.adapter.read(state.memory, instruction, adapter_row);
+
+        let rd = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
 
         let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        core_row.a = z.map(F::from_canonical_u8);
-        core_row.b = x.map(F::from_canonical_u8);
-        core_row.c = y.map(F::from_canonical_u8);
+        core_row.a = rd.map(F::from_canonical_u8);
+        core_row.b = rs1.map(F::from_canonical_u8);
+        core_row.c = rs2.map(F::from_canonical_u8);
         core_row.opcode_add_flag = F::from_bool(local_opcode == BaseAluOpcode::ADD);
         core_row.opcode_sub_flag = F::from_bool(local_opcode == BaseAluOpcode::SUB);
         core_row.opcode_xor_flag = F::from_bool(local_opcode == BaseAluOpcode::XOR);
         core_row.opcode_or_flag = F::from_bool(local_opcode == BaseAluOpcode::OR);
         core_row.opcode_and_flag = F::from_bool(local_opcode == BaseAluOpcode::AND);
 
-        z
+        self.adapter
+            .write(state.memory, instruction, adapter_row, &rd);
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 
-    pub fn fill_trace_row<F: PrimeField32>(&self, core_row: &mut [F]) {
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        self.adapter
+            .fill_trace_row(mem_helper, self.bitwise_lookup_chip.as_ref(), adapter_row);
+
         let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 
         if core_row.opcode_add_flag == F::ONE || core_row.opcode_sub_flag == F::ONE {
@@ -240,109 +267,40 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluCoreChip<NUM_LIMBS, 
     }
 }
 
-#[derive(derive_new::new)]
-pub struct BaseAluStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub core: BaseAluCoreChip<NUM_LIMBS, LIMB_BITS>,
-    phantom: PhantomData<A>,
-}
-
-impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> SingleTraceStep<F, CTX>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
     for BaseAluStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
+        + for<'a> AdapterExecutorE1<
             F,
-            CTX,
-            ReadData = [[u8; NUM_LIMBS]; 2],
+            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
             WriteData = [u8; NUM_LIMBS],
-            TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>,
         >,
 {
-    fn execute(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
-        state: VmStateMut<TracingMemory, CTX>,
+        state: VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
-        row_slice: &mut [F],
-    ) -> Result<()> {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
+        let Instruction { opcode, .. } = instruction;
 
-        A::start(*state.pc, state.memory, adapter_row);
-        let [rs1, rs2] = A::read(state.memory, instruction, adapter_row);
-        let output = self.core.execute(instruction, [rs1, rs2], core_row);
-        A::write(state.memory, instruction, adapter_row, &output);
+        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        *state.pc += DEFAULT_PC_STEP;
-        Ok(())
-    }
+        let (rs1, rs2) = self.adapter.read(state.memory, instruction);
+        let rd = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
+        self.adapter.write(state.memory, instruction, &rd);
 
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            BaseAluOpcode::from_usize(opcode - self.core.air.offset)
-        )
-    }
-
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        A::fill_trace_row(
-            mem_helper,
-            self.core.bitwise_lookup_chip.as_ref(),
-            adapter_row,
-        );
-        self.core.fill_trace_row(core_row);
-    }
-}
-
-impl<Mem, Ctx, F, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<Mem, Ctx, F>
-    for BaseAluCoreChip<NUM_LIMBS, LIMB_BITS>
-where
-    Mem: GuestMemory,
-    F: PrimeField32,
-{
-    fn execute_e1(
-        &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()> {
-        let Instruction {
-            opcode, a, b, c, e, ..
-        } = instruction;
-
-        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
-
-        let rs1_addr = b.as_canonical_u32();
-        let rs1_bytes: [u8; NUM_LIMBS] = unsafe { state.memory.read(RV32_REGISTER_AS, rs1_addr) };
-
-        let rs2_bytes = if e.as_canonical_u32() == RV32_IMM_AS {
-            // Use immediate value
-            let imm = c.as_canonical_u32();
-            // Convert imm from u32 to [u8; NUM_LIMBS]
-            let imm_bytes = imm.to_le_bytes();
-            // TODO(ayush): remove this
-            let mut rs2_bytes = [0u8; NUM_LIMBS];
-            rs2_bytes[..NUM_LIMBS].copy_from_slice(&imm_bytes[..NUM_LIMBS]);
-            rs2_bytes
-        } else {
-            // Read from register
-            let rs2_addr = c.as_canonical_u32();
-            let rs2_bytes: [u8; NUM_LIMBS] =
-                unsafe { state.memory.read(RV32_REGISTER_AS, rs2_addr) };
-            rs2_bytes
-        };
-
-        let rd_bytes = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1_bytes, &rs2_bytes);
-
-        // Write result back to destination register
-        let rd_addr = a.as_canonical_u32();
-        unsafe { state.memory.write(RV32_REGISTER_AS, rd_addr, &rd_bytes) };
-
-        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }
 }
 
+#[inline(always)]
 pub(super) fn run_alu<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     opcode: BaseAluOpcode,
     x: &[u8; NUM_LIMBS],
@@ -358,6 +316,7 @@ pub(super) fn run_alu<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     }
 }
 
+#[inline(always)]
 fn run_add<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],
@@ -374,6 +333,7 @@ fn run_add<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     z
 }
 
+#[inline(always)]
 fn run_subtract<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],
@@ -393,14 +353,17 @@ fn run_subtract<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     z
 }
 
+#[inline(always)]
 fn run_xor<const NUM_LIMBS: usize>(x: &[u8; NUM_LIMBS], y: &[u8; NUM_LIMBS]) -> [u8; NUM_LIMBS] {
     array::from_fn(|i| x[i] ^ y[i])
 }
 
+#[inline(always)]
 fn run_or<const NUM_LIMBS: usize>(x: &[u8; NUM_LIMBS], y: &[u8; NUM_LIMBS]) -> [u8; NUM_LIMBS] {
     array::from_fn(|i| x[i] | y[i])
 }
 
+#[inline(always)]
 fn run_and<const NUM_LIMBS: usize>(x: &[u8; NUM_LIMBS], y: &[u8; NUM_LIMBS]) -> [u8; NUM_LIMBS] {
     array::from_fn(|i| x[i] & y[i])
 }

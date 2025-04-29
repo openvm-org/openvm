@@ -1,19 +1,20 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
+    marker::PhantomData,
     ops::{Add, Mul, Sub},
 };
 
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, InsExecutorE1, MinimalInstruction, Result,
-        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
+        AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, InsExecutorE1,
+        MinimalInstruction, Result, VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
     },
     system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::FieldExtensionOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -144,64 +145,56 @@ pub struct FieldExtensionRecord<F> {
     pub z: [F; EXT_DEG],
 }
 
-pub struct FieldExtensionCoreChip {
-    pub air: FieldExtensionCoreAir,
+pub struct FieldExtensionStep<A> {
+    phantom: PhantomData<A>,
 }
 
-impl FieldExtensionCoreChip {
-    pub fn new() -> Self {
-        Self {
-            air: FieldExtensionCoreAir {},
-        }
-    }
-}
-
-impl Default for FieldExtensionCoreChip {
+impl Default for FieldExtensionStep {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for FieldExtensionCoreChip
-where
-    I::Reads: Into<[[F; EXT_DEG]; 2]>,
-    I::Writes: From<[[F; EXT_DEG]; 1]>,
-{
-    type Record = FieldExtensionRecord<F>;
-    type Air = FieldExtensionCoreAir;
-
-    #[allow(clippy::type_complexity)]
-    fn execute_instruction(
-        &self,
-        instruction: &Instruction<F>,
-        _from_pc: u32,
-        reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let Instruction { opcode, .. } = instruction;
-        let local_opcode_idx = opcode.local_opcode_idx(FieldExtensionOpcode::CLASS_OFFSET);
-
-        let data: [[F; EXT_DEG]; 2] = reads.into();
-        let y: [F; EXT_DEG] = data[0];
-        let z: [F; EXT_DEG] = data[1];
-
-        let x = FieldExtension::solve(FieldExtensionOpcode::from_usize(local_opcode_idx), y, z)
-            .unwrap();
-
-        let output = AdapterRuntimeContext {
-            to_pc: None,
-            writes: [x].into(),
-        };
-
-        let record = Self::Record {
-            opcode: FieldExtensionOpcode::from_usize(local_opcode_idx),
-            x,
-            y,
-            z,
-        };
-
-        Ok((output, record))
+impl FieldExtensionChip {
+    pub fn new() -> Self {
+        Self {
+            phantom: PhantomData,
+        }
     }
 
+    #[inline]
+    pub fn execute_trace_core<F>(
+        &self,
+        instruction: &Instruction<F>,
+        [x, y]: [[u8; NUM_LIMBS]; 2],
+        core_row: &mut [F],
+    ) -> [u8; NUM_LIMBS]
+    where
+        F: PrimeField32,
+    {
+        todo!("Implement execute_trace_core")
+    }
+
+    pub fn fill_trace_row_core<F>(&self, core_row: &mut [F])
+    where
+        F: PrimeField32,
+    {
+        todo!("Implement fill_trace_row_core")
+    }
+}
+
+impl<F, CTX, A> SingleTraceStep<F, CTX> for FieldExtensionStep<A>
+where
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            CTX,
+            ReadData = [[u8; NUM_LIMBS]; 2],
+            WriteData = [u8; NUM_LIMBS],
+            TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>,
+        >,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -209,41 +202,134 @@ where
         )
     }
 
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let FieldExtensionRecord { opcode, x, y, z } = record;
-        let cols: &mut FieldExtensionCoreCols<_> = row_slice.borrow_mut();
-        cols.x = x;
-        cols.y = y;
-        cols.z = z;
-        cols.is_add = F::from_bool(opcode == FieldExtensionOpcode::FE4ADD);
-        cols.is_sub = F::from_bool(opcode == FieldExtensionOpcode::FE4SUB);
-        cols.is_mul = F::from_bool(opcode == FieldExtensionOpcode::BBE4MUL);
-        cols.is_div = F::from_bool(opcode == FieldExtensionOpcode::BBE4DIV);
-        cols.divisor_inv = if opcode == FieldExtensionOpcode::BBE4DIV {
-            FieldExtension::invert(z)
-        } else {
-            [F::ZERO; EXT_DEG]
-        };
+    fn execute(
+        &mut self,
+        state: VmStateMut<TracingMemory, CTX>,
+        instruction: &Instruction<F>,
+        row_slice: &mut [F],
+    ) -> Result<()> {
+        todo!("Implement execute")
     }
 
-    fn air(&self) -> &Self::Air {
-        &self.air
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        todo!("Implement fill_trace_row")
     }
 }
 
-impl<Mem, Ctx, F> InsExecutorE1<Mem, Ctx, F> for FieldExtensionCoreChip
+impl<Mem, Ctx, F, A> StepExecutorE1<Mem, Ctx, F> for FieldExtensionStep<A>
 where
     Mem: GuestMemory,
     F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterExecutorE1<
+            Mem,
+            F,
+            ReadData = ([F; EXT_DEG], [F; EXT_DEG]),
+            WriteData = [F; EXT_DEG],
+        >,
 {
     fn execute_e1(
         &mut self,
-        _state: &mut VmExecutionState<Mem, Ctx>,
-        _instruction: &Instruction<F>,
+        state: &mut VmExecutionState<Mem, Ctx>,
+        instruction: &Instruction<F>,
     ) -> Result<()> {
-        todo!("Implement execute_e1")
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
+        } = instruction;
+
+        let local_opcode_idx = opcode.local_opcode_idx(FieldExtensionOpcode::CLASS_OFFSET);
+
+        let (y_val, z_val) = A::read(&mut state.memory, instruction);
+
+        let x_val = FieldExtension::solve(
+            FieldExtensionOpcode::from_usize(local_opcode_idx),
+            y_val,
+            z_val,
+        )
+        .unwrap();
+
+        A::write(&mut state.memory, instruction, &x_val);
+
+        state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 }
+
+// impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for FieldExtensionCoreChip
+// where
+//     I::Reads: Into<[[F; EXT_DEG]; 2]>,
+//     I::Writes: From<[[F; EXT_DEG]; 1]>,
+// {
+//     type Record = FieldExtensionRecord<F>;
+//     type Air = FieldExtensionCoreAir;
+
+//     #[allow(clippy::type_complexity)]
+//     fn execute_instruction(
+//         &self,
+//         instruction: &Instruction<F>,
+//         _from_pc: u32,
+//         reads: I::Reads,
+//     ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
+//         let Instruction { opcode, .. } = instruction;
+//         let local_opcode_idx = opcode.local_opcode_idx(FieldExtensionOpcode::CLASS_OFFSET);
+
+//         let data: [[F; EXT_DEG]; 2] = reads.into();
+//         let y: [F; EXT_DEG] = data[0];
+//         let z: [F; EXT_DEG] = data[1];
+
+//         let x = FieldExtension::solve(FieldExtensionOpcode::from_usize(local_opcode_idx), y, z)
+//             .unwrap();
+
+//         let output = AdapterRuntimeContext {
+//             to_pc: None,
+//             writes: [x].into(),
+//         };
+
+//         let record = Self::Record {
+//             opcode: FieldExtensionOpcode::from_usize(local_opcode_idx),
+//             x,
+//             y,
+//             z,
+//         };
+
+//         Ok((output, record))
+//     }
+
+//     fn get_opcode_name(&self, opcode: usize) -> String {
+//         format!(
+//             "{:?}",
+//             FieldExtensionOpcode::from_usize(opcode - FieldExtensionOpcode::CLASS_OFFSET)
+//         )
+//     }
+
+//     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
+//         let FieldExtensionRecord { opcode, x, y, z } = record;
+//         let cols: &mut FieldExtensionCoreCols<_> = row_slice.borrow_mut();
+//         cols.x = x;
+//         cols.y = y;
+//         cols.z = z;
+//         cols.is_add = F::from_bool(opcode == FieldExtensionOpcode::FE4ADD);
+//         cols.is_sub = F::from_bool(opcode == FieldExtensionOpcode::FE4SUB);
+//         cols.is_mul = F::from_bool(opcode == FieldExtensionOpcode::BBE4MUL);
+//         cols.is_div = F::from_bool(opcode == FieldExtensionOpcode::BBE4DIV);
+//         cols.divisor_inv = if opcode == FieldExtensionOpcode::BBE4DIV {
+//             FieldExtension::invert(z)
+//         } else {
+//             [F::ZERO; EXT_DEG]
+//         };
+//     }
+
+//     fn air(&self) -> &Self::Air {
+//         &self.air
+//     }
+// }
 
 pub struct FieldExtension;
 impl FieldExtension {
