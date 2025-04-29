@@ -193,23 +193,6 @@ where
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct BranchLessThanCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    #[serde(with = "BigArray")]
-    pub a: [T; NUM_LIMBS],
-    #[serde(with = "BigArray")]
-    pub b: [T; NUM_LIMBS],
-    pub cmp_result: T,
-    pub cmp_lt: T,
-    pub imm: T,
-    pub a_msb_f: T,
-    pub b_msb_f: T,
-    pub diff_val: T,
-    pub diff_idx: usize,
-    pub opcode: BranchLessThanOpcode,
-}
-
 pub struct BranchLessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,

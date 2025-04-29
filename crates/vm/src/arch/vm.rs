@@ -330,6 +330,7 @@ where
 
             let mut segment = E1VmSegmentExecutor::new(
                 &self.config,
+                // TODO(ayush): avoid clones
                 exe.program.clone(),
                 state.input,
                 Some(state.memory),

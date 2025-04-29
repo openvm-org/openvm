@@ -189,7 +189,7 @@ where
         adapter_row.rs1_ptr = b;
         tracing_read(
             memory,
-            d.as_canonical_u32(),
+            RV32_REGISTER_AS,
             b.as_canonical_u32(),
             &mut adapter_row.rs1_aux_cols,
         )
@@ -217,7 +217,7 @@ where
             adapter_row.rd_ptr = a;
             tracing_write(
                 memory,
-                d.as_canonical_u32(),
+                RV32_REGISTER_AS,
                 a.as_canonical_u32(),
                 data,
                 &mut adapter_row.rd_aux_cols,
@@ -265,7 +265,7 @@ where
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
         let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(d.as_canonical_u32(), b.as_canonical_u32()) };
+            unsafe { memory.read(RV32_REGISTER_AS, b.as_canonical_u32()) };
 
         rs1
     }
@@ -283,7 +283,7 @@ where
 
         if *enabled != F::ZERO {
             unsafe {
-                memory.write(d.as_canonical_u32(), a.as_canonical_u32(), data);
+                memory.write(RV32_REGISTER_AS, a.as_canonical_u32(), data);
             }
         }
     }

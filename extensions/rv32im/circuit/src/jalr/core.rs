@@ -52,17 +52,6 @@ pub struct Rv32JalrCoreCols<T> {
     pub imm_sign: T,
 }
 
-#[repr(C)]
-#[derive(Serialize, Deserialize)]
-pub struct Rv32JalrCoreRecord<F> {
-    pub imm: F,
-    pub rs1_data: [F; RV32_REGISTER_NUM_LIMBS],
-    pub rd_data: [F; RV32_REGISTER_NUM_LIMBS - 1],
-    pub to_pc_least_sig_bit: F,
-    pub to_pc_limbs: [u32; 2],
-    pub imm_sign: F,
-}
-
 #[derive(Debug, Clone, derive_new::new)]
 pub struct Rv32JalrCoreAir {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,

@@ -159,14 +159,14 @@ where
         adapter_row.rs1_ptr = a;
         let rs1 = tracing_read(
             memory,
-            d.as_canonical_u32(),
+            RV32_REGISTER_AS,
             a.as_canonical_u32(),
             &mut adapter_row.reads_aux[0],
         );
         adapter_row.rs2_ptr = b;
         let rs2 = tracing_read(
             memory,
-            e.as_canonical_u32(),
+            RV32_REGISTER_AS,
             b.as_canonical_u32(),
             &mut adapter_row.reads_aux[1],
         );
@@ -221,9 +221,9 @@ where
         debug_assert_eq!(e.as_canonical_u32(), RV32_REGISTER_AS);
 
         let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(d.as_canonical_u32(), a.as_canonical_u32()) };
+            unsafe { memory.read(RV32_REGISTER_AS, a.as_canonical_u32()) };
         let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(e.as_canonical_u32(), b.as_canonical_u32()) };
+            unsafe { memory.read(RV32_REGISTER_AS, b.as_canonical_u32()) };
 
         (rs1, rs2)
     }

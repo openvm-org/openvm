@@ -518,7 +518,7 @@ where
                     adapter_row.rd_rs2_ptr = a;
                     tracing_write_with_base_aux(
                         memory,
-                        d.as_canonical_u32(),
+                        RV32_REGISTER_AS,
                         a.as_canonical_u32(),
                         data,
                         &mut adapter_row.write_base_aux,
@@ -631,7 +631,7 @@ where
                 memory.read(e.as_canonical_u32(), ptr_val)
             },
             STOREW | STOREH | STOREB => unsafe {
-                memory.read(d.as_canonical_u32(), a.as_canonical_u32())
+                memory.read(RV32_REGISTER_AS, a.as_canonical_u32())
             },
         };
 
@@ -639,7 +639,7 @@ where
         let prev_data: [u8; RV32_REGISTER_NUM_LIMBS] = match local_opcode {
             STOREW | STOREH | STOREB => unsafe { memory.read(e.as_canonical_u32(), ptr_val) },
             LOADW | LOADB | LOADH | LOADBU | LOADHU => unsafe {
-                memory.read(d.as_canonical_u32(), a.as_canonical_u32())
+                memory.read(RV32_REGISTER_AS, a.as_canonical_u32())
             },
         };
 
@@ -671,7 +671,7 @@ where
         );
 
         let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
-            unsafe { memory.read(d.as_canonical_u32(), b.as_canonical_u32()) };
+            unsafe { memory.read(RV32_REGISTER_AS, b.as_canonical_u32()) };
         let rs1_val = u32::from_le_bytes(rs1_bytes);
 
         let imm = c.as_canonical_u32();
@@ -698,7 +698,7 @@ where
                     unsafe { memory.write(e.as_canonical_u32(), ptr & 0xfffffffc, data) };
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => unsafe {
-                    memory.write(d.as_canonical_u32(), a.as_canonical_u32(), data);
+                    memory.write(RV32_REGISTER_AS, a.as_canonical_u32(), data);
                 },
             }
         }

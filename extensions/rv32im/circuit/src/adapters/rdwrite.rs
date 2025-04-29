@@ -243,7 +243,7 @@ where
         adapter_row.rd_ptr = a;
         tracing_write(
             memory,
-            d.as_canonical_u32(),
+            RV32_REGISTER_AS,
             a.as_canonical_u32(),
             data,
             &mut adapter_row.rd_aux_cols,
@@ -288,7 +288,7 @@ where
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        unsafe { memory.write(d.as_canonical_u32(), a.as_canonical_u32(), rd) };
+        unsafe { memory.write(RV32_REGISTER_AS, a.as_canonical_u32(), rd) };
     }
 }
 
