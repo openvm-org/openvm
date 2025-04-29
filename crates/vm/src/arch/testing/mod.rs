@@ -120,22 +120,35 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.rng.next_u32() % (1 << (F::bits() - 2))
     }
 
-    pub fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
-        self.memory.read(address_space, pointer)
+    pub fn read<const NUM_ALIGNS: usize, const N: usize>(
+        &mut self,
+        address_space: usize,
+        pointer: usize,
+    ) -> [F; N] {
+        self.memory.read::<NUM_ALIGNS, N>(address_space, pointer)
     }
 
-    pub fn write<const N: usize>(&mut self, address_space: usize, pointer: usize, value: [F; N]) {
-        self.memory.write(address_space, pointer, value);
+    pub fn write<const NUM_ALIGNS: usize, const N: usize>(
+        &mut self,
+        address_space: usize,
+        pointer: usize,
+        value: [F; N],
+    ) {
+        self.memory
+            .write::<NUM_ALIGNS, N>(address_space, pointer, value);
     }
 
-    pub fn write_usize<const N: usize>(
+    pub fn write_usize<const NUM_ALIGNS: usize, const N: usize>(
         &mut self,
         address_space: usize,
         pointer: usize,
         value: [usize; N],
     ) {
-        self.memory
-            .write(address_space, pointer, value.map(F::from_canonical_usize));
+        self.memory.write::<NUM_ALIGNS, N>(
+            address_space,
+            pointer,
+            value.map(F::from_canonical_usize),
+        );
     }
 
     pub fn write_heap<const NUM_LIMBS: usize>(
@@ -144,10 +157,11 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         pointer: usize,
         writes: Vec<[F; NUM_LIMBS]>,
     ) {
-        self.write(1usize, register, [F::from_canonical_usize(pointer)]);
-        for (i, &write) in writes.iter().enumerate() {
-            self.write(2usize, pointer + i * NUM_LIMBS, write);
-        }
+        todo!()
+        // self.write(1usize, register, [F::from_canonical_usize(pointer)]);
+        // for (i, &write) in writes.iter().enumerate() {
+        //     self.write(2usize, pointer + i * NUM_LIMBS, write);
+        // }
     }
 
     pub fn system_port(&self) -> SystemPort {
@@ -214,10 +228,11 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         reg_increment: usize,
         pointer_increment: usize,
     ) -> (usize, usize) {
-        let register = self.get_default_register(reg_increment);
-        let pointer = self.get_default_pointer(pointer_increment);
-        self.write(1, register, pointer.to_le_bytes().map(F::from_canonical_u8));
-        (register, pointer)
+        todo!()
+        // let register = self.get_default_register(reg_increment);
+        // let pointer = self.get_default_pointer(pointer_increment);
+        // self.write(1, register, pointer.to_le_bytes().map(F::from_canonical_u8));
+        // (register, pointer)
     }
 
     pub fn write_heap_default<const NUM_LIMBS: usize>(

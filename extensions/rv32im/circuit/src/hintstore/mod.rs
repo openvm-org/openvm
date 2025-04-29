@@ -430,86 +430,88 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
         bitwise_lookup_chip: &SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         pointer_max_bits: usize,
     ) -> usize {
-        let width = Rv32HintStoreCols::<F>::width();
-        let cols: &mut Rv32HintStoreCols<F> = slice[..width].borrow_mut();
+        todo!()
+        // let width = Rv32HintStoreCols::<F>::width();
+        // let cols: &mut Rv32HintStoreCols<F> = slice[..width].borrow_mut();
 
-        cols.is_single = F::from_bool(record.num_words_read.is_none());
-        cols.is_buffer = F::from_bool(record.num_words_read.is_some());
-        cols.is_buffer_start = cols.is_buffer;
+        // cols.is_single = F::from_bool(record.num_words_read.is_none());
+        // cols.is_buffer = F::from_bool(record.num_words_read.is_some());
+        // cols.is_buffer_start = cols.is_buffer;
 
-        cols.from_state = record.from_state.map(F::from_canonical_u32);
-        cols.mem_ptr_ptr = record.instruction.b;
-        aux_cols_factory.generate_read_aux(
-            memory.record_by_id(record.mem_ptr_read),
-            &mut cols.mem_ptr_aux_cols,
-        );
+        // cols.from_state = record.from_state.map(F::from_canonical_u32);
+        // cols.mem_ptr_ptr = record.instruction.b;
+        // aux_cols_factory.generate_read_aux(
+        //     memory.record_by_id(record.mem_ptr_read),
+        //     &mut cols.mem_ptr_aux_cols,
+        // );
 
-        cols.num_words_ptr = record.instruction.a;
-        if let Some(num_words_read) = record.num_words_read {
-            aux_cols_factory.generate_read_aux(
-                memory.record_by_id(num_words_read),
-                &mut cols.num_words_aux_cols,
-            );
-        }
+        // cols.num_words_ptr = record.instruction.a;
+        // if let Some(num_words_read) = record.num_words_read {
+        //     aux_cols_factory.generate_read_aux(
+        //         memory.record_by_id(num_words_read),
+        //         &mut cols.num_words_aux_cols,
+        //     );
+        // }
 
-        let mut mem_ptr = record.mem_ptr;
-        let mut rem_words = record.num_words;
-        let mut used_u32s = 0;
+        // let mut mem_ptr = record.mem_ptr;
+        // let mut rem_words = record.num_words;
+        // let mut used_u32s = 0;
 
-        let mem_ptr_msl = mem_ptr >> ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS);
-        let rem_words_msl = rem_words >> ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS);
-        bitwise_lookup_chip.request_range(
-            mem_ptr_msl << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - pointer_max_bits),
-            rem_words_msl << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - pointer_max_bits),
-        );
-        for (i, &(data, write)) in record.hints.iter().enumerate() {
-            for half in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
-                bitwise_lookup_chip.request_range(
-                    data[2 * half].as_canonical_u32(),
-                    data[2 * half + 1].as_canonical_u32(),
-                );
-            }
+        // let mem_ptr_msl = mem_ptr >> ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS);
+        // let rem_words_msl = rem_words >> ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS);
+        // bitwise_lookup_chip.request_range(
+        //     mem_ptr_msl << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - pointer_max_bits),
+        //     rem_words_msl << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - pointer_max_bits),
+        // );
+        // for (i, &(data, write)) in record.hints.iter().enumerate() {
+        //     for half in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
+        //         bitwise_lookup_chip.request_range(
+        //             data[2 * half].as_canonical_u32(),
+        //             data[2 * half + 1].as_canonical_u32(),
+        //         );
+        //     }
 
-            let cols: &mut Rv32HintStoreCols<F> = slice[used_u32s..used_u32s + width].borrow_mut();
-            cols.from_state.timestamp =
-                F::from_canonical_u32(record.from_state.timestamp + (3 * i as u32));
-            cols.data = data;
-            aux_cols_factory.generate_write_aux(memory.record_by_id(write), &mut cols.write_aux);
-            cols.rem_words_limbs = decompose(rem_words);
-            cols.mem_ptr_limbs = decompose(mem_ptr);
-            if i != 0 {
-                cols.is_buffer = F::ONE;
-            }
-            used_u32s += width;
-            mem_ptr += RV32_REGISTER_NUM_LIMBS as u32;
-            rem_words -= 1;
-        }
+        //     let cols: &mut Rv32HintStoreCols<F> = slice[used_u32s..used_u32s + width].borrow_mut();
+        //     cols.from_state.timestamp =
+        //         F::from_canonical_u32(record.from_state.timestamp + (3 * i as u32));
+        //     cols.data = data;
+        //     aux_cols_factory.generate_write_aux(memory.record_by_id(write), &mut cols.write_aux);
+        //     cols.rem_words_limbs = decompose(rem_words);
+        //     cols.mem_ptr_limbs = decompose(mem_ptr);
+        //     if i != 0 {
+        //         cols.is_buffer = F::ONE;
+        //     }
+        //     used_u32s += width;
+        //     mem_ptr += RV32_REGISTER_NUM_LIMBS as u32;
+        //     rem_words -= 1;
+        // }
 
-        used_u32s
+        // used_u32s
     }
 
     fn generate_trace(self) -> RowMajorMatrix<F> {
-        let width = self.trace_width();
-        let height = next_power_of_two_or_zero(self.height);
-        let mut flat_trace = F::zero_vec(width * height);
+        todo!()
+        // let width = self.trace_width();
+        // let height = next_power_of_two_or_zero(self.height);
+        // let mut flat_trace = F::zero_vec(width * height);
 
-        let memory = self.offline_memory.lock().unwrap();
+        // let memory = self.offline_memory.lock().unwrap();
 
-        let aux_cols_factory = memory.aux_cols_factory();
+        // let aux_cols_factory = memory.aux_cols_factory();
 
-        let mut used_u32s = 0;
-        for record in self.records {
-            used_u32s += Self::record_to_rows(
-                record,
-                &aux_cols_factory,
-                &mut flat_trace[used_u32s..],
-                &memory,
-                &self.bitwise_lookup_chip,
-                self.air.pointer_max_bits,
-            );
-        }
-        // padding rows can just be all zeros
-        RowMajorMatrix::new(flat_trace, width)
+        // let mut used_u32s = 0;
+        // for record in self.records {
+        //     used_u32s += Self::record_to_rows(
+        //         record,
+        //         &aux_cols_factory,
+        //         &mut flat_trace[used_u32s..],
+        //         &memory,
+        //         &self.bitwise_lookup_chip,
+        //         self.air.pointer_max_bits,
+        //     );
+        // }
+        // // padding rows can just be all zeros
+        // RowMajorMatrix::new(flat_trace, width)
     }
 }
 

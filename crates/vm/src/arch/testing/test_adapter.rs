@@ -111,7 +111,7 @@ impl<F: PrimeField32> VmAdapterChip<F> for TestAdapterChip<F> {
         row_slice: &mut [F],
         _read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        _memory: &OfflineMemory<F>,
+        // _memory: &OfflineMemory<F>,
     ) {
         let cols: &mut TestAdapterCols<F> = row_slice.borrow_mut();
         cols.from_pc = F::from_canonical_u32(write_record.from_pc);

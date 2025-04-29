@@ -5,7 +5,7 @@ use openvm_circuit::system::memory::MemoryController;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::Rng;
 
-use crate::system::memory::INITIAL_TIMESTAMP;
+use crate::system::memory::online::INITIAL_TIMESTAMP;
 
 pub mod air;
 
@@ -36,7 +36,11 @@ impl<F: PrimeField32> MemoryTester<F> {
     }
 
     // TODO: change interface by implementing GuestMemory trait after everything works
-    pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {
+    pub fn read<const NUM_ALIGNS: usize, const N: usize>(
+        &mut self,
+        addr_space: usize,
+        ptr: usize,
+    ) -> [F; N] {
         let controller = &mut self.controller;
         let t = controller.memory.timestamp();
         // TODO: hack
@@ -44,14 +48,14 @@ impl<F: PrimeField32> MemoryTester<F> {
             let (t_prev, data) = unsafe {
                 controller
                     .memory
-                    .read::<u8, N, 4>(addr_space as u32, ptr as u32)
+                    .read::<u8, NUM_ALIGNS, N, 4>(addr_space as u32, ptr as u32)
             };
             (t_prev, data.map(F::from_canonical_u8))
         } else {
             unsafe {
                 controller
                     .memory
-                    .read::<F, N, 1>(addr_space as u32, ptr as u32)
+                    .read::<F, NUM_ALIGNS, N, 1>(addr_space as u32, ptr as u32)
             }
         };
         self.chip_for_block.get_mut(&N).unwrap().receive(
@@ -69,13 +73,18 @@ impl<F: PrimeField32> MemoryTester<F> {
     }
 
     // TODO: see read
-    pub fn write<const N: usize>(&mut self, addr_space: usize, ptr: usize, data: [F; N]) {
+    pub fn write<const NUM_ALIGNS: usize, const N: usize>(
+        &mut self,
+        addr_space: usize,
+        ptr: usize,
+        data: [F; N],
+    ) {
         let controller = &mut self.controller;
         let t = controller.memory.timestamp();
         // TODO: hack
         let (t_prev, data_prev) = if addr_space <= 2 {
             let (t_prev, data_prev) = unsafe {
-                controller.memory.write::<u8, N, 4>(
+                controller.memory.write::<u8, NUM_ALIGNS, N, 4>(
                     addr_space as u32,
                     ptr as u32,
                     &data.map(|x| x.as_canonical_u32() as u8),
@@ -86,7 +95,7 @@ impl<F: PrimeField32> MemoryTester<F> {
             unsafe {
                 controller
                     .memory
-                    .write::<F, N, 1>(addr_space as u32, ptr as u32, &data)
+                    .write::<F, NUM_ALIGNS, N, 1>(addr_space as u32, ptr as u32, &data)
             }
         };
         self.chip_for_block.get_mut(&N).unwrap().receive(

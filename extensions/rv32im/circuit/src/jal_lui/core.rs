@@ -179,7 +179,7 @@ impl Rv32JalLuiCoreChip {
 impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32JalLuiCoreChip {
     fn execute(
         &mut self,
-        state: VmStateMut<TracingMemory, CTX>,
+        state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
         row_slice: &mut [F],
     ) -> Result<()> {

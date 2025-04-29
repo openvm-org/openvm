@@ -514,36 +514,37 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32LoadStoreAdapterChip<F> {
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        memory: &OfflineMemory<F>,
+        // memory: &OfflineMemory<F>,
     ) {
-        self.range_checker_chip.add_count(
-            (read_record.mem_ptr_limbs[0] - read_record.shift_amount) / 4,
-            RV32_CELL_BITS * 2 - 2,
-        );
-        self.range_checker_chip.add_count(
-            read_record.mem_ptr_limbs[1],
-            self.air.pointer_max_bits - RV32_CELL_BITS * 2,
-        );
+        todo!()
+        // self.range_checker_chip.add_count(
+        //     (read_record.mem_ptr_limbs[0] - read_record.shift_amount) / 4,
+        //     RV32_CELL_BITS * 2 - 2,
+        // );
+        // self.range_checker_chip.add_count(
+        //     read_record.mem_ptr_limbs[1],
+        //     self.air.pointer_max_bits - RV32_CELL_BITS * 2,
+        // );
 
-        let aux_cols_factory = memory.aux_cols_factory();
-        let adapter_cols: &mut Rv32LoadStoreAdapterCols<_> = row_slice.borrow_mut();
-        adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
-        let rs1 = memory.record_by_id(read_record.rs1_record);
-        adapter_cols.rs1_data.copy_from_slice(rs1.data_slice());
-        aux_cols_factory.generate_read_aux(rs1, &mut adapter_cols.rs1_aux_cols);
-        adapter_cols.rs1_ptr = read_record.rs1_ptr;
-        adapter_cols.rd_rs2_ptr = write_record.rd_rs2_ptr;
-        let read = memory.record_by_id(read_record.read);
-        aux_cols_factory.generate_read_aux(read, &mut adapter_cols.read_data_aux);
-        adapter_cols.imm = read_record.imm;
-        adapter_cols.imm_sign = read_record.imm_sign;
-        adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs.map(F::from_canonical_u32);
-        adapter_cols.mem_as = read_record.mem_as;
-        if write_record.write_id.0 != usize::MAX {
-            let write = memory.record_by_id(write_record.write_id);
-            aux_cols_factory.generate_base_aux(write, &mut adapter_cols.write_base_aux);
-            adapter_cols.needs_write = F::ONE;
-        }
+        // let aux_cols_factory = memory.aux_cols_factory();
+        // let adapter_cols: &mut Rv32LoadStoreAdapterCols<_> = row_slice.borrow_mut();
+        // adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
+        // let rs1 = memory.record_by_id(read_record.rs1_record);
+        // adapter_cols.rs1_data.copy_from_slice(rs1.data_slice());
+        // aux_cols_factory.generate_read_aux(rs1, &mut adapter_cols.rs1_aux_cols);
+        // adapter_cols.rs1_ptr = read_record.rs1_ptr;
+        // adapter_cols.rd_rs2_ptr = write_record.rd_rs2_ptr;
+        // let read = memory.record_by_id(read_record.read);
+        // aux_cols_factory.generate_read_aux(read, &mut adapter_cols.read_data_aux);
+        // adapter_cols.imm = read_record.imm;
+        // adapter_cols.imm_sign = read_record.imm_sign;
+        // adapter_cols.mem_ptr_limbs = read_record.mem_ptr_limbs.map(F::from_canonical_u32);
+        // adapter_cols.mem_as = read_record.mem_as;
+        // if write_record.write_id.0 != usize::MAX {
+        //     let write = memory.record_by_id(write_record.write_id);
+        //     aux_cols_factory.generate_base_aux(write, &mut adapter_cols.write_base_aux);
+        //     adapter_cols.needs_write = F::ONE;
+        // }
     }
 
     fn air(&self) -> &Self::Air {

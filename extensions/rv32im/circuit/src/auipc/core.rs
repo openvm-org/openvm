@@ -224,7 +224,7 @@ impl Rv32AuipcCoreChip {
 impl<F: PrimeField32, CTX> SingleTraceStep<F, CTX> for Rv32AuipcCoreChip {
     fn execute(
         &mut self,
-        state: VmStateMut<TracingMemory, CTX>,
+        state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
         row_slice: &mut [F],
     ) -> Result<()> {

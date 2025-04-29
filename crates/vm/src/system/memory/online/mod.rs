@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 
-use access_adapter::{AccessAdapterInventory, AdapterInventoryTraceCursor};
 use getset::Getters;
 use itertools::{izip, zip_eq};
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
@@ -8,16 +7,14 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
 use super::{
+    adapter::{AccessAdapterInventory, AdapterInventoryTraceCursor},
     offline_checker::MemoryBus,
     paged_vec::{AddressMap, PAGE_SIZE},
     Address, MemoryAddress, PagedVec,
 };
-use crate::{
-    arch::MemoryConfig,
-    system::memory::{offline::INITIAL_TIMESTAMP, MemoryImage, RecordId},
-};
+use crate::{arch::MemoryConfig, system::memory::MemoryImage};
 
-pub(crate) mod access_adapter;
+pub const INITIAL_TIMESTAMP: u32 = 0;
 
 /// API for guest memory conforming to OpenVM ISA
 pub trait GuestMemory {
@@ -97,7 +94,7 @@ impl AccessMetadata {
 /// Online memory that stores additional information for trace generation purposes.
 /// In particular, keeps track of timestamp.
 #[derive(Getters)]
-pub struct TracingMemory {
+pub struct TracingMemory<F> {
     pub timestamp: u32,
     /// The underlying data memory, with memory cells typed by address space: see [AddressMap].
     // TODO: make generic in GuestMemory
@@ -110,9 +107,10 @@ pub struct TracingMemory {
     /// all memory accesses in `addr_space` must be aligned to this block size.
     pub(super) min_block_size: Vec<u32>,
     pub(super) access_adapter_inventory: AccessAdapterInventory,
+    pub(super) access_adapter_trace_cursor: AdapterInventoryTraceCursor<F>,
 }
 
-impl TracingMemory {
+impl<F: PrimeField32> TracingMemory<F> {
     // TODO: per-address space memory capacity specification
     pub fn new(
         mem_config: &MemoryConfig,
@@ -148,6 +146,7 @@ impl TracingMemory {
                 mem_config.clk_max_bits,
                 mem_config.max_access_adapter_n,
             ),
+            access_adapter_trace_cursor: AdapterInventoryTraceCursor::new(num_addr_sp),
         }
     }
 
@@ -173,9 +172,16 @@ impl TracingMemory {
     }
 
     #[inline(always)]
-    fn assert_alignment(&self, block_size: usize, align: usize, addr_space: u32, ptr: u32) {
+    fn assert_alignment(
+        &self,
+        num_aligns: usize,
+        block_size: usize,
+        align: usize,
+        addr_space: u32,
+        ptr: u32,
+    ) {
         debug_assert!(block_size.is_power_of_two());
-        debug_assert_eq!(block_size % align, 0);
+        debug_assert_eq!(num_aligns * align, block_size);
         debug_assert_ne!(addr_space, 0);
         debug_assert_eq!(align as u32, self.min_block_size[addr_space as usize]);
         assert_eq!(
@@ -185,24 +191,101 @@ impl TracingMemory {
         );
     }
 
+    fn execute_split_fixed_size<const BLOCK_SIZE: usize, const ALIGN: usize>(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[u8],
+        timestamp: u32,
+    ) {
+        if BLOCK_SIZE <= values.len() && BLOCK_SIZE > ALIGN {
+            let MemoryAddress {
+                address_space,
+                pointer,
+            } = address;
+            for i in (pointer..pointer + values.len() as u32).step_by(BLOCK_SIZE) {
+                self.access_adapter_inventory
+                    .execute_split::<BLOCK_SIZE, _>(
+                        MemoryAddress::new(address_space, i),
+                        values,
+                        timestamp,
+                        self.access_adapter_trace_cursor
+                            .get_row_slice::<BLOCK_SIZE>(),
+                    );
+            }
+        }
+    }
+
+    fn execute_split<const ALIGN: usize>(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[u8],
+        timestamp: u32,
+    ) {
+        self.execute_split_fixed_size::<2, ALIGN>(address, values, timestamp);
+        self.execute_split_fixed_size::<4, ALIGN>(address, values, timestamp);
+        self.execute_split_fixed_size::<8, ALIGN>(address, values, timestamp);
+        self.execute_split_fixed_size::<16, ALIGN>(address, values, timestamp);
+        self.execute_split_fixed_size::<32, ALIGN>(address, values, timestamp);
+    }
+
+    fn execute_merge_fixed_size<const BLOCK_SIZE: usize, const ALIGN: usize>(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[u8],
+        timestamps: &[u32],
+    ) {
+        if BLOCK_SIZE <= values.len() && BLOCK_SIZE > ALIGN {
+            let MemoryAddress {
+                address_space,
+                pointer,
+            } = address;
+            for i in (0..values.len()).step_by(BLOCK_SIZE) {
+                let left_timestamp = timestamps[(i / ALIGN)..((i + BLOCK_SIZE / 2) / ALIGN)]
+                    .iter()
+                    .max()
+                    .unwrap();
+                let right_timestamp = timestamps
+                    [(i + BLOCK_SIZE / 2 / ALIGN)..((i + BLOCK_SIZE) / ALIGN)]
+                    .iter()
+                    .max()
+                    .unwrap();
+                self.access_adapter_inventory
+                    .execute_merge::<BLOCK_SIZE, _>(
+                        MemoryAddress::new(address_space, pointer + i as u32),
+                        values,
+                        *left_timestamp,
+                        *right_timestamp,
+                        self.access_adapter_trace_cursor
+                            .get_row_slice::<BLOCK_SIZE>(),
+                    );
+            }
+        }
+    }
+
+    fn execute_merge<const ALIGN: usize>(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[u8],
+        timestamps: &[u32],
+    ) {
+        self.execute_merge_fixed_size::<2, ALIGN>(address, values, timestamps);
+        self.execute_merge_fixed_size::<4, ALIGN>(address, values, timestamps);
+        self.execute_merge_fixed_size::<8, ALIGN>(address, values, timestamps);
+        self.execute_merge_fixed_size::<16, ALIGN>(address, values, timestamps);
+        self.execute_merge_fixed_size::<32, ALIGN>(address, values, timestamps);
+    }
+
     /// Returns the timestamp of the previous access to `[pointer:BLOCK_SIZE]_{address_space}`.
     /// If we need to split/merge/initialize something for this, we first do all the necessary
     /// actions. In the end of this process, we have this segment intact in our `meta`.
     ///
     /// Caller must ensure alignment (e.g. via `assert_alignment`) prior to calling this function.
-    fn prev_access_time<
-        F: PrimeField32,
-        const NUM_ALIGNS: usize,
-        const BLOCK_SIZE: usize,
-        const ALIGN: usize,
-    >(
+    fn prev_access_time<const NUM_ALIGNS: usize, const BLOCK_SIZE: usize, const ALIGN: usize>(
         &mut self,
         address_space: u32,
         pointer: u32,
         values: &[u8],
-        traces: &mut AdapterInventoryTraceCursor<F>,
     ) -> u32 {
-        let pv = &mut self.meta[address_space as usize];
         let mut i = pointer as usize / ALIGN;
         let end = i + BLOCK_SIZE / ALIGN;
 
@@ -212,7 +295,8 @@ impl TracingMemory {
             if i >= end {
                 break true;
             }
-            let mut current_metadata = pv.get::<AccessMetadata>(i * size_of::<AccessMetadata>());
+            let mut current_metadata = self.meta[address_space as usize]
+                .get::<AccessMetadata>(i * size_of::<AccessMetadata>());
             if current_metadata.block_size == BLOCK_SIZE as u32 && i + BLOCK_SIZE == end {
                 // We do not have to do anything
                 prev_ts = current_metadata.timestamp;
@@ -224,33 +308,44 @@ impl TracingMemory {
                 prev_ts = prev_ts.max(current_metadata.timestamp);
                 while current_metadata.block_size == AccessMetadata::OCCUPIED {
                     i -= 1;
-                    current_metadata = pv.get::<AccessMetadata>(i * size_of::<AccessMetadata>());
+                    current_metadata = self.meta[address_space as usize]
+                        .get::<AccessMetadata>(i * size_of::<AccessMetadata>());
                 }
                 block_timestamps[i.saturating_sub(pointer as usize / ALIGN)
                     ..(i + (current_metadata.block_size as usize).min(end)
                         - (pointer as usize) / ALIGN)]
                     .fill(current_metadata.timestamp);
                 // Split
-                self.access_adapter_inventory
-                    .execute_split::<BLOCK_SIZE, _>(
-                        MemoryAddress::new(address_space, i as u32),
-                        values,
+                // AG: I don't know how to do this better without getting rid of all const generics
+                let address = MemoryAddress::new(address_space, (i * ALIGN) as u32);
+                if i < pointer as usize / ALIGN || i + current_metadata.block_size as usize > end {
+                    let values = unsafe {
+                        self.data
+                            .read::<u8, BLOCK_SIZE>(address.address_space, address.pointer)
+                    };
+                    self.execute_split::<ALIGN>(
+                        address,
+                        &values[..current_metadata.block_size as usize],
                         self.timestamp,
-                        traces.get_row_slice::<BLOCK_SIZE, NUM_ALIGNS>(),
                     );
+                } else {
+                    self.execute_split::<ALIGN>(
+                        address,
+                        &values[(i - pointer as usize)
+                            ..(i - pointer as usize + current_metadata.block_size as usize)],
+                        self.timestamp,
+                    );
+                }
                 i += current_metadata.block_size as usize;
             }
         };
         if need_to_merge {
-            // merge
-            self.access_adapter_inventory
-                .execute_merge::<BLOCK_SIZE, _>(
-                    MemoryAddress::new(address_space, pointer),
-                    values,
-                    &block_timestamps,
-                    *block_timestamps.iter().max().unwrap(),
-                    traces.get_row_slice::<BLOCK_SIZE, NUM_ALIGNS>(),
-                );
+            // Merge
+            self.execute_merge::<ALIGN>(
+                MemoryAddress::new(address_space, pointer),
+                values,
+                &block_timestamps,
+            );
         }
         prev_ts
     }
@@ -277,13 +372,28 @@ impl TracingMemory {
     /// In addition:
     /// - `address_space` must be valid.
     #[inline(always)]
-    pub unsafe fn read<T: Copy, const BLOCK_SIZE: usize, const ALIGN: usize>(
+    pub unsafe fn read<
+        T: Copy,
+        const NUM_ALIGNS: usize,
+        const BLOCK_SIZE: usize,
+        const ALIGN: usize,
+    >(
         &mut self,
         address_space: u32,
         pointer: u32,
     ) -> (u32, [T; BLOCK_SIZE]) {
-        self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
+        self.assert_alignment(NUM_ALIGNS, BLOCK_SIZE, ALIGN, address_space, pointer);
         let values = self.data.read(address_space, pointer);
+        // Convert [T; BLOCK_SIZE] to &[u8]
+        let values_u8: &[u8] = unsafe {
+            // Safety: Relies on T being safely transmutable to a sequence of bytes.
+            // This is guaranteed by the caller according to the function's safety contract,
+            // which requires T to be repr(C) or repr(transparent).
+            std::slice::from_raw_parts(
+                values.as_ptr() as *const u8,
+                BLOCK_SIZE * std::mem::size_of::<T>(),
+            )
+        };
         let t_curr = self.timestamp;
         self.timestamp += 1;
         // Handle timestamp and block size:
@@ -291,11 +401,10 @@ impl TracingMemory {
         // TODO: address space should be checked elsewhere
         let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
         // The new
-        let t_prev = self.prev_access_time::<_, NUM_ALIGNS, BLOCK_SIZE, ALIGN>(
+        let t_prev = self.prev_access_time::<NUM_ALIGNS, BLOCK_SIZE, ALIGN>(
             address_space,
             pointer,
-            &values,
-            &mut traces,
+            &values_u8,
         );
 
         (t_prev, values)
@@ -323,32 +432,39 @@ impl TracingMemory {
     /// In addition:
     /// - `address_space` must be valid.
     #[inline(always)]
-    pub unsafe fn write<T: Copy, const BLOCK_SIZE: usize, const ALIGN: usize>(
+    pub unsafe fn write<
+        T: Copy,
+        const NUM_ALIGNS: usize,
+        const BLOCK_SIZE: usize,
+        const ALIGN: usize,
+    >(
         &mut self,
         address_space: u32,
         pointer: u32,
         values: &[T; BLOCK_SIZE],
     ) -> (u32, [T; BLOCK_SIZE]) {
-        self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
+        self.assert_alignment(NUM_ALIGNS, BLOCK_SIZE, ALIGN, address_space, pointer);
         let values_prev = self.data.replace(address_space, pointer, values);
+        let values_u8: &[u8] = unsafe {
+            // Safety: Relies on T being safely transmutable to a sequence of bytes.
+            // This is guaranteed by the caller according to the function's safety contract,
+            // which requires T to be repr(C) or repr(transparent).
+            std::slice::from_raw_parts(
+                values_prev.as_ptr() as *const u8,
+                BLOCK_SIZE * std::mem::size_of::<T>(),
+            )
+        };
         let t_curr = self.timestamp;
         self.timestamp += 1;
         // Handle timestamp and block size:
         let access_idx = (pointer as usize / ALIGN) * size_of::<AccessMetadata>();
         // TODO: address space should be checked elsewhere
         let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
-        // The new
-        let AccessMetadata {
-            timestamp: t_prev,
-            mut block_size,
-        } = meta.replace(access_idx, &AccessMetadata::new(t_curr, BLOCK_SIZE as u32));
-        // TODO: mark as touched
-        if block_size == 0 {
-            block_size = BLOCK_SIZE as u32;
-        }
-        if (block_size as usize) != BLOCK_SIZE {
-            todo!("split and merge stuff")
-        };
+        let t_prev = self.prev_access_time::<NUM_ALIGNS, BLOCK_SIZE, ALIGN>(
+            address_space,
+            pointer,
+            &values_u8,
+        );
 
         (t_prev, values_prev)
     }

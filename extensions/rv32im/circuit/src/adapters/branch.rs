@@ -212,17 +212,18 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32BranchAdapterChip<F> {
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        memory: &OfflineMemory<F>,
+        // memory: &OfflineMemory<F>,
     ) {
-        let aux_cols_factory = memory.aux_cols_factory();
-        let row_slice: &mut Rv32BranchAdapterCols<_> = row_slice.borrow_mut();
-        row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-        let rs1 = memory.record_by_id(read_record.rs1);
-        let rs2 = memory.record_by_id(read_record.rs2);
-        row_slice.rs1_ptr = rs1.pointer;
-        row_slice.rs2_ptr = rs2.pointer;
-        aux_cols_factory.generate_read_aux(rs1, &mut row_slice.reads_aux[0]);
-        aux_cols_factory.generate_read_aux(rs2, &mut row_slice.reads_aux[1]);
+        todo!()
+        // let aux_cols_factory = memory.aux_cols_factory();
+        // let row_slice: &mut Rv32BranchAdapterCols<_> = row_slice.borrow_mut();
+        // row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
+        // let rs1 = memory.record_by_id(read_record.rs1);
+        // let rs2 = memory.record_by_id(read_record.rs2);
+        // row_slice.rs1_ptr = rs1.pointer;
+        // row_slice.rs2_ptr = rs2.pointer;
+        // aux_cols_factory.generate_read_aux(rs1, &mut row_slice.reads_aux[0]);
+        // aux_cols_factory.generate_read_aux(rs2, &mut row_slice.reads_aux[1]);
     }
 
     fn air(&self) -> &Self::Air {

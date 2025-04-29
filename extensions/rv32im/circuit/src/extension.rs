@@ -1,9 +1,11 @@
+use std::sync::{Arc, Mutex};
+
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
         SystemConfig, SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
-    system::phantom::PhantomChip,
+    system::{memory::OfflineMemory, phantom::PhantomChip},
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::{
@@ -197,7 +199,8 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         } = builder.system_port();
 
         let range_checker = builder.system_base().range_checker_chip.clone();
-        let offline_memory = builder.system_base().offline_memory();
+        // let offline_memory = builder.system_base().offline_memory();
+        let offline_memory = Arc::new(Mutex::new(OfflineMemory::new()));
         let pointer_max_bits = builder.system_config().memory_config.pointer_max_bits;
 
         let bitwise_lu_chip = if let Some(&chip) = builder
@@ -373,8 +376,8 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
             program_bus,
             memory_bridge,
         } = builder.system_port();
-        let offline_memory = builder.system_base().offline_memory();
-
+        // let offline_memory = builder.system_base().offline_memory();
+        let offline_memory = Arc::new(Mutex::new(OfflineMemory::new()));
         let bitwise_lu_chip = if let Some(&chip) = builder
             .find_chip::<SharedBitwiseOperationLookupChip<8>>()
             .first()

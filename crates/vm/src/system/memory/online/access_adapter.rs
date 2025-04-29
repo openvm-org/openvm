@@ -433,13 +433,14 @@ impl AccessAdapterInventory {
     }
 }
 
-pub struct AdapterInventoryTraceCursor<'a, F: PrimeField32> {
-    cursors: Vec<Cursor<&'a mut [F]>>,
+pub struct AdapterInventoryTraceCursor<F: PrimeField32> {
+    // [AG] TODO: replace with a pre-allocated space
+    cursors: Vec<Cursor<Vec<F>>>,
 }
 
-impl<'a, F: PrimeField32> AdapterInventoryTraceCursor<'a, F> {
-    pub fn new(traces: Vec<&'a mut [F]>) -> Self {
-        let cursors = traces.into_iter().map(Cursor::new).collect();
+impl<F: PrimeField32> AdapterInventoryTraceCursor<F> {
+    pub fn new(as_cnt: usize) -> Self {
+        let cursors = vec![Cursor::new(Vec::new()); as_cnt];
         Self { cursors }
     }
 

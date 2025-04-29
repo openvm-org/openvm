@@ -499,7 +499,7 @@ impl<F: PrimeField32> SystemBase<F> {
     }
 
     pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
-        self.memory_controller.offline_memory().clone()
+        Arc::new(Mutex::new(OfflineMemory::new()))
     }
 
     /// Return trace heights of SystemBase. Usually this is for aggregation and not useful for

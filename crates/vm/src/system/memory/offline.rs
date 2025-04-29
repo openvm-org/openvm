@@ -228,7 +228,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
         address_space: u32,
         pointer: u32,
         values: Vec<F>,
-        records: &mut AccessAdapterInventory<F>,
+        records: &mut AccessAdapterInventory,
     ) {
         let len = values.len();
         assert!(len.is_power_of_two());
@@ -261,7 +261,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
         address_space: u32,
         pointer: u32,
         len: usize,
-        adapter_records: &mut AccessAdapterInventory<F>,
+        adapter_records: &mut AccessAdapterInventory,
     ) {
         assert!(len.is_power_of_two());
         if address_space == 0 {
@@ -302,7 +302,7 @@ impl<F: PrimeField32> OfflineMemory<F> {
 
     pub fn finalize<const N: usize>(
         &mut self,
-        adapter_records: &mut AccessAdapterInventory<F>,
+        adapter_records: &mut AccessAdapterInventory,
     ) -> TimestampedEquipartition<F, N> {
         // First make sure the partition we maintain in self.block_data is an equipartition.
         // Grab all aligned pointers that need to be re-accessed.

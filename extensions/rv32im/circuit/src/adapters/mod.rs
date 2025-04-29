@@ -54,22 +54,24 @@ pub fn decompose<F: PrimeField32>(value: u32) -> [F; RV32_REGISTER_NUM_LIMBS] {
 /// Atomic read operation which increments the timestamp by 1.
 /// Returns `(t_prev, [reg_ptr:4]_1)` where `t_prev` is the timestamp of the last memory access.
 #[inline(always)]
-pub fn timed_read_reg(
-    memory: &mut TracingMemory,
+pub fn timed_read_reg<F: PrimeField32>(
+    memory: &mut TracingMemory<F>,
     reg_ptr: u32,
 ) -> (u32, [u8; RV32_REGISTER_NUM_LIMBS]) {
     // SAFETY:
     // - address space `RV32_REGISTER_AS` will always have cell type `u8` and minimum alignment of
     //   `RV32_REGISTER_NUM_LIMBS`
     unsafe {
-        memory
-            .read::<u8, RV32_REGISTER_NUM_LIMBS, RV32_REGISTER_NUM_LIMBS>(RV32_REGISTER_AS, reg_ptr)
+        memory.read::<u8, 1, RV32_REGISTER_NUM_LIMBS, RV32_REGISTER_NUM_LIMBS>(
+            RV32_REGISTER_AS,
+            reg_ptr,
+        )
     }
 }
 
 #[inline(always)]
-pub fn timed_write_reg(
-    memory: &mut TracingMemory,
+pub fn timed_write_reg<F: PrimeField32>(
+    memory: &mut TracingMemory<F>,
     reg_ptr: u32,
     reg_val: &[u8; RV32_REGISTER_NUM_LIMBS],
 ) -> (u32, [u8; RV32_REGISTER_NUM_LIMBS]) {
@@ -77,7 +79,7 @@ pub fn timed_write_reg(
     // - address space `RV32_REGISTER_AS` will always have cell type `u8` and minimum alignment of
     //   `RV32_REGISTER_NUM_LIMBS`
     unsafe {
-        memory.write::<u8, RV32_REGISTER_NUM_LIMBS, RV32_REGISTER_NUM_LIMBS>(
+        memory.write::<u8, 1, RV32_REGISTER_NUM_LIMBS, RV32_REGISTER_NUM_LIMBS>(
             RV32_REGISTER_AS,
             reg_ptr,
             reg_val,
@@ -89,7 +91,7 @@ pub fn timed_write_reg(
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
 #[inline(always)]
 pub fn tracing_read_reg<F: PrimeField32>(
-    memory: &mut TracingMemory,
+    memory: &mut TracingMemory<F>,
     reg_ptr: u32,
     (reg_ptr_mut, aux_cols): (&mut F, &mut MemoryReadAuxCols<F>), /* TODO[jpw]: switch to raw u8
                                                                    * buffer */
@@ -104,7 +106,7 @@ pub fn tracing_read_reg<F: PrimeField32>(
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
 #[inline(always)]
 pub fn tracing_write_reg<F: PrimeField32>(
-    memory: &mut TracingMemory,
+    memory: &mut TracingMemory<F>,
     reg_ptr: u32,
     reg_val: &[u8; RV32_REGISTER_NUM_LIMBS],
     (reg_ptr_mut, aux_cols): (&mut F, &mut MemoryWriteAuxCols<F, RV32_REGISTER_NUM_LIMBS>), /* TODO[jpw]: switch to raw u8
@@ -124,7 +126,7 @@ pub fn tracing_write_reg<F: PrimeField32>(
 /// Assumes that `addr_space` is [RV32_IMM_AS] or [RV32_REGISTER_AS].
 #[inline(always)]
 pub fn tracing_read_reg_or_imm<F: PrimeField32>(
-    memory: &mut TracingMemory,
+    memory: &mut TracingMemory<F>,
     addr_space: u32,
     reg_ptr_or_imm: u32,
     addr_space_mut: &mut F,

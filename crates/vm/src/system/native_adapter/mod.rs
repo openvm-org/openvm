@@ -279,29 +279,30 @@ impl<F: PrimeField32, const R: usize, const W: usize> VmAdapterChip<F>
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        memory: &OfflineMemory<F>,
+        // memory: &OfflineMemory<F>,
     ) {
-        let row_slice: &mut NativeAdapterCols<_, R, W> = row_slice.borrow_mut();
-        let aux_cols_factory = memory.aux_cols_factory();
+        todo!()
+        // let row_slice: &mut NativeAdapterCols<_, R, W> = row_slice.borrow_mut();
+        // let aux_cols_factory = memory.aux_cols_factory();
 
-        row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
+        // row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
 
-        for (i, read) in read_record.reads.iter().enumerate() {
-            let (id, _) = read;
-            let record = memory.record_by_id(*id);
-            aux_cols_factory
-                .generate_read_or_immediate_aux(record, &mut row_slice.reads_aux[i].read_aux);
-            row_slice.reads_aux[i].address =
-                MemoryAddress::new(record.address_space, record.pointer);
-        }
+        // for (i, read) in read_record.reads.iter().enumerate() {
+        //     let (id, _) = read;
+        //     let record = memory.record_by_id(*id);
+        //     aux_cols_factory
+        //         .generate_read_or_immediate_aux(record, &mut row_slice.reads_aux[i].read_aux);
+        //     row_slice.reads_aux[i].address =
+        //         MemoryAddress::new(record.address_space, record.pointer);
+        // }
 
-        for (i, write) in write_record.writes.iter().enumerate() {
-            let (id, _) = write;
-            let record = memory.record_by_id(*id);
-            aux_cols_factory.generate_write_aux(record, &mut row_slice.writes_aux[i].write_aux);
-            row_slice.writes_aux[i].address =
-                MemoryAddress::new(record.address_space, record.pointer);
-        }
+        // for (i, write) in write_record.writes.iter().enumerate() {
+        //     let (id, _) = write;
+        //     let record = memory.record_by_id(*id);
+        //     aux_cols_factory.generate_write_aux(record, &mut row_slice.writes_aux[i].write_aux);
+        //     row_slice.writes_aux[i].address =
+        //         MemoryAddress::new(record.address_space, record.pointer);
+        // }
     }
 
     fn air(&self) -> &Self::Air {

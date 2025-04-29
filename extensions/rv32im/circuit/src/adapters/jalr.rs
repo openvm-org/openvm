@@ -243,20 +243,21 @@ impl<F: PrimeField32> VmAdapterChip<F> for Rv32JalrAdapterChip<F> {
         row_slice: &mut [F],
         read_record: Self::ReadRecord,
         write_record: Self::WriteRecord,
-        memory: &OfflineMemory<F>,
+        // memory: &OfflineMemory<F>,
     ) {
-        let aux_cols_factory = memory.aux_cols_factory();
-        let adapter_cols: &mut Rv32JalrAdapterCols<_> = row_slice.borrow_mut();
-        adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
-        let rs1 = memory.record_by_id(read_record.rs1);
-        adapter_cols.rs1_ptr = rs1.pointer;
-        aux_cols_factory.generate_read_aux(rs1, &mut adapter_cols.rs1_aux_cols);
-        if let Some(id) = write_record.rd_id {
-            let rd = memory.record_by_id(id);
-            adapter_cols.rd_ptr = rd.pointer;
-            adapter_cols.needs_write = F::ONE;
-            aux_cols_factory.generate_write_aux(rd, &mut adapter_cols.rd_aux_cols);
-        }
+        todo!()
+        // let aux_cols_factory = memory.aux_cols_factory();
+        // let adapter_cols: &mut Rv32JalrAdapterCols<_> = row_slice.borrow_mut();
+        // adapter_cols.from_state = write_record.from_state.map(F::from_canonical_u32);
+        // let rs1 = memory.record_by_id(read_record.rs1);
+        // adapter_cols.rs1_ptr = rs1.pointer;
+        // aux_cols_factory.generate_read_aux(rs1, &mut adapter_cols.rs1_aux_cols);
+        // if let Some(id) = write_record.rd_id {
+        //     let rd = memory.record_by_id(id);
+        //     adapter_cols.rd_ptr = rd.pointer;
+        //     adapter_cols.needs_write = F::ONE;
+        //     aux_cols_factory.generate_write_aux(rd, &mut adapter_cols.rd_aux_cols);
+        // }
     }
 
     fn air(&self) -> &Self::Air {

@@ -23,8 +23,8 @@ use super::merkle::SerialReceiver;
 use crate::{
     arch::hasher::Hasher,
     system::memory::{
-        dimensions::MemoryDimensions, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
-        TimestampedEquipartition, INITIAL_TIMESTAMP,
+        dimensions::MemoryDimensions, offline_checker::MemoryBus, online::INITIAL_TIMESTAMP,
+        MemoryAddress, MemoryImage, TimestampedEquipartition,
     },
 };
 
