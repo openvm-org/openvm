@@ -17,6 +17,6 @@ pub const SHA256_FUNCT7: u8 = 0x1;
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 #[no_mangle]
-extern "C" fn zkvm_sha256_impl(bytes: *const u8, len: usize, output: *mut u8) {
+pub extern "C" fn zkvm_sha256_impl(bytes: *const u8, len: usize, output: *mut u8) {
     openvm_platform::custom_insn_r!(opcode = OPCODE, funct3 = SHA256_FUNCT3, funct7 = SHA256_FUNCT7, rd = In output, rs1 = In bytes, rs2 = In len);
 }
