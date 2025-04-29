@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, cmp::max, sync::Arc};
+use std::{borrow::BorrowMut, cmp::max, io::Cursor, sync::Arc};
 
 pub use air::*;
 pub use columns::*;
@@ -26,6 +26,36 @@ mod air;
 mod columns;
 #[cfg(test)]
 mod tests;
+
+pub struct AdapterInventoryTraceCursor<F> {
+    cursors: Vec<Cursor<Vec<F>>>,
+}
+
+#[inline(always)]
+fn get_chip_index<const N: usize>() -> usize {
+    assert!(
+        N.is_power_of_two() && N >= 2,
+        "Invalid block size {} for split operation",
+        N
+    );
+    let index = N.trailing_zeros().checked_sub(1).unwrap();
+    index as usize
+}
+
+impl<F: PrimeField32> AdapterInventoryTraceCursor<F> {
+    pub fn new(as_cnt: usize) -> Self {
+        let cursors = vec![Cursor::new(vec![]); as_cnt];
+        Self { cursors }
+    }
+
+    pub fn get_row_slice<const N: usize>(&mut self) -> &mut [F] {
+        let index = get_chip_index::<N>();
+        let begin = self.cursors[index].position() as usize;
+        let end = begin + size_of::<AccessAdapterCols<u8, N>>();
+        self.cursors[index].set_position(end as u64);
+        &mut self.cursors[index].get_mut()[begin..end]
+    }
+}
 
 pub struct AccessAdapterInventory<F> {
     chips: Vec<GenericAccessAdapterChip<F>>,

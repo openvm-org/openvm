@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 
-use access_adapter::{AccessAdapterInventory, AdapterInventoryTraceCursor};
 use getset::Getters;
 use itertools::{izip, zip_eq};
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
@@ -8,6 +7,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
 use super::{
+    adapter::{AccessAdapterInventory, AdapterInventoryTraceCursor},
     offline_checker::MemoryBus,
     paged_vec::{AddressMap, PAGE_SIZE},
     Address, MemoryAddress, PagedVec,
@@ -16,8 +16,6 @@ use crate::{
     arch::MemoryConfig,
     system::memory::{offline::INITIAL_TIMESTAMP, MemoryImage, RecordId},
 };
-
-pub(crate) mod access_adapter;
 
 /// API for guest memory conforming to OpenVM ISA
 pub trait GuestMemory {
@@ -97,7 +95,7 @@ impl AccessMetadata {
 /// Online memory that stores additional information for trace generation purposes.
 /// In particular, keeps track of timestamp.
 #[derive(Getters)]
-pub struct TracingMemory {
+pub struct TracingMemory<F> {
     pub timestamp: u32,
     /// The underlying data memory, with memory cells typed by address space: see [AddressMap].
     // TODO: make generic in GuestMemory
@@ -109,10 +107,11 @@ pub struct TracingMemory {
     /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
     /// all memory accesses in `addr_space` must be aligned to this block size.
     pub(super) min_block_size: Vec<u32>,
-    pub(super) access_adapter_inventory: AccessAdapterInventory,
+    pub(super) access_adapter_inventory: AccessAdapterInventory<F>,
+    pub(super) cursors: AdapterInventoryTraceCursor<F>,
 }
 
-impl TracingMemory {
+impl<F: PrimeField32> TracingMemory<F> {
     // TODO: per-address space memory capacity specification
     pub fn new(
         mem_config: &MemoryConfig,
@@ -148,6 +147,7 @@ impl TracingMemory {
                 mem_config.clk_max_bits,
                 mem_config.max_access_adapter_n,
             ),
+            cursors: AdapterInventoryTraceCursor::new(num_addr_sp),
         }
     }
 
@@ -190,12 +190,7 @@ impl TracingMemory {
     /// actions. In the end of this process, we have this segment intact in our `meta`.
     ///
     /// Caller must ensure alignment (e.g. via `assert_alignment`) prior to calling this function.
-    fn prev_access_time<
-        F: PrimeField32,
-        const NUM_ALIGNS: usize,
-        const BLOCK_SIZE: usize,
-        const ALIGN: usize,
-    >(
+    fn prev_access_time<const NUM_ALIGNS: usize, const BLOCK_SIZE: usize, const ALIGN: usize>(
         &mut self,
         address_space: u32,
         pointer: u32,
@@ -236,7 +231,7 @@ impl TracingMemory {
                         MemoryAddress::new(address_space, i as u32),
                         values,
                         self.timestamp,
-                        traces.get_row_slice::<BLOCK_SIZE, NUM_ALIGNS>(),
+                        traces.get_row_slice::<BLOCK_SIZE>(),
                     );
                 i += current_metadata.block_size as usize;
             }
@@ -249,7 +244,7 @@ impl TracingMemory {
                     values,
                     &block_timestamps,
                     *block_timestamps.iter().max().unwrap(),
-                    traces.get_row_slice::<BLOCK_SIZE, NUM_ALIGNS>(),
+                    traces.get_row_slice::<BLOCK_SIZE>(),
                 );
         }
         prev_ts
@@ -277,7 +272,12 @@ impl TracingMemory {
     /// In addition:
     /// - `address_space` must be valid.
     #[inline(always)]
-    pub unsafe fn read<T: Copy, const BLOCK_SIZE: usize, const ALIGN: usize>(
+    pub unsafe fn read<
+        T: Copy,
+        const NUM_ALIGNS: usize,
+        const BLOCK_SIZE: usize,
+        const ALIGN: usize,
+    >(
         &mut self,
         address_space: u32,
         pointer: u32,
@@ -291,11 +291,11 @@ impl TracingMemory {
         // TODO: address space should be checked elsewhere
         let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
         // The new
-        let t_prev = self.prev_access_time::<_, NUM_ALIGNS, BLOCK_SIZE, ALIGN>(
+        let t_prev = self.prev_access_time::<NUM_ALIGNS, BLOCK_SIZE, ALIGN>(
             address_space,
             pointer,
             &values,
-            &mut traces,
+            &mut self.cursors,
         );
 
         (t_prev, values)
