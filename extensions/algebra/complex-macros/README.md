@@ -66,20 +66,23 @@ extern "C" {
 2. Again, `complex_init!` macro implements these extern functions and defines the setup functions for the complex arithmetic struct.
 
 ```rust
+#[allow(non_snake_case)]
 #[cfg(target_os = "zkvm")]
 mod openvm_intrinsics_ffi_complex {
-    fn complex_add_extern_func_Complex(rd: usize, rs1: usize, rs2: usize) {
+    #[no_mangle]
+    extern "C" fn complex_add_extern_func_Complex(rd: usize, rs1: usize, rs2: usize) {
         // send the instructions for the corresponding complex chip
         // If this struct was `init`ed k-th, these operations will be sent to the k-th complex chip
     }
-    // implement the other functions
-}
-pub fn setup_complex_0() {
-    // send the setup instructions
+    // .. implement the other functions
+    #[no_mangle]
+    extern "C" fn complex_setup_extern_func_Complex() {
+        // send the setup instructions
+    }
 }
 ```
 
-3. Obviously, `mod_idx` in the `complex_init!` must match the position of the corresponding modulus in the `moduli_init!` macro. The order of the items in `complex_init!` affects what `setup_complex_*` function will correspond to what complex class. Also, it **must match** the order of the moduli in the chip configuration -- more specifically, in the modular extension parameters (the order of numbers in `Fp2Extension::supported_modulus`, which is usually defined with the whole `app_vm_config` in the `openvm.toml` file). However, it again imposes the restriction that we only can invoke `complex_init!` once. Again analogous to the moduli setups, the rust bindings will automatically call `setup_complex_*` on each complex extension on first use of its intrinsics.
+3. Obviously, `mod_idx` in the `complex_init!` must match the position of the corresponding modulus in the `moduli_init!` macro. The order of the items in `complex_init!` affects what `setup_complex_*` function will correspond to what complex class. Also, it **must match** the order of the moduli in the chip configuration -- more specifically, in the modular extension parameters (the order of numbers in `Fp2Extension::supported_modulus`, which is usually defined with the whole `app_vm_config` in the `openvm.toml` file). However, it again imposes the restriction that we only can invoke `complex_init!` once. Again analogous to the moduli setups, the rust bindings will automatically call `complex_setup_extern_func_*` on each complex extension on first use of its intrinsics.
 
 4. Note that, due to the nature of function names, the name of the struct used in `complex_init!` must be the same as in `complex_declare!`. To illustrate, the following code will **fail** to compile:
 

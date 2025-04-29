@@ -58,8 +58,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
         create_extern_func!(complex_sub_extern_func);
         create_extern_func!(complex_mul_extern_func);
         create_extern_func!(complex_div_extern_func);
-
-        let setup_function = syn::Ident::new(&format!("setup_{}", struct_name), span.into());
+        create_extern_func!(complex_setup_extern_func);
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
             extern "C" {
@@ -67,7 +66,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                 fn #complex_sub_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #complex_mul_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #complex_div_extern_func(rd: usize, rs1: usize, rs2: usize);
-                fn #setup_function();
+                fn #complex_setup_extern_func();
             }
 
 
@@ -297,7 +296,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                 fn assert_is_setup() {
                     static is_setup: ::openvm_algebra_guest::once_cell::race::OnceBool = ::openvm_algebra_guest::once_cell::race::OnceBool::new();
                     is_setup.get_or_init(|| {
-                        unsafe { #setup_function(); }
+                        unsafe { #complex_setup_extern_func(); }
                         true
                     });
                 }
@@ -547,7 +546,6 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
     let MacroArgs { items } = parse_macro_input!(input as MacroArgs);
 
     let mut externs = Vec::new();
-    let mut setups = Vec::new();
 
     let span = proc_macro::Span::call_site();
 
@@ -606,12 +604,14 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
             });
         }
 
-        let setup_function = syn::Ident::new(&format!("setup_{}", struct_name), span.into());
+        let setup_extern_func = syn::Ident::new(
+            &format!("complex_setup_extern_func_{}", struct_name),
+            span.into(),
+        );
 
-        setups.push(quote::quote_spanned! { span.into() =>
-            #[allow(non_snake_case)]
+        externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
-            extern "C" fn #setup_function() {
+            extern "C" fn #setup_extern_func() {
                 #[cfg(target_os = "zkvm")]
                 {
                     use super::openvm_intrinsics_meta_do_not_type_this_by_yourself::{two_modular_limbs_list, limb_list_borders};
@@ -646,10 +646,10 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
     }
 
     TokenStream::from(quote::quote_spanned! { span.into() =>
+        #[allow(non_snake_case)]
         #[cfg(target_os = "zkvm")]
         mod openvm_intrinsics_ffi_complex {
             #(#externs)*
-            #(#setups)*
         }
     })
 }
