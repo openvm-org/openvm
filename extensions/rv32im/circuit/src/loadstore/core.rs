@@ -305,6 +305,8 @@ where
 
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
+        A::start(*state.pc, state.memory, adapter_row);
+
         let ((prev_data, read_data), shift) =
             self.adapter.read(state.memory, instruction, adapter_row);
         let prev_data = prev_data.map(F::from_canonical_u8);
