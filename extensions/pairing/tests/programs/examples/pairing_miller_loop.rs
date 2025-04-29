@@ -20,8 +20,6 @@ mod bn254 {
     openvm::init!("openvm_init_pairing_miller_loop_bn254.rs");
 
     pub fn test_miller_loop(io: &[u8]) {
-        setup_0();
-        setup_all_complex_extensions();
         let s0 = &io[0..32 * 2];
         let s1 = &io[32 * 2..32 * 4];
         let q0 = &io[32 * 4..32 * 8];
@@ -56,8 +54,6 @@ mod bls12_381 {
     openvm::init!("openvm_init_pairing_miller_loop_bls12_381.rs");
 
     pub fn test_miller_loop(io: &[u8]) {
-        setup_0();
-        setup_all_complex_extensions();
         let s0 = &io[0..48 * 2];
         let s1 = &io[48 * 2..48 * 4];
         let q0 = &io[48 * 4..48 * 8];

@@ -46,13 +46,10 @@ moduli_init! {
 
 This step enumerates the declared moduli (e.g., `0` for the first one, `1` for the second one) and sets up internal linkage so the compiler can generate the appropriate RISC-V instructions associated with each modulus.
 
-3. **Setup**: At runtime, before performing arithmetic, a setup instruction must be sent to ensure security and correctness. For the \\(i\\)-th modulus, you call `setup_<i>()` (e.g., `setup_0()` or `setup_1()`). Alternatively, `setup_all_moduli()` can be used to handle all declared moduli.
-
 **Summary**:
 
 - `moduli_declare!`: Declares modular arithmetic structures and can be done multiple times.
 - `init!`: Called once in the final binary to assign and lock in the moduli.
-- `setup_<i>()`/`setup_all_moduli()`: Ensures at runtime that the correct modulus is in use, providing a security check and finalizing the environment for safe arithmetic operations.
 
 ## Complex field extension
 
@@ -82,8 +79,6 @@ complex_init! {
 }
 */
 ```
-
-3. **Setup**: Similar to moduli, call `setup_complex_<i>()` or `setup_all_complex_extensions()` at runtime to secure the environment.
 
 ### Config parameters
 

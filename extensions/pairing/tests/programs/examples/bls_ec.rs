@@ -8,7 +8,4 @@ openvm::init!("openvm_init_bls_ec_bls12_381.rs");
 
 openvm::entry!(main);
 
-pub fn main() {
-    setup_all_moduli();
-    setup_all_curves();
-}
+pub fn main() {}

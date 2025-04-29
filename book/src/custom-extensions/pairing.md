@@ -36,14 +36,6 @@ Additionally, we'll need to initialize our moduli and `Fp2` struct via the follo
 {{ #include ../../../examples/pairing/src/main.rs:init }}
 ```
 
-And we'll run the required setup functions at the top of the guest program's `main()` function:
-
-```rust,no_run,noplayground
-{{ #include ../../../examples/pairing/src/main.rs:setup }}
-```
-
-There are two moduli defined internally in the `Bls12_381` feature. The `moduli_init!` macro thus requires both of them to be initialized. However, we do not need the scalar field of BLS12-381 (which is at index 1), and thus we only initialize the modulus from index 0, thus we only use `setup_0()` (as opposed to `setup_all_moduli()`, which will save us some columns when generating the trace).
-
 ## Input values
 
 The inputs to the pairing check are `AffinePoint`s in \\(\mathbb{F}\_p\\) and \\(\mathbb{F}\_{p^2}\\). They can be constructed via the `AffinePoint::new` function, with the inner `Fp` and `Fp2` values constructed via various `from_...` functions.

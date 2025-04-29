@@ -3969,6 +3969,7 @@ version = "1.2.0"
 dependencies = [
  "halo2curves-axiom",
  "num-bigint 0.4.6",
+ "once_cell",
  "openvm-algebra-complex-macros",
  "openvm-algebra-moduli-macros",
  "serde-big-array",

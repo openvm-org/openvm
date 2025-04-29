@@ -192,11 +192,6 @@ type CurvePoint1mod4Wrapper = CurvePointWrapper<CurvePoint1mod4>;
 
 // Check that decompress enters an infinite loop when hint_decompress returns an incorrect value.
 pub fn main() {
-    setup_0();
-    setup_2();
-    setup_4();
-    setup_all_curves();
-
     let bytes = read_vec();
 
     test_p_3_mod_4(&bytes[..32], &bytes[32..64]);

@@ -18,7 +18,6 @@ openvm_algebra_moduli_macros::moduli_declare! {
 openvm::init!("openvm_init_moduli_setup.rs");
 
 pub fn main() {
-    setup_all_moduli();
     let x = Bls12381::from_repr(core::array::from_fn(|i| i as u8));
     assert_eq!(x.0.len(), 48);
 
