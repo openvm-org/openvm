@@ -100,7 +100,11 @@ pub fn timed_read(
     address_space: u32,
     ptr: u32,
 ) -> (u32, [u8; RV32_REGISTER_NUM_LIMBS]) {
-    debug_assert!(address_space == RV32_REGISTER_AS || address_space == RV32_MEMORY_AS);
+    debug_assert!(
+        address_space == RV32_REGISTER_AS
+            || address_space == RV32_MEMORY_AS
+            || address_space == PUBLIC_VALUES_AS
+    );
 
     // SAFETY:
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
@@ -117,7 +121,7 @@ pub fn timed_write(
     ptr: u32,
     val: &[u8; RV32_REGISTER_NUM_LIMBS],
 ) -> (u32, [u8; RV32_REGISTER_NUM_LIMBS]) {
-    // TODO(ayush): should this allow hint address space
+    // TODO(ayush): should this allow public values address space
     debug_assert!(
         address_space == RV32_REGISTER_AS
             || address_space == RV32_MEMORY_AS
@@ -149,7 +153,6 @@ pub fn tracing_read<F>(
 where
     F: PrimeField32,
 {
-    // TODO(ayush): should this allow hint address space
     let (t_prev, data) = timed_read(memory, address_space, ptr);
     aux_cols.set_prev(F::from_canonical_u32(t_prev));
     data

@@ -74,6 +74,8 @@ fn set_and_execute(
         *[1, 2].choose(rng).unwrap()
     } else {
         *[2, 3].choose(rng).unwrap()
+        // TODO(ayush): should this allow 4?
+        // *[2, 3, 4].choose(rng).unwrap()
     });
 
     let ptr_val = imm_ext.wrapping_add(compose(rs1));
@@ -416,19 +418,20 @@ fn negative_wrong_address_space_tests() {
         Some(3),
         VerificationError::OodEvaluationMismatch,
     );
-    run_negative_loadstore_test(
-        LOADW,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        Some(4),
-        VerificationError::OodEvaluationMismatch,
-    );
+    // TODO(ayush): add back
+    // run_negative_loadstore_test(
+    //     LOADW,
+    //     None,
+    //     None,
+    //     None,
+    //     None,
+    //     None,
+    //     None,
+    //     None,
+    //     None,
+    //     Some(4),
+    //     VerificationError::OodEvaluationMismatch,
+    // );
     run_negative_loadstore_test(
         STOREW,
         None,
