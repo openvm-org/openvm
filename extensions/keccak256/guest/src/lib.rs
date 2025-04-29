@@ -20,7 +20,7 @@ pub const KECCAK256_FUNCT7: u8 = 0;
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 #[no_mangle]
-extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
+pub extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
     openvm_platform::custom_insn_r!(
         opcode = OPCODE,
         funct3 = KECCAK256_FUNCT3,
