@@ -1,4 +1,5 @@
 use std::{
+    env::var,
     fs::{create_dir_all, read, write},
     path::PathBuf,
     sync::Arc,
@@ -128,7 +129,8 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
     };
     let mut guest_options = GuestOptions::default()
         .with_features(build_args.features.clone())
-        .with_profile(build_args.profile.clone());
+        .with_profile(build_args.profile.clone())
+        .with_rustc_flags(var("RUSTFLAGS").unwrap_or_default().split_whitespace());
     guest_options.target_dir = build_args.target_dir.clone();
     if build_args.offline {
         guest_options.options = vec!["--offline".to_string()];
