@@ -36,11 +36,7 @@ impl<F: PrimeField32> MemoryTester<F> {
     }
 
     // TODO: change interface by implementing GuestMemory trait after everything works
-    pub fn read<const NUM_ALIGNS: usize, const N: usize>(
-        &mut self,
-        addr_space: usize,
-        ptr: usize,
-    ) -> [F; N] {
+    pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {
         let controller = &mut self.controller;
         let t = controller.memory.timestamp();
         // TODO: hack
@@ -48,14 +44,14 @@ impl<F: PrimeField32> MemoryTester<F> {
             let (t_prev, data) = unsafe {
                 controller
                     .memory
-                    .read::<u8, NUM_ALIGNS, N, 4>(addr_space as u32, ptr as u32)
+                    .read::<u8, N, 4>(addr_space as u32, ptr as u32)
             };
             (t_prev, data.map(F::from_canonical_u8))
         } else {
             unsafe {
                 controller
                     .memory
-                    .read::<F, NUM_ALIGNS, N, 1>(addr_space as u32, ptr as u32)
+                    .read::<F, N, 1>(addr_space as u32, ptr as u32)
             }
         };
         self.chip_for_block.get_mut(&N).unwrap().receive(

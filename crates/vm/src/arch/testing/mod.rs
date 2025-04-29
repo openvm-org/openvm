@@ -120,12 +120,8 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.rng.next_u32() % (1 << (F::bits() - 2))
     }
 
-    pub fn read<const NUM_ALIGNS: usize, const N: usize>(
-        &mut self,
-        address_space: usize,
-        pointer: usize,
-    ) -> [F; N] {
-        self.memory.read::<NUM_ALIGNS, N>(address_space, pointer)
+    pub fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
+        self.memory.read(address_space, pointer)
     }
 
     pub fn write<const N: usize>(&mut self, address_space: usize, pointer: usize, value: [F; N]) {
