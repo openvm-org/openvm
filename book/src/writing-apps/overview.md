@@ -26,13 +26,13 @@ For more information on both commands, see the [build](./build.md) docs.
 
 ### Inputs
 
-The `--input` field needs to either be a single hex string or a file path to a json file that contains the key `input` and an array of hex strings. Note that if your hex string represents a single number, it should be written in little-endian format (as this is what the VM expects). Also note that if you need to provide multiple input streams, you have to use the file path option.
+The `--input` field needs to either be a single hex string or a file path to a json file that contains the key `input` and an array of hex strings. Also note that if you need to provide multiple input streams, you have to use the file path option.
 Each hex string (either in the file or as the direct input) is either:
 
-- Hex string of bytes, which is prefixed with 0x01
-- Hex string of native field elements (represented as u32, little endian), prefixed with 0x02
+- Hex string of bytes, which is prefixed with `0x01`
+- Hex string of native field elements (represented as u32, little endian), prefixed with `0x02`
 
-To see how more complex inputs can be converted into a VM-readable format, see the **Using StdIn** section of the [SDK](../advanced-usage/sdk.md) doc.
+If you are providing input for a struct of type `T` that will be deserialized by the `openvm::io::read()` function, then the corresponding hex string should be prefixed by `0x01` followed by the serialization of `T` into bytes according to `openvm::serde::to_vec`. The serialization will serialize primitive types (e.g., `u8, u16, u32, u64`) into little-endian bytes. All serialized bytes are zero-padded to a multiple of `4` byte length. For more details on how to serialize complex types into a VM-readable format, see the **Using StdIn** section of the [SDK](../advanced-usage/sdk.md#using-stdin) doc.
 
 ## Generating a Proof
 
@@ -72,7 +72,7 @@ To do (a), you need to run the following command. If you've run it previously on
 cargo openvm setup
 ```
 
-> ⚠️ **WARNING**  
+> ⚠️ **WARNING**
 > This command requires very large amounts of computation and memory (~200 GB).
 
 To do (b), you simply need to replace `app` in `cargo openvm prove` and `cargo openvm verify` as such:
