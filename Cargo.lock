@@ -4755,6 +4755,7 @@ name = "openvm-rv32im-guest"
 version = "1.2.0"
 dependencies = [
  "openvm-custom-insn",
+ "p3-field",
  "strum_macros",
 ]
 
@@ -4767,6 +4768,7 @@ dependencies = [
  "openvm-circuit",
  "openvm-instructions",
  "openvm-rv32im-circuit",
+ "openvm-rv32im-guest",
  "openvm-rv32im-transpiler",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",

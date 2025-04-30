@@ -1,13 +1,16 @@
 #[cfg(test)]
 mod tests {
+    use std::{collections::HashMap, sync::Arc};
+
     use eyre::Result;
     use openvm_circuit::{
-        arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, VmExecutor},
+        arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, Streams, VmExecutor},
         system::memory::tree::public_values::UserPublicValuesProof,
         utils::{air_test, air_test_with_min_segments},
     };
     use openvm_instructions::exe::VmExe;
     use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
+    use openvm_rv32im_guest::hint_load_by_key_encode;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
@@ -85,6 +88,29 @@ mod tests {
         )?;
         let input = vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()];
         air_test_with_min_segments(config, exe, input, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn test_hint_load_by_key() -> Result<()> {
+        let elf = build_example_program_at_path(get_programs_dir!(), "hint_load_by_key")?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension),
+        )?;
+        let config = Rv32IConfig::default();
+        // stdin will be read after reading kv_store
+        let stdin = vec![[0, 1, 2].map(F::from_canonical_u8).to_vec()];
+        let mut streams: Streams<F> = stdin.into();
+        let input = vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()];
+        streams.kv_store = Arc::new(HashMap::from([(
+            "key".as_bytes().to_vec(),
+            hint_load_by_key_encode(&input),
+        )]));
+        air_test_with_min_segments(config, exe, streams, 1);
         Ok(())
     }
 
