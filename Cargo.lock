@@ -3932,6 +3932,7 @@ version = "1.1.2"
 dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
+ "eyre",
  "halo2curves-axiom",
  "itertools 0.14.0",
  "num-bigint 0.4.6",
@@ -3973,6 +3974,8 @@ dependencies = [
  "once_cell",
  "openvm-algebra-complex-macros",
  "openvm-algebra-moduli-macros",
+ "openvm-custom-insn",
+ "openvm-rv32im-guest",
  "serde-big-array",
  "strum_macros",
 ]
@@ -4120,21 +4123,6 @@ dependencies = [
  "serde",
  "serde-big-array",
  "strum_macros",
-]
-
-[[package]]
-name = "openvm-bigint-integration-tests"
-version = "1.1.2"
-dependencies = [
- "eyre",
- "openvm-bigint-circuit",
- "openvm-bigint-transpiler",
- "openvm-circuit",
- "openvm-instructions",
- "openvm-rv32im-transpiler",
- "openvm-stark-sdk",
- "openvm-toolchain-tests",
- "openvm-transpiler",
 ]
 
 [[package]]
@@ -4316,6 +4304,7 @@ name = "openvm-ecc-integration-tests"
 version = "1.1.2"
 dependencies = [
  "eyre",
+ "halo2curves-axiom",
  "hex-literal",
  "num-bigint 0.4.6",
  "openvm-algebra-circuit",
@@ -4417,21 +4406,6 @@ version = "1.1.2"
 dependencies = [
  "openvm-platform",
  "tiny-keccak",
-]
-
-[[package]]
-name = "openvm-keccak256-integration-tests"
-version = "1.1.2"
-dependencies = [
- "eyre",
- "openvm-circuit",
- "openvm-instructions",
- "openvm-keccak256-circuit",
- "openvm-keccak256-transpiler",
- "openvm-rv32im-transpiler",
- "openvm-stark-sdk",
- "openvm-toolchain-tests",
- "openvm-transpiler",
 ]
 
 [[package]]
@@ -4628,31 +4602,6 @@ dependencies = [
  "serde",
  "strum_macros",
  "subtle",
-]
-
-[[package]]
-name = "openvm-pairing-integration-tests"
-version = "1.1.2"
-dependencies = [
- "eyre",
- "num-bigint 0.4.6",
- "num-traits",
- "openvm",
- "openvm-algebra-circuit",
- "openvm-algebra-transpiler",
- "openvm-circuit",
- "openvm-ecc-circuit",
- "openvm-ecc-guest",
- "openvm-ecc-transpiler",
- "openvm-instructions",
- "openvm-pairing-circuit",
- "openvm-pairing-guest",
- "openvm-pairing-transpiler",
- "openvm-rv32im-transpiler",
- "openvm-stark-sdk",
- "openvm-toolchain-tests",
- "openvm-transpiler",
- "rand",
 ]
 
 [[package]]
@@ -4882,21 +4831,6 @@ version = "1.1.2"
 dependencies = [
  "openvm-platform",
  "sha2",
-]
-
-[[package]]
-name = "openvm-sha256-integration-tests"
-version = "1.1.2"
-dependencies = [
- "eyre",
- "openvm-circuit",
- "openvm-instructions",
- "openvm-rv32im-transpiler",
- "openvm-sha256-circuit",
- "openvm-sha256-transpiler",
- "openvm-stark-sdk",
- "openvm-toolchain-tests",
- "openvm-transpiler",
 ]
 
 [[package]]
