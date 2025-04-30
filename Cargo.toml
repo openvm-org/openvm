@@ -48,7 +48,6 @@ members = [
     "extensions/bigint/circuit",
     "extensions/bigint/transpiler",
     "extensions/bigint/guest",
-    "extensions/bigint/tests",
     "extensions/keccak256/circuit",
     "extensions/keccak256/transpiler",
     "extensions/keccak256/guest",
