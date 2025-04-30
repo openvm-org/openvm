@@ -3,7 +3,9 @@ use std::io::{self, Cursor, Read, Result, Write};
 use openvm_circuit::{
     arch::ContinuationVmProof, system::memory::tree::public_values::UserPublicValuesProof,
 };
-use openvm_continuations::verifier::root::types::RootVmVerifierInput;
+use openvm_continuations::verifier::{
+    internal::types::E2eStarkProof, root::types::RootVmVerifierInput,
+};
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_native_recursion::hints::{InnerBatchOpening, InnerFriProof, InnerQueryProof};
 use openvm_stark_backend::{
@@ -16,7 +18,7 @@ use openvm_stark_backend::{
 };
 use p3_fri::CommitPhaseProofStep;
 
-use super::{F, SC}; // BabyBearPoseidon2Config
+use super::{F, SC};
 
 type Challenge = BinomialExtensionField<F, 4>;
 
@@ -56,6 +58,13 @@ impl Encode for ContinuationVmProof<SC> {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
         encode_slice(&self.per_segment, writer)?;
         self.user_public_values.encode(writer)
+    }
+}
+
+impl Encode for E2eStarkProof<SC> {
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
+        self.proof.encode(writer)?;
+        encode_slice(&self.user_public_values, writer)
     }
 }
 
@@ -318,6 +327,17 @@ impl Decode for ContinuationVmProof<SC> {
         let user_public_values = UserPublicValuesProof::decode(reader)?;
         Ok(Self {
             per_segment,
+            user_public_values,
+        })
+    }
+}
+
+impl Decode for E2eStarkProof<SC> {
+    fn decode<R: Read>(reader: &mut R) -> Result<Self> {
+        let proof = Proof::decode(reader)?;
+        let user_public_values = decode_vec(reader)?;
+        Ok(Self {
+            proof,
             user_public_values,
         })
     }

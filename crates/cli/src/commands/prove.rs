@@ -2,17 +2,17 @@ use std::{path::PathBuf, sync::Arc};
 
 use clap::Parser;
 use eyre::Result;
+#[cfg(feature = "evm-prove")]
+use openvm_sdk::fs::write_evm_proof_to_file;
 use openvm_sdk::{
     commit::AppExecutionCommit,
-    config::SdkVmConfig,
-    fs::{read_app_pk_from_file, read_exe_from_file, write_app_proof_to_file},
+    config::{AggregationTreeConfig, SdkVmConfig},
+    fs::{
+        encode_to_file, read_agg_pk_from_file, read_app_pk_from_file, read_exe_from_file,
+        write_app_proof_to_file,
+    },
     keygen::AppProvingKey,
     NonRootCommittedExe, Sdk, StdIn,
-};
-#[cfg(feature = "evm-prove")]
-use openvm_sdk::{
-    config::AggregationTreeConfig,
-    fs::{read_agg_pk_from_file, write_evm_proof_to_file},
 };
 
 use crate::{
@@ -41,6 +41,22 @@ enum ProveSubCommand {
 
         #[arg(long, action, help = "Path to output proof", default_value = DEFAULT_APP_PROOF_PATH)]
         output: PathBuf,
+    },
+    Stark {
+        #[arg(long, action, help = "Path to app proving key", default_value = DEFAULT_APP_PK_PATH)]
+        app_pk: PathBuf,
+
+        #[arg(long, action, help = "Path to OpenVM executable", default_value = DEFAULT_APP_EXE_PATH)]
+        exe: PathBuf,
+
+        #[arg(long, value_parser, help = "Input to OpenVM program")]
+        input: Option<Input>,
+
+        #[arg(long, action, help = "Path to output proof", default_value = DEFAULT_APP_PROOF_PATH)]
+        output: PathBuf,
+
+        #[command(flatten)]
+        agg_tree_config: AggregationTreeConfig,
     },
     #[cfg(feature = "evm-prove")]
     Evm {
@@ -75,6 +91,28 @@ impl ProveCmd {
                     Self::prepare_execution(&sdk, app_pk, exe, input)?;
                 let app_proof = sdk.generate_app_proof(app_pk, committed_exe, input)?;
                 write_app_proof_to_file(app_proof, output)?;
+            }
+            ProveSubCommand::Stark {
+                app_pk,
+                exe,
+                input,
+                output,
+                agg_tree_config,
+            } => {
+                let mut sdk = sdk;
+                sdk.set_agg_tree_config(*agg_tree_config);
+                let (app_pk, committed_exe, input) =
+                    Self::prepare_execution(&sdk, app_pk, exe, input)?;
+                let agg_pk = read_agg_pk_from_file(DEFAULT_AGG_PK_PATH).map_err(|e| {
+                    eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
+                })?;
+                let stark_proof = sdk.generate_e2e_stark_proof(
+                    app_pk,
+                    committed_exe,
+                    agg_pk.agg_stark_pk,
+                    input,
+                )?;
+                encode_to_file(output, stark_proof)?;
             }
             #[cfg(feature = "evm-prove")]
             ProveSubCommand::Evm {
