@@ -22,8 +22,8 @@ lazy_static! {
 }
 
 openvm_algebra_moduli_macros::moduli_declare! {
-    P256Coord { modulus = "0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff" },
-    P256Scalar { modulus = "0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551" },
+    P256Coord { modulus = "0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff", impl_field = true },
+    P256Scalar { modulus = "0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551", impl_field = true },
 }
 
 pub const P256_NUM_LIMBS: usize = 32;
@@ -44,21 +44,6 @@ openvm_ecc_sw_macros::sw_declare! {
 #[cfg(not(target_os = "zkvm"))]
 // Used in WeierstrassExtension config
 pub const P256_ECC_STRUCT_NAME: &str = "P256Point";
-
-impl Field for P256Coord {
-    const ZERO: Self = <Self as IntMod>::ZERO;
-    const ONE: Self = <Self as IntMod>::ONE;
-
-    type SelfRef<'a> = &'a Self;
-
-    fn double_assign(&mut self) {
-        IntMod::double_assign(self);
-    }
-
-    fn square_assign(&mut self) {
-        IntMod::square_assign(self);
-    }
-}
 
 impl CyclicGroup for P256Point {
     // The constants are taken from: https://neuromancer.sk/std/secg/secp256r1
