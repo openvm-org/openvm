@@ -20,7 +20,9 @@ use openvm_circuit::{
         program::trace::VmCommittedExe,
     },
 };
-use openvm_continuations::verifier::root::types::RootVmVerifierInput;
+use openvm_continuations::verifier::{
+    internal::types::E2eStarkProof, root::types::RootVmVerifierInput,
+};
 pub use openvm_continuations::{
     static_verifier::{DefaultStaticVerifierPvHandler, StaticVerifierPvHandler},
     RootSC, C, F, SC,
@@ -273,6 +275,23 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         let stark_prover =
             StarkProver::<VC, E>::new(app_pk, app_exe, agg_stark_pk, self.agg_tree_config);
         let proof = stark_prover.generate_root_verifier_input(inputs);
+        Ok(proof)
+    }
+
+    pub fn generate_e2e_stark_proof<VC: VmConfig<F>>(
+        &self,
+        app_pk: Arc<AppProvingKey<VC>>,
+        app_exe: Arc<NonRootCommittedExe>,
+        agg_stark_pk: AggStarkProvingKey,
+        inputs: StdIn,
+    ) -> Result<E2eStarkProof<SC>>
+    where
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
+    {
+        let stark_prover =
+            StarkProver::<VC, E>::new(app_pk, app_exe, agg_stark_pk, self.agg_tree_config);
+        let proof = stark_prover.generate_e2e_stark_proof(inputs);
         Ok(proof)
     }
 
