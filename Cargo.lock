@@ -4722,6 +4722,7 @@ dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",
+ "eyre",
  "halo2curves-axiom",
  "itertools 0.14.0",
  "num-bigint 0.4.6",
@@ -4763,6 +4764,8 @@ dependencies = [
  "once_cell",
  "openvm-algebra-complex-macros",
  "openvm-algebra-moduli-macros",
+ "openvm-custom-insn",
+ "openvm-rv32im-guest",
  "openvm-custom-insn",
  "openvm-rv32im-guest",
  "serde-big-array",
@@ -5090,6 +5093,7 @@ version = "1.1.2"
 dependencies = [
  "eyre",
  "halo2curves-axiom",
+ "halo2curves-axiom",
  "hex-literal",
  "num-bigint 0.4.6",
  "openvm-algebra-circuit",
@@ -5262,6 +5266,8 @@ name = "openvm-keccak256-guest"
 version = "1.1.2"
 dependencies = [
  "openvm-platform",
+]
+ "tiny-keccak",
 ]
 
 [[package]]
@@ -5824,6 +5830,8 @@ name = "openvm-sha256-guest"
 version = "1.1.2"
 dependencies = [
  "openvm-platform",
+]
+ "sha2",
 ]
 
 [[package]]
