@@ -75,11 +75,12 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 #### Phantom Sub-Instructions
 
-| VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
-| ------------- | ---------- | ------------- |
-| RV32IM | `Rv32Phantom::HintInput` | Rv32HintInput |
-| RV32IM | `Rv32Phantom::PrintStr` | Rv32PrintStr |
-| RV32IM | `Rv32Phantom::HintRandom` | Rv32HintRandom |
+| VM Extension | `PhantomDiscriminant`         | ISA Phantom Sub-Instruction |
+| ------------- |-------------------------------| ------------- |
+| RV32IM | `Rv32Phantom::HintInput`      | Rv32HintInput |
+| RV32IM | `Rv32Phantom::PrintStr`       | Rv32PrintStr |
+| RV32IM | `Rv32Phantom::HintRandom`     | Rv32HintRandom |
+| RV32IM | `Rv32Phantom::HintLoadByKey` | Rv32HintLoadByKey |
 
 ## Native Extension
 

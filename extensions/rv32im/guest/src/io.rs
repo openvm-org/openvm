@@ -55,6 +55,18 @@ pub fn hint_random(len: usize) {
     );
 }
 
+/// Hint the VM to load values with key = [ptr: len] into input streams.
+#[inline(always)]
+pub fn hint_load_by_key(ptr: *const u8, len: u32) {
+    openvm_custom_insn::custom_insn_i!(
+        opcode = SYSTEM_OPCODE,
+        funct3 = PHANTOM_FUNCT3,
+        rd = In ptr,
+        rs1 = In len,
+        imm = Const PhantomImm::HintLoadByKey as u16,
+    );
+}
+
 /// Store rs1 to [[rd] + imm]_3.
 #[macro_export]
 macro_rules! reveal {
