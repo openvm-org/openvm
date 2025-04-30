@@ -61,9 +61,8 @@ members = [
     "extensions/ecc/sw-macros",
     "extensions/ecc/tests",
     "extensions/pairing/circuit",
-    "extensions/pairing/transpiler",
     "extensions/pairing/guest",
-    "extensions/pairing/tests",
+    "extensions/pairing/transpiler",
 ]
 exclude = ["crates/sdk/example"]
 resolver = "2"
