@@ -91,6 +91,12 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
                         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                         0,
                     ),
+                    PhantomImm::HintLoadByKey => Instruction::phantom(
+                        PhantomDiscriminant(Rv32Phantom::HintLoadByKey as u16),
+                        F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
+                        F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                        0,
+                    ),
                 })
             }
             (RV32_ALU_OPCODE, _) => {
