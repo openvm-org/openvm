@@ -224,7 +224,7 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 pub trait SingleTraceStep<F, CTX> {
     fn execute(
         &mut self,
-        state: VmStateMut<TracingMemory, CTX>,
+        state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
         row_slice: &mut [F],
     ) -> Result<()>;
@@ -391,18 +391,18 @@ pub trait AdapterTraceStep<F, CTX> {
     where
         Self: 'a;
 
-    fn start(pc: u32, memory: &TracingMemory, adapter_row: &mut [F]);
+    fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]);
 
     fn read(
         &self,
-        memory: &mut TracingMemory,
+        memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
     ) -> Self::ReadData;
 
     fn write(
         &self,
-        memory: &mut TracingMemory,
+        memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
         data: &Self::WriteData,

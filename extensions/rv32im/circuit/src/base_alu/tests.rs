@@ -385,7 +385,7 @@ where
         <Rv32BaseAluAdapterStep<RV32_CELL_BITS> as AdapterTraceStep<F, CTX>>::TraceContext<'a>;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, adapter_row: &mut [F]) {
+    fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]) {
         <Rv32BaseAluAdapterStep<RV32_CELL_BITS> as AdapterTraceStep<F, CTX>>::start(
             pc,
             memory,
@@ -396,7 +396,7 @@ where
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory,
+        memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
     ) -> Self::ReadData {
@@ -452,7 +452,7 @@ where
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory,
+        memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
         data: &Self::WriteData,

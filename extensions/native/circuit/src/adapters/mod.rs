@@ -19,7 +19,7 @@ pub mod native_vectorized_adapter;
 /// access.
 #[inline(always)]
 pub fn timed_read<F, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory,
+    memory: &mut TracingMemory<F>,
     ptr: u32,
 ) -> (u32, [F; BLOCK_SIZE])
 where
@@ -32,7 +32,7 @@ where
 
 #[inline(always)]
 pub fn timed_write<F, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory,
+    memory: &mut TracingMemory<F>,
     ptr: u32,
     vals: &[F; BLOCK_SIZE],
 ) -> (u32, [F; BLOCK_SIZE])
@@ -48,7 +48,7 @@ where
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
 #[inline(always)]
 pub fn tracing_read<F, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory,
+    memory: &mut TracingMemory<F>,
     ptr: u32,
     (ptr_mut, aux_cols): (&mut F, &mut MemoryReadAuxCols<F>),
 ) -> [F; BLOCK_SIZE]
@@ -65,7 +65,7 @@ where
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
 #[inline(always)]
 pub fn tracing_write<F, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory,
+    memory: &mut TracingMemory<F>,
     ptr: u32,
     vals: &[F; BLOCK_SIZE],
     (ptr_mut, aux_cols): (&mut F, &mut MemoryWriteAuxCols<F, BLOCK_SIZE>),
@@ -83,7 +83,7 @@ pub fn tracing_write<F, const BLOCK_SIZE: usize>(
 /// Assumes that `addr_space` is [Immediate] or [Native].
 #[inline(always)]
 pub fn tracing_read_or_imm<F>(
-    memory: &mut TracingMemory,
+    memory: &mut TracingMemory<F>,
     addr_space: u32,
     ptr_or_imm: u32,
     addr_space_mut: &mut F,

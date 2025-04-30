@@ -120,7 +120,7 @@ where
     type TraceContext<'a> = ();
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, adapter_row: &mut [F]) {
+    fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]) {
         let adapter_row: &mut Rv32BranchAdapterCols<F> = adapter_row.borrow_mut();
         adapter_row.from_state.pc = F::from_canonical_u32(pc);
         adapter_row.from_state.timestamp = F::from_canonical_u32(memory.timestamp);
@@ -129,7 +129,7 @@ where
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory,
+        memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
     ) -> Self::ReadData {
@@ -161,7 +161,7 @@ where
     #[inline(always)]
     fn write(
         &self,
-        _memory: &mut TracingMemory,
+        _memory: &mut TracingMemory<F>,
         _instruction: &Instruction<F>,
         _adapter_row: &mut [F],
         _data: &Self::WriteData,

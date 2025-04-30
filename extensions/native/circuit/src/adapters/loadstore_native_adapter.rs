@@ -207,7 +207,7 @@ where
     type TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, adapter_row: &mut [F]) {
+    fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]) {
         let adapter_row: &mut NativeLoadStoreAdapterCols<F> = adapter_row.borrow_mut();
 
         adapter_row.from_state.pc = F::from_canonical_u32(pc);
@@ -216,7 +216,7 @@ where
 
     #[inline(always)]
     fn read(
-        memory: &mut TracingMemory,
+        memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
     ) -> Self::ReadData {
@@ -225,7 +225,7 @@ where
 
     #[inline(always)]
     fn write(
-        memory: &mut TracingMemory,
+        memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
         data: &Self::WriteData,
