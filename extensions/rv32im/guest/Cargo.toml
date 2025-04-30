@@ -11,5 +11,8 @@ repository.workspace = true
 openvm-custom-insn = { workspace = true }
 strum_macros = { workspace = true }
 
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+p3-field = { workspace = true }
+
 [features]
 default = []
