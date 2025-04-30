@@ -1083,7 +1083,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
 
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
-            extern "C" fn #setup_function() {
+            extern "C" fn #setup_extern_func() {
                 #[cfg(target_os = "zkvm")]
                 {
                     let mut ptr = 0;
