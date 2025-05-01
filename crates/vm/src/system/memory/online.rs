@@ -372,24 +372,26 @@ impl<F: PrimeField32> TracingMemory<F> {
         // Handle timestamp and block size:
         let access_idx = (pointer as usize / ALIGN) * size_of::<AccessMetadata>();
         // TODO: this is wrong and must be replaced with normal logic
-        let t_prev = {
-            // TODO: address space should be checked elsewhere
-            let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
-            let AccessMetadata {
-                timestamp: t_prev,
-                mut block_size,
-            } = meta.replace(access_idx, &AccessMetadata::new(t_curr, BLOCK_SIZE as u32));
-            // TODO: mark as touched
-            if block_size == 0 {
-                block_size = BLOCK_SIZE as u32;
-            }
-            t_prev
-        };
-        // let t_prev = self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(
-        //     address_space as usize,
-        //     pointer as usize,
-        //     &values_f,
-        // );
+        // let t_prev = {
+        //     // TODO: address space should be checked elsewhere
+        //     let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
+        //     let AccessMetadata {
+        //         timestamp: t_prev,
+        //         mut block_size,
+        //     } = meta.replace(access_idx, &AccessMetadata::new(t_curr, BLOCK_SIZE as u32));
+        //     // TODO: mark as touched
+        //     if block_size == 0 {
+        //         block_size = BLOCK_SIZE as u32;
+        //     }
+        //     t_prev
+        // };
+        let t_prev = self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(
+            address_space as usize,
+            pointer as usize,
+            &values_f,
+        );
+        let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
+        meta.set(access_idx, &AccessMetadata::new(t_curr, BLOCK_SIZE as u32));
 
         (t_prev, values)
     }
@@ -435,24 +437,26 @@ impl<F: PrimeField32> TracingMemory<F> {
         // Handle timestamp and block size:
         let access_idx = (pointer as usize / ALIGN) * size_of::<AccessMetadata>();
         // TODO: this is wrong and must be replaced with normal logic
-        let t_prev = {
-            // TODO: address space should be checked elsewhere
-            let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
-            let AccessMetadata {
-                timestamp: t_prev,
-                mut block_size,
-            } = meta.replace(access_idx, &AccessMetadata::new(t_curr, BLOCK_SIZE as u32));
-            // TODO: mark as touched
-            if block_size == 0 {
-                block_size = BLOCK_SIZE as u32;
-            }
-            t_prev
-        };
-        // let t_prev = self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(
-        //     address_space as usize,
-        //     pointer as usize,
-        //     &values_f,
-        // );
+        // let t_prev = {
+        //     // TODO: address space should be checked elsewhere
+        //     let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
+        //     let AccessMetadata {
+        //         timestamp: t_prev,
+        //         mut block_size,
+        //     } = meta.replace(access_idx, &AccessMetadata::new(t_curr, BLOCK_SIZE as u32));
+        //     // TODO: mark as touched
+        //     if block_size == 0 {
+        //         block_size = BLOCK_SIZE as u32;
+        //     }
+        //     t_prev
+        // };
+        let t_prev = self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(
+            address_space as usize,
+            pointer as usize,
+            &values_f,
+        );
+        let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
+        meta.set(access_idx, &AccessMetadata::new(t_curr, BLOCK_SIZE as u32));
 
         (t_prev, values_prev)
     }
