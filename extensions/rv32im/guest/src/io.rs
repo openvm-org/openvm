@@ -81,6 +81,21 @@ macro_rules! reveal {
     };
 }
 
+/// Store rs1 to [[rd]]_4.
+#[macro_export]
+macro_rules! store_to_native {
+    ($rd:ident, $rs1:ident) => {
+        openvm_custom_insn::custom_insn_r!(
+            opcode = openvm_rv32im_guest::SYSTEM_OPCODE,
+            funct3 = openvm_rv32im_guest::NATIVE_STOREW_FUNCT3,
+            funct7 = openvm_rv32im_guest::NATIVE_STOREW_FUNCT7,
+            rd = In $rd,
+            rs1 = In $rs1,
+            rs2 = In $rs1,
+        )
+    };
+}
+
 /// Print UTF-8 string encoded as bytes to host stdout for debugging purposes.
 #[inline(always)]
 pub fn print_str_from_bytes(str_as_bytes: &[u8]) {
