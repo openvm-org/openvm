@@ -8,12 +8,29 @@ use openvm_ecc_guest::{
 };
 
 use super::Bls12_381;
-use crate::{
-    bls12_381::{BLS12_381_PSEUDO_BINARY_ENCODING, BLS12_381_SEED_ABS},
-    pairing::{
-        Evaluatable, EvaluatedLine, LineMulMType, MillerStep, MultiMillerLoop, UnevaluatedLine,
-    },
+use crate::pairing::{
+    Evaluatable, EvaluatedLine, LineMulMType, MillerStep, MultiMillerLoop, UnevaluatedLine,
 };
+
+pub const BLS12_381_SEED_ABS: u64 = 0xd201000000010000;
+// Encodes the Bls12_381 seed, x.
+// x = sum_i BLS12_381_PSEUDO_BINARY_ENCODING[i] * 2^i
+// where BLS12_381_PSEUDO_BINARY_ENCODING[i] is in {-1, 0, 1}
+pub const BLS12_381_PSEUDO_BINARY_ENCODING: [i8; 64] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1,
+];
+
+#[test]
+fn test_bls12381_pseudo_binary_encoding() {
+    let mut x: i128 = 0;
+    let mut power_of_2 = 1;
+    for b in BLS12_381_PSEUDO_BINARY_ENCODING.iter() {
+        x += (*b as i128) * power_of_2;
+        power_of_2 *= 2;
+    }
+    assert_eq!(x.unsigned_abs(), BLS12_381_SEED_ABS as u128);
+}
 
 impl MillerStep for Bls12_381 {
     type Fp2 = Fq2;

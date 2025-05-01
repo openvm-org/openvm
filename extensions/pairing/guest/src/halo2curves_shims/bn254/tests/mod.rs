@@ -5,14 +5,14 @@ use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2, G1Affine, G2Affine, Gt},
     pairing::MillerLoopResult,
 };
+use hex_literal::hex;
 use itertools::izip;
+use lazy_static::lazy_static;
 use num_bigint::BigUint;
 use num_traits::Pow;
 use openvm_algebra_guest::ExpBytes;
 use openvm_ecc_guest::AffinePoint;
 use rand::{rngs::StdRng, SeedableRng};
-
-use crate::bn254::{BN254_MODULUS, BN254_ORDER};
 
 #[cfg(test)]
 mod test_final_exp;
@@ -20,6 +20,15 @@ mod test_final_exp;
 mod test_line;
 #[cfg(test)]
 mod test_miller_loop;
+
+lazy_static! {
+    pub static ref BN254_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
+        "30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47"
+    ));
+    pub static ref BN254_ORDER: BigUint = BigUint::from_bytes_be(&hex!(
+        "30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001"
+    ));
+}
 
 // Manual final exponentiation because halo2curves `MillerLoopResult` doesn't have constructor
 pub fn final_exp(f: Fq12) -> Fq12 {

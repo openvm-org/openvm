@@ -2,14 +2,14 @@ use alloc::vec::Vec;
 use core::mem::transmute;
 
 use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2, G1Affine, G2Affine, MillerLoopResult};
+use hex_literal::hex;
 use itertools::izip;
+use lazy_static::lazy_static;
 use num_bigint::BigUint;
 use num_traits::Pow;
 use openvm_algebra_guest::ExpBytes;
 use openvm_ecc_guest::AffinePoint;
 use rand::{rngs::StdRng, SeedableRng};
-
-use crate::bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER};
 
 #[cfg(test)]
 mod test_final_exp;
@@ -17,6 +17,17 @@ mod test_final_exp;
 mod test_line;
 #[cfg(test)]
 mod test_miller_loop;
+
+#[cfg(not(target_os = "zkvm"))]
+
+lazy_static! {
+    pub static ref BLS12_381_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
+        "1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab"
+    ));
+    pub static ref BLS12_381_ORDER: BigUint = BigUint::from_bytes_be(&hex!(
+        "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
+    ));
+}
 
 // Manual final exponentiation because halo2curves `MillerLoopResult` doesn't have constructor
 pub fn final_exp(f: Fq12) -> Fq12 {
