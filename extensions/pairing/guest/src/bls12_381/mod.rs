@@ -35,3 +35,7 @@ pub const BLS12_381_PSEUDO_BINARY_ENCODING: [i8; 64] = [
 #[cfg(not(target_os = "zkvm"))]
 // Used in WeierstrassExtension config
 pub const BLS12_381_ECC_STRUCT_NAME: &str = "Bls12_381G1Affine";
+
+#[cfg(not(target_os = "zkvm"))]
+// Used in Fp2Extension config
+pub const BLS12_381_COMPLEX_STRUCT_NAME: &str = "Bls12_381Fp2";
