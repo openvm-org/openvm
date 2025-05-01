@@ -160,7 +160,6 @@ impl<F: PrimeField32> TracingMemory<F> {
 
     /// Instantiates a new `Memory` data structure from an image.
     pub fn with_image(mut self, image: MemoryImage, _access_capacity: usize) -> Self {
-        self.min_block_size = vec![1; self.meta.len()];
         for (i, (paged_vec, cell_size)) in izip!(&image.paged_vecs, &image.cell_size).enumerate() {
             let num_cells = paged_vec.bytes_capacity() / cell_size;
 
