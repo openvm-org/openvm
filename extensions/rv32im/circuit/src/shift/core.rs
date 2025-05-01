@@ -6,7 +6,7 @@ use std::{
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
-        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmStateMut,
+        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -267,7 +267,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, 
     }
 }
 
-impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> SingleTraceStep<F, CTX>
+impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F, CTX>
     for ShiftStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
@@ -288,12 +288,15 @@ where
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        row_slice: &mut [F],
+        trace: &mut [F],
+        trace_offset: &mut usize,
+        width: usize,
     ) -> Result<()> {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
+        let mut row_slice = &mut trace[*trace_offset..*trace_offset + width];
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
@@ -316,6 +319,8 @@ where
             .write(state.memory, instruction, adapter_row, &output);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        *trace_offset += width;
 
         Ok(())
     }

@@ -7,7 +7,7 @@ use itertools::izip;
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, InsExecutorE1,
-        MinimalInstruction, Result, SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir,
+        MinimalInstruction, Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir,
         VmCoreChip, VmExecutionState,
     },
     system::memory::online::GuestMemory,
@@ -162,7 +162,7 @@ impl<A> FieldArithmeticStep<A> {
     }
 }
 
-impl<F, CTX, A> SingleTraceStep<F, CTX> for FieldArithmeticStep<A>
+impl<F, CTX, A> TraceStep<F, CTX> for FieldArithmeticStep<A>
 where
     F: PrimeField32,
     A: 'static

@@ -173,8 +173,7 @@ where
     }
 }
 
-impl<F, CTX, A, const NUM_CELLS: usize> SingleTraceStep<F, CTX>
-    for NativeLoadStoreStep<A, F, NUM_CELLS>
+impl<F, CTX, A, const NUM_CELLS: usize> TraceStep<F, CTX> for NativeLoadStoreStep<A, F, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static

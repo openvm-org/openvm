@@ -2,8 +2,8 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, Result, SingleTraceStep,
-        StepExecutorE1, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, Result, StepExecutorE1, TraceStep,
+        VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -274,7 +274,7 @@ impl<A, const NUM_CELLS: usize> LoadStoreStep<A, NUM_CELLS> {
     }
 }
 
-impl<F, CTX, A, const NUM_CELLS: usize> SingleTraceStep<F, CTX> for LoadStoreStep<A, NUM_CELLS>
+impl<F, CTX, A, const NUM_CELLS: usize> TraceStep<F, CTX> for LoadStoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static
@@ -297,12 +297,15 @@ where
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        row_slice: &mut [F],
+        trace: &mut [F],
+        trace_offset: &mut usize,
+        width: usize,
     ) -> Result<()> {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
+        let mut row_slice = &mut trace[*trace_offset..*trace_offset + width];
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
@@ -351,6 +354,8 @@ where
         );
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        *trace_offset += width;
 
         Ok(())
     }

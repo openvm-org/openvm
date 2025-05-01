@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, AdapterTraceStep,
-        BasicAdapterInterface, MinimalInstruction, Result, SingleTraceStep, StepExecutorE1,
+        BasicAdapterInterface, MinimalInstruction, Result, StepExecutorE1, TraceStep,
         VmAdapterInterface, VmCoreAir, VmCoreChip, VmStateMut,
     },
     system::{
@@ -141,7 +141,7 @@ where
     }
 }
 
-impl<F, CTX, A> SingleTraceStep<F, CTX> for PublicValuesStep<A, F>
+impl<F, CTX, A> TraceStep<F, CTX> for PublicValuesStep<A, F>
 where
     F: PrimeField32,
     A: 'static
@@ -164,7 +164,9 @@ where
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        row_slice: &mut [F],
+        trace: &mut [F],
+        trace_offset: &mut usize,
+        width: usize,
     ) -> Result<()> {
         todo!("Implement execute function");
     }

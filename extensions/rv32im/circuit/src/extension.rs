@@ -25,7 +25,7 @@ use strum::IntoEnumIterator;
 use crate::{adapters::*, *};
 
 // TODO(ayush): this should be decided after e2 execution
-const MAX_INS_CAPACITY: usize = 0;
+const MAX_INS_CAPACITY: usize = 1 << 22;
 
 /// Config for a VM with base extension and IO extension
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
@@ -583,16 +583,24 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
             chip
         };
 
-        let mut hintstore_chip = Rv32HintStoreChip::new(
-            execution_bus,
-            program_bus,
-            bitwise_lu_chip.clone(),
-            memory_bridge,
-            offline_memory.clone(),
-            builder.system_config().memory_config.pointer_max_bits,
-            Rv32HintStoreOpcode::CLASS_OFFSET,
+        let mut hintstore_chip = Rv32HintStoreChip::<F>::new(
+            Rv32HintStoreAir::new(
+                ExecutionBridge::new(execution_bus, program_bus),
+                memory_bridge,
+                bitwise_lu_chip.bus(),
+                Rv32HintStoreOpcode::CLASS_OFFSET,
+                builder.system_config().memory_config.pointer_max_bits,
+            ),
+            Rv32HintStoreStep::new(
+                bitwise_lu_chip,
+                offline_memory.clone(),
+                builder.system_config().memory_config.pointer_max_bits,
+                Rv32HintStoreOpcode::CLASS_OFFSET,
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
         );
-        hintstore_chip.set_streams(builder.streams().clone());
+        hintstore_chip.step.set_streams(builder.streams().clone());
 
         inventory.add_executor(
             hintstore_chip,

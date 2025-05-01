@@ -6,7 +6,7 @@ use std::{
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, Result, SignedImmInstruction,
-        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmStateMut,
+        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -197,7 +197,7 @@ impl<A> Rv32JalrStep<A> {
     }
 }
 
-impl<F, CTX, A> SingleTraceStep<F, CTX> for Rv32JalrStep<A>
+impl<F, CTX, A> TraceStep<F, CTX> for Rv32JalrStep<A>
 where
     F: PrimeField32,
     A: 'static
@@ -220,13 +220,16 @@ where
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        row_slice: &mut [F],
+        trace: &mut [F],
+        trace_offset: &mut usize,
+        width: usize,
     ) -> Result<()> {
         let Instruction { opcode, c, g, .. } = *instruction;
 
         let local_opcode =
             Rv32JalrOpcode::from_usize(opcode.local_opcode_idx(Rv32JalrOpcode::CLASS_OFFSET));
 
+        let mut row_slice = &mut trace[*trace_offset..*trace_offset + width];
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
@@ -268,6 +271,8 @@ where
         );
 
         *state.pc = to_pc;
+
+        *trace_offset += width;
 
         Ok(())
     }
