@@ -5,21 +5,16 @@ mod tests {
     use eyre::Result;
     use hex_literal::hex;
     use num_bigint::BigUint;
-    use openvm_algebra_circuit::ModularExtension;
     use openvm_algebra_transpiler::ModularTranspilerExtension;
     use openvm_circuit::{
-        arch::{instructions::exe::VmExe, SystemConfig},
+        arch::instructions::exe::VmExe,
         utils::{air_test, air_test_with_min_segments},
     };
-    use openvm_ecc_circuit::{
-        CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension, P256_CONFIG, SECP256K1_CONFIG,
-    };
+    use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, P256_CONFIG, SECP256K1_CONFIG};
     use openvm_ecc_transpiler::EccTranspilerExtension;
-    use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_sdk::config::SdkVmConfig;
     use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::{openvm_stark_backend, p3_baby_bear::BabyBear};
     use openvm_toolchain_tests::{
