@@ -182,9 +182,9 @@ jobs:
       - name: Set working directory
         id: set-working-dir
         run: |
-          WORKING_DIR=$(jq -r --arg name "${{ inputs.benchmark_name }}" '
+          WORKING_DIR=$(jq -r --arg id "${{ inputs.benchmark_id }}" '
             .benchmarks[] |
-            select(.name == $name) |
+            select(.id == $id) |
             .working_directory
           ' ./ci/benchmark-config.json)
           RELATIVE_PATH=$(python3 -c "import os.path; print(os.path.relpath('.', '$WORKING_DIR'))")

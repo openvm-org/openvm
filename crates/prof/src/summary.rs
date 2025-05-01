@@ -42,6 +42,7 @@ pub struct SingleSummaryMetrics {
 
 impl GithubSummary {
     pub fn new(
+        names: &[String],
         aggregated_metrics: &[(AggregateMetrics, Option<AggregateMetrics>)],
         md_paths: &[PathBuf],
         benchmark_results_link: &str,
@@ -49,7 +50,8 @@ impl GithubSummary {
         let rows = aggregated_metrics
             .iter()
             .zip_eq(md_paths.iter())
-            .map(|((aggregated, prev_aggregated), md_path)| {
+            .zip_eq(names)
+            .map(|(((aggregated, prev_aggregated), md_path), name)| {
                 let md_filename = md_path.file_name().unwrap().to_str().unwrap();
                 let mut row = aggregated.get_summary_row(md_filename).unwrap();
                 if let Some(prev_aggregated) = prev_aggregated {
@@ -60,6 +62,7 @@ impl GithubSummary {
                         }
                     }
                 }
+                row.name = name.clone();
                 row
             })
             .collect();
