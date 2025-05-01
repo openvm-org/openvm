@@ -216,26 +216,45 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
     pub instruction: I::ProcessedInstruction,
 }
 
-/// Interface for trace generation when the state transition step of a single instruction
-/// uses only one trace row. The trace row is provided as a mutable buffer during both
-/// instruction execution and trace generation.
+/// Interface for trace generation of a single instruction.The trace is provided as a mutable
+/// buffer during both instruction execution and trace generation.
 /// It is expected that no additional memory allocation is necessary and the trace buffer
 /// is sufficient, with possible overwriting.
-pub trait SingleTraceStep<F, CTX> {
+pub trait TraceStep<F, CTX> {
     fn execute(
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        row_slice: &mut [F],
+        // TODO(ayush): combine to a single struct
+        trace: &mut [F],
+        trace_offset: &mut usize,
+        // TODO(ayush): move air inside step and remove width
+        width: usize,
     ) -> Result<()>;
 
+    /// Populates `trace`. This function will always be called after
+    /// [`TraceStep::execute`], so the `trace` should already contain context necessary to
+    /// fill in the rest of it.
+    // TODO(ayush): come up with a better abstraction for chips that fill a dynamic number of rows
+    fn fill_trace(&self, mem_helper: &MemoryAuxColsFactory<F>, trace: &mut [F], width: usize)
+    where
+        Self: Send + Sync,
+        F: Send + Sync,
+    {
+        trace.par_chunks_exact_mut(width).for_each(|row_slice| {
+            self.fill_trace_row(mem_helper, row_slice);
+        });
+    }
+
     /// Populates `row_slice`. This function will always be called after
-    /// [`SingleTraceStep::execute`], so the `row_slice` should already contain context necessary to
+    /// [`TraceStep::execute`], so the `row_slice` should already contain context necessary to
     /// fill in the rest of the row. This function will be called for each row in the trace which is
     /// being used, and all other rows in the trace will be filled with zeroes.
     ///
     /// The provided `row_slice` will have length equal to the width of the AIR.
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]);
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        unreachable!("fill_trace_row is not implemented")
+    }
 
     /// Returns a list of public values to publish.
     fn generate_public_values(&self) -> Vec<F> {
@@ -251,6 +270,7 @@ pub struct NewVmChipWrapper<F, AIR, STEP> {
     pub air: AIR,
     pub step: STEP,
     pub trace_buffer: Vec<F>,
+    // TODO(ayush): width should be a constant?
     width: usize,
     buffer_idx: usize,
     mem_helper: SharedMemoryHelper<F>,
@@ -279,7 +299,7 @@ where
 impl<F, AIR, STEP> InstructionExecutor<F> for NewVmChipWrapper<F, AIR, STEP>
 where
     F: PrimeField32,
-    STEP: SingleTraceStep<F, ()> // TODO: CTX?
+    STEP: TraceStep<F, ()> // TODO: CTX?
         + StepExecutorE1<F>,
 {
     fn execute(
@@ -294,20 +314,13 @@ where
             memory: &mut memory.memory,
             ctx: &mut (),
         };
-        let start_idx = self.buffer_idx;
-        self.buffer_idx += self.width;
-        if self.buffer_idx > self.trace_buffer.len() {
-            return Err(ExecutionError::TraceBufferOutOfBounds {
-                requested: self.buffer_idx,
-                capacity: self.trace_buffer.len(),
-            });
-        }
-        // SAFETY: bound checked above
-        let row_slice = unsafe {
-            self.trace_buffer
-                .get_unchecked_mut(start_idx..self.buffer_idx)
-        };
-        self.step.execute(state, instruction, row_slice)?;
+        self.step.execute(
+            state,
+            instruction,
+            &mut self.trace_buffer,
+            &mut self.buffer_idx,
+            self.width,
+        )?;
 
         Ok(ExecutionState {
             pc,
@@ -328,7 +341,7 @@ impl<SC, AIR, STEP> Chip<SC> for NewVmChipWrapper<Val<SC>, AIR, STEP>
 where
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
-    STEP: SingleTraceStep<Val<SC>, ()> + Send + Sync,
+    STEP: TraceStep<Val<SC>, ()> + Send + Sync,
     AIR: Clone + AnyRap<SC> + 'static,
 {
     fn air(&self) -> AirRef<SC> {
@@ -346,11 +359,11 @@ where
         // This zip only goes through used rows.
         // TODO: check if zero-init assumption changes
         // The padding(=dummy) rows between rows_used..height are ASSUMED to be filled with zeros.
-        self.trace_buffer[..rows_used * self.width]
-            .par_chunks_exact_mut(self.width)
-            .for_each(|row_slice| {
-                self.step.fill_trace_row(&mem_helper, row_slice);
-            });
+        self.step.fill_trace(
+            &mem_helper,
+            &mut self.trace_buffer[..rows_used * self.width],
+            self.width,
+        );
         drop(self.mem_helper);
         let trace = RowMajorMatrix::new(self.trace_buffer, self.width);
         // self.inner.finalize(&mut trace, num_records);
@@ -376,9 +389,9 @@ where
 
 // TODO[jpw]: switch read,write to store into abstract buffer, then fill_trace_row using buffer
 /// A helper trait for expressing generic state accesses within the implementation of
-/// [SingleTraceStep]. Note that this is only a helper trait when the same interface of state access
+/// [TraceStep]. Note that this is only a helper trait when the same interface of state access
 /// is reused or shared by multiple implementations. It is not required to implement this trait if
-/// it is easier to implement the [SingleTraceStep] trait directly without this trait.
+/// it is easier to implement the [TraceStep] trait directly without this trait.
 pub trait AdapterTraceStep<F, CTX> {
     /// Adapter row width
     const WIDTH: usize;

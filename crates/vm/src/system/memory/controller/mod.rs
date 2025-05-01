@@ -101,7 +101,7 @@ pub struct MemoryController<F> {
     // Store separately to avoid smart pointer reference each time
     range_checker_bus: VariableRangeCheckerBus,
     // addr_space -> Memory data structure
-    pub(crate) memory: TracingMemory<F>,
+    pub memory: TracingMemory<F>,
     /// A reference to the `OfflineMemory`. Will be populated after `finalize()`.
     pub offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     pub access_adapters: AccessAdapterInventory<F>,

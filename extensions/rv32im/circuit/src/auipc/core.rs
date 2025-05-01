@@ -6,7 +6,7 @@ use std::{
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, ImmInstruction, Result,
-        SingleTraceStep, StepExecutorE1, VmAdapterInterface, VmCoreAir, VmStateMut,
+        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -207,7 +207,7 @@ impl<A> Rv32AuipcStep<A> {
     }
 }
 
-impl<F, CTX, A> SingleTraceStep<F, CTX> for Rv32AuipcStep<A>
+impl<F, CTX, A> TraceStep<F, CTX> for Rv32AuipcStep<A>
 where
     F: PrimeField32,
     A: 'static
@@ -227,13 +227,16 @@ where
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        row_slice: &mut [F],
+        trace: &mut [F],
+        trace_offset: &mut usize,
+        width: usize,
     ) -> Result<()> {
         let Instruction { opcode, c: imm, .. } = instruction;
 
         let local_opcode =
             Rv32AuipcOpcode::from_usize(opcode.local_opcode_idx(Rv32AuipcOpcode::CLASS_OFFSET));
 
+        let mut row_slice = &mut trace[*trace_offset..*trace_offset + width];
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
@@ -253,6 +256,8 @@ where
 
         // TODO(ayush): add increment_pc function to vmstate
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        *trace_offset += width;
 
         Ok(())
     }

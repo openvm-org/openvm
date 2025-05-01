@@ -183,7 +183,7 @@ impl FieldExtensionChip {
     }
 }
 
-impl<F, CTX, A> SingleTraceStep<F, CTX> for FieldExtensionStep<A>
+impl<F, CTX, A> TraceStep<F, CTX> for FieldExtensionStep<A>
 where
     F: PrimeField32,
     A: 'static

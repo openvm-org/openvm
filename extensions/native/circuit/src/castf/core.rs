@@ -151,7 +151,7 @@ impl<A> CastFStep<A> {
     }
 }
 
-impl<F, CTX, A> SingleTraceStep<F, CTX> for CastFStep<A>
+impl<F, CTX, A> TraceStep<F, CTX> for CastFStep<A>
 where
     F: PrimeField32,
     A: 'static

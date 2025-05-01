@@ -6,7 +6,7 @@ use std::{
 
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    Streams,
+    ExecutionBridge, Streams,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -29,10 +29,11 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{Rv32HintStoreChip, Rv32HintStoreCols};
+use super::{Rv32HintStoreAir, Rv32HintStoreChip, Rv32HintStoreCols, Rv32HintStoreStep};
 use crate::adapters::decompose;
 
 type F = BabyBear;
+const MAX_INS_CAPACITY: usize = 128;
 
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
@@ -50,7 +51,8 @@ fn set_and_execute(
     let read_data: [F; RV32_REGISTER_NUM_LIMBS] =
         array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << RV32_CELL_BITS))));
     for data in read_data {
-        chip.streams
+        chip.step
+            .streams
             .get()
             .unwrap()
             .lock()
@@ -90,7 +92,8 @@ fn set_and_execute_buffer(
         .collect();
     for i in 0..num_words {
         for datum in data[i as usize] {
-            chip.streams
+            chip.step
+                .streams
                 .get()
                 .unwrap()
                 .lock()
@@ -131,15 +134,24 @@ fn rand_hintstore_test() {
     let range_checker_chip = tester.memory_controller().range_checker.clone();
 
     let mut chip = Rv32HintStoreChip::<F>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        bitwise_chip.clone(),
-        tester.memory_bridge(),
-        tester.offline_memory_mutex_arc(),
-        tester.address_bits(),
-        0,
+        Rv32HintStoreAir::new(
+            ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
+            tester.memory_bridge(),
+            bitwise_chip.bus(),
+            0,
+            tester.address_bits(),
+        ),
+        Rv32HintStoreStep::new(
+            bitwise_chip.clone(),
+            tester.offline_memory_mutex_arc(),
+            tester.address_bits(),
+            0,
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
     );
-    chip.set_streams(Arc::new(Mutex::new(Streams::default())));
+    chip.step
+        .set_streams(Arc::new(Mutex::new(Streams::default())));
 
     let num_tests: usize = 8;
     for _ in 0..num_tests {
@@ -178,15 +190,24 @@ fn run_negative_hintstore_test(
     let range_checker_chip = tester.memory_controller().range_checker.clone();
 
     let mut chip = Rv32HintStoreChip::<F>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        bitwise_chip.clone(),
-        tester.memory_bridge(),
-        tester.offline_memory_mutex_arc(),
-        tester.address_bits(),
-        0,
+        Rv32HintStoreAir::new(
+            ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
+            tester.memory_bridge(),
+            bitwise_chip.bus(),
+            0,
+            tester.address_bits(),
+        ),
+        Rv32HintStoreStep::new(
+            bitwise_chip.clone(),
+            tester.offline_memory_mutex_arc(),
+            tester.address_bits(),
+            0,
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
     );
-    chip.set_streams(Arc::new(Mutex::new(Streams::default())));
+    chip.step
+        .set_streams(Arc::new(Mutex::new(Streams::default())));
 
     set_and_execute(&mut tester, &mut chip, &mut rng, opcode);
 
@@ -231,15 +252,24 @@ fn execute_roundtrip_sanity_test() {
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let mut chip = Rv32HintStoreChip::<F>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        bitwise_chip.clone(),
-        tester.memory_bridge(),
-        tester.offline_memory_mutex_arc(),
-        tester.address_bits(),
-        0,
+        Rv32HintStoreAir::new(
+            ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
+            tester.memory_bridge(),
+            bitwise_chip.bus(),
+            0,
+            tester.address_bits(),
+        ),
+        Rv32HintStoreStep::new(
+            bitwise_chip.clone(),
+            tester.offline_memory_mutex_arc(),
+            tester.address_bits(),
+            0,
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
     );
-    chip.set_streams(Arc::new(Mutex::new(Streams::default())));
+    chip.step
+        .set_streams(Arc::new(Mutex::new(Streams::default())));
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {

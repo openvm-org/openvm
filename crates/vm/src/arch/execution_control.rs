@@ -26,6 +26,7 @@ where
     fn new(chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>) -> Self;
 
     /// Determines if execution should stop
+    // TODO(ayush): rename to should_suspend
     fn should_stop(&mut self, chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>)
         -> bool;
 
