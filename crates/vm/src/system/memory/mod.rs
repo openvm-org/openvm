@@ -15,7 +15,6 @@ mod volatile;
 
 pub use controller::*;
 pub use offline::*;
-use openvm_stark_backend::p3_field::PrimeField32;
 pub use paged_vec::*;
 
 #[derive(PartialEq, Copy, Clone, Debug, Eq)]

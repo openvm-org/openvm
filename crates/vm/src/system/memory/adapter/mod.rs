@@ -455,7 +455,7 @@ pub fn get_chip_index(block_size: usize) -> usize {
         "Invalid block size {} for split operation",
         block_size
     );
-    let index = block_size.trailing_zeros().checked_sub(1).unwrap();
+    let index = block_size.trailing_zeros() - 1;
     index as usize
 }
 
