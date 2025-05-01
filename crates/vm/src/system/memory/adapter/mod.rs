@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, cmp::max, sync::Arc};
+use std::{borrow::BorrowMut, cmp::max, io::Cursor, sync::Arc};
 
 pub use air::*;
 pub use columns::*;
@@ -145,6 +145,39 @@ impl<F> AccessAdapterInventory<F> {
             None
         }
     }
+
+    pub(crate) fn execute_split(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[F],
+        timestamp: u32,
+        row_slice: &mut [F],
+    ) where
+        F: PrimeField32,
+    {
+        let index = get_chip_index(values.len());
+        self.chips[index].execute_split(address, values, timestamp, row_slice);
+    }
+
+    pub(crate) fn execute_merge(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[F],
+        left_timestamp: u32,
+        right_timestamp: u32,
+        row_slice: &mut [F],
+    ) where
+        F: PrimeField32,
+    {
+        let index = get_chip_index(values.len());
+        self.chips[index].execute_merge(
+            address,
+            values,
+            left_timestamp,
+            right_timestamp,
+            row_slice,
+        );
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -172,6 +205,25 @@ pub trait GenericAccessAdapterChipTrait<F> {
     fn n(&self) -> usize;
     fn generate_trace(self) -> RowMajorMatrix<F>
     where
+        F: PrimeField32;
+
+    fn execute_split(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[F],
+        timestamp: u32,
+        row_slice: &mut [F],
+    ) where
+        F: PrimeField32;
+
+    fn execute_merge(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[F],
+        left_timestamp: u32,
+        right_timestamp: u32,
+        row_slice: &mut [F],
+    ) where
         F: PrimeField32;
 }
 
@@ -216,6 +268,7 @@ impl<F> GenericAccessAdapterChip<F> {
         }
     }
 }
+
 pub struct AccessAdapterChip<F, const N: usize> {
     air: AccessAdapterAir<N>,
     range_checker: SharedVariableRangeCheckerChip,
@@ -294,6 +347,72 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
             });
         RowMajorMatrix::new(values, width)
     }
+
+    fn execute_split(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[F],
+        timestamp: u32,
+        row_slice: &mut [F],
+    ) where
+        F: PrimeField32,
+    {
+        let row: &mut AccessAdapterCols<F, N> = row_slice.borrow_mut();
+        row.is_valid = F::ONE;
+        row.is_split = F::ONE;
+        row.address = MemoryAddress::new(
+            F::from_canonical_u32(address.address_space),
+            F::from_canonical_u32(address.pointer),
+        );
+        let timestamp = F::from_canonical_u32(timestamp);
+        row.left_timestamp = timestamp;
+        row.right_timestamp = timestamp;
+        row.is_right_larger = F::ZERO;
+        debug_assert_eq!(
+            values.len(),
+            N,
+            "Input values slice length must match the access adapter type"
+        );
+
+        // SAFETY: `values` slice is asserted to have length N. `row.values` is an array of length
+        // N. Pointers are valid and regions do not overlap because exactly one of them is a
+        // part of the trace.
+        unsafe {
+            std::ptr::copy_nonoverlapping(values.as_ptr(), row.values.as_mut_ptr(), N);
+        }
+    }
+
+    fn execute_merge(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[F],
+        left_timestamp: u32,
+        right_timestamp: u32,
+        row_slice: &mut [F],
+    ) where
+        F: PrimeField32,
+    {
+        let row: &mut AccessAdapterCols<F, N> = row_slice.borrow_mut();
+        row.is_valid = F::ONE;
+        row.is_split = F::ZERO;
+        row.address = MemoryAddress::new(
+            F::from_canonical_u32(address.address_space),
+            F::from_canonical_u32(address.pointer),
+        );
+        row.left_timestamp = F::from_canonical_u32(left_timestamp);
+        row.right_timestamp = F::from_canonical_u32(right_timestamp);
+        debug_assert_eq!(
+            values.len(),
+            N,
+            "Input values slice length must match the access adapter type"
+        );
+        // SAFETY: `values` slice is asserted to have length N. `row.values` is an array of length
+        // N. Pointers are valid and regions do not overlap because exactly one of them is a
+        // part of the trace.
+        unsafe {
+            std::ptr::copy_nonoverlapping(values.as_ptr(), row.values.as_mut_ptr(), N);
+        }
+    }
 }
 
 impl<SC: StarkGenericConfig, const N: usize> Chip<SC> for AccessAdapterChip<Val<SC>, N>
@@ -327,4 +446,43 @@ impl<F, const N: usize> ChipUsageGetter for AccessAdapterChip<F, N> {
 #[inline]
 fn air_name(n: usize) -> String {
     format!("AccessAdapter<{}>", n)
+}
+
+#[inline(always)]
+pub fn get_chip_index(block_size: usize) -> usize {
+    assert!(
+        block_size.is_power_of_two() && block_size >= 2,
+        "Invalid block size {} for split operation",
+        block_size
+    );
+    let index = block_size.trailing_zeros() - 1;
+    index as usize
+}
+
+pub struct AdapterInventoryTraceCursor<F> {
+    // [AG] TODO: replace with a pre-allocated space
+    cursors: Vec<Cursor<Vec<F>>>,
+    widths: Vec<usize>,
+}
+
+impl<F: PrimeField32> AdapterInventoryTraceCursor<F> {
+    pub fn new(as_cnt: usize) -> Self {
+        let cursors = vec![Cursor::new(Vec::new()); as_cnt];
+        let widths = vec![
+            size_of::<AccessAdapterCols<u8, 2>>(),
+            size_of::<AccessAdapterCols<u8, 4>>(),
+            size_of::<AccessAdapterCols<u8, 8>>(),
+            size_of::<AccessAdapterCols<u8, 16>>(),
+            size_of::<AccessAdapterCols<u8, 32>>(),
+        ];
+        Self { cursors, widths }
+    }
+
+    pub fn get_row_slice(&mut self, block_size: usize) -> &mut [F] {
+        let index = get_chip_index(block_size);
+        let begin = self.cursors[index].position() as usize;
+        let end = begin + self.widths[index];
+        self.cursors[index].set_position(end as u64);
+        &mut self.cursors[index].get_mut()[begin..end]
+    }
 }

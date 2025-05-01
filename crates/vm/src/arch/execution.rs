@@ -6,7 +6,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32},
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -86,10 +86,10 @@ pub struct VmStateMut<'a, MEM, CTX> {
     pub ctx: &'a mut CTX,
 }
 
-impl<CTX> VmStateMut<'_, TracingMemory, CTX> {
+impl<F: PrimeField32, CTX> VmStateMut<'_, TracingMemory<F>, CTX> {
     // TODO: store as u32 directly
     #[inline(always)]
-    pub fn ins_start<F: Field>(&self, from_state: &mut ExecutionState<F>) {
+    pub fn ins_start(&self, from_state: &mut ExecutionState<F>) {
         from_state.pc = F::from_canonical_u32(*self.pc);
         from_state.timestamp = F::from_canonical_u32(self.memory.timestamp);
     }

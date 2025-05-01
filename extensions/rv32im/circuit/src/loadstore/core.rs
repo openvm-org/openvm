@@ -295,7 +295,7 @@ where
 
     fn execute(
         &mut self,
-        state: VmStateMut<TracingMemory, CTX>,
+        state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
         row_slice: &mut [F],
     ) -> Result<()> {

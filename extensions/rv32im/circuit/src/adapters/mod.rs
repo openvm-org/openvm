@@ -96,8 +96,8 @@ pub fn memory_write<Mem>(
 /// Returns `(t_prev, [ptr:4]_{address_space})` where `t_prev` is the timestamp of the last memory
 /// access.
 #[inline(always)]
-pub fn timed_read(
-    memory: &mut TracingMemory,
+pub fn timed_read<F: PrimeField32>(
+    memory: &mut TracingMemory<F>,
     address_space: u32,
     ptr: u32,
 ) -> (u32, [u8; RV32_REGISTER_NUM_LIMBS]) {
@@ -116,8 +116,8 @@ pub fn timed_read(
 }
 
 #[inline(always)]
-pub fn timed_write(
-    memory: &mut TracingMemory,
+pub fn timed_write<F: PrimeField32>(
+    memory: &mut TracingMemory<F>,
     address_space: u32,
     ptr: u32,
     val: &[u8; RV32_REGISTER_NUM_LIMBS],
@@ -145,7 +145,7 @@ pub fn timed_write(
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
 #[inline(always)]
 pub fn tracing_read<F>(
-    memory: &mut TracingMemory,
+    memory: &mut TracingMemory<F>,
     address_space: u32,
     ptr: u32,
     aux_cols: &mut MemoryReadAuxCols<F>, /* TODO[jpw]: switch to raw u8
@@ -163,7 +163,7 @@ where
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
 #[inline(always)]
 pub fn tracing_write<F>(
-    memory: &mut TracingMemory,
+    memory: &mut TracingMemory<F>,
     address_space: u32,
     ptr: u32,
     val: &[u8; RV32_REGISTER_NUM_LIMBS],
@@ -183,7 +183,7 @@ pub fn tracing_write<F>(
 // TODO(ayush): this is bad but not sure how to avoid
 #[inline(always)]
 pub fn tracing_write_with_base_aux<F>(
-    memory: &mut TracingMemory,
+    memory: &mut TracingMemory<F>,
     address_space: u32,
     ptr: u32,
     val: &[u8; RV32_REGISTER_NUM_LIMBS],
@@ -197,7 +197,7 @@ pub fn tracing_write_with_base_aux<F>(
 
 #[inline(always)]
 pub fn tracing_read_imm<F>(
-    memory: &mut TracingMemory,
+    memory: &mut TracingMemory<F>,
     imm: u32,
     imm_mut: &mut F,
 ) -> [u8; RV32_REGISTER_NUM_LIMBS]
