@@ -199,6 +199,9 @@ jobs:
       - name: Download all metric json files from S3
         run: |
           matrix=$(echo '${{ needs.create-matrix.outputs.matrix }}')
+          names=$(echo $matrix | jq -r '.[] | "\(.id)"')
+          names_list=$(echo -n "$names" | paste -sd "," -)
+
           json_files=$(echo $matrix | jq -r '
             .[] |
             "\(.id)-${{ env.CURRENT_SHA }}.json"')
@@ -224,6 +227,7 @@ jobs:
 
           openvm-prof --json-paths "${json_file_list}" \
             --prev-json-paths "${prev_json_file_list}" \
+            --names "${names_list}" \
             summary \
             --benchmark-results-link "https://github.com/${{ github.repository }}/blob/benchmark-results/${BENCHMARK_RESULTS_PATH}" \
             --summary-md-path summary.md

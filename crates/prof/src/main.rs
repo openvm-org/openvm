@@ -29,6 +29,12 @@ struct Cli {
     #[arg(long, value_delimiter = ',')]
     prev_json_paths: Option<Vec<PathBuf>>,
 
+    /// Display names for each metrics file (optional).
+    /// If provided, must be same length and in same order as `json-paths`.
+    /// Otherwise, the app program name will be used.
+    #[arg(long, value_delimiter = ',')]
+    names: Option<Vec<String>>,
+
     /// Path to write the output JSON in BMF format
     #[arg(long)]
     output_json: Option<PathBuf>,
@@ -55,10 +61,21 @@ fn main() -> Result<()> {
     } else {
         vec![None; args.json_paths.len()]
     };
+    let names = args.names.unwrap_or_default();
+    let mut names = if names.len() == args.json_paths.len() {
+        names
+    } else {
+        vec!["".to_string(); args.json_paths.len()]
+    };
     let mut aggregated_metrics = Vec::new();
     let mut md_paths = Vec::new();
     let mut output = BenchmarkOutput::default();
-    for (metrics_path, prev_metrics_path) in args.json_paths.into_iter().zip_eq(prev_json_paths) {
+    for ((metrics_path, prev_metrics_path), name) in args
+        .json_paths
+        .into_iter()
+        .zip_eq(prev_json_paths)
+        .zip_eq(&mut names)
+    {
         let db = MetricDb::new(&metrics_path)?;
         let grouped = GroupedMetrics::new(&db, "group")?;
         let mut aggregated = grouped.aggregate();
@@ -71,8 +88,10 @@ fn main() -> Result<()> {
                 aggregated.set_diff(prev_aggregated.as_ref().unwrap());
             }
         }
-
-        output.insert(&aggregated.name(), aggregated.to_bencher_metrics());
+        if name.is_empty() {
+            *name = aggregated.name();
+        }
+        output.insert(name, aggregated.to_bencher_metrics());
         let mut writer = Vec::new();
         aggregated.write_markdown(&mut writer, VM_METRIC_NAMES)?;
 
@@ -95,8 +114,12 @@ fn main() -> Result<()> {
     if let Some(command) = args.command {
         match command {
             Commands::Summary(cmd) => {
-                let summary =
-                    GithubSummary::new(&aggregated_metrics, &md_paths, &cmd.benchmark_results_link);
+                let summary = GithubSummary::new(
+                    &names,
+                    &aggregated_metrics,
+                    &md_paths,
+                    &cmd.benchmark_results_link,
+                );
                 let mut writer = Vec::new();
                 summary.write_markdown(&mut writer)?;
                 if let Some(path) = cmd.summary_md_path {
