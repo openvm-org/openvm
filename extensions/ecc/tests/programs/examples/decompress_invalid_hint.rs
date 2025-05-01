@@ -73,7 +73,18 @@ openvm_ecc_sw_macros::sw_declare! {
     },
 }
 
-openvm::init!("openvm_init_decompress_invalid_hint.rs");
+#[cfg(feature = "test_secp256k1_possible")]
+openvm::init!("openvm_init_decompress_invalid_hint_secp256k1_possible.rs");
+#[cfg(feature = "test_secp256k1_impossible")]
+openvm::init!("openvm_init_decompress_invalid_hint_secp256k1_impossible.rs");
+#[cfg(feature = "test_curvepoint5mod8_possible")]
+openvm::init!("openvm_init_decompress_invalid_hint_curvepoint5mod8_possible.rs");
+#[cfg(feature = "test_curvepoint5mod8_impossible")]
+openvm::init!("openvm_init_decompress_invalid_hint_curvepoint5mod8_impossible.rs");
+#[cfg(feature = "test_curvepoint1mod4_possible")]
+openvm::init!("openvm_init_decompress_invalid_hint_curvepoint1mod4_possible.rs");
+#[cfg(feature = "test_curvepoint1mod4_impossible")]
+openvm::init!("openvm_init_decompress_invalid_hint_curvepoint1mod4_impossible.rs");
 
 trait NonQr<P: WeierstrassPoint> {
     fn get_non_qr() -> &'static P::Coordinate;
