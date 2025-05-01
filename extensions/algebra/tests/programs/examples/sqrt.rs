@@ -10,11 +10,11 @@ openvm::entry!(main);
 openvm_algebra_moduli_macros::moduli_declare! {
     Secp256k1Coord {
         modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
-        prime = true
+        impl_field = true
     }
 }
 
-openvm::init!();
+openvm::init!("openvm_init_sqrt.rs");
 
 pub fn main() {
     let a = Secp256k1Coord::from_u32(4);

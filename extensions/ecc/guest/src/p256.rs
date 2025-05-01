@@ -5,7 +5,7 @@ use hex_literal::hex;
 use lazy_static::lazy_static;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint::BigUint;
-use openvm_algebra_guest::{Field, IntMod};
+use openvm_algebra_guest::IntMod;
 
 use super::group::{CyclicGroup, Group};
 use crate::weierstrass::{CachedMulTable, IntrinsicCurve};

@@ -12,10 +12,10 @@ use k256::{
 use openvm_ecc_guest::{
     algebra::IntMod, ecdsa::VerifyingKey, k256::Secp256k1Point, weierstrass::WeierstrassPoint,
 };
-use openvm_keccak256_guest::keccak256;
+use openvm_keccak256::keccak256;
 openvm::entry!(main);
 
-openvm::init!("openvm_init_ecdsa.rs");
+openvm::init!("openvm_init_ecdsa_k256.rs");
 
 // Ref: https://docs.rs/k256/latest/k256/ecdsa/index.html
 pub fn main() {
