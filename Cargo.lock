@@ -4601,32 +4601,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-pairing-integration-tests"
-version = "1.0.1-rc.0"
-dependencies = [
- "eyre",
- "halo2curves-axiom",
- "num-bigint 0.4.6",
- "num-traits",
- "openvm",
- "openvm-algebra-circuit",
- "openvm-algebra-transpiler",
- "openvm-circuit",
- "openvm-ecc-circuit",
- "openvm-ecc-guest",
- "openvm-ecc-transpiler",
- "openvm-instructions",
- "openvm-pairing-circuit",
- "openvm-pairing-guest",
- "openvm-pairing-transpiler",
- "openvm-rv32im-transpiler",
- "openvm-stark-sdk",
- "openvm-toolchain-tests",
- "openvm-transpiler",
- "rand",
-]
-
-[[package]]
 name = "openvm-pairing-transpiler"
 version = "1.1.2"
 dependencies = [
