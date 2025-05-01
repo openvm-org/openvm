@@ -328,7 +328,7 @@ where
 
     fn execute(
         &mut self,
-        state: VmStateMut<TracingMemory, CTX>,
+        state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
         trace: &mut [F],
         trace_offset: &mut usize,
@@ -408,16 +408,10 @@ where
                 state.memory.increment_timestamp();
             }
 
-            // TODO(ayush): why is hint_stream F if composed of u8 limbs?
             let data_f: [F; RV32_REGISTER_NUM_LIMBS] =
                 std::array::from_fn(|_| streams.hint_stream.pop_front().unwrap());
             let data: [u8; RV32_REGISTER_NUM_LIMBS] =
                 data_f.map(|byte| byte.as_canonical_u32() as u8);
-
-            for half in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
-                self.bitwise_lookup_chip
-                    .request_range(data[2 * half] as u32, data[2 * half + 1] as u32);
-            }
 
             let mem_ptr_word = mem_ptr + (RV32_REGISTER_NUM_LIMBS * word_index) as u32;
 
@@ -457,6 +451,13 @@ where
         timestamp += 1;
 
         mem_helper.fill_from_prev(timestamp, row.write_aux.as_mut());
+
+        for half in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
+            self.bitwise_lookup_chip.request_range(
+                row.data[2 * half].as_canonical_u32(),
+                row.data[2 * half + 1].as_canonical_u32(),
+            );
+        }
     }
 }
 
@@ -513,7 +514,6 @@ where
         }
 
         for word_index in 0..num_words {
-            // TODO(ayush): why is hint_stream F if composed of u8 limbs?
             let data: [u8; RV32_REGISTER_NUM_LIMBS] = std::array::from_fn(|_| {
                 streams.hint_stream.pop_front().unwrap().as_canonical_u32() as u8
             });

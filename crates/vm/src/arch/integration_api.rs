@@ -232,14 +232,29 @@ pub trait TraceStep<F, CTX> {
         width: usize,
     ) -> Result<()>;
 
+    /// Populates `trace`. This function will always be called after
+    /// [`TraceStep::execute`], so the `trace` should already contain context necessary to
+    /// fill in the rest of it.
+    // TODO(ayush): come up with a better abstraction for chips that fill a dynamic number of rows
+    fn fill_trace(&self, mem_helper: &MemoryAuxColsFactory<F>, trace: &mut [F], width: usize)
+    where
+        Self: Send + Sync,
+        F: Send + Sync,
+    {
+        trace.par_chunks_exact_mut(width).for_each(|row_slice| {
+            self.fill_trace_row(mem_helper, row_slice);
+        });
+    }
+
     /// Populates `row_slice`. This function will always be called after
     /// [`TraceStep::execute`], so the `row_slice` should already contain context necessary to
     /// fill in the rest of the row. This function will be called for each row in the trace which is
     /// being used, and all other rows in the trace will be filled with zeroes.
     ///
     /// The provided `row_slice` will have length equal to the width of the AIR.
-    // TODO(ayush): should this still operate on a single row or be like execute and operate on a set of rows?
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]);
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        unreachable!("fill_trace_row is not implemented")
+    }
 
     /// Returns a list of public values to publish.
     fn generate_public_values(&self) -> Vec<F> {
@@ -344,11 +359,11 @@ where
         // This zip only goes through used rows.
         // TODO: check if zero-init assumption changes
         // The padding(=dummy) rows between rows_used..height are ASSUMED to be filled with zeros.
-        self.trace_buffer[..rows_used * self.width]
-            .par_chunks_exact_mut(self.width)
-            .for_each(|row_slice| {
-                self.step.fill_trace_row(&mem_helper, row_slice);
-            });
+        self.step.fill_trace(
+            &mem_helper,
+            &mut self.trace_buffer[..rows_used * self.width],
+            self.width,
+        );
         drop(self.mem_helper);
         let trace = RowMajorMatrix::new(self.trace_buffer, self.width);
         // self.inner.finalize(&mut trace, num_records);
