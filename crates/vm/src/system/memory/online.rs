@@ -260,7 +260,6 @@ impl<F: PrimeField32> TracingMemory<F> {
         &mut self,
         address_space: usize,
         pointer: usize,
-        values: &[F],
     ) -> u32 {
         let size = size_of::<T>();
         let seg_size = ALIGN * size;
@@ -303,29 +302,23 @@ impl<F: PrimeField32> TracingMemory<F> {
                 .fill(current_metadata.timestamp);
             // Split
             let address = MemoryAddress::new(address_space as u32, (cur_ptr * seg_size) as u32);
-            if cur_ptr < begin || cur_ptr + current_metadata.block_size as usize > end {
-                let values = (0..current_metadata.block_size as usize)
-                    .map(|i| {
-                        self.data
-                            .get_f(address.address_space, address.pointer + (i as u32))
-                    })
-                    .collect::<Vec<_>>();
-                self.execute_splits::<ALIGN>(address, &values, self.timestamp);
-            } else {
-                self.execute_splits::<ALIGN>(
-                    address,
-                    &values[(cur_ptr - begin)
-                        ..(cur_ptr - begin + current_metadata.block_size as usize)],
-                    self.timestamp,
-                );
-            }
+            let values = (0..current_metadata.block_size as usize)
+                .map(|i| {
+                    self.data
+                        .get_f(address.address_space, address.pointer + (i as u32))
+                })
+                .collect::<Vec<_>>();
+            self.execute_splits::<ALIGN>(address, &values, self.timestamp);
             cur_ptr += current_metadata.block_size as usize;
         };
         if need_to_merge {
             // Merge
+            let values = (0..BLOCK_SIZE)
+                .map(|i| self.data.get_f(address_space as u32, (pointer + i) as u32))
+                .collect::<Vec<_>>();
             self.execute_merges::<ALIGN>(
                 MemoryAddress::new(address_space as u32, pointer as u32),
-                values,
+                &values,
                 &block_timestamps,
             );
         }
@@ -364,9 +357,6 @@ impl<F: PrimeField32> TracingMemory<F> {
     {
         self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
         let values = self.data.read(address_space, pointer);
-        let values_f = (0..BLOCK_SIZE)
-            .map(|i| self.data.get_f::<F>(address_space, pointer + (i as u32)))
-            .collect::<Vec<_>>();
         let t_curr = self.timestamp;
         self.timestamp += 1;
         // Handle timestamp and block size:
@@ -385,11 +375,8 @@ impl<F: PrimeField32> TracingMemory<F> {
         //     }
         //     t_prev
         // };
-        let t_prev = self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(
-            address_space as usize,
-            pointer as usize,
-            &values_f,
-        );
+        let t_prev =
+            self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(address_space as usize, pointer as usize);
         let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
         meta.set(access_idx, &AccessMetadata::new(t_curr, BLOCK_SIZE as u32));
 
@@ -429,9 +416,6 @@ impl<F: PrimeField32> TracingMemory<F> {
     {
         self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
         let values_prev = self.data.replace(address_space, pointer, values);
-        let values_f = (0..BLOCK_SIZE)
-            .map(|i| self.data.get_f::<F>(address_space, pointer + (i as u32)))
-            .collect::<Vec<_>>();
         let t_curr = self.timestamp;
         self.timestamp += 1;
         // Handle timestamp and block size:
@@ -450,11 +434,8 @@ impl<F: PrimeField32> TracingMemory<F> {
         //     }
         //     t_prev
         // };
-        let t_prev = self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(
-            address_space as usize,
-            pointer as usize,
-            &values_f,
-        );
+        let t_prev =
+            self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(address_space as usize, pointer as usize);
         let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
         meta.set(access_idx, &AccessMetadata::new(t_curr, BLOCK_SIZE as u32));
 
