@@ -151,6 +151,8 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                 fn #mul_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #div_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #is_eq_extern_func(rs1: usize, rs2: usize) -> bool;
+                fn #hint_sqrt_extern_func(rs1: usize);
+                fn #hint_non_qr_extern_func();
                 fn #moduli_setup_extern_func();
             }
 

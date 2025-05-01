@@ -73,7 +73,7 @@ openvm_ecc_sw_macros::sw_declare! {
     },
 }
 
-openvm::init!("openvm_init_decompress.rs");
+openvm::init!("openvm_init_decompress_k256.rs");
 
 // test decompression under an honest host
 pub fn main() {

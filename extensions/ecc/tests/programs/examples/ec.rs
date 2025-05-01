@@ -10,7 +10,7 @@ use openvm_ecc_guest::{
     Group,
 };
 
-openvm::init!("openvm_init_ec.rs");
+openvm::init!("openvm_init_ec_k256.rs");
 
 openvm::entry!(main);
 
