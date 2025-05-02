@@ -186,7 +186,7 @@ impl<F: PrimeField32> TracingMemory<F> {
         );
     }
 
-    fn execute_splits<const ALIGN: usize>(
+    pub(crate) fn execute_splits<const ALIGN: usize>(
         &mut self,
         address: MemoryAddress<u32, u32>,
         values: &[F],
@@ -203,9 +203,9 @@ impl<F: PrimeField32> TracingMemory<F> {
                 self.access_adapter_inventory.execute_split(
                     MemoryAddress {
                         address_space,
-                        pointer: pointer + (i * size) as u32,
+                        pointer: pointer + i as u32,
                     },
-                    &values[i * size..(i + 1) * size],
+                    &values[i..i + size],
                     timestamp,
                     self.adapter_inventory_trace_cursor.get_row_slice(size),
                 );
@@ -213,7 +213,7 @@ impl<F: PrimeField32> TracingMemory<F> {
         }
     }
 
-    fn execute_merges<const ALIGN: usize>(
+    pub(crate) fn execute_merges<const ALIGN: usize>(
         &mut self,
         address: MemoryAddress<u32, u32>,
         values: &[F],
@@ -238,9 +238,9 @@ impl<F: PrimeField32> TracingMemory<F> {
                 self.access_adapter_inventory.execute_merge(
                     MemoryAddress {
                         address_space,
-                        pointer: pointer + (i * size) as u32,
+                        pointer: pointer + i as u32,
                     },
-                    &values[i * size..(i + 1) * size],
+                    &values[i..i + size],
                     *left_timestamp,
                     *right_timestamp,
                     self.adapter_inventory_trace_cursor.get_row_slice(size),
@@ -281,13 +281,12 @@ impl<F: PrimeField32> TracingMemory<F> {
                 break false;
             } else if current_metadata.block_size == 0 {
                 // Initialize
-                self.meta[address_space].set(
-                    cur_ptr * size_of::<AccessMetadata>(),
-                    &AccessMetadata {
-                        timestamp: INITIAL_TIMESTAMP,
-                        block_size: ALIGN as u32,
-                    },
-                );
+                current_metadata = AccessMetadata {
+                    timestamp: INITIAL_TIMESTAMP,
+                    block_size: BLOCK_SIZE as u32,
+                };
+                self.meta[address_space]
+                    .set(cur_ptr * size_of::<AccessMetadata>(), &current_metadata);
             }
             prev_ts = prev_ts.max(current_metadata.timestamp);
             while current_metadata.block_size == AccessMetadata::OCCUPIED {

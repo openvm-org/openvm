@@ -32,6 +32,7 @@ use super::{
     online::{GuestMemory, INITIAL_TIMESTAMP},
     paged_vec::{AddressMap, PAGE_SIZE},
     volatile::VolatileBoundaryChip,
+    MemoryAddress,
 };
 use crate::{
     arch::{hasher::HasherChip, MemoryConfig},
@@ -470,39 +471,82 @@ impl<F: PrimeField32> MemoryController<F> {
         if self.final_state.is_some() {
             return;
         }
-        todo!();
 
-        match &mut self.interface_chip {
-            MemoryInterface::Volatile { boundary_chip } => {
-                // let final_memory = offline_memory.finalize::<1>(&mut self.access_adapters);
-                // boundary_chip.finalize(final_memory);
-                // self.final_state = Some(FinalState::Volatile(VolatileFinalState::default()));
-            }
-            MemoryInterface::Persistent {
-                merkle_chip,
-                boundary_chip,
-                initial_memory,
-            } => {
-                let hasher = hasher.unwrap();
-                // let final_partition = offline_memory.finalize::<CHUNK>(&mut
-                // self.access_adapters);
+        // self.replay_access_log();
+        // let mut offline_memory = self.offline_memory.lock().unwrap();
 
-                // boundary_chip.finalize(initial_memory, &final_partition, hasher);
-                // let final_memory_values = final_partition
-                //     .into_par_iter()
-                //     .map(|(key, value)| (key, value.values))
-                //     .collect();
-                // let initial_node = MemoryNode::tree_from_memory(
-                //     merkle_chip.air.memory_dimensions,
-                //     initial_memory,
-                //     hasher,
-                // );
-                // merkle_chip.finalize(&initial_node, &final_memory_values, hasher);
-                // self.final_state = Some(FinalState::Persistent(PersistentFinalState {
-                //     final_memory: final_memory_values.clone(),
-                // }));
+        let touched_blocks = self.memory.touched_blocks().collect::<Vec<_>>();
+        if let MemoryInterface::Volatile { boundary_chip } = &mut self.interface_chip {
+            let mut final_memory = TimestampedEquipartition::<F, 1>::new();
+            for ((addr_space, ptr), metadata) in touched_blocks {
+                let mut values = (0..metadata.block_size)
+                    .map(|i| self.memory.data.get_f::<F>(addr_space, ptr + i))
+                    .collect::<Vec<_>>();
+                for i in 0..metadata.block_size {
+                    final_memory.insert(
+                        (addr_space, ptr + i),
+                        TimestampedValues {
+                            timestamp: metadata.timestamp,
+                            values: [values[i as usize]],
+                        },
+                    );
+                }
+                self.memory.execute_splits::<1>(
+                    MemoryAddress::new(addr_space, ptr),
+                    &values,
+                    metadata.timestamp,
+                );
+                values.fill(F::ZERO);
+                self.memory.execute_merges::<1>(
+                    MemoryAddress::new(addr_space, ptr),
+                    &values,
+                    &vec![INITIAL_TIMESTAMP; metadata.block_size as usize],
+                );
             }
-        };
+
+            for i in 0..self.access_adapters.num_access_adapters() {
+                let width = self.memory.adapter_inventory_trace_cursor.width(i);
+                self.access_adapters.set_trace(
+                    i,
+                    self.memory.adapter_inventory_trace_cursor.extract_trace(i),
+                    width,
+                );
+            }
+
+            boundary_chip.finalize(final_memory);
+        }
+
+        // match &mut self.interface_chip {
+        //     MemoryInterface::Volatile { boundary_chip } => {
+        //         let final_memory = offline_memory.finalize::<1>(&mut self.access_adapters);
+        //         boundary_chip.finalize(final_memory);
+        //         self.final_state = Some(FinalState::Volatile(VolatileFinalState::default()));
+        //     }
+        //     MemoryInterface::Persistent {
+        //         merkle_chip,
+        //         boundary_chip,
+        //         initial_memory,
+        //     } => {
+        //         let hasher = hasher.unwrap();
+        //         let final_partition = offline_memory.finalize::<CHUNK>(&mut
+        // self.access_adapters);
+
+        //         boundary_chip.finalize(initial_memory, &final_partition, hasher);
+        //         let final_memory_values = final_partition
+        //             .into_par_iter()
+        //             .map(|(key, value)| (key, value.values))
+        //             .collect();
+        //         let initial_node = MemoryNode::tree_from_memory(
+        //             merkle_chip.air.memory_dimensions,
+        //             initial_memory,
+        //             hasher,
+        //         );
+        //         merkle_chip.finalize(&initial_node, &final_memory_values, hasher);
+        //         self.final_state = Some(FinalState::Persistent(PersistentFinalState {
+        //             final_memory: final_memory_values.clone(),
+        //         }));
+        //     }
+        // };
     }
 
     pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>

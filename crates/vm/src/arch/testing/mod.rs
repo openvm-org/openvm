@@ -1,3 +1,10 @@
+use std::{
+    borrow::Borrow,
+    iter::zip,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
+
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
@@ -33,6 +40,7 @@ use crate::{
             offline_checker::{MemoryBridge, MemoryBus},
             MemoryController, SharedMemoryHelper,
         },
+        poseidon2::Poseidon2PeripheryChip,
         program::ProgramBus,
     },
 };
@@ -300,26 +308,24 @@ where
     }
 
     pub fn finalize(mut self) -> Self {
-        if let Some(mut memory_tester) = self.memory.take() {
+        if let Some(memory_tester) = self.memory.take() {
             // Balance memory boundaries
-            memory_tester.finalize();
-            let memory_controller = memory_tester.controller;
+            // memory_tester.finalize();
+            let mut memory_controller = memory_tester.controller;
+            memory_controller.finalize(None::<&mut Poseidon2PeripheryChip<Val<SC>>>);
             let range_checker = memory_controller.range_checker.clone();
-            drop(memory_controller);
+            // drop(memory_controller);
             // dummy memory interactions:
             for mem_chip in memory_tester.chip_for_block.into_values() {
                 self = self.load(mem_chip);
             }
             {
                 // todo: boundary and adapter stuff
-                // let airs = memory_controller.borrow().airs();
-                // let air_proof_inputs = Rc::try_unwrap(memory_controller)
-                //     .unwrap_or_else(|_| panic!("Memory controller was not dropped"))
-                //     .into_inner()
-                //     .generate_air_proof_inputs();
-                // self.air_proof_inputs.extend(
-                //     zip(airs, air_proof_inputs).filter(|(_, input)| input.main_trace_height() >
-                // 0), );
+                let airs = memory_controller.borrow().airs();
+                let air_proof_inputs = memory_controller.generate_air_proof_inputs();
+                self.air_proof_inputs.extend(
+                    zip(airs, air_proof_inputs).filter(|(_, input)| input.main_trace_height() > 0),
+                );
             }
             self = self.load(range_checker); // this must be last because other trace generation
                                              // mutates its state
