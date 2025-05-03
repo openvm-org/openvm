@@ -3,7 +3,7 @@ use std::{array, borrow::BorrowMut};
 use openvm_circuit::{
     arch::{
         testing::{TestAdapterChip, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        NewVmChipWrapper, VmAirWrapper, VmChipWrapper,
+        NewVmChipWrapper, VmAirWrapper,
     },
     utils::generate_long_number,
 };

@@ -569,7 +569,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
             program_bus,
             memory_bridge,
         } = builder.system_port();
-        let offline_memory = builder.system_base().offline_memory();
 
         let bitwise_lu_chip = if let Some(&chip) = builder
             .find_chip::<SharedBitwiseOperationLookupChip<8>>()
@@ -593,7 +592,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
             ),
             Rv32HintStoreStep::new(
                 bitwise_lu_chip,
-                offline_memory.clone(),
                 builder.system_config().memory_config.pointer_max_bits,
                 Rv32HintStoreOpcode::CLASS_OFFSET,
             ),

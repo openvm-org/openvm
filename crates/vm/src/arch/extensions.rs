@@ -46,7 +46,7 @@ use crate::{
         connector::VmConnectorChip,
         memory::{
             offline_checker::{MemoryBridge, MemoryBus},
-            MemoryController, MemoryImage, OfflineMemory, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
+            MemoryController, MemoryImage, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
         },
         native_adapter::{NativeAdapterAir, NativeAdapterStep},
         phantom::PhantomChip,
@@ -502,10 +502,6 @@ impl<F: PrimeField32> SystemBase<F> {
 
     pub fn execution_bus(&self) -> ExecutionBus {
         self.connector_chip.air.execution_bus
-    }
-
-    pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
-        self.memory_controller.offline_memory().clone()
     }
 
     /// Return trace heights of SystemBase. Usually this is for aggregation and not useful for

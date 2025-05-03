@@ -6,8 +6,7 @@ use std::{
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
-        ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
-        VmAdapterInterface,
+        ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterInterface,
     },
     system::{
         memory::{
@@ -30,7 +29,7 @@ use serde_big_array::BigArray;
 use super::memory::{online::TracingMemory, MemoryAuxColsFactory};
 use crate::{
     arch::{AdapterExecutorE1, AdapterTraceStep},
-    system::memory::{online::GuestMemory, OfflineMemory, RecordId},
+    system::memory::{online::GuestMemory, RecordId},
 };
 
 #[repr(C)]

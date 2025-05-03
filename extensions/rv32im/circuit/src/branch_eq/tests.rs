@@ -2,8 +2,8 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-    BasicAdapterInterface, ExecutionBridge, ImmInstruction, InstructionExecutor, VmAdapterChip,
-    VmAirWrapper, VmChipWrapper, VmCoreChip,
+    BasicAdapterInterface, ExecutionBridge, ImmInstruction, InstructionExecutor, VmAirWrapper,
+    VmCoreChip,
 };
 use openvm_instructions::{
     instruction::Instruction,

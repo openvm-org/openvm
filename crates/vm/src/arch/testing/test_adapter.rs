@@ -16,9 +16,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     arch::{
         AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, ExecutionBridge,
-        ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
+        ExecutionState, MinimalInstruction, Result, VmAdapterAir,
     },
-    system::memory::{MemoryController, OfflineMemory},
+    system::memory::MemoryController,
 };
 
 // Replaces A: VmAdapterChip while testing VmCoreChip functionality, as it has no
@@ -51,78 +51,6 @@ impl<F> TestAdapterChip<F> {
 pub struct TestAdapterRecord<T> {
     pub from_pc: u32,
     pub operands: [T; 7],
-}
-
-impl<F: PrimeField32> VmAdapterChip<F> for TestAdapterChip<F> {
-    type ReadRecord = ();
-    type WriteRecord = TestAdapterRecord<F>;
-    type Air = TestAdapterAir;
-    type Interface = DynAdapterInterface<F>;
-
-    fn preprocess(
-        &mut self,
-        _memory: &mut MemoryController<F>,
-        _instruction: &Instruction<F>,
-    ) -> Result<(DynArray<F>, Self::ReadRecord)> {
-        Ok((
-            self.prank_reads
-                .pop_front()
-                .expect("Not enough prank reads provided")
-                .into(),
-            (),
-        ))
-    }
-
-    fn postprocess(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-        _output: AdapterRuntimeContext<F, Self::Interface>,
-        _read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
-        let pc_inc = self
-            .prank_pc_inc
-            .pop_front()
-            .map(|x| x.unwrap_or(4))
-            .unwrap_or(4);
-        Ok((
-            ExecutionState {
-                pc: from_state.pc + pc_inc,
-                timestamp: memory.timestamp(),
-            },
-            TestAdapterRecord {
-                operands: [
-                    instruction.a,
-                    instruction.b,
-                    instruction.c,
-                    instruction.d,
-                    instruction.e,
-                    instruction.f,
-                    instruction.g,
-                ],
-                from_pc: from_state.pc,
-            },
-        ))
-    }
-
-    fn generate_trace_row(
-        &self,
-        row_slice: &mut [F],
-        _read_record: Self::ReadRecord,
-        write_record: Self::WriteRecord,
-        _memory: &OfflineMemory<F>,
-    ) {
-        let cols: &mut TestAdapterCols<F> = row_slice.borrow_mut();
-        cols.from_pc = F::from_canonical_u32(write_record.from_pc);
-        cols.operands = write_record.operands;
-        // row_slice[0] = F::from_canonical_u32(write_record.from_pc);
-        // row_slice[1..].copy_from_slice(&write_record.operands);
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
-    }
 }
 
 #[derive(Clone, Copy, Debug)]

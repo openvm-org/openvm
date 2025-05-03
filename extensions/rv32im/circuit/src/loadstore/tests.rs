@@ -3,7 +3,7 @@ use std::{array, borrow::BorrowMut};
 use openvm_circuit::{
     arch::{
         testing::{memory::gen_pointer, VmChipTestBuilder},
-        VmAdapterChip, VmAirWrapper,
+        VmAirWrapper,
     },
     utils::u32_into_limbs,
 };

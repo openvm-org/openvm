@@ -141,12 +141,7 @@ fn rand_hintstore_test() {
             0,
             tester.address_bits(),
         ),
-        Rv32HintStoreStep::new(
-            bitwise_chip.clone(),
-            tester.offline_memory_mutex_arc(),
-            tester.address_bits(),
-            0,
-        ),
+        Rv32HintStoreStep::new(bitwise_chip.clone(), tester.address_bits(), 0),
         MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
@@ -197,12 +192,7 @@ fn run_negative_hintstore_test(
             0,
             tester.address_bits(),
         ),
-        Rv32HintStoreStep::new(
-            bitwise_chip.clone(),
-            tester.offline_memory_mutex_arc(),
-            tester.address_bits(),
-            0,
-        ),
+        Rv32HintStoreStep::new(bitwise_chip.clone(), tester.address_bits(), 0),
         MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
@@ -259,12 +249,7 @@ fn execute_roundtrip_sanity_test() {
             0,
             tester.address_bits(),
         ),
-        Rv32HintStoreStep::new(
-            bitwise_chip.clone(),
-            tester.offline_memory_mutex_arc(),
-            tester.address_bits(),
-            0,
-        ),
+        Rv32HintStoreStep::new(bitwise_chip.clone(), tester.address_bits(), 0),
         MAX_INS_CAPACITY,
         tester.memory_helper(),
     );

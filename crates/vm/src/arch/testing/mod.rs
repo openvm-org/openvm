@@ -1,5 +1,3 @@
-use std::sync::{Arc, Mutex};
-
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
@@ -33,7 +31,7 @@ use crate::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryBus},
-            MemoryController, OfflineMemory, SharedMemoryHelper,
+            MemoryController, SharedMemoryHelper,
         },
         program::ProgramBus,
     },
@@ -42,6 +40,7 @@ use crate::{
 pub mod execution;
 pub mod memory;
 pub mod program;
+// TODO[jpw]: delete or fix
 pub mod test_adapter;
 
 pub use execution::ExecutionTester;
@@ -188,11 +187,6 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 
     pub fn memory_helper(&self) -> SharedMemoryHelper<F> {
         self.memory.controller.helper()
-    }
-
-    // TODO: delete
-    pub fn offline_memory_mutex_arc(&self) -> Arc<Mutex<OfflineMemory<F>>> {
-        self.memory.controller.offline_memory().clone()
     }
 
     pub fn address_bits(&self) -> usize {

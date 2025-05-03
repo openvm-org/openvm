@@ -12,10 +12,9 @@ use super::{
     paged_vec::{AddressMap, PAGE_SIZE},
     Address, MemoryAddress, PagedVec,
 };
-use crate::{
-    arch::MemoryConfig,
-    system::memory::{offline::INITIAL_TIMESTAMP, MemoryImage, RecordId},
-};
+use crate::{arch::MemoryConfig, system::memory::MemoryImage};
+
+pub const INITIAL_TIMESTAMP: u32 = 0;
 
 /// API for guest memory conforming to OpenVM ISA
 pub trait GuestMemory {

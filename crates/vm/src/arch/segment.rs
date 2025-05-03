@@ -22,7 +22,7 @@ use super::{
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{instructions::*, ExecutionState, InstructionExecutor},
+    arch::{instructions::*, InstructionExecutor},
     system::{
         connector::DEFAULT_SUSPEND_EXIT_CODE,
         memory::{online::GuestMemory, paged_vec::PAGE_SIZE, AddressMap, MemoryImage},

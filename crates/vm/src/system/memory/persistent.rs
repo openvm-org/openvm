@@ -19,12 +19,12 @@ use openvm_stark_backend::{
 };
 use rustc_hash::FxHashSet;
 
-use super::merkle::SerialReceiver;
+use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP};
 use crate::{
     arch::hasher::Hasher,
     system::memory::{
         dimensions::MemoryDimensions, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
-        TimestampedEquipartition, INITIAL_TIMESTAMP,
+        TimestampedEquipartition,
     },
 };
 

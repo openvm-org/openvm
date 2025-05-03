@@ -13,7 +13,7 @@ use openvm_circuit::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
             online::{GuestMemory, TracingMemory},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, OfflineMemory, RecordId,
+            MemoryAddress, MemoryAuxColsFactory, MemoryController, RecordId,
         },
         program::ProgramBus,
     },
@@ -286,7 +286,6 @@ pub struct Rv32HintStoreRecord<F: Field> {
 pub struct Rv32HintStoreStep<F: Field> {
     pointer_max_bits: usize,
     offset: usize,
-    offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     pub streams: OnceLock<Arc<Mutex<Streams<F>>>>,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
@@ -294,14 +293,12 @@ pub struct Rv32HintStoreStep<F: Field> {
 impl<F: PrimeField32> Rv32HintStoreStep<F> {
     pub fn new(
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
         pointer_max_bits: usize,
         offset: usize,
     ) -> Self {
         Self {
             pointer_max_bits,
             offset,
-            offline_memory,
             streams: OnceLock::new(),
             bitwise_lookup_chip,
         }
@@ -398,7 +395,7 @@ where
 
         for word_index in 0..(num_words as usize) {
             let offset = *trace_offset + word_index * width;
-            let mut row: &mut Rv32HintStoreCols<F> = trace[offset..offset + width].borrow_mut();
+            let row: &mut Rv32HintStoreCols<F> = trace[offset..offset + width].borrow_mut();
 
             if word_index != 0 {
                 row.is_buffer = F::ONE;

@@ -5,7 +5,7 @@ use openvm_circuit::{
         testing::{
             test_adapter::TestAdapterAir, TestAdapterChip, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
         },
-        AdapterExecutorE1, AdapterTraceStep, NewVmChipWrapper, VmAirWrapper, VmChipWrapper,
+        AdapterExecutorE1, AdapterTraceStep, NewVmChipWrapper, VmAirWrapper,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},

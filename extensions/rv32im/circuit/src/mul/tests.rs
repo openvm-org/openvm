@@ -3,7 +3,7 @@ use std::borrow::BorrowMut;
 use openvm_circuit::{
     arch::{
         testing::{TestAdapterChip, VmChipTestBuilder, RANGE_TUPLE_CHECKER_BUS},
-        ExecutionBridge, VmAdapterChip, VmAirWrapper, VmChipWrapper,
+        ExecutionBridge, VmAirWrapper,
     },
     utils::generate_long_number,
 };
