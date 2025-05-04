@@ -19,7 +19,7 @@ Findings include anything that could warrant change or unexpected behavior that 
 
 **Context:** [link](https://cantina.xyz/code/c486d600-bed0-4fc6-aed1-de759fd29fa2/openvm/extensions/rv32im/circuit/src/adapters/loadstore.rs#L183)
 
-**Description:** `Rv32LoadStoreChip` chip doesn't assert supoprted address spaces. An valid instruction could read from an address space which requires elements larger than 1 byte or write into an address space which requires elements smaller than 1 byte. This could break address space invariants which other chips take.
+**Description:** `Rv32LoadStoreChip` chip doesn't assert supported address spaces. An valid instruction could read from an address space which requires elements larger than 1 byte or write into an address space which requires elements smaller than 1 byte. This could break address space invariants which other chips take.
 
 This could only happen when users intend to add some invalid instruction.
 
