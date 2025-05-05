@@ -34,7 +34,7 @@ impl<VC, E: StarkFriEngine<SC>> StarkProver<VC, E> {
         );
         assert_eq!(
             app_pk.app_vm_pk.vm_config.system().num_public_values,
-            agg_stark_pk.num_public_values(),
+            agg_stark_pk.num_user_public_values(),
             "App VM is incompatible with Agg VM  because of the number of public values"
         );
 

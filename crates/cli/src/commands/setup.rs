@@ -17,7 +17,9 @@ use openvm_sdk::{
     DefaultStaticVerifierPvHandler, Sdk,
 };
 
-use crate::default::{DEFAULT_AGG_PK_PATH, DEFAULT_EVM_HALO2_VERIFIER_PATH, DEFAULT_PARAMS_DIR};
+use crate::default::{
+    DEFAULT_AGG_PK_PATH, DEFAULT_ASM_PATH, DEFAULT_EVM_HALO2_VERIFIER_PATH, DEFAULT_PARAMS_DIR,
+};
 
 #[derive(Parser)]
 #[command(
@@ -56,11 +58,17 @@ impl EvmProvingSetupCmd {
         println!("Generating proving key...");
         let agg_pk = sdk.agg_keygen(agg_config, &params_reader, &DefaultStaticVerifierPvHandler)?;
 
+        println!("Generating root verifier ASM...");
+        let root_verifier_asm = sdk.generate_root_verifier_asm(&agg_pk.agg_stark_pk);
+
         println!("Generating verifier contract...");
         let verifier = sdk.generate_halo2_verifier_solidity(&params_reader, &agg_pk)?;
 
         println!("Writing proving key to file...");
         write_agg_pk_to_file(agg_pk, DEFAULT_AGG_PK_PATH)?;
+
+        println!("Writing root verifier ASM to file...");
+        write(DEFAULT_ASM_PATH, root_verifier_asm)?;
 
         println!("Writing verifier contract to file...");
         write_evm_halo2_verifier_to_folder(verifier, DEFAULT_EVM_HALO2_VERIFIER_PATH)?;
