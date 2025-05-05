@@ -103,7 +103,7 @@ impl ProveCmd {
                 sdk.set_agg_tree_config(*agg_tree_config);
                 let (app_pk, committed_exe, input) =
                     Self::prepare_execution(&sdk, app_pk, exe, input)?;
-                let agg_pk = read_agg_pk_from_file(DEFAULT_AGG_PK_PATH).map_err(|e| {
+                let agg_pk = read_agg_pk_from_file(default_agg_pk_path()).map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
                 })?;
                 let stark_proof = sdk.generate_e2e_stark_proof(
