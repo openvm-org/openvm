@@ -46,6 +46,7 @@ use crate::{
     NonRootCommittedExe, RootSC, F, SC,
 };
 
+pub mod asm;
 pub(crate) mod dummy;
 pub mod perm;
 pub mod static_verifier;
@@ -321,7 +322,7 @@ impl AggStarkProvingKey {
             let root_program = RootVmVerifierConfig {
                 leaf_fri_params: config.leaf_fri_params,
                 internal_fri_params: config.internal_fri_params,
-                num_public_values: config.max_num_user_public_values,
+                num_user_public_values: config.max_num_user_public_values,
                 internal_vm_verifier_commit: internal_committed_exe.get_program_commit().into(),
                 compiler_options: config.compiler_options,
             }
@@ -369,7 +370,7 @@ impl AggStarkProvingKey {
         self.internal_committed_exe.get_program_commit().into()
     }
 
-    pub fn num_public_values(&self) -> usize {
+    pub fn num_user_public_values(&self) -> usize {
         self.root_verifier_pk
             .vm_pk
             .vm_config
