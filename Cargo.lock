@@ -3886,6 +3886,7 @@ version = "1.0.0"
 dependencies = [
  "derivative",
  "lazy_static",
+ "openvm-poseidon2-air",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "p3-monty-31",
