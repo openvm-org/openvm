@@ -18,6 +18,10 @@ pub fn default_agg_pk_path() -> String {
     env::var("HOME").unwrap() + "/.openvm/agg.pk"
 }
 
+pub fn default_asm_path() -> String {
+    env::var("HOME").unwrap() + "/.openvm/root.asm"
+}
+
 pub fn default_params_dir() -> String {
     env::var("HOME").unwrap() + "/.openvm/params/"
 }

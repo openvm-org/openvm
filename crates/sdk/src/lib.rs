@@ -21,7 +21,8 @@ use openvm_circuit::{
     },
 };
 use openvm_continuations::verifier::{
-    internal::types::E2eStarkProof, root::types::RootVmVerifierInput,
+    internal::types::E2eStarkProof,
+    root::{types::RootVmVerifierInput, RootVmVerifierConfig},
 };
 pub use openvm_continuations::{
     static_verifier::{DefaultStaticVerifierPvHandler, StaticVerifierPvHandler},
@@ -59,6 +60,8 @@ pub mod prover;
 
 mod stdin;
 pub use stdin::*;
+
+use crate::keygen::asm::program_to_asm;
 
 pub mod fs;
 pub mod types;
@@ -259,6 +262,24 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
     ) -> Result<AggProvingKey> {
         let agg_pk = AggProvingKey::keygen(config, reader, pv_handler);
         Ok(agg_pk)
+    }
+
+    pub fn generate_root_verifier_asm(&self, agg_stark_pk: &AggStarkProvingKey) -> String {
+        let kernel_asm = RootVmVerifierConfig {
+            leaf_fri_params: agg_stark_pk.leaf_vm_pk.fri_params,
+            internal_fri_params: agg_stark_pk.internal_vm_pk.fri_params,
+            num_user_public_values: agg_stark_pk.num_user_public_values(),
+            internal_vm_verifier_commit: agg_stark_pk
+                .internal_committed_exe
+                .get_program_commit()
+                .into(),
+            compiler_options: Default::default(),
+        }
+        .build_kernel_asm(
+            &agg_stark_pk.leaf_vm_pk.vm_pk.get_vk(),
+            &agg_stark_pk.internal_vm_pk.vm_pk.get_vk(),
+        );
+        program_to_asm(kernel_asm)
     }
 
     pub fn generate_root_verifier_input<VC: VmConfig<F>>(
