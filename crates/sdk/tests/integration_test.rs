@@ -37,7 +37,7 @@ use openvm_sdk::{
     codec::{Decode, Encode},
     commit::AppExecutionCommit,
     config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config, SdkSystemConfig, SdkVmConfig},
-    keygen::AppProvingKey,
+    keygen::{AggStarkProvingKey, AppProvingKey},
     types::{EvmHalo2Verifier, EvmProof},
     DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
@@ -611,4 +611,12 @@ fn test_segmentation_retry() {
         })
         .sum();
     assert!(new_total_height < total_height);
+}
+
+#[test]
+fn test_root_verifier_asm_generate() {
+    let agg_stark_config = agg_stark_config_for_test();
+    let agg_pk = AggStarkProvingKey::keygen(agg_stark_config);
+    let sdk = Sdk::new();
+    sdk.generate_root_verifier_asm(&agg_pk);
 }

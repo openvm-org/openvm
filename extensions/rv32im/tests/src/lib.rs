@@ -93,7 +93,8 @@ mod tests {
 
     #[test]
     fn test_hint_load_by_key() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "hint_load_by_key")?;
+        let config = Rv32IConfig::default();
+        let elf = build_example_program_at_path(get_programs_dir!(), "hint_load_by_key", &config)?;
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -101,7 +102,6 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        let config = Rv32IConfig::default();
         // stdin will be read after reading kv_store
         let stdin = vec![[0, 1, 2].map(F::from_canonical_u8).to_vec()];
         let mut streams: Streams<F> = stdin.into();
