@@ -120,7 +120,6 @@ where
         }
     }
 
-    println!("hello 1");
     let airs = config.create_chip_complex().unwrap().airs();
     let executor = VmExecutor::<Val<SC>, VC>::new(config);
 
@@ -132,7 +131,6 @@ where
         1,
         "only proving one segment for now"
     );
-    println!("hello 2");
 
     let result = result.per_segment.pop().unwrap();
     #[cfg(feature = "bench-metrics")]
@@ -143,7 +141,6 @@ where
         .into_iter()
         .map(|(air_id, x)| (airs[air_id].clone(), x))
         .unzip();
-    println!("hello 3");
     ProofInputForTest {
         airs: used_airs,
         per_air,

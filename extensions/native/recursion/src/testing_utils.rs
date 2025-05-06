@@ -72,8 +72,6 @@ pub mod inner {
             ))
             .unwrap();
 
-        println!("yo we made it");
-
         recursive_stark_test(
             vparams,
             CompilerOptions::default(),
@@ -104,6 +102,5 @@ where
     PcsProof<AggSC>: Send + Sync,
 {
     let (program, witness_stream) = build_verification_program(vparams, compiler_options);
-    println!("yo we made it 2");
     execute_and_prove_program(program, witness_stream, vm_config, engine)
 }

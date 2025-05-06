@@ -51,7 +51,7 @@ def run_cargo_command(
     env = os.environ.copy()  # Copy current environment variables
     env["OUTPUT_PATH"] = output_path
     env["RUSTFLAGS"] = "-Ctarget-cpu=native"
-    env["RUST_BACKTRACE"] = "1"  # Enable backtrace for better error reporting
+    env["RUST_BACKTRACE"] = "full"  # Enable backtrace for better error reporting
 
     # Run the subprocess with the updated environment
     subprocess.run(command, check=True, env=env)
