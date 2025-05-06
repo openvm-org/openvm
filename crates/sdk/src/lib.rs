@@ -67,6 +67,11 @@ pub const EVM_HALO2_VERIFIER_INTERFACE: &str =
     include_str!("../contracts/src/IOpenVmHalo2Verifier.sol");
 pub const EVM_HALO2_VERIFIER_TEMPLATE: &str =
     include_str!("../contracts/template/OpenVmHalo2Verifier.sol");
+pub const OPENVM_VERSION: &str = concat!(
+    env!("CARGO_PKG_VERSION_MAJOR"),
+    ".",
+    env!("CARGO_PKG_VERSION_MINOR")
+);
 
 #[cfg(feature = "evm-verify")]
 sol! {
@@ -346,12 +351,10 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
             "OpenVM Halo2 verifier contract does not support more than 8192 public values"
         );
 
-        let openvm_version = env!("CARGO_PKG_VERSION");
-
         // Fill out the public values length and OpenVM version in the template
         let openvm_verifier_code = EVM_HALO2_VERIFIER_TEMPLATE
             .replace("{PUBLIC_VALUES_LENGTH}", &pvs_length.to_string())
-            .replace("{OPENVM_VERSION}", openvm_version);
+            .replace("{OPENVM_VERSION}", OPENVM_VERSION);
 
         let formatter_config = FormatterConfig {
             line_length: 120,
@@ -401,7 +404,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         // Create temp dir
         let temp_dir = tempdir().wrap_err("Failed to create temp dir")?;
         let temp_path = temp_dir.path();
-        let root_path = Path::new("src").join(format!("v{}", openvm_version));
+        let root_path = Path::new("src").join(format!("v{}", OPENVM_VERSION));
 
         // Make interfaces dir
         let interfaces_path = root_path.join("interfaces");
@@ -491,11 +494,11 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         let bytecode = parsed
             .get("contracts")
             .expect("No 'contracts' field found")
-            .get(format!("src/v{}/OpenVmHalo2Verifier.sol", openvm_version))
+            .get(format!("src/v{}/OpenVmHalo2Verifier.sol", OPENVM_VERSION))
             .unwrap_or_else(|| {
                 panic!(
                     "No 'src/v{}/OpenVmHalo2Verifier.sol' field found",
-                    openvm_version
+                    OPENVM_VERSION
                 )
             })
             .get("OpenVmHalo2Verifier")

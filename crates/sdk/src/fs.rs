@@ -13,7 +13,7 @@ use crate::{
     codec::{Decode, Encode},
     keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey},
     types::{EvmHalo2Verifier, EvmProof},
-    F, SC,
+    F, OPENVM_VERSION, SC,
 };
 
 pub const EVM_HALO2_VERIFIER_INTERFACE_NAME: &str = "IOpenVmHalo2Verifier.sol";
@@ -134,7 +134,7 @@ pub fn write_evm_halo2_verifier_to_folder<P: AsRef<Path>>(
     let folder = folder
         .as_ref()
         .join("src")
-        .join(format!("v{}", env!("CARGO_PKG_VERSION")));
+        .join(format!("v{}", OPENVM_VERSION));
     if !folder.exists() {
         create_dir_all(&folder)?; // Make sure directories exist
     }
