@@ -14,6 +14,7 @@
 - [Compiling](./writing-apps/build.md)
 - [Generating Proofs](./writing-apps/prove.md)
 - [Verifying Proofs](./writing-apps/verify.md)
+- [Solidity SDK](./writing-apps/solidity.md)
 
 # Using Extensions
 
