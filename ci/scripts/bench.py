@@ -17,7 +17,7 @@ def run_cargo_command(
 ):
     # Command to run (for best performance but slower builds, use --profile maxperf)
     command = [
-        "RUST_BACKTRACE=1", "cargo", "run", "--no-default-features", "--bin", bin_name, "--profile", profile, "--features", ",".join(feature_flags), "--"
+        "cargo", "run", "--no-default-features", "--bin", bin_name, "--profile", profile, "--features", ",".join(feature_flags), "--"
     ]
 
     if app_log_blowup is not None:
@@ -51,6 +51,7 @@ def run_cargo_command(
     env = os.environ.copy()  # Copy current environment variables
     env["OUTPUT_PATH"] = output_path
     env["RUSTFLAGS"] = "-Ctarget-cpu=native"
+    env["RUST_BACKTRACE"] = "1"  # Enable backtrace for better error reporting
 
     # Run the subprocess with the updated environment
     subprocess.run(command, check=True, env=env)
