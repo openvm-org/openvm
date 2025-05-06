@@ -105,19 +105,7 @@ impl<F: PrimeField32> MemoryTester<F> {
     /// messages. Taking a volatile memory approach: any touched address will be initialized with
     /// zero.
     pub fn finalize(&mut self) {
-        let memory = &self.controller.memory;
-        // TODO[jpw]: assuming the last block size matches initial block size, after adding
-        // adapters, fix this
-        for ((addr_space, ptr), metadata) in memory.touched_blocks() {
-            let block_size = metadata.block_size as usize;
-            let chip = self.chip_for_block.get_mut(&block_size).unwrap();
-            let mut data = F::zero_vec(block_size);
-            chip.send(addr_space, ptr, &data, INITIAL_TIMESTAMP);
-            for (i, v) in data.iter_mut().enumerate() {
-                *v = memory.data().get_f(addr_space, ptr + i as u32);
-            }
-            chip.receive(addr_space, ptr, &data, metadata.timestamp);
-        }
+        panic!("should not be called");
     }
 }
 

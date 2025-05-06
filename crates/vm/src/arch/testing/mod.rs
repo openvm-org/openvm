@@ -9,10 +9,11 @@ use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
 use openvm_instructions::instruction::Instruction;
+use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::VerificationData,
-    interaction::BusIndex,
+    interaction::{BusIndex, PermutationCheckBus},
     p3_field::PrimeField32,
     p3_matrix::dense::{DenseMatrix, RowMajorMatrix},
     prover::types::AirProofInput,
@@ -262,11 +263,18 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
             RANGE_CHECKER_BUS,
             mem_config.decomp,
         ));
-        let memory_controller = MemoryController::with_volatile_memory(
+        let memory_controller = MemoryController::with_persistent_memory(
             MemoryBus::new(MEMORY_BUS),
             mem_config,
             range_checker,
+            PermutationCheckBus::new(MEMORY_MERKLE_BUS),
+            PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
         );
+        // let memory_controller = MemoryController::with_volatile_memory(
+        //     MemoryBus::new(MEMORY_BUS),
+        //     mem_config,
+        //     range_checker,
+        // );
         Self {
             memory: MemoryTester::new(memory_controller),
             execution: ExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
@@ -312,7 +320,10 @@ where
             // Balance memory boundaries
             // memory_tester.finalize();
             let mut memory_controller = memory_tester.controller;
-            memory_controller.finalize(None::<&mut Poseidon2PeripheryChip<Val<SC>>>);
+            // memory_controller.finalize(None::<&mut Poseidon2PeripheryChip<Val<SC>>>);
+            let mut poseidon_chip =
+                Poseidon2PeripheryChip::new(Poseidon2Config::default(), POSEIDON2_DIRECT_BUS, 3);
+            memory_controller.finalize(Some(&mut poseidon_chip));
             let range_checker = memory_controller.range_checker.clone();
             // drop(memory_controller);
             // dummy memory interactions:

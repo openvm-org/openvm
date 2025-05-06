@@ -15,6 +15,7 @@ use openvm_circuit_primitives::{
     },
     TraceSubRowGenerator,
 };
+use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     interaction::PermutationCheckBus,
@@ -44,7 +45,7 @@ use crate::{
             MemoryBaseAuxCols, MemoryBridge, MemoryBus, MemoryReadAuxCols,
             MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols, AUX_LEN,
         },
-        online::{MemoryLogEntry, TracingMemory},
+        online::{AccessMetadata, MemoryLogEntry, TracingMemory},
         persistent::PersistentBoundaryChip,
         tree::MemoryNode,
     },
@@ -241,7 +242,12 @@ impl<F: PrimeField32> MemoryController<F> {
                     range_checker.clone(),
                 ),
             },
-            memory: TracingMemory::new(&mem_config, range_checker.clone(), memory_bus),
+            memory: TracingMemory::new(
+                &mem_config,
+                range_checker.clone(),
+                memory_bus,
+                RV32_REGISTER_NUM_LIMBS,
+            ),
             access_adapters: AccessAdapterInventory::new(
                 range_checker.clone(),
                 memory_bus,
@@ -285,8 +291,8 @@ impl<F: PrimeField32> MemoryController<F> {
             memory_bus,
             mem_config,
             interface_chip,
-            memory: TracingMemory::new(&mem_config, range_checker.clone(), memory_bus), /* it is expected that the memory will be
-                                                                                         * set later */
+            memory: TracingMemory::new(&mem_config, range_checker.clone(), memory_bus, CHUNK), /* it is expected that the memory will be
+                                                                                                * set later */
             access_adapters: AccessAdapterInventory::new(
                 range_checker.clone(),
                 memory_bus,
@@ -338,6 +344,7 @@ impl<F: PrimeField32> MemoryController<F> {
             &self.mem_config,
             self.range_checker.clone(),
             self.memory_bus,
+            CHUNK,
         )
         .with_image(memory.clone(), self.mem_config.access_capacity);
 
@@ -464,6 +471,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     /// Returns the final memory state if persistent.
+    #[allow(clippy::assertions_on_constants)]
     pub fn finalize<H>(&mut self, hasher: Option<&mut H>)
     where
         H: HasherChip<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
@@ -476,77 +484,152 @@ impl<F: PrimeField32> MemoryController<F> {
         // let mut offline_memory = self.offline_memory.lock().unwrap();
 
         let touched_blocks = self.memory.touched_blocks().collect::<Vec<_>>();
-        if let MemoryInterface::Volatile { boundary_chip } = &mut self.interface_chip {
-            let mut final_memory = TimestampedEquipartition::<F, 1>::new();
+        // First, let's split everything into blocks of ALIGN
+        let aligned_final_memory = {
+            let mut final_memory = TimestampedEquipartition::<F, RV32_REGISTER_NUM_LIMBS>::new();
             for ((addr_space, ptr), metadata) in touched_blocks {
+                if metadata.block_size == AccessMetadata::OCCUPIED {
+                    continue;
+                }
+                assert!(
+                    metadata.block_size >= RV32_REGISTER_NUM_LIMBS as u32,
+                    "How come some block size is less than RV32_REGISTER_NUM_LIMBS, isn't this the alignment?"
+                );
                 let mut values = (0..metadata.block_size)
                     .map(|i| self.memory.data.get_f::<F>(addr_space, ptr + i))
                     .collect::<Vec<_>>();
-                for i in 0..metadata.block_size {
+                for start in (0..metadata.block_size).step_by(RV32_REGISTER_NUM_LIMBS) {
                     final_memory.insert(
-                        (addr_space, ptr + i),
+                        (addr_space, ptr + start),
                         TimestampedValues {
                             timestamp: metadata.timestamp,
-                            values: [values[i as usize]],
+                            values: values
+                                [(start as usize)..(start as usize + RV32_REGISTER_NUM_LIMBS)]
+                                .try_into()
+                                .unwrap(),
                         },
                     );
                 }
-                self.memory.execute_splits::<1>(
+                self.memory.execute_splits::<RV32_REGISTER_NUM_LIMBS>(
                     MemoryAddress::new(addr_space, ptr),
                     &values,
                     metadata.timestamp,
                 );
-                values.fill(F::ZERO);
-                self.memory.execute_merges::<1>(
-                    MemoryAddress::new(addr_space, ptr),
-                    &values,
-                    &vec![INITIAL_TIMESTAMP; metadata.block_size as usize],
-                );
             }
+            final_memory
+        };
+        match &mut self.interface_chip {
+            MemoryInterface::Volatile { boundary_chip } => {
+                let mut final_memory = TimestampedEquipartition::<F, 1>::new();
+                for ((addr_space, ptr), ts_values) in aligned_final_memory {
+                    let TimestampedValues {
+                        timestamp,
+                        mut values,
+                    } = ts_values;
+                    for (i, &v) in values.iter().enumerate() {
+                        final_memory.insert(
+                            (addr_space, ptr + i as u32),
+                            TimestampedValues {
+                                timestamp,
+                                values: [v],
+                            },
+                        );
+                    }
+                    self.memory.execute_splits::<1>(
+                        MemoryAddress::new(addr_space, ptr),
+                        &values,
+                        timestamp,
+                    );
+                    values.fill(F::ZERO);
+                    self.memory.execute_merges::<1>(
+                        MemoryAddress::new(addr_space, ptr),
+                        &values,
+                        &vec![INITIAL_TIMESTAMP; values.len()],
+                    );
+                }
 
-            for i in 0..self.access_adapters.num_access_adapters() {
-                let width = self.memory.adapter_inventory_trace_cursor.width(i);
-                self.access_adapters.set_trace(
-                    i,
-                    self.memory.adapter_inventory_trace_cursor.extract_trace(i),
-                    width,
-                );
+                for i in 0..self.access_adapters.num_access_adapters() {
+                    let width = self.memory.adapter_inventory_trace_cursor.width(i);
+                    self.access_adapters.set_trace(
+                        i,
+                        self.memory.adapter_inventory_trace_cursor.extract_trace(i),
+                        width,
+                    );
+                }
+
+                boundary_chip.finalize(final_memory);
             }
+            MemoryInterface::Persistent {
+                boundary_chip,
+                merkle_chip,
+                initial_memory,
+            } => {
+                let hasher = hasher.unwrap();
+                assert!(CHUNK % RV32_REGISTER_NUM_LIMBS == 0);
+                assert!(CHUNK >= RV32_REGISTER_NUM_LIMBS);
+                let mut current_values = [F::ZERO; CHUNK];
+                let mut current_cnt = 0;
+                let mut current_address = MemoryAddress::new(0, 0);
+                let mut current_timestamps = vec![0; CHUNK / RV32_REGISTER_NUM_LIMBS];
+                let mut final_memory = TimestampedEquipartition::<F, CHUNK>::new();
+                for ((addr_space, ptr), ts_values) in aligned_final_memory {
+                    let TimestampedValues { timestamp, values } = ts_values;
+                    if current_cnt == 0 {
+                        current_address = MemoryAddress::new(addr_space, ptr);
+                    } else {
+                        debug_assert_eq!(current_address.address_space, addr_space);
+                        debug_assert_eq!(current_address.pointer + current_cnt as u32, ptr);
+                    }
+                    current_values[current_cnt..(current_cnt + values.len())]
+                        .copy_from_slice(&values);
+                    current_timestamps[current_cnt / RV32_REGISTER_NUM_LIMBS] = timestamp;
+                    current_cnt += values.len();
+                    if current_cnt != CHUNK {
+                        continue;
+                    }
+                    final_memory.insert(
+                        (current_address.address_space, current_address.pointer),
+                        TimestampedValues {
+                            timestamp: *current_timestamps.iter().max().unwrap(),
+                            values: current_values,
+                        },
+                    );
+                    self.memory.execute_merges::<RV32_REGISTER_NUM_LIMBS>(
+                        current_address,
+                        &current_values,
+                        &current_timestamps,
+                    );
+                    // We do not need to implement the initial splits here,
+                    // because this has been done in the controller on the first access.
 
-            boundary_chip.finalize(final_memory);
+                    current_cnt = 0;
+                }
+
+                for i in 0..self.access_adapters.num_access_adapters() {
+                    let width = self.memory.adapter_inventory_trace_cursor.width(i);
+                    self.access_adapters.set_trace(
+                        i,
+                        self.memory.adapter_inventory_trace_cursor.extract_trace(i),
+                        width,
+                    );
+                }
+
+                boundary_chip.finalize(initial_memory, &final_memory, hasher);
+                let final_memory_values = final_memory
+                    .into_par_iter()
+                    .map(|(key, value)| (key, value.values))
+                    .collect();
+                let initial_node = MemoryNode::tree_from_memory(
+                    merkle_chip.air.memory_dimensions,
+                    initial_memory,
+                    hasher,
+                );
+                merkle_chip.finalize(&initial_node, &final_memory_values, hasher);
+                self.final_state = Some(FinalState::Persistent(PersistentFinalState {
+                    final_memory: final_memory_values.clone(),
+                }));
+            }
         }
-
-        // match &mut self.interface_chip {
-        //     MemoryInterface::Volatile { boundary_chip } => {
-        //         let final_memory = offline_memory.finalize::<1>(&mut self.access_adapters);
-        //         boundary_chip.finalize(final_memory);
-        //         self.final_state = Some(FinalState::Volatile(VolatileFinalState::default()));
-        //     }
-        //     MemoryInterface::Persistent {
-        //         merkle_chip,
-        //         boundary_chip,
-        //         initial_memory,
-        //     } => {
-        //         let hasher = hasher.unwrap();
-        //         let final_partition = offline_memory.finalize::<CHUNK>(&mut
-        // self.access_adapters);
-
-        //         boundary_chip.finalize(initial_memory, &final_partition, hasher);
-        //         let final_memory_values = final_partition
-        //             .into_par_iter()
-        //             .map(|(key, value)| (key, value.values))
-        //             .collect();
-        //         let initial_node = MemoryNode::tree_from_memory(
-        //             merkle_chip.air.memory_dimensions,
-        //             initial_memory,
-        //             hasher,
-        //         );
-        //         merkle_chip.finalize(&initial_node, &final_memory_values, hasher);
-        //         self.final_state = Some(FinalState::Persistent(PersistentFinalState {
-        //             final_memory: final_memory_values.clone(),
-        //         }));
-        //     }
-        // };
     }
 
     pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>
