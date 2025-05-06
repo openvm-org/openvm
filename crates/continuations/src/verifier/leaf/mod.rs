@@ -9,7 +9,7 @@ use openvm_native_recursion::{
     vars::StarkProofVariable,
 };
 use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
+    config::{koala_bear_poseidon2::KoalaBearPoseidon2Config, FriParameters},
     openvm_stark_backend::{
         keygen::types::MultiStarkVerifyingKey, p3_field::FieldAlgebra, p3_util::log2_strict_usize,
         proof::Proof,
@@ -42,7 +42,7 @@ pub struct LeafVmVerifierConfig {
 impl LeafVmVerifierConfig {
     pub fn build_program(
         &self,
-        app_vm_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        app_vm_vk: &MultiStarkVerifyingKey<KoalaBearPoseidon2Config>,
     ) -> Program<F> {
         let m_advice = new_from_inner_multi_vk(app_vm_vk);
         let mut builder = Builder::<C>::default();
@@ -55,7 +55,7 @@ impl LeafVmVerifierConfig {
             builder.cycle_tracker_end("InitializePcsConst");
             builder.cycle_tracker_start("ReadProofsFromInput");
             let proofs: Array<C, StarkProofVariable<_>> =
-                <Vec<Proof<BabyBearPoseidon2Config>> as Hintable<C>>::read(&mut builder);
+                <Vec<Proof<KoalaBearPoseidon2Config>> as Hintable<C>>::read(&mut builder);
             // At least 1 proof should be provided.
             builder.assert_nonzero(&proofs.len());
             builder.cycle_tracker_end("ReadProofsFromInput");

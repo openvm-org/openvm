@@ -3,7 +3,7 @@ use std::sync::Arc;
 use derive_new::new;
 use openvm_circuit::system::memory::MemoryTraceHeights;
 use openvm_instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
-use openvm_poseidon2_air::{default_baby_bear_rc, Poseidon2Config};
+use openvm_poseidon2_air::{default_koalabear_rc, Poseidon2Config};
 use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -21,7 +21,7 @@ const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 3;
 pub const POSEIDON2_WIDTH: usize = 16;
 /// Returns a Poseidon2 config for the VM.
 pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<F> {
-    Poseidon2Config::new(default_baby_bear_rc())
+    Poseidon2Config::new(default_koalabear_rc())
 }
 
 pub trait VmConfig<F: PrimeField32>: Clone + Serialize + DeserializeOwned {

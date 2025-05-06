@@ -14,7 +14,7 @@ use openvm_native_compiler::{
     ir::{Config, DslIr, TracedVec, Witness},
 };
 use openvm_stark_backend::p3_field::extension::BinomialExtensionField;
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
+use openvm_stark_sdk::{p3_bn254_fr::Bn254Fr, p3_koala_bear::KoalaBear};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use snark_verifier_sdk::{
     evm::encode_calldata,
@@ -101,7 +101,7 @@ impl Halo2Prover {
     }
 
     pub fn populate<
-        C: Config<N = Bn254Fr, F = BabyBear, EF = BinomialExtensionField<BabyBear, 4>> + Debug,
+        C: Config<N = Bn254Fr, F = KoalaBear, EF = BinomialExtensionField<KoalaBear, 4>> + Debug,
     >(
         builder: BaseCircuitBuilder<Fr>,
         dsl_operations: DslOperations<C>,
@@ -130,7 +130,7 @@ impl Halo2Prover {
     ///
     /// Returns the public instances.
     pub fn mock<
-        C: Config<N = Bn254Fr, F = BabyBear, EF = BinomialExtensionField<BabyBear, 4>> + Debug,
+        C: Config<N = Bn254Fr, F = KoalaBear, EF = BinomialExtensionField<KoalaBear, 4>> + Debug,
     >(
         k: usize,
         dsl_operations: DslOperations<C>,
@@ -152,7 +152,7 @@ impl Halo2Prover {
 
     /// Populates builder, tunes circuit, keygen
     pub fn keygen<
-        C: Config<N = Bn254Fr, F = BabyBear, EF = BinomialExtensionField<BabyBear, 4>> + Debug,
+        C: Config<N = Bn254Fr, F = KoalaBear, EF = BinomialExtensionField<KoalaBear, 4>> + Debug,
     >(
         params: &Halo2Params,
         dsl_operations: DslOperations<C>,
@@ -200,7 +200,7 @@ impl Halo2Prover {
     }
 
     pub fn prove<
-        C: Config<N = Bn254Fr, F = BabyBear, EF = BinomialExtensionField<BabyBear, 4>> + Debug,
+        C: Config<N = Bn254Fr, F = KoalaBear, EF = BinomialExtensionField<KoalaBear, 4>> + Debug,
     >(
         params: &Halo2Params,
         config_params: BaseCircuitParams,

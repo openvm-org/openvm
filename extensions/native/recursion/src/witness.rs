@@ -9,8 +9,8 @@ use openvm_stark_backend::{
     proof::{AdjacentOpenedValues, AirProofData, Commitments, OpenedValues, OpeningProof, Proof},
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig, p3_baby_bear::BabyBear,
-    p3_bn254_fr::Bn254Fr,
+    config::koala_bear_poseidon2_root::KoalaBearPoseidon2RootConfig, p3_bn254_fr::Bn254Fr,
+    p3_koala_bear::KoalaBear,
 };
 use p3_symmetric::Hash;
 
@@ -33,7 +33,7 @@ pub trait Witnessable<C: Config> {
 }
 
 type C = OuterConfig;
-type OuterCom = Hash<BabyBear, Bn254Fr, 1>;
+type OuterCom = Hash<KoalaBear, Bn254Fr, 1>;
 
 impl Witnessable<C> for Bn254Fr {
     type WitnessVariable = Var<Bn254Fr>;
@@ -144,7 +144,7 @@ impl VectorWitnessable<C> for DigestVal<C> {}
 
 impl VectorWitnessable<C> for AirProofData<InnerVal, InnerChallenge> {}
 
-impl Witnessable<C> for Proof<BabyBearPoseidon2RootConfig> {
+impl Witnessable<C> for Proof<KoalaBearPoseidon2RootConfig> {
     type WitnessVariable = StarkProofVariable<C>;
 
     fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
@@ -214,7 +214,7 @@ impl Witnessable<C> for AirProofData<OuterVal, OuterChallenge> {
     }
 }
 
-impl Witnessable<OuterConfig> for Commitments<Com<BabyBearPoseidon2RootConfig>> {
+impl Witnessable<OuterConfig> for Commitments<Com<KoalaBearPoseidon2RootConfig>> {
     type WitnessVariable = CommitmentsVariable<OuterConfig>;
 
     fn read(&self, builder: &mut Builder<OuterConfig>) -> Self::WitnessVariable {
@@ -235,7 +235,7 @@ impl Witnessable<OuterConfig> for Commitments<Com<BabyBearPoseidon2RootConfig>> 
     }
 }
 
-impl Witnessable<C> for OpeningProof<PcsProof<BabyBearPoseidon2RootConfig>, OuterChallenge> {
+impl Witnessable<C> for OpeningProof<PcsProof<KoalaBearPoseidon2RootConfig>, OuterChallenge> {
     type WitnessVariable = OpeningProofVariable<C>;
 
     fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {

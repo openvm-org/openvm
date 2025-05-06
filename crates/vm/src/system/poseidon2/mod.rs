@@ -10,6 +10,8 @@
 
 use openvm_poseidon2_air::{
     Poseidon2Config, BABYBEAR_POSEIDON2_PARTIAL_ROUNDS, BABYBEAR_POSEIDON2_SBOX_DEGREE,
+    KOALABEAR_POSEIDON2_PARTIAL_ROUNDS, KOALABEAR_POSEIDON2_SBOX_DEGREE,
+    KOALABEAR_POSEIDON2_SBOX_REGISTERS,
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -50,19 +52,23 @@ pub enum Poseidon2PeripheryChip<F: PrimeField32> {
             BABYBEAR_POSEIDON2_PARTIAL_ROUNDS,
         >,
     ),
+    KoalaBear(
+        Poseidon2PeripheryBaseChip<
+            F,
+            KOALABEAR_POSEIDON2_SBOX_DEGREE,
+            KOALABEAR_POSEIDON2_SBOX_REGISTERS,
+            KOALABEAR_POSEIDON2_PARTIAL_ROUNDS,
+        >,
+    ),
 }
 
 impl<F: PrimeField32> Poseidon2PeripheryChip<F> {
     pub fn new(
         poseidon2_config: Poseidon2Config<F>,
         bus_idx: BusIndex,
-        max_constraint_degree: usize,
+        _max_constraint_degree: usize,
     ) -> Self {
-        if max_constraint_degree >= 7 {
-            Self::Register0(Poseidon2PeripheryBaseChip::new(poseidon2_config, bus_idx))
-        } else {
-            Self::Register1(Poseidon2PeripheryBaseChip::new(poseidon2_config, bus_idx))
-        }
+        Self::KoalaBear(Poseidon2PeripheryBaseChip::new(poseidon2_config, bus_idx))
     }
 }
 
@@ -74,6 +80,7 @@ where
         match self {
             Poseidon2PeripheryChip::Register0(chip) => chip.air(),
             Poseidon2PeripheryChip::Register1(chip) => chip.air(),
+            Poseidon2PeripheryChip::KoalaBear(chip) => chip.air(),
         }
     }
 
@@ -81,6 +88,7 @@ where
         match self {
             Poseidon2PeripheryChip::Register0(chip) => chip.generate_air_proof_input(),
             Poseidon2PeripheryChip::Register1(chip) => chip.generate_air_proof_input(),
+            Poseidon2PeripheryChip::KoalaBear(chip) => chip.generate_air_proof_input(),
         }
     }
 }
@@ -90,6 +98,7 @@ impl<F: PrimeField32> ChipUsageGetter for Poseidon2PeripheryChip<F> {
         match self {
             Poseidon2PeripheryChip::Register0(chip) => chip.air_name(),
             Poseidon2PeripheryChip::Register1(chip) => chip.air_name(),
+            Poseidon2PeripheryChip::KoalaBear(chip) => chip.air_name(),
         }
     }
 
@@ -97,6 +106,7 @@ impl<F: PrimeField32> ChipUsageGetter for Poseidon2PeripheryChip<F> {
         match self {
             Poseidon2PeripheryChip::Register0(chip) => chip.current_trace_height(),
             Poseidon2PeripheryChip::Register1(chip) => chip.current_trace_height(),
+            Poseidon2PeripheryChip::KoalaBear(chip) => chip.current_trace_height(),
         }
     }
 
@@ -104,6 +114,7 @@ impl<F: PrimeField32> ChipUsageGetter for Poseidon2PeripheryChip<F> {
         match self {
             Poseidon2PeripheryChip::Register0(chip) => chip.trace_width(),
             Poseidon2PeripheryChip::Register1(chip) => chip.trace_width(),
+            Poseidon2PeripheryChip::KoalaBear(chip) => chip.trace_width(),
         }
     }
 }
@@ -117,6 +128,7 @@ impl<F: PrimeField32> Hasher<PERIPHERY_POSEIDON2_CHUNK_SIZE, F> for Poseidon2Per
         match self {
             Poseidon2PeripheryChip::Register0(chip) => chip.compress(lhs, rhs),
             Poseidon2PeripheryChip::Register1(chip) => chip.compress(lhs, rhs),
+            Poseidon2PeripheryChip::KoalaBear(chip) => chip.compress(lhs, rhs),
         }
     }
 }
@@ -130,6 +142,7 @@ impl<F: PrimeField32> HasherChip<PERIPHERY_POSEIDON2_CHUNK_SIZE, F> for Poseidon
         match self {
             Poseidon2PeripheryChip::Register0(chip) => chip.compress_and_record(lhs, rhs),
             Poseidon2PeripheryChip::Register1(chip) => chip.compress_and_record(lhs, rhs),
+            Poseidon2PeripheryChip::KoalaBear(chip) => chip.compress_and_record(lhs, rhs),
         }
     }
 }

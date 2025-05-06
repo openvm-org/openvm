@@ -12,14 +12,14 @@ use openvm_instructions::{riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_mod_circuit_builder::{test_utils::biguint_to_limbs, ExprBuilderConfig, FieldExpr};
 use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
 use openvm_stark_backend::p3_field::FieldAlgebra;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_koala_bear::KoalaBear;
 
 use super::{EcAddNeChip, EcDoubleChip};
 
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
 const BLOCK_SIZE: usize = 32;
-type F = BabyBear;
+type F = KoalaBear;
 
 lazy_static::lazy_static! {
     // Sample points got from https://asecuritysite.com/ecc/ecc_points2 and
@@ -70,10 +70,10 @@ lazy_static::lazy_static! {
     };
 }
 
-fn prime_limbs(expr: &FieldExpr) -> Vec<BabyBear> {
+fn prime_limbs(expr: &FieldExpr) -> Vec<KoalaBear> {
     expr.prime_limbs
         .iter()
-        .map(|n| BabyBear::from_canonical_usize(*n))
+        .map(|n| KoalaBear::from_canonical_usize(*n))
         .collect::<Vec<_>>()
 }
 
@@ -107,13 +107,13 @@ fn test_add_ne() {
     let (p2_x, p2_y) = SampleEcPoints[1].clone();
 
     let p1_x_limbs =
-        biguint_to_limbs::<NUM_LIMBS>(p1_x.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
+        biguint_to_limbs::<NUM_LIMBS>(p1_x.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32);
     let p1_y_limbs =
-        biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
+        biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32);
     let p2_x_limbs =
-        biguint_to_limbs::<NUM_LIMBS>(p2_x.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
+        biguint_to_limbs::<NUM_LIMBS>(p2_x.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32);
     let p2_y_limbs =
-        biguint_to_limbs::<NUM_LIMBS>(p2_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
+        biguint_to_limbs::<NUM_LIMBS>(p2_y.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32);
 
     let r = chip
         .0
@@ -124,9 +124,9 @@ fn test_add_ne() {
     assert_eq!(r[1], SampleEcPoints[2].0);
     assert_eq!(r[2], SampleEcPoints[2].1);
 
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(chip.0.core.expr()).try_into().unwrap();
-    let mut one_limbs = [BabyBear::ONE; NUM_LIMBS];
-    one_limbs[0] = BabyBear::ONE;
+    let prime_limbs: [KoalaBear; NUM_LIMBS] = prime_limbs(chip.0.core.expr()).try_into().unwrap();
+    let mut one_limbs = [KoalaBear::ONE; NUM_LIMBS];
+    one_limbs[0] = KoalaBear::ONE;
     let setup_instruction = rv32_write_heap_default(
         &mut tester,
         vec![prime_limbs, one_limbs], // inputs[0] = prime, others doesn't matter
@@ -169,9 +169,9 @@ fn test_double() {
 
     let (p1_x, p1_y) = SampleEcPoints[1].clone();
     let p1_x_limbs =
-        biguint_to_limbs::<NUM_LIMBS>(p1_x.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
+        biguint_to_limbs::<NUM_LIMBS>(p1_x.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32);
     let p1_y_limbs =
-        biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
+        biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32);
 
     let mut chip = EcDoubleChip::new(
         adapter,
@@ -188,8 +188,9 @@ fn test_double() {
     assert_eq!(r[1], SampleEcPoints[3].0);
     assert_eq!(r[2], SampleEcPoints[3].1);
 
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core.air.expr).try_into().unwrap();
-    let a_limbs = [BabyBear::ZERO; NUM_LIMBS];
+    let prime_limbs: [KoalaBear; NUM_LIMBS] =
+        prime_limbs(&chip.0.core.air.expr).try_into().unwrap();
+    let a_limbs = [KoalaBear::ZERO; NUM_LIMBS];
     let setup_instruction = rv32_write_heap_default(
         &mut tester,
         vec![prime_limbs, a_limbs], // inputs[0] = prime, inputs[1] = a coeff of weierstrass equation
@@ -246,9 +247,9 @@ fn test_p256_double() {
     )
     .unwrap();
     let p1_x_limbs =
-        biguint_to_limbs::<NUM_LIMBS>(p1_x.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
+        biguint_to_limbs::<NUM_LIMBS>(p1_x.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32);
     let p1_y_limbs =
-        biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
+        biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32);
 
     let mut chip = EcDoubleChip::new(
         adapter,
@@ -275,9 +276,10 @@ fn test_p256_double() {
     assert_eq!(r[1], expected_double_x);
     assert_eq!(r[2], expected_double_y);
 
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core.air.expr).try_into().unwrap();
+    let prime_limbs: [KoalaBear; NUM_LIMBS] =
+        prime_limbs(&chip.0.core.air.expr).try_into().unwrap();
     let a_limbs =
-        biguint_to_limbs::<NUM_LIMBS>(a.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
+        biguint_to_limbs::<NUM_LIMBS>(a.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32);
     let setup_instruction = rv32_write_heap_default(
         &mut tester,
         vec![prime_limbs, a_limbs], // inputs[0] = prime, inputs[1] = a coeff of weierstrass equation

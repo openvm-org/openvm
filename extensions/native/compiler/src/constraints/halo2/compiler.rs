@@ -10,7 +10,7 @@ use itertools::Itertools;
 #[cfg(feature = "bench-metrics")]
 use openvm_circuit::metrics::cycle_tracker::CycleTracker;
 use openvm_stark_backend::p3_field::{ExtensionField, Field, FieldAlgebra, PrimeField};
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
+use openvm_stark_sdk::{p3_bn254_fr::Bn254Fr, p3_koala_bear::KoalaBear};
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::{
         gates::{
@@ -27,8 +27,9 @@ use snark_verifier_sdk::snark_verifier::{
 use super::stats::Halo2Stats;
 use crate::{
     constraints::halo2::{
-        baby_bear::{
-            AssignedBabyBear, AssignedBabyBearExt4, BabyBearChip, BabyBearExt4, BabyBearExt4Chip,
+        koala_bear::{
+            AssignedKoalaBear, AssignedKoalaBearExt4, KoalaBearChip, KoalaBearExt4,
+            KoalaBearExt4Chip,
         },
         poseidon2_perm::{Poseidon2Params, Poseidon2State},
     },
@@ -133,21 +134,21 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
     // Assume: C::N = C::F = C::EF is type Fr
     pub fn constrain_halo2(&self, halo2_state: &mut Halo2State<C>, operations: TracedVec<DslIr<C>>)
     where
-        C: Config<N = Bn254Fr, F = BabyBear, EF = BabyBearExt4>,
+        C: Config<N = Bn254Fr, F = KoalaBear, EF = KoalaBearExt4>,
     {
         #[cfg(feature = "bench-metrics")]
         let mut cell_tracker = CycleTracker::new();
         let range = Arc::new(halo2_state.builder.range_chip());
-        let f_chip = Arc::new(BabyBearChip::new(range.clone()));
-        let ext_chip = BabyBearExt4Chip::new(Arc::clone(&f_chip));
+        let f_chip = Arc::new(KoalaBearChip::new(range.clone()));
+        let ext_chip = KoalaBearExt4Chip::new(Arc::clone(&f_chip));
         let gate = f_chip.gate();
         let ctx = halo2_state.builder.main(0);
         let mut public_values = vec![ctx.load_zero(); self.num_public_values];
 
         // Local variables for referencing during the course of constraint building
         let mut vars = HashMap::new();
-        let mut felts = HashMap::<u32, AssignedBabyBear>::new();
-        let mut exts = HashMap::<u32, AssignedBabyBearExt4>::new();
+        let mut felts = HashMap::<u32, AssignedKoalaBear>::new();
+        let mut exts = HashMap::<u32, AssignedKoalaBearExt4>::new();
 
         #[cfg(feature = "bench-metrics")]
         let mut old_stats = stats_snapshot(ctx, range.clone());
@@ -300,7 +301,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         let x = if c.is_one() {
                             felts[&b.0]
                         } else if c.is_zero() {
-                            f_chip.load_constant(ctx, BabyBear::ZERO)
+                            f_chip.load_constant(ctx, KoalaBear::ZERO)
                         } else {
                             let tmp = f_chip.load_constant(ctx, c);
                             f_chip.mul(ctx, felts[&b.0], tmp)
@@ -315,7 +316,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         let x = if c.is_one() {
                             exts[&b.0]
                         } else if c.is_zero() {
-                            ext_chip.load_constant(ctx, BabyBearExt4::ZERO)
+                            ext_chip.load_constant(ctx, KoalaBearExt4::ZERO)
                         } else {
                             let tmp = ext_chip.load_constant(ctx, c);
                             ext_chip.mul(ctx, exts[&b.0], tmp)
@@ -330,7 +331,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         let x = if c.is_one() {
                             exts[&b.0]
                         } else if c.is_zero() {
-                            ext_chip.load_constant(ctx, BabyBearExt4::ZERO)
+                            ext_chip.load_constant(ctx, KoalaBearExt4::ZERO)
                         } else {
                             let tmp = f_chip.load_constant(ctx, c);
                             ext_chip.scalar_mul(ctx, exts[&b.0], tmp)
@@ -447,12 +448,12 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         println!("PrintV: {:?}", vars[&a.0].value());
                     }
                     DslIr::PrintF(a) => {
-                        println!("PrintF: {:?}", felts[&a.0].to_baby_bear());
+                        println!("PrintF: {:?}", felts[&a.0].to_koala_bear());
                     }
                     DslIr::PrintE(a) => {
                         println!("PrintE:");
                         for x in exts[&a.0].0.iter() {
-                            println!("{:?}", x.to_baby_bear());
+                            println!("{:?}", x.to_koala_bear());
                         }
                     }
                     DslIr::WitnessVar(a, b) => {
@@ -468,7 +469,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         exts.insert(a.0, x);
                     }
                     DslIr::CircuitFelts2Ext(a, b) => {
-                        let x = AssignedBabyBearExt4(
+                        let x = AssignedKoalaBearExt4(
                             a.iter()
                                 .map(|a| felts[&a.0])
                                 .collect_vec()
@@ -604,7 +605,7 @@ fn var_to_u64_limbs(
     range: &RangeChip<Fr>,
     gate: &GateChip<Fr>,
     x: AssignedValue<Fr>,
-) -> [AssignedBabyBear; 4] {
+) -> [AssignedKoalaBear; 4] {
     let limbs = fr_to_u64_limbs(x.value()).map(|limb| ctx.load_witness(Fr::from(limb)));
     let factors = [
         Fr::from([1, 0, 0, 0]),
@@ -624,7 +625,7 @@ fn var_to_u64_limbs(
             range.check_less_than_safe(ctx, limbs[3], fr_bound_limbs[3] + 1);
             (Fr::NUM_BITS - 3 * 64) as usize
         };
-        AssignedBabyBear {
+        AssignedKoalaBear {
             value: limb,
             max_bits: bits,
         }

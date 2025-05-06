@@ -11,8 +11,8 @@ use openvm_stark_backend::{
     verifier::VerificationError,
 };
 use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
+    any_rap_arc_vec, config::koala_bear_poseidon2::KoalaBearPoseidon2Engine,
+    engine::StarkFriEngine, p3_koala_bear::KoalaBear,
 };
 use test_case::test_case;
 
@@ -80,13 +80,13 @@ impl<F: Field> IsZeroChip<F> {
 #[test_case(97 ; "97 => 0")]
 #[test_case(0 ; "0 => 1")]
 fn test_single_is_zero(x: u32) {
-    let chip = IsZeroChip::new(vec![BabyBear::from_canonical_u32(x)]);
+    let chip = IsZeroChip::new(vec![KoalaBear::from_canonical_u32(x)]);
     let air = chip.air;
     let trace = chip.generate_trace();
 
     assert_eq!(trace.get(0, 1), FieldAlgebra::from_bool(x == 0));
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
+    KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
         .expect("Verification failed");
 }
 
@@ -108,7 +108,7 @@ fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
         );
     }
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
+    KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
         .expect("Verification failed");
 }
 
@@ -119,11 +119,11 @@ fn test_single_is_zero_fail(x: u32) {
     let chip = IsZeroChip::new(vec![x]);
     let air = chip.air;
     let mut trace = chip.generate_trace();
-    trace.values[1] = BabyBear::ONE - trace.values[1];
+    trace.values[1] = KoalaBear::ONE - trace.values[1];
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
+        KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
             .err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
@@ -133,9 +133,9 @@ fn test_single_is_zero_fail(x: u32) {
 #[test_case([1, 2, 7, 0], [0, 0, 0, 1] ; "1, 2, 7, 0 => 0, 0, 0, 1")]
 #[test_case([97, 0, 179, 0], [0, 1, 0, 1] ; "97, 0, 179, 0 => 0, 1, 0, 1")]
 fn test_vec_is_zero_fail(x_vec: [u32; 4], expected: [u32; 4]) {
-    let x_vec: Vec<BabyBear> = x_vec
+    let x_vec: Vec<KoalaBear> = x_vec
         .into_iter()
-        .map(BabyBear::from_canonical_u32)
+        .map(KoalaBear::from_canonical_u32)
         .collect();
     let chip = IsZeroChip::new(x_vec);
     let air = chip.air;
@@ -143,9 +143,9 @@ fn test_vec_is_zero_fail(x_vec: [u32; 4], expected: [u32; 4]) {
 
     disable_debug_builder();
     for (i, _value) in expected.iter().enumerate() {
-        trace.row_mut(i)[1] = BabyBear::ONE - trace.row_mut(i)[1];
+        trace.row_mut(i)[1] = KoalaBear::ONE - trace.row_mut(i)[1];
         assert_eq!(
-            BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
+            KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(
                 any_rap_arc_vec![air],
                 vec![trace.clone()]
             )
@@ -153,6 +153,6 @@ fn test_vec_is_zero_fail(x_vec: [u32; 4], expected: [u32; 4]) {
             Some(VerificationError::OodEvaluationMismatch),
             "Expected constraint to fail"
         );
-        trace.row_mut(i)[1] = BabyBear::ONE - trace.row_mut(i)[1];
+        trace.row_mut(i)[1] = KoalaBear::ONE - trace.row_mut(i)[1];
     }
 }

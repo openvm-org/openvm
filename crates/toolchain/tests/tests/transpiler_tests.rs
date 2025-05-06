@@ -27,12 +27,12 @@ use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_koala_bear::KoalaBear;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 use test_case::test_case;
 
-type F = BabyBear;
+type F = KoalaBear;
 
 fn get_elf(elf_path: impl AsRef<Path>) -> Result<Elf> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

@@ -89,7 +89,7 @@ pub struct ExprBuilder {
     needs_setup: bool,
 }
 
-// Number of bits in BabyBear modulus
+// Number of bits in KoalaBear modulus
 const MODULUS_BITS: usize = 31;
 
 impl ExprBuilder {

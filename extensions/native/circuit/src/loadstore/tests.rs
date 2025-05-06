@@ -4,7 +4,7 @@ use openvm_circuit::arch::{testing::VmChipTestBuilder, Streams};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::NativeLoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
-use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{config::setup_tracing, p3_koala_bear::KoalaBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::{
@@ -12,7 +12,7 @@ use super::{
     NativeLoadStoreCoreChip,
 };
 
-type F = BabyBear;
+type F = KoalaBear;
 
 #[derive(Debug)]
 struct TestData {

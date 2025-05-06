@@ -164,6 +164,7 @@ impl<
             )),
             address_space: F::from_canonical_u32(AS::Native as u32),
         };
+        println!("constants: {:?}", poseidon2_config.constants);
         Self {
             record_set: Default::default(),
             air,
@@ -313,6 +314,7 @@ impl<
             let initial_log_height = memory
                 .unsafe_read_cell(address_space, dim_base_pointer)
                 .as_canonical_u32();
+            println!("initial_log_height: {:?}", initial_log_height);
             let mut log_height = initial_log_height as i32;
             let mut sibling_index = 0;
             let mut opened_index = 0;

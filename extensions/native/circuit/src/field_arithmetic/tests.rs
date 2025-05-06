@@ -10,8 +10,8 @@ use openvm_stark_backend::{
     Chip,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
+    config::koala_bear_poseidon2::KoalaBearPoseidon2Engine, engine::StarkFriEngine,
+    p3_koala_bear::KoalaBear, utils::create_seeded_rng,
 };
 use rand::Rng;
 use strum::EnumCount;
@@ -44,8 +44,8 @@ fn new_field_arithmetic_air_test() {
         let opcode =
             FieldArithmeticOpcode::from_usize(rng.gen_range(0..FieldArithmeticOpcode::COUNT));
 
-        let operand1 = BabyBear::from_canonical_u32(rng.gen_range(elem_range()));
-        let operand2 = BabyBear::from_canonical_u32(rng.gen_range(elem_range()));
+        let operand1 = KoalaBear::from_canonical_u32(rng.gen_range(elem_range()));
+        let operand2 = KoalaBear::from_canonical_u32(rng.gen_range(elem_range()));
 
         if opcode == FieldArithmeticOpcode::DIV && operand2.is_zero() {
             continue;
@@ -103,8 +103,8 @@ fn new_field_arithmetic_air_test() {
             .as_mut()
             .unwrap();
         let old_trace = arith_trace.clone();
-        for width in 0..FieldArithmeticCoreCols::<BabyBear>::width() {
-            let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
+        for width in 0..FieldArithmeticCoreCols::<KoalaBear>::width() {
+            let prank_value = KoalaBear::from_canonical_u32(rng.gen_range(1..=100));
             arith_trace.row_mut(height)[width] = prank_value;
         }
 
@@ -131,8 +131,8 @@ fn new_field_arithmetic_air_zero_div_zero() {
         FieldArithmeticCoreChip::new(),
         tester.offline_memory_mutex_arc(),
     );
-    tester.write_cell(4, 6, BabyBear::from_canonical_u32(111));
-    tester.write_cell(4, 7, BabyBear::from_canonical_u32(222));
+    tester.write_cell(4, 6, KoalaBear::from_canonical_u32(111));
+    tester.write_cell(4, 7, KoalaBear::from_canonical_u32(222));
 
     tester.execute(
         &mut chip,
@@ -147,16 +147,16 @@ fn new_field_arithmetic_air_zero_div_zero() {
     let mut chip_input = chip.generate_air_proof_input();
     // set the value of [c]_f to zero, necessary to bypass trace gen checks
     let row = chip_input.raw.common_main.as_mut().unwrap().row_mut(0);
-    let cols: &mut FieldArithmeticCoreCols<BabyBear> = row
-        .split_at_mut(AluNativeAdapterCols::<BabyBear>::width())
+    let cols: &mut FieldArithmeticCoreCols<KoalaBear> = row
+        .split_at_mut(AluNativeAdapterCols::<KoalaBear>::width())
         .1
         .borrow_mut();
-    cols.b = BabyBear::ZERO;
+    cols.b = KoalaBear::ZERO;
 
     disable_debug_builder();
 
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(vec![chip_air], vec![chip_input]).err(),
+        KoalaBearPoseidon2Engine::run_test_fast(vec![chip_air], vec![chip_input]).err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
     );
@@ -175,7 +175,7 @@ fn new_field_arithmetic_air_test_panic() {
         FieldArithmeticCoreChip::new(),
         tester.offline_memory_mutex_arc(),
     );
-    tester.write_cell(4, 0, BabyBear::ZERO);
+    tester.write_cell(4, 0, KoalaBear::ZERO);
     // should panic
     tester.execute(
         &mut chip,

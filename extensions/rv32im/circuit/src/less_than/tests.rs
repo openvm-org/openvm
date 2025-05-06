@@ -23,7 +23,7 @@ use openvm_stark_backend::{
     verifier::VerificationError,
     ChipUsageGetter,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{p3_koala_bear::KoalaBear, utils::create_seeded_rng};
 use rand::Rng;
 
 use super::{core::run_less_than, LessThanCoreChip, Rv32LessThanChip};
@@ -33,7 +33,7 @@ use crate::{
     test_utils::{generate_rv32_is_type_immediate, rv32_rand_write_register_or_imm},
 };
 
-type F = BabyBear;
+type F = KoalaBear;
 
 //////////////////////////////////////////////////////////////////////////////////////
 // POSITIVE TESTS
@@ -156,7 +156,7 @@ fn run_rv32_lt_negative_test(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
+    let mut tester: VmChipTestBuilder<KoalaBear> = VmChipTestBuilder::default();
     let mut chip = Rv32LessThanTestChip::<F>::new(
         TestAdapterChip::new(
             vec![[b.map(F::from_canonical_u32), c.map(F::from_canonical_u32)].concat()],
@@ -206,7 +206,7 @@ fn run_rv32_lt_negative_test(
         }
     };
 
-    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+    let modify_trace = |trace: &mut DenseMatrix<KoalaBear>| {
         let mut values = trace.row_slice(0).to_vec();
         let cols: &mut LessThanCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();

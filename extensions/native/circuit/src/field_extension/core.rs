@@ -20,7 +20,7 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-pub const BETA: usize = 11;
+pub const BETA: usize = 3;
 pub const EXT_DEG: usize = 4;
 
 #[repr(C)]

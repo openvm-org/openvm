@@ -26,13 +26,13 @@ use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
-use openvm_stark_sdk::{bench::run_with_metric_collection, p3_baby_bear::BabyBear};
+use openvm_stark_sdk::{bench::run_with_metric_collection, p3_koala_bear::KoalaBear};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
 use serde::{Deserialize, Serialize};
 use tiny_keccak::{Hasher, Keccak};
 
-fn make_input(signing_key: &SigningKey, msg: &[u8]) -> Vec<BabyBear> {
+fn make_input(signing_key: &SigningKey, msg: &[u8]) -> Vec<KoalaBear> {
     let mut hasher = Keccak::v256();
     hasher.update(msg);
     let mut prehash = [0u8; 32];
@@ -45,7 +45,10 @@ fn make_input(signing_key: &SigningKey, msg: &[u8]) -> Vec<BabyBear> {
     input.push(v);
     input.extend_from_slice(signature.to_bytes().as_ref());
 
-    input.into_iter().map(BabyBear::from_canonical_u8).collect()
+    input
+        .into_iter()
+        .map(KoalaBear::from_canonical_u8)
+        .collect()
 }
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
@@ -90,7 +93,7 @@ fn main() -> Result<()> {
     let elf = args.build_bench_program("ecrecover")?;
     let exe = VmExe::from_elf(
         elf,
-        Transpiler::<BabyBear>::default()
+        Transpiler::<KoalaBear>::default()
             .with_extension(Rv32ITranspilerExtension)
             .with_extension(Rv32MTranspilerExtension)
             .with_extension(Rv32IoTranspilerExtension)
@@ -114,7 +117,7 @@ fn main() -> Result<()> {
         expected_address[..12].fill(0); // 20 bytes as the address.
         let mut input_stream = vec![expected_address
             .into_iter()
-            .map(BabyBear::from_canonical_u8)
+            .map(KoalaBear::from_canonical_u8)
             .collect::<Vec<_>>()];
 
         let msg = ["Elliptic", "Curve", "Digital", "Signature", "Algorithm"];

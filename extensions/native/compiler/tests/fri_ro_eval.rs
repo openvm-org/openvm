@@ -5,11 +5,11 @@ use openvm_native_compiler::{
     ir::{Array, Ext, Felt},
 };
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_koala_bear::KoalaBear;
 use rand::{thread_rng, Rng};
 
-type F = BabyBear;
-type EF = BinomialExtensionField<BabyBear, 4>;
+type F = KoalaBear;
+type EF = BinomialExtensionField<KoalaBear, 4>;
 
 #[test]
 fn test_single_reduced_opening_eval() {

@@ -4,7 +4,7 @@ use openvm_stark_backend::{
     p3_field::{extension::BinomialExtensionField, FieldAlgebra},
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2_root::root_perm, p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr,
+    config::koala_bear_poseidon2_root::root_perm, p3_bn254_fr::Bn254Fr, p3_koala_bear::KoalaBear,
 };
 use p3_symmetric::Hash;
 
@@ -19,18 +19,18 @@ use crate::{
 fn test_challenger() {
     let perm = root_perm();
     let mut challenger = OuterChallenger::new(perm).unwrap();
-    let a = BabyBear::from_canonical_usize(1);
-    let b = BabyBear::from_canonical_usize(2);
-    let c = BabyBear::from_canonical_usize(3);
+    let a = KoalaBear::from_canonical_usize(1);
+    let b = KoalaBear::from_canonical_usize(2);
+    let c = KoalaBear::from_canonical_usize(3);
     challenger.observe(a);
     challenger.observe(b);
     challenger.observe(c);
-    let gt1: BabyBear = challenger.sample();
+    let gt1: KoalaBear = challenger.sample();
     challenger.observe(a);
     challenger.observe(b);
     challenger.observe(c);
-    let gt2: BabyBear = challenger.sample();
-    let gt3: BabyBear = challenger.sample();
+    let gt2: KoalaBear = challenger.sample();
+    let gt3: KoalaBear = challenger.sample();
 
     let mut builder = Builder::<OuterConfig>::default();
     builder.flags.static_only = true;
@@ -65,19 +65,19 @@ fn test_challenger() {
 fn test_challenger_sample_ext() {
     let perm = root_perm();
     let mut challenger = OuterChallenger::new(perm).unwrap();
-    let a = BabyBear::from_canonical_usize(1);
-    let b = BabyBear::from_canonical_usize(2);
-    let c = BabyBear::from_canonical_usize(3);
+    let a = KoalaBear::from_canonical_usize(1);
+    let b = KoalaBear::from_canonical_usize(2);
+    let c = KoalaBear::from_canonical_usize(3);
     let hash = Hash::from([Bn254Fr::TWO; OUTER_DIGEST_SIZE]);
     challenger.observe(hash);
     challenger.observe(a);
     challenger.observe(b);
     challenger.observe(c);
-    let gt1: BinomialExtensionField<BabyBear, 4> = challenger.sample_ext_element();
+    let gt1: BinomialExtensionField<KoalaBear, 4> = challenger.sample_ext_element();
     challenger.observe(a);
     challenger.observe(b);
     challenger.observe(c);
-    let gt2: BinomialExtensionField<BabyBear, 4> = challenger.sample_ext_element();
+    let gt2: BinomialExtensionField<KoalaBear, 4> = challenger.sample_ext_element();
 
     let mut builder = Builder::<OuterConfig>::default();
     builder.flags.static_only = true;

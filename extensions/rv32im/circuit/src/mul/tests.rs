@@ -21,7 +21,7 @@ use openvm_stark_backend::{
     verifier::VerificationError,
     ChipUsageGetter,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{p3_koala_bear::KoalaBear, utils::create_seeded_rng};
 
 use super::core::run_mul;
 use crate::{
@@ -30,7 +30,7 @@ use crate::{
     test_utils::rv32_rand_write_register_or_imm,
 };
 
-type F = BabyBear;
+type F = KoalaBear;
 
 //////////////////////////////////////////////////////////////////////////////////////
 // POSITIVE TESTS
@@ -152,7 +152,7 @@ fn run_rv32_mul_negative_test(
         }
     }
 
-    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+    let modify_trace = |trace: &mut DenseMatrix<KoalaBear>| {
         let mut values = trace.row_slice(0).to_vec();
         let cols: &mut MultiplicationCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();

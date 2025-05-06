@@ -6,7 +6,7 @@ use openvm_native_compiler::{
 };
 use openvm_native_compiler_derive::DslVariable;
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_koala_bear::KoalaBear;
 
 #[derive(DslVariable, Clone, Debug)]
 pub struct Point<C: Config> {
@@ -17,8 +17,8 @@ pub struct Point<C: Config> {
 
 #[test]
 fn test_fixed_array_const() {
-    type F = BabyBear;
-    type EF = BinomialExtensionField<BabyBear, 4>;
+    type F = KoalaBear;
+    type EF = BinomialExtensionField<KoalaBear, 4>;
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
@@ -51,8 +51,8 @@ fn test_fixed_array_const() {
 
 #[test]
 fn test_fixed_array_var() {
-    type F = BabyBear;
-    type EF = BinomialExtensionField<BabyBear, 4>;
+    type F = KoalaBear;
+    type EF = BinomialExtensionField<KoalaBear, 4>;
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
@@ -89,8 +89,8 @@ fn test_fixed_array_var() {
 
 #[test]
 fn test_array_eq() {
-    type F = BabyBear;
-    type EF = BinomialExtensionField<BabyBear, 4>;
+    type F = KoalaBear;
+    type EF = BinomialExtensionField<KoalaBear, 4>;
 
     let mut builder = AsmBuilder::<F, EF>::default();
     let arr1: Array<_, Var<_>> = builder.dyn_array(2);
@@ -110,8 +110,8 @@ fn test_array_eq() {
 #[should_panic]
 #[test]
 fn test_array_eq_neg() {
-    type F = BabyBear;
-    type EF = BinomialExtensionField<BabyBear, 4>;
+    type F = KoalaBear;
+    type EF = BinomialExtensionField<KoalaBear, 4>;
 
     let mut builder = AsmBuilder::<F, EF>::default();
     let arr1: Array<_, Var<_>> = builder.dyn_array(2);
@@ -130,8 +130,8 @@ fn test_array_eq_neg() {
 
 #[test]
 fn test_slice_variable_impl_happy_path() {
-    type F = BabyBear;
-    type EF = BinomialExtensionField<BabyBear, 4>;
+    type F = KoalaBear;
+    type EF = BinomialExtensionField<KoalaBear, 4>;
     type C = AsmConfig<F, EF>;
 
     const N: usize = 3;
@@ -167,8 +167,8 @@ fn test_slice_variable_impl_happy_path() {
 #[test]
 #[should_panic]
 fn test_slice_assert_eq_neg() {
-    type F = BabyBear;
-    type EF = BinomialExtensionField<BabyBear, 4>;
+    type F = KoalaBear;
+    type EF = BinomialExtensionField<KoalaBear, 4>;
     const N: usize = 3;
 
     let mut builder = AsmBuilder::<F, EF>::default();

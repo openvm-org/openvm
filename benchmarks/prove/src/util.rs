@@ -21,18 +21,18 @@ use openvm_sdk::{
 use openvm_stark_backend::utils::metrics_span;
 use openvm_stark_sdk::{
     config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        koala_bear_poseidon2::{KoalaBearPoseidon2Config, KoalaBearPoseidon2Engine},
         FriParameters,
     },
     engine::StarkFriEngine,
     openvm_stark_backend::Chip,
-    p3_baby_bear::BabyBear,
+    p3_koala_bear::KoalaBear,
 };
 use openvm_transpiler::elf::Elf;
 use tracing::info_span;
 
-type F = BabyBear;
-type SC = BabyBearPoseidon2Config;
+type F = KoalaBear;
+type SC = KoalaBearPoseidon2Config;
 
 #[derive(Parser, Debug)]
 #[command(allow_external_subcommands = true)]
@@ -72,7 +72,7 @@ pub struct BenchmarkCli {
 }
 
 impl BenchmarkCli {
-    pub fn app_config<VC: VmConfig<BabyBear>>(&self, mut app_vm_config: VC) -> AppConfig<VC> {
+    pub fn app_config<VC: VmConfig<KoalaBear>>(&self, mut app_vm_config: VC) -> AppConfig<VC> {
         let app_log_blowup = self.app_log_blowup.unwrap_or(DEFAULT_APP_LOG_BLOWUP);
         let leaf_log_blowup = self.leaf_log_blowup.unwrap_or(DEFAULT_LEAF_LOG_BLOWUP);
 
@@ -157,7 +157,7 @@ impl BenchmarkCli {
         VC::Periphery: Chip<SC>,
     {
         let app_config = self.app_config(vm_config);
-        bench_from_exe::<VC, BabyBearPoseidon2Engine>(
+        bench_from_exe::<VC, KoalaBearPoseidon2Engine>(
             bench_name,
             app_config,
             exe,

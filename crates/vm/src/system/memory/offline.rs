@@ -531,7 +531,7 @@ mod tests {
         SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
     };
     use openvm_stark_backend::p3_field::FieldAlgebra;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_stark_sdk::p3_koala_bear::KoalaBear;
 
     use super::{BlockData, MemoryRecord, OfflineMemory};
     use crate::{
@@ -546,26 +546,26 @@ mod tests {
 
     macro_rules! bb {
         ($x:expr) => {
-            BabyBear::from_canonical_u32($x)
+            KoalaBear::from_canonical_u32($x)
         };
     }
 
     macro_rules! bba {
         [$($x:expr),*] => {
-            [$(BabyBear::from_canonical_u32($x)),*]
+            [$(KoalaBear::from_canonical_u32($x)),*]
         }
     }
 
     macro_rules! bbvec {
         [$($x:expr),*] => {
-            vec![$(BabyBear::from_canonical_u32($x)),*]
+            vec![$(KoalaBear::from_canonical_u32($x)),*]
         }
     }
 
     fn setup_test(
-        initial_memory: MemoryImage<BabyBear>,
+        initial_memory: MemoryImage<KoalaBear>,
         initial_block_size: usize,
-    ) -> (OfflineMemory<BabyBear>, AccessAdapterInventory<BabyBear>) {
+    ) -> (OfflineMemory<KoalaBear>, AccessAdapterInventory<KoalaBear>) {
         let memory_bus = MemoryBus::new(0);
         let range_checker =
             SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(1, 29));
@@ -901,13 +901,13 @@ mod tests {
 
         memory.write(2, 0, bbvec![4, 3, 2, 1], &mut adapter_records);
 
-        assert_eq!(memory.get(2, 0), BabyBear::from_canonical_u32(4));
-        assert_eq!(memory.get(2, 1), BabyBear::from_canonical_u32(3));
-        assert_eq!(memory.get(2, 2), BabyBear::from_canonical_u32(2));
-        assert_eq!(memory.get(2, 3), BabyBear::from_canonical_u32(1));
-        assert_eq!(memory.get(2, 5), BabyBear::ZERO);
+        assert_eq!(memory.get(2, 0), KoalaBear::from_canonical_u32(4));
+        assert_eq!(memory.get(2, 1), KoalaBear::from_canonical_u32(3));
+        assert_eq!(memory.get(2, 2), KoalaBear::from_canonical_u32(2));
+        assert_eq!(memory.get(2, 3), KoalaBear::from_canonical_u32(1));
+        assert_eq!(memory.get(2, 5), KoalaBear::ZERO);
 
-        assert_eq!(memory.get(1, 0), BabyBear::ZERO);
+        assert_eq!(memory.get(1, 0), KoalaBear::ZERO);
     }
 
     #[test]
@@ -916,13 +916,13 @@ mod tests {
 
         memory.write(2, 0, bbvec![4, 3, 2, 1], &mut adapter_records);
 
-        assert_eq!(memory.get(2, 0), BabyBear::from_canonical_u32(4));
-        assert_eq!(memory.get(2, 1), BabyBear::from_canonical_u32(3));
-        assert_eq!(memory.get(2, 2), BabyBear::from_canonical_u32(2));
-        assert_eq!(memory.get(2, 3), BabyBear::from_canonical_u32(1));
-        assert_eq!(memory.get(2, 5), BabyBear::ZERO);
-        assert_eq!(memory.get(2, 9), BabyBear::ZERO);
-        assert_eq!(memory.get(1, 0), BabyBear::ZERO);
+        assert_eq!(memory.get(2, 0), KoalaBear::from_canonical_u32(4));
+        assert_eq!(memory.get(2, 1), KoalaBear::from_canonical_u32(3));
+        assert_eq!(memory.get(2, 2), KoalaBear::from_canonical_u32(2));
+        assert_eq!(memory.get(2, 3), KoalaBear::from_canonical_u32(1));
+        assert_eq!(memory.get(2, 5), KoalaBear::ZERO);
+        assert_eq!(memory.get(2, 9), KoalaBear::ZERO);
+        assert_eq!(memory.get(1, 0), KoalaBear::ZERO);
     }
 
     #[test]
@@ -997,7 +997,7 @@ mod tests {
 
     #[test]
     fn test_write_read_initial_block_len_8_initial_memory() {
-        type F = BabyBear;
+        type F = KoalaBear;
 
         // Initialize initial memory with blocks at indices 0 and 2
         let mut initial_memory = MemoryImage::default();

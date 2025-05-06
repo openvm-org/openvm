@@ -1,7 +1,7 @@
 use openvm_native_compiler::ir::Builder;
 use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::config::{
-    baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig, FriParameters,
+    koala_bear_poseidon2_root::KoalaBearPoseidon2RootConfig, FriParameters,
 };
 
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
 pub fn build_circuit_verify_operations(
     advice: MultiStarkVerificationAdvice<OuterConfig>,
     fri_params: &FriParameters,
-    proof: &Proof<BabyBearPoseidon2RootConfig>,
+    proof: &Proof<KoalaBearPoseidon2RootConfig>,
 ) -> DslOperations<OuterConfig> {
     let mut builder = Builder::<OuterConfig>::default();
     builder.flags.static_only = true;

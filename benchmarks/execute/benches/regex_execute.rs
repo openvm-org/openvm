@@ -7,7 +7,7 @@ use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_sdk::StdIn;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_koala_bear::KoalaBear;
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
 fn benchmark_function(c: &mut Criterion) {
@@ -16,7 +16,7 @@ fn benchmark_function(c: &mut Criterion) {
 
     let exe = VmExe::from_elf(
         elf,
-        Transpiler::<BabyBear>::default()
+        Transpiler::<KoalaBear>::default()
             .with_extension(Rv32ITranspilerExtension)
             .with_extension(Rv32MTranspilerExtension)
             .with_extension(Rv32IoTranspilerExtension)
@@ -27,7 +27,7 @@ fn benchmark_function(c: &mut Criterion) {
     let mut group = c.benchmark_group("regex");
     group.sample_size(10);
     let config = Keccak256Rv32Config::default();
-    let executor = VmExecutor::<BabyBear, Keccak256Rv32Config>::new(config);
+    let executor = VmExecutor::<KoalaBear, Keccak256Rv32Config>::new(config);
 
     let data = include_str!("../../guest/regex/regex_email.txt");
 

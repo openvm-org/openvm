@@ -5,7 +5,7 @@ use openvm_native_recursion::{
     utils::const_fri_config,
 };
 use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
+    config::{koala_bear_poseidon2::KoalaBearPoseidon2Config, FriParameters},
     openvm_stark_backend::keygen::types::MultiStarkVerifyingKey,
 };
 
@@ -33,8 +33,8 @@ pub struct InternalVmVerifierConfig {
 impl InternalVmVerifierConfig {
     pub fn build_program(
         &self,
-        leaf_vm_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-        internal_vm_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        leaf_vm_vk: &MultiStarkVerifyingKey<KoalaBearPoseidon2Config>,
+        internal_vm_vk: &MultiStarkVerifyingKey<KoalaBearPoseidon2Config>,
     ) -> Program<F> {
         let leaf_advice = new_from_inner_multi_vk(leaf_vm_vk);
         let internal_advice = new_from_inner_multi_vk(internal_vm_vk);
@@ -44,7 +44,7 @@ impl InternalVmVerifierConfig {
             let InternalVmVerifierInputVariable {
                 self_program_commit,
                 proofs,
-            } = InternalVmVerifierInput::<BabyBearPoseidon2Config>::read(&mut builder);
+            } = InternalVmVerifierInput::<KoalaBearPoseidon2Config>::read(&mut builder);
             builder.cycle_tracker_end("ReadProofsFromInput");
             builder.cycle_tracker_start("InitializePcsConst");
             let leaf_pcs = TwoAdicFriPcsVariable {

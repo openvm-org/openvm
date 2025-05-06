@@ -12,7 +12,7 @@ use openvm_native_compiler::{
     conversion::AS, FieldArithmeticOpcode, Poseidon2Opcode, Poseidon2Opcode::*,
     VerifyBatchOpcode::VERIFY_BATCH,
 };
-use openvm_poseidon2_air::{default_baby_bear_rc, Poseidon2Config, Poseidon2SubChip};
+use openvm_poseidon2_air::{default_koalabear_rc, Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32, PrimeField64},
@@ -21,13 +21,13 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{
     config::{
-        baby_bear_blake3::{BabyBearBlake3Config, BabyBearBlake3Engine},
-        baby_bear_poseidon2::BabyBearPoseidon2Engine,
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
+        koala_bear_blake3::{KoalaBearBlake3Config, KoalaBearBlake3Engine},
+        koala_bear_poseidon2::KoalaBearPoseidon2Engine,
         FriParameters,
     },
     engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
+    p3_koala_bear::KoalaBear,
     utils::create_seeded_rng,
 };
 use rand::{rngs::StdRng, Rng};
@@ -86,7 +86,7 @@ fn compute_commit<F: Field>(
     root
 }
 
-type F = BabyBear;
+type F = KoalaBear;
 
 #[derive(Debug, Clone)]
 struct VerifyBatchInstance {
@@ -138,9 +138,9 @@ fn random_instance(
     }
 }
 
-const SBOX_DEGREE: u64 = 7;
-const SBOX_REGISTERS: usize = 1;
-const PARTIAL_ROUNDS: usize = 13;
+const SBOX_DEGREE: u64 = 3;
+const SBOX_REGISTERS: usize = 0;
+const PARTIAL_ROUNDS: usize = 20;
 
 struct Case {
     row_lengths: Vec<Vec<usize>>,
@@ -160,7 +160,7 @@ fn test<const N: usize>(cases: [Case; N]) {
     let mut chip = NativePoseidon2Chip::<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>::new(
         tester.system_port(),
         tester.offline_memory_mutex_arc(),
-        Poseidon2Config::new(default_baby_bear_rc()),
+        Poseidon2Config::new(default_koalabear_rc()),
         VERIFY_BATCH_BUS,
         streams.clone(),
     );
@@ -266,7 +266,7 @@ fn test<const N: usize>(cases: [Case; N]) {
     trace.row_mut(row_index);
 
     let p2_chip = Poseidon2SubChip::<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>::new(
-        default_baby_bear_rc(),
+        default_koalabear_rc(),
     );
     let inner_trace = p2_chip.generate_trace(vec![[F::ZERO; 2 * CHUNK]]);
     let inner_width = p2_chip.air.width();
@@ -359,12 +359,12 @@ fn verify_batch_test_felt_and_ext() {
 }
 
 /// Create random instructions for the poseidon2 chip.
-fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
+fn random_instructions(num_ops: usize) -> Vec<Instruction<KoalaBear>> {
     let mut rng = create_seeded_rng();
     (0..num_ops)
         .map(|_| {
             let [a, b, c] =
-                std::array::from_fn(|_| BabyBear::from_canonical_usize(gen_pointer(&mut rng, 1)));
+                std::array::from_fn(|_| KoalaBear::from_canonical_usize(gen_pointer(&mut rng, 1)));
             Instruction {
                 opcode: if rng.gen_bool(0.5) {
                     PERM_POS2
@@ -375,16 +375,16 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
                 a,
                 b,
                 c,
-                d: BabyBear::from_canonical_usize(4),
-                e: BabyBear::from_canonical_usize(4),
-                f: BabyBear::ZERO,
-                g: BabyBear::ZERO,
+                d: KoalaBear::from_canonical_usize(4),
+                e: KoalaBear::from_canonical_usize(4),
+                f: KoalaBear::ZERO,
+                g: KoalaBear::ZERO,
             }
         })
         .collect()
 }
 
-fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlake3Config> {
+fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<KoalaBearBlake3Config> {
     let elem_range = || 1..=100;
 
     let mut tester = VmChipTestBuilder::default();
@@ -392,7 +392,7 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
     let mut chip = NativePoseidon2Chip::<F, SBOX_DEGREE, SBOX_REGISTERS, PARTIAL_ROUNDS>::new(
         tester.system_port(),
         tester.offline_memory_mutex_arc(),
-        Poseidon2Config::new(default_baby_bear_rc()),
+        Poseidon2Config::new(default_koalabear_rc()),
         VERIFY_BATCH_BUS,
         streams.clone(),
     );
@@ -419,14 +419,14 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
         let rhs = gen_pointer(&mut rng, CHUNK) / 2;
 
         let data: [_; 2 * CHUNK] =
-            std::array::from_fn(|_| BabyBear::from_canonical_usize(rng.gen_range(elem_range())));
+            std::array::from_fn(|_| KoalaBear::from_canonical_usize(rng.gen_range(elem_range())));
 
         let hash = chip.subchip.permute(data);
 
-        tester.write_cell(d, a, BabyBear::from_canonical_usize(dst));
-        tester.write_cell(d, b, BabyBear::from_canonical_usize(lhs));
+        tester.write_cell(d, a, KoalaBear::from_canonical_usize(dst));
+        tester.write_cell(d, b, KoalaBear::from_canonical_usize(lhs));
         if opcode == COMP_POS2 {
-            tester.write_cell(d, c, BabyBear::from_canonical_usize(rhs));
+            tester.write_cell(d, c, KoalaBear::from_canonical_usize(rhs));
         }
 
         match opcode {
@@ -458,8 +458,8 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
     tester.build().load(chip).finalize()
 }
 
-fn get_engine() -> BabyBearBlake3Engine {
-    BabyBearBlake3Engine::new(FriParameters::new_for_testing(3))
+fn get_engine() -> KoalaBearBlake3Engine {
+    KoalaBearBlake3Engine::new(FriParameters::new_for_testing(3))
 }
 
 #[test]
@@ -483,7 +483,7 @@ fn verify_batch_chip_simple_50() {
 // log_blowup = 3 for poseidon2 chip
 fn air_test_with_compress_poseidon2(
     poseidon2_max_constraint_degree: usize,
-    program: Program<BabyBear>,
+    program: Program<KoalaBear>,
 ) {
     let fri_params = if matches!(std::env::var("OPENVM_FAST_TEST"), Ok(x) if &x == "1") {
         FriParameters {
@@ -495,7 +495,7 @@ fn air_test_with_compress_poseidon2(
     } else {
         standard_fri_params_with_100_bits_conjectured_security(3)
     };
-    let engine = BabyBearPoseidon2Engine::new(fri_params);
+    let engine = KoalaBearPoseidon2Engine::new(fri_params);
 
     let config = NativeConfig::aggregation(0, poseidon2_max_constraint_degree);
     let vm = VirtualMachine::new(engine, config);

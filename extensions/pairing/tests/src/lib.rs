@@ -31,12 +31,14 @@ mod bn254 {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_stark_sdk::{openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear};
+    use openvm_stark_sdk::{
+        openvm_stark_backend::p3_field::FieldAlgebra, p3_koala_bear::KoalaBear,
+    };
     use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
     use rand::SeedableRng;
 
-    type F = BabyBear;
+    type F = KoalaBear;
 
     pub fn get_testing_config() -> Rv32PairingConfig {
         let primes = [BN254_MODULUS.clone()];
@@ -434,12 +436,14 @@ mod bls12_381 {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_stark_sdk::{openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear};
+    use openvm_stark_sdk::{
+        openvm_stark_backend::p3_field::FieldAlgebra, p3_koala_bear::KoalaBear,
+    };
     use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
     use rand::SeedableRng;
 
-    type F = BabyBear;
+    type F = KoalaBear;
 
     pub fn get_testing_config() -> Rv32PairingConfig {
         let primes = [BLS12_381_MODULUS.clone()];

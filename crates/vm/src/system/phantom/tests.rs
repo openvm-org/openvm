@@ -2,11 +2,11 @@ use std::sync::{Arc, Mutex};
 
 use openvm_instructions::{instruction::Instruction, SystemOpcode};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_koala_bear::KoalaBear;
 
 use super::PhantomChip;
 use crate::arch::{instructions::LocalOpcode, testing::VmChipTestBuilder, ExecutionState};
-type F = BabyBear;
+type F = KoalaBear;
 
 #[test]
 fn test_nops_and_terminate() {

@@ -1,7 +1,7 @@
 use openvm_native_compiler::ir::Witness;
 use openvm_stark_sdk::{
     config::{
-        baby_bear_poseidon2_root::{BabyBearPoseidon2RootConfig, BabyBearPoseidon2RootEngine},
+        koala_bear_poseidon2_root::{KoalaBearPoseidon2RootConfig, KoalaBearPoseidon2RootEngine},
         setup_tracing_with_log_level, FriParameters,
     },
     engine::StarkFriEngine,
@@ -19,21 +19,21 @@ use crate::{
 
 #[test]
 fn test_fibonacci() {
-    run_recursive_test(fibonacci_test_proof_input::<BabyBearPoseidon2RootConfig>(
+    run_recursive_test(fibonacci_test_proof_input::<KoalaBearPoseidon2RootConfig>(
         16,
     ))
 }
 
 #[test]
 fn test_interactions() {
-    run_recursive_test(interaction_test_proof_input::<BabyBearPoseidon2RootConfig>())
+    run_recursive_test(interaction_test_proof_input::<KoalaBearPoseidon2RootConfig>())
 }
 
-fn run_recursive_test(mut test_proof_input: ProofInputForTest<BabyBearPoseidon2RootConfig>) {
+fn run_recursive_test(mut test_proof_input: ProofInputForTest<KoalaBearPoseidon2RootConfig>) {
     setup_tracing_with_log_level(Level::WARN);
     test_proof_input.sort_chips();
     let vparams = test_proof_input
-        .run_test(&BabyBearPoseidon2RootEngine::new(
+        .run_test(&KoalaBearPoseidon2RootEngine::new(
             FriParameters::standard_fast(),
         ))
         .unwrap();

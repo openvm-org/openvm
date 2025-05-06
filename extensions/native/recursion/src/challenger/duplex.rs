@@ -200,9 +200,9 @@ mod tests {
         p3_field::FieldAlgebra,
     };
     use openvm_stark_sdk::{
-        config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
+        config::koala_bear_poseidon2::{default_engine, KoalaBearPoseidon2Config},
         engine::StarkEngine,
-        p3_baby_bear::BabyBear,
+        p3_koala_bear::KoalaBear,
     };
     use rand::Rng;
 
@@ -211,10 +211,10 @@ mod tests {
     fn test_compiler_challenger_with_num_challenges(num_challenges: usize) {
         let mut rng = rand::thread_rng();
         let observations = (0..num_challenges)
-            .map(|_| BabyBear::from_canonical_u32(rng.gen_range(0..(1 << 30))))
+            .map(|_| KoalaBear::from_canonical_u32(rng.gen_range(0..(1 << 30))))
             .collect::<Vec<_>>();
 
-        type SC = BabyBearPoseidon2Config;
+        type SC = KoalaBearPoseidon2Config;
         type F = Val<SC>;
         type EF = <SC as StarkGenericConfig>::Challenge;
 

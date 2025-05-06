@@ -16,7 +16,7 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
-use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{config::setup_tracing, p3_koala_bear::KoalaBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::run_write_data_sign_extend;
@@ -28,7 +28,7 @@ use crate::{
 
 const IMM_BITS: usize = 16;
 
-type F = BabyBear;
+type F = KoalaBear;
 
 fn into_limbs<const NUM_LIMBS: usize, const LIMB_BITS: usize>(num: u32) -> [u32; NUM_LIMBS] {
     array::from_fn(|i| (num >> (LIMB_BITS * i)) & ((1 << LIMB_BITS) - 1))
@@ -214,7 +214,7 @@ fn run_negative_loadstore_test(
         imm_sign,
     );
 
-    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+    let modify_trace = |trace: &mut DenseMatrix<KoalaBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
 
         let (_, core_row) = trace_row.split_at_mut(adapter_width);

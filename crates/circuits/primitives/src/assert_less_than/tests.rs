@@ -18,8 +18,8 @@ use openvm_stark_backend::{
     verifier::VerificationError,
 };
 use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
+    any_rap_arc_vec, config::koala_bear_poseidon2::KoalaBearPoseidon2Engine,
+    engine::StarkFriEngine, p3_koala_bear::KoalaBear,
 };
 
 use super::*;
@@ -131,9 +131,9 @@ fn test_assert_less_than_chip_lt() {
     let airs = any_rap_arc_vec![chip.air, range_checker.air];
     chip.pairs = vec![(14321, 26883), (0, 1), (28, 120), (337, 456)];
     let trace = chip.generate_trace();
-    let range_trace: DenseMatrix<BabyBear> = range_checker.generate_trace();
+    let range_trace: DenseMatrix<KoalaBear> = range_checker.generate_trace();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace])
+    KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace])
         .expect("Verification failed");
 }
 
@@ -149,9 +149,9 @@ fn test_lt_chip_decomp_does_not_divide() {
     let airs = any_rap_arc_vec![chip.air, range_checker.air];
     chip.pairs = vec![(14321, 26883), (0, 1), (28, 120), (337, 456)];
     let trace = chip.generate_trace();
-    let range_trace: DenseMatrix<BabyBear> = range_checker.generate_trace();
+    let range_trace: DenseMatrix<KoalaBear> = range_checker.generate_trace();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace])
+    KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace])
         .expect("Verification failed");
 }
 
@@ -174,7 +174,7 @@ fn test_assert_less_than_negative_1() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace]).err(),
+        KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace]).err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
@@ -199,7 +199,7 @@ fn test_assert_less_than_negative_2() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace],).err(),
+        KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace]).err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
@@ -217,8 +217,8 @@ fn test_assert_less_than_with_non_power_of_two_pairs() {
     let airs = any_rap_arc_vec![chip.air, range_checker.air];
     chip.pairs = vec![(14321, 26883), (0, 1), (28, 120)];
     let trace = chip.generate_trace();
-    let range_trace: DenseMatrix<BabyBear> = range_checker.generate_trace();
+    let range_trace: DenseMatrix<KoalaBear> = range_checker.generate_trace();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace])
+    KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace])
         .expect("Verification failed");
 }

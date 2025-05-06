@@ -23,11 +23,11 @@ use openvm_pairing_guest::{
 use openvm_pairing_transpiler::{Bls12381Fp12Opcode, Bn254Fp12Opcode, Fp12Opcode};
 use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
 use openvm_stark_backend::p3_field::FieldAlgebra;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_koala_bear::KoalaBear;
 
 use super::{fp12_add_expr, fp12_mul_expr, fp12_sub_expr};
 
-type F = BabyBear;
+type F = KoalaBear;
 
 #[allow(clippy::too_many_arguments)]
 fn test_fp12_fn<
@@ -69,15 +69,15 @@ fn test_fp12_fn<
     let x_limbs = x
         .iter()
         .map(|x| {
-            biguint_to_limbs::<NUM_LIMBS>(x.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32)
+            biguint_to_limbs::<NUM_LIMBS>(x.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32)
         })
-        .collect::<Vec<[BabyBear; NUM_LIMBS]>>();
+        .collect::<Vec<[KoalaBear; NUM_LIMBS]>>();
     let y_limbs = y
         .iter()
         .map(|y| {
-            biguint_to_limbs::<NUM_LIMBS>(y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32)
+            biguint_to_limbs::<NUM_LIMBS>(y.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32)
         })
-        .collect::<Vec<[BabyBear; NUM_LIMBS]>>();
+        .collect::<Vec<[KoalaBear; NUM_LIMBS]>>();
     let mut chip = VmChipWrapper::new(adapter, core, tester.offline_memory_mutex_arc());
 
     let res = chip.core.air.expr.execute([x, y].concat(), vec![]);

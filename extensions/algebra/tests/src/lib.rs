@@ -14,11 +14,11 @@ mod tests {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_stark_sdk::p3_koala_bear::KoalaBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
-    type F = BabyBear;
+    type F = KoalaBear;
 
     #[test]
     fn test_moduli_setup() -> Result<()> {

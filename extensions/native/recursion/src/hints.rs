@@ -15,8 +15,8 @@ use openvm_stark_backend::{
     proof::{AdjacentOpenedValues, AirProofData, Commitments, OpenedValues, OpeningProof, Proof},
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-    p3_baby_bear::{BabyBear, Poseidon2BabyBear},
+    config::koala_bear_poseidon2::KoalaBearPoseidon2Config,
+    p3_koala_bear::{KoalaBear, Poseidon2KoalaBear},
 };
 use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof};
 use p3_merkle_tree::MerkleTreeMmcs;
@@ -30,9 +30,9 @@ use crate::{
     },
 };
 
-pub type InnerVal = BabyBear;
+pub type InnerVal = KoalaBear;
 pub type InnerChallenge = BinomialExtensionField<InnerVal, 4>;
-pub type InnerPerm = Poseidon2BabyBear<16>;
+pub type InnerPerm = Poseidon2KoalaBear<16>;
 pub type InnerHash = PaddingFreeSponge<InnerPerm, 16, 8, 8>;
 pub type InnerDigest = [InnerVal; DIGEST_SIZE];
 pub type InnerCompress = TruncatedPermutation<InnerPerm, 2, 8, 16>;
@@ -122,7 +122,7 @@ impl VecAutoHintable for Vec<AdjacentOpenedValues<InnerChallenge>> {}
 impl VecAutoHintable for Vec<Vec<AdjacentOpenedValues<InnerChallenge>>> {}
 
 impl VecAutoHintable for AirProofData<InnerVal, InnerChallenge> {}
-impl VecAutoHintable for Proof<BabyBearPoseidon2Config> {}
+impl VecAutoHintable for Proof<KoalaBearPoseidon2Config> {}
 
 impl<C: Config, I: VecAutoHintable + Hintable<C>> Hintable<C> for Vec<I> {
     type HintVariable = Array<C, I::HintVariable>;
@@ -269,13 +269,13 @@ impl Hintable<InnerConfig> for TraceWidth {
     }
 }
 
-impl Hintable<InnerConfig> for Proof<BabyBearPoseidon2Config> {
+impl Hintable<InnerConfig> for Proof<KoalaBearPoseidon2Config> {
     type HintVariable = StarkProofVariable<InnerConfig>;
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
-        let commitments = Commitments::<Com<BabyBearPoseidon2Config>>::read(builder);
+        let commitments = Commitments::<Com<KoalaBearPoseidon2Config>>::read(builder);
         let opening =
-            OpeningProof::<PcsProof<BabyBearPoseidon2Config>, InnerChallenge>::read(builder);
+            OpeningProof::<PcsProof<KoalaBearPoseidon2Config>, InnerChallenge>::read(builder);
         let per_air = Vec::<AirProofData<InnerVal, InnerChallenge>>::read(builder);
         let raw_air_perm_by_height = Vec::<usize>::read(builder);
         // A hacky way to transmute from Array of Var to Array of Usize.
@@ -343,7 +343,7 @@ impl Hintable<InnerConfig> for AirProofData<InnerVal, InnerChallenge> {
     }
 }
 
-impl Hintable<InnerConfig> for OpeningProof<PcsProof<BabyBearPoseidon2Config>, InnerChallenge> {
+impl Hintable<InnerConfig> for OpeningProof<PcsProof<KoalaBearPoseidon2Config>, InnerChallenge> {
     type HintVariable = OpeningProofVariable<InnerConfig>;
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
@@ -413,7 +413,7 @@ impl Hintable<InnerConfig> for AdjacentOpenedValues<InnerChallenge> {
     }
 }
 
-impl Hintable<InnerConfig> for Commitments<Com<BabyBearPoseidon2Config>> {
+impl Hintable<InnerConfig> for Commitments<Com<KoalaBearPoseidon2Config>> {
     type HintVariable = CommitmentsVariable<InnerConfig>;
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {

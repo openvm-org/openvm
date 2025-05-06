@@ -22,7 +22,7 @@ use crate::{
             assert_single_segment_vm_exit_successfully_with_connector_air_id, types::SpecialAirIds,
         },
         root::types::RootVmVerifierPvs,
-        utils::compress_babybear_var_to_bn254,
+        utils::compress_koalabear_var_to_bn254,
     },
     RootSC,
 };
@@ -56,8 +56,8 @@ impl StaticVerifierPvHandler for DefaultStaticVerifierPvHandler {
             .map(|x| builder.cast_felt_to_var(x))
             .collect();
         let pvs = RootVmVerifierPvs::from_flatten(public_values);
-        let exe_commit = compress_babybear_var_to_bn254(builder, pvs.exe_commit);
-        let leaf_commit = compress_babybear_var_to_bn254(builder, pvs.leaf_verifier_commit);
+        let exe_commit = compress_koalabear_var_to_bn254(builder, pvs.exe_commit);
+        let leaf_commit = compress_koalabear_var_to_bn254(builder, pvs.leaf_verifier_commit);
         let num_public_values = 2 + pvs.public_values.len();
         builder.static_commit_public_value(0, exe_commit);
         builder.static_commit_public_value(1, leaf_commit);

@@ -27,7 +27,7 @@ use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, ShiftOpcode,
 };
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{p3_koala_bear::KoalaBear, utils::create_seeded_rng};
 use rand::Rng;
 
 use super::{
@@ -35,7 +35,7 @@ use super::{
     Rv32Multiplication256Chip, Rv32Shift256Chip,
 };
 
-type F = BabyBear;
+type F = KoalaBear;
 
 #[allow(clippy::type_complexity)]
 fn run_int_256_rand_execute<E: InstructionExecutor<F>>(

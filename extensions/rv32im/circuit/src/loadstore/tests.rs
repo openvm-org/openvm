@@ -19,7 +19,7 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
-use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{config::setup_tracing, p3_koala_bear::KoalaBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, seq::SliceRandom, Rng};
 
 use super::{run_write_data, LoadStoreCoreChip, Rv32LoadStoreChip};
@@ -30,7 +30,7 @@ use crate::{
 
 const IMM_BITS: usize = 16;
 
-type F = BabyBear;
+type F = KoalaBear;
 
 #[allow(clippy::too_many_arguments)]
 fn set_and_execute(
@@ -277,7 +277,7 @@ fn run_negative_loadstore_test(
         mem_as,
     );
 
-    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+    let modify_trace = |trace: &mut DenseMatrix<KoalaBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
         let core_cols: &mut LoadStoreCoreCols<F, RV32_REGISTER_NUM_LIMBS> = core_row.borrow_mut();

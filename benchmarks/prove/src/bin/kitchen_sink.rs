@@ -14,7 +14,7 @@ use openvm_sdk::{
     DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
 use openvm_stark_sdk::{
-    bench::run_with_metric_collection, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+    bench::run_with_metric_collection, config::koala_bear_poseidon2::KoalaBearPoseidon2Engine,
 };
 use openvm_transpiler::FromElf;
 
@@ -80,7 +80,7 @@ fn main() -> Result<()> {
     )?;
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let mut prover = ContinuationProver::<_, BabyBearPoseidon2Engine>::new(
+        let mut prover = ContinuationProver::<_, KoalaBearPoseidon2Engine>::new(
             &halo2_params_reader,
             app_pk,
             app_committed_exe,

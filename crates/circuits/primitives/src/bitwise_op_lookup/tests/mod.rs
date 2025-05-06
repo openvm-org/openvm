@@ -10,8 +10,8 @@ use openvm_stark_backend::{
     AirRef,
 };
 use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
+    any_rap_arc_vec, config::koala_bear_poseidon2::KoalaBearPoseidon2Engine,
+    engine::StarkFriEngine, p3_koala_bear::KoalaBear, utils::create_seeded_rng,
 };
 use rand::Rng;
 
@@ -93,10 +93,10 @@ fn test_bitwise_operation_lookup() {
                 4,
             )
         })
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<KoalaBear>>>();
     traces.push(lookup.generate_trace());
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(chips, traces)
+    KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(chips, traces)
         .expect("Verification failed");
 }
 
@@ -131,7 +131,7 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperation)) {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(chips, traces).err(),
+        KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(chips, traces).err(),
         Some(VerificationError::ChallengePhaseError),
         "Expected constraint to fail"
     );

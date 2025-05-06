@@ -164,8 +164,8 @@ pub(crate) mod tests {
         p3_field::PrimeField,
     };
     use openvm_stark_sdk::config::{
-        baby_bear_poseidon2::{config_from_perm, default_perm, BabyBearPoseidon2Config},
         fri_params::SecurityParameters,
+        koala_bear_poseidon2::{config_from_perm, default_perm, KoalaBearPoseidon2Config},
     };
     use rand::{thread_rng, Rng};
 
@@ -201,7 +201,7 @@ pub(crate) mod tests {
     }
 
     fn test_domain_impl(static_only: bool) {
-        type SC = BabyBearPoseidon2Config;
+        type SC = KoalaBearPoseidon2Config;
         type F = Val<SC>;
         type EF = <SC as StarkGenericConfig>::Challenge;
         type Challenger = <SC as StarkGenericConfig>::Challenger;

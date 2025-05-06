@@ -6,17 +6,17 @@ use openvm_native_compiler::{
 };
 use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_koala_bear::KoalaBear;
 
-type F = BabyBear;
-type EF = BinomialExtensionField<BabyBear, 4>;
+type F = KoalaBear;
+type EF = BinomialExtensionField<KoalaBear, 4>;
 
 #[test]
 fn test_compiler_for_loops() {
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let n_val = BabyBear::from_canonical_u32(10);
-    let m_val = BabyBear::from_canonical_u32(5);
+    let n_val = KoalaBear::from_canonical_u32(10);
+    let m_val = KoalaBear::from_canonical_u32(5);
 
     let zero: Var<_> = builder.eval(F::ZERO);
     let n: Var<_> = builder.eval(n_val);
@@ -169,7 +169,7 @@ fn test_compiler_nested_array_loop() {
 fn test_compiler_bneinc() {
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let n_val = BabyBear::from_canonical_u32(20);
+    let n_val = KoalaBear::from_canonical_u32(20);
 
     let zero: Var<_> = builder.eval(F::ZERO);
     let n: Var<_> = builder.eval(n_val);

@@ -11,7 +11,7 @@ use openvm_stark_backend::{
     p3_field::FieldAlgebra, utils::disable_debug_builder, verifier::VerificationError,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_blake3::BabyBearBlake3Config, p3_baby_bear::BabyBear,
+    config::koala_bear_blake3::KoalaBearBlake3Config, p3_koala_bear::KoalaBear,
     utils::create_seeded_rng,
 };
 use p3_keccak_air::NUM_ROUNDS;
@@ -20,13 +20,13 @@ use tiny_keccak::Hasher;
 
 use super::{columns::KeccakVmCols, utils::num_keccak_f, KeccakVmChip};
 
-type F = BabyBear;
+type F = KoalaBear;
 // io is vector of (input, expected_output, prank_output) where prank_output is Some if the trace
 // will be replaced
 #[allow(clippy::type_complexity)]
 fn build_keccak256_test(
     io: Vec<(Vec<u8>, Option<[u8; 32]>, Option<[u8; 32]>)>,
-) -> VmChipTester<BabyBearBlake3Config> {
+) -> VmChipTester<KoalaBearBlake3Config> {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<8>::new(bitwise_bus);
 

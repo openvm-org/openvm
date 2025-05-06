@@ -5,9 +5,9 @@ use openvm_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, AirRef,
 };
 use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
+    any_rap_arc_vec, config::koala_bear_blake3::KoalaBearBlake3Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
+    p3_koala_bear::KoalaBear, utils::create_seeded_rng,
 };
 use rand::Rng;
 
@@ -66,16 +66,16 @@ fn test_range_tuple_chip() {
                 sizes.len() + 1,
             )
         })
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<KoalaBear>>>();
 
     let range_trace = range_checker.generate_trace();
 
     let all_traces = lists_traces
         .into_iter()
         .chain(iter::once(range_trace))
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<KoalaBear>>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
+    KoalaBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
         .expect("Verification failed");
 }
 
@@ -98,11 +98,11 @@ fn negative_test_range_tuple_chip() {
     let mut range_trace = range_checker.generate_trace();
 
     // Corrupt the trace to make it invalid
-    range_trace.values[0] = BabyBear::from_wrapped_u32(99);
+    range_trace.values[0] = KoalaBear::from_wrapped_u32(99);
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+        KoalaBearBlake3Engine::run_simple_test_no_pis_fast(
             any_rap_arc_vec![range_checker.air],
             vec![range_trace]
         )

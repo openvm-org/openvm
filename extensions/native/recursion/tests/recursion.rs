@@ -7,11 +7,11 @@ use openvm_stark_backend::{
     p3_commit::PolynomialSpace,
     p3_field::{extension::BinomialExtensionField, FieldAlgebra},
 };
-use openvm_stark_sdk::{config::FriParameters, p3_baby_bear::BabyBear, utils::ProofInputForTest};
+use openvm_stark_sdk::{config::FriParameters, p3_koala_bear::KoalaBear, utils::ProofInputForTest};
 
-fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
-    type F = BabyBear;
-    type EF = BinomialExtensionField<BabyBear, 4>;
+fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<KoalaBear> {
+    type F = KoalaBear;
+    type EF = BinomialExtensionField<KoalaBear, 4>;
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
@@ -41,13 +41,13 @@ pub(crate) fn fibonacci_program_test_proof_input<SC: StarkGenericConfig>(
     n: u32,
 ) -> ProofInputForTest<SC>
 where
-    Domain<SC>: PolynomialSpace<Val = BabyBear>,
+    Domain<SC>: PolynomialSpace<Val = KoalaBear>,
 {
     let fib_program = fibonacci_program(a, b, n);
     let vm_config = NativeConfig::new(SystemConfig::default().with_public_values(3), Native);
     let airs = vm_config.create_chip_complex().unwrap().airs();
 
-    let executor = VmExecutor::<BabyBear, NativeConfig>::new(vm_config);
+    let executor = VmExecutor::<KoalaBear, NativeConfig>::new(vm_config);
 
     let mut result = executor.execute_and_generate(fib_program, vec![]).unwrap();
     assert_eq!(result.per_segment.len(), 1, "unexpected continuation");

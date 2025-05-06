@@ -8,11 +8,11 @@ use openvm_continuations::verifier::leaf::LeafVmVerifierConfig;
 use openvm_native_compiler::{conversion::CompilerOptions, ir::DIGEST_SIZE};
 use openvm_stark_backend::{config::StarkGenericConfig, p3_field::PrimeField32};
 use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+    config::{koala_bear_poseidon2::KoalaBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
     openvm_stark_backend::p3_field::FieldAlgebra,
-    p3_baby_bear::BabyBear,
     p3_bn254_fr::Bn254Fr,
+    p3_koala_bear::KoalaBear,
 };
 
 use crate::{keygen::AppProvingKey, NonRootCommittedExe, F, SC};
@@ -58,17 +58,17 @@ impl AppExecutionCommit<F> {
     }
 
     pub fn app_config_commit_to_bn254(&self) -> Bn254Fr {
-        babybear_digest_to_bn254(&self.leaf_vm_verifier_commit)
+        koalabear_digest_to_bn254(&self.leaf_vm_verifier_commit)
     }
 
     pub fn exe_commit_to_bn254(&self) -> Bn254Fr {
-        babybear_digest_to_bn254(&self.exe_commit)
+        koalabear_digest_to_bn254(&self.exe_commit)
     }
 }
 
-pub(crate) fn babybear_digest_to_bn254(digest: &[F; DIGEST_SIZE]) -> Bn254Fr {
+pub(crate) fn koalabear_digest_to_bn254(digest: &[F; DIGEST_SIZE]) -> Bn254Fr {
     let mut ret = Bn254Fr::ZERO;
-    let order = Bn254Fr::from_canonical_u32(BabyBear::ORDER_U32);
+    let order = Bn254Fr::from_canonical_u32(KoalaBear::ORDER_U32);
     let mut base = Bn254Fr::ONE;
     digest.iter().for_each(|&x| {
         ret += base * Bn254Fr::from_canonical_u32(x.as_canonical_u32());
@@ -83,7 +83,7 @@ pub fn generate_leaf_committed_exe<VC: VmConfig<F>>(
     app_pk: &AppProvingKey<VC>,
 ) -> Arc<NonRootCommittedExe> {
     let app_vm_vk = app_pk.app_vm_pk.vm_pk.get_vk();
-    let leaf_engine = BabyBearPoseidon2Engine::new(leaf_fri_params);
+    let leaf_engine = KoalaBearPoseidon2Engine::new(leaf_fri_params);
     let leaf_program = LeafVmVerifierConfig {
         app_fri_params: app_pk.app_vm_pk.fri_params,
         app_system_config: app_pk.app_vm_pk.vm_config.system().clone(),
@@ -101,10 +101,10 @@ pub fn commit_app_exe(
     app_exe: impl Into<VmExe<F>>,
 ) -> Arc<NonRootCommittedExe> {
     let exe: VmExe<_> = app_exe.into();
-    let app_engine = BabyBearPoseidon2Engine::new(app_fri_params);
+    let app_engine = KoalaBearPoseidon2Engine::new(app_fri_params);
     Arc::new(VmCommittedExe::<SC>::commit(exe, app_engine.config.pcs()))
 }
 
 pub fn committed_exe_as_bn254(committed_exe: &NonRootCommittedExe) -> Bn254Fr {
-    babybear_digest_to_bn254(&committed_exe.get_program_commit().into())
+    koalabear_digest_to_bn254(&committed_exe.get_program_commit().into())
 }

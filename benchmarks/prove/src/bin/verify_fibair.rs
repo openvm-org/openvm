@@ -13,7 +13,7 @@ use openvm_sdk::{
 use openvm_stark_sdk::{
     bench::run_with_metric_collection,
     collect_airs_and_inputs,
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+    config::{koala_bear_poseidon2::KoalaBearPoseidon2Engine, FriParameters},
     dummy_airs::fib_air::chip::FibonacciChip,
     engine::StarkFriEngine,
     openvm_stark_backend::Chip,
@@ -30,7 +30,7 @@ fn main() -> Result<()> {
 
     let n = 1 << 15; // STARK to calculate (2 ** 15)th Fibonacci number.
     let fib_chip = FibonacciChip::new(0, 1, n);
-    let engine = BabyBearPoseidon2Engine::new(
+    let engine = KoalaBearPoseidon2Engine::new(
         FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup),
     );
 
@@ -43,7 +43,7 @@ fn main() -> Result<()> {
             FriParameters::standard_with_100_bits_conjectured_security(leaf_log_blowup);
         let mut app_vm_config = NativeConfig::aggregation(
             DEFAULT_MAX_NUM_PUBLIC_VALUES,
-            app_fri_params.max_constraint_degree().min(7),
+            app_fri_params.max_constraint_degree().min(3),
         );
         app_vm_config.system.profiling = args.profiling;
 
@@ -59,7 +59,7 @@ fn main() -> Result<()> {
         let app_pk = sdk.app_keygen(app_config)?;
         let app_vk = app_pk.get_app_vk();
         let committed_exe = sdk.commit_app_exe(app_fri_params, program.into())?;
-        let prover = AppProver::<_, BabyBearPoseidon2Engine>::new(app_pk.app_vm_pk, committed_exe)
+        let prover = AppProver::<_, KoalaBearPoseidon2Engine>::new(app_pk.app_vm_pk, committed_exe)
             .with_program_name("verify_fibair");
         let proof = prover.generate_app_proof_without_continuations(input_stream.into());
         sdk.verify_app_proof_without_continuations(&app_vk, &proof)?;

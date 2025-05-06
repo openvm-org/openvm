@@ -15,7 +15,7 @@ use openvm_stark_backend::{
     verifier::VerificationError,
     Chip, ChipUsageGetter,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{p3_koala_bear::KoalaBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreChip, Rv32AuipcCoreCols};
@@ -24,7 +24,7 @@ use crate::adapters::{Rv32RdWriteAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_
 const IMM_BITS: usize = 24;
 const BITWISE_OP_LOOKUP_BUS: BusIndex = 9;
 
-type F = BabyBear;
+type F = KoalaBear;
 
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,

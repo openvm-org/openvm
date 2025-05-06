@@ -8,7 +8,7 @@ use openvm_circuit_primitives::{
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
 };
 use openvm_stark_backend::p3_field::PrimeField64;
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{p3_koala_bear::KoalaBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, RngCore};
 
 use crate::{ExprBuilder, ExprBuilderConfig};
@@ -45,7 +45,7 @@ pub fn generate_random_biguint(prime: &BigUint) -> BigUint {
     x % prime
 }
 
-pub fn evaluate_biguint(limbs: &[BabyBear], limb_bits: usize) -> BigUint {
+pub fn evaluate_biguint(limbs: &[KoalaBear], limb_bits: usize) -> BigUint {
     let mut res = BigUint::zero();
     let base = BigUint::from_u64(1 << limb_bits).unwrap();
     for limb in limbs.iter().rev() {

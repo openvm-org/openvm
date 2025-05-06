@@ -21,10 +21,10 @@ mod tests {
     };
     use openvm_sdk::config::SdkVmConfig;
     use openvm_stark_backend::p3_field::FieldAlgebra;
-    use openvm_stark_sdk::{openvm_stark_backend, p3_baby_bear::BabyBear};
+    use openvm_stark_sdk::{openvm_stark_backend, p3_koala_bear::KoalaBear};
     use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
-    type F = BabyBear;
+    type F = KoalaBear;
 
     #[test]
     fn test_ec() -> Result<()> {

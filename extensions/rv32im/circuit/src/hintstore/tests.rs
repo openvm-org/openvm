@@ -26,13 +26,13 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
-use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{config::setup_tracing, p3_koala_bear::KoalaBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::{Rv32HintStoreChip, Rv32HintStoreCols};
 use crate::adapters::decompose;
 
-type F = BabyBear;
+type F = KoalaBear;
 
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
@@ -202,7 +202,7 @@ fn run_negative_hintstore_test(
 
     set_and_execute(&mut tester, &mut chip, &mut rng, opcode);
 
-    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+    let modify_trace = |trace: &mut DenseMatrix<KoalaBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
         let cols: &mut Rv32HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
         if let Some(data) = data {

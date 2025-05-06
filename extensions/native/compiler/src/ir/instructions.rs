@@ -186,9 +186,9 @@ pub enum DslIr<C: Config> {
 
     // Hashing.
     /// Permutes an array of baby bear elements using Poseidon2 (output = p2_permute(array)).
-    Poseidon2PermuteBabyBear(Array<C, Felt<C::F>>, Array<C, Felt<C::F>>),
+    Poseidon2PermuteKoalaBear(Array<C, Felt<C::F>>, Array<C, Felt<C::F>>),
     /// Compresses two baby bear element arrays using Poseidon2 (output = p2_compress(array1, array2)).
-    Poseidon2CompressBabyBear(
+    Poseidon2CompressKoalaBear(
         Array<C, Felt<C::F>>,
         Array<C, Felt<C::F>>,
         Array<C, Felt<C::F>>,

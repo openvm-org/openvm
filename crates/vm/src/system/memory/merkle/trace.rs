@@ -281,6 +281,7 @@ impl<'a, F: PrimeField32> SerialReceiver<&'a [F]> for Poseidon2PeripheryChip<F> 
         match self {
             Poseidon2PeripheryChip::Register0(chip) => chip.receive(perm_preimage),
             Poseidon2PeripheryChip::Register1(chip) => chip.receive(perm_preimage),
+            Poseidon2PeripheryChip::KoalaBear(chip) => chip.receive(perm_preimage),
         }
     }
 }

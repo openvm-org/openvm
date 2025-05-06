@@ -23,7 +23,7 @@ use openvm_rv32_adapters::{
 };
 use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{p3_koala_bear::KoalaBear, utils::create_seeded_rng};
 use rand::Rng;
 
 use super::{
@@ -34,7 +34,7 @@ use super::{
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
 const BLOCK_SIZE: usize = 32;
-type F = BabyBear;
+type F = KoalaBear;
 
 const ADD_LOCAL: usize = Rv32ModularArithmeticOpcode::ADD as usize;
 const MUL_LOCAL: usize = Rv32ModularArithmeticOpcode::MUL as usize;
@@ -139,11 +139,11 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         write_ptr_reg(&mut tester, ptr_as, addr_ptr2, address2);
         write_ptr_reg(&mut tester, ptr_as, addr_ptr3, address3);
 
-        let a_limbs: [BabyBear; NUM_LIMBS] =
-            biguint_to_limbs(a.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
+        let a_limbs: [KoalaBear; NUM_LIMBS] =
+            biguint_to_limbs(a.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32);
         tester.write(data_as, address1 as usize, a_limbs);
-        let b_limbs: [BabyBear; NUM_LIMBS] =
-            biguint_to_limbs(b.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
+        let b_limbs: [KoalaBear; NUM_LIMBS] =
+            biguint_to_limbs(b.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32);
         tester.write(data_as, address2 as usize, b_limbs);
 
         let instruction = Instruction::from_isize(
@@ -160,7 +160,7 @@ fn test_addsub(opcode_offset: usize, modulus: BigUint) {
         for (i, expected) in expected_limbs.into_iter().enumerate() {
             let address = address3 as usize + i;
             let read_val = tester.read_cell(data_as, address);
-            assert_eq!(BabyBear::from_canonical_u32(expected), read_val);
+            assert_eq!(KoalaBear::from_canonical_u32(expected), read_val);
         }
     }
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
@@ -268,11 +268,11 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         write_ptr_reg(&mut tester, ptr_as, addr_ptr2, address2);
         write_ptr_reg(&mut tester, ptr_as, addr_ptr3, address3);
 
-        let a_limbs: [BabyBear; NUM_LIMBS] =
-            biguint_to_limbs(a.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
+        let a_limbs: [KoalaBear; NUM_LIMBS] =
+            biguint_to_limbs(a.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32);
         tester.write(data_as, address1 as usize, a_limbs);
-        let b_limbs: [BabyBear; NUM_LIMBS] =
-            biguint_to_limbs(b.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
+        let b_limbs: [KoalaBear; NUM_LIMBS] =
+            biguint_to_limbs(b.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32);
         tester.write(data_as, address2 as usize, b_limbs);
 
         let instruction = Instruction::from_isize(
@@ -289,7 +289,7 @@ fn test_muldiv(opcode_offset: usize, modulus: BigUint) {
         for (i, expected) in expected_limbs.into_iter().enumerate() {
             let address = address3 as usize + i;
             let read_val = tester.read_cell(data_as, address);
-            assert_eq!(BabyBear::from_canonical_u32(expected), read_val);
+            assert_eq!(KoalaBear::from_canonical_u32(expected), read_val);
         }
     }
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();

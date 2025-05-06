@@ -12,8 +12,8 @@ use openvm_stark_backend::{
     AirRef,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear, utils::to_field_vec,
+    config::koala_bear_poseidon2::KoalaBearPoseidon2Engine, engine::StarkFriEngine,
+    p3_koala_bear::KoalaBear, utils::to_field_vec,
 };
 
 use crate::{
@@ -24,7 +24,7 @@ use crate::{
     },
 };
 
-type F = BabyBear;
+type F = KoalaBear;
 
 impl<F: Field> PartitionedBaseAir<F> for PublicValuesCoreAir {}
 
@@ -51,7 +51,7 @@ fn public_values_happy_path_1() {
     let trace = RowMajorMatrix::new_row(cols.flatten());
     let pvs = to_field_vec(vec![0, 0, 12]);
 
-    BabyBearPoseidon2Engine::run_test_fast(vec![air], vec![AirProofInput::simple(trace, pvs)])
+    KoalaBearPoseidon2Engine::run_test_fast(vec![air], vec![AirProofInput::simple(trace, pvs)])
         .expect("Verification failed");
 }
 
@@ -70,7 +70,7 @@ fn public_values_neg_pv_not_match() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(vec![air], vec![AirProofInput::simple(trace, pvs)])
+        KoalaBearPoseidon2Engine::run_test_fast(vec![air], vec![AirProofInput::simple(trace, pvs)])
             .err(),
         Some(VerificationError::OodEvaluationMismatch)
     );
@@ -91,7 +91,7 @@ fn public_values_neg_index_out_of_bound() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(vec![air], vec![AirProofInput::simple(trace, pvs)])
+        KoalaBearPoseidon2Engine::run_test_fast(vec![air], vec![AirProofInput::simple(trace, pvs)])
             .err(),
         Some(VerificationError::OodEvaluationMismatch)
     );
@@ -129,7 +129,7 @@ fn public_values_neg_double_publish_impl(actual_pv: u32) {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(vec![air], vec![AirProofInput::simple(trace, pvs)])
+        KoalaBearPoseidon2Engine::run_test_fast(vec![air], vec![AirProofInput::simple(trace, pvs)])
             .err(),
         Some(VerificationError::OodEvaluationMismatch)
     );

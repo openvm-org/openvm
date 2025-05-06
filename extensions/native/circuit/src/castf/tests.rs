@@ -7,8 +7,8 @@ use openvm_stark_backend::{
     p3_field::FieldAlgebra, utils::disable_debug_builder, verifier::VerificationError, Chip,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
+    config::koala_bear_poseidon2::KoalaBearPoseidon2Engine, engine::StarkFriEngine,
+    p3_koala_bear::KoalaBear, utils::create_seeded_rng,
 };
 use rand::{rngs::StdRng, Rng};
 
@@ -16,7 +16,7 @@ use super::{
     super::adapters::convert_adapter::{ConvertAdapterChip, ConvertAdapterCols},
     CastF, CastFChip, CastFCoreChip, CastFCoreCols, FINAL_LIMB_BITS, LIMB_BITS,
 };
-type F = BabyBear;
+type F = KoalaBear;
 
 fn generate_uint_number(rng: &mut StdRng) -> u32 {
     rng.gen_range(0..(1 << 30) - 1)
@@ -111,7 +111,7 @@ fn negative_castf_overflow_test() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(
+        KoalaBearPoseidon2Engine::run_test_fast(
             vec![chip_air, rc_air],
             vec![chip_input, rc_p_input]
         )
@@ -155,7 +155,7 @@ fn negative_castf_memread_test() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(
+        KoalaBearPoseidon2Engine::run_test_fast(
             vec![chip_air, rc_air],
             vec![chip_input, rc_p_input]
         )
@@ -199,7 +199,7 @@ fn negative_castf_memwrite_test() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(
+        KoalaBearPoseidon2Engine::run_test_fast(
             vec![chip_air, rc_air],
             vec![chip_input, rc_p_input]
         )
@@ -243,7 +243,7 @@ fn negative_castf_as_test() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(
+        KoalaBearPoseidon2Engine::run_test_fast(
             vec![chip_air, rc_air],
             vec![chip_input, rc_p_input]
         )

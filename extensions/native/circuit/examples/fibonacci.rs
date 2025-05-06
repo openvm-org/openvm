@@ -4,7 +4,7 @@ use openvm_native_compiler::{
     ir::{Felt, Var},
 };
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_koala_bear::KoalaBear;
 
 fn fibonacci(n: u32) -> u32 {
     if n == 0 {
@@ -22,7 +22,7 @@ fn fibonacci(n: u32) -> u32 {
 }
 
 fn main() {
-    type F = BabyBear;
+    type F = KoalaBear;
     type EF = BinomialExtensionField<F, 4>;
 
     let n_val = 10;

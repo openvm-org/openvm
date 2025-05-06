@@ -23,8 +23,8 @@ use openvm_native_recursion::hints::Hintable;
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_stark_sdk::{
     config::{
-        baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        fri_params::standard_fri_params_with_100_bits_conjectured_security, FriParameters,
+        fri_params::standard_fri_params_with_100_bits_conjectured_security,
+        koala_bear_poseidon2::KoalaBearPoseidon2Engine, FriParameters,
     },
     engine::StarkFriEngine,
     openvm_stark_backend::{
@@ -79,7 +79,7 @@ pub(super) fn dummy_internal_proof(
         1,
     );
     let internal_input = internal_inputs.pop().unwrap();
-    let internal_prover = VmLocalProver::<SC, NativeConfig, BabyBearPoseidon2Engine>::new(
+    let internal_prover = VmLocalProver::<SC, NativeConfig, KoalaBearPoseidon2Engine>::new(
         internal_vm_pk,
         internal_exe,
     );
@@ -137,13 +137,13 @@ fn dummy_leaf_proof_impl<VC: VmConfig<F>>(
         1,
         "Dummy proof should only have 1 segment"
     );
-    let e = BabyBearPoseidon2Engine::new(leaf_vm_pk.fri_params);
+    let e = KoalaBearPoseidon2Engine::new(leaf_vm_pk.fri_params);
     let leaf_exe = Arc::new(VmCommittedExe::<SC>::commit(
         leaf_program.into(),
         e.config.pcs(),
     ));
     let leaf_prover =
-        VmLocalProver::<SC, NativeConfig, BabyBearPoseidon2Engine>::new(leaf_vm_pk, leaf_exe);
+        VmLocalProver::<SC, NativeConfig, KoalaBearPoseidon2Engine>::new(leaf_vm_pk, leaf_exe);
     let mut leaf_inputs = LeafVmVerifierInput::chunk_continuation_vm_proof(app_proof, 1);
     let leaf_input = leaf_inputs.pop().unwrap();
     SingleSegmentVmProver::prove(&leaf_prover, leaf_input.write_to_stream())
@@ -154,7 +154,7 @@ fn dummy_riscv_app_vm_pk(
     fri_params: FriParameters,
 ) -> VmProvingKey<SC, Rv32ImConfig> {
     let vm_config = Rv32ImConfig::with_public_values(num_public_values);
-    let vm = VirtualMachine::new(BabyBearPoseidon2Engine::new(fri_params), vm_config.clone());
+    let vm = VirtualMachine::new(KoalaBearPoseidon2Engine::new(fri_params), vm_config.clone());
     let vm_pk = vm.keygen();
     VmProvingKey {
         fri_params,
@@ -192,7 +192,7 @@ where
     };
     // For the dummy proof, we must override the trace heights.
     let app_prover =
-        VmLocalProver::<SC, VC, BabyBearPoseidon2Engine>::new_with_overridden_trace_heights(
+        VmLocalProver::<SC, VC, KoalaBearPoseidon2Engine>::new_with_overridden_trace_heights(
             app_vm_pk,
             dummy_exe,
             Some(overridden_heights),
@@ -202,7 +202,7 @@ where
 
 fn dummy_app_committed_exe(fri_params: FriParameters) -> Arc<NonRootCommittedExe> {
     let program = dummy_app_program();
-    let e = BabyBearPoseidon2Engine::new(fri_params);
+    let e = KoalaBearPoseidon2Engine::new(fri_params);
     Arc::new(VmCommittedExe::<SC>::commit(program.into(), e.config.pcs()))
 }
 

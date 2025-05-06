@@ -122,14 +122,14 @@ impl<F: PrimeField32> Memory<F> {
 #[cfg(test)]
 mod tests {
     use openvm_stark_backend::p3_field::FieldAlgebra;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_stark_sdk::p3_koala_bear::KoalaBear;
 
     use super::Memory;
     use crate::arch::MemoryConfig;
 
     macro_rules! bba {
         [$($x:expr),*] => {
-            [$(BabyBear::from_canonical_u32($x)),*]
+            [$(KoalaBear::from_canonical_u32($x)),*]
         }
     }
 

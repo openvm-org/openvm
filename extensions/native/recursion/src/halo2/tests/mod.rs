@@ -7,7 +7,7 @@ use openvm_native_compiler::{
 use openvm_stark_backend::p3_field::{
     reduce_32 as reduce_32_gt, split_32 as split_32_gt, FieldAlgebra,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
+use openvm_stark_sdk::{p3_bn254_fr::Bn254Fr, p3_koala_bear::KoalaBear};
 use snark_verifier_sdk::{
     halo2::{gen_dummy_snark_from_vk, gen_snark_shplonk},
     snark_verifier::{
@@ -95,8 +95,8 @@ fn test_publish() {
 
 #[test]
 fn test_reduce_32() {
-    let value_1 = BabyBear::from_canonical_u32(1345237507);
-    let value_2 = BabyBear::from_canonical_u32(1000001);
+    let value_1 = KoalaBear::from_canonical_u32(1345237507);
+    let value_2 = KoalaBear::from_canonical_u32(1000001);
     let gt: Bn254Fr = reduce_32_gt(&[value_1, value_2]);
 
     let mut builder = Builder::<OuterConfig>::default();
@@ -119,7 +119,7 @@ fn test_reduce_32() {
 #[test]
 fn test_split_32() {
     let f = |value| {
-        let gt: Vec<BabyBear> = split_32_gt(value, 3);
+        let gt: Vec<KoalaBear> = split_32_gt(value, 3);
         dbg!(&gt);
 
         let mut builder = Builder::<OuterConfig>::default();

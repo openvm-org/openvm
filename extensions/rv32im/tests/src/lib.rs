@@ -11,7 +11,9 @@ mod tests {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_stark_sdk::{openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear};
+    use openvm_stark_sdk::{
+        openvm_stark_backend::p3_field::FieldAlgebra, p3_koala_bear::KoalaBear,
+    };
     use openvm_toolchain_tests::{
         build_example_program_at_path, build_example_program_at_path_with_features,
         get_programs_dir,
@@ -19,7 +21,7 @@ mod tests {
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
     use test_case::test_case;
 
-    type F = BabyBear;
+    type F = KoalaBear;
 
     #[test_case("fibonacci", 1)]
     fn test_rv32i(example_name: &str, min_segments: usize) -> Result<()> {

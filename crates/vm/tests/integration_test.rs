@@ -37,12 +37,12 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{
     config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
+        koala_bear_poseidon2::{KoalaBearPoseidon2Config, KoalaBearPoseidon2Engine},
         setup_tracing, FriParameters,
     },
     engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
+    p3_koala_bear::KoalaBear,
 };
 use rand::Rng;
 use test_log::test;
@@ -113,12 +113,12 @@ fn test_vm_1() {
 
 #[test]
 fn test_vm_override_executor_height() {
-    let e = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let program = Program::<BabyBear>::from_instructions(&[
+    let e = KoalaBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let program = Program::<KoalaBear>::from_instructions(&[
         Instruction::large_from_isize(ADD.global_opcode(), 0, 4, 0, 4, 0, 0, 0),
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ]);
-    let committed_exe = Arc::new(VmCommittedExe::<BabyBearPoseidon2Config>::commit(
+    let committed_exe = Arc::new(VmCommittedExe::<KoalaBearPoseidon2Config>::commit(
         program.into(),
         e.config().pcs(),
     ));
@@ -213,7 +213,7 @@ fn test_vm_1_optional_air() {
     // uses Core and FieldArithmetic. All other chips should not have AIR proof inputs.
     let config = NativeConfig::aggregation(4, 3);
     let engine =
-        BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
+        KoalaBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
     let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
     let num_airs = pk.per_air.len();
@@ -257,7 +257,7 @@ fn test_vm_public_values() {
     let num_public_values = 100;
     let config = SystemConfig::default().with_public_values(num_public_values);
     let engine =
-        BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
+        KoalaBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
     let vm = VirtualMachine::new(engine, config.clone());
     let pk = vm.keygen();
 
@@ -279,7 +279,7 @@ fn test_vm_public_values() {
         assert_eq!(
             exe_result.public_values,
             [
-                vec![None, None, Some(BabyBear::from_canonical_u32(12))],
+                vec![None, None, Some(KoalaBear::from_canonical_u32(12))],
                 vec![None; num_public_values - 3]
             ]
             .concat(),
@@ -297,7 +297,7 @@ fn test_vm_public_values() {
 fn test_vm_initial_memory() {
     // Program that fails if mem[(4, 7)] != 101.
     let program = Program::from_instructions(&[
-        Instruction::<BabyBear>::from_isize(
+        Instruction::<KoalaBear>::from_isize(
             NativeBranchEqualOpcode(BEQ).global_opcode(),
             7,
             101,
@@ -305,7 +305,7 @@ fn test_vm_initial_memory() {
             4,
             0,
         ),
-        Instruction::<BabyBear>::from_isize(
+        Instruction::<KoalaBear>::from_isize(
             PHANTOM.global_opcode(),
             0,
             0,
@@ -313,10 +313,10 @@ fn test_vm_initial_memory() {
             0,
             0,
         ),
-        Instruction::<BabyBear>::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        Instruction::<KoalaBear>::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ]);
 
-    let init_memory: BTreeMap<_, _> = [((4, 7), BabyBear::from_canonical_u32(101))]
+    let init_memory: BTreeMap<_, _> = [((4, 7), KoalaBear::from_canonical_u32(101))]
         .into_iter()
         .collect();
 
@@ -332,13 +332,13 @@ fn test_vm_initial_memory() {
 
 #[test]
 fn test_vm_1_persistent() {
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let engine = KoalaBearPoseidon2Engine::new(FriParameters::standard_fast());
     let config = test_native_continuations_config();
     let ptr_max_bits = config.system.memory_config.pointer_max_bits;
     let as_height = config.system.memory_config.as_height;
-    let airs = VmConfig::<BabyBear>::create_chip_complex(&config)
+    let airs = VmConfig::<KoalaBear>::create_chip_complex(&config)
         .unwrap()
-        .airs::<BabyBearPoseidon2Config>();
+        .airs::<KoalaBearPoseidon2Config>();
 
     let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
@@ -372,7 +372,7 @@ fn test_vm_1_persistent() {
             merkle_air_proof_input.raw.public_values[..8],
             merkle_air_proof_input.raw.public_values[8..]
         );
-        let mut digest = [BabyBear::ZERO; CHUNK];
+        let mut digest = [KoalaBear::ZERO; CHUNK];
         let compression = vm_poseidon2_hasher();
         for _ in 0..ptr_max_bits + as_height - 2 {
             digest = compression.compress(&digest, &digest);
@@ -601,8 +601,8 @@ fn test_vm_max_access_adapter_8() {
         // AccessAdapterAir with N=16/32 are disabled.
         assert_eq!(mem_ctrl1.air_names().len(), mem_ctrl2.air_names().len() + 2);
         assert_eq!(
-            mem_ctrl1.airs::<BabyBearPoseidon2Config>().len(),
-            mem_ctrl2.airs::<BabyBearPoseidon2Config>().len() + 2
+            mem_ctrl1.airs::<KoalaBearPoseidon2Config>().len(),
+            mem_ctrl2.airs::<KoalaBearPoseidon2Config>().len() + 2
         );
         assert_eq!(
             mem_ctrl1.current_trace_heights().len(),
@@ -690,7 +690,7 @@ fn test_vm_hint() {
 
     let program = Program::from_instructions(&instructions);
 
-    type F = BabyBear;
+    type F = KoalaBear;
 
     let input_stream: Vec<Vec<F>> = vec![vec![F::TWO]];
     let config = NativeConfig::new(SystemConfig::default(), Default::default());
@@ -699,7 +699,7 @@ fn test_vm_hint() {
 
 #[test]
 fn test_hint_load_1() {
-    type F = BabyBear;
+    type F = KoalaBear;
     let instructions = vec![
         Instruction::phantom(
             PhantomDiscriminant(NativePhantom::HintLoad as u16),
@@ -729,7 +729,7 @@ fn test_hint_load_1() {
 
 #[test]
 fn test_hint_load_2() {
-    type F = BabyBear;
+    type F = KoalaBear;
     let instructions = vec![
         Instruction::phantom(
             PhantomDiscriminant(NativePhantom::HintLoad as u16),

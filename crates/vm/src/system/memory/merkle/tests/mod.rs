@@ -13,9 +13,9 @@ use openvm_stark_backend::{
     Chip, ChipUsageGetter,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+    config::koala_bear_poseidon2::KoalaBearPoseidon2Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
+    p3_koala_bear::KoalaBear, utils::create_seeded_rng,
 };
 use rand::RngCore;
 
@@ -39,9 +39,9 @@ const COMPRESSION_BUS: PermutationCheckBus = PermutationCheckBus::new(POSEIDON2_
 
 fn test<const CHUNK: usize>(
     memory_dimensions: MemoryDimensions,
-    initial_memory: &MemoryImage<BabyBear>,
+    initial_memory: &MemoryImage<KoalaBear>,
     touched_labels: BTreeSet<(u32, u32)>,
-    final_memory: &MemoryImage<BabyBear>,
+    final_memory: &MemoryImage<KoalaBear>,
 ) {
     let MemoryDimensions {
         as_height,
@@ -106,11 +106,11 @@ fn test<const CHUNK: usize>(
                            height: usize,
                            as_label: u32,
                            address_label: u32,
-                           hash: [BabyBear; CHUNK]| {
+                           hash: [KoalaBear; CHUNK]| {
         let expand_direction = if is_compress {
-            BabyBear::NEG_ONE
+            KoalaBear::NEG_ONE
         } else {
-            BabyBear::ONE
+            KoalaBear::ONE
         };
         dummy_interaction_trace_rows.push(match interaction_type {
             PermutationInteractionType::Send => expand_direction,
@@ -118,9 +118,9 @@ fn test<const CHUNK: usize>(
         });
         dummy_interaction_trace_rows.extend([
             expand_direction,
-            BabyBear::from_canonical_usize(height),
-            BabyBear::from_canonical_u32(as_label),
-            BabyBear::from_canonical_u32(address_label),
+            KoalaBear::from_canonical_usize(height),
+            KoalaBear::from_canonical_u32(as_label),
+            KoalaBear::from_canonical_u32(address_label),
         ]);
         dummy_interaction_trace_rows.extend(hash);
     };
@@ -157,7 +157,7 @@ fn test<const CHUNK: usize>(
     while !(dummy_interaction_trace_rows.len() / (dummy_interaction_air.field_width() + 1))
         .is_power_of_two()
     {
-        dummy_interaction_trace_rows.push(BabyBear::ZERO);
+        dummy_interaction_trace_rows.push(KoalaBear::ZERO);
     }
     let dummy_interaction_trace = RowMajorMatrix::new(
         dummy_interaction_trace_rows,
@@ -165,7 +165,7 @@ fn test<const CHUNK: usize>(
     );
     let dummy_interaction_api = AirProofInput::simple_no_pis(dummy_interaction_trace);
 
-    BabyBearPoseidon2Engine::run_test_fast(
+    KoalaBearPoseidon2Engine::run_test_fast(
         vec![
             chip_air,
             Arc::new(dummy_interaction_air),
@@ -220,7 +220,7 @@ fn random_test<const CHUNK: usize>(
 
             if is_initial && num_initial_addresses != 0 {
                 num_initial_addresses -= 1;
-                let value = BabyBear::from_canonical_u32(next_u32() % max_value);
+                let value = KoalaBear::from_canonical_u32(next_u32() % max_value);
                 initial_memory.insert(&(address_space, pointer), value);
                 final_memory.insert(&(address_space, pointer), value);
             }
@@ -228,7 +228,7 @@ fn random_test<const CHUNK: usize>(
                 num_touched_addresses -= 1;
                 touched_labels.insert((address_space, label));
                 if value_changes || !is_initial {
-                    let value = BabyBear::from_canonical_u32(next_u32() % max_value);
+                    let value = KoalaBear::from_canonical_u32(next_u32() % max_value);
                     final_memory.insert(&(address_space, pointer), value);
                 }
             }
@@ -290,7 +290,7 @@ fn expand_test_no_accesses() {
 
     let partition = memory_to_partition(&memory);
     chip.finalize(&tree, &partition, &mut hash_test_chip);
-    BabyBearPoseidon2Engine::run_test_fast(
+    KoalaBearPoseidon2Engine::run_test_fast(
         vec![chip.air(), Arc::new(hash_test_chip.air())],
         vec![
             chip.generate_air_proof_input(),
@@ -336,15 +336,15 @@ fn expand_test_negative() {
         let trace = chip_api.raw.common_main.as_mut().unwrap();
         for row in trace.rows_mut() {
             let row: &mut MemoryMerkleCols<_, DEFAULT_CHUNK> = row.borrow_mut();
-            if row.expand_direction == BabyBear::NEG_ONE {
-                row.left_direction_different = BabyBear::ZERO;
-                row.right_direction_different = BabyBear::ZERO;
+            if row.expand_direction == KoalaBear::NEG_ONE {
+                row.left_direction_different = KoalaBear::ZERO;
+                row.right_direction_different = KoalaBear::ZERO;
             }
         }
     }
 
     let hash_air = Arc::new(hash_test_chip.air());
-    BabyBearPoseidon2Engine::run_test_fast(
+    KoalaBearPoseidon2Engine::run_test_fast(
         vec![air, hash_air],
         vec![chip_api, hash_test_chip.generate_air_proof_input()],
     )

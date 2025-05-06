@@ -18,7 +18,7 @@ use openvm_stark_backend::{
     verifier::VerificationError,
     ChipUsageGetter,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{p3_koala_bear::KoalaBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::{
@@ -27,7 +27,7 @@ use super::{
 };
 use crate::adapters::{Rv32BranchAdapterChip, RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS};
 
-type F = BabyBear;
+type F = KoalaBear;
 
 //////////////////////////////////////////////////////////////////////////////////////
 // POSITIVE TESTS
@@ -151,7 +151,7 @@ fn run_rv32_beq_negative_test(
     let trace_width = chip.trace_width();
     let adapter_width = BaseAir::<F>::width(chip.adapter.air());
 
-    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+    let modify_trace = |trace: &mut DenseMatrix<KoalaBear>| {
         let mut values = trace.row_slice(0).to_vec();
         let cols: &mut BranchEqualCoreCols<F, RV32_REGISTER_NUM_LIMBS> =
             values.split_at_mut(adapter_width).1.borrow_mut();

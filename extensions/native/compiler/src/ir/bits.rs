@@ -1,15 +1,15 @@
 use std::{any::TypeId, array};
 
 use openvm_stark_backend::p3_field::FieldAlgebra;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_koala_bear::KoalaBear;
 
 use super::{Array, Builder, Config, DslIr, Felt, MemIndex, Var};
 
 impl<C: Config> Builder<C> {
     /// Converts a felt to bits. Will result in a failed assertion if `num` has more than `num_bits` bits.
-    /// Only works for C::F = BabyBear
+    /// Only works for C::F = KoalaBear
     pub fn num2bits_f(&mut self, num: Felt<C::F>, num_bits: u32) -> Array<C, Var<C::N>> {
-        assert_eq!(TypeId::of::<C::F>(), TypeId::of::<BabyBear>());
+        assert_eq!(TypeId::of::<C::F>(), TypeId::of::<KoalaBear>());
 
         self.push(DslIr::HintBitsF(num, num_bits));
         let output = self.dyn_array::<Felt<_>>(num_bits as usize);
@@ -32,17 +32,17 @@ impl<C: Config> Builder<C> {
             let bit = self.get(&output, i);
             self.assert_felt_eq(bit * (bit - C::F::ONE), C::F::ZERO);
             self.assign(&sum, sum + bit * C::F::from_canonical_u32(1 << i));
-            if i == 26 {
+            if i == 23 {
                 self.assign(&prefix_sum, sum);
             }
-            if i > 26 {
+            if i > 23 {
                 self.assign(&suffix_bit_sum, suffix_bit_sum + bit);
             }
         }
         self.assert_felt_eq(sum, num);
 
         // Check that the bits represent the number without overflow.
-        // If F is BabyBear, then any element of F can be represented either as:
+        // If F is KoalaBear, then any element of F can be represented either as:
         //    * 2^30 + ... + 2^x + y for y in [0, 2^(x - 1)) and 27 < x <= 30
         //    * 2^30 + ... + 2^27
         //    * y for y in [0, 2^27)
@@ -53,7 +53,7 @@ impl<C: Config> Builder<C> {
         //    * if `num_bits >= 27`, then we must check:
         //      if `suffix_bit_sum = b[27] + ... + b[30] = 4`, then `prefix_sum = b[0] + ... + b[26] * 2^26 = 0`
         let suffix_bit_sum_var = self.cast_felt_to_var(suffix_bit_sum);
-        self.if_eq(suffix_bit_sum_var, C::N::from_canonical_u32(4))
+        self.if_eq(suffix_bit_sum_var, C::N::from_canonical_u32(7))
             .then(|builder| {
                 builder.assert_felt_eq(prefix_sum, C::F::ZERO);
             });

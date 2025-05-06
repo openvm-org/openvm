@@ -19,7 +19,7 @@ impl<C: Config> Builder<C> {
             }
             Array::Dyn(_, len) => self.dyn_array::<Felt<C::F>>(len.clone()),
         };
-        self.operations.push(DslIr::Poseidon2PermuteBabyBear(
+        self.operations.push(DslIr::Poseidon2PermuteKoalaBear(
             output.clone(),
             array.clone(),
         ));
@@ -33,7 +33,7 @@ impl<C: Config> Builder<C> {
         if let Array::Fixed(_) = array {
             panic!("Poseidon2 permutation is not allowed on fixed arrays");
         }
-        self.operations.push(DslIr::Poseidon2PermuteBabyBear(
+        self.operations.push(DslIr::Poseidon2PermuteKoalaBear(
             array.clone(),
             array.clone(),
         ));
@@ -68,7 +68,7 @@ impl<C: Config> Builder<C> {
         left: &Array<C, Felt<C::F>>,
         right: &Array<C, Felt<C::F>>,
     ) {
-        self.operations.push(DslIr::Poseidon2CompressBabyBear(
+        self.operations.push(DslIr::Poseidon2CompressKoalaBear(
             result.clone(),
             left.clone(),
             right.clone(),

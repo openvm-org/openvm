@@ -1,7 +1,7 @@
 use openvm_native_compiler::ir::{Builder, Felt, Var, Witness};
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2_root::root_perm, p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr,
+    config::koala_bear_poseidon2_root::root_perm, p3_bn254_fr::Bn254Fr, p3_koala_bear::KoalaBear,
 };
 use p3_symmetric::{CryptographicHasher, Permutation, PseudoCompressionFunction};
 
@@ -48,14 +48,14 @@ fn test_p2_hash() {
     let perm = root_perm();
     let hasher = OuterHash::new(perm.clone()).unwrap();
 
-    let input: [BabyBear; 7] = [
-        BabyBear::from_canonical_u32(0),
-        BabyBear::from_canonical_u32(1),
-        BabyBear::from_canonical_u32(2),
-        BabyBear::from_canonical_u32(2),
-        BabyBear::from_canonical_u32(2),
-        BabyBear::from_canonical_u32(2),
-        BabyBear::from_canonical_u32(2),
+    let input: [KoalaBear; 7] = [
+        KoalaBear::from_canonical_u32(0),
+        KoalaBear::from_canonical_u32(1),
+        KoalaBear::from_canonical_u32(2),
+        KoalaBear::from_canonical_u32(2),
+        KoalaBear::from_canonical_u32(2),
+        KoalaBear::from_canonical_u32(2),
+        KoalaBear::from_canonical_u32(2),
     ];
     let output = hasher.hash_iter(input);
 

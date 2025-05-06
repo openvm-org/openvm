@@ -18,8 +18,8 @@ use crate::{
 };
 
 // The maximum two-adicity of Felt `C::F`. This means `C::F` does not have a multiplicative subgroup
-// of order 2^{MAX_TWO_ADICITY + 1}. Currently set to 27 for BabyBear.
-pub const MAX_TWO_ADICITY: usize = 27;
+// of order 2^{MAX_TWO_ADICITY + 1}. Currently set to 24 for KoalaBear.
+pub const MAX_TWO_ADICITY: usize = 24;
 
 /// Notes:
 /// 1. FieldMerkleTreeMMCS sorts traces by height in descending order when committing data.
@@ -606,8 +606,8 @@ pub mod tests {
         p3_matrix::dense::RowMajorMatrix,
     };
     use openvm_stark_sdk::{
-        config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
-        p3_baby_bear::BabyBear,
+        config::koala_bear_poseidon2::{default_engine, KoalaBearPoseidon2Config},
+        p3_koala_bear::KoalaBear,
     };
     use rand::rngs::OsRng;
 
@@ -627,8 +627,8 @@ pub mod tests {
     pub fn build_test_fri_with_cols_and_log2_rows(
         nb_cols: usize,
         nb_log2_rows: usize,
-    ) -> (Program<BabyBear>, Vec<Vec<BabyBear>>) {
-        type SC = BabyBearPoseidon2Config;
+    ) -> (Program<KoalaBear>, Vec<Vec<KoalaBear>>) {
+        type SC = KoalaBearPoseidon2Config;
         type F = Val<SC>;
         type EF = <SC as StarkGenericConfig>::Challenge;
         type Challenger = <SC as StarkGenericConfig>::Challenger;

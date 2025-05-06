@@ -30,7 +30,7 @@ use openvm_stark_backend::{
     prover::types::{AirProofInput, CommittedTraceData, ProofInput},
     AirRef, Chip, ChipUsageGetter,
 };
-use p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_koala_bear::KoalaBear;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
@@ -615,9 +615,9 @@ impl<F: PrimeField32> SystemComplex<F> {
             range_checker_chip: range_checker,
         };
 
-        let max_trace_height = if TypeId::of::<F>() == TypeId::of::<BabyBear>() {
+        let max_trace_height = if TypeId::of::<F>() == TypeId::of::<KoalaBear>() {
             let min_log_blowup = log2_ceil_usize(config.max_constraint_degree - 1);
-            1 << (BabyBear::TWO_ADICITY - min_log_blowup)
+            1 << (KoalaBear::TWO_ADICITY - min_log_blowup)
         } else {
             tracing::warn!(
                 "constructing SystemComplex for unrecognized field; using max_trace_height = 2^30"
@@ -1258,7 +1258,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use p3_baby_bear::BabyBear;
+    use openvm_stark_sdk::p3_koala_bear::KoalaBear;
 
     use super::*;
     use crate::system::memory::interface::MemoryInterface;
@@ -1335,7 +1335,7 @@ mod tests {
     #[test]
     fn test_system_bus_indices() {
         let config = SystemConfig::default().with_continuations();
-        let complex = SystemComplex::<BabyBear>::new(config);
+        let complex = SystemComplex::<KoalaBear>::new(config);
         assert_eq!(complex.base.execution_bus().index(), 0);
         assert_eq!(complex.base.memory_bus().index(), 1);
         assert_eq!(complex.base.program_bus().index(), 2);

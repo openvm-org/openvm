@@ -2,11 +2,11 @@ use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_rv32im_circuit::adapters::{RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};
 use openvm_stark_backend::p3_field::FieldAlgebra;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_koala_bear::KoalaBear;
 use rand::{rngs::StdRng, Rng};
 
 pub fn write_ptr_reg(
-    tester: &mut VmChipTestBuilder<BabyBear>,
+    tester: &mut VmChipTestBuilder<KoalaBear>,
     ptr_as: usize,
     reg_addr: usize,
     value: u32,
@@ -14,16 +14,16 @@ pub fn write_ptr_reg(
     tester.write(
         ptr_as,
         reg_addr,
-        value.to_le_bytes().map(BabyBear::from_canonical_u8),
+        value.to_le_bytes().map(KoalaBear::from_canonical_u8),
     );
 }
 
 pub fn rv32_write_heap_default<const NUM_LIMBS: usize>(
-    tester: &mut VmChipTestBuilder<BabyBear>,
-    addr1_writes: Vec<[BabyBear; NUM_LIMBS]>,
-    addr2_writes: Vec<[BabyBear; NUM_LIMBS]>,
+    tester: &mut VmChipTestBuilder<KoalaBear>,
+    addr1_writes: Vec<[KoalaBear; NUM_LIMBS]>,
+    addr2_writes: Vec<[KoalaBear; NUM_LIMBS]>,
     opcode_with_offset: usize,
-) -> Instruction<BabyBear> {
+) -> Instruction<KoalaBear> {
     let (reg1, _) =
         tester.write_heap_default::<NUM_LIMBS>(RV32_REGISTER_NUM_LIMBS, 128, addr1_writes);
     let reg2 = if addr2_writes.is_empty() {
@@ -46,12 +46,12 @@ pub fn rv32_write_heap_default<const NUM_LIMBS: usize>(
 }
 
 pub fn rv32_write_heap_default_with_increment<const NUM_LIMBS: usize>(
-    tester: &mut VmChipTestBuilder<BabyBear>,
-    addr1_writes: Vec<[BabyBear; NUM_LIMBS]>,
-    addr2_writes: Vec<[BabyBear; NUM_LIMBS]>,
+    tester: &mut VmChipTestBuilder<KoalaBear>,
+    addr1_writes: Vec<[KoalaBear; NUM_LIMBS]>,
+    addr2_writes: Vec<[KoalaBear; NUM_LIMBS]>,
     pointer_increment: usize,
     opcode_with_offset: usize,
-) -> Instruction<BabyBear> {
+) -> Instruction<KoalaBear> {
     let (reg1, _) = tester.write_heap_default::<NUM_LIMBS>(
         RV32_REGISTER_NUM_LIMBS,
         pointer_increment,
@@ -80,12 +80,12 @@ pub fn rv32_write_heap_default_with_increment<const NUM_LIMBS: usize>(
 }
 
 pub fn rv32_heap_branch_default<const NUM_LIMBS: usize>(
-    tester: &mut VmChipTestBuilder<BabyBear>,
-    addr1_writes: Vec<[BabyBear; NUM_LIMBS]>,
-    addr2_writes: Vec<[BabyBear; NUM_LIMBS]>,
+    tester: &mut VmChipTestBuilder<KoalaBear>,
+    addr1_writes: Vec<[KoalaBear; NUM_LIMBS]>,
+    addr2_writes: Vec<[KoalaBear; NUM_LIMBS]>,
     imm: isize,
     opcode_with_offset: usize,
-) -> Instruction<BabyBear> {
+) -> Instruction<KoalaBear> {
     let (reg1, _) =
         tester.write_heap_default::<NUM_LIMBS>(RV32_REGISTER_NUM_LIMBS, 128, addr1_writes);
     let reg2 = if addr2_writes.is_empty() {
@@ -108,22 +108,22 @@ pub fn rv32_heap_branch_default<const NUM_LIMBS: usize>(
 
 // Returns (instruction, rd)
 pub fn rv32_rand_write_register_or_imm<const NUM_LIMBS: usize>(
-    tester: &mut VmChipTestBuilder<BabyBear>,
+    tester: &mut VmChipTestBuilder<KoalaBear>,
     rs1_writes: [u32; NUM_LIMBS],
     rs2_writes: [u32; NUM_LIMBS],
     imm: Option<usize>,
     opcode_with_offset: usize,
     rng: &mut StdRng,
-) -> (Instruction<BabyBear>, usize) {
+) -> (Instruction<KoalaBear>, usize) {
     let rs2_is_imm = imm.is_some();
 
     let rs1 = gen_pointer(rng, NUM_LIMBS);
     let rs2 = imm.unwrap_or_else(|| gen_pointer(rng, NUM_LIMBS));
     let rd = gen_pointer(rng, NUM_LIMBS);
 
-    tester.write::<NUM_LIMBS>(1, rs1, rs1_writes.map(BabyBear::from_canonical_u32));
+    tester.write::<NUM_LIMBS>(1, rs1, rs1_writes.map(KoalaBear::from_canonical_u32));
     if !rs2_is_imm {
-        tester.write::<NUM_LIMBS>(1, rs2, rs2_writes.map(BabyBear::from_canonical_u32));
+        tester.write::<NUM_LIMBS>(1, rs2, rs2_writes.map(KoalaBear::from_canonical_u32));
     }
 
     (

@@ -4,7 +4,7 @@ use openvm_continuations::verifier::root::types::RootVmVerifierInput;
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
 use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2_root::BabyBearPoseidon2RootEngine, FriParameters},
+    config::{koala_bear_poseidon2_root::KoalaBearPoseidon2RootEngine, FriParameters},
     engine::{StarkEngine, StarkFriEngine},
     openvm_stark_backend::proof::Proof,
 };
@@ -76,7 +76,7 @@ impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
             // Overwrite the AIR ID.
             proof_input.per_air[i].0 = i;
         }
-        let e = BabyBearPoseidon2RootEngine::new(*self.fri_params());
+        let e = KoalaBearPoseidon2RootEngine::new(*self.fri_params());
         e.prove(&self.root_verifier_pk.vm_pk.vm_pk, proof_input)
     }
 }

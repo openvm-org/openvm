@@ -821,7 +821,7 @@ mod tests {
         SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
     };
     use openvm_stark_backend::{interaction::BusIndex, p3_field::FieldAlgebra};
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_stark_sdk::p3_koala_bear::KoalaBear;
     use rand::{prelude::SliceRandom, thread_rng, Rng};
 
     use super::MemoryController;
@@ -834,7 +834,7 @@ mod tests {
 
     #[test]
     fn test_no_adapter_records_for_singleton_accesses() {
-        type F = BabyBear;
+        type F = KoalaBear;
 
         let memory_bus = MemoryBus::new(MEMORY_BUS);
         let memory_config = MemoryConfig::default();

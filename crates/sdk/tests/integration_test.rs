@@ -15,7 +15,7 @@ use openvm_continuations::{
         common::types::{SpecialAirIds, VmVerifierPvs},
         leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
         root::types::RootVmVerifierPvs,
-        utils::compress_babybear_var_to_bn254,
+        utils::compress_koalabear_var_to_bn254,
     },
 };
 use openvm_native_circuit::{Native, NativeConfig};
@@ -44,20 +44,20 @@ use openvm_sdk::{
 use openvm_stark_backend::{keygen::types::LinearConstraint, p3_matrix::Matrix};
 use openvm_stark_sdk::{
     config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        koala_bear_poseidon2::{KoalaBearPoseidon2Config, KoalaBearPoseidon2Engine},
         setup_tracing, FriParameters,
     },
     engine::{StarkEngine, StarkFriEngine},
     openvm_stark_backend::{p3_field::FieldAlgebra, Chip},
-    p3_baby_bear::BabyBear,
     p3_bn254_fr::Bn254Fr,
+    p3_koala_bear::KoalaBear,
 };
 use openvm_transpiler::transpiler::Transpiler;
 use snark_verifier_sdk::evm::evm_verify;
 
-type SC = BabyBearPoseidon2Config;
+type SC = KoalaBearPoseidon2Config;
 type C = InnerConfig;
-type F = BabyBear;
+type F = KoalaBear;
 
 const NUM_PUB_VALUES: usize = 16;
 const LEAF_LOG_BLOWUP: usize = 2;
@@ -183,7 +183,7 @@ fn test_public_values_and_leaf_verification() {
     let leaf_vm = SingleSegmentVmExecutor::new(leaf_vm_config);
     let leaf_committed_exe = app_pk.leaf_committed_exe.clone();
 
-    let app_engine = BabyBearPoseidon2Engine::new(app_pk.app_vm_pk.fri_params);
+    let app_engine = KoalaBearPoseidon2Engine::new(app_pk.app_vm_pk.fri_params);
     let app_vm = VmExecutor::new(app_pk.app_vm_pk.vm_config.clone());
     let app_vm_result = app_vm
         .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![])
@@ -316,8 +316,8 @@ fn test_static_verifier_custom_pv_handler() {
                 .map(|x| builder.cast_felt_to_var(x))
                 .collect();
             let pvs = RootVmVerifierPvs::from_flatten(public_values);
-            let exe_commit = compress_babybear_var_to_bn254(builder, pvs.exe_commit);
-            let leaf_commit = compress_babybear_var_to_bn254(builder, pvs.leaf_verifier_commit);
+            let exe_commit = compress_koalabear_var_to_bn254(builder, pvs.exe_commit);
+            let leaf_commit = compress_koalabear_var_to_bn254(builder, pvs.leaf_verifier_commit);
             let num_public_values = pvs.public_values.len();
 
             println!("num_public_values: {}", num_public_values);
@@ -561,7 +561,7 @@ fn test_segmentation_retry() {
     ));
 
     // Try lowering segmentation threshold.
-    let config = VmConfig::<BabyBear>::system_mut(&mut app_vm.config);
+    let config = VmConfig::<KoalaBear>::system_mut(&mut app_vm.config);
     config.set_segmentation_strategy(config.segmentation_strategy.stricter_strategy());
     let app_vm_result = app_vm
         .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![])

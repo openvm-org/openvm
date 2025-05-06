@@ -7,9 +7,9 @@ use openvm_stark_backend::{
     p3_field::extension::BinomialExtensionField,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,
-    p3_baby_bear::BabyBear,
+    config::koala_bear_poseidon2_root::KoalaBearPoseidon2RootConfig,
     p3_bn254_fr::{Bn254Fr, Poseidon2Bn254},
+    p3_koala_bear::KoalaBear,
 };
 use p3_dft::Radix2DitParallel;
 use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof, TwoAdicFriPcs};
@@ -34,19 +34,19 @@ pub struct OuterConfig;
 
 impl Config for OuterConfig {
     type N = Bn254Fr;
-    type F = BabyBear;
-    type EF = BinomialExtensionField<BabyBear, 4>;
+    type F = KoalaBear;
+    type EF = BinomialExtensionField<KoalaBear, 4>;
 }
 
 /// A configuration for outer recursion.
-pub type OuterVal = BabyBear;
+pub type OuterVal = KoalaBear;
 pub type OuterChallenge = BinomialExtensionField<OuterVal, 4>;
 pub type OuterPerm = Poseidon2Bn254<WIDTH>;
 pub type OuterHash =
     MultiField32PaddingFreeSponge<OuterVal, Bn254Fr, OuterPerm, WIDTH, RATE, DIGEST_WIDTH>;
 pub type OuterDigest = [Bn254Fr; 1];
 pub type OuterCompress = TruncatedPermutation<OuterPerm, 2, 1, WIDTH>;
-pub type OuterValMmcs = MerkleTreeMmcs<BabyBear, Bn254Fr, OuterHash, OuterCompress, 1>;
+pub type OuterValMmcs = MerkleTreeMmcs<KoalaBear, Bn254Fr, OuterHash, OuterCompress, 1>;
 pub type OuterChallengeMmcs = ExtensionMmcs<OuterVal, OuterChallenge, OuterValMmcs>;
 pub type OuterDft = Radix2DitParallel<OuterVal>;
 pub type OuterChallenger = MultiField32Challenger<OuterVal, Bn254Fr, OuterPerm, WIDTH, 2>;
@@ -58,7 +58,7 @@ pub type OuterFriProof = FriProof<OuterChallenge, OuterChallengeMmcs, OuterVal, 
 pub type OuterBatchOpening = BatchOpening<OuterVal, OuterValMmcs>;
 
 pub(crate) fn new_from_outer_vkv2(
-    vk: StarkVerifyingKey<BabyBear, Com<BabyBearPoseidon2RootConfig>>,
+    vk: StarkVerifyingKey<KoalaBear, Com<KoalaBearPoseidon2RootConfig>>,
 ) -> StarkVerificationAdvice<OuterConfig> {
     let StarkVerifyingKey {
         preprocessed_data,
@@ -85,7 +85,7 @@ pub(crate) fn new_from_outer_vkv2(
 
 /// Create MultiStarkVerificationAdvice for the outer config.
 pub fn new_from_outer_multi_vk(
-    vk: &MultiStarkVerifyingKey<BabyBearPoseidon2RootConfig>,
+    vk: &MultiStarkVerifyingKey<KoalaBearPoseidon2RootConfig>,
 ) -> MultiStarkVerificationAdvice<OuterConfig> {
     let num_challenges_to_sample = vk.num_challenges_per_phase();
     let pre_hash: [Bn254Fr; DIGEST_WIDTH] = vk.pre_hash.into();

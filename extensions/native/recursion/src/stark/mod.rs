@@ -17,8 +17,8 @@ use openvm_stark_backend::{
     verifier::GenericVerifierConstraintFolder,
 };
 use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
-    p3_baby_bear::BabyBear,
+    config::{koala_bear_poseidon2::KoalaBearPoseidon2Config, FriParameters},
+    p3_koala_bear::KoalaBear,
 };
 
 use crate::{
@@ -48,11 +48,11 @@ pub struct VerifierProgram<C: Config> {
 }
 
 impl VerifierProgram<InnerConfig> {
-    /// Create a new instance of the program for the [`openvm_stark_sdk::config::baby_bear_poseidon2`]
+    /// Create a new instance of the program for the [`openvm_stark_sdk::config::koala_bear_poseidon2`]
     pub fn build(
         constants: MultiStarkVerificationAdvice<InnerConfig>,
         fri_params: &FriParameters,
-    ) -> Program<BabyBear> {
+    ) -> Program<KoalaBear> {
         let options = CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()
@@ -60,18 +60,18 @@ impl VerifierProgram<InnerConfig> {
         Self::build_with_options(constants, fri_params, options)
     }
 
-    /// Create a new instance of the program for the [`openvm_stark_sdk::config::baby_bear_poseidon2`]
+    /// Create a new instance of the program for the [`openvm_stark_sdk::config::koala_bear_poseidon2`]
     pub fn build_with_options(
         constants: MultiStarkVerificationAdvice<InnerConfig>,
         fri_params: &FriParameters,
         options: CompilerOptions,
-    ) -> Program<BabyBear> {
+    ) -> Program<KoalaBear> {
         let mut builder = Builder::<InnerConfig>::default();
 
         builder.cycle_tracker_start("VerifierProgram");
         builder.cycle_tracker_start("ReadingProofFromInput");
         let input: StarkProofVariable<_> = builder.uninit();
-        Proof::<BabyBearPoseidon2Config>::witness(&input, &mut builder);
+        Proof::<KoalaBearPoseidon2Config>::witness(&input, &mut builder);
         builder.cycle_tracker_end("ReadingProofFromInput");
 
         builder.cycle_tracker_start("InitializePcsConst");

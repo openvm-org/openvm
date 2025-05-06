@@ -9,7 +9,7 @@ use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_poseidon2_air::{default_baby_bear_rc, Poseidon2Config};
+use openvm_poseidon2_air::{default_koalabear_rc, Poseidon2Config};
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, BaseAir},
@@ -20,8 +20,8 @@ use openvm_stark_backend::{
     Chip,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
+    config::koala_bear_poseidon2::KoalaBearPoseidon2Engine, engine::StarkFriEngine,
+    p3_koala_bear::KoalaBear, utils::create_seeded_rng,
 };
 use rand::{
     prelude::{SliceRandom, StdRng},
@@ -217,7 +217,7 @@ fn test_memory_controller() {
         memory_bridge: memory_controller.memory_bridge(),
     });
 
-    memory_controller.finalize(None::<&mut Poseidon2PeripheryChip<BabyBear>>);
+    memory_controller.finalize(None::<&mut Poseidon2PeripheryChip<KoalaBear>>);
 
     let memory_requester_trace = {
         let offline_memory = memory_controller.offline_memory();
@@ -232,7 +232,7 @@ fn test_memory_controller() {
     airs.push(range_checker.air());
     air_proof_inputs.push(range_checker.generate_air_proof_input());
 
-    BabyBearPoseidon2Engine::run_test_fast(airs, air_proof_inputs).expect("Verification failed");
+    KoalaBearPoseidon2Engine::run_test_fast(airs, air_proof_inputs).expect("Verification failed");
 }
 
 #[test]
@@ -260,7 +260,7 @@ fn test_memory_controller_persistent() {
     };
 
     let mut poseidon_chip = Poseidon2PeripheryChip::new(
-        Poseidon2Config::new(default_baby_bear_rc()),
+        Poseidon2Config::new(default_koalabear_rc()),
         POSEIDON2_DIRECT_BUS,
         3,
     );
@@ -286,7 +286,7 @@ fn test_memory_controller_persistent() {
         range_checker.generate_air_proof_input(),
     ]);
 
-    BabyBearPoseidon2Engine::run_test_fast(airs, air_proof_inputs).expect("Verification failed");
+    KoalaBearPoseidon2Engine::run_test_fast(airs, air_proof_inputs).expect("Verification failed");
 }
 
 fn make_random_accesses<F: PrimeField32>(

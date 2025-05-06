@@ -17,7 +17,7 @@ use openvm_stark_backend::{
     verifier::VerificationError,
     Chip, ChipUsageGetter,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{p3_koala_bear::KoalaBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use crate::{
@@ -26,7 +26,7 @@ use crate::{
 };
 
 const IMM_BITS: usize = 16;
-type F = BabyBear;
+type F = KoalaBear;
 
 fn into_limbs(num: u32) -> [u32; 4] {
     array::from_fn(|i| (num >> (8 * i)) & 255)

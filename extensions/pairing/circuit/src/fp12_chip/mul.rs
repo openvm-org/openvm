@@ -89,13 +89,13 @@ mod tests {
     use openvm_pairing_guest::bn254::{BN254_MODULUS, BN254_XI_ISIZE};
     use openvm_rv32_adapters::rv32_write_heap_default_with_increment;
     use openvm_stark_backend::p3_field::FieldAlgebra;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_stark_sdk::p3_koala_bear::KoalaBear;
     use rand::{rngs::StdRng, SeedableRng};
 
     use super::*;
 
     const LIMB_BITS: usize = 8;
-    type F = BabyBear;
+    type F = KoalaBear;
 
     #[test]
     fn test_fp12_mul_bn254() {
@@ -151,14 +151,14 @@ mod tests {
             .iter()
             .map(|x| {
                 biguint_to_limbs::<NUM_LIMBS>(x.clone(), LIMB_BITS)
-                    .map(BabyBear::from_canonical_u32)
+                    .map(KoalaBear::from_canonical_u32)
             })
             .collect_vec();
         let y_limbs = inputs[12..]
             .iter()
             .map(|y| {
                 biguint_to_limbs::<NUM_LIMBS>(y.clone(), LIMB_BITS)
-                    .map(BabyBear::from_canonical_u32)
+                    .map(KoalaBear::from_canonical_u32)
             })
             .collect_vec();
         let instruction = rv32_write_heap_default_with_increment(

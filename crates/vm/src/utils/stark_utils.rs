@@ -8,11 +8,11 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{
     config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        koala_bear_poseidon2::{KoalaBearPoseidon2Config, KoalaBearPoseidon2Engine},
         setup_tracing, FriParameters,
     },
     engine::{StarkEngine, StarkFriEngine, VerificationDataWithFriParams},
-    p3_baby_bear::BabyBear,
+    p3_koala_bear::KoalaBear,
     utils::ProofInputForTest,
 };
 
@@ -21,11 +21,11 @@ use crate::arch::{
     Streams, VmConfig, VmMemoryState,
 };
 
-pub fn air_test<VC>(config: VC, exe: impl Into<VmExe<BabyBear>>)
+pub fn air_test<VC>(config: VC, exe: impl Into<VmExe<KoalaBear>>)
 where
-    VC: VmConfig<BabyBear>,
-    VC::Executor: Chip<BabyBearPoseidon2Config>,
-    VC::Periphery: Chip<BabyBearPoseidon2Config>,
+    VC: VmConfig<KoalaBear>,
+    VC::Executor: Chip<KoalaBearPoseidon2Config>,
+    VC::Periphery: Chip<KoalaBearPoseidon2Config>,
 {
     air_test_with_min_segments(config, exe, Streams::default(), 1);
 }
@@ -33,14 +33,14 @@ where
 /// Executes and proves the VM and returns the final memory state.
 pub fn air_test_with_min_segments<VC>(
     config: VC,
-    exe: impl Into<VmExe<BabyBear>>,
-    input: impl Into<Streams<BabyBear>>,
+    exe: impl Into<VmExe<KoalaBear>>,
+    input: impl Into<Streams<KoalaBear>>,
     min_segments: usize,
-) -> Option<VmMemoryState<BabyBear>>
+) -> Option<VmMemoryState<KoalaBear>>
 where
-    VC: VmConfig<BabyBear>,
-    VC::Executor: Chip<BabyBearPoseidon2Config>,
-    VC::Periphery: Chip<BabyBearPoseidon2Config>,
+    VC: VmConfig<KoalaBear>,
+    VC::Executor: Chip<KoalaBearPoseidon2Config>,
+    VC::Periphery: Chip<KoalaBearPoseidon2Config>,
 {
     air_test_impl(config, exe, input, min_segments, true)
 }
@@ -49,22 +49,22 @@ where
 /// If `debug` is true, runs the debug prover.
 pub fn air_test_impl<VC>(
     config: VC,
-    exe: impl Into<VmExe<BabyBear>>,
-    input: impl Into<Streams<BabyBear>>,
+    exe: impl Into<VmExe<KoalaBear>>,
+    input: impl Into<Streams<KoalaBear>>,
     min_segments: usize,
     debug: bool,
-) -> Option<VmMemoryState<BabyBear>>
+) -> Option<VmMemoryState<KoalaBear>>
 where
-    VC: VmConfig<BabyBear>,
-    VC::Executor: Chip<BabyBearPoseidon2Config>,
-    VC::Periphery: Chip<BabyBearPoseidon2Config>,
+    VC: VmConfig<KoalaBear>,
+    VC::Executor: Chip<KoalaBearPoseidon2Config>,
+    VC::Periphery: Chip<KoalaBearPoseidon2Config>,
 {
     setup_tracing();
     let mut log_blowup = 1;
     while config.system().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
     }
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(log_blowup));
+    let engine = KoalaBearPoseidon2Engine::new(FriParameters::new_for_testing(log_blowup));
     let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
     let mut result = vm.execute_and_generate(exe, input).unwrap();
@@ -120,6 +120,7 @@ where
         }
     }
 
+    println!("hello 1");
     let airs = config.create_chip_complex().unwrap().airs();
     let executor = VmExecutor::<Val<SC>, VC>::new(config);
 
@@ -131,6 +132,7 @@ where
         1,
         "only proving one segment for now"
     );
+    println!("hello 2");
 
     let result = result.per_segment.pop().unwrap();
     #[cfg(feature = "bench-metrics")]
@@ -141,6 +143,7 @@ where
         .into_iter()
         .map(|(air_id, x)| (airs[air_id].clone(), x))
         .unzip();
+    println!("hello 3");
     ProofInputForTest {
         airs: used_airs,
         per_air,

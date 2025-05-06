@@ -3,7 +3,7 @@ use std::array;
 use derivative::Derivative;
 use openvm_native_compiler::ir::{Builder, Config, Felt, DIGEST_SIZE};
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
+    config::koala_bear_poseidon2::KoalaBearPoseidon2Config,
     openvm_stark_backend::{
         config::{Com, StarkGenericConfig, Val},
         p3_field::PrimeField32,
@@ -35,7 +35,7 @@ pub struct RootVmVerifierInput<SC: StarkGenericConfig> {
     /// Public values to expose directly
     pub public_values: Vec<Val<SC>>,
 }
-assert_impl_all!(RootVmVerifierInput<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
+assert_impl_all!(RootVmVerifierInput<KoalaBearPoseidon2Config>: Serialize, DeserializeOwned);
 
 impl<F: PrimeField32> RootVmVerifierPvs<Felt<F>> {
     pub fn uninit<C: Config<F = F>>(builder: &mut Builder<C>, num_public_values: usize) -> Self {

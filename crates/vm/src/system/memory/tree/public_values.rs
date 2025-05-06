@@ -201,7 +201,7 @@ pub fn extract_public_values<F: PrimeField32>(
 #[cfg(test)]
 mod tests {
     use openvm_stark_backend::p3_field::FieldAlgebra;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_stark_sdk::p3_koala_bear::KoalaBear;
 
     use super::{UserPublicValuesProof, PUBLIC_VALUES_ADDRESS_SPACE_OFFSET};
     use crate::{
@@ -209,7 +209,7 @@ mod tests {
         system::memory::{paged_vec::AddressMap, tree::MemoryNode, CHUNK},
     };
 
-    type F = BabyBear;
+    type F = KoalaBear;
     #[test]
     fn test_public_value_happy_path() {
         let mut vm_config = SystemConfig::default();

@@ -12,11 +12,11 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{
     config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        koala_bear_poseidon2::{KoalaBearPoseidon2Config, KoalaBearPoseidon2Engine},
         FriParameters,
     },
     engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
+    p3_koala_bear::KoalaBear,
 };
 
 use super::VmConnectorPvs;
@@ -25,7 +25,7 @@ use crate::{
     system::program::trace::VmCommittedExe,
 };
 
-type F = BabyBear;
+type F = KoalaBear;
 #[test]
 fn test_vm_connector_happy_path() {
     let exit_code = 1789;
@@ -65,10 +65,10 @@ fn test_vm_connector_wrong_is_terminate() {
 fn test_impl(
     should_pass: bool,
     exit_code: u32,
-    f: impl FnOnce(&mut AirProofInput<BabyBearPoseidon2Config>),
+    f: impl FnOnce(&mut AirProofInput<KoalaBearPoseidon2Config>),
 ) {
     let vm_config = SystemConfig::default();
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
+    let engine = KoalaBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
     let vm = VirtualMachine::new(engine, vm_config.clone());
     let pk = vm.keygen();
 

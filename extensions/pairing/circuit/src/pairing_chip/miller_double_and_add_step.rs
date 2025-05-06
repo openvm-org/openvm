@@ -119,12 +119,12 @@ mod tests {
     use openvm_pairing_transpiler::PairingOpcode;
     use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
     use openvm_stark_backend::p3_field::FieldAlgebra;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_stark_sdk::p3_koala_bear::KoalaBear;
     use rand::{rngs::StdRng, SeedableRng};
 
     use super::*;
 
-    type F = BabyBear;
+    type F = KoalaBear;
     const NUM_LIMBS: usize = 32;
     const LIMB_BITS: usize = 8;
     const BLOCK_SIZE: usize = 32;
@@ -188,7 +188,7 @@ mod tests {
             .iter()
             .map(|x| {
                 biguint_to_limbs::<NUM_LIMBS>(x.clone(), LIMB_BITS)
-                    .map(BabyBear::from_canonical_u32)
+                    .map(KoalaBear::from_canonical_u32)
             })
             .collect::<Vec<_>>();
 
@@ -196,7 +196,7 @@ mod tests {
             .iter()
             .map(|x| {
                 biguint_to_limbs::<NUM_LIMBS>(x.clone(), LIMB_BITS)
-                    .map(BabyBear::from_canonical_u32)
+                    .map(KoalaBear::from_canonical_u32)
             })
             .collect::<Vec<_>>();
 

@@ -113,7 +113,11 @@ pub enum Poseidon2Executor<F: Field> {
         Plonky3Poseidon2Executor<F, BabyBearPoseidon2LinearLayers, BABYBEAR_POSEIDON2_SBOX_DEGREE>,
     ),
     KoalaBearMds(
-        Plonky3Poseidon2Executor<F, KoalaBearPoseidon2LinearLayers, BABYBEAR_POSEIDON2_SBOX_DEGREE>,
+        Plonky3Poseidon2Executor<
+            F,
+            KoalaBearPoseidon2LinearLayers,
+            KOALABEAR_POSEIDON2_SBOX_DEGREE,
+        >,
     ),
 }
 

@@ -23,8 +23,8 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{
     config::{
-        baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        baby_bear_poseidon2_root::BabyBearPoseidon2RootEngine, FriParameters,
+        koala_bear_poseidon2::KoalaBearPoseidon2Engine,
+        koala_bear_poseidon2_root::KoalaBearPoseidon2RootEngine, FriParameters,
     },
     engine::StarkFriEngine,
     openvm_stark_backend::{
@@ -39,7 +39,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info_span;
 
 use crate::{
-    commit::babybear_digest_to_bn254,
+    commit::koalabear_digest_to_bn254,
     config::{AggConfig, AggStarkConfig, AppConfig},
     keygen::perm::AirIdPermutation,
     prover::vm::types::VmProvingKey,
@@ -95,7 +95,7 @@ where
     VC::Periphery: Chip<SC>,
 {
     pub fn keygen(config: AppConfig<VC>) -> Self {
-        let app_engine = BabyBearPoseidon2Engine::new(config.app_fri_params.fri_params);
+        let app_engine = KoalaBearPoseidon2Engine::new(config.app_fri_params.fri_params);
         let app_vm_pk = {
             let vm = VirtualMachine::new(app_engine, config.app_vm_config.clone());
             let vm_pk = vm.keygen();
@@ -115,7 +115,7 @@ where
             config.leaf_fri_params.fri_params.log_blowup,
         );
         let leaf_committed_exe = {
-            let leaf_engine = BabyBearPoseidon2Engine::new(config.leaf_fri_params.fri_params);
+            let leaf_engine = KoalaBearPoseidon2Engine::new(config.leaf_fri_params.fri_params);
             let leaf_program = LeafVmVerifierConfig {
                 app_fri_params: config.app_fri_params.fri_params,
                 app_system_config: config.app_vm_config.system().clone(),
@@ -156,10 +156,10 @@ where
     }
 
     pub fn commit_in_bn254(&self) -> Bn254Fr {
-        babybear_digest_to_bn254(&self.commit_in_babybear())
+        koalabear_digest_to_bn254(&self.commit_in_koalabear())
     }
 
-    pub fn commit_in_babybear(&self) -> [F; DIGEST_SIZE] {
+    pub fn commit_in_koalabear(&self) -> [F; DIGEST_SIZE] {
         self.leaf_committed_exe.get_program_commit().into()
     }
 }
@@ -257,7 +257,7 @@ impl AggStarkProvingKey {
         let internal_vm_config = config.internal_vm_config();
         let root_vm_config = config.root_verifier_vm_config();
 
-        let leaf_engine = BabyBearPoseidon2Engine::new(config.leaf_fri_params);
+        let leaf_engine = KoalaBearPoseidon2Engine::new(config.leaf_fri_params);
         let leaf_vm_pk = Arc::new({
             let vm = VirtualMachine::new(leaf_engine, leaf_vm_config.clone());
             let vm_pk = vm.keygen();
@@ -275,7 +275,7 @@ impl AggStarkProvingKey {
             config.internal_fri_params.log_blowup,
         );
 
-        let internal_engine = BabyBearPoseidon2Engine::new(config.internal_fri_params);
+        let internal_engine = KoalaBearPoseidon2Engine::new(config.internal_fri_params);
         let internal_vm = VirtualMachine::new(internal_engine, internal_vm_config.clone());
         let internal_vm_pk = Arc::new({
             let vm_pk = internal_vm.keygen();
@@ -314,7 +314,7 @@ impl AggStarkProvingKey {
         );
 
         let root_verifier_pk = {
-            let mut root_engine = BabyBearPoseidon2RootEngine::new(config.root_fri_params);
+            let mut root_engine = KoalaBearPoseidon2RootEngine::new(config.root_fri_params);
             root_engine.max_constraint_degree = config.root_max_constraint_degree;
             let root_program = RootVmVerifierConfig {
                 leaf_fri_params: config.leaf_fri_params,
@@ -449,7 +449,7 @@ pub fn leaf_keygen(
     fri_params: FriParameters,
     leaf_vm_config: NativeConfig,
 ) -> Arc<VmProvingKey<SC, NativeConfig>> {
-    let leaf_engine = BabyBearPoseidon2Engine::new(fri_params);
+    let leaf_engine = KoalaBearPoseidon2Engine::new(fri_params);
     let leaf_vm_pk = info_span!("keygen", group = "leaf")
         .in_scope(|| VirtualMachine::new(leaf_engine, leaf_vm_config.clone()).keygen());
     Arc::new(VmProvingKey {

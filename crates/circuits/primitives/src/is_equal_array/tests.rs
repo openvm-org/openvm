@@ -14,8 +14,8 @@ use openvm_stark_backend::{
     verifier::VerificationError,
 };
 use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
+    any_rap_arc_vec, config::koala_bear_poseidon2::KoalaBearPoseidon2Engine,
+    engine::StarkFriEngine, p3_koala_bear::KoalaBear, utils::create_seeded_rng,
 };
 use rand::Rng;
 use test_case::test_case;
@@ -98,11 +98,11 @@ fn test_is_eq_array_single_row(x: [u32; 3], y: [u32; 3], is_equal: u32) {
     let chip = IsEqArrayChip::new(vec![(x, y)]);
     let air = chip.air;
     let trace = chip.generate_trace();
-    let row: &IsEqArrayCols<BabyBear, 3> = trace.values.as_slice().borrow();
+    let row: &IsEqArrayCols<KoalaBear, 3> = trace.values.as_slice().borrow();
 
     assert_eq!(row.out, FieldAlgebra::from_canonical_u32(is_equal));
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
+    KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
         .expect("Verification failed");
 }
 
@@ -128,7 +128,7 @@ fn test_is_eq_array_multi_rows() {
 
     let trace = chip.generate_trace();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
+    KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
         .expect("Verification failed");
 }
 
@@ -147,10 +147,10 @@ fn test_is_eq_array_single_row_fail(x: [u32; 3], y: [u32; 3]) {
     let mut trace = chip.generate_trace();
 
     disable_debug_builder();
-    let row: &mut IsEqArrayCols<BabyBear, 3> = trace.values.as_mut_slice().borrow_mut();
-    row.out = BabyBear::ONE - row.out;
+    let row: &mut IsEqArrayCols<KoalaBear, 3> = trace.values.as_mut_slice().borrow_mut();
+    row.out = KoalaBear::ONE - row.out;
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
+        KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
             .err(),
         Some(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
@@ -178,7 +178,7 @@ fn test_is_eq_array_fail_rand() {
             let mut prank_trace = trace.clone();
             prank_trace.row_mut(i)[j] += FieldAlgebra::from_wrapped_u32(rng.gen::<u32>() + 1);
             assert_eq!(
-                BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
+                KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(
                     any_rap_arc_vec![air],
                     vec![prank_trace]
                 )

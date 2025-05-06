@@ -186,8 +186,8 @@ mod tests {
         p3_air::BaseAir, p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix,
     };
     use openvm_stark_sdk::{
-        any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
-        p3_baby_bear::BabyBear,
+        any_rap_arc_vec, config::koala_bear_blake3::KoalaBearBlake3Engine, engine::StarkFriEngine,
+        p3_koala_bear::KoalaBear,
     };
 
     use super::Fp2;
@@ -218,14 +218,14 @@ mod tests {
 
         let builder = builder.borrow().clone();
         let air = FieldExpr::new(builder, range_checker.bus(), false);
-        let width = BaseAir::<BabyBear>::width(&air);
+        let width = BaseAir::<KoalaBear>::width(&air);
 
         let x_fp2 = bn254_fq2_random(1);
         let y_fp2 = bn254_fq2_random(5);
         let r_fp2 = fq2_fn(&x_fp2, &y_fp2);
         let inputs = two_fp2_input(&x_fp2, &y_fp2);
 
-        let mut row = BabyBear::zero_vec(width);
+        let mut row = KoalaBear::zero_vec(width);
         air.generate_subrow((&range_checker, inputs, vec![]), &mut row);
         let FieldExprCols { vars, .. } = air.load_vars(&row);
         let trace = RowMajorMatrix::new(row, width);
@@ -238,7 +238,7 @@ mod tests {
         assert_eq!(r_c0, expected_c0);
         assert_eq!(r_c1, expected_c1);
 
-        BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+        KoalaBearBlake3Engine::run_simple_test_no_pis_fast(
             any_rap_arc_vec![air, range_checker.air],
             vec![trace, range_trace],
         )
@@ -279,7 +279,7 @@ mod tests {
 
         let builder = builder.borrow().clone();
         let air = FieldExpr::new(builder, range_checker.bus(), false);
-        let width = BaseAir::<BabyBear>::width(&air);
+        let width = BaseAir::<KoalaBear>::width(&air);
 
         let x_fp2 = bn254_fq2_random(5);
         let y_fp2 = bn254_fq2_random(15);
@@ -293,7 +293,7 @@ mod tests {
             bn254_fq_to_biguint(z_fp2.c0),
             bn254_fq_to_biguint(z_fp2.c1),
         ];
-        let mut row = BabyBear::zero_vec(width);
+        let mut row = KoalaBear::zero_vec(width);
         air.generate_subrow((&range_checker, inputs, vec![]), &mut row);
         let FieldExprCols { vars, .. } = air.load_vars(&row);
         let trace = RowMajorMatrix::new(row, width);
@@ -306,7 +306,7 @@ mod tests {
         assert_eq!(r_c0, expected_c0);
         assert_eq!(r_c1, expected_c1);
 
-        BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+        KoalaBearBlake3Engine::run_simple_test_no_pis_fast(
             any_rap_arc_vec![air, range_checker.air],
             vec![trace, range_trace],
         )

@@ -9,22 +9,22 @@ use openvm_stark_backend::{
     verifier::VerificationError,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
+    config::koala_bear_poseidon2::KoalaBearPoseidon2Config,
     engine::{StarkFriEngine, VerificationDataWithFriParams},
-    p3_baby_bear::BabyBear,
+    p3_koala_bear::KoalaBear,
     utils::ProofInputForTest,
 };
 
 use crate::hints::InnerVal;
 
-type InnerSC = BabyBearPoseidon2Config;
+type InnerSC = KoalaBearPoseidon2Config;
 
 pub mod inner {
     use openvm_native_circuit::NativeConfig;
     use openvm_native_compiler::conversion::CompilerOptions;
     use openvm_stark_sdk::{
         config::{
-            baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+            koala_bear_poseidon2::{KoalaBearPoseidon2Config, KoalaBearPoseidon2Engine},
             FriParameters,
         },
         engine::{StarkFriEngine, VerificationDataWithFriParams},
@@ -36,7 +36,7 @@ pub mod inner {
     pub fn build_verification_program(
         vparams: VerificationDataWithFriParams<InnerSC>,
         compiler_options: CompilerOptions,
-    ) -> (Program<BabyBear>, Vec<Vec<InnerVal>>) {
+    ) -> (Program<KoalaBear>, Vec<Vec<InnerVal>>) {
         let VerificationDataWithFriParams { data, fri_params } = vparams;
         let VerificationData { proof, vk } = data;
 
@@ -63,20 +63,22 @@ pub mod inner {
     ///
     /// This is a convenience function with default configs for testing purposes only.
     pub fn run_recursive_test(
-        test_proof_input: ProofInputForTest<BabyBearPoseidon2Config>,
+        test_proof_input: ProofInputForTest<KoalaBearPoseidon2Config>,
         fri_params: FriParameters,
     ) {
         let vparams = test_proof_input
-            .run_test(&BabyBearPoseidon2Engine::new(
+            .run_test(&KoalaBearPoseidon2Engine::new(
                 FriParameters::new_for_testing(1),
             ))
             .unwrap();
 
+        println!("yo we made it");
+
         recursive_stark_test(
             vparams,
             CompilerOptions::default(),
-            NativeConfig::aggregation(4, 7),
-            &BabyBearPoseidon2Engine::new(fri_params),
+            NativeConfig::aggregation(4, 3),
+            &KoalaBearPoseidon2Engine::new(fri_params),
         )
         .unwrap();
     }
@@ -95,13 +97,13 @@ pub fn recursive_stark_test<AggSC: StarkGenericConfig, E: StarkFriEngine<AggSC>>
     engine: &E,
 ) -> Result<VerificationDataWithFriParams<AggSC>, VerificationError>
 where
-    Domain<AggSC>: PolynomialSpace<Val = BabyBear>,
+    Domain<AggSC>: PolynomialSpace<Val = KoalaBear>,
     Domain<AggSC>: Send + Sync,
     PcsProverData<AggSC>: Send + Sync,
     Com<AggSC>: Send + Sync,
     PcsProof<AggSC>: Send + Sync,
 {
     let (program, witness_stream) = build_verification_program(vparams, compiler_options);
-
+    println!("yo we made it 2");
     execute_and_prove_program(program, witness_stream, vm_config, engine)
 }

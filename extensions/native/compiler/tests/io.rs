@@ -4,10 +4,10 @@ use openvm_native_compiler::{
     conversion::{convert_program, CompilerOptions},
 };
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_koala_bear::KoalaBear;
 
-type F = BabyBear;
-type EF = BinomialExtensionField<BabyBear, 4>;
+type F = KoalaBear;
+type EF = BinomialExtensionField<KoalaBear, 4>;
 
 const WORD_SIZE: usize = 1;
 

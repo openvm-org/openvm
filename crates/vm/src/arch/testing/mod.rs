@@ -21,12 +21,12 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{
     config::{
-        baby_bear_blake3::{BabyBearBlake3Config, BabyBearBlake3Engine},
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        koala_bear_blake3::{KoalaBearBlake3Config, KoalaBearBlake3Engine},
+        koala_bear_poseidon2::{KoalaBearPoseidon2Config, KoalaBearPoseidon2Engine},
         setup_tracing_with_log_level, FriParameters,
     },
     engine::{StarkEngine, StarkFriEngine},
-    p3_baby_bear::BabyBear,
+    p3_koala_bear::KoalaBear,
 };
 use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
@@ -243,14 +243,14 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 }
 
 // Use Blake3 as hash for faster tests.
-type TestSC = BabyBearBlake3Config;
+type TestSC = KoalaBearBlake3Config;
 
-impl VmChipTestBuilder<BabyBear> {
+impl VmChipTestBuilder<KoalaBear> {
     pub fn build(self) -> VmChipTester<TestSC> {
         self.memory
             .controller
             .borrow_mut()
-            .finalize(None::<&mut Poseidon2PeripheryChip<BabyBear>>);
+            .finalize(None::<&mut Poseidon2PeripheryChip<KoalaBear>>);
         let tester = VmChipTester {
             memory: Some(self.memory),
             ..Default::default()
@@ -258,11 +258,11 @@ impl VmChipTestBuilder<BabyBear> {
         let tester = tester.load(self.execution);
         tester.load(self.program)
     }
-    pub fn build_babybear_poseidon2(self) -> VmChipTester<BabyBearPoseidon2Config> {
+    pub fn build_koalabear_poseidon2(self) -> VmChipTester<KoalaBearPoseidon2Config> {
         self.memory
             .controller
             .borrow_mut()
-            .finalize(None::<&mut Poseidon2PeripheryChip<BabyBear>>);
+            .finalize(None::<&mut Poseidon2PeripheryChip<KoalaBear>>);
         let tester = VmChipTester {
             memory: Some(self.memory),
             ..Default::default()
@@ -388,11 +388,11 @@ where
     }
 }
 
-impl VmChipTester<BabyBearPoseidon2Config> {
+impl VmChipTester<KoalaBearPoseidon2Config> {
     pub fn simple_test(
         &self,
-    ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerificationError> {
-        self.test(|| BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1)))
+    ) -> Result<VerificationData<KoalaBearPoseidon2Config>, VerificationError> {
+        self.test(|| KoalaBearPoseidon2Engine::new(FriParameters::new_for_testing(1)))
     }
 
     pub fn simple_test_with_expected_error(&self, expected_error: VerificationError) {
@@ -405,9 +405,11 @@ impl VmChipTester<BabyBearPoseidon2Config> {
     }
 }
 
-impl VmChipTester<BabyBearBlake3Config> {
-    pub fn simple_test(&self) -> Result<VerificationData<BabyBearBlake3Config>, VerificationError> {
-        self.test(|| BabyBearBlake3Engine::new(FriParameters::new_for_testing(1)))
+impl VmChipTester<KoalaBearBlake3Config> {
+    pub fn simple_test(
+        &self,
+    ) -> Result<VerificationData<KoalaBearBlake3Config>, VerificationError> {
+        self.test(|| KoalaBearBlake3Engine::new(FriParameters::new_for_testing(1)))
     }
 
     pub fn simple_test_with_expected_error(&self, expected_error: VerificationError) {

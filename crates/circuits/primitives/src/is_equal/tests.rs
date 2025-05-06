@@ -11,7 +11,7 @@ use openvm_stark_backend::{
     verifier::VerificationError,
 };
 use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    any_rap_arc_vec, config::koala_bear_poseidon2::KoalaBearPoseidon2Engine, engine::StarkFriEngine,
 };
 use test_case::test_matrix;
 
@@ -91,7 +91,7 @@ fn test_single_is_equal(x: u32, y: u32) {
 
     let trace = chip.generate_trace();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
+    KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(
         any_rap_arc_vec![IsEqTestAir(IsEqSubAir)],
         vec![trace],
     )
@@ -119,7 +119,7 @@ fn test_single_is_zero_fail(x: u32, y: u32) {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
+        KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(
             any_rap_arc_vec![IsEqTestAir(IsEqSubAir)],
             vec![trace]
         )

@@ -1,7 +1,7 @@
 use openvm_native_compiler::ir::Witness;
 use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::config::{
-    baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig, FriParameters,
+    koala_bear_poseidon2_root::KoalaBearPoseidon2RootConfig, FriParameters,
 };
 use serde::{Deserialize, Serialize};
 use snark_verifier_sdk::Snark;
@@ -27,7 +27,7 @@ pub fn generate_halo2_verifier_proving_key(
     params: &Halo2Params,
     advice: MultiStarkVerificationAdvice<OuterConfig>,
     fri_params: &FriParameters,
-    proof: &Proof<BabyBearPoseidon2RootConfig>,
+    proof: &Proof<KoalaBearPoseidon2RootConfig>,
 ) -> Halo2VerifierProvingKey {
     let mut witness = Witness::default();
     proof.write(&mut witness);

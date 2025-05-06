@@ -5,9 +5,9 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*, utils::disable_debug_builder, verifier::VerificationError, AirRef,
 };
 use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
+    any_rap_arc_vec, config::koala_bear_blake3::KoalaBearBlake3Engine,
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
+    p3_koala_bear::KoalaBear, utils::create_seeded_rng,
 };
 use rand::Rng;
 
@@ -63,7 +63,7 @@ fn test_xor_limbs_chip() {
                 4,
             )
         })
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<KoalaBear>>>();
 
     let xor_trace = xor_chip.generate_trace();
 
@@ -76,9 +76,9 @@ fn test_xor_limbs_chip() {
     let all_traces = requesters_traces
         .into_iter()
         .chain(iter::once(xor_trace))
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<KoalaBear>>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
+    KoalaBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
         .expect("Verification failed");
 }
 
@@ -130,7 +130,7 @@ fn negative_test_xor_limbs_chip() {
     let xor_trace = xor_chip.generate_trace();
 
     disable_debug_builder();
-    let result = BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+    let result = KoalaBearBlake3Engine::run_simple_test_no_pis_fast(
         any_rap_arc_vec![requester, xor_chip.air],
         vec![requester_trace, xor_trace],
     );

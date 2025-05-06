@@ -158,7 +158,7 @@ impl From<FriParameters> for LeafFriParams {
     }
 }
 
-const SBOX_SIZE: usize = 7;
+const SBOX_SIZE: usize = 3;
 
 impl AggStarkConfig {
     pub fn leaf_vm_config(&self) -> NativeConfig {

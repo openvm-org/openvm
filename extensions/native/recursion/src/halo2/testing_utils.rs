@@ -1,7 +1,7 @@
 use openvm_native_compiler::prelude::Witness;
 use openvm_stark_sdk::{
     config::{
-        baby_bear_poseidon2_root::{BabyBearPoseidon2RootConfig, BabyBearPoseidon2RootEngine},
+        koala_bear_poseidon2_root::{KoalaBearPoseidon2RootConfig, KoalaBearPoseidon2RootEngine},
         FriParameters,
     },
     engine::StarkFriEngine,
@@ -19,7 +19,7 @@ use crate::{
 };
 
 pub fn run_static_verifier_test(
-    mut test_proof_input: ProofInputForTest<BabyBearPoseidon2RootConfig>,
+    mut test_proof_input: ProofInputForTest<KoalaBearPoseidon2RootConfig>,
     fri_params: FriParameters,
 ) -> (Halo2VerifierProvingKey, Snark) {
     let k = 21;
@@ -28,7 +28,7 @@ pub fn run_static_verifier_test(
     test_proof_input.sort_chips();
     let info_span =
         tracing::info_span!("prove outer stark to verify", step = "outer_stark_prove").entered();
-    let engine = BabyBearPoseidon2RootEngine::new(fri_params);
+    let engine = KoalaBearPoseidon2RootEngine::new(fri_params);
     let vparams = test_proof_input.run_test(&engine).unwrap();
 
     info_span.exit();

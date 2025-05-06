@@ -110,12 +110,12 @@ mod tests {
     use openvm_pairing_transpiler::PairingOpcode;
     use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
     use openvm_stark_backend::p3_field::FieldAlgebra;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_stark_sdk::p3_koala_bear::KoalaBear;
     use rand::{rngs::StdRng, SeedableRng};
 
     use super::*;
 
-    type F = BabyBear;
+    type F = KoalaBear;
 
     #[test]
     #[allow(non_snake_case)]
@@ -169,8 +169,9 @@ mod tests {
         assert_eq!(result[6], bn254_fq_to_biguint(l_init.c.c0));
         assert_eq!(result[7], bn254_fq_to_biguint(l_init.c.c1));
 
-        let input_limbs = inputs
-            .map(|x| biguint_to_limbs::<NUM_LIMBS>(x, LIMB_BITS).map(BabyBear::from_canonical_u32));
+        let input_limbs = inputs.map(|x| {
+            biguint_to_limbs::<NUM_LIMBS>(x, LIMB_BITS).map(KoalaBear::from_canonical_u32)
+        });
 
         let instruction = rv32_write_heap_default(
             &mut tester,
@@ -236,8 +237,9 @@ mod tests {
         assert_eq!(result[6], bls12381_fq_to_biguint(l_init.c.c0));
         assert_eq!(result[7], bls12381_fq_to_biguint(l_init.c.c1));
 
-        let input_limbs = inputs
-            .map(|x| biguint_to_limbs::<NUM_LIMBS>(x, LIMB_BITS).map(BabyBear::from_canonical_u32));
+        let input_limbs = inputs.map(|x| {
+            biguint_to_limbs::<NUM_LIMBS>(x, LIMB_BITS).map(KoalaBear::from_canonical_u32)
+        });
 
         let instruction = rv32_write_heap_default(
             &mut tester,

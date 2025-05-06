@@ -4,12 +4,12 @@ use openvm_circuit::{
 };
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
+    config::koala_bear_poseidon2::KoalaBearPoseidon2Config,
     openvm_stark_backend::{
         config::{Com, StarkGenericConfig, Val},
         proof::Proof,
     },
-    p3_baby_bear::BabyBear,
+    p3_koala_bear::KoalaBear,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use static_assertions::assert_impl_all;
@@ -25,7 +25,7 @@ pub struct LeafVmVerifierInput<SC: StarkGenericConfig> {
     /// segment.
     pub public_values_root_proof: Option<UserPublicValuesRootProof<Val<SC>>>,
 }
-assert_impl_all!(LeafVmVerifierInput<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
+assert_impl_all!(LeafVmVerifierInput<KoalaBearPoseidon2Config>: Serialize, DeserializeOwned);
 
 /// Proof that the merkle root of public values is in the memory state. Can be extracted from
 /// `openvm_circuit::system::memory::public_values::UserPublicValuesProof`.
@@ -37,7 +37,7 @@ pub struct UserPublicValuesRootProof<F> {
     pub sibling_hashes: Vec<[F; DIGEST_SIZE]>,
     pub public_values_commit: [F; DIGEST_SIZE],
 }
-assert_impl_all!(UserPublicValuesRootProof<BabyBear>: Serialize, DeserializeOwned);
+assert_impl_all!(UserPublicValuesRootProof<KoalaBear>: Serialize, DeserializeOwned);
 
 impl<SC: StarkGenericConfig> LeafVmVerifierInput<SC> {
     pub fn chunk_continuation_vm_proof(proof: &ContinuationVmProof<SC>, chunk: usize) -> Vec<Self> {

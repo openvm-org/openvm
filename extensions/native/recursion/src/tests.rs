@@ -14,7 +14,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{
     collect_airs_and_inputs,
     config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        koala_bear_poseidon2::{KoalaBearPoseidon2Config, KoalaBearPoseidon2Engine},
         FriParameters,
     },
     dummy_airs::{
@@ -96,7 +96,7 @@ where
 #[test]
 fn test_fibonacci_small() {
     run_recursive_test(
-        fibonacci_test_proof_input::<BabyBearPoseidon2Config>(1 << 5),
+        fibonacci_test_proof_input::<KoalaBearPoseidon2Config>(1 << 1),
         FriParameters::new_for_testing(3),
     )
 }
@@ -105,7 +105,7 @@ fn test_fibonacci_small() {
 fn test_fibonacci() {
     // test lde = 27
     run_recursive_test(
-        fibonacci_test_proof_input::<BabyBearPoseidon2Config>(1 << 24),
+        fibonacci_test_proof_input::<KoalaBearPoseidon2Config>(1 << 24),
         FriParameters {
             log_blowup: 3,
             log_final_poly_len: 0,
@@ -118,7 +118,7 @@ fn test_fibonacci() {
 #[test]
 fn test_interactions() {
     run_recursive_test(
-        interaction_test_proof_input::<BabyBearPoseidon2Config>(),
+        interaction_test_proof_input::<KoalaBearPoseidon2Config>(),
         FriParameters::new_for_testing(3),
     )
 }
@@ -126,7 +126,7 @@ fn test_interactions() {
 #[test]
 fn test_unordered() {
     run_recursive_test(
-        unordered_test_proof_input::<BabyBearPoseidon2Config>(),
+        unordered_test_proof_input::<KoalaBearPoseidon2Config>(),
         FriParameters::new_for_testing(3),
     )
 }
@@ -135,7 +135,7 @@ fn test_unordered() {
 fn test_optional_air() {
     use openvm_stark_backend::{engine::StarkEngine, prover::types::ProofInput, Chip};
     let fri_params = FriParameters::new_for_testing(3);
-    let engine = BabyBearPoseidon2Engine::new(fri_params);
+    let engine = KoalaBearPoseidon2Engine::new(fri_params);
     let fib_chip = FibonacciChip::new(0, 1, 8);
     let send_chip1 = DummyInteractionChip::new_without_partition(1, true, 0);
     let send_chip2 = DummyInteractionChip::new_with_partition(engine.config(), 1, true, 0);
@@ -184,7 +184,7 @@ fn test_optional_air() {
             .verify(&pk.get_vk(), &proof)
             .expect("Verification failed");
         // The VM program will panic when the program cannot verify the proof.
-        gen_vm_program_test_proof_input::<BabyBearPoseidon2Config, NativeConfig>(
+        gen_vm_program_test_proof_input::<KoalaBearPoseidon2Config, NativeConfig>(
             program.clone(),
             proof.write(),
             vm_config.clone(),
@@ -215,7 +215,7 @@ fn test_optional_air() {
             .verify(&pk.get_vk(), &proof)
             .expect("Verification failed");
         // The VM program will panic when the program cannot verify the proof.
-        gen_vm_program_test_proof_input::<BabyBearPoseidon2Config, NativeConfig>(
+        gen_vm_program_test_proof_input::<KoalaBearPoseidon2Config, NativeConfig>(
             program.clone(),
             proof.write(),
             vm_config.clone(),
@@ -238,7 +238,7 @@ fn test_optional_air() {
         assert!(engine.verify(&pk.get_vk(), &proof).is_err());
         // The VM program should panic when the proof cannot be verified.
         let unwind_res = catch_unwind(|| {
-            gen_vm_program_test_proof_input::<BabyBearPoseidon2Config, NativeConfig>(
+            gen_vm_program_test_proof_input::<KoalaBearPoseidon2Config, NativeConfig>(
                 program.clone(),
                 proof.write(),
                 vm_config,

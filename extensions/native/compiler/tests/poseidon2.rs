@@ -5,12 +5,12 @@ use openvm_native_compiler::{
     prelude::RVar,
 };
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
-use openvm_stark_sdk::{config::baby_bear_poseidon2::default_perm, p3_baby_bear::BabyBear};
+use openvm_stark_sdk::{config::koala_bear_poseidon2::default_perm, p3_koala_bear::KoalaBear};
 use p3_symmetric::Permutation;
 use rand::{thread_rng, Rng};
 
-type F = BabyBear;
-type EF = BinomialExtensionField<BabyBear, 4>;
+type F = KoalaBear;
+type EF = BinomialExtensionField<KoalaBear, 4>;
 
 #[test]
 fn test_compiler_poseidon2_permute() {

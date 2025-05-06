@@ -8,10 +8,10 @@ use openvm_stark_backend::{
     prover::types::AirProofInput, Chip,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+    config::koala_bear_poseidon2::{KoalaBearPoseidon2Config, KoalaBearPoseidon2Engine},
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
+    p3_koala_bear::KoalaBear,
     utils::create_seeded_rng,
 };
 use rand::Rng;
@@ -22,7 +22,7 @@ use crate::system::memory::{
     TimestampedValues,
 };
 
-type Val = BabyBear;
+type Val = KoalaBear;
 
 #[test]
 fn boundary_air_test() {
@@ -107,7 +107,7 @@ fn boundary_air_test() {
 
     boundary_chip.finalize(final_memory.clone());
     let boundary_air = boundary_chip.air();
-    let boundary_api: AirProofInput<BabyBearPoseidon2Config> =
+    let boundary_api: AirProofInput<KoalaBearPoseidon2Config> =
         boundary_chip.generate_air_proof_input();
     // test trace height override
     {
@@ -117,7 +117,7 @@ fn boundary_air_test() {
             VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker.clone());
         boundary_chip.set_overridden_height(overridden_height);
         boundary_chip.finalize(final_memory.clone());
-        let boundary_api: AirProofInput<BabyBearPoseidon2Config> =
+        let boundary_api: AirProofInput<KoalaBearPoseidon2Config> =
             boundary_chip.generate_air_proof_input();
         assert_eq!(
             boundary_api.main_trace_height(),
@@ -125,7 +125,7 @@ fn boundary_air_test() {
         );
     }
 
-    BabyBearPoseidon2Engine::run_test_fast(
+    KoalaBearPoseidon2Engine::run_test_fast(
         vec![
             boundary_air,
             range_checker.air(),

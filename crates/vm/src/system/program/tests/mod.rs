@@ -17,12 +17,12 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{
     any_rap_arc_vec,
     config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,
+        koala_bear_poseidon2::{KoalaBearPoseidon2Config, KoalaBearPoseidon2Engine},
+        koala_bear_poseidon2_root::KoalaBearPoseidon2RootConfig,
     },
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
+    p3_koala_bear::KoalaBear,
 };
 use serde::{de::DeserializeOwned, Serialize};
 use static_assertions::assert_impl_all;
@@ -32,10 +32,10 @@ use crate::{
     system::program::{trace::VmCommittedExe, ProgramBus, ProgramChip},
 };
 
-assert_impl_all!(VmCommittedExe<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
-assert_impl_all!(VmCommittedExe<BabyBearPoseidon2RootConfig>: Serialize, DeserializeOwned);
+assert_impl_all!(VmCommittedExe<KoalaBearPoseidon2Config>: Serialize, DeserializeOwned);
+assert_impl_all!(VmCommittedExe<KoalaBearPoseidon2RootConfig>: Serialize, DeserializeOwned);
 
-fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
+fn interaction_test(program: Program<KoalaBear>, execution: Vec<u32>) {
     let bus = ProgramBus::new(READ_INSTRUCTION_BUS);
     let mut chip = ProgramChip::new_with_program(program.clone(), bus);
     let mut execution_frequencies = vec![0; program.len()];
@@ -52,8 +52,8 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
         let option = program.get_instruction_and_debug_info(index);
         if let Some((instruction, _)) = option {
             program_cells.extend([
-                BabyBear::from_canonical_usize(frequency), // hacky: we should switch execution_frequencies into hashmap
-                BabyBear::from_canonical_usize(index * (DEFAULT_PC_STEP as usize)),
+                KoalaBear::from_canonical_usize(frequency), // hacky: we should switch execution_frequencies into hashmap
+                KoalaBear::from_canonical_usize(index * (DEFAULT_PC_STEP as usize)),
                 instruction.opcode.to_field(),
                 instruction.a,
                 instruction.b,
@@ -71,13 +71,13 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let original_height = program.num_defined_instructions();
     let desired_height = original_height.next_power_of_two();
     let cells_to_add = (desired_height - original_height) * width;
-    program_cells.extend(iter::repeat(BabyBear::ZERO).take(cells_to_add));
+    program_cells.extend(iter::repeat(KoalaBear::ZERO).take(cells_to_add));
 
     let counter_trace = RowMajorMatrix::new(program_cells, 10);
     println!("trace height = {}", original_height);
     println!("counter trace height = {}", counter_trace.height());
 
-    BabyBearPoseidon2Engine::run_test_fast(
+    KoalaBearPoseidon2Engine::run_test_fast(
         any_rap_arc_vec!(program_air, counter_air),
         vec![
             program_proof_input,
@@ -192,8 +192,8 @@ fn test_program_negative() {
     let mut program_rows = vec![];
     for (pc_idx, instruction) in instructions.iter().enumerate() {
         program_rows.extend(vec![
-            BabyBear::from_canonical_usize(execution_frequencies[pc_idx]),
-            BabyBear::from_canonical_usize(pc_idx * DEFAULT_PC_STEP as usize),
+            KoalaBear::from_canonical_usize(execution_frequencies[pc_idx]),
+            KoalaBear::from_canonical_usize(pc_idx * DEFAULT_PC_STEP as usize),
             instruction.opcode.to_field(),
             instruction.a,
             instruction.b,
@@ -203,9 +203,9 @@ fn test_program_negative() {
         ]);
     }
     let mut counter_trace = RowMajorMatrix::new(program_rows, 8);
-    counter_trace.row_mut(1)[1] = BabyBear::ZERO;
+    counter_trace.row_mut(1)[1] = KoalaBear::ZERO;
 
-    BabyBearPoseidon2Engine::run_test_fast(
+    KoalaBearPoseidon2Engine::run_test_fast(
         any_rap_arc_vec!(program_air, counter_air),
         vec![
             program_proof_input,

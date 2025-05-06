@@ -5,8 +5,8 @@ use openvm_stark_backend::{
     utils::disable_debug_builder, verifier::VerificationError, AirRef,
 };
 use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
+    any_rap_arc_vec, config::koala_bear_blake3::KoalaBearBlake3Engine, engine::StarkFriEngine,
+    p3_koala_bear::KoalaBear, utils::create_seeded_rng,
 };
 use rand::Rng;
 
@@ -69,16 +69,16 @@ fn test_variable_range_checker_chip_send() {
                 2,
             )
         })
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<KoalaBear>>>();
 
     let var_range_checker_trace = var_range_checker.generate_trace();
 
     let all_traces = lists_traces
         .into_iter()
         .chain(iter::once(var_range_checker_trace))
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<KoalaBear>>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
+    KoalaBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
         .expect("Verification failed");
 }
 
@@ -125,7 +125,7 @@ fn negative_test_variable_range_checker_chip_send() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces).err(),
+        KoalaBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces).err(),
         Some(VerificationError::ChallengePhaseError),
         "Expected constraint to fail"
     );
@@ -180,16 +180,16 @@ fn test_variable_range_checker_chip_range_check() {
                 1,
             )
         })
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<KoalaBear>>>();
 
     let var_range_checker_trace = var_range_checker.generate_trace();
 
     let all_traces = lists_traces
         .into_iter()
         .chain(iter::once(var_range_checker_trace))
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<KoalaBear>>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
+    KoalaBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
         .expect("Verification failed");
 }
 
@@ -234,7 +234,7 @@ fn negative_test_variable_range_checker_chip_range_check() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces).err(),
+        KoalaBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces).err(),
         Some(VerificationError::ChallengePhaseError),
         "Expected constraint to fail"
     );

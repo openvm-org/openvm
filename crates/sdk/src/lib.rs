@@ -35,7 +35,7 @@ pub use openvm_continuations::{
 use openvm_native_recursion::halo2::{utils::Halo2ParamsReader, wrapper::EvmVerifierByteCode};
 use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+    config::{koala_bear_poseidon2::KoalaBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
     openvm_stark_backend::{verifier::VerificationError, Chip},
 };
@@ -112,7 +112,7 @@ impl<E: StarkFriEngine<SC>> Default for GenericSdk<E> {
     }
 }
 
-pub type Sdk = GenericSdk<BabyBearPoseidon2Engine>;
+pub type Sdk = GenericSdk<KoalaBearPoseidon2Engine>;
 
 impl<E: StarkFriEngine<SC>> GenericSdk<E> {
     pub fn new() -> Self {

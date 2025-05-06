@@ -7,7 +7,7 @@ use openvm_native_compiler::{
     prelude::DIGEST_SIZE,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
+    config::koala_bear_poseidon2::KoalaBearPoseidon2Config,
     openvm_stark_backend::{
         config::{Com, StarkGenericConfig, Val},
         p3_field::PrimeField32,
@@ -28,7 +28,7 @@ pub struct InternalVmVerifierInput<SC: StarkGenericConfig> {
     /// The proofs of leaf verifier or internal verifier in the execution order.
     pub proofs: Vec<Proof<SC>>,
 }
-assert_impl_all!(InternalVmVerifierInput<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
+assert_impl_all!(InternalVmVerifierInput<KoalaBearPoseidon2Config>: Serialize, DeserializeOwned);
 
 impl InternalVmVerifierInput<SC> {
     pub fn chunk_leaf_or_internal_proofs(

@@ -16,7 +16,7 @@ use openvm_stark_backend::{
 };
 use p3_fri::CommitPhaseProofStep;
 
-use super::{F, SC}; // BabyBearPoseidon2Config
+use super::{F, SC}; // KoalaBearPoseidon2Config
 
 type Challenge = BinomialExtensionField<F, 4>;
 
@@ -78,9 +78,9 @@ impl Encode for Proof<SC> {
     // We need to know:
     // - Pcs is TwoAdicFriPcs
     // - Com<SC>: Into<[F; 8]>
-    // For simplicity, we only implement for fixed `BabyBearPoseidon2Config`
+    // For simplicity, we only implement for fixed `KoalaBearPoseidon2Config`
     //
-    /// Encode a proof using FRI as the PCS with `BabyBearPoseidon2Config`.
+    /// Encode a proof using FRI as the PCS with `KoalaBearPoseidon2Config`.
     /// The Merkle tree hashes have digest `[F; 8]`.
     /// ```
     /// pub struct Proof<SC: StarkGenericConfig> {
@@ -348,7 +348,7 @@ impl Decode for RootVmVerifierInput<SC> {
 }
 
 impl Decode for Proof<SC> {
-    /// Decode a proof using FRI as the PCS with `BabyBearPoseidon2Config`.
+    /// Decode a proof using FRI as the PCS with `KoalaBearPoseidon2Config`.
     fn decode<R: Read>(reader: &mut R) -> Result<Self> {
         let mut version_bytes = [0u8; 4];
         reader.read_exact(&mut version_bytes)?;

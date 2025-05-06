@@ -12,7 +12,7 @@ use openvm_stark_backend::{
     verifier::VerificationError,
     ChipUsageGetter,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{p3_koala_bear::KoalaBear, utils::create_seeded_rng};
 use rand::Rng;
 use strum::EnumCount;
 
@@ -23,7 +23,7 @@ use super::{
 
 #[test]
 fn new_field_extension_air_test() {
-    type F = BabyBear;
+    type F = KoalaBear;
 
     let mut tester = VmChipTestBuilder::default();
     let mut chip = FieldExtensionChip::new(
@@ -86,7 +86,7 @@ fn new_field_extension_air_test() {
             .unwrap();
         let original_trace = extension_trace.clone();
         for width in 0..trace_width {
-            let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
+            let prank_value = KoalaBear::from_canonical_u32(rng.gen_range(1..=100));
             extension_trace.row_mut(height)[width] = prank_value;
         }
 
@@ -101,7 +101,7 @@ fn new_field_extension_air_test() {
 
 #[test]
 fn new_field_extension_consistency_test() {
-    type F = BabyBear;
+    type F = KoalaBear;
     type EF = BinomialExtensionField<F, 4>;
 
     let len_tests = 100;

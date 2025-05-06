@@ -211,8 +211,8 @@ mod tests {
         p3_air::BaseAir, p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix,
     };
     use openvm_stark_sdk::{
-        any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
-        p3_baby_bear::BabyBear, utils::create_seeded_rng,
+        any_rap_arc_vec, config::koala_bear_blake3::KoalaBearBlake3Engine, engine::StarkFriEngine,
+        p3_koala_bear::KoalaBear, utils::create_seeded_rng,
     };
 
     use super::*;
@@ -252,7 +252,7 @@ mod tests {
 
         let builder = builder.borrow().clone();
         let air = FieldExpr::new(builder, range_checker.bus(), false);
-        let width = BaseAir::<BabyBear>::width(&air);
+        let width = BaseAir::<KoalaBear>::width(&air);
 
         let x_fq12 = x;
         let y_fq12 = y;
@@ -260,7 +260,7 @@ mod tests {
         let mut inputs = bn254_fq12_to_biguint_vec(x_fq12);
         inputs.extend(bn254_fq12_to_biguint_vec(y_fq12));
 
-        let mut row = BabyBear::zero_vec(width);
+        let mut row = KoalaBear::zero_vec(width);
         air.generate_subrow((&range_checker, inputs, vec![]), &mut row);
         let FieldExprCols { vars, .. } = air.load_vars(&row);
         let trace = RowMajorMatrix::new(row, width);
@@ -276,7 +276,7 @@ mod tests {
             );
         }
 
-        BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+        KoalaBearBlake3Engine::run_simple_test_no_pis_fast(
             any_rap_arc_vec![air, range_checker.air],
             vec![trace, range_trace],
         )

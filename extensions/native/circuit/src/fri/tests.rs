@@ -12,7 +12,7 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{p3_koala_bear::KoalaBear, utils::create_seeded_rng};
 use rand::Rng;
 
 use super::{super::field_extension::FieldExtension, elem_to_ext, FriReducedOpeningChip, EXT_DEG};
@@ -57,7 +57,7 @@ fn fri_mat_opening_air_test() {
     macro_rules! gen_ext {
         () => {
             std::array::from_fn::<_, EXT_DEG, _>(|_| {
-                BabyBear::from_canonical_u32(rng.gen_range(elem_range()))
+                KoalaBear::from_canonical_u32(rng.gen_range(elem_range()))
             })
         };
     }
@@ -68,7 +68,7 @@ fn fri_mat_opening_air_test() {
         let alpha = gen_ext!();
         let length = rng.gen_range(length_range());
         let a = (0..length)
-            .map(|_| BabyBear::from_canonical_u32(rng.gen_range(elem_range())))
+            .map(|_| KoalaBear::from_canonical_u32(rng.gen_range(elem_range())))
             .collect_vec();
         let b = (0..length).map(|_| gen_ext!()).collect_vec();
 
@@ -94,23 +94,23 @@ fn fri_mat_opening_air_test() {
         tester.write_cell(
             address_space,
             length_pointer,
-            BabyBear::from_canonical_usize(length),
+            KoalaBear::from_canonical_usize(length),
         );
         tester.write_cell(
             address_space,
             a_pointer_pointer,
-            BabyBear::from_canonical_usize(a_pointer),
+            KoalaBear::from_canonical_usize(a_pointer),
         );
         tester.write_cell(
             address_space,
             b_pointer_pointer,
-            BabyBear::from_canonical_usize(b_pointer),
+            KoalaBear::from_canonical_usize(b_pointer),
         );
         let is_init = rng.gen_range(0..2);
         tester.write_cell(
             address_space,
             is_init_ptr,
-            BabyBear::from_canonical_u32(is_init),
+            KoalaBear::from_canonical_u32(is_init),
         );
 
         if is_init == 0 {
@@ -164,7 +164,7 @@ fn fri_mat_opening_air_test() {
         for width in 0..OVERALL_WIDTH
         /* num operands */
         {
-            let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
+            let prank_value = KoalaBear::from_canonical_u32(rng.gen_range(1..=100));
             trace.row_mut(height)[width] = prank_value;
         }
 

@@ -19,12 +19,12 @@ use openvm_rv32_adapters::{
     rv32_write_heap_default_with_increment, Rv32VecHeapAdapterChip, Rv32VecHeapTwoReadsAdapterChip,
 };
 use openvm_stark_backend::p3_field::FieldAlgebra;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::p3_koala_bear::KoalaBear;
 use rand::{rngs::StdRng, SeedableRng};
 
 use super::*;
 
-type F = BabyBear;
+type F = KoalaBear;
 const NUM_LIMBS: usize = 48;
 const LIMB_BITS: usize = 8;
 const BLOCK_SIZE: usize = 16;
@@ -103,13 +103,13 @@ fn test_mul_023_by_023() {
     let input_line0_limbs = input_line0
         .iter()
         .map(|x| {
-            biguint_to_limbs::<NUM_LIMBS>(x.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32)
+            biguint_to_limbs::<NUM_LIMBS>(x.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32)
         })
         .collect::<Vec<_>>();
     let input_line1_limbs = input_line1
         .iter()
         .map(|x| {
-            biguint_to_limbs::<NUM_LIMBS>(x.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32)
+            biguint_to_limbs::<NUM_LIMBS>(x.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32)
         })
         .collect::<Vec<_>>();
 
@@ -193,13 +193,13 @@ fn test_mul_by_02345() {
     let input_f_limbs = input_f
         .iter()
         .map(|x| {
-            biguint_to_limbs::<NUM_LIMBS>(x.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32)
+            biguint_to_limbs::<NUM_LIMBS>(x.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32)
         })
         .collect::<Vec<_>>();
     let input_x_limbs = input_x
         .iter()
         .map(|x| {
-            biguint_to_limbs::<NUM_LIMBS>(x.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32)
+            biguint_to_limbs::<NUM_LIMBS>(x.clone(), LIMB_BITS).map(KoalaBear::from_canonical_u32)
         })
         .collect::<Vec<_>>();
 

@@ -27,7 +27,7 @@ use openvm_stark_backend::{
     verifier::VerificationError,
     ChipUsageGetter,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{p3_koala_bear::KoalaBear, utils::create_seeded_rng};
 use rand::rngs::StdRng;
 
 use super::core::run_mulh;
@@ -36,7 +36,7 @@ use crate::{
     mulh::{MulHCoreChip, MulHCoreCols, Rv32MulHChip},
 };
 
-type F = BabyBear;
+type F = KoalaBear;
 
 //////////////////////////////////////////////////////////////////////////////////////
 // POSITIVE TESTS
@@ -186,7 +186,7 @@ fn run_rv32_mulh_negative_test(
         range_tuple_chip.add_count(&[a[i], carry[RV32_REGISTER_NUM_LIMBS + i]]);
     }
 
-    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+    let modify_trace = |trace: &mut DenseMatrix<KoalaBear>| {
         let mut values = trace.row_slice(0).to_vec();
         let cols: &mut MulHCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();

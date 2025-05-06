@@ -28,7 +28,7 @@ impl<C: Config> Poseidon2CircuitBuilder<C> for Builder<C> {
         assert_eq!(C::N::bits(), openvm_stark_sdk::p3_bn254_fr::Bn254Fr::bits());
         assert_eq!(
             C::F::bits(),
-            openvm_stark_sdk::p3_baby_bear::BabyBear::bits()
+            openvm_stark_sdk::p3_koala_bear::KoalaBear::bits()
         );
         let num_f_elms = C::N::bits() / C::F::bits();
         let mut state: [Var<C::N>; SPONGE_SIZE] = [

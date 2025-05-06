@@ -9,7 +9,7 @@ use openvm_sdk::{
     prover::AppProver,
     Sdk, StdIn,
 };
-use openvm_stark_sdk::config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters};
+use openvm_stark_sdk::config::{koala_bear_poseidon2::KoalaBearPoseidon2Engine, FriParameters};
 use openvm_transpiler::elf::Elf;
 use serde::{Deserialize, Serialize};
 
@@ -90,7 +90,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 9a. Generate a proof
     let proof = sdk.generate_app_proof(app_pk.clone(), app_committed_exe.clone(), stdin.clone())?;
     // 9b. Generate a proof with an AppProver with custom fields
-    let app_prover = AppProver::<_, BabyBearPoseidon2Engine>::new(
+    let app_prover = AppProver::<_, KoalaBearPoseidon2Engine>::new(
         app_pk.app_vm_pk.clone(),
         app_committed_exe.clone(),
     )

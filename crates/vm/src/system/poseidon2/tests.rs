@@ -1,8 +1,8 @@
-use openvm_poseidon2_air::{default_baby_bear_rc, Poseidon2Config};
+use openvm_poseidon2_air::{default_koalabear_rc, Poseidon2Config};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 use openvm_stark_sdk::{
     dummy_airs::interaction::dummy_interaction_air::{DummyInteractionChip, DummyInteractionData},
-    p3_baby_bear::BabyBear,
+    p3_koala_bear::KoalaBear,
     utils::create_seeded_rng,
 };
 use rand::RngCore;
@@ -23,22 +23,22 @@ fn poseidon2_periphery_direct_test() {
     let mut rng = create_seeded_rng();
     const NUM_OPS: usize = 50;
     let hashes: [(
-        [BabyBear; PERIPHERY_POSEIDON2_CHUNK_SIZE],
-        [BabyBear; PERIPHERY_POSEIDON2_CHUNK_SIZE],
+        [KoalaBear; PERIPHERY_POSEIDON2_CHUNK_SIZE],
+        [KoalaBear; PERIPHERY_POSEIDON2_CHUNK_SIZE],
     ); NUM_OPS] = std::array::from_fn(|_| {
         (
-            std::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
-            std::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
+            std::array::from_fn(|_| KoalaBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
+            std::array::from_fn(|_| KoalaBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
         )
     });
 
-    let mut chip = Poseidon2PeripheryChip::<BabyBear>::new(
-        Poseidon2Config::new(default_baby_bear_rc()),
+    let mut chip = Poseidon2PeripheryChip::<KoalaBear>::new(
+        Poseidon2Config::new(default_koalabear_rc()),
         POSEIDON2_DIRECT_BUS,
         3,
     );
 
-    let outs: [[BabyBear; PERIPHERY_POSEIDON2_CHUNK_SIZE]; NUM_OPS] =
+    let outs: [[KoalaBear; PERIPHERY_POSEIDON2_CHUNK_SIZE]; NUM_OPS] =
         std::array::from_fn(|i| chip.compress_and_record(&hashes[i].0, &hashes[i].1));
 
     let mut dummy_interaction_chip = DummyInteractionChip::new_without_partition(
@@ -76,23 +76,23 @@ fn poseidon2_periphery_duplicate_hashes_test() {
     let mut rng = create_seeded_rng();
     const NUM_OPS: usize = 50;
     let hashes: [(
-        [BabyBear; PERIPHERY_POSEIDON2_CHUNK_SIZE],
-        [BabyBear; PERIPHERY_POSEIDON2_CHUNK_SIZE],
+        [KoalaBear; PERIPHERY_POSEIDON2_CHUNK_SIZE],
+        [KoalaBear; PERIPHERY_POSEIDON2_CHUNK_SIZE],
     ); NUM_OPS] = std::array::from_fn(|_| {
         (
-            std::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
-            std::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
+            std::array::from_fn(|_| KoalaBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
+            std::array::from_fn(|_| KoalaBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
         )
     });
     let counts: [u32; NUM_OPS] = std::array::from_fn(|_| rng.next_u32() % 20);
 
-    let mut chip = Poseidon2PeripheryChip::<BabyBear>::new(
-        Poseidon2Config::new(default_baby_bear_rc()),
+    let mut chip = Poseidon2PeripheryChip::<KoalaBear>::new(
+        Poseidon2Config::new(default_koalabear_rc()),
         POSEIDON2_DIRECT_BUS,
         3,
     );
 
-    let outs: [[BabyBear; PERIPHERY_POSEIDON2_CHUNK_SIZE]; NUM_OPS] = std::array::from_fn(|i| {
+    let outs: [[KoalaBear; PERIPHERY_POSEIDON2_CHUNK_SIZE]; NUM_OPS] = std::array::from_fn(|i| {
         for _ in 0..counts[i] {
             chip.compress_and_record(&hashes[i].0, &hashes[i].1);
         }

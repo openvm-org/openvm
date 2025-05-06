@@ -14,7 +14,7 @@ use openvm_stark_backend::{
     verifier::VerificationError,
 };
 use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    any_rap_arc_vec, config::koala_bear_poseidon2::KoalaBearPoseidon2Engine, engine::StarkFriEngine,
 };
 
 use super::*;
@@ -161,7 +161,7 @@ fn test_is_less_than_tuple_chip() {
 
     let trace = chip.generate_trace();
     let range_checker_trace = range_checker.generate_trace();
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
+    KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(
         any_rap_arc_vec![air, range_checker.air],
         vec![trace, range_checker_trace],
     )
@@ -181,7 +181,7 @@ fn test_is_less_than_tuple_chip_negative() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
+        KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(
             any_rap_arc_vec![air, range_checker.air],
             vec![trace, range_checker_trace]
         )
@@ -203,7 +203,7 @@ fn test_is_less_than_tuple_chip_nonzero_diff() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
+        KoalaBearPoseidon2Engine::run_simple_test_no_pis_fast(
             any_rap_arc_vec![air, range_checker.air],
             vec![trace, range_checker_trace]
         )
