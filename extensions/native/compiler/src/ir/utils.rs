@@ -25,9 +25,9 @@ pub fn prime_field_to_usize<F: PrimeField>(x: F) -> usize {
 impl<C: Config> Builder<C> {
     /// The generator for the field.
     ///
-    /// Reference: [`openvm_stark_sdk::p3_baby_bear::BabyBear`]
+    /// Reference: [`openvm_stark_sdk::p3_koala_bear::KoalaBear`]
     pub fn generator(&mut self) -> Felt<C::F> {
-        self.eval(C::F::from_canonical_u32(31))
+        self.eval(C::F::from_canonical_u32(3))
     }
 
     /// Select a variable based on a condition.
