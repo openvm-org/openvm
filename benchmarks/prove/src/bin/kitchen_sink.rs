@@ -1,4 +1,4 @@
-use std::{path::PathBuf, str::FromStr, sync::Arc};
+use std::{str::FromStr, sync::Arc};
 
 use clap::Parser;
 use eyre::Result;
@@ -7,11 +7,10 @@ use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::{instructions::exe::VmExe, SystemConfig};
 use openvm_ecc_circuit::{WeierstrassExtension, P256_CONFIG, SECP256K1_CONFIG};
-use openvm_native_recursion::halo2::utils::{CacheHalo2ParamsReader, DEFAULT_PARAMS_DIR};
 use openvm_pairing_circuit::{PairingCurve, PairingExtension};
 use openvm_sdk::{
-    commit::commit_app_exe, config::SdkVmConfig, prover::ContinuationProver,
-    DefaultStaticVerifierPvHandler, Sdk, StdIn,
+    commit::commit_app_exe, config::SdkVmConfig, keygen::AggStarkProvingKey, prover::StarkProver,
+    Sdk, StdIn,
 };
 use openvm_stark_sdk::{
     bench::run_with_metric_collection, config::koala_bear_poseidon2::KoalaBearPoseidon2Engine,
@@ -67,28 +66,18 @@ fn main() -> Result<()> {
     let app_pk = Arc::new(sdk.app_keygen(app_config)?);
     let app_committed_exe = commit_app_exe(app_pk.app_fri_params(), exe);
 
-    let agg_config = args.agg_config();
-    let halo2_params_reader = CacheHalo2ParamsReader::new(
-        args.kzg_params_dir
-            .clone()
-            .unwrap_or(PathBuf::from(DEFAULT_PARAMS_DIR)),
-    );
-    let full_agg_pk = sdk.agg_keygen(
-        agg_config,
-        &halo2_params_reader,
-        &DefaultStaticVerifierPvHandler,
-    )?;
+    let agg_stark_config = args.agg_config().agg_stark_config;
+    let agg_stark_pk = AggStarkProvingKey::keygen(agg_stark_config);
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let mut prover = ContinuationProver::<_, KoalaBearPoseidon2Engine>::new(
-            &halo2_params_reader,
+        let mut prover = StarkProver::<_, KoalaBearPoseidon2Engine>::new(
             app_pk,
             app_committed_exe,
-            full_agg_pk,
+            agg_stark_pk,
         );
         prover.set_program_name("kitchen_sink");
         let stdin = StdIn::default();
-        let _proof = prover.generate_proof_for_evm(stdin);
+        let _proof = prover.generate_root_verifier_input(stdin);
         Ok(())
     })
 }

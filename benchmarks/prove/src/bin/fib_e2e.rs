@@ -1,16 +1,15 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::instructions::{exe::VmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES};
-use openvm_native_recursion::halo2::utils::{CacheHalo2ParamsReader, DEFAULT_PARAMS_DIR};
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_sdk::{
-    commit::commit_app_exe, prover::ContinuationProver, DefaultStaticVerifierPvHandler, Sdk, StdIn,
+    commit::commit_app_exe, keygen::AggStarkProvingKey, prover::StarkProver, Sdk, StdIn,
 };
 use openvm_stark_sdk::{
     bench::run_with_metric_collection, config::koala_bear_poseidon2::KoalaBearPoseidon2Engine,
@@ -33,17 +32,8 @@ async fn main() -> Result<()> {
     let agg_config = args.agg_config();
 
     let sdk = Sdk::new();
-    let halo2_params_reader = CacheHalo2ParamsReader::new(
-        args.kzg_params_dir
-            .clone()
-            .unwrap_or(PathBuf::from(DEFAULT_PARAMS_DIR)),
-    );
     let app_pk = Arc::new(sdk.app_keygen(app_config)?);
-    let full_agg_pk = sdk.agg_keygen(
-        agg_config,
-        &halo2_params_reader,
-        &DefaultStaticVerifierPvHandler,
-    )?;
+    let agg_stark_pk = AggStarkProvingKey::keygen(agg_config.agg_stark_config);
     let elf = args.build_bench_program("fibonacci")?;
     let exe = VmExe::from_elf(
         elf,
@@ -58,14 +48,13 @@ async fn main() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&n);
     run_with_metric_collection("OUTPUT_PATH", || {
-        let mut e2e_prover = ContinuationProver::<_, KoalaBearPoseidon2Engine>::new(
-            &halo2_params_reader,
+        let mut prover = StarkProver::<_, KoalaBearPoseidon2Engine>::new(
             app_pk,
             app_committed_exe,
-            full_agg_pk,
+            agg_stark_pk,
         );
-        e2e_prover.set_program_name("fib_e2e");
-        let _proof = e2e_prover.generate_proof_for_evm(stdin);
+        prover.set_program_name("fib_e2e");
+        let _proof = prover.generate_root_verifier_input(stdin);
     });
 
     Ok(())
