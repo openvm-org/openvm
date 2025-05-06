@@ -8,8 +8,9 @@ use openvm_circuit::arch::{
     testing::{memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
     ExecutionBridge, Streams,
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    var_range::SharedVariableRangeCheckerChip,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -24,16 +25,41 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
-    verifier::VerificationError,
 };
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::{Rv32HintStoreAir, Rv32HintStoreChip, Rv32HintStoreCols, Rv32HintStoreStep};
-use crate::adapters::decompose;
+use crate::{adapters::decompose, test_utils::get_verification_error};
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
+
+fn create_test_chip(
+    tester: &mut VmChipTestBuilder<F>,
+) -> (
+    Rv32HintStoreChip<F>,
+    SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+) {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+
+    let mut chip = Rv32HintStoreChip::<F>::new(
+        Rv32HintStoreAir::new(
+            ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
+            tester.memory_bridge(),
+            bitwise_chip.bus(),
+            0,
+            tester.address_bits(),
+        ),
+        Rv32HintStoreStep::new(bitwise_chip.clone(), tester.address_bits(), 0),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
+    );
+    chip.step
+        .set_streams(Arc::new(Mutex::new(Streams::default())));
+    (chip, bitwise_chip)
+}
 
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
@@ -122,34 +148,16 @@ fn set_and_execute_buffer(
 /// Randomly generate computations and execute, ensuring that the generated trace
 /// passes all constraints.
 ///////////////////////////////////////////////////////////////////////////////////////
+
 #[test]
 fn rand_hintstore_test() {
     setup_tracing();
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-
-    let range_checker_chip = tester.memory_controller().range_checker.clone();
-
-    let mut chip = Rv32HintStoreChip::<F>::new(
-        Rv32HintStoreAir::new(
-            ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
-            tester.memory_bridge(),
-            bitwise_chip.bus(),
-            0,
-            tester.address_bits(),
-        ),
-        Rv32HintStoreStep::new(bitwise_chip.clone(), tester.address_bits(), 0),
-        MAX_INS_CAPACITY,
-        tester.memory_helper(),
-    );
-    chip.step
-        .set_streams(Arc::new(Mutex::new(Streams::default())));
-
-    let num_tests: usize = 8;
-    for _ in 0..num_tests {
+    let (mut chip, bitwise_chip) = create_test_chip(&mut tester);
+    let num_ops: usize = 100;
+    for _ in 0..num_ops {
         if rng.gen_bool(0.5) {
             set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW);
         } else {
@@ -157,7 +165,6 @@ fn rand_hintstore_test() {
         }
     }
 
-    drop(range_checker_chip);
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
@@ -166,68 +173,44 @@ fn rand_hintstore_test() {
 // NEGATIVE TESTS
 //
 // Given a fake trace of a single operation, setup a chip and run the test. We replace
-// the write part of the trace and check that the core chip throws the expected error.
-// A dummy adaptor is used so memory interactions don't indirectly cause false passes.
+// part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[allow(clippy::too_many_arguments)]
 fn run_negative_hintstore_test(
     opcode: Rv32HintStoreOpcode,
-    data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
-    expected_error: VerificationError,
+    prank_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+    interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-
-    let range_checker_chip = tester.memory_controller().range_checker.clone();
-
-    let mut chip = Rv32HintStoreChip::<F>::new(
-        Rv32HintStoreAir::new(
-            ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
-            tester.memory_bridge(),
-            bitwise_chip.bus(),
-            0,
-            tester.address_bits(),
-        ),
-        Rv32HintStoreStep::new(bitwise_chip.clone(), tester.address_bits(), 0),
-        MAX_INS_CAPACITY,
-        tester.memory_helper(),
-    );
-    chip.step
-        .set_streams(Arc::new(Mutex::new(Streams::default())));
+    let (mut chip, bitwise_chip) = create_test_chip(&mut tester);
 
     set_and_execute(&mut tester, &mut chip, &mut rng, opcode);
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
         let cols: &mut Rv32HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
-        if let Some(data) = data {
+        if let Some(data) = prank_data {
             cols.data = data.map(F::from_canonical_u32);
         }
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
-    drop(range_checker_chip);
     disable_debug_builder();
     let tester = tester
         .build()
         .load_and_prank_trace(chip, modify_trace)
         .load(bitwise_chip)
         .finalize();
-    tester.simple_test_with_expected_error(expected_error);
+    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
 }
 
 #[test]
 fn negative_hintstore_tests() {
-    run_negative_hintstore_test(
-        HINT_STOREW,
-        Some([92, 187, 45, 280]),
-        VerificationError::ChallengePhaseError,
-    );
+    run_negative_hintstore_test(HINT_STOREW, Some([92, 187, 45, 280]), true);
 }
+
 ///////////////////////////////////////////////////////////////////////////////////////
 /// SANITY TESTS
 ///
@@ -238,26 +221,10 @@ fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+    let (mut chip, _) = create_test_chip(&mut tester);
 
-    let mut chip = Rv32HintStoreChip::<F>::new(
-        Rv32HintStoreAir::new(
-            ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
-            tester.memory_bridge(),
-            bitwise_chip.bus(),
-            0,
-            tester.address_bits(),
-        ),
-        Rv32HintStoreStep::new(bitwise_chip.clone(), tester.address_bits(), 0),
-        MAX_INS_CAPACITY,
-        tester.memory_helper(),
-    );
-    chip.step
-        .set_streams(Arc::new(Mutex::new(Streams::default())));
-
-    let num_tests: usize = 100;
-    for _ in 0..num_tests {
+    let num_ops: usize = 10;
+    for _ in 0..num_ops {
         set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW);
     }
 }

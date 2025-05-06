@@ -4781,6 +4781,7 @@ dependencies = [
  "serde",
  "serde-big-array",
  "strum",
+ "test-case",
 ]
 
 [[package]]
@@ -4948,6 +4949,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.0.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.0.0#884f8e6aabf72bde00dc51f1f1121277bff73b1e"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -4975,6 +4977,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.0.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.0.0#884f8e6aabf72bde00dc51f1f1121277bff73b1e"
 dependencies = [
  "derivative",
  "derive_more 0.99.19",
@@ -4991,7 +4994,6 @@ dependencies = [
  "p3-fri",
  "p3-goldilocks",
  "p3-keccak",
- "p3-koala-bear",
  "p3-merkle-tree",
  "p3-poseidon",
  "p3-poseidon2",
@@ -5268,20 +5270,6 @@ dependencies = [
  "p3-util",
  "rand",
  "tracing",
-]
-
-[[package]]
-name = "p3-koala-bear"
-version = "0.1.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1ba4e5c#1ba4e5c40417f4f7aae86bcca56b6484b4b2490b"
-dependencies = [
- "p3-field",
- "p3-mds",
- "p3-monty-31",
- "p3-poseidon2",
- "p3-symmetric",
- "rand",
- "serde",
 ]
 
 [[package]]

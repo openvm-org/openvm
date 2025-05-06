@@ -1,17 +1,14 @@
 use std::{array, borrow::BorrowMut};
 
-use openvm_circuit::{
-    arch::{
-        testing::{TestAdapterChip, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        NewVmChipWrapper, VmAirWrapper,
-    },
-    utils::generate_long_number,
+use openvm_circuit::arch::{
+    testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    InstructionExecutor, VmAirWrapper,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
-use openvm_rv32im_transpiler::ShiftOpcode;
+use openvm_instructions::LocalOpcode;
+use openvm_rv32im_transpiler::ShiftOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::FieldAlgebra,
@@ -20,20 +17,19 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
-    verifier::VerificationError,
-    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use rand::Rng;
+use rand::{rngs::StdRng, Rng};
+use test_case::test_case;
 
-use super::{
-    core::run_shift, Rv32ShiftChip, Rv32ShiftStep, ShiftCoreAir, ShiftCoreCols, ShiftStep,
-};
+use super::{core::run_shift, Rv32ShiftChip, ShiftCoreAir, ShiftCoreCols, ShiftStep};
 use crate::{
     adapters::{
         Rv32BaseAluAdapterAir, Rv32BaseAluAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
-    test_utils::{generate_rv32_is_type_immediate, rv32_rand_write_register_or_imm},
+    test_utils::{
+        generate_rv32_is_type_immediate, get_verification_error, rv32_rand_write_register_or_imm,
+    },
 };
 
 type F = BabyBear;
@@ -74,309 +70,287 @@ fn create_test_chip(
     (chip, bitwise_chip)
 }
 
+#[allow(clippy::too_many_arguments)]
+fn set_and_execute<E: InstructionExecutor<F>>(
+    tester: &mut VmChipTestBuilder<F>,
+    chip: &mut E,
+    rng: &mut StdRng,
+    opcode: ShiftOpcode,
+    b: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
+    is_imm: Option<bool>,
+    c: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
+) {
+    let b = b.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
+    let (c_imm, c) = if is_imm.unwrap_or(rng.gen_bool(0.5)) {
+        let (imm, c) = if let Some(c) = c {
+            ((u32::from_le_bytes(c) & 0xFFFFFF) as usize, c)
+        } else {
+            generate_rv32_is_type_immediate(rng)
+        };
+        (Some(imm), c)
+    } else {
+        (
+            None,
+            c.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX))),
+        )
+    };
+    let (instruction, rd) = rv32_rand_write_register_or_imm(
+        tester,
+        b,
+        c,
+        c_imm,
+        opcode.global_opcode().as_usize(),
+        rng,
+    );
+    tester.execute(chip, &instruction);
+
+    let (a, _, _) = run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
+    assert_eq!(
+        a.map(F::from_canonical_u8),
+        tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
+    )
+}
+
 //////////////////////////////////////////////////////////////////////////////////////
 // POSITIVE TESTS
 //
 // Randomly generate computations and execute, ensuring that the generated trace
 // passes all constraints.
 //////////////////////////////////////////////////////////////////////////////////////
-
+#[test_case(SLL, 100)]
+#[test_case(SRL, 100)]
+#[test_case(SRA, 100)]
 fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
-
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
     for _ in 0..num_ops {
-        let b = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng)
-            .map(|x| x as u8);
-        let (c_imm, c) = if rng.gen_bool(0.5) {
-            (
-                None,
-                generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng)
-                    .map(|x| x as u8),
-            )
-        } else {
-            let (imm, c) = generate_rv32_is_type_immediate(&mut rng);
-            (Some(imm), c)
-        };
-
-        let (instruction, rd) = rv32_rand_write_register_or_imm(
-            &mut tester,
-            b,
-            c,
-            c_imm,
-            opcode.global_opcode().as_usize(),
-            &mut rng,
-        );
-        tester.execute(&mut chip, &instruction);
-
-        let (a, _, _) = run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
-        assert_eq!(
-            a.map(F::from_canonical_u8),
-            tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
-        )
+        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None, None);
     }
 
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
-#[test]
-fn rv32_shift_sll_rand_test() {
-    run_rv32_shift_rand_test(ShiftOpcode::SLL, 100);
-}
-
-#[test]
-fn rv32_shift_srl_rand_test() {
-    run_rv32_shift_rand_test(ShiftOpcode::SRL, 100);
-}
-
-#[test]
-fn rv32_shift_sra_rand_test() {
-    run_rv32_shift_rand_test(ShiftOpcode::SRA, 100);
-}
-
 //////////////////////////////////////////////////////////////////////////////////////
 // NEGATIVE TESTS
 //
 // Given a fake trace of a single operation, setup a chip and run the test. We replace
-// the write part of the trace and check that the core chip throws the expected error.
-// A dummy adapter is used so memory interactions don't indirectly cause false passes.
+// part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
-// type Rv32ShiftTestChip<F> =
-//     VmChipWrapper<F, TestAdapterChip<F>, ShiftStep<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
+#[derive(Clone, Copy, Default, PartialEq)]
+struct ShiftPrankValues<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub bit_shift: Option<u32>,
+    pub bit_multiplier_left: Option<u32>,
+    pub bit_multiplier_right: Option<u32>,
+    pub b_sign: Option<u32>,
+    pub bit_shift_marker: Option<[u32; LIMB_BITS]>,
+    pub limb_shift_marker: Option<[u32; NUM_LIMBS]>,
+    pub bit_shift_carry: Option<[u32; NUM_LIMBS]>,
+}
 
-// #[derive(Clone, Copy, Default, PartialEq)]
-// struct ShiftPrankValues<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-//     pub bit_shift: Option<u32>,
-//     pub bit_multiplier_left: Option<u32>,
-//     pub bit_multiplier_right: Option<u32>,
-//     pub b_sign: Option<u32>,
-//     pub bit_shift_marker: Option<[u32; LIMB_BITS]>,
-//     pub limb_shift_marker: Option<[u32; NUM_LIMBS]>,
-//     pub bit_shift_carry: Option<[u32; NUM_LIMBS]>,
-// }
+#[allow(clippy::too_many_arguments)]
+fn run_negative_shift_test(
+    opcode: ShiftOpcode,
+    prank_a: [u32; RV32_REGISTER_NUM_LIMBS],
+    b: [u8; RV32_REGISTER_NUM_LIMBS],
+    c: [u8; RV32_REGISTER_NUM_LIMBS],
+    prank_vals: ShiftPrankValues<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+    interaction_error: bool,
+) {
+    let mut rng = create_seeded_rng();
+    let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
+    let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
-// #[allow(clippy::too_many_arguments)]
-// fn run_rv32_shift_negative_test(
-//     opcode: ShiftOpcode,
-//     a: [u32; RV32_REGISTER_NUM_LIMBS],
-//     b: [u32; RV32_REGISTER_NUM_LIMBS],
-//     c: [u32; RV32_REGISTER_NUM_LIMBS],
-//     prank_vals: ShiftPrankValues<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
-//     interaction_error: bool,
-// ) {
-//     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
-//     let (mut chip, bitwise_chip) = create_test_chip(&tester);
-//     let range_checker_chip = tester.range_checker();
+    set_and_execute(
+        &mut tester,
+        &mut chip,
+        &mut rng,
+        opcode,
+        Some(b),
+        Some(false),
+        Some(c),
+    );
 
-//     tester.execute(
-//         &mut chip,
-//         &Instruction::from_usize(opcode.global_opcode(), [0, 0, 0, 1, 1]),
-//     );
+    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut values = trace.row_slice(0).to_vec();
+        let cols: &mut ShiftCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
+            values.split_at_mut(adapter_width).1.borrow_mut();
 
-//     let bit_shift = prank_vals
-//         .bit_shift
-//         .unwrap_or(c[0] % (RV32_CELL_BITS as u32));
-//     let bit_shift_carry = prank_vals
-//         .bit_shift_carry
-//         .unwrap_or(array::from_fn(|i| match opcode {
-//             ShiftOpcode::SLL => b[i] >> ((RV32_CELL_BITS as u32) - bit_shift),
-//             _ => b[i] % (1 << bit_shift),
-//         }));
+        cols.a = prank_a.map(F::from_canonical_u32);
+        if let Some(bit_multiplier_left) = prank_vals.bit_multiplier_left {
+            cols.bit_multiplier_left = F::from_canonical_u32(bit_multiplier_left);
+        }
+        if let Some(bit_multiplier_right) = prank_vals.bit_multiplier_right {
+            cols.bit_multiplier_right = F::from_canonical_u32(bit_multiplier_right);
+        }
+        if let Some(b_sign) = prank_vals.b_sign {
+            cols.b_sign = F::from_canonical_u32(b_sign);
+        }
+        if let Some(bit_shift_marker) = prank_vals.bit_shift_marker {
+            cols.bit_shift_marker = bit_shift_marker.map(F::from_canonical_u32);
+        }
+        if let Some(limb_shift_marker) = prank_vals.limb_shift_marker {
+            cols.limb_shift_marker = limb_shift_marker.map(F::from_canonical_u32);
+        }
+        if let Some(bit_shift_carry) = prank_vals.bit_shift_carry {
+            cols.bit_shift_carry = bit_shift_carry.map(F::from_canonical_u32);
+        }
 
-//     range_checker_chip.clear();
-//     range_checker_chip.add_count(bit_shift, RV32_CELL_BITS.ilog2() as usize);
-//     for (a_val, carry_val) in a.iter().zip(bit_shift_carry.iter()) {
-//         range_checker_chip.add_count(*a_val, RV32_CELL_BITS);
-//         range_checker_chip.add_count(*carry_val, bit_shift as usize);
-//     }
+        *trace = RowMajorMatrix::new(values, trace.width());
+    };
 
-//     let trace_width = chip.trace_width();
-//     let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(chip, modify_trace)
+        .load(bitwise_chip)
+        .finalize();
+    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+}
 
-//     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-//         let mut values = trace.row_slice(0).to_vec();
-//         let cols: &mut ShiftCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
-//             values.split_at_mut(adapter_width).1.borrow_mut();
+#[test]
+fn rv32_shift_wrong_negative_test() {
+    let a = [1, 0, 0, 0];
+    let b = [1, 0, 0, 0];
+    let c = [1, 0, 0, 0];
+    let prank_vals = Default::default();
+    run_negative_shift_test(SLL, a, b, c, prank_vals, false);
+    run_negative_shift_test(SRL, a, b, c, prank_vals, false);
+    run_negative_shift_test(SRA, a, b, c, prank_vals, false);
+}
 
-//         cols.a = a.map(F::from_canonical_u32);
-//         if let Some(bit_multiplier_left) = prank_vals.bit_multiplier_left {
-//             cols.bit_multiplier_left = F::from_canonical_u32(bit_multiplier_left);
-//         }
-//         if let Some(bit_multiplier_right) = prank_vals.bit_multiplier_right {
-//             cols.bit_multiplier_right = F::from_canonical_u32(bit_multiplier_right);
-//         }
-//         if let Some(b_sign) = prank_vals.b_sign {
-//             cols.b_sign = F::from_canonical_u32(b_sign);
-//         }
-//         if let Some(bit_shift_marker) = prank_vals.bit_shift_marker {
-//             cols.bit_shift_marker = bit_shift_marker.map(F::from_canonical_u32);
-//         }
-//         if let Some(limb_shift_marker) = prank_vals.limb_shift_marker {
-//             cols.limb_shift_marker = limb_shift_marker.map(F::from_canonical_u32);
-//         }
-//         if let Some(bit_shift_carry) = prank_vals.bit_shift_carry {
-//             cols.bit_shift_carry = bit_shift_carry.map(F::from_canonical_u32);
-//         }
+#[test]
+fn rv32_sll_wrong_bit_shift_negative_test() {
+    let a = [0, 4, 4, 4];
+    let b = [1, 1, 1, 1];
+    let c = [9, 10, 100, 0];
+    let prank_vals = ShiftPrankValues {
+        bit_shift: Some(2),
+        bit_multiplier_left: Some(4),
+        bit_shift_marker: Some([0, 0, 1, 0, 0, 0, 0, 0]),
+        ..Default::default()
+    };
+    run_negative_shift_test(SLL, a, b, c, prank_vals, true);
+}
 
-//         *trace = RowMajorMatrix::new(values, trace_width);
-//     };
+#[test]
+fn rv32_sll_wrong_limb_shift_negative_test() {
+    let a = [0, 0, 2, 2];
+    let b = [1, 1, 1, 1];
+    let c = [9, 0, 0, 0];
+    let prank_vals = ShiftPrankValues {
+        limb_shift_marker: Some([0, 0, 1, 0]),
+        ..Default::default()
+    };
+    run_negative_shift_test(SLL, a, b, c, prank_vals, true);
+}
 
-//     disable_debug_builder();
-//     let tester = tester
-//         .build()
-//         .load_and_prank_trace(chip, modify_trace)
-//         .load(bitwise_chip)
-//         .finalize();
-//     tester.simple_test_with_expected_error(if interaction_error {
-//         VerificationError::ChallengePhaseError
-//     } else {
-//         VerificationError::OodEvaluationMismatch
-//     });
-// }
+#[test]
+fn rv32_sll_wrong_bit_carry_negative_test() {
+    let a = [0, 510, 510, 510];
+    let b = [255, 255, 255, 255];
+    let c = [9, 0, 0, 0];
+    let prank_vals = ShiftPrankValues {
+        bit_shift_carry: Some([0, 0, 0, 0]),
+        ..Default::default()
+    };
+    run_negative_shift_test(SLL, a, b, c, prank_vals, true);
+}
 
-// #[test]
-// fn rv32_shift_wrong_negative_test() {
-//     let a = [1, 0, 0, 0];
-//     let b = [1, 0, 0, 0];
-//     let c = [1, 0, 0, 0];
-//     let prank_vals = Default::default();
-//     run_rv32_shift_negative_test(ShiftOpcode::SLL, a, b, c, prank_vals, false);
-//     run_rv32_shift_negative_test(ShiftOpcode::SRL, a, b, c, prank_vals, false);
-//     run_rv32_shift_negative_test(ShiftOpcode::SRA, a, b, c, prank_vals, false);
-// }
+#[test]
+fn rv32_sll_wrong_bit_mult_side_negative_test() {
+    let a = [128, 128, 128, 0];
+    let b = [1, 1, 1, 1];
+    let c = [9, 0, 0, 0];
+    let prank_vals = ShiftPrankValues {
+        bit_multiplier_left: Some(0),
+        bit_multiplier_right: Some(1),
+        ..Default::default()
+    };
+    run_negative_shift_test(SLL, a, b, c, prank_vals, false);
+}
 
-// #[test]
-// fn rv32_sll_wrong_bit_shift_negative_test() {
-//     let a = [0, 4, 4, 4];
-//     let b = [1, 1, 1, 1];
-//     let c = [9, 10, 100, 0];
-//     let prank_vals = ShiftPrankValues {
-//         bit_shift: Some(2),
-//         bit_multiplier_left: Some(4),
-//         bit_shift_marker: Some([0, 0, 1, 0, 0, 0, 0, 0]),
-//         ..Default::default()
-//     };
-//     run_rv32_shift_negative_test(ShiftOpcode::SLL, a, b, c, prank_vals, true);
-// }
+#[test]
+fn rv32_srl_wrong_bit_shift_negative_test() {
+    let a = [0, 0, 32, 0];
+    let b = [0, 0, 0, 128];
+    let c = [9, 0, 0, 0];
+    let prank_vals = ShiftPrankValues {
+        bit_shift: Some(2),
+        bit_multiplier_left: Some(4),
+        bit_shift_marker: Some([0, 0, 1, 0, 0, 0, 0, 0]),
+        ..Default::default()
+    };
+    run_negative_shift_test(SRL, a, b, c, prank_vals, false);
+}
 
-// #[test]
-// fn rv32_sll_wrong_limb_shift_negative_test() {
-//     let a = [0, 0, 2, 2];
-//     let b = [1, 1, 1, 1];
-//     let c = [9, 0, 0, 0];
-//     let prank_vals = ShiftPrankValues {
-//         limb_shift_marker: Some([0, 0, 1, 0]),
-//         ..Default::default()
-//     };
-//     run_rv32_shift_negative_test(ShiftOpcode::SLL, a, b, c, prank_vals, true);
-// }
+#[test]
+fn rv32_srl_wrong_limb_shift_negative_test() {
+    let a = [0, 64, 0, 0];
+    let b = [0, 0, 0, 128];
+    let c = [9, 0, 0, 0];
+    let prank_vals = ShiftPrankValues {
+        limb_shift_marker: Some([0, 1, 0, 0]),
+        ..Default::default()
+    };
+    run_negative_shift_test(SRL, a, b, c, prank_vals, false);
+}
 
-// #[test]
-// fn rv32_sll_wrong_bit_carry_negative_test() {
-//     let a = [0, 510, 510, 510];
-//     let b = [255, 255, 255, 255];
-//     let c = [9, 0, 0, 0];
-//     let prank_vals = ShiftPrankValues {
-//         bit_shift_carry: Some([0, 0, 0, 0]),
-//         ..Default::default()
-//     };
-//     run_rv32_shift_negative_test(ShiftOpcode::SLL, a, b, c, prank_vals, true);
-// }
+#[test]
+fn rv32_srx_wrong_bit_mult_side_negative_test() {
+    let a = [0, 0, 0, 0];
+    let b = [0, 0, 0, 128];
+    let c = [9, 0, 0, 0];
+    let prank_vals = ShiftPrankValues {
+        bit_multiplier_left: Some(1),
+        bit_multiplier_right: Some(0),
+        ..Default::default()
+    };
+    run_negative_shift_test(SRL, a, b, c, prank_vals, false);
+    run_negative_shift_test(SRA, a, b, c, prank_vals, false);
+}
 
-// #[test]
-// fn rv32_sll_wrong_bit_mult_side_negative_test() {
-//     let a = [128, 128, 128, 0];
-//     let b = [1, 1, 1, 1];
-//     let c = [9, 0, 0, 0];
-//     let prank_vals = ShiftPrankValues {
-//         bit_multiplier_left: Some(0),
-//         bit_multiplier_right: Some(1),
-//         ..Default::default()
-//     };
-//     run_rv32_shift_negative_test(ShiftOpcode::SLL, a, b, c, prank_vals, false);
-// }
+#[test]
+fn rv32_sra_wrong_bit_shift_negative_test() {
+    let a = [0, 0, 224, 255];
+    let b = [0, 0, 0, 128];
+    let c = [9, 0, 0, 0];
+    let prank_vals = ShiftPrankValues {
+        bit_shift: Some(2),
+        bit_multiplier_left: Some(4),
+        bit_shift_marker: Some([0, 0, 1, 0, 0, 0, 0, 0]),
+        ..Default::default()
+    };
+    run_negative_shift_test(SRA, a, b, c, prank_vals, false);
+}
 
-// #[test]
-// fn rv32_srl_wrong_bit_shift_negative_test() {
-//     let a = [0, 0, 32, 0];
-//     let b = [0, 0, 0, 128];
-//     let c = [9, 0, 0, 0];
-//     let prank_vals = ShiftPrankValues {
-//         bit_shift: Some(2),
-//         bit_multiplier_left: Some(4),
-//         bit_shift_marker: Some([0, 0, 1, 0, 0, 0, 0, 0]),
-//         ..Default::default()
-//     };
-//     run_rv32_shift_negative_test(ShiftOpcode::SRL, a, b, c, prank_vals, false);
-// }
+#[test]
+fn rv32_sra_wrong_limb_shift_negative_test() {
+    let a = [0, 192, 255, 255];
+    let b = [0, 0, 0, 128];
+    let c = [9, 0, 0, 0];
+    let prank_vals = ShiftPrankValues {
+        limb_shift_marker: Some([0, 1, 0, 0]),
+        ..Default::default()
+    };
+    run_negative_shift_test(SRA, a, b, c, prank_vals, false);
+}
 
-// #[test]
-// fn rv32_srl_wrong_limb_shift_negative_test() {
-//     let a = [0, 64, 0, 0];
-//     let b = [0, 0, 0, 128];
-//     let c = [9, 0, 0, 0];
-//     let prank_vals = ShiftPrankValues {
-//         limb_shift_marker: Some([0, 1, 0, 0]),
-//         ..Default::default()
-//     };
-//     run_rv32_shift_negative_test(ShiftOpcode::SRL, a, b, c, prank_vals, false);
-// }
-
-// #[test]
-// fn rv32_srx_wrong_bit_mult_side_negative_test() {
-//     let a = [0, 0, 0, 0];
-//     let b = [0, 0, 0, 128];
-//     let c = [9, 0, 0, 0];
-//     let prank_vals = ShiftPrankValues {
-//         bit_multiplier_left: Some(1),
-//         bit_multiplier_right: Some(0),
-//         ..Default::default()
-//     };
-//     run_rv32_shift_negative_test(ShiftOpcode::SRL, a, b, c, prank_vals, false);
-//     run_rv32_shift_negative_test(ShiftOpcode::SRA, a, b, c, prank_vals, false);
-// }
-
-// #[test]
-// fn rv32_sra_wrong_bit_shift_negative_test() {
-//     let a = [0, 0, 224, 255];
-//     let b = [0, 0, 0, 128];
-//     let c = [9, 0, 0, 0];
-//     let prank_vals = ShiftPrankValues {
-//         bit_shift: Some(2),
-//         bit_multiplier_left: Some(4),
-//         bit_shift_marker: Some([0, 0, 1, 0, 0, 0, 0, 0]),
-//         ..Default::default()
-//     };
-//     run_rv32_shift_negative_test(ShiftOpcode::SRA, a, b, c, prank_vals, false);
-// }
-
-// #[test]
-// fn rv32_sra_wrong_limb_shift_negative_test() {
-//     let a = [0, 192, 255, 255];
-//     let b = [0, 0, 0, 128];
-//     let c = [9, 0, 0, 0];
-//     let prank_vals = ShiftPrankValues {
-//         limb_shift_marker: Some([0, 1, 0, 0]),
-//         ..Default::default()
-//     };
-//     run_rv32_shift_negative_test(ShiftOpcode::SRA, a, b, c, prank_vals, false);
-// }
-
-// #[test]
-// fn rv32_sra_wrong_sign_negative_test() {
-//     let a = [0, 0, 64, 0];
-//     let b = [0, 0, 0, 128];
-//     let c = [9, 0, 0, 0];
-//     let prank_vals = ShiftPrankValues {
-//         b_sign: Some(0),
-//         ..Default::default()
-//     };
-//     run_rv32_shift_negative_test(ShiftOpcode::SRA, a, b, c, prank_vals, true);
-// }
+#[test]
+fn rv32_sra_wrong_sign_negative_test() {
+    let a = [0, 0, 64, 0];
+    let b = [0, 0, 0, 128];
+    let c = [9, 0, 0, 0];
+    let prank_vals = ShiftPrankValues {
+        b_sign: Some(0),
+        ..Default::default()
+    };
+    run_negative_shift_test(SRA, a, b, c, prank_vals, true);
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////
 /// SANITY TESTS
@@ -390,7 +364,7 @@ fn run_sll_sanity_test() {
     let y: [u8; RV32_REGISTER_NUM_LIMBS] = [91, 0, 100, 0];
     let z: [u8; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 104];
     let (result, limb_shift, bit_shift) =
-        run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(ShiftOpcode::SLL, &x, &y);
+        run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(SLL, &x, &y);
     for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
@@ -405,7 +379,7 @@ fn run_srl_sanity_test() {
     let y: [u8; RV32_REGISTER_NUM_LIMBS] = [49, 190, 190, 190];
     let z: [u8; RV32_REGISTER_NUM_LIMBS] = [110, 100, 0, 0];
     let (result, limb_shift, bit_shift) =
-        run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(ShiftOpcode::SRL, &x, &y);
+        run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(SRL, &x, &y);
     for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
@@ -420,7 +394,7 @@ fn run_sra_sanity_test() {
     let y: [u8; RV32_REGISTER_NUM_LIMBS] = [113, 20, 50, 80];
     let z: [u8; RV32_REGISTER_NUM_LIMBS] = [110, 228, 255, 255];
     let (result, limb_shift, bit_shift) =
-        run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(ShiftOpcode::SRA, &x, &y);
+        run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(SRA, &x, &y);
     for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }

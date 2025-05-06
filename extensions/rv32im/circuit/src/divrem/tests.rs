@@ -3,10 +3,9 @@ use std::{array, borrow::BorrowMut};
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_pointer, TestAdapterChip, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
-            RANGE_TUPLE_CHECKER_BUS,
+            memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
-        ExecutionBridge, InstructionExecutor, VmAirWrapper,
+        InstructionExecutor, VmAirWrapper,
     },
     utils::generate_long_number,
 };
@@ -24,11 +23,10 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
-    verifier::VerificationError,
-    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
+use test_case::test_case;
 
 use super::core::run_divrem;
 use crate::{
@@ -37,18 +35,14 @@ use crate::{
         run_mul_carries, run_sltu_diff_idx, DivRemCoreCols, DivRemCoreSpecialCase, DivRemStep,
         Rv32DivRemChip,
     },
-    DivRemCoreAir, Rv32DivRemStep,
+    test_utils::get_verification_error,
+    DivRemCoreAir,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
-
-//////////////////////////////////////////////////////////////////////////////////////
-// POSITIVE TESTS
-//
-// Randomly generate computations and execute, ensuring that the generated trace
-// passes all constraints.
-//////////////////////////////////////////////////////////////////////////////////////
+// the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
+const MAX_NUM_LIMBS: u32 = 32;
 
 fn limb_sra<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: [u32; NUM_LIMBS],
@@ -59,15 +53,58 @@ fn limb_sra<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     array::from_fn(|i| if i + shift < NUM_LIMBS { x[i] } else { ext })
 }
 
+fn create_test_chip(
+    tester: &mut VmChipTestBuilder<F>,
+) -> (
+    Rv32DivRemChip<F>,
+    SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    SharedRangeTupleCheckerChip<2>,
+) {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let range_tuple_bus = RangeTupleCheckerBus::new(
+        RANGE_TUPLE_CHECKER_BUS,
+        [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
+    );
+
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+    let range_tuple_chip = SharedRangeTupleCheckerChip::new(range_tuple_bus);
+
+    let chip = Rv32DivRemChip::<F>::new(
+        VmAirWrapper::new(
+            Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+            DivRemCoreAir::new(bitwise_bus, range_tuple_bus, DivRemOpcode::CLASS_OFFSET),
+        ),
+        DivRemStep::new(
+            Rv32MultAdapterStep::new(),
+            bitwise_chip.clone(),
+            range_tuple_chip.clone(),
+            DivRemOpcode::CLASS_OFFSET,
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
+    );
+
+    (chip, bitwise_chip, range_tuple_chip)
+}
+
 #[allow(clippy::too_many_arguments)]
-fn run_rv32_divrem_rand_write_execute<E: InstructionExecutor<F>>(
-    opcode: DivRemOpcode,
+fn set_and_execute<E: InstructionExecutor<F>>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut E,
-    b: [u32; RV32_REGISTER_NUM_LIMBS],
-    c: [u32; RV32_REGISTER_NUM_LIMBS],
     rng: &mut StdRng,
+    opcode: DivRemOpcode,
+    b: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+    c: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
 ) {
+    let b = b.unwrap_or(generate_long_number::<
+        RV32_REGISTER_NUM_LIMBS,
+        RV32_CELL_BITS,
+    >(rng));
+    let c = c.unwrap_or(limb_sra::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+        generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(rng),
+        rng.gen_range(0..(RV32_REGISTER_NUM_LIMBS - 1)),
+    ));
+
     let rs1 = gen_pointer(rng, 4);
     let rs2 = gen_pointer(rng, 4);
     let rd = gen_pointer(rng, 4);
@@ -91,466 +128,383 @@ fn run_rv32_divrem_rand_write_execute<E: InstructionExecutor<F>>(
     );
 }
 
-fn run_rv32_divrem_rand_test(opcode: DivRemOpcode, num_ops: usize) {
-    // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
-    const MAX_NUM_LIMBS: u32 = 32;
+//////////////////////////////////////////////////////////////////////////////////////
+// POSITIVE TESTS
+//
+// Randomly generate computations and execute, ensuring that the generated trace
+// passes all constraints.
+//////////////////////////////////////////////////////////////////////////////////////
+
+#[test_case(DivRemOpcode::DIV, 100)]
+#[test_case(DivRemOpcode::DIVU, 100)]
+#[test_case(DivRemOpcode::REM, 100)]
+#[test_case(DivRemOpcode::REMU, 100)]
+fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
-
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let range_tuple_bus = RangeTupleCheckerBus::new(
-        RANGE_TUPLE_CHECKER_BUS,
-        [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
-    );
-
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let range_tuple_checker = SharedRangeTupleCheckerChip::new(range_tuple_bus);
-
     let mut tester = VmChipTestBuilder::default();
-
-    let mut chip = Rv32DivRemChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-            DivRemCoreAir::new(bitwise_bus, range_tuple_bus, DivRemOpcode::CLASS_OFFSET),
-        ),
-        DivRemStep::new(
-            Rv32MultAdapterStep::new(),
-            bitwise_chip.clone(),
-            range_tuple_checker.clone(),
-            DivRemOpcode::CLASS_OFFSET,
-        ),
-        MAX_INS_CAPACITY,
-        tester.memory_helper(),
-    );
+    let (mut chip, bitwise_chip, range_tuple_chip) = create_test_chip(&mut tester);
 
     for _ in 0..num_ops {
-        let b = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
-        let leading_zeros = rng.gen_range(0..(RV32_REGISTER_NUM_LIMBS - 1));
-        let c = limb_sra::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
-            generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng),
-            leading_zeros,
-        );
-        run_rv32_divrem_rand_write_execute(opcode, &mut tester, &mut chip, b, c, &mut rng);
+        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
     }
 
     // Test special cases in addition to random cases (i.e. zero divisor with b > 0,
     // zero divisor with b < 0, r = 0 (3 cases), and signed overflow).
-    run_rv32_divrem_rand_write_execute(
-        opcode,
+    set_and_execute(
         &mut tester,
         &mut chip,
-        [98, 188, 163, 127],
-        [0, 0, 0, 0],
         &mut rng,
+        opcode,
+        Some([98, 188, 163, 127]),
+        Some([0, 0, 0, 0]),
     );
-    run_rv32_divrem_rand_write_execute(
-        opcode,
+    set_and_execute(
         &mut tester,
         &mut chip,
-        [98, 188, 163, 229],
-        [0, 0, 0, 0],
         &mut rng,
+        opcode,
+        Some([98, 188, 163, 229]),
+        Some([0, 0, 0, 0]),
     );
-    run_rv32_divrem_rand_write_execute(
-        opcode,
+    set_and_execute(
         &mut tester,
         &mut chip,
-        [0, 0, 0, 128],
-        [0, 1, 0, 0],
         &mut rng,
+        opcode,
+        Some([0, 0, 0, 128]),
+        Some([0, 1, 0, 0]),
     );
-    run_rv32_divrem_rand_write_execute(
-        opcode,
+    set_and_execute(
         &mut tester,
         &mut chip,
-        [0, 0, 0, 127],
-        [0, 1, 0, 0],
         &mut rng,
+        opcode,
+        Some([0, 0, 0, 127]),
+        Some([0, 1, 0, 0]),
     );
-    run_rv32_divrem_rand_write_execute(
-        opcode,
+    set_and_execute(
         &mut tester,
         &mut chip,
-        [0, 0, 0, 0],
-        [0, 0, 0, 0],
         &mut rng,
+        opcode,
+        Some([0, 0, 0, 0]),
+        Some([0, 0, 0, 0]),
     );
-    run_rv32_divrem_rand_write_execute(
-        opcode,
+    set_and_execute(
         &mut tester,
         &mut chip,
-        [0, 0, 0, 128],
-        [255, 255, 255, 255],
         &mut rng,
+        opcode,
+        Some([0, 0, 0, 0]),
+        Some([0, 0, 0, 0]),
+    );
+    set_and_execute(
+        &mut tester,
+        &mut chip,
+        &mut rng,
+        opcode,
+        Some([0, 0, 0, 128]),
+        Some([255, 255, 255, 255]),
     );
 
     let tester = tester
         .build()
         .load(chip)
         .load(bitwise_chip)
-        .load(range_tuple_checker)
+        .load(range_tuple_chip)
         .finalize();
     tester.simple_test().expect("Verification failed");
-}
-
-#[test]
-fn rv32_div_rand_test() {
-    run_rv32_divrem_rand_test(DivRemOpcode::DIV, 100);
-}
-
-#[test]
-fn rv32_divu_rand_test() {
-    run_rv32_divrem_rand_test(DivRemOpcode::DIVU, 100);
-}
-
-#[test]
-fn rv32_rem_rand_test() {
-    run_rv32_divrem_rand_test(DivRemOpcode::REM, 100);
-}
-
-#[test]
-fn rv32_remu_rand_test() {
-    run_rv32_divrem_rand_test(DivRemOpcode::REMU, 100);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
 // NEGATIVE TESTS
 //
 // Given a fake trace of a single operation, setup a chip and run the test. We replace
-// the write part of the trace and check that the core chip throws the expected error.
-// A dummy adapter is used so memory interactions don't indirectly cause false passes.
+// part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
-// type Rv32DivRemTestChip<F> =
-//     VmChipWrapper<F, TestAdapterChip<F>, DivRemStep<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
+#[derive(Default, Clone, Copy)]
+struct DivRemPrankValues<const NUM_LIMBS: usize> {
+    pub q: Option<[u32; NUM_LIMBS]>,
+    pub r: Option<[u32; NUM_LIMBS]>,
+    pub r_prime: Option<[u32; NUM_LIMBS]>,
+    pub diff_val: Option<u32>,
+    pub zero_divisor: Option<bool>,
+    pub r_zero: Option<bool>,
+}
 
-// #[derive(Default, Clone, Copy)]
-// struct DivRemPrankValues<const NUM_LIMBS: usize> {
-//     pub q: Option<[u32; NUM_LIMBS]>,
-//     pub r: Option<[u32; NUM_LIMBS]>,
-//     pub r_prime: Option<[u32; NUM_LIMBS]>,
-//     pub diff_val: Option<u32>,
-//     pub zero_divisor: Option<bool>,
-//     pub r_zero: Option<bool>,
-// }
+fn run_negative_divrem_test(
+    signed: bool,
+    b: [u32; RV32_REGISTER_NUM_LIMBS],
+    c: [u32; RV32_REGISTER_NUM_LIMBS],
+    prank_vals: DivRemPrankValues<RV32_REGISTER_NUM_LIMBS>,
+    interaction_error: bool,
+) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut chip, bitwise_chip, range_tuple_chip) = create_test_chip(&mut tester);
 
-// fn run_rv32_divrem_negative_test(
-//     signed: bool,
-//     b: [u32; RV32_REGISTER_NUM_LIMBS],
-//     c: [u32; RV32_REGISTER_NUM_LIMBS],
-//     prank_vals: &DivRemPrankValues<RV32_REGISTER_NUM_LIMBS>,
-//     interaction_error: bool,
-// ) {
-//     // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
-//     const MAX_NUM_LIMBS: u32 = 32;
-//     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-//     let range_tuple_bus = RangeTupleCheckerBus::new(
-//         RANGE_TUPLE_CHECKER_BUS,
-//         [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
-//     );
+    let (div_opcode, rem_opcode) = if signed {
+        (DivRemOpcode::DIV, DivRemOpcode::REM)
+    } else {
+        (DivRemOpcode::DIVU, DivRemOpcode::REMU)
+    };
 
-//     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-//     let range_tuple_chip = SharedRangeTupleCheckerChip::new(range_tuple_bus);
+    set_and_execute(
+        &mut tester,
+        &mut chip,
+        &mut rng,
+        div_opcode,
+        Some(b),
+        Some(c),
+    );
 
-//     let mut tester = VmChipTestBuilder::default();
-//     let mut chip = Rv32DivRemTestChip::<F>::new(
-//         TestAdapterChip::new(
-//             vec![[b.map(F::from_canonical_u32), c.map(F::from_canonical_u32)].concat(); 2],
-//             vec![None],
-//             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
-//         ),
-//         DivRemStep::new(
-//             bitwise_chip.clone(),
-//             range_tuple_chip.clone(),
-//             DivRemOpcode::CLASS_OFFSET,
-//         ),
-//         tester.offline_memory_mutex_arc(),
-//     );
+    set_and_execute(
+        &mut tester,
+        &mut chip,
+        &mut rng,
+        rem_opcode,
+        Some(b),
+        Some(c),
+    );
 
-//     let (div_opcode, rem_opcode) = if signed {
-//         (DivRemOpcode::DIV, DivRemOpcode::REM)
-//     } else {
-//         (DivRemOpcode::DIVU, DivRemOpcode::REMU)
-//     };
-//     tester.execute(
-//         &mut chip,
-//         &Instruction::from_usize(div_opcode.global_opcode(), [0, 0, 0, 1, 1]),
-//     );
-//     tester.execute(
-//         &mut chip,
-//         &Instruction::from_usize(rem_opcode.global_opcode(), [0, 0, 0, 1, 1]),
-//     );
+    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut values = trace.row_slice(0).to_vec();
+        let cols: &mut DivRemCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
+            values.split_at_mut(adapter_width).1.borrow_mut();
 
-//     let (q, r, b_sign, c_sign, q_sign, case) =
-//         run_divrem::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(signed, &b, &c);
-//     let q = prank_vals.q.unwrap_or(q);
-//     let r = prank_vals.r.unwrap_or(r);
-//     let carries =
-//         run_mul_carries::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(signed, &c, &q, &r, q_sign);
+        if let Some(q) = prank_vals.q {
+            cols.q = q.map(F::from_canonical_u32);
+        }
+        if let Some(r) = prank_vals.r {
+            cols.r = r.map(F::from_canonical_u32);
+            let r_sum = r.iter().sum::<u32>();
+            cols.r_sum_inv = F::from_canonical_u32(r_sum)
+                .try_inverse()
+                .unwrap_or(F::ZERO);
+        }
+        if let Some(r_prime) = prank_vals.r_prime {
+            cols.r_prime = r_prime.map(F::from_canonical_u32);
+            cols.r_inv = cols
+                .r_prime
+                .map(|r| (r - F::from_canonical_u32(256)).inverse());
+        }
+        if let Some(diff_val) = prank_vals.diff_val {
+            cols.lt_diff = F::from_canonical_u32(diff_val);
+        }
+        if let Some(zero_divisor) = prank_vals.zero_divisor {
+            cols.zero_divisor = F::from_bool(zero_divisor);
+        }
+        if let Some(r_zero) = prank_vals.r_zero {
+            cols.r_zero = F::from_bool(r_zero);
+        }
 
-//     range_tuple_chip.clear();
-//     for i in 0..RV32_REGISTER_NUM_LIMBS {
-//         range_tuple_chip.add_count(&[q[i], carries[i]]);
-//         range_tuple_chip.add_count(&[r[i], carries[i + RV32_REGISTER_NUM_LIMBS]]);
-//     }
+        *trace = RowMajorMatrix::new(values, trace.width());
+    };
 
-//     if let Some(diff_val) = prank_vals.diff_val {
-//         bitwise_chip.clear();
-//         if signed {
-//             let b_sign_mask = if b_sign { 1 << (RV32_CELL_BITS - 1) } else { 0 };
-//             let c_sign_mask = if c_sign { 1 << (RV32_CELL_BITS - 1) } else { 0 };
-//             bitwise_chip.request_range(
-//                 (b[RV32_REGISTER_NUM_LIMBS - 1] - b_sign_mask) << 1,
-//                 (c[RV32_REGISTER_NUM_LIMBS - 1] - c_sign_mask) << 1,
-//             );
-//         }
-//         if case == DivRemCoreSpecialCase::None {
-//             bitwise_chip.request_range(diff_val - 1, 0);
-//         }
-//     }
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(chip, modify_trace)
+        .load(bitwise_chip)
+        .load(range_tuple_chip)
+        .finalize();
+    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+}
 
-//     let trace_width = chip.trace_width();
-//     let adapter_width = BaseAir::<F>::width(chip.adapter.air());
+#[test]
+fn rv32_divrem_unsigned_wrong_q_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [98, 188, 163, 229];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [123, 34, 0, 0];
+    let prank_vals = DivRemPrankValues {
+        q: Some([245, 168, 7, 0]),
+        ..Default::default()
+    };
+    run_negative_divrem_test(false, b, c, prank_vals, true);
+}
 
-//     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-//         let mut values = trace.row_slice(0).to_vec();
-//         let cols: &mut DivRemCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
-//             values.split_at_mut(adapter_width).1.borrow_mut();
+#[test]
+fn rv32_divrem_unsigned_wrong_r_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [98, 188, 163, 229];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [123, 34, 0, 0];
+    let prank_vals = DivRemPrankValues {
+        r: Some([171, 3, 0, 0]),
+        r_prime: Some([171, 3, 0, 0]),
+        diff_val: Some(31),
+        ..Default::default()
+    };
+    run_negative_divrem_test(false, b, c, prank_vals, true);
+}
 
-//         if let Some(q) = prank_vals.q {
-//             cols.q = q.map(F::from_canonical_u32);
-//         }
-//         if let Some(r) = prank_vals.r {
-//             cols.r = r.map(F::from_canonical_u32);
-//             let r_sum = r.iter().sum::<u32>();
-//             cols.r_sum_inv = F::from_canonical_u32(r_sum)
-//                 .try_inverse()
-//                 .unwrap_or(F::ZERO);
-//         }
-//         if let Some(r_prime) = prank_vals.r_prime {
-//             cols.r_prime = r_prime.map(F::from_canonical_u32);
-//             cols.r_inv = cols
-//                 .r_prime
-//                 .map(|r| (r - F::from_canonical_u32(256)).inverse());
-//         }
-//         if let Some(diff_val) = prank_vals.diff_val {
-//             cols.lt_diff = F::from_canonical_u32(diff_val);
-//         }
-//         if let Some(zero_divisor) = prank_vals.zero_divisor {
-//             cols.zero_divisor = F::from_bool(zero_divisor);
-//         }
-//         if let Some(r_zero) = prank_vals.r_zero {
-//             cols.r_zero = F::from_bool(r_zero);
-//         }
+#[test]
+fn rv32_divrem_unsigned_high_mult_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 2, 0, 0];
+    let prank_vals = DivRemPrankValues {
+        q: Some([128, 0, 0, 1]),
+        ..Default::default()
+    };
+    run_negative_divrem_test(false, b, c, prank_vals, true);
+}
 
-//         *trace = RowMajorMatrix::new(values, trace_width);
-//     };
+#[test]
+fn rv32_divrem_unsigned_zero_divisor_wrong_r_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [254, 255, 255, 255];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
+    let prank_vals = DivRemPrankValues {
+        r: Some([255, 255, 255, 255]),
+        r_prime: Some([255, 255, 255, 255]),
+        diff_val: Some(255),
+        ..Default::default()
+    };
+    run_negative_divrem_test(false, b, c, prank_vals, true);
+}
 
-//     disable_debug_builder();
-//     let tester = tester
-//         .build()
-//         .load_and_prank_trace(chip, modify_trace)
-//         .load(bitwise_chip)
-//         .load(range_tuple_chip)
-//         .finalize();
-//     tester.simple_test_with_expected_error(if interaction_error {
-//         VerificationError::ChallengePhaseError
-//     } else {
-//         VerificationError::OodEvaluationMismatch
-//     });
-// }
+#[test]
+fn rv32_divrem_signed_wrong_q_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [98, 188, 163, 229];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [123, 34, 0, 0];
+    let prank_vals = DivRemPrankValues {
+        q: Some([74, 61, 255, 255]),
+        ..Default::default()
+    };
+    run_negative_divrem_test(true, b, c, prank_vals, true);
+}
 
-// #[test]
-// fn rv32_divrem_unsigned_wrong_q_negative_test() {
-//     let b: [u32; RV32_REGISTER_NUM_LIMBS] = [98, 188, 163, 229];
-//     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [123, 34, 0, 0];
-//     let prank_vals = DivRemPrankValues {
-//         q: Some([245, 168, 7, 0]),
-//         ..Default::default()
-//     };
-//     run_rv32_divrem_negative_test(false, b, c, &prank_vals, true);
-// }
+#[test]
+fn rv32_divrem_signed_wrong_r_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [98, 188, 163, 229];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [123, 34, 0, 0];
+    let prank_vals = DivRemPrankValues {
+        r: Some([212, 241, 255, 255]),
+        r_prime: Some([44, 14, 0, 0]),
+        diff_val: Some(20),
+        ..Default::default()
+    };
+    run_negative_divrem_test(true, b, c, prank_vals, true);
+}
 
-// #[test]
-// fn rv32_divrem_unsigned_wrong_r_negative_test() {
-//     let b: [u32; RV32_REGISTER_NUM_LIMBS] = [98, 188, 163, 229];
-//     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [123, 34, 0, 0];
-//     let prank_vals = DivRemPrankValues {
-//         r: Some([171, 3, 0, 0]),
-//         r_prime: Some([171, 3, 0, 0]),
-//         diff_val: Some(31),
-//         ..Default::default()
-//     };
-//     run_rv32_divrem_negative_test(false, b, c, &prank_vals, true);
-// }
+#[test]
+fn rv32_divrem_signed_high_mult_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 255];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 255];
+    let prank_vals = DivRemPrankValues {
+        q: Some([1, 0, 0, 1]),
+        ..Default::default()
+    };
+    run_negative_divrem_test(true, b, c, prank_vals, true);
+}
 
-// #[test]
-// fn rv32_divrem_unsigned_high_mult_negative_test() {
-//     let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
-//     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 2, 0, 0];
-//     let prank_vals = DivRemPrankValues {
-//         q: Some([128, 0, 0, 1]),
-//         ..Default::default()
-//     };
-//     run_rv32_divrem_negative_test(false, b, c, &prank_vals, true);
-// }
+#[test]
+fn rv32_divrem_signed_r_wrong_sign_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [50, 0, 0, 0];
+    let prank_vals = DivRemPrankValues {
+        q: Some([31, 5, 0, 0]),
+        r: Some([242, 255, 255, 255]),
+        r_prime: Some([242, 255, 255, 255]),
+        diff_val: Some(192),
+        ..Default::default()
+    };
+    run_negative_divrem_test(true, b, c, prank_vals, false);
+}
 
-// #[test]
-// fn rv32_divrem_unsigned_zero_divisor_wrong_r_negative_test() {
-//     let b: [u32; RV32_REGISTER_NUM_LIMBS] = [254, 255, 255, 255];
-//     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
-//     let prank_vals = DivRemPrankValues {
-//         r: Some([255, 255, 255, 255]),
-//         r_prime: Some([255, 255, 255, 255]),
-//         diff_val: Some(255),
-//         ..Default::default()
-//     };
-//     run_rv32_divrem_negative_test(false, b, c, &prank_vals, true);
-// }
+#[test]
+fn rv32_divrem_signed_r_wrong_prime_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [50, 0, 0, 0];
+    let prank_vals = DivRemPrankValues {
+        q: Some([31, 5, 0, 0]),
+        r: Some([242, 255, 255, 255]),
+        r_prime: Some([14, 0, 0, 0]),
+        diff_val: Some(36),
+        ..Default::default()
+    };
+    run_negative_divrem_test(true, b, c, prank_vals, false);
+}
 
-// #[test]
-// fn rv32_divrem_signed_wrong_q_negative_test() {
-//     let b: [u32; RV32_REGISTER_NUM_LIMBS] = [98, 188, 163, 229];
-//     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [123, 34, 0, 0];
-//     let prank_vals = DivRemPrankValues {
-//         q: Some([74, 61, 255, 255]),
-//         ..Default::default()
-//     };
-//     run_rv32_divrem_negative_test(true, b, c, &prank_vals, true);
-// }
+#[test]
+fn rv32_divrem_signed_zero_divisor_wrong_r_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [254, 255, 255, 255];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
+    let prank_vals = DivRemPrankValues {
+        r: Some([255, 255, 255, 255]),
+        r_prime: Some([1, 0, 0, 0]),
+        diff_val: Some(1),
+        ..Default::default()
+    };
+    run_negative_divrem_test(true, b, c, prank_vals, true);
+}
 
-// #[test]
-// fn rv32_divrem_signed_wrong_r_negative_test() {
-//     let b: [u32; RV32_REGISTER_NUM_LIMBS] = [98, 188, 163, 229];
-//     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [123, 34, 0, 0];
-//     let prank_vals = DivRemPrankValues {
-//         r: Some([212, 241, 255, 255]),
-//         r_prime: Some([44, 14, 0, 0]),
-//         diff_val: Some(20),
-//         ..Default::default()
-//     };
-//     run_rv32_divrem_negative_test(true, b, c, &prank_vals, true);
-// }
+#[test]
+fn rv32_divrem_false_zero_divisor_flag_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [50, 0, 0, 0];
+    let prank_vals = DivRemPrankValues {
+        q: Some([29, 5, 0, 0]),
+        r: Some([86, 0, 0, 0]),
+        r_prime: Some([86, 0, 0, 0]),
+        diff_val: Some(36),
+        zero_divisor: Some(true),
+        ..Default::default()
+    };
+    run_negative_divrem_test(true, b, c, prank_vals, false);
+    run_negative_divrem_test(false, b, c, prank_vals, false);
+}
 
-// #[test]
-// fn rv32_divrem_signed_high_mult_negative_test() {
-//     let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 255];
-//     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 255];
-//     let prank_vals = DivRemPrankValues {
-//         q: Some([1, 0, 0, 1]),
-//         ..Default::default()
-//     };
-//     run_rv32_divrem_negative_test(true, b, c, &prank_vals, true);
-// }
+#[test]
+fn rv32_divrem_false_r_zero_flag_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [50, 0, 0, 0];
+    let prank_vals = DivRemPrankValues {
+        q: Some([29, 5, 0, 0]),
+        r: Some([86, 0, 0, 0]),
+        r_prime: Some([86, 0, 0, 0]),
+        diff_val: Some(36),
+        r_zero: Some(true),
+        ..Default::default()
+    };
+    run_negative_divrem_test(true, b, c, prank_vals, false);
+    run_negative_divrem_test(false, b, c, prank_vals, false);
+}
 
-// #[test]
-// fn rv32_divrem_signed_r_wrong_sign_negative_test() {
-//     let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
-//     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [50, 0, 0, 0];
-//     let prank_vals = DivRemPrankValues {
-//         q: Some([31, 5, 0, 0]),
-//         r: Some([242, 255, 255, 255]),
-//         r_prime: Some([242, 255, 255, 255]),
-//         diff_val: Some(192),
-//         ..Default::default()
-//     };
-//     run_rv32_divrem_negative_test(true, b, c, &prank_vals, false);
-// }
+#[test]
+fn rv32_divrem_unset_zero_divisor_flag_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
+    let prank_vals = DivRemPrankValues {
+        zero_divisor: Some(false),
+        ..Default::default()
+    };
+    run_negative_divrem_test(true, b, c, prank_vals, false);
+    run_negative_divrem_test(false, b, c, prank_vals, false);
+}
 
-// #[test]
-// fn rv32_divrem_signed_r_wrong_prime_negative_test() {
-//     let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
-//     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [50, 0, 0, 0];
-//     let prank_vals = DivRemPrankValues {
-//         q: Some([31, 5, 0, 0]),
-//         r: Some([242, 255, 255, 255]),
-//         r_prime: Some([14, 0, 0, 0]),
-//         diff_val: Some(36),
-//         ..Default::default()
-//     };
-//     run_rv32_divrem_negative_test(true, b, c, &prank_vals, false);
-// }
+#[test]
+fn rv32_divrem_wrong_r_zero_flag_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
+    let prank_vals = DivRemPrankValues {
+        zero_divisor: Some(false),
+        r_zero: Some(true),
+        ..Default::default()
+    };
+    run_negative_divrem_test(true, b, c, prank_vals, false);
+    run_negative_divrem_test(false, b, c, prank_vals, false);
+}
 
-// #[test]
-// fn rv32_divrem_signed_zero_divisor_wrong_r_negative_test() {
-//     let b: [u32; RV32_REGISTER_NUM_LIMBS] = [254, 255, 255, 255];
-//     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
-//     let prank_vals = DivRemPrankValues {
-//         r: Some([255, 255, 255, 255]),
-//         r_prime: Some([1, 0, 0, 0]),
-//         diff_val: Some(1),
-//         ..Default::default()
-//     };
-//     run_rv32_divrem_negative_test(true, b, c, &prank_vals, true);
-// }
-
-// #[test]
-// fn rv32_divrem_false_zero_divisor_flag_negative_test() {
-//     let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
-//     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [50, 0, 0, 0];
-//     let prank_vals = DivRemPrankValues {
-//         q: Some([29, 5, 0, 0]),
-//         r: Some([86, 0, 0, 0]),
-//         r_prime: Some([86, 0, 0, 0]),
-//         diff_val: Some(36),
-//         zero_divisor: Some(true),
-//         ..Default::default()
-//     };
-//     run_rv32_divrem_negative_test(true, b, c, &prank_vals, false);
-//     run_rv32_divrem_negative_test(false, b, c, &prank_vals, false);
-// }
-
-// #[test]
-// fn rv32_divrem_false_r_zero_flag_negative_test() {
-//     let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
-//     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [50, 0, 0, 0];
-//     let prank_vals = DivRemPrankValues {
-//         q: Some([29, 5, 0, 0]),
-//         r: Some([86, 0, 0, 0]),
-//         r_prime: Some([86, 0, 0, 0]),
-//         diff_val: Some(36),
-//         r_zero: Some(true),
-//         ..Default::default()
-//     };
-//     run_rv32_divrem_negative_test(true, b, c, &prank_vals, false);
-//     run_rv32_divrem_negative_test(false, b, c, &prank_vals, false);
-// }
-
-// #[test]
-// fn rv32_divrem_unset_zero_divisor_flag_negative_test() {
-//     let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
-//     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
-//     let prank_vals = DivRemPrankValues {
-//         zero_divisor: Some(false),
-//         ..Default::default()
-//     };
-//     run_rv32_divrem_negative_test(true, b, c, &prank_vals, false);
-//     run_rv32_divrem_negative_test(false, b, c, &prank_vals, false);
-// }
-
-// #[test]
-// fn rv32_divrem_wrong_r_zero_flag_negative_test() {
-//     let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
-//     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
-//     let prank_vals = DivRemPrankValues {
-//         zero_divisor: Some(false),
-//         r_zero: Some(true),
-//         ..Default::default()
-//     };
-//     run_rv32_divrem_negative_test(true, b, c, &prank_vals, false);
-//     run_rv32_divrem_negative_test(false, b, c, &prank_vals, false);
-// }
-
-// #[test]
-// fn rv32_divrem_unset_r_zero_flag_negative_test() {
-//     let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
-//     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
-//     let prank_vals = DivRemPrankValues {
-//         r_zero: Some(false),
-//         ..Default::default()
-//     };
-//     run_rv32_divrem_negative_test(true, b, c, &prank_vals, false);
-//     run_rv32_divrem_negative_test(false, b, c, &prank_vals, false);
-// }
+#[test]
+fn rv32_divrem_unset_r_zero_flag_negative_test() {
+    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
+    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
+    let prank_vals = DivRemPrankValues {
+        r_zero: Some(false),
+        ..Default::default()
+    };
+    run_negative_divrem_test(true, b, c, prank_vals, false);
+    run_negative_divrem_test(false, b, c, prank_vals, false);
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////
 /// SANITY TESTS

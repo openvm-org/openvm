@@ -1,33 +1,36 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAirWrapper};
+use openvm_circuit::arch::{
+    testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    VmAirWrapper,
+};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 use openvm_stark_backend::{
-    interaction::BusIndex,
+    p3_air::BaseAir,
     p3_field::{FieldAlgebra, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
     utils::disable_debug_builder,
-    verifier::VerificationError,
-    Chip, ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreAir, Rv32AuipcCoreCols, Rv32AuipcStep};
-use crate::adapters::{
-    Rv32RdWriteAdapterAir, Rv32RdWriteAdapterCols, Rv32RdWriteAdapterStep, RV32_CELL_BITS,
-    RV32_REGISTER_NUM_LIMBS,
+use crate::{
+    adapters::{
+        Rv32RdWriteAdapterAir, Rv32RdWriteAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+    },
+    test_utils::get_verification_error,
 };
 
-const ADAPTER_WIDTH: usize = size_of::<Rv32RdWriteAdapterCols<u8>>();
 const IMM_BITS: usize = 24;
-const BITWISE_OP_LOOKUP_BUS: BusIndex = 9;
 const MAX_INS_CAPACITY: usize = 128;
-
 type F = BabyBear;
 
 fn create_test_chip(
@@ -69,9 +72,7 @@ fn set_and_execute(
         initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
     );
     let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
-
     let rd_data = run_auipc(opcode, initial_pc, imm as u32);
-
     assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
 }
 
@@ -85,11 +86,10 @@ fn set_and_execute(
 #[test]
 fn rand_auipc_test() {
     let mut rng = create_seeded_rng();
-
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
-    let num_tests: usize = 1;
+    let num_tests: usize = 100;
     for _ in 0..num_tests {
         set_and_execute(&mut tester, &mut chip, &mut rng, AUIPC, None, None);
     }
@@ -102,18 +102,22 @@ fn rand_auipc_test() {
 // NEGATIVE TESTS
 //
 // Given a fake trace of a single operation, setup a chip and run the test. We replace
-// the write part of the trace and check that the core chip throws the expected error.
-// A dummy adaptor is used so memory interactions don't indirectly cause false passes.
+// part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Clone, Copy, Default, PartialEq)]
+struct AuipcPrankValues {
+    pub rd_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+    pub imm_limbs: Option<[u32; RV32_REGISTER_NUM_LIMBS - 1]>,
+    pub pc_limbs: Option<[u32; RV32_REGISTER_NUM_LIMBS - 2]>,
+}
 
 fn run_negative_auipc_test(
     opcode: Rv32AuipcOpcode,
     initial_imm: Option<u32>,
     initial_pc: Option<u32>,
-    rd_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
-    imm_limbs: Option<[u32; RV32_REGISTER_NUM_LIMBS - 1]>,
-    pc_limbs: Option<[u32; RV32_REGISTER_NUM_LIMBS - 2]>,
-    expected_error: VerificationError,
+    prank_vals: AuipcPrankValues,
+    interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -128,39 +132,32 @@ fn run_negative_auipc_test(
         initial_pc,
     );
 
-    let tester = tester.build();
-
-    let auipc_trace_width = chip.trace_width();
-    let air = chip.air();
-    let mut chip_input = chip.generate_air_proof_input();
-    let auipc_trace = chip_input.raw.common_main.as_mut().unwrap();
-    {
-        let mut trace_row = auipc_trace.row_slice(0).to_vec();
-
-        let (_, core_row) = trace_row.split_at_mut(ADAPTER_WIDTH);
-
+    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<F>| {
+        let mut trace_row = trace.row_slice(0).to_vec();
+        let (_, core_row) = trace_row.split_at_mut(adapter_width);
         let core_cols: &mut Rv32AuipcCoreCols<F> = core_row.borrow_mut();
 
-        if let Some(data) = rd_data {
+        if let Some(data) = prank_vals.rd_data {
             core_cols.rd_data = data.map(F::from_canonical_u32);
         }
-
-        if let Some(data) = imm_limbs {
+        if let Some(data) = prank_vals.imm_limbs {
             core_cols.imm_limbs = data.map(F::from_canonical_u32);
         }
-
-        if let Some(data) = pc_limbs {
+        if let Some(data) = prank_vals.pc_limbs {
             core_cols.pc_limbs = data.map(F::from_canonical_u32);
         }
 
-        *auipc_trace = RowMajorMatrix::new(trace_row, auipc_trace_width);
-    }
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
     disable_debug_builder();
     let tester = tester
-        .load_air_proof_input((air, chip_input))
+        .build()
+        .load_and_prank_trace(chip, modify_trace)
         .load(bitwise_chip)
         .finalize();
-    tester.simple_test_with_expected_error(expected_error);
+    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
 }
 
 #[test]
@@ -169,47 +166,53 @@ fn invalid_limb_negative_tests() {
         AUIPC,
         Some(9722891),
         None,
-        None,
-        Some([107, 46, 81]),
-        None,
-        VerificationError::OodEvaluationMismatch,
+        AuipcPrankValues {
+            imm_limbs: Some([107, 46, 81]),
+            ..Default::default()
+        },
+        false,
     );
     run_negative_auipc_test(
         AUIPC,
         Some(0),
         Some(2110400),
-        Some([194, 51, 32, 240]),
-        None,
-        Some([51, 32]),
-        VerificationError::ChallengePhaseError,
+        AuipcPrankValues {
+            rd_data: Some([194, 51, 32, 240]),
+            pc_limbs: Some([51, 32]),
+            ..Default::default()
+        },
+        true,
     );
     run_negative_auipc_test(
         AUIPC,
         None,
         None,
-        None,
-        None,
-        Some([206, 166]),
-        VerificationError::OodEvaluationMismatch,
+        AuipcPrankValues {
+            pc_limbs: Some([206, 166]),
+            ..Default::default()
+        },
+        false,
     );
     run_negative_auipc_test(
         AUIPC,
         None,
         None,
-        Some([30, 92, 82, 132]),
-        None,
-        None,
-        VerificationError::OodEvaluationMismatch,
+        AuipcPrankValues {
+            rd_data: Some([30, 92, 82, 132]),
+            ..Default::default()
+        },
+        false,
     );
-
     run_negative_auipc_test(
         AUIPC,
         None,
         Some(876487877),
-        Some([197, 202, 49, 70]),
-        Some([166, 243, 17]),
-        Some([36, 62]),
-        VerificationError::ChallengePhaseError,
+        AuipcPrankValues {
+            rd_data: Some([197, 202, 49, 70]),
+            imm_limbs: Some([166, 243, 17]),
+            pc_limbs: Some([36, 62]),
+        },
+        true,
     );
 }
 
@@ -219,37 +222,42 @@ fn overflow_negative_tests() {
         AUIPC,
         Some(256264),
         None,
-        None,
-        Some([3592, 219, 3]),
-        None,
-        VerificationError::OodEvaluationMismatch,
+        AuipcPrankValues {
+            imm_limbs: Some([3592, 219, 3]),
+            ..Default::default()
+        },
+        false,
     );
     run_negative_auipc_test(
         AUIPC,
         None,
         None,
-        None,
-        None,
-        Some([0, 0]),
-        VerificationError::OodEvaluationMismatch,
+        AuipcPrankValues {
+            pc_limbs: Some([0, 0]),
+            ..Default::default()
+        },
+        false,
     );
     run_negative_auipc_test(
         AUIPC,
         Some(255),
         None,
-        None,
-        Some([F::NEG_ONE.as_canonical_u32(), 1, 0]),
-        None,
-        VerificationError::ChallengePhaseError,
+        AuipcPrankValues {
+            imm_limbs: Some([F::NEG_ONE.as_canonical_u32(), 1, 0]),
+            ..Default::default()
+        },
+        true,
     );
     run_negative_auipc_test(
         AUIPC,
         Some(0),
         Some(255),
-        Some([F::NEG_ONE.as_canonical_u32(), 1, 0, 0]),
-        Some([0, 0, 0]),
-        Some([1, 0]),
-        VerificationError::ChallengePhaseError,
+        AuipcPrankValues {
+            rd_data: Some([F::NEG_ONE.as_canonical_u32(), 1, 0, 0]),
+            imm_limbs: Some([0, 0, 0]),
+            pc_limbs: Some([1, 0]),
+        },
+        true,
     );
 }
 
@@ -258,18 +266,6 @@ fn overflow_negative_tests() {
 ///
 /// Ensure that solve functions produce the correct results.
 ///////////////////////////////////////////////////////////////////////////////////////
-
-#[test]
-fn execute_roundtrip_sanity_test() {
-    let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
-    let (mut chip, _) = create_test_chip(&tester);
-
-    let num_tests: usize = 100;
-    for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, AUIPC, None, None);
-    }
-}
 
 #[test]
 fn run_auipc_sanity_test() {

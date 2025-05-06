@@ -1,9 +1,8 @@
 use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, TestAdapterChip, VmChipTestBuilder},
-    BasicAdapterInterface, ExecutionBridge, ImmInstruction, InstructionExecutor, VmAirWrapper,
-    VmCoreChip,
+    testing::{memory::gen_pointer, VmChipTestBuilder},
+    InstructionExecutor, VmAirWrapper,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -19,11 +18,10 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
-    verifier::VerificationError,
-    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
+use test_case::test_case;
 
 use super::{
     core::{run_eq, BranchEqualStep},
@@ -33,29 +31,50 @@ use crate::{
     adapters::{
         Rv32BranchAdapterAir, Rv32BranchAdapterStep, RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
+    test_utils::get_verification_error,
     BranchEqualCoreAir,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
+const ABS_MAX_IMM: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
 
-//////////////////////////////////////////////////////////////////////////////////////
-// POSITIVE TESTS
-//
-// Randomly generate computations and execute, ensuring that the generated trace
-// passes all constraints.
-//////////////////////////////////////////////////////////////////////////////////////
+fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32BranchEqualChip<F> {
+    let chip = Rv32BranchEqualChip::<F>::new(
+        VmAirWrapper::new(
+            Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+            BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+        ),
+        BranchEqualStep::new(
+            Rv32BranchAdapterStep::new(),
+            BranchEqualOpcode::CLASS_OFFSET,
+            DEFAULT_PC_STEP,
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
+    );
+
+    chip
+}
 
 #[allow(clippy::too_many_arguments)]
-fn run_rv32_branch_eq_rand_execute<E: InstructionExecutor<F>>(
+fn set_and_execute<E: InstructionExecutor<F>>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut E,
-    opcode: BranchEqualOpcode,
-    a: [u8; RV32_REGISTER_NUM_LIMBS],
-    b: [u8; RV32_REGISTER_NUM_LIMBS],
-    imm: i32,
     rng: &mut StdRng,
+    opcode: BranchEqualOpcode,
+    a: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
+    b: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
+    imm: Option<i32>,
 ) {
+    let a = a.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
+    let b = b.unwrap_or(if rng.gen_bool(0.5) {
+        a
+    } else {
+        array::from_fn(|_| rng.gen_range(0..=u8::MAX))
+    });
+
+    let imm = imm.unwrap_or(rng.gen_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
     let rs1 = gen_pointer(rng, 4);
     let rs2 = gen_pointer(rng, 4);
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_canonical_u8));
@@ -83,190 +102,170 @@ fn run_rv32_branch_eq_rand_execute<E: InstructionExecutor<F>>(
     assert_eq!(to_pc, from_pc + pc_inc);
 }
 
-fn run_rv32_branch_eq_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
+//////////////////////////////////////////////////////////////////////////////////////
+// POSITIVE TESTS
+//
+// Randomly generate computations and execute, ensuring that the generated trace
+// passes all constraints.
+//////////////////////////////////////////////////////////////////////////////////////
+
+#[test_case(BranchEqualOpcode::BEQ, 100)]
+#[test_case(BranchEqualOpcode::BNE, 100)]
+fn rand_rv32_branch_eq_test(opcode: BranchEqualOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
-    const ABS_MAX_BRANCH: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
-
     let mut tester = VmChipTestBuilder::default();
-
-    let mut chip = Rv32BranchEqualChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-            BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
-        ),
-        BranchEqualStep::new(
-            Rv32BranchAdapterStep::new(),
-            BranchEqualOpcode::CLASS_OFFSET,
-            DEFAULT_PC_STEP,
-        ),
-        MAX_INS_CAPACITY,
-        tester.memory_helper(),
-    );
+    let mut chip = create_test_chip(&mut tester);
 
     for _ in 0..num_ops {
-        let a = array::from_fn(|_| rng.gen_range(0..u8::MAX));
-        let b = if rng.gen_bool(0.5) {
-            a
-        } else {
-            array::from_fn(|_| rng.gen_range(0..u8::MAX))
-        };
-        let imm = rng.gen_range((-ABS_MAX_BRANCH)..ABS_MAX_BRANCH);
-        run_rv32_branch_eq_rand_execute(&mut tester, &mut chip, opcode, a, b, imm, &mut rng);
+        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None, None);
     }
 
     let tester = tester.build().load(chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
-#[test]
-fn rv32_beq_rand_test() {
-    run_rv32_branch_eq_rand_test(BranchEqualOpcode::BEQ, 100);
-}
-
-#[test]
-fn rv32_bne_rand_test() {
-    run_rv32_branch_eq_rand_test(BranchEqualOpcode::BNE, 100);
-}
-
 //////////////////////////////////////////////////////////////////////////////////////
 // NEGATIVE TESTS
 //
 // Given a fake trace of a single operation, setup a chip and run the test. We replace
-// the write part of the trace and check that the core chip throws the expected error.
-// A dummy adapter is used so memory interactions don't indirectly cause false passes.
+// part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
-// type Rv32BranchEqualTestChip<F> =
-//     VmChipWrapper<F, TestAdapterChip<F>, BranchEqualStep<RV32_REGISTER_NUM_LIMBS>>;
+#[allow(clippy::too_many_arguments)]
+fn run_negative_branch_eq_test(
+    opcode: BranchEqualOpcode,
+    a: [u8; RV32_REGISTER_NUM_LIMBS],
+    b: [u8; RV32_REGISTER_NUM_LIMBS],
+    prank_cmp_result: Option<bool>,
+    prank_diff_inv_marker: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+    interaction_error: bool,
+) {
+    let imm = 16i32;
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let mut chip = create_test_chip(&mut tester);
 
-// #[allow(clippy::too_many_arguments)]
-// fn run_rv32_beq_negative_test(
-//     opcode: BranchEqualOpcode,
-//     a: [u32; RV32_REGISTER_NUM_LIMBS],
-//     b: [u32; RV32_REGISTER_NUM_LIMBS],
-//     cmp_result: bool,
-//     diff_inv_marker: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
-// ) {
-//     let imm = 16u32;
-//     let mut tester = VmChipTestBuilder::default();
-//     let mut chip = Rv32BranchEqualTestChip::<F>::new(
-//         TestAdapterChip::new(
-//             vec![[a.map(F::from_canonical_u32), b.map(F::from_canonical_u32)].concat()],
-//             vec![if cmp_result { Some(imm) } else { None }],
-//             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
-//         ),
-//         BranchEqualStep::new(BranchEqualOpcode::CLASS_OFFSET, 4),
-//         tester.offline_memory_mutex_arc(),
-//     );
+    set_and_execute(
+        &mut tester,
+        &mut chip,
+        &mut rng,
+        opcode,
+        Some(a),
+        Some(b),
+        Some(imm),
+    );
 
-//     tester.execute(
-//         &mut chip,
-//         &Instruction::from_usize(opcode.global_opcode(), [0, 0, imm as usize, 1, 1]),
-//     );
+    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut values = trace.row_slice(0).to_vec();
+        let cols: &mut BranchEqualCoreCols<F, RV32_REGISTER_NUM_LIMBS> =
+            values.split_at_mut(adapter_width).1.borrow_mut();
+        if let Some(cmp_result) = prank_cmp_result {
+            cols.cmp_result = F::from_bool(cmp_result);
+        }
+        if let Some(diff_inv_marker) = prank_diff_inv_marker {
+            cols.diff_inv_marker = diff_inv_marker.map(F::from_canonical_u32);
+        }
+        *trace = RowMajorMatrix::new(values, trace.width());
+    };
 
-//     let trace_width = chip.trace_width();
-//     let adapter_width = BaseAir::<F>::width(chip.adapter.air());
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(chip, modify_trace)
+        .finalize();
+    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+}
 
-//     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-//         let mut values = trace.row_slice(0).to_vec();
-//         let cols: &mut BranchEqualCoreCols<F, RV32_REGISTER_NUM_LIMBS> =
-//             values.split_at_mut(adapter_width).1.borrow_mut();
-//         cols.cmp_result = F::from_bool(cmp_result);
-//         if let Some(diff_inv_marker) = diff_inv_marker {
-//             cols.diff_inv_marker = diff_inv_marker.map(F::from_canonical_u32);
-//         }
-//         *trace = RowMajorMatrix::new(values, trace_width);
-//     };
+#[test]
+fn rv32_beq_wrong_cmp_negative_test() {
+    run_negative_branch_eq_test(
+        BranchEqualOpcode::BEQ,
+        [0, 0, 7, 0],
+        [0, 0, 0, 7],
+        Some(true),
+        None,
+        false,
+    );
 
-//     disable_debug_builder();
-//     let tester = tester
-//         .build()
-//         .load_and_prank_trace(chip, modify_trace)
-//         .finalize();
-//     tester.simple_test_with_expected_error(VerificationError::OodEvaluationMismatch);
-// }
+    run_negative_branch_eq_test(
+        BranchEqualOpcode::BEQ,
+        [0, 0, 7, 0],
+        [0, 0, 7, 0],
+        Some(false),
+        None,
+        false,
+    );
+}
 
-// #[test]
-// fn rv32_beq_wrong_cmp_negative_test() {
-//     run_rv32_beq_negative_test(
-//         BranchEqualOpcode::BEQ,
-//         [0, 0, 7, 0],
-//         [0, 0, 0, 7],
-//         true,
-//         None,
-//     );
+#[test]
+fn rv32_beq_zero_inv_marker_negative_test() {
+    run_negative_branch_eq_test(
+        BranchEqualOpcode::BEQ,
+        [0, 0, 7, 0],
+        [0, 0, 0, 7],
+        Some(true),
+        Some([0, 0, 0, 0]),
+        false,
+    );
+}
 
-//     run_rv32_beq_negative_test(
-//         BranchEqualOpcode::BEQ,
-//         [0, 0, 7, 0],
-//         [0, 0, 7, 0],
-//         false,
-//         None,
-//     );
-// }
+#[test]
+fn rv32_beq_invalid_inv_marker_negative_test() {
+    run_negative_branch_eq_test(
+        BranchEqualOpcode::BEQ,
+        [0, 0, 7, 0],
+        [0, 0, 7, 0],
+        Some(false),
+        Some([0, 0, 1, 0]),
+        false,
+    );
+}
 
-// #[test]
-// fn rv32_beq_zero_inv_marker_negative_test() {
-//     run_rv32_beq_negative_test(
-//         BranchEqualOpcode::BEQ,
-//         [0, 0, 7, 0],
-//         [0, 0, 0, 7],
-//         true,
-//         Some([0, 0, 0, 0]),
-//     );
-// }
+#[test]
+fn rv32_bne_wrong_cmp_negative_test() {
+    run_negative_branch_eq_test(
+        BranchEqualOpcode::BNE,
+        [0, 0, 7, 0],
+        [0, 0, 0, 7],
+        Some(false),
+        None,
+        false,
+    );
 
-// #[test]
-// fn rv32_beq_invalid_inv_marker_negative_test() {
-//     run_rv32_beq_negative_test(
-//         BranchEqualOpcode::BEQ,
-//         [0, 0, 7, 0],
-//         [0, 0, 7, 0],
-//         false,
-//         Some([0, 0, 1, 0]),
-//     );
-// }
+    run_negative_branch_eq_test(
+        BranchEqualOpcode::BNE,
+        [0, 0, 7, 0],
+        [0, 0, 7, 0],
+        Some(true),
+        None,
+        false,
+    );
+}
 
-// #[test]
-// fn rv32_bne_wrong_cmp_negative_test() {
-//     run_rv32_beq_negative_test(
-//         BranchEqualOpcode::BNE,
-//         [0, 0, 7, 0],
-//         [0, 0, 0, 7],
-//         false,
-//         None,
-//     );
+#[test]
+fn rv32_bne_zero_inv_marker_negative_test() {
+    run_negative_branch_eq_test(
+        BranchEqualOpcode::BNE,
+        [0, 0, 7, 0],
+        [0, 0, 0, 7],
+        Some(false),
+        Some([0, 0, 0, 0]),
+        false,
+    );
+}
 
-//     run_rv32_beq_negative_test(
-//         BranchEqualOpcode::BNE,
-//         [0, 0, 7, 0],
-//         [0, 0, 7, 0],
-//         true,
-//         None,
-//     );
-// }
-
-// #[test]
-// fn rv32_bne_zero_inv_marker_negative_test() {
-//     run_rv32_beq_negative_test(
-//         BranchEqualOpcode::BNE,
-//         [0, 0, 7, 0],
-//         [0, 0, 0, 7],
-//         false,
-//         Some([0, 0, 0, 0]),
-//     );
-// }
-
-// #[test]
-// fn rv32_bne_invalid_inv_marker_negative_test() {
-//     run_rv32_beq_negative_test(
-//         BranchEqualOpcode::BNE,
-//         [0, 0, 7, 0],
-//         [0, 0, 7, 0],
-//         true,
-//         Some([0, 0, 1, 0]),
-//     );
-// }
+#[test]
+fn rv32_bne_invalid_inv_marker_negative_test() {
+    run_negative_branch_eq_test(
+        BranchEqualOpcode::BNE,
+        [0, 0, 7, 0],
+        [0, 0, 7, 0],
+        Some(true),
+        Some([0, 0, 1, 0]),
+        false,
+    );
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////
 /// SANITY TESTS
@@ -274,35 +273,34 @@ fn rv32_bne_rand_test() {
 /// Ensure that solve functions produce the correct results.
 ///////////////////////////////////////////////////////////////////////////////////////
 
-// #[test]
-// fn execute_pc_increment_sanity_test() {
-//     let core = BranchEqualStep::<RV32_REGISTER_NUM_LIMBS>::new(BranchEqualOpcode::CLASS_OFFSET,
-// 4);
+#[test]
+fn execute_roundtrip_sanity_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let mut chip = create_test_chip(&mut tester);
 
-//     let mut instruction = Instruction::<F> {
-//         opcode: BranchEqualOpcode::BEQ.global_opcode(),
-//         c: F::from_canonical_u8(8),
-//         ..Default::default()
-//     };
-//     let x: [F; RV32_REGISTER_NUM_LIMBS] = [19, 4, 1790, 60].map(F::from_canonical_u32);
-//     let y: [F; RV32_REGISTER_NUM_LIMBS] = [19, 32, 1804, 60].map(F::from_canonical_u32);
+    let x = [19, 4, 179, 60];
+    let y = [19, 32, 180, 60];
+    set_and_execute(
+        &mut tester,
+        &mut chip,
+        &mut rng,
+        BranchEqualOpcode::BEQ,
+        Some(x),
+        Some(y),
+        Some(8),
+    );
 
-//     let result = <BranchEqualStep<RV32_REGISTER_NUM_LIMBS> as VmCoreChip<
-//         F,
-//         BasicAdapterInterface<F, ImmInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,
-//     >>::execute_instruction(&core, &instruction, 0, [x, y]);
-//     let (output, _) = result.expect("execute_instruction failed");
-//     assert!(output.to_pc.is_none());
-
-//     instruction.opcode = BranchEqualOpcode::BNE.global_opcode();
-//     let result = <BranchEqualStep<RV32_REGISTER_NUM_LIMBS> as VmCoreChip<
-//         F,
-//         BasicAdapterInterface<F, ImmInstruction<F>, 2, 0, RV32_REGISTER_NUM_LIMBS, 0>,
-//     >>::execute_instruction(&core, &instruction, 0, [x, y]);
-//     let (output, _) = result.expect("execute_instruction failed");
-//     assert!(output.to_pc.is_some());
-//     assert_eq!(output.to_pc.unwrap(), 8);
-// }
+    set_and_execute(
+        &mut tester,
+        &mut chip,
+        &mut rng,
+        BranchEqualOpcode::BNE,
+        Some(x),
+        Some(y),
+        Some(8),
+    );
+}
 
 #[test]
 fn run_eq_sanity_test() {

@@ -14,10 +14,10 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
-    verifier::VerificationError,
 };
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
+use test_case::test_case;
 
 use super::{run_write_data_sign_extend, LoadSignExtendCoreAir};
 use crate::{
@@ -26,16 +26,40 @@ use crate::{
         RV32_REGISTER_NUM_LIMBS,
     },
     load_sign_extend::LoadSignExtendCoreCols,
+    test_utils::get_verification_error,
     LoadSignExtendStep, Rv32LoadSignExtendChip,
 };
 
 const IMM_BITS: usize = 16;
-const MAX_INS_CAPACITY: usize = 256;
+const MAX_INS_CAPACITY: usize = 128;
 
 type F = BabyBear;
 
 fn into_limbs<const NUM_LIMBS: usize, const LIMB_BITS: usize>(num: u32) -> [u32; NUM_LIMBS] {
     array::from_fn(|i| (num >> (LIMB_BITS * i)) & ((1 << LIMB_BITS) - 1))
+}
+
+fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32LoadSignExtendChip<F> {
+    let range_checker_chip = tester.memory_controller().range_checker.clone();
+    let chip = Rv32LoadSignExtendChip::<F>::new(
+        VmAirWrapper::new(
+            Rv32LoadStoreAdapterAir::new(
+                tester.memory_bridge(),
+                tester.execution_bridge(),
+                range_checker_chip.bus(),
+                tester.address_bits(),
+            ),
+            LoadSignExtendCoreAir::new(range_checker_chip.bus()),
+        ),
+        LoadSignExtendStep::new(
+            Rv32LoadStoreAdapterStep::new(tester.address_bits()),
+            range_checker_chip.clone(),
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
+    );
+
+    chip
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -121,49 +145,20 @@ fn set_and_execute(
 /// Randomly generate computations and execute, ensuring that the generated trace
 /// passes all constraints.
 ///////////////////////////////////////////////////////////////////////////////////////
-#[test]
-fn rand_load_sign_extend_test() {
+#[test_case(LOADB, 100)]
+#[test_case(LOADH, 100)]
+fn rand_load_sign_extend_test(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
     setup_tracing();
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let range_checker_chip = tester.memory_controller().range_checker.clone();
-
-    let mut chip = Rv32LoadSignExtendChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32LoadStoreAdapterAir::new(
-                tester.memory_bridge(),
-                tester.execution_bridge(),
-                range_checker_chip.bus(),
-                tester.address_bits(),
-            ),
-            LoadSignExtendCoreAir::new(range_checker_chip.bus()),
-        ),
-        LoadSignExtendStep::new(
-            Rv32LoadStoreAdapterStep::new(tester.address_bits()),
-            range_checker_chip,
-        ),
-        MAX_INS_CAPACITY,
-        tester.memory_helper(),
-    );
-
-    let num_tests: usize = 1;
-    for _ in 0..num_tests {
+    let mut chip = create_test_chip(&mut tester);
+    for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
             &mut chip,
             &mut rng,
-            LOADB,
-            None,
-            None,
-            None,
-            None,
-        );
-        set_and_execute(
-            &mut tester,
-            &mut chip,
-            &mut rng,
-            LOADH,
+            opcode,
             None,
             None,
             None,
@@ -179,45 +174,29 @@ fn rand_load_sign_extend_test() {
 // NEGATIVE TESTS
 //
 // Given a fake trace of a single operation, setup a chip and run the test. We replace
-// the write part of the trace and check that the core chip throws the expected error.
-// A dummy adaptor is used so memory interactions don't indirectly cause false passes.
+// part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
-#[allow(clippy::too_many_arguments)]
-fn run_negative_loadstore_test(
-    opcode: Rv32LoadStoreOpcode,
-    read_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+#[derive(Clone, Copy, Default, PartialEq)]
+struct LoadSignExtPrankValues {
     data_most_sig_bit: Option<u32>,
     shift_most_sig_bit: Option<u32>,
     opcode_flags: Option<[bool; 3]>,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_negative_load_sign_extend_test(
+    opcode: Rv32LoadStoreOpcode,
+    read_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     imm: Option<u32>,
     imm_sign: Option<u32>,
-    expected_error: VerificationError,
+    prank_vals: LoadSignExtPrankValues,
+    interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let range_checker_chip = tester.memory_controller().range_checker.clone();
-
-    let mut chip = Rv32LoadSignExtendChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32LoadStoreAdapterAir::new(
-                tester.memory_bridge(),
-                tester.execution_bridge(),
-                range_checker_chip.bus(),
-                tester.address_bits(),
-            ),
-            LoadSignExtendCoreAir::new(range_checker_chip.bus()),
-        ),
-        LoadSignExtendStep::new(
-            Rv32LoadStoreAdapterStep::new(tester.address_bits()),
-            range_checker_chip,
-        ),
-        MAX_INS_CAPACITY,
-        tester.memory_helper(),
-    );
-
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let mut chip = create_test_chip(&mut tester);
 
     set_and_execute(
         &mut tester,
@@ -230,30 +209,28 @@ fn run_negative_loadstore_test(
         imm_sign,
     );
 
+    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
-
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
 
         let core_cols: &mut LoadSignExtendCoreCols<F, RV32_REGISTER_NUM_LIMBS> =
             core_row.borrow_mut();
-
         if let Some(shifted_read_data) = read_data {
             core_cols.shifted_read_data = shifted_read_data.map(F::from_canonical_u32);
         }
-
-        if let Some(data_most_sig_bit) = data_most_sig_bit {
+        if let Some(data_most_sig_bit) = prank_vals.data_most_sig_bit {
             core_cols.data_most_sig_bit = F::from_canonical_u32(data_most_sig_bit);
         }
-        if let Some(shift_most_sig_bit) = shift_most_sig_bit {
+        if let Some(shift_most_sig_bit) = prank_vals.shift_most_sig_bit {
             core_cols.shift_most_sig_bit = F::from_canonical_u32(shift_most_sig_bit);
         }
-
-        if let Some(opcode_flags) = opcode_flags {
+        if let Some(opcode_flags) = prank_vals.opcode_flags {
             core_cols.opcode_loadb_flag0 = F::from_bool(opcode_flags[0]);
             core_cols.opcode_loadb_flag1 = F::from_bool(opcode_flags[1]);
             core_cols.opcode_loadh_flag = F::from_bool(opcode_flags[2]);
         }
+
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
@@ -262,45 +239,48 @@ fn run_negative_loadstore_test(
         .build()
         .load_and_prank_trace(chip, modify_trace)
         .finalize();
-    tester.simple_test_with_expected_error(expected_error);
+    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
 }
 
 #[test]
 fn loadstore_negative_tests() {
-    run_negative_loadstore_test(
+    run_negative_load_sign_extend_test(
         LOADB,
         Some([233, 187, 145, 238]),
-        Some(0),
         None,
         None,
         None,
-        None,
-        None,
-        VerificationError::ChallengePhaseError,
+        LoadSignExtPrankValues {
+            data_most_sig_bit: Some(0),
+            ..Default::default()
+        },
+        true,
     );
 
-    run_negative_loadstore_test(
+    run_negative_load_sign_extend_test(
         LOADH,
-        None,
-        None,
-        Some(0),
         None,
         Some([202, 109, 183, 26]),
         Some(31212),
         None,
-        VerificationError::ChallengePhaseError,
+        LoadSignExtPrankValues {
+            shift_most_sig_bit: Some(0),
+            ..Default::default()
+        },
+        true,
     );
 
-    run_negative_loadstore_test(
+    run_negative_load_sign_extend_test(
         LOADB,
         None,
-        None,
-        None,
-        Some([true, false, false]),
         Some([250, 132, 77, 5]),
         Some(47741),
         None,
-        VerificationError::ChallengePhaseError,
+        LoadSignExtPrankValues {
+            opcode_flags: Some([true, false, false]),
+            ..Default::default()
+        },
+        true,
     );
 }
 
@@ -309,54 +289,6 @@ fn loadstore_negative_tests() {
 ///
 /// Ensure that solve functions produce the correct results.
 ///////////////////////////////////////////////////////////////////////////////////////
-#[test]
-fn execute_roundtrip_sanity_test() {
-    let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
-    let range_checker_chip = tester.memory_controller().range_checker.clone();
-
-    let mut chip = Rv32LoadSignExtendChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32LoadStoreAdapterAir::new(
-                tester.memory_bridge(),
-                tester.execution_bridge(),
-                range_checker_chip.bus(),
-                tester.address_bits(),
-            ),
-            LoadSignExtendCoreAir::new(range_checker_chip.bus()),
-        ),
-        LoadSignExtendStep::new(
-            Rv32LoadStoreAdapterStep::new(tester.address_bits()),
-            range_checker_chip,
-        ),
-        MAX_INS_CAPACITY,
-        tester.memory_helper(),
-    );
-
-    let num_tests: usize = 10;
-    for _ in 0..num_tests {
-        set_and_execute(
-            &mut tester,
-            &mut chip,
-            &mut rng,
-            LOADB,
-            None,
-            None,
-            None,
-            None,
-        );
-        set_and_execute(
-            &mut tester,
-            &mut chip,
-            &mut rng,
-            LOADH,
-            None,
-            None,
-            None,
-            None,
-        );
-    }
-}
 
 #[test]
 fn solve_loadh_extend_sign_sanity_test() {
