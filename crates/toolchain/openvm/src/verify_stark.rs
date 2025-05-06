@@ -15,7 +15,7 @@
 /// little-endian bytes.
 #[macro_export]
 macro_rules! define_verify_openvm_stark {
-    ($fn_name: ident, $asm_folder: literal, $asm_filename: literal) => {
+    ($fn_name: ident, $asm_folder: expr, $asm_filename: literal) => {
         pub fn $fn_name(app_exe_commit: &[u32; 8], app_vm_commit: &[u32; 8], user_pvs: &[u32]) {
             // The memory location for the start of the heap.
             const HEAP_START_ADDRESS: u32 = 1 << 24;
