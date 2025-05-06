@@ -51,16 +51,11 @@ pub fn verify_two_adic_pcs<C: Config>(
 {
     // Currently do not support other final poly len
     builder.assert_var_eq(RVar::from(config.log_final_poly_len), RVar::zero());
-    // The `proof.final_poly` length is in general `2^{log_final_poly_len + log_blowup}`.
-    // We require `log_final_poly_len = 0`, so `proof.final_poly` has length `2^log_blowup`.
-    // In fact, the FRI low-degree test requires that `proof.final_poly = [constant, 0, ..., 0]`.
-    builder.assert_usize_eq(proof.final_poly.len(), RVar::from(config.blowup));
+    // The `proof.final_poly` length is in general `2^{log_final_poly_len}`.
+    // We require `log_final_poly_len = 0`, so `proof.final_poly` has length `1`.
+    builder.assert_usize_eq(proof.final_poly.len(), RVar::one());
     // Constant term of final poly
     let final_poly_ct = builder.get(&proof.final_poly, 0);
-    for i in 1..config.blowup {
-        let term = builder.get(&proof.final_poly, i);
-        builder.assert_ext_eq(term, C::EF::ZERO.cons());
-    }
 
     let g = builder.generator();
 
