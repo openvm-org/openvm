@@ -62,6 +62,20 @@ members = [
     "extensions/pairing/circuit",
     "extensions/pairing/guest",
     "extensions/pairing/transpiler",
+    "guest-libs/ff_derive/guest/",
+    "guest-libs/ff_derive/tests/",
+    "guest-libs/k256/guest/",
+    "guest-libs/k256/tests/",
+    "guest-libs/p256/guest/",
+    "guest-libs/p256/tests/",
+    "guest-libs/keccak256/guest/",
+    "guest-libs/keccak256/tests/",
+    "guest-libs/pairing/guest/",
+    "guest-libs/pairing/tests/",
+    "guest-libs/ruint/guest/",
+    "guest-libs/ruint/tests/",
+    "guest-libs/sha2/guest/",
+    "guest-libs/sha2/tests/",
 ]
 exclude = ["crates/sdk/example"]
 resolver = "2"
@@ -235,6 +249,8 @@ ecdsa = { version = "0.16.9", default-features = false }
 num-bigint = { version = "0.4.6", default-features = false }
 num-integer = { version = "0.1.46", default-features = false }
 num-traits = { version = "0.2.19", default-features = false }
+ff = { version = "0.13.1", default-features = false }
+sha2 = { version = "0.10", default-features = false }
 
 # For local development. Add to your `.cargo/config.toml`
 # [patch."https://github.com/Plonky3/Plonky3.git"]

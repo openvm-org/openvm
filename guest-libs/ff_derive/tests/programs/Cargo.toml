@@ -1,0 +1,31 @@
+[workspace]
+[package]
+name = "openvm-ff-derive-test-programs"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { git = "https://github.com/openvm-org/openvm.git", branch = "refactor/guest-library-reorg-final" }
+openvm-platform = { git = "https://github.com/openvm-org/openvm.git", features = ["getrandom"], branch = "refactor/guest-library-reorg-final" }
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "refactor/guest-library-reorg-final" }
+openvm-algebra-moduli-macros = { git = "https://github.com/openvm-org/openvm.git", branch = "refactor/guest-library-reorg-final" }
+
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+serde = { version = "1.0", default-features = false, features = [
+    "alloc",
+    "derive",
+]}
+ff = { version = "0.13.1", features = ["derive"] }
+rand = { version = "0.8.5", default-features = false, features = ["getrandom"] }
+num-bigint = { version = "0.4.6", default-features = false }
+
+openvm-ff-derive = { path = "../../guest" }
+
+[features]
+default = []
+std = ["serde/std", "openvm/std", "ff/std"]
+
+[profile.release]
+panic = "abort"
+lto = "thin"    # turn on lto = fat to decrease binary size, but this optimizes out some missing extern links so we shouldn't use it for testing
+# strip = "symbols"
