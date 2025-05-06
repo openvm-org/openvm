@@ -1,20 +1,6 @@
 {
   "benchmarks": [
     {
-      "name": "verify_fibair",
-      "id": "verify_fibair",
-      "working_directory": "benchmarks/prove",
-      "e2e_bench": false,
-      "run_params": [
-        {
-          "instance_type": "64cpu-linux-arm64",
-          "memory_allocator": "jemalloc",
-          "app_log_blowup": 1,
-          "leaf_log_blowup": 1
-        }
-      ]
-    },
-    {
       "name": "fibonacci",
       "id": "fibonacci",
       "working_directory": "benchmarks/prove",
