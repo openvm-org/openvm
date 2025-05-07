@@ -10,9 +10,9 @@
 /// program calls `reveal_u32` to publish an u32(e.g. `258`) in the proof, that u32 is decomposed
 /// into 4 field elements in byte. In `user_pvs`, it should be an u32 array, `[2, 1, 0, 0]`.
 /// 2. Provide the corresponding stark proof in the key-value store in OpenVM streams. The key
-///    should
-/// be the concatenation of the filename, `app_exe_commit`, `app_vm_commit`, and `user_pvs` in
-/// little-endian bytes.
+/// should be the concatenation of the filename, `app_exe_commit`, `app_vm_commit`, and `user_pvs`
+/// in little-endian bytes. Users can use `openvm::host::compute_hint_key_for_verify_openvm_stark`
+/// to compute the hint key.
 #[macro_export]
 macro_rules! define_verify_openvm_stark {
     ($fn_name: ident, $asm_folder: expr, $asm_filename: literal) => {

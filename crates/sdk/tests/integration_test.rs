@@ -1,6 +1,7 @@
 use std::{borrow::Borrow, path::PathBuf, sync::Arc};
 
 use eyre::Result;
+use openvm::host::{compute_hint_key_for_verify_openvm_stark, encode_rv32_public_values};
 use openvm_build::GuestOptions;
 use openvm_circuit::{
     arch::{
@@ -44,9 +45,7 @@ use openvm_sdk::{
     types::{EvmHalo2Verifier, EvmProof},
     DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
-use openvm_stark_backend::{
-    keygen::types::LinearConstraint, p3_field::PrimeField32, p3_matrix::Matrix,
-};
+use openvm_stark_backend::{keygen::types::LinearConstraint, p3_matrix::Matrix};
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -356,7 +355,7 @@ fn test_static_verifier_custom_pv_handler() {
         &app_pk.leaf_committed_exe,
     );
     let exe_commit = commits.exe_commit_to_bn254();
-    let leaf_verifier_commit = commits.app_config_commit_to_bn254();
+    let leaf_verifier_commit = commits.vm_commit_to_bn254();
 
     let pv_handler = CustomPvHandler {
         exe_commit,
@@ -643,42 +642,23 @@ fn test_verify_openvm_stark_e2e() -> Result<()> {
         sdk.transpile(elf, vm_config.transpiler())?
     };
 
+    // app_exe publishes 7th and 8th fibonacci numbers.
     let pvs = [13u32, 21, 0, 0, 0, 0, 0, 0];
+    let pvs_u32 = encode_rv32_public_values(&pvs);
 
-    let exe_commit_u32: Vec<_> = commits
-        .exe_commit
-        .iter()
-        .map(|x| x.as_canonical_u32())
-        .collect();
-    let vm_commit_u32: Vec<_> = commits
-        .leaf_vm_verifier_commit
-        .iter()
-        .map(|x| x.as_canonical_u32())
-        .collect();
-    let pvs_u32: Vec<_> = pvs
-        .iter()
-        .flat_map(|x| x.to_le_bytes())
-        .map(|x| x as u32)
-        .collect();
-
-    let key = ASM_FILENAME
-        .as_bytes()
-        .iter()
-        .cloned()
-        .chain(exe_commit_u32.iter().flat_map(|x| x.to_le_bytes()))
-        .chain(vm_commit_u32.iter().flat_map(|x| x.to_le_bytes()))
-        .chain(pvs_u32.iter().flat_map(|x| x.to_le_bytes()))
-        .collect();
     let mut stdin = StdIn::default();
+    let key = compute_hint_key_for_verify_openvm_stark(
+        ASM_FILENAME,
+        &commits.exe_commit,
+        &commits.vm_commit,
+        &pvs_u32,
+    );
     let to_encode: Vec<Vec<F>> = e2e_stark_proof.proof.write();
     let value = hint_load_by_key_encode(&to_encode);
     stdin.add_key_value(key, value);
 
-    let exe_commit_u32_8: [u32; 8] = exe_commit_u32.try_into().unwrap();
-    let vm_commit_u32_8: [u32; 8] = vm_commit_u32.try_into().unwrap();
-
-    stdin.write(&exe_commit_u32_8);
-    stdin.write(&vm_commit_u32_8);
+    stdin.write(&commits.exe_commit);
+    stdin.write(&commits.vm_commit);
     stdin.write(&pvs_u32);
 
     sdk.execute(verify_exe, vm_config, stdin)?;
