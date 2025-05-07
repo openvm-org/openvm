@@ -15,7 +15,7 @@ use openvm_stark_backend::{
     },
     utils::disable_debug_builder,
 };
-use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
@@ -148,7 +148,6 @@ fn set_and_execute(
 #[test_case(LOADB, 100)]
 #[test_case(LOADH, 100)]
 fn rand_load_sign_extend_test(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
-    setup_tracing();
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
