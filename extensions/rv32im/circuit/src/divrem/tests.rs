@@ -14,7 +14,7 @@ use openvm_circuit_primitives::{
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
-use openvm_rv32im_transpiler::DivRemOpcode;
+use openvm_rv32im_transpiler::DivRemOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra},
@@ -112,8 +112,8 @@ fn set_and_execute<E: InstructionExecutor<F>>(
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
 
-    let is_div = opcode == DivRemOpcode::DIV || opcode == DivRemOpcode::DIVU;
-    let is_signed = opcode == DivRemOpcode::DIV || opcode == DivRemOpcode::REM;
+    let is_div = opcode == DIV || opcode == DIVU;
+    let is_signed = opcode == DIV || opcode == REM;
 
     let (q, r, _, _, _, _) =
         run_divrem::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(is_signed, &b, &c);
@@ -135,10 +135,10 @@ fn set_and_execute<E: InstructionExecutor<F>>(
 // passes all constraints.
 //////////////////////////////////////////////////////////////////////////////////////
 
-#[test_case(DivRemOpcode::DIV, 100)]
-#[test_case(DivRemOpcode::DIVU, 100)]
-#[test_case(DivRemOpcode::REM, 100)]
-#[test_case(DivRemOpcode::REMU, 100)]
+#[test_case(DIV, 100)]
+#[test_case(DIVU, 100)]
+#[test_case(REM, 100)]
+#[test_case(REMU, 100)]
 fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -234,7 +234,7 @@ struct DivRemPrankValues<const NUM_LIMBS: usize> {
 }
 
 fn run_negative_divrem_test(
-    signed: bool,
+    opcode: DivRemOpcode,
     b: [u32; RV32_REGISTER_NUM_LIMBS],
     c: [u32; RV32_REGISTER_NUM_LIMBS],
     prank_vals: DivRemPrankValues<RV32_REGISTER_NUM_LIMBS>,
@@ -244,29 +244,7 @@ fn run_negative_divrem_test(
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip, range_tuple_chip) = create_test_chip(&mut tester);
 
-    let (div_opcode, rem_opcode) = if signed {
-        (DivRemOpcode::DIV, DivRemOpcode::REM)
-    } else {
-        (DivRemOpcode::DIVU, DivRemOpcode::REMU)
-    };
-
-    set_and_execute(
-        &mut tester,
-        &mut chip,
-        &mut rng,
-        div_opcode,
-        Some(b),
-        Some(c),
-    );
-
-    set_and_execute(
-        &mut tester,
-        &mut chip,
-        &mut rng,
-        rem_opcode,
-        Some(b),
-        Some(c),
-    );
+    set_and_execute(&mut tester, &mut chip, &mut rng, opcode, Some(b), Some(c));
 
     let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
@@ -321,7 +299,8 @@ fn rv32_divrem_unsigned_wrong_q_negative_test() {
         q: Some([245, 168, 7, 0]),
         ..Default::default()
     };
-    run_negative_divrem_test(false, b, c, prank_vals, true);
+    run_negative_divrem_test(DIVU, b, c, prank_vals, true);
+    run_negative_divrem_test(REMU, b, c, prank_vals, true);
 }
 
 #[test]
@@ -334,7 +313,8 @@ fn rv32_divrem_unsigned_wrong_r_negative_test() {
         diff_val: Some(31),
         ..Default::default()
     };
-    run_negative_divrem_test(false, b, c, prank_vals, true);
+    run_negative_divrem_test(DIVU, b, c, prank_vals, true);
+    run_negative_divrem_test(REMU, b, c, prank_vals, true);
 }
 
 #[test]
@@ -345,7 +325,8 @@ fn rv32_divrem_unsigned_high_mult_negative_test() {
         q: Some([128, 0, 0, 1]),
         ..Default::default()
     };
-    run_negative_divrem_test(false, b, c, prank_vals, true);
+    run_negative_divrem_test(DIVU, b, c, prank_vals, true);
+    run_negative_divrem_test(REMU, b, c, prank_vals, true);
 }
 
 #[test]
@@ -358,7 +339,8 @@ fn rv32_divrem_unsigned_zero_divisor_wrong_r_negative_test() {
         diff_val: Some(255),
         ..Default::default()
     };
-    run_negative_divrem_test(false, b, c, prank_vals, true);
+    run_negative_divrem_test(DIVU, b, c, prank_vals, true);
+    run_negative_divrem_test(REMU, b, c, prank_vals, true);
 }
 
 #[test]
@@ -369,7 +351,8 @@ fn rv32_divrem_signed_wrong_q_negative_test() {
         q: Some([74, 61, 255, 255]),
         ..Default::default()
     };
-    run_negative_divrem_test(true, b, c, prank_vals, true);
+    run_negative_divrem_test(DIV, b, c, prank_vals, true);
+    run_negative_divrem_test(REM, b, c, prank_vals, true);
 }
 
 #[test]
@@ -382,7 +365,8 @@ fn rv32_divrem_signed_wrong_r_negative_test() {
         diff_val: Some(20),
         ..Default::default()
     };
-    run_negative_divrem_test(true, b, c, prank_vals, true);
+    run_negative_divrem_test(DIV, b, c, prank_vals, true);
+    run_negative_divrem_test(REM, b, c, prank_vals, true);
 }
 
 #[test]
@@ -393,7 +377,8 @@ fn rv32_divrem_signed_high_mult_negative_test() {
         q: Some([1, 0, 0, 1]),
         ..Default::default()
     };
-    run_negative_divrem_test(true, b, c, prank_vals, true);
+    run_negative_divrem_test(DIV, b, c, prank_vals, true);
+    run_negative_divrem_test(REM, b, c, prank_vals, true);
 }
 
 #[test]
@@ -407,7 +392,8 @@ fn rv32_divrem_signed_r_wrong_sign_negative_test() {
         diff_val: Some(192),
         ..Default::default()
     };
-    run_negative_divrem_test(true, b, c, prank_vals, false);
+    run_negative_divrem_test(DIV, b, c, prank_vals, false);
+    run_negative_divrem_test(REM, b, c, prank_vals, false);
 }
 
 #[test]
@@ -421,7 +407,8 @@ fn rv32_divrem_signed_r_wrong_prime_negative_test() {
         diff_val: Some(36),
         ..Default::default()
     };
-    run_negative_divrem_test(true, b, c, prank_vals, false);
+    run_negative_divrem_test(DIV, b, c, prank_vals, false);
+    run_negative_divrem_test(REM, b, c, prank_vals, false);
 }
 
 #[test]
@@ -434,7 +421,8 @@ fn rv32_divrem_signed_zero_divisor_wrong_r_negative_test() {
         diff_val: Some(1),
         ..Default::default()
     };
-    run_negative_divrem_test(true, b, c, prank_vals, true);
+    run_negative_divrem_test(DIV, b, c, prank_vals, true);
+    run_negative_divrem_test(REM, b, c, prank_vals, true);
 }
 
 #[test]
@@ -449,8 +437,10 @@ fn rv32_divrem_false_zero_divisor_flag_negative_test() {
         zero_divisor: Some(true),
         ..Default::default()
     };
-    run_negative_divrem_test(true, b, c, prank_vals, false);
-    run_negative_divrem_test(false, b, c, prank_vals, false);
+    run_negative_divrem_test(DIVU, b, c, prank_vals, false);
+    run_negative_divrem_test(REMU, b, c, prank_vals, false);
+    run_negative_divrem_test(DIV, b, c, prank_vals, false);
+    run_negative_divrem_test(REM, b, c, prank_vals, false);
 }
 
 #[test]
@@ -465,8 +455,10 @@ fn rv32_divrem_false_r_zero_flag_negative_test() {
         r_zero: Some(true),
         ..Default::default()
     };
-    run_negative_divrem_test(true, b, c, prank_vals, false);
-    run_negative_divrem_test(false, b, c, prank_vals, false);
+    run_negative_divrem_test(DIVU, b, c, prank_vals, false);
+    run_negative_divrem_test(REMU, b, c, prank_vals, false);
+    run_negative_divrem_test(DIV, b, c, prank_vals, false);
+    run_negative_divrem_test(REM, b, c, prank_vals, false);
 }
 
 #[test]
@@ -477,8 +469,10 @@ fn rv32_divrem_unset_zero_divisor_flag_negative_test() {
         zero_divisor: Some(false),
         ..Default::default()
     };
-    run_negative_divrem_test(true, b, c, prank_vals, false);
-    run_negative_divrem_test(false, b, c, prank_vals, false);
+    run_negative_divrem_test(DIVU, b, c, prank_vals, false);
+    run_negative_divrem_test(REMU, b, c, prank_vals, false);
+    run_negative_divrem_test(DIV, b, c, prank_vals, false);
+    run_negative_divrem_test(REM, b, c, prank_vals, false);
 }
 
 #[test]
@@ -490,8 +484,10 @@ fn rv32_divrem_wrong_r_zero_flag_negative_test() {
         r_zero: Some(true),
         ..Default::default()
     };
-    run_negative_divrem_test(true, b, c, prank_vals, false);
-    run_negative_divrem_test(false, b, c, prank_vals, false);
+    run_negative_divrem_test(DIVU, b, c, prank_vals, false);
+    run_negative_divrem_test(REMU, b, c, prank_vals, false);
+    run_negative_divrem_test(DIV, b, c, prank_vals, false);
+    run_negative_divrem_test(REM, b, c, prank_vals, false);
 }
 
 #[test]
@@ -502,8 +498,10 @@ fn rv32_divrem_unset_r_zero_flag_negative_test() {
         r_zero: Some(false),
         ..Default::default()
     };
-    run_negative_divrem_test(true, b, c, prank_vals, false);
-    run_negative_divrem_test(false, b, c, prank_vals, false);
+    run_negative_divrem_test(DIVU, b, c, prank_vals, false);
+    run_negative_divrem_test(REMU, b, c, prank_vals, false);
+    run_negative_divrem_test(DIV, b, c, prank_vals, false);
+    run_negative_divrem_test(REM, b, c, prank_vals, false);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
