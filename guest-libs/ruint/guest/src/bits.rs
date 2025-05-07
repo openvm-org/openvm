@@ -400,7 +400,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
         }
 
         // Check for overflow
-        let overflow = self.limbs[LIMBS - limbs - 1] >> (bits - 1) & 1 != 0;
+        let overflow = (self.limbs[LIMBS - limbs - 1] >> (bits - 1)) & 1 != 0;
 
         // Shift
         for i in 0..(LIMBS - limbs - 1) {
@@ -517,7 +517,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
             return Self::ZERO;
         }
         let rhs = rhs % BITS;
-        self << rhs | self >> (BITS - rhs)
+        (self << rhs) | (self >> (BITS - rhs))
     }
 
     /// Shifts the bits to the right by a specified amount, `rhs`, wrapping the
@@ -936,7 +936,7 @@ mod tests {
                 assert_eq!(a ^ b, U::from_limbs([a.limbs[0] ^ b.limbs[0]]));
             });
             proptest!(|(a: U, s in 0..BITS)| {
-                assert_eq!(a << s, U::from_limbs([a.limbs[0] << s & U::MASK]));
+                assert_eq!(a << s, U::from_limbs([(a.limbs[0] << s) & U::MASK]));
                 assert_eq!(a >> s, U::from_limbs([a.limbs[0] >> s]));
             });
         });
@@ -1017,12 +1017,16 @@ mod tests {
             (Uint::<64, 1>::from(20), true)
         );
 
-        // Test: Two limbs right shift from 0x0010_0000_0000_0000 and 0 by 1 bit.
-        // Expects resulting limbs: [0x0080_0000_0000_000, 0] with no fractional part.
-        assert_eq!(
-            Uint::<65, 2>::from_limbs([0x0010_0000_0000_0000, 0]).overflowing_shr(1),
-            (Uint::<65, 2>::from_limbs([0x0080_0000_0000_000, 0]), false)
-        );
+        #[allow(clippy::unusual_byte_groupings)]
+        // creating a block to silence clippy warning
+        {
+            // Test: Two limbs right shift from 0x0010_0000_0000_0000 and 0 by 1 bit.
+            // Expects resulting limbs: [0x0080_0000_0000_000, 0] with no fractional part.
+            assert_eq!(
+                Uint::<65, 2>::from_limbs([0x0010_0000_0000_0000, 0]).overflowing_shr(1),
+                (Uint::<65, 2>::from_limbs([0x0080_0000_0000_000, 0]), false)
+            );
+        }
 
         // Test: Shift beyond single limb capacity with MAX value.
         // Expects the highest possible value in 256-bit representation with a detected

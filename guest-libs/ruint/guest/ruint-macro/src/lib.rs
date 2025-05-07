@@ -1,6 +1,6 @@
 #![doc = include_str!("../README.md")]
-#![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
-
+// Silenced these warnings because we use our own clippy rules
+//#![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
 use proc_macro::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream, TokenTree};
 use std::fmt::{self, Write};
 

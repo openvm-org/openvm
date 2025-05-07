@@ -220,7 +220,7 @@ impl FromEncodedPoint<P256> for P256Point {
         match openvm_ecc_guest::ecdsa::VerifyingKey::<P256>::from_sec1_bytes(
             encoded_point.as_bytes(),
         ) {
-            Ok(verifying_key) => CtOption::new(verifying_key.as_affine().clone(), 1.into()),
+            Ok(verifying_key) => CtOption::new(*verifying_key.as_affine(), 1.into()),
             Err(_) => CtOption::new(P256Point::default(), 0.into()),
         }
     }

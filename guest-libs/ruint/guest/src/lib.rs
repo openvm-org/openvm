@@ -1,13 +1,14 @@
 #![doc = include_str!("../README.md")]
 #![doc(issue_tracker_base_url = "https://github.com/recmo/uint/issues/")]
-#![warn(
-    clippy::all,
-    clippy::pedantic,
-    clippy::nursery,
-    clippy::missing_inline_in_public_items,
-    missing_docs,
-    unreachable_pub
-)]
+// Silenced these warnings because we use our own clippy rules
+// #![warn(
+//     clippy::all,
+//     clippy::pedantic,
+//     clippy::nursery,
+//     clippy::missing_inline_in_public_items,
+//     missing_docs,
+//     unreachable_pub
+// )]
 #![allow(
     clippy::doc_markdown, // Unfortunately many false positives on Latex.
     clippy::inline_always,
@@ -354,8 +355,8 @@ mod test {
         assert_eq!(mask(0), 0);
         assert_eq!(mask(1), 1);
         assert_eq!(mask(5), 0x1f);
-        assert_eq!(mask(63), u64::max_value() >> 1);
-        assert_eq!(mask(64), u64::max_value());
+        assert_eq!(mask(63), u64::MAX >> 1);
+        assert_eq!(mask(64), u64::MAX);
     }
 
     #[test]

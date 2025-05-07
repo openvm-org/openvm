@@ -7,21 +7,23 @@ use num_bigint::BigUint;
 use num_traits::One;
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
 use openvm_ecc_guest::{weierstrass::WeierstrassPoint, AffinePoint};
-use openvm_pairing_guest::pairing::{
-    fp2_invert_assign, fp6_invert_assign, fp6_square_assign, FinalExp, MultiMillerLoop,
-    PairingCheck, PairingIntrinsics,
+use openvm_pairing_guest::{
+    bn254::{BN254_MODULUS, BN254_ORDER},
+    pairing::{FinalExp, MultiMillerLoop, PairingCheck, PairingIntrinsics},
 };
 use rand::{rngs::StdRng, SeedableRng};
 
 use super::{Fp, Fp12, Fp2};
-use crate::bn254::{
-    utils::{
-        convert_bn254_fp12_to_halo2_fq12, convert_bn254_halo2_fq12_to_fp12,
-        convert_bn254_halo2_fq2_to_fp2, convert_bn254_halo2_fq_to_fp,
-        convert_g2_affine_halo2_to_openvm,
+use crate::{
+    bn254::{
+        utils::{
+            convert_bn254_fp12_to_halo2_fq12, convert_bn254_halo2_fq12_to_fp12,
+            convert_bn254_halo2_fq2_to_fp2, convert_bn254_halo2_fq_to_fp,
+            convert_g2_affine_halo2_to_openvm,
+        },
+        Bn254, G2Affine as OpenVmG2Affine,
     },
-    Bn254, G2Affine as OpenVmG2Affine, BN254_MODULUS, BN254_ORDER, BN254_PSEUDO_BINARY_ENCODING,
-    BN254_SEED,
+    operations::{fp2_invert_assign, fp6_invert_assign, fp6_square_assign},
 };
 
 #[test]
@@ -146,7 +148,7 @@ fn test_fp_one() {
 // Gt(Fq12) is not public
 fn assert_miller_results_eq(a: Gt, b: Fp12) {
     let b = convert_bn254_fp12_to_halo2_fq12(b);
-    crate::halo2curves_shims::bn254::tests::assert_miller_results_eq(a, b);
+    openvm_pairing_guest::halo2curves_shims::bn254::test_utils::assert_miller_results_eq(a, b);
 }
 
 #[test]
@@ -274,8 +276,12 @@ fn test_bn254_pairing_check_hint_host() {
         y: h2c_q.y,
     };
 
-    let f_cmp = crate::halo2curves_shims::bn254::Bn254::multi_miller_loop(&[p_cmp], &[q_cmp]);
-    let (c_cmp, u_cmp) = crate::halo2curves_shims::bn254::Bn254::final_exp_hint(&f_cmp);
+    let f_cmp = openvm_pairing_guest::halo2curves_shims::bn254::Bn254::multi_miller_loop(
+        &[p_cmp],
+        &[q_cmp],
+    );
+    let (c_cmp, u_cmp) =
+        openvm_pairing_guest::halo2curves_shims::bn254::Bn254::final_exp_hint(&f_cmp);
     let c_cmp = convert_bn254_halo2_fq12_to_fp12(c_cmp);
     let u_cmp = convert_bn254_halo2_fq12_to_fp12(u_cmp);
 
