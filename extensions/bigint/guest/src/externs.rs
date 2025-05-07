@@ -133,7 +133,7 @@ pub unsafe extern "C" fn zkvm_u256_eq_impl(a: *const u8, b: *const u8) -> bool {
 
 #[no_mangle]
 pub unsafe extern "C" fn zkvm_u256_cmp_impl(a: *const u8, b: *const u8) -> Ordering {
-    let mut cmp_result = MaybeUninit::<crate::U256>::uninit();
+    let mut cmp_result = MaybeUninit::<[u8; 32]>::uninit();
     custom_insn_r!(
         opcode = OPCODE,
         funct3 = INT256_FUNCT3,
@@ -143,7 +143,7 @@ pub unsafe extern "C" fn zkvm_u256_cmp_impl(a: *const u8, b: *const u8) -> Order
         rs2 = In b as *const u8
     );
     let mut cmp_result = cmp_result.assume_init();
-    if cmp_result.as_le_bytes()[0] != 0 {
+    if cmp_result[0] != 0 {
         return Ordering::Less;
     }
     custom_insn_r!(
@@ -154,7 +154,7 @@ pub unsafe extern "C" fn zkvm_u256_cmp_impl(a: *const u8, b: *const u8) -> Order
         rs1 = In b as *const u8,
         rs2 = In a as *const u8
     );
-    if cmp_result.as_le_bytes()[0] != 0 {
+    if cmp_result[0] != 0 {
         return Ordering::Greater;
     }
     return Ordering::Equal;
@@ -162,7 +162,7 @@ pub unsafe extern "C" fn zkvm_u256_cmp_impl(a: *const u8, b: *const u8) -> Order
 
 #[no_mangle]
 pub unsafe extern "C" fn zkvm_u256_clone_impl(result: *mut u8, a: *const u8) {
-    let zero = &crate::U256::ZERO as *const _ as *const u8;
+    let zero = &[0u8; 32] as *const _ as *const u8;
     custom_insn_r!(
         opcode = OPCODE,
         funct3 = INT256_FUNCT3,
