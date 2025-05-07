@@ -4,7 +4,7 @@ use openvm_circuit::{
     arch::ContinuationVmProof, system::memory::tree::public_values::UserPublicValuesProof,
 };
 use openvm_continuations::verifier::{
-    internal::types::E2eStarkProof, root::types::RootVmVerifierInput,
+    internal::types::VmStarkProof, root::types::RootVmVerifierInput,
 };
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_native_recursion::hints::{InnerBatchOpening, InnerFriProof, InnerQueryProof};
@@ -61,7 +61,7 @@ impl Encode for ContinuationVmProof<SC> {
     }
 }
 
-impl Encode for E2eStarkProof<SC> {
+impl Encode for VmStarkProof<SC> {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
         self.proof.encode(writer)?;
         encode_slice(&self.user_public_values, writer)
@@ -332,7 +332,7 @@ impl Decode for ContinuationVmProof<SC> {
     }
 }
 
-impl Decode for E2eStarkProof<SC> {
+impl Decode for VmStarkProof<SC> {
     fn decode<R: Read>(reader: &mut R) -> Result<Self> {
         let proof = Proof::decode(reader)?;
         let user_public_values = decode_vec(reader)?;
