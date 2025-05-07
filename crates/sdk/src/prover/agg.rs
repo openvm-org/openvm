@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use openvm_circuit::arch::ContinuationVmProof;
 use openvm_continuations::verifier::{
-    internal::types::{E2eStarkProof, InternalVmVerifierInput},
+    internal::types::{InternalVmVerifierInput, VmStarkProof},
     leaf::types::LeafVmVerifierInput,
     root::types::RootVmVerifierInput,
 };
@@ -79,8 +79,8 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
         self
     }
 
-    /// Generate a proof to aggregate app proofs.
-    pub fn generate_agg_proof(&self, app_proofs: ContinuationVmProof<SC>) -> Proof<RootSC> {
+    /// Generate the root proof for outer recursion.
+    pub fn generate_root_proof(&self, app_proofs: ContinuationVmProof<SC>) -> Proof<RootSC> {
         let root_verifier_input = self.generate_root_verifier_input(app_proofs);
         self.generate_root_proof_impl(root_verifier_input)
     }
@@ -96,15 +96,15 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
     ) -> RootVmVerifierInput<SC> {
         let leaf_proofs = self.generate_leaf_proofs(&app_proofs);
         let public_values = app_proofs.user_public_values.public_values;
-        let e2e_stark_proof = self.generate_e2e_stark_proof(leaf_proofs, public_values);
+        let e2e_stark_proof = self.aggregate_leaf_proofs(leaf_proofs, public_values);
         self.wrap_e2e_stark_proof(e2e_stark_proof)
     }
 
-    pub fn generate_e2e_stark_proof(
+    pub fn aggregate_leaf_proofs(
         &self,
         leaf_proofs: Vec<Proof<SC>>,
         public_values: Vec<F>,
-    ) -> E2eStarkProof<SC> {
+    ) -> VmStarkProof<SC> {
         let mut internal_node_idx = -1;
         let mut internal_node_height = 0;
         let mut proofs = leaf_proofs;
@@ -140,7 +140,7 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
             });
             internal_node_height += 1;
         }
-        E2eStarkProof {
+        VmStarkProof {
             proof: proofs.pop().unwrap(),
             user_public_values: public_values,
         }
@@ -149,7 +149,7 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
     /// Wrap the e2e stark proof until its heights meet the requirements of the root verifier.
     pub fn wrap_e2e_stark_proof(
         &self,
-        e2e_stark_proof: E2eStarkProof<SC>,
+        e2e_stark_proof: VmStarkProof<SC>,
     ) -> RootVmVerifierInput<SC> {
         let internal_commit = self
             .internal_prover
@@ -214,9 +214,9 @@ pub fn wrap_e2e_stark_proof<E: StarkFriEngine<SC>>(
     root_prover: &RootVerifierLocalProver,
     internal_commit: [F; DIGEST_SIZE],
     max_internal_wrapper_layers: usize,
-    e2e_stark_proof: E2eStarkProof<SC>,
+    e2e_stark_proof: VmStarkProof<SC>,
 ) -> RootVmVerifierInput<SC> {
-    let E2eStarkProof {
+    let VmStarkProof {
         mut proof,
         user_public_values,
     } = e2e_stark_proof;
