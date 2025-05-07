@@ -16,7 +16,7 @@ use openvm_stark_sdk::{
     config::{
         baby_bear_blake3::{BabyBearBlake3Config, BabyBearBlake3Engine},
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        setup_tracing_with_log_level, FriParameters,
+        setup_tracing, setup_tracing_with_log_level, FriParameters,
     },
     engine::{StarkEngine, StarkFriEngine},
     p3_baby_bear::BabyBear,
@@ -248,6 +248,7 @@ impl VmChipTestBuilder<BabyBear> {
 
 impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
     fn default() -> Self {
+        setup_tracing();
         let mem_config = MemoryConfig::default();
         let range_checker = SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,
