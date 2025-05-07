@@ -23,11 +23,11 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-use super::memory::MemoryController;
+use super::memory::{online::GuestMemory, MemoryController};
 use crate::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor,
-        PcIncOrSet, PhantomSubExecutor, Streams,
+        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutorE1,
+        InstructionExecutor, PcIncOrSet, PhantomSubExecutor, Streams, VmStateMut,
     },
     system::program::ProgramBus,
 };
@@ -121,6 +121,61 @@ impl<F> PhantomChip<F> {
     ) -> Option<Box<dyn PhantomSubExecutor<F>>> {
         self.phantom_executors
             .insert(discriminant, Box::new(sub_executor))
+    }
+}
+
+impl<F> InsExecutorE1<F> for PhantomChip<F>
+where
+    F: PrimeField32,
+{
+    fn execute_e1<Mem, Ctx>(
+        &mut self,
+        state: VmStateMut<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<(), ExecutionError>
+    where
+        Mem: GuestMemory,
+        F: PrimeField32,
+    {
+        let &Instruction {
+            opcode, a, b, c, ..
+        } = instruction;
+        assert_eq!(opcode, self.air.phantom_opcode);
+
+        let c_u32 = c.as_canonical_u32();
+        let discriminant = PhantomDiscriminant(c_u32 as u16);
+        // If not a system phantom sub-instruction (which is handled in
+        // ExecutionSegment), look for a phantom sub-executor to handle it.
+        if SysPhantom::from_repr(discriminant.0).is_none() {
+            let sub_executor = self
+                .phantom_executors
+                .get_mut(&discriminant)
+                .ok_or_else(|| ExecutionError::PhantomNotFound {
+                    pc: *state.pc,
+                    discriminant,
+                })?;
+            let mut streams = self.streams.get().unwrap().lock().unwrap();
+            // TODO(ayush): implement phantom subexecutor for new traits
+            // sub_executor
+            //     .as_mut()
+            //     .phantom_execute(
+            //         state.memory,
+            //         &mut streams,
+            //         discriminant,
+            //         a,
+            //         b,
+            //         (c_u32 >> 16) as u16,
+            //     )
+            //     .map_err(|e| ExecutionError::Phantom {
+            //         pc: *state.pc,
+            //         discriminant,
+            //         inner: e,
+            //     })?;
+        }
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 }
 

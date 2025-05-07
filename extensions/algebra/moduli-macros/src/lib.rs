@@ -746,8 +746,6 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
 
     for (mod_idx, item) in items.into_iter().enumerate() {
         let modulus = item.value();
-        println!("[init] modulus #{} = {}", mod_idx, modulus);
-
         let modulus_bytes = string_to_bytes(&modulus);
         let mut limbs = modulus_bytes.len();
         let mut block_size = 32;

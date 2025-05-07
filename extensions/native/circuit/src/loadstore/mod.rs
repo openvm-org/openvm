@@ -1,4 +1,4 @@
-use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
+use openvm_circuit::arch::{NewVmChipWrapper, VmAirWrapper, VmChipWrapper};
 
 #[cfg(test)]
 mod tests;
@@ -9,11 +9,11 @@ pub use core::*;
 use super::adapters::loadstore_native_adapter::{
     NativeLoadStoreAdapterAir, NativeLoadStoreAdapterChip,
 };
+use crate::adapters::loadstore_native_adapter::NativeLoadStoreAdapterStep;
 
 pub type NativeLoadStoreAir<const NUM_CELLS: usize> =
     VmAirWrapper<NativeLoadStoreAdapterAir<NUM_CELLS>, NativeLoadStoreCoreAir<NUM_CELLS>>;
-pub type NativeLoadStoreChip<F, const NUM_CELLS: usize> = VmChipWrapper<
-    F,
-    NativeLoadStoreAdapterChip<F, NUM_CELLS>,
-    NativeLoadStoreCoreChip<F, NUM_CELLS>,
->;
+pub type NativeLoadStoreStepWithAdapter<const NUM_CELLS: usize> =
+    NativeLoadStoreCoreStep<NativeLoadStoreAdapterStep<NUM_CELLS>>;
+pub type NativeLoadStoreChip<F, const NUM_CELLS: usize> =
+    NewVmChipWrapper<F, NativeLoadStoreAir<NUM_CELLS>, NativeLoadStoreStepWithAdapter<NUM_CELLS>>;

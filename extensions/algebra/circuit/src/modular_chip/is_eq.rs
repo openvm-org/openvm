@@ -5,9 +5,12 @@ use std::{
 
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        AdapterAirContext, AdapterRuntimeContext, InsExecutorE1, MinimalInstruction, Result,
+        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
+    },
+    system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
@@ -420,6 +423,21 @@ where
 
     fn air(&self) -> &Self::Air {
         &self.air
+    }
+}
+
+impl<Mem, Ctx, F, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
+    InsExecutorE1<Mem, Ctx, F> for ModularIsEqualCoreChip<READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
+where
+    Mem: GuestMemory,
+    F: PrimeField32,
+{
+    fn execute_e1(
+        &mut self,
+        _state: &mut VmExecutionState<Mem, Ctx>,
+        _instruction: &Instruction<F>,
+    ) -> Result<()> {
+        todo!("Implement execute_e1")
     }
 }
 

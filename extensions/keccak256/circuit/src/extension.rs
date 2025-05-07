@@ -84,7 +84,6 @@ impl<F: PrimeField32> VmExtension<F> for Keccak256 {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
-        let offline_memory = builder.system_base().offline_memory();
         let address_bits = builder.system_config().memory_config.pointer_max_bits;
 
         let keccak_chip = KeccakVmChip::new(

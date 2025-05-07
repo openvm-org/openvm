@@ -10,7 +10,7 @@ use getset::Getters;
 use itertools::{zip_eq, Itertools};
 #[cfg(feature = "bench-metrics")]
 use metrics::counter;
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
 use openvm_circuit_primitives::{
     utils::next_power_of_two_or_zero,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
@@ -40,17 +40,23 @@ use super::{
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
-use crate::system::{
-    connector::VmConnectorChip,
-    memory::{
-        offline_checker::{MemoryBridge, MemoryBus},
-        MemoryController, MemoryImage, OfflineMemory, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
+use crate::{
+    arch::{ExecutionBridge, VmAirWrapper},
+    system::{
+        connector::VmConnectorChip,
+        memory::{
+            offline_checker::{MemoryBridge, MemoryBus},
+            MemoryController, MemoryImage, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
+        },
+        native_adapter::{NativeAdapterAir, NativeAdapterStep},
+        phantom::PhantomChip,
+        poseidon2::Poseidon2PeripheryChip,
+        program::{ProgramBus, ProgramChip},
+        public_values::{
+            core::{PublicValuesCoreAir, PublicValuesStep},
+            PublicValuesChip,
+        },
     },
-    native_adapter::NativeAdapterChip,
-    phantom::PhantomChip,
-    poseidon2::Poseidon2PeripheryChip,
-    program::{ProgramBus, ProgramChip},
-    public_values::{core::PublicValuesCoreChip, PublicValuesChip},
 };
 
 /// Global AIR ID in the VM circuit verifying key.
@@ -494,10 +500,6 @@ impl<F: PrimeField32> SystemBase<F> {
         self.memory_controller.memory_bridge()
     }
 
-    pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
-        self.memory_controller.offline_memory().clone()
-    }
-
     pub fn execution_bus(&self) -> ExecutionBus {
         self.connector_chip.air.execution_bus
     }
@@ -519,7 +521,7 @@ impl<F: PrimeField32> SystemBase<F> {
     }
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor, InsExecutorE1)]
 pub enum SystemExecutor<F: PrimeField32> {
     PublicValues(PublicValuesChip<F>),
     Phantom(RefCell<PhantomChip<F>>),
@@ -557,7 +559,6 @@ impl<F: PrimeField32> SystemComplex<F> {
             )
         };
         let memory_bridge = memory_controller.memory_bridge();
-        let offline_memory = memory_controller.offline_memory();
         let program_chip = ProgramChip::new(program_bus);
         let connector_chip = VmConnectorChip::new(
             execution_bus,
@@ -570,14 +571,25 @@ impl<F: PrimeField32> SystemComplex<F> {
         // PublicValuesChip is required when num_public_values > 0 in single segment mode.
         if config.has_public_values_chip() {
             assert_eq!(inventory.executors().len(), Self::PV_EXECUTOR_IDX);
+
+            // TODO(ayush): this should be decided after e2 execution
+            const MAX_INS_CAPACITY: usize = 0;
             let chip = PublicValuesChip::new(
-                NativeAdapterChip::new(execution_bus, program_bus, memory_bridge),
-                PublicValuesCoreChip::new(
-                    config.num_public_values,
-                    config.max_constraint_degree as u32 - 1,
+                VmAirWrapper::new(
+                    NativeAdapterAir::new(
+                        ExecutionBridge::new(execution_bus, program_bus),
+                        memory_bridge,
+                    ),
+                    PublicValuesCoreAir::new(
+                        config.num_public_values,
+                        config.max_constraint_degree as u32 - 1,
+                    ),
                 ),
-                offline_memory,
+                PublicValuesStep::new(NativeAdapterStep::new(), config.num_public_values),
+                MAX_INS_CAPACITY,
+                memory_controller.helper(),
             );
+
             inventory
                 .add_executor(chip, [PublishOpcode::PUBLISH.global_opcode()])
                 .unwrap();
@@ -788,7 +800,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         self.base.program_chip.set_program(program);
     }
 
-    pub(crate) fn set_initial_memory(&mut self, memory: MemoryImage<F>) {
+    pub(crate) fn set_initial_memory(&mut self, memory: MemoryImage) {
         self.base.memory_controller.set_initial_memory(memory);
     }
 
@@ -851,6 +863,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .chain([self.range_checker_chip().air_name()])
             .collect()
     }
+
     /// Return trace heights of all chips in order corresponding to `air_names`.
     pub(crate) fn current_trace_heights(&self) -> Vec<usize>
     where
