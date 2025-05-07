@@ -1,11 +1,4 @@
-use std::{
-    env,
-    fs::{create_dir_all, read, write},
-    marker::PhantomData,
-    path::Path,
-    process::Command,
-    sync::Arc,
-};
+use std::{fs::read, marker::PhantomData, path::Path, sync::Arc};
 
 #[cfg(feature = "evm-verify")]
 use alloy_sol_types::sol;
@@ -50,10 +43,6 @@ use snark_verifier_sdk::{evm::gen_evm_verifier_sol_code, halo2::aggregation::Agg
 
 use crate::{
     config::AggConfig,
-    fs::{
-        EVM_HALO2_VERIFIER_BASE_NAME, EVM_HALO2_VERIFIER_INTERFACE_NAME,
-        EVM_HALO2_VERIFIER_PARENT_NAME,
-    },
     keygen::{AggProvingKey, AggStarkProvingKey},
     prover::{AppProver, StarkProver},
 };
@@ -550,49 +539,4 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
 
         Ok(gas_cost)
     }
-}
-
-/// We will split the output by whitespace and look for the following
-/// sequence:
-/// [
-///     ...
-///     "=======",
-///     "OpenVmHalo2Verifier.sol:OpenVmHalo2Verifier",
-///     "=======",
-///     "Binary:"
-///     "[compiled bytecode]"
-///     ...
-/// ]
-///
-/// Once we find "OpenVmHalo2Verifier.sol:OpenVmHalo2Verifier," we can skip
-/// to the appropriate offset to get the compiled bytecode.
-fn extract_binary(output: &[u8], contract_name: &str) -> Vec<u8> {
-    let split = split_by_ascii_whitespace(output);
-    let contract_name_bytes = contract_name.as_bytes();
-
-    for i in 0..split.len().saturating_sub(3) {
-        if split[i] == contract_name_bytes {
-            return hex::decode(split[i + 3]).expect("Invalid hex in Binary");
-        }
-    }
-
-    panic!("Contract '{}' not found", contract_name);
-}
-
-fn split_by_ascii_whitespace(bytes: &[u8]) -> Vec<&[u8]> {
-    let mut split = Vec::new();
-    let mut start = None;
-    for (idx, byte) in bytes.iter().enumerate() {
-        if byte.is_ascii_whitespace() {
-            if let Some(start) = start.take() {
-                split.push(&bytes[start..idx]);
-            }
-        } else if start.is_none() {
-            start = Some(idx);
-        }
-    }
-    if let Some(last) = start {
-        split.push(&bytes[last..]);
-    }
-    split
 }
