@@ -11,7 +11,7 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::Streams;
+use super::{E1Ctx, MeteredCtx, Streams};
 use crate::system::{
     memory::{
         online::{GuestMemory, TracingMemory},
@@ -113,9 +113,18 @@ pub trait InstructionExecutor<F> {
 
 /// New trait for instruction execution
 pub trait InsExecutorE1<F> {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Mem>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<Mem, E1Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+        F: PrimeField32;
+
+    fn execute_e2<Mem>(
+        &mut self,
+        state: VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -127,9 +136,9 @@ impl<F, C> InsExecutorE1<F> for RefCell<C>
 where
     C: InsExecutorE1<F>,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Mem>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<Mem, E1Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -137,6 +146,18 @@ where
         F: PrimeField32,
     {
         self.borrow_mut().execute_e1(state, instruction)
+    }
+
+    fn execute_e2<Mem>(
+        &mut self,
+        state: VmStateMut<Mem, MeteredCtx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+        F: PrimeField32,
+    {
+        self.borrow_mut().execute_e2(state, instruction)
     }
 }
 

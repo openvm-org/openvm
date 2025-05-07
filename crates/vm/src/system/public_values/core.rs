@@ -18,8 +18,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, AdapterTraceStep,
-        BasicAdapterInterface, MinimalInstruction, Result, StepExecutorE1, TraceStep,
-        VmAdapterInterface, VmCoreAir, VmCoreChip, VmStateMut,
+        BasicAdapterInterface, E1Ctx, MeteredCtx, MinimalInstruction, Result, StepExecutorE1,
+        TraceStep, VmAdapterInterface, VmCoreAir, VmCoreChip, VmStateMut,
     },
     system::{
         memory::{
@@ -209,9 +209,9 @@ where
     F: PrimeField32,
     A: 'static + for<'a> AdapterExecutorE1<F, ReadData = [F; 2], WriteData = [F; 0]>,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Mem>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<Mem, E1Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -233,6 +233,24 @@ where
         }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+
+    fn execute_e2<Mem>(
+        &mut self,
+        state: VmStateMut<Mem, MeteredCtx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
+        let state = VmStateMut {
+            pc: state.pc,
+            memory: state.memory,
+            ctx: &mut E1Ctx::default(),
+        };
+        self.execute_e1(state, instruction)?;
 
         Ok(())
     }

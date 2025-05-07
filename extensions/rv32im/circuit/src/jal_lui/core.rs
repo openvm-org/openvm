@@ -2,8 +2,8 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, ImmInstruction, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, E1Ctx, ImmInstruction, MeteredCtx,
+        Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -255,9 +255,9 @@ where
     A: 'static
         + for<'a> AdapterExecutorE1<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Mem>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<Mem, E1Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -286,6 +286,24 @@ where
         self.adapter.write(state.memory, instruction, &rd);
 
         *state.pc = to_pc;
+
+        Ok(())
+    }
+
+    fn execute_e2<Mem>(
+        &mut self,
+        state: VmStateMut<Mem, MeteredCtx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
+        let state = VmStateMut {
+            pc: state.pc,
+            memory: state.memory,
+            ctx: &mut E1Ctx::default(),
+        };
+        self.execute_e1(state, instruction)?;
 
         Ok(())
     }

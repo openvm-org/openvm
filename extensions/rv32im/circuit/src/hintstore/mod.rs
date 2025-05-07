@@ -5,9 +5,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutorE1,
-        InstructionExecutor, NewVmChipWrapper, Result, StepExecutorE1, Streams, TraceStep,
-        VmStateMut,
+        E1Ctx, ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutorE1,
+        InstructionExecutor, MeteredCtx, NewVmChipWrapper, Result, StepExecutorE1, Streams,
+        TraceStep, VmStateMut,
     },
     system::{
         memory::{
@@ -462,9 +462,9 @@ impl<F> StepExecutorE1<F> for Rv32HintStoreStep<F>
 where
     F: PrimeField32,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Mem>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<Mem, E1Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -523,6 +523,24 @@ where
         }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+
+    fn execute_e2<Mem>(
+        &mut self,
+        state: VmStateMut<Mem, MeteredCtx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
+        let state = VmStateMut {
+            pc: state.pc,
+            memory: state.memory,
+            ctx: &mut E1Ctx::default(),
+        };
+        self.execute_e1(state, instruction)?;
 
         Ok(())
     }

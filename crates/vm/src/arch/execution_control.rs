@@ -2,7 +2,7 @@ use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{
-    ExecutionError, ExecutionSegmentState, TracegenCtx, VmChipComplex, VmConfig, VmStateMut,
+    E1Ctx, ExecutionError, ExecutionSegmentState, TracegenCtx, VmChipComplex, VmConfig, VmStateMut,
 };
 use crate::{
     arch::{ExecutionState, InsExecutorE1, InstructionExecutor},
@@ -62,7 +62,8 @@ where
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
     where
-        F: PrimeField32;
+        F: PrimeField32,
+        Self::Ctx: Default;
 }
 
 /// Implementation of the ExecutionControl trait using the old segmentation strategy
@@ -161,6 +162,7 @@ where
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
+        Self::Ctx: Default,
     {
         let timestamp = chip_complex.memory_controller().timestamp();
 
@@ -196,7 +198,7 @@ where
     VC: VmConfig<F>,
     VC::Executor: InsExecutorE1<F>,
 {
-    type Ctx = ();
+    type Ctx = E1Ctx;
     type Mem = AddressMap<PAGE_SIZE>;
 
     fn new(_chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>) -> Self {
@@ -243,6 +245,7 @@ where
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
+        Self::Ctx: Default,
     {
         let &Instruction { opcode, .. } = instruction;
 

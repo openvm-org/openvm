@@ -142,9 +142,9 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                 .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InsExecutorE1<F> });
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<F> for #name #ty_generics #where_clause {
-                    fn execute_e1<Mem, Ctx>(
+                    fn execute_e1<Mem>(
                         &mut self,
-                        state: ::openvm_circuit::arch::VmStateMut<Mem, Ctx>,
+                        state: ::openvm_circuit::arch::VmStateMut<Mem, ::openvm_circuit::arch::E1Ctx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                     ) -> ::openvm_circuit::arch::Result<()>
                     where
@@ -152,6 +152,18 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         F: ::openvm_stark_backend::p3_field::PrimeField32
                     {
                         self.0.execute_e1(state, instruction)
+                    }
+
+                    fn execute_e2<Mem>(
+                        &mut self,
+                        state: ::openvm_circuit::arch::VmStateMut<Mem, ::openvm_circuit::arch::MeteredCtx>,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                    ) -> ::openvm_circuit::arch::Result<()>
+                    where
+                        Mem: ::openvm_circuit::system::memory::online::GuestMemory,
+                        F: ::openvm_stark_backend::p3_field::PrimeField32
+                    {
+                        self.0.execute_e2(state, instruction)
                     }
                 }
             }
@@ -181,18 +193,24 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                 .expect("First generic must be type for Field");
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
             // crate. Assume F is already generic of the field.
-            let execute_arms = variants.iter().map(|(variant_name, field)| {
+            let execute_e1_arms = variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 quote! {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_e1(x, state, instruction)
                 }
             }).collect::<Vec<_>>();
+            let execute_e2_arms = variants.iter().map(|(variant_name, field)| {
+                let field_ty = &field.ty;
+                quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_e2(x, state, instruction)
+                }
+            }).collect::<Vec<_>>();
 
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic> for #name #ty_generics {
-                    fn execute_e1<Mem, Ctx>(
+                    fn execute_e1<Mem>(
                         &mut self,
-                        state: ::openvm_circuit::arch::VmStateMut<Mem, Ctx>,
+                        state: ::openvm_circuit::arch::VmStateMut<Mem, ::openvm_circuit::arch::E1Ctx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
                     ) -> ::openvm_circuit::arch::Result<()>
                     where
@@ -200,7 +218,21 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         #first_ty_generic: ::openvm_stark_backend::p3_field::PrimeField32
                     {
                         match self {
-                            #(#execute_arms,)*
+                            #(#execute_e1_arms,)*
+                        }
+                    }
+
+                    fn execute_e2<Mem>(
+                        &mut self,
+                        state: ::openvm_circuit::arch::VmStateMut<Mem, openvm_circuit::arch::MeteredCtx>,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
+                    ) -> ::openvm_circuit::arch::Result<()>
+                    where
+                        Mem: ::openvm_circuit::system::memory::online::GuestMemory,
+                        #first_ty_generic: ::openvm_stark_backend::p3_field::PrimeField32
+                    {
+                        match self {
+                            #(#execute_e2_arms,)*
                         }
                     }
                 }

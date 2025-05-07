@@ -17,7 +17,7 @@ use program::Program;
 use super::{
     execution_control::{E1ExecutionControl, ExecutionControl, TracegenExecutionControl},
     ExecutionError, GenerationError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights,
-    VmConfig, VmStateMut,
+    VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -49,22 +49,52 @@ where
     pub metrics: VmMetrics,
 }
 
+// E1 execution
+pub type E1Ctx = ();
 pub type E1VmSegmentExecutor<F, VC> =
-    VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, (), E1ExecutionControl>;
+    VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, E1Ctx, E1ExecutionControl>;
 
-// pub struct TracegenCtx;
+// E2 (metered) execution
+pub struct MeteredCtx {
+    pub trace_heights: Vec<usize>,
+    pub total_trace_cells: u64,
+    pub total_interactions: u64,
+}
+
+pub type MeteredVmSegmentExecutor<F, VC> =
+    VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, MeteredCtx, E1ExecutionControl>;
+
+// E3 (tracegen) execution
 pub type TracegenCtx = ();
-pub type TracegenVmStateMut<'a> = VmStateMut<'a, AddressMap<PAGE_SIZE>, TracegenCtx>;
-
 pub type TracegenVmSegmentExecutor<F, VC> =
     VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, TracegenCtx, TracegenExecutionControl>;
 
-#[derive(derive_new::new)]
-pub struct ExecutionSegmentState<Mem: GuestMemory> {
+#[derive(Default, derive_new::new)]
+pub struct ExecutionSegmentState<Mem, Ctx>
+where
+    Ctx: Default,
+{
     pub memory: Option<Mem>,
     pub pc: u32,
+    // TODO(ayush): do we need both exit_code and is_terminated?
     pub exit_code: u32,
     pub is_terminated: bool,
+    pub ctx: Ctx,
+}
+
+impl<Mem, Ctx> ExecutionSegmentState<Mem, Ctx>
+where
+    Ctx: Default,
+{
+    pub fn with_pc(mut self, pc: u32) -> Self {
+        self.pc = pc;
+        self
+    }
+
+    pub fn with_ctx(mut self, ctx: Ctx) -> Self {
+        self.ctx = ctx;
+        self
+    }
 }
 
 impl<F, VC, Mem, Ctx, Ctrl> VmSegmentExecutor<F, VC, Mem, Ctx, Ctrl>
@@ -72,6 +102,7 @@ where
     F: PrimeField32,
     VC: VmConfig<F>,
     Mem: GuestMemory,
+    Ctx: Default,
     Ctrl: ExecutionControl<F, VC, Mem = Mem, Ctx = Ctx>,
 {
     /// Creates a new execution segment from a program and initial state, using parent VM config
@@ -127,20 +158,20 @@ where
         &mut self,
         pc: u32,
         memory: Option<Mem>,
-    ) -> Result<ExecutionSegmentState<Mem>, ExecutionError> {
+    ) -> Result<ExecutionSegmentState<Mem, Ctx>, ExecutionError> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
         // Call the pre-execution hook
         self.control.on_segment_start(pc, &mut self.chip_complex);
 
-        let mut state = ExecutionSegmentState::new(memory, pc, 0, false);
+        let mut state = ExecutionSegmentState::default().with_pc(pc);
         loop {
             // Fetch, decode and execute single instruction
             let terminated_exit_code = self.execute_instruction(&mut state, &mut prev_backtrace)?;
 
             if let Some(exit_code) = terminated_exit_code {
-                state.is_terminated = true;
                 state.exit_code = exit_code;
+                state.is_terminated = true;
                 self.control
                     .on_terminate(state.pc, &mut self.chip_complex, exit_code);
                 break;
@@ -160,7 +191,7 @@ where
     // TODO(ayush): clean this up, separate to smaller functions
     fn execute_instruction(
         &mut self,
-        state: &mut ExecutionSegmentState<Mem>,
+        state: &mut ExecutionSegmentState<Mem, Ctx>,
         prev_backtrace: &mut Option<Backtrace>,
     ) -> Result<Option<u32>, ExecutionError> {
         let pc = state.pc;
@@ -243,7 +274,7 @@ where
         self.control.should_stop(&self.chip_complex)
     }
 
-    // TODO(ayush): not sure what to do of these
+    // TODO(ayush): this is not relevant for e1/e2 execution
     /// Generate ProofInput to prove the segment. Should be called after ::execute
     pub fn generate_proof_input<SC: StarkGenericConfig>(
         #[allow(unused_mut)] mut self,

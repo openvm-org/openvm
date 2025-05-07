@@ -15,7 +15,9 @@ use openvm_stark_backend::{
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use super::{ExecutionState, InsExecutorE1, InstructionExecutor, Result, VmStateMut};
+use super::{
+    E1Ctx, ExecutionState, InsExecutorE1, InstructionExecutor, MeteredCtx, Result, VmStateMut,
+};
 use crate::system::memory::{
     online::{GuestMemory, TracingMemory},
     MemoryAuxColsFactory, MemoryController, SharedMemoryHelper,
@@ -398,9 +400,17 @@ where
 
 // TODO: Rename core/step to operator
 pub trait StepExecutorE1<F> {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Mem>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<Mem, E1Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Mem: GuestMemory;
+
+    fn execute_e2<Mem>(
+        &mut self,
+        state: VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -414,15 +424,26 @@ where
     F: PrimeField32,
     S: StepExecutorE1<F>,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Mem>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<Mem, E1Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
         Mem: GuestMemory,
     {
         self.step.execute_e1(state, instruction)
+    }
+
+    fn execute_e2<Mem>(
+        &mut self,
+        state: VmStateMut<Mem, MeteredCtx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
+        self.step.execute_e2(state, instruction)
     }
 }
 
