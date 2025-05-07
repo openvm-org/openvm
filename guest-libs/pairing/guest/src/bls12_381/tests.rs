@@ -6,9 +6,13 @@ use num_bigint::BigUint;
 use num_traits::One;
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
 use openvm_ecc_guest::{weierstrass::WeierstrassPoint, AffinePoint};
+use openvm_pairing_guest::{
+    bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER},
+    pairing::{FinalExp, MultiMillerLoop, PairingCheck, PairingIntrinsics},
+};
 use rand::{rngs::StdRng, SeedableRng};
 
-use super::{Fp, Fp12, Fp2, BLS12_381_MODULUS, BLS12_381_ORDER};
+use super::{Fp, Fp12, Fp2};
 use crate::{
     bls12_381::{
         utils::{
@@ -16,13 +20,9 @@ use crate::{
             convert_bls12381_halo2_fq2_to_fp2, convert_bls12381_halo2_fq_to_fp,
             convert_g2_affine_halo2_to_openvm,
         },
-        Bls12_381, G2Affine as OpenVmG2Affine, BLS12_381_PSEUDO_BINARY_ENCODING,
-        BLS12_381_SEED_ABS,
+        Bls12_381, G2Affine as OpenVmG2Affine,
     },
-    pairing::{
-        fp2_invert_assign, fp6_invert_assign, fp6_square_assign, FinalExp, MultiMillerLoop,
-        PairingCheck, PairingIntrinsics,
-    },
+    operations::{fp2_invert_assign, fp6_invert_assign, fp6_square_assign},
 };
 
 #[test]
@@ -158,7 +158,7 @@ fn test_fp_one() {
 // Gt(Fq12) is not public
 fn assert_miller_results_eq(a: MillerLoopResult, b: Fp12) {
     let b = convert_bls12381_fp12_to_halo2_fq12(b);
-    crate::halo2curves_shims::bls12_381::tests::assert_miller_results_eq(a, b);
+    openvm_pairing_guest::halo2curves_shims::bls12_381::test_utils::assert_miller_results_eq(a, b);
 }
 
 #[test]
@@ -289,9 +289,12 @@ fn test_bls12381_pairing_check_hint_host() {
         y: h2c_q.y,
     };
 
-    let f_cmp =
-        crate::halo2curves_shims::bls12_381::Bls12_381::multi_miller_loop(&[p_cmp], &[q_cmp]);
-    let (c_cmp, s_cmp) = crate::halo2curves_shims::bls12_381::Bls12_381::final_exp_hint(&f_cmp);
+    let f_cmp = openvm_pairing_guest::halo2curves_shims::bls12_381::Bls12_381::multi_miller_loop(
+        &[p_cmp],
+        &[q_cmp],
+    );
+    let (c_cmp, s_cmp) =
+        openvm_pairing_guest::halo2curves_shims::bls12_381::Bls12_381::final_exp_hint(&f_cmp);
     let c_cmp = convert_bls12381_halo2_fq12_to_fp12(c_cmp);
     let s_cmp = convert_bls12381_halo2_fq12_to_fp12(s_cmp);
 

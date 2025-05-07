@@ -74,10 +74,10 @@ impl IntrinsicCurve for P256 {
 
 impl P256Point {
     pub fn x_be_bytes(&self) -> [u8; 32] {
-        <Self as WeierstrassPoint>::x(&self).to_be_bytes()
+        <Self as WeierstrassPoint>::x(self).to_be_bytes()
     }
 
     pub fn y_be_bytes(&self) -> [u8; 32] {
-        <Self as WeierstrassPoint>::y(&self).to_be_bytes()
+        <Self as WeierstrassPoint>::y(self).to_be_bytes()
     }
 }

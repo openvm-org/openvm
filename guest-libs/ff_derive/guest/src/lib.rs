@@ -44,6 +44,8 @@ impl ReprEndianness {
         }
     }
 
+    // Clippy things methods named from_* don't take self as a parameter
+    #[allow(clippy::wrong_self_convention)]
     fn from_repr(&self, name: &syn::Ident, limbs: usize) -> proc_macro2::TokenStream {
         let read_repr = match self {
             ReprEndianness::Big => quote! {

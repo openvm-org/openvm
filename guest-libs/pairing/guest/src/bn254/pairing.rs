@@ -5,15 +5,16 @@ use alloc::vec::Vec;
 use itertools::izip;
 use openvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field};
 use openvm_ecc_guest::AffinePoint;
-#[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
-use openvm_pairing_guest::halo2curves_shims::bn254::Bn254 as Halo2CurvesBn254;
 use openvm_pairing_guest::{
     bn254::{BN254_PSEUDO_BINARY_ENCODING, BN254_SEED},
     pairing::{
-        exp_check_fallback, Evaluatable, EvaluatedLine, FinalExp, FromLineDType, LineMulDType,
-        MillerStep, MultiMillerLoop, PairingCheck, PairingCheckError, PairingIntrinsics,
-        UnevaluatedLine,
+        exp_check_fallback, Evaluatable, EvaluatedLine, FromLineDType, LineMulDType, MillerStep,
+        MultiMillerLoop, PairingCheck, PairingCheckError, PairingIntrinsics, UnevaluatedLine,
     },
+};
+#[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
+use openvm_pairing_guest::{
+    halo2curves_shims::bn254::Bn254 as Halo2CurvesBn254, pairing::FinalExp,
 };
 #[cfg(target_os = "zkvm")]
 use {

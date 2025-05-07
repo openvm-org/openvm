@@ -15,10 +15,6 @@ pub(crate) mod utils;
 pub use fp12::*;
 pub use fp2::*;
 use hex_literal::hex;
-#[cfg(not(target_os = "zkvm"))]
-use lazy_static::lazy_static;
-#[cfg(not(target_os = "zkvm"))]
-use num_bigint::BigUint;
 use openvm_ecc_sw_macros::sw_declare;
 use openvm_pairing_guest::pairing::PairingIntrinsics;
 
