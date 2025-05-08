@@ -214,25 +214,37 @@ pub fn display_program_with_pc<F: Field>(program: &Program<F>) {
     }
 }
 
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+struct SerializedInstructionsAndDebugInfos<F> {
+    instruction_and_index: Vec<(Instruction<F>, u32)>,
+    total_length: u32,
+}
+
 // `debug_info` is stick with a specific binary. Serializ
 fn serialize_instructions_and_debug_infos<F: Serialize, S: Serializer>(
     data: &[Option<(Instruction<F>, Option<DebugInfo>)>],
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
-    let ins_data: Vec<_> = data
-        .iter()
-        .map(|o| o.as_ref().map(|(ins, _)| ins))
-        .collect();
-    ins_data.serialize(serializer)
+    let mut ins_data = Vec::with_capacity(data.len());
+    let total_len = data.len() as u32;
+    for (i, o) in data.iter().enumerate() {
+        if let Some(o) = o {
+            ins_data.push((&o.0, i as u32));
+        }
+    }
+    (ins_data, total_len).serialize(serializer)
 }
 
 #[allow(clippy::type_complexity)]
 fn deserialize_instructions_and_debug_infos<'de, F: Deserialize<'de>, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Vec<Option<(Instruction<F>, Option<DebugInfo>)>>, D::Error> {
-    let inst_data: Vec<Option<Instruction<F>>> = Deserialize::deserialize(deserializer)?;
-    Ok(inst_data
-        .into_iter()
-        .map(|ins_opt| ins_opt.map(|ins| (ins, None)))
-        .collect())
+    let (inst_data, total_len): (Vec<(Instruction<F>, u32)>, u32) =
+        Deserialize::deserialize(deserializer)?;
+    let mut ret: Vec<Option<(Instruction<F>, Option<DebugInfo>)>> = Vec::new();
+    ret.resize_with(total_len as usize, || None);
+    for (inst, i) in inst_data {
+        ret[i as usize] = Some((inst, None));
+    }
+    Ok(ret)
 }
