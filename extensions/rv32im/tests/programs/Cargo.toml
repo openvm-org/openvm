@@ -29,4 +29,4 @@ lto = "thin"    # turn on lto = fat to decrease binary size, but this optimizes 
 
 [[example]]
 name = "getrandom"
-requires = ["getrandom"]
+required-features = ["getrandom"]
