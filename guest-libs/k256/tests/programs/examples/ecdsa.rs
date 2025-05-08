@@ -3,15 +3,13 @@
 
 extern crate alloc;
 
-use ecdsa::RecoveryId;
-use ecdsa::{Signature, VerifyingKey};
+use ecdsa::{RecoveryId, Signature, VerifyingKey};
 use hex_literal::hex;
-use openvm_k256::{EncodedPoint, Secp256k1};
-use openvm_sha2::sha256;
-
 // clippy thinks this is unused, but it's used in the init! macro
 #[allow(unused)]
 use openvm_k256::Secp256k1Point;
+use openvm_k256::{EncodedPoint, Secp256k1};
+use openvm_sha2::sha256;
 
 openvm::init!("openvm_init_ecdsa.rs");
 

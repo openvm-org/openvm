@@ -5,6 +5,7 @@ openvm::entry!(main);
 extern crate alloc;
 
 use alloc::{vec, vec::Vec};
+
 use openvm_ff_derive::openvm_prime_field;
 
 /// The BLS12-381 scalar field.

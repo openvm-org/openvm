@@ -4747,7 +4747,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-ff-derive"
-version = "1.0.1-rc.0"
+version = "1.1.2"
 dependencies = [
  "addchain",
  "num-bigint 0.3.3",
@@ -4760,7 +4760,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-ff-derive-integration-tests"
-version = "1.0.1-rc.0"
+version = "1.1.2"
 dependencies = [
  "eyre",
  "num-bigint 0.4.6",
@@ -4807,7 +4807,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-k256"
-version = "1.0.1-rc.0"
+version = "1.1.2"
 dependencies = [
  "ecdsa 0.16.9",
  "elliptic-curve 0.13.8",
@@ -4827,7 +4827,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-k256-integration-tests"
-version = "1.0.1-rc.0"
+version = "1.1.2"
 dependencies = [
  "derive_more 1.0.0",
  "eyre",
@@ -4851,7 +4851,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-keccak256"
-version = "1.0.1-rc.0"
+version = "1.1.2"
 dependencies = [
  "openvm-keccak256-guest",
  "tiny-keccak",
@@ -4893,7 +4893,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-keccak256-integration-tests"
-version = "1.0.1-rc.0"
+version = "1.1.2"
 dependencies = [
  "eyre",
  "openvm-circuit",
@@ -5047,7 +5047,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-p256"
-version = "1.0.1-rc.0"
+version = "1.1.2"
 dependencies = [
  "ecdsa 0.16.9",
  "elliptic-curve 0.13.8",
@@ -5067,7 +5067,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-p256-integration-tests"
-version = "1.0.1-rc.0"
+version = "1.1.2"
 dependencies = [
  "derive_more 1.0.0",
  "eyre",
@@ -5091,7 +5091,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-pairing"
-version = "1.0.1-rc.0"
+version = "1.1.2"
 dependencies = [
  "group 0.13.0",
  "halo2curves-axiom",
@@ -5175,7 +5175,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-pairing-integration-tests"
-version = "1.0.1-rc.0"
+version = "1.1.2"
 dependencies = [
  "eyre",
  "halo2curves-axiom",
@@ -5255,7 +5255,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-ruint"
-version = "1.0.1-rc.0"
+version = "1.1.2"
 dependencies = [
  "alloy-rlp",
  "approx",
@@ -5297,7 +5297,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-ruint-integration-tests"
-version = "1.0.1-rc.0"
+version = "1.1.2"
 dependencies = [
  "eyre",
  "openvm-bigint-circuit",
@@ -5453,7 +5453,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-sha2"
-version = "1.0.1-rc.0"
+version = "1.1.2"
 dependencies = [
  "openvm-sha256-guest",
  "sha2 0.10.9",
@@ -5461,7 +5461,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-sha2-integration-tests"
-version = "1.0.1-rc.0"
+version = "1.1.2"
 dependencies = [
  "eyre",
  "openvm-circuit",

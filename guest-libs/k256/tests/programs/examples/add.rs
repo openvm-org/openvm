@@ -3,7 +3,6 @@
 
 use elliptic_curve::{group::Curve, CurveArithmetic, Group};
 use openvm_k256::Secp256k1;
-
 // clippy thinks this is unused, but it's used in the init! macro
 #[allow(unused)]
 use openvm_k256::Secp256k1Point;
