@@ -15,9 +15,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{
-        BitwiseOperationLookupBus, BitwiseOperationLookupChip, SharedBitwiseOperationLookupChip,
-    },
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -202,7 +200,7 @@ where
             CTX,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-            TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>,
+            TraceContext<'a> = (),
         >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -256,8 +254,7 @@ where
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-        self.adapter
-            .fill_trace_row(mem_helper, self.bitwise_lookup_chip.as_ref(), adapter_row);
+        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
 
         let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 

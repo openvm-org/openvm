@@ -225,7 +225,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 BaseAluCoreAir::new(bitwise_lu_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
             ),
             Rv32BaseAluStep::new(
-                Rv32BaseAluAdapterStep::new(),
+                Rv32BaseAluAdapterStep::new(bitwise_lu_chip.clone()),
                 bitwise_lu_chip.clone(),
                 BaseAluOpcode::CLASS_OFFSET,
             ),
@@ -247,7 +247,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 LessThanCoreAir::new(bitwise_lu_chip.bus(), LessThanOpcode::CLASS_OFFSET),
             ),
             LessThanStep::new(
-                Rv32BaseAluAdapterStep::new(),
+                Rv32BaseAluAdapterStep::new(bitwise_lu_chip.clone()),
                 bitwise_lu_chip.clone(),
                 LessThanOpcode::CLASS_OFFSET,
             ),
@@ -270,7 +270,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 ),
             ),
             ShiftStep::new(
-                Rv32BaseAluAdapterStep::new(),
+                Rv32BaseAluAdapterStep::new(bitwise_lu_chip.clone()),
                 bitwise_lu_chip.clone(),
                 range_checker.clone(),
                 ShiftOpcode::CLASS_OFFSET,

@@ -10,7 +10,7 @@ use openvm_circuit::{
     },
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
@@ -73,7 +73,7 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
     [1 << 8, 32 * (1 << 8)]
 }
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutorE1, From, AnyEnum)]
 pub enum Int256Executor<F: PrimeField32> {
     BaseAlu256(Rv32BaseAlu256Chip<F>),
     LessThan256(Rv32LessThan256Chip<F>),
@@ -149,7 +149,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 BaseAluCoreAir::new(bitwise_lu_chip.bus(), Rv32BaseAlu256Opcode::CLASS_OFFSET),
             ),
             Rv32BaseAlu256Step::new(
-                Rv32HeapAdapterStep::new(pointer_max_bits),
+                Rv32HeapAdapterStep::new(pointer_max_bits, bitwise_lu_chip.clone()),
                 bitwise_lu_chip.clone(),
                 Rv32BaseAlu256Opcode::CLASS_OFFSET,
             ),
@@ -173,7 +173,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 LessThanCoreAir::new(bitwise_lu_chip.bus(), Rv32LessThan256Opcode::CLASS_OFFSET),
             ),
             Rv32LessThan256Step::new(
-                Rv32HeapAdapterStep::new(pointer_max_bits),
+                Rv32HeapAdapterStep::new(pointer_max_bits, bitwise_lu_chip.clone()),
                 bitwise_lu_chip.clone(),
                 Rv32LessThan256Opcode::CLASS_OFFSET,
             ),
@@ -197,7 +197,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 BranchEqualCoreAir::new(Rv32BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
             ),
             Rv32BranchEqual256Step::new(
-                Rv32HeapBranchAdapterStep::new(pointer_max_bits),
+                Rv32HeapBranchAdapterStep::new(pointer_max_bits, bitwise_lu_chip.clone()),
                 Rv32BranchEqual256Opcode::CLASS_OFFSET,
                 DEFAULT_PC_STEP,
             ),
@@ -224,7 +224,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 ),
             ),
             Rv32BranchLessThan256Step::new(
-                Rv32HeapBranchAdapterStep::new(pointer_max_bits),
+                Rv32HeapBranchAdapterStep::new(pointer_max_bits, bitwise_lu_chip.clone()),
                 bitwise_lu_chip.clone(),
                 Rv32BranchLessThan256Opcode::CLASS_OFFSET,
             ),
@@ -247,7 +247,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 MultiplicationCoreAir::new(*range_tuple_chip.bus(), Rv32Mul256Opcode::CLASS_OFFSET),
             ),
             Rv32Multiplication256Step::new(
-                Rv32HeapAdapterStep::new(pointer_max_bits),
+                Rv32HeapAdapterStep::new(pointer_max_bits, bitwise_lu_chip.clone()),
                 range_tuple_chip.clone(),
                 Rv32Mul256Opcode::CLASS_OFFSET,
             ),
@@ -275,7 +275,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 ),
             ),
             Rv32Shift256Step::new(
-                Rv32HeapAdapterStep::new(pointer_max_bits),
+                Rv32HeapAdapterStep::new(pointer_max_bits, bitwise_lu_chip.clone()),
                 bitwise_lu_chip.clone(),
                 range_checker_chip.clone(),
                 Rv32Shift256Opcode::CLASS_OFFSET,

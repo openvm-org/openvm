@@ -58,7 +58,7 @@ fn create_test_chip(
             ),
         ),
         ShiftStep::new(
-            Rv32BaseAluAdapterStep::new(),
+            Rv32BaseAluAdapterStep::new(bitwise_chip.clone()),
             bitwise_chip.clone(),
             tester.range_checker().clone(),
             ShiftOpcode::CLASS_OFFSET,

@@ -39,7 +39,7 @@ const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
 fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32LoadStoreChip<F> {
-    let range_checker_chip = tester.memory_controller().range_checker.clone();
+    let range_checker_chip = tester.range_checker();
     let chip = Rv32LoadStoreChip::<F>::new(
         VmAirWrapper::new(
             Rv32LoadStoreAdapterAir::new(

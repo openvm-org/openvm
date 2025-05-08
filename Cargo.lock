@@ -4143,6 +4143,7 @@ dependencies = [
  "openvm-stark-sdk",
  "rand",
  "serde",
+ "test-case",
 ]
 
 [[package]]

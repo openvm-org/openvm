@@ -12,7 +12,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -161,7 +161,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
 }
 
 #[derive(derive_new::new)]
-pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize>;
+pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize> {
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+}
 
 impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     for Rv32BaseAluAdapterStep<LIMB_BITS>
@@ -169,7 +171,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     const WIDTH: usize = size_of::<Rv32BaseAluAdapterCols<u8>>();
     type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
     type WriteData = [[u8; RV32_REGISTER_NUM_LIMBS]; 1];
-    type TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>;
+    type TraceContext<'a> = ();
 
     #[inline(always)]
     fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]) {
@@ -249,7 +251,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     fn fill_trace_row(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
-        bitwise_lookup_chip: &BitwiseOperationLookupChip<LIMB_BITS>,
+        _ctx: (),
         adapter_row: &mut [F],
     ) {
         let adapter_row: &mut Rv32BaseAluAdapterCols<F> = adapter_row.borrow_mut();
@@ -264,7 +266,8 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
         } else {
             let rs2_imm = adapter_row.rs2.as_canonical_u32();
             let mask = (1 << RV32_CELL_BITS) - 1;
-            bitwise_lookup_chip.request_range(rs2_imm & mask, (rs2_imm >> 8) & mask);
+            self.bitwise_lookup_chip
+                .request_range(rs2_imm & mask, (rs2_imm >> 8) & mask);
         }
         timestamp += 1;
 
