@@ -2,11 +2,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use elliptic_curve::{ops::LinearCombination, Group, PrimeField};
-use openvm_k256::{ProjectivePoint, Scalar};
-
 // clippy thinks this is unused, but it's used in the init! macro
 #[allow(unused)]
 use openvm_k256::Secp256k1Point;
+use openvm_k256::{ProjectivePoint, Scalar};
 
 openvm::init!("openvm_init_linear_combination.rs");
 
