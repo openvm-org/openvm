@@ -7,8 +7,8 @@
 #[cfg(feature = "getrandom-unsupported")]
 #[no_mangle]
 unsafe extern "Rust" fn __getrandom_v03_custom(
-    dest: *mut u8,
-    len: usize,
+    _dest: *mut u8,
+    _len: usize,
 ) -> Result<(), getrandom::Error> {
     Err(getrandom::Error::UNSUPPORTED)
 }
