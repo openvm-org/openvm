@@ -167,8 +167,8 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     for Rv32BaseAluAdapterStep<LIMB_BITS>
 {
     const WIDTH: usize = size_of::<Rv32BaseAluAdapterCols<u8>>();
-    type ReadData = ([u8; RV32_REGISTER_NUM_LIMBS], [u8; RV32_REGISTER_NUM_LIMBS]);
-    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
+    type WriteData = [[u8; RV32_REGISTER_NUM_LIMBS]; 1];
     type TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>;
 
     #[inline(always)]
@@ -218,7 +218,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
             tracing_read_imm(memory, c.as_canonical_u32(), &mut adapter_row.rs2)
         };
 
-        (rs1, rs2)
+        [rs1, rs2]
     }
 
     #[inline(always)]
@@ -240,7 +240,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
             memory,
             RV32_REGISTER_AS,
             a.as_canonical_u32(),
-            data,
+            &data[0],
             &mut adapter_row.writes_aux,
         );
     }
@@ -277,8 +277,8 @@ where
     F: PrimeField32,
 {
     // TODO(ayush): directly use u32
-    type ReadData = ([u8; RV32_REGISTER_NUM_LIMBS], [u8; RV32_REGISTER_NUM_LIMBS]);
-    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
+    type WriteData = [[u8; RV32_REGISTER_NUM_LIMBS]; 1];
 
     #[inline(always)]
     fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
@@ -307,7 +307,7 @@ where
             imm_le
         };
 
-        (rs1, rs2)
+        [rs1, rs2]
     }
 
     #[inline(always)]
@@ -319,6 +319,6 @@ where
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        memory_write(memory, d.as_canonical_u32(), a.as_canonical_u32(), rd);
+        memory_write(memory, d.as_canonical_u32(), a.as_canonical_u32(), &rd[0]);
     }
 }

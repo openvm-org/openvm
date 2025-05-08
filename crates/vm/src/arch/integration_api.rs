@@ -636,6 +636,18 @@ pub struct SignedImmInstruction<T> {
 mod conversions {
     use super::*;
 
+    // impl<T> From<[T; 1]> for T {
+    //     fn from(v: [T; 1]) -> Self {
+    //         v[0]
+    //     }
+    // }
+
+    // impl<T> From<[T; 2]> for (T, T) {
+    //     fn from(v: [T; 2]) -> Self {
+    //         (v[0], v[1])
+    //     }
+    // }
+
     // AdapterAirContext: VecHeapAdapterInterface -> DynInterface
     impl<
             T,

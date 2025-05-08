@@ -26,8 +26,6 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use serde::{Deserialize, Serialize};
-use serde_big_array::BigArray;
 use strum::IntoEnumIterator;
 
 #[repr(C)]
@@ -223,7 +221,7 @@ where
         + for<'a> AdapterTraceStep<
             F,
             CTX,
-            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
+            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData = (),
             TraceContext<'a> = (),
         >,
@@ -247,12 +245,15 @@ where
 
         let blt_opcode = BranchLessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let mut row_slice = &mut trace[*trace_offset..*trace_offset + width];
+        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
 
-        let (rs1, rs2) = self.adapter.read(state.memory, instruction, adapter_row);
+        let [rs1, rs2] = self
+            .adapter
+            .read(state.memory, instruction, adapter_row)
+            .into();
 
         let (cmp_result, diff_idx, a_sign, b_sign) =
             run_cmp::<NUM_LIMBS, LIMB_BITS>(blt_opcode, &rs1, &rs2);
@@ -355,8 +356,7 @@ impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
     for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<F, ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]), WriteData = ()>,
+    A: 'static + for<'a> AdapterExecutorE1<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
 {
     fn execute_e1<Mem, Ctx>(
         &mut self,
@@ -370,7 +370,7 @@ where
 
         let blt_opcode = BranchLessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let (rs1, rs2) = self.adapter.read(state.memory, instruction);
+        let [rs1, rs2] = self.adapter.read(state.memory, instruction).into();
 
         // TODO(ayush): probably don't need the other values
         let (cmp_result, _, _, _) = run_cmp::<NUM_LIMBS, LIMB_BITS>(blt_opcode, &rs1, &rs2);

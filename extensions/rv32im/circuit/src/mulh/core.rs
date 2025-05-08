@@ -26,8 +26,7 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use serde::{Deserialize, Serialize};
-use serde_big_array::BigArray;
+
 use strum::IntoEnumIterator;
 
 #[repr(C)]
@@ -231,8 +230,8 @@ where
         + for<'a> AdapterTraceStep<
             F,
             CTX,
-            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
-            WriteData = [u8; NUM_LIMBS],
+            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
+            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
             TraceContext<'a> = (),
         >,
 {
@@ -255,12 +254,15 @@ where
 
         let mulh_opcode = MulHOpcode::from_usize(opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
 
-        let mut row_slice = &mut trace[*trace_offset..*trace_offset + width];
+        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
 
-        let (rs1, rs2) = self.adapter.read(state.memory, instruction, adapter_row);
+        let [rs1, rs2] = self
+            .adapter
+            .read(state.memory, instruction, adapter_row)
+            .into();
 
         let b = rs1.map(u32::from);
         let c = rs2.map(u32::from);
@@ -296,7 +298,7 @@ where
         // TODO(ayush): avoid this conversion
         let a = a.map(|x| x as u8);
         self.adapter
-            .write(state.memory, instruction, adapter_row, &a);
+            .write(state.memory, instruction, adapter_row, &[a].into());
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -319,8 +321,8 @@ where
     A: 'static
         + for<'a> AdapterExecutorE1<
             F,
-            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
-            WriteData = [u8; NUM_LIMBS],
+            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
+            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
         >,
 {
     fn execute_e1<Mem, Ctx>(
@@ -335,14 +337,14 @@ where
 
         let mulh_opcode = MulHOpcode::from_usize(opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
 
-        let (rs1, rs2) = self.adapter.read(state.memory, instruction);
+        let [rs1, rs2] = self.adapter.read(state.memory, instruction).into();
         let rs1 = rs1.map(u32::from);
         let rs2 = rs2.map(u32::from);
 
         let (rd, _, _, _, _) = run_mulh::<NUM_LIMBS, LIMB_BITS>(mulh_opcode, &rs1, &rs2);
         let rd = rd.map(|x| x as u8);
 
-        self.adapter.write(state.memory, instruction, &rd);
+        self.adapter.write(state.memory, instruction, &[rd].into());
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
