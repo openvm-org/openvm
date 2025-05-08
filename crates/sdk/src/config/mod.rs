@@ -1,5 +1,5 @@
 use clap::Args;
-use openvm_circuit::arch::instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
+use openvm_circuit::arch::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use openvm_continuations::verifier::{
     common::types::VmVerifierPvs, internal::types::InternalVmVerifierPvs,
 };

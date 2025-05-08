@@ -42,9 +42,6 @@ impl AppExecutionCommit<F> {
         app_exe: &NonRootCommittedExe,
         leaf_vm_verifier_exe: &NonRootCommittedExe,
     ) -> Self {
-        assert!(
-            app_exe.exe.program.max_num_public_values <= app_vm_config.system().num_public_values
-        );
         let exe_commit = app_exe
             .compute_exe_commit(&app_vm_config.system().memory_config)
             .into();
