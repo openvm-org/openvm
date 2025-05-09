@@ -18,9 +18,9 @@ use crate::{
     system::{
         memory::{
             controller::dimensions::MemoryDimensions,
-            merkle::{FinalState, MemoryMerkleChip, MemoryMerkleCols},
+            merkle::{tree::MerkleTree, FinalState, MemoryMerkleChip, MemoryMerkleCols},
             tree::MemoryNode::{self, NonLeaf},
-            Equipartition,
+            Equipartition, MemoryImage,
         },
         poseidon2::{
             Poseidon2PeripheryBaseChip, Poseidon2PeripheryChip, PERIPHERY_POSEIDON2_WIDTH,
@@ -31,37 +31,13 @@ use crate::{
 impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     pub fn finalize(
         &mut self,
-        initial_tree: &MemoryNode<CHUNK, F>,
+        initial_memory: MemoryImage,
         final_memory: &Equipartition<F, CHUNK>,
         hasher: &mut impl HasherChip<CHUNK, F>,
     ) {
         assert!(self.final_state.is_none(), "Merkle chip already finalized");
-        // there needs to be a touched node with `height_section` = 0
-        // shouldn't be a leaf because
-        // trace generation will expect an interaction from MemoryInterfaceChip in that case
-        if self.touched_nodes.len() == 1 {
-            self.touch_node(1, 0, 0);
-        }
-
-        let mut rows = vec![];
-        let mut tree_helper = TreeHelper {
-            memory_dimensions: self.air.memory_dimensions,
-            final_memory,
-            touched_nodes: &self.touched_nodes,
-            trace_rows: &mut rows,
-        };
-        let final_tree = tree_helper.recur(
-            self.air.memory_dimensions.overall_height(),
-            initial_tree,
-            0,
-            0,
-            hasher,
-        );
-        self.final_state = Some(FinalState {
-            rows,
-            init_root: initial_tree.hash(),
-            final_root: final_tree.hash(),
-        });
+        let mut tree = MerkleTree::from_memory(initial_memory, &self.air.memory_dimensions, hasher);
+        self.final_state = Some(tree.finalize(hasher, final_memory, &self.air.memory_dimensions));
     }
 }
 

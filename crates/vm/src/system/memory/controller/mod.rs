@@ -495,7 +495,7 @@ impl<F: PrimeField32> MemoryController<F> {
                     metadata.block_size >= RV32_REGISTER_NUM_LIMBS as u32,
                     "How come some block size is less than RV32_REGISTER_NUM_LIMBS, isn't this the alignment?"
                 );
-                let mut values = (0..metadata.block_size)
+                let values = (0..metadata.block_size)
                     .map(|i| self.memory.data.get_f::<F>(addr_space, ptr + i))
                     .collect::<Vec<_>>();
                 for start in (0..metadata.block_size).step_by(RV32_REGISTER_NUM_LIMBS) {
@@ -614,17 +614,12 @@ impl<F: PrimeField32> MemoryController<F> {
                     );
                 }
 
-                boundary_chip.finalize(initial_memory, &final_memory, hasher);
+                boundary_chip.finalize(&initial_memory, &final_memory, hasher);
                 let final_memory_values = final_memory
                     .into_par_iter()
                     .map(|(key, value)| (key, value.values))
                     .collect();
-                let initial_node = MemoryNode::tree_from_memory(
-                    merkle_chip.air.memory_dimensions,
-                    initial_memory,
-                    hasher,
-                );
-                merkle_chip.finalize(&initial_node, &final_memory_values, hasher);
+                merkle_chip.finalize(initial_memory.clone(), &final_memory_values, hasher);
                 self.final_state = Some(FinalState::Persistent(PersistentFinalState {
                     final_memory: final_memory_values.clone(),
                 }));

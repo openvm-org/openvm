@@ -338,6 +338,14 @@ where
                     zip(airs, air_proof_inputs).filter(|(_, input)| input.main_trace_height() > 0),
                 );
             }
+            eprintln!(
+                "poseidon_chip: {:?}",
+                match &poseidon_chip {
+                    Poseidon2PeripheryChip::Register0(chip) => &chip.records,
+                    Poseidon2PeripheryChip::Register1(chip) => &chip.records,
+                }
+            );
+            self = self.load(poseidon_chip);
             self = self.load(range_checker); // this must be last because other trace generation
                                              // mutates its state
         }
