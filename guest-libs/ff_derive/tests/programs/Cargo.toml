@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 openvm = { git = "https://github.com/openvm-org/openvm.git", branch = "refactor/guest-library-reorg-final" }
-openvm-platform = { git = "https://github.com/openvm-org/openvm.git", features = ["getrandom"], branch = "refactor/guest-library-reorg-final" }
+openvm-platform = { git = "https://github.com/openvm-org/openvm.git", branch = "refactor/guest-library-reorg-final" }
 openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "refactor/guest-library-reorg-final" }
 openvm-algebra-moduli-macros = { git = "https://github.com/openvm-org/openvm.git", branch = "refactor/guest-library-reorg-final" }
 
