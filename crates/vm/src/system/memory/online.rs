@@ -190,19 +190,21 @@ impl<F: PrimeField32> TracingMemory<F> {
         );
     }
 
-    pub(crate) fn execute_splits<const ALIGN: usize>(
+    pub(crate) fn execute_splits<const ALIGN: usize, const UPDATE_META: bool>(
         &mut self,
         address: MemoryAddress<u32, u32>,
         values: &[F],
         timestamp: u32,
     ) {
-        for i in 0..(values.len() / ALIGN) {
-            self.set_meta_block::<ALIGN>(
-                address.address_space as usize,
-                address.pointer as usize + i * ALIGN,
-                ALIGN,
-                timestamp,
-            );
+        if UPDATE_META {
+            for i in 0..(values.len() / ALIGN) {
+                self.set_meta_block::<ALIGN>(
+                    address.address_space as usize,
+                    address.pointer as usize + i * ALIGN,
+                    ALIGN,
+                    timestamp,
+                );
+            }
         }
         let mut size = ALIGN;
         let MemoryAddress {
@@ -225,18 +227,20 @@ impl<F: PrimeField32> TracingMemory<F> {
         }
     }
 
-    pub(crate) fn execute_merges<const ALIGN: usize>(
+    pub(crate) fn execute_merges<const ALIGN: usize, const UPDATE_META: bool>(
         &mut self,
         address: MemoryAddress<u32, u32>,
         values: &[F],
         timestamps: &[u32],
     ) {
-        self.set_meta_block::<ALIGN>(
-            address.address_space as usize,
-            address.pointer as usize,
-            values.len(),
-            *timestamps.iter().max().unwrap(),
-        );
+        if UPDATE_META {
+            self.set_meta_block::<ALIGN>(
+                address.address_space as usize,
+                address.pointer as usize,
+                values.len(),
+                *timestamps.iter().max().unwrap(),
+            );
+        }
         let mut size = ALIGN;
         let MemoryAddress {
             address_space,
@@ -354,7 +358,7 @@ impl<F: PrimeField32> TracingMemory<F> {
                         .get_f(address.address_space, address.pointer + (i as u32))
                 })
                 .collect::<Vec<_>>();
-            self.execute_splits::<ALIGN>(address, &values, current_metadata.timestamp);
+            self.execute_splits::<ALIGN, true>(address, &values, current_metadata.timestamp);
             cur_ptr += current_metadata.block_size as usize;
         };
         if need_to_merge {
@@ -362,7 +366,7 @@ impl<F: PrimeField32> TracingMemory<F> {
             let values = (0..BLOCK_SIZE)
                 .map(|i| self.data.get_f(address_space as u32, (pointer + i) as u32))
                 .collect::<Vec<_>>();
-            self.execute_merges::<ALIGN>(
+            self.execute_merges::<ALIGN, true>(
                 MemoryAddress::new(address_space as u32, pointer as u32),
                 &values,
                 &block_timestamps,

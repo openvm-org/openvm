@@ -510,7 +510,7 @@ impl<F: PrimeField32> MemoryController<F> {
                         },
                     );
                 }
-                self.memory.execute_splits::<RV32_REGISTER_NUM_LIMBS>(
+                self.memory.execute_splits::<RV32_REGISTER_NUM_LIMBS, true>(
                     MemoryAddress::new(addr_space, ptr),
                     &values,
                     metadata.timestamp,
@@ -535,13 +535,13 @@ impl<F: PrimeField32> MemoryController<F> {
                             },
                         );
                     }
-                    self.memory.execute_splits::<1>(
+                    self.memory.execute_splits::<1, false>(
                         MemoryAddress::new(addr_space, ptr),
                         &values,
                         timestamp,
                     );
                     values.fill(F::ZERO);
-                    self.memory.execute_merges::<1>(
+                    self.memory.execute_merges::<1, false>(
                         MemoryAddress::new(addr_space, ptr),
                         &values,
                         &vec![INITIAL_TIMESTAMP; values.len()],
@@ -594,11 +594,12 @@ impl<F: PrimeField32> MemoryController<F> {
                             values: current_values,
                         },
                     );
-                    self.memory.execute_merges::<RV32_REGISTER_NUM_LIMBS>(
-                        current_address,
-                        &current_values,
-                        &current_timestamps,
-                    );
+                    self.memory
+                        .execute_merges::<RV32_REGISTER_NUM_LIMBS, false>(
+                            current_address,
+                            &current_values,
+                            &current_timestamps,
+                        );
                     // We do not need to implement the initial splits here,
                     // because this has been done in the controller on the first access.
 
