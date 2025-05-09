@@ -23,6 +23,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
+use test_case::test_case;
 
 use super::{
     core::{run_cmp, BranchLessThanStep},
@@ -37,7 +38,6 @@ use crate::{
     test_utils::get_verification_error,
     BranchLessThanCoreAir,
 };
-use test_case::test_case;
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;

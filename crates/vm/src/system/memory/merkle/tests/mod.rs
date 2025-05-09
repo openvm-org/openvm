@@ -19,6 +19,7 @@ use openvm_stark_sdk::{
 };
 use rand::RngCore;
 
+use super::memory_to_partition;
 use crate::{
     arch::testing::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
     system::memory::{
@@ -31,8 +32,6 @@ use crate::{
         Equipartition, MemoryImage,
     },
 };
-
-use super::memory_to_partition;
 
 mod util;
 
