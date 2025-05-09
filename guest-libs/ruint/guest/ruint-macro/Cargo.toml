@@ -1,0 +1,23 @@
+[package]
+name = "openvm-ruint-macro"
+description = "OpenVM fork of ruint-macro"
+version = "1.2.1"
+keywords = ["uint", "macro"]
+categories = ["mathematics"]
+readme = "README.md"
+
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[lib]
+proc-macro = true
+
+[package.metadata.release]
+tag = false
+
+[dev-dependencies]
+openvm-ruint = { path = ".." }

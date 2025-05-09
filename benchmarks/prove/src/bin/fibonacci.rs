@@ -13,7 +13,8 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
 
-    let elf = args.build_bench_program("fibonacci")?;
+    let config = Rv32ImConfig::default();
+    let elf = args.build_bench_program("fibonacci", &config, None)?;
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
@@ -26,6 +27,6 @@ fn main() -> Result<()> {
         let n = 100_000u64;
         let mut stdin = StdIn::default();
         stdin.write(&n);
-        args.bench_from_exe("fibonacci_program", Rv32ImConfig::default(), exe, stdin)
+        args.bench_from_exe("fibonacci_program", config, exe, stdin)
     })
 }

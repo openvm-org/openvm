@@ -1,10 +1,8 @@
-use core::ops::{Add, Mul, Sub};
-
 use halo2curves_axiom::ff;
 
 use crate::{field::Field, DivAssignUnsafe, DivUnsafe};
 
-macro_rules! div_unsafe_impl {
+macro_rules! field_impls {
     ($($t:ty),*) => {
         $(
             impl DivUnsafe for $t {
@@ -42,48 +40,36 @@ macro_rules! div_unsafe_impl {
                     *self *= other.invert().unwrap();
                 }
             }
+
+            impl Field for $t {
+                const ZERO: Self = <$t as ff::Field>::ZERO;
+                const ONE: Self = <$t as ff::Field>::ONE;
+
+                type SelfRef<'a> = &'a Self;
+
+                fn double_assign(&mut self) {
+                    *self += *self;
+                }
+
+                fn square_assign(&mut self) {
+                    *self = self.square();
+                }
+            }
+
         )*
     };
 }
 
-div_unsafe_impl!(
+field_impls!(
     halo2curves_axiom::bls12_381::Fq,
     halo2curves_axiom::bls12_381::Fq12,
     halo2curves_axiom::bls12_381::Fq2
 );
-div_unsafe_impl!(
+field_impls!(
     halo2curves_axiom::bn256::Fq,
     halo2curves_axiom::bn256::Fq12,
     halo2curves_axiom::bn256::Fq2
 );
-
-impl<F: ff::Field> Field for F
-where
-    for<'a> &'a F: Add<&'a F, Output = F>
-        + Sub<&'a F, Output = F>
-        + Mul<&'a F, Output = F>
-        + DivUnsafe<&'a F, Output = F>,
-    for<'a> F: Add<&'a F, Output = F>
-        + Sub<&'a F, Output = F>
-        + Mul<&'a F, Output = F>
-        + DivAssignUnsafe
-        + DivUnsafe
-        + DivAssignUnsafe<&'a F>
-        + DivUnsafe<&'a F, Output = F>,
-{
-    const ZERO: Self = <F as ff::Field>::ZERO;
-    const ONE: Self = <F as ff::Field>::ONE;
-
-    type SelfRef<'a> = &'a F;
-
-    fn double_assign(&mut self) {
-        *self += *self;
-    }
-
-    fn square_assign(&mut self) {
-        *self = self.square();
-    }
-}
 
 mod bn254 {
     use alloc::vec::Vec;

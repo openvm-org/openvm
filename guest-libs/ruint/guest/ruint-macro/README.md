@@ -1,0 +1,1 @@
+See the [upstream docs](https://github.com/recmo/uint/blob/main/ruint-macro/README.md)

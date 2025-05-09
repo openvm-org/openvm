@@ -8,7 +8,7 @@ use subtle::ConditionallySelectable;
 use super::generate_test_points_bls12_381;
 use crate::{
     halo2curves_shims::bls12_381::{
-        tests::{assert_miller_results_eq, final_exp},
+        test_utils::{assert_miller_results_eq, final_exp},
         Bls12_381,
     },
     pairing::{Evaluatable, LineMulMType, MillerStep, MultiMillerLoop},
