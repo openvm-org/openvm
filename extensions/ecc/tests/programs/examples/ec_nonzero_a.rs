@@ -11,7 +11,7 @@ use openvm_ecc_guest::{
 
 openvm::entry!(main);
 
-openvm::init!("openvm_init_ec_nonzero_a.rs");
+openvm::init!("openvm_init_ec_nonzero_a_p256.rs");
 
 pub fn main() {
     // Sample points got from https://asecuritysite.com/ecc/p256p

@@ -611,9 +611,7 @@ the same format that is congruent modulo `N` to the respective operation applied
 
 For each instruction, the operand `d` is fixed to be `1` and `e` is fixed to be `2`.
 Each instruction performs block accesses with block size `4` in address space `1` and block size `N::BLOCK_SIZE` in
-address space `2`, where `N::NUM_LIMBS` is divisible by `N::BLOCK_SIZE`. Recall that `N::BLOCK_SIZE` must be a power of
-
-2.
+address space `2`, where `N::NUM_LIMBS` is divisible by `N::BLOCK_SIZE`. Recall that `N::BLOCK_SIZE` must be a power of 2.
 
 | Name                      | Operands    | Description                                                                                                                                                                                                |
 | ------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -634,6 +632,16 @@ format with each limb having `LIMB_BITS` bits.
 | ----------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ISEQMOD_RV32\<N\>       | `a,b,c,1,2` | `[a:4]_1 = [r32{0}(b): N::NUM_LIMBS]_2 == [r32{0}(c): N::NUM_LIMBS]_2 (mod N) ? 1 : 0`. Enforces that `[r32{0}(b): N::NUM_LIMBS]_2, [r32{0}(c): N::NUM_LIMBS]_2` are less than `N` and then sets the register value of `[a:4]_1` to `1` or `0` depending on whether the two big integers are equal. |
 | SETUP_ISEQMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(b): N::NUM_LIMBS]_2 == N)` in the chip that handles modular equality. For the sake of implementation convenience it also writes something (can be anything) into register value of `[a:4]_1`                                                                                        |
+
+#### Phantom Sub-Instructions
+
+
+| Name           | Discriminant | Operands      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| -------------- | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| HintNonQr\<N\>  | 0x50         | `_,_,c_upper` | Use `c_upper` to determine the index of the modulus from the list of supported moduli. Reset the hint stream to equal a quadratic nonresidue modulo `N`. |
+| HintSqrt\<N\>   | 0x51         | `a,_,c_upper` | Use `c_upper` to determine the index of the modulus from the list of supported moduli. Read from memory `x = [r32{0}(a): N::NUM_LIMBS]_2`.  If `x` is a quadratic residue modulo `N`, reset the hint stream to `[1u8, 0u8, 0u8, 0u8]` followed by a square root of `x`.  If `x` is not a quadratic residue, reset the hint stream to `[0u8; 4]` followed by a square root of `x * non_qr`, where `non_qr` is the quadratic nonresidue returned by `HintNonQr<N>`. |
+
+#
 
 #### Complex Extension Field
 

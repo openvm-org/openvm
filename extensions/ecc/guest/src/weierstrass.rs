@@ -426,7 +426,7 @@ macro_rules! impl_sw_group_ops {
                     p2.clone()
                 } else if p2.is_identity() {
                     self.clone()
-                } else if self.x() == p2.x() {
+                } else if WeierstrassPoint::x(self) == WeierstrassPoint::x(p2) {
                     if self.y() + p2.y() == <$field as openvm_algebra_guest::Field>::ZERO {
                         <$struct_name as WeierstrassPoint>::IDENTITY
                     } else {
@@ -444,7 +444,7 @@ macro_rules! impl_sw_group_ops {
                     *self = p2.clone();
                 } else if p2.is_identity() {
                     // do nothing
-                } else if self.x() == p2.x() {
+                } else if WeierstrassPoint::x(self) == WeierstrassPoint::x(p2) {
                     if self.y() + p2.y() == <$field as openvm_algebra_guest::Field>::ZERO {
                         *self = <$struct_name as WeierstrassPoint>::IDENTITY;
                     } else {
@@ -486,7 +486,7 @@ macro_rules! impl_sw_group_ops {
                     self.clone()
                 } else if self.is_identity() {
                     core::ops::Neg::neg(p2)
-                } else if self.x() == p2.x() {
+                } else if WeierstrassPoint::x(self) == WeierstrassPoint::x(p2) {
                     if self.y() == p2.y() {
                         <$struct_name as WeierstrassPoint>::IDENTITY
                     } else {
@@ -504,7 +504,7 @@ macro_rules! impl_sw_group_ops {
                     // do nothing
                 } else if self.is_identity() {
                     *self = core::ops::Neg::neg(p2);
-                } else if self.x() == p2.x() {
+                } else if WeierstrassPoint::x(self) == WeierstrassPoint::x(p2) {
                     if self.y() == p2.y() {
                         *self = <$struct_name as WeierstrassPoint>::IDENTITY
                     } else {
