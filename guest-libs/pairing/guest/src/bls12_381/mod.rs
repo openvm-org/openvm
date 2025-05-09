@@ -41,34 +41,6 @@ pub type Scalar = Bls12_381Scalar;
 pub type G1Affine = Bls12_381G1Affine;
 pub use g2::G2Affine;
 
-impl Field for Fp {
-    type SelfRef<'a> = &'a Self;
-    const ZERO: Self = <Self as IntMod>::ZERO;
-    const ONE: Self = <Self as IntMod>::ONE;
-
-    fn double_assign(&mut self) {
-        IntMod::double_assign(self);
-    }
-
-    fn square_assign(&mut self) {
-        IntMod::square_assign(self);
-    }
-}
-
-impl Field for Scalar {
-    type SelfRef<'a> = &'a Self;
-    const ZERO: Self = <Self as IntMod>::ZERO;
-    const ONE: Self = <Self as IntMod>::ONE;
-
-    fn double_assign(&mut self) {
-        IntMod::double_assign(self);
-    }
-
-    fn square_assign(&mut self) {
-        IntMod::square_assign(self);
-    }
-}
-
 // https://hackmd.io/@benjaminion/bls12-381#Cofactor
 // BLS12-381: The from_xy function will allow constructing elements that lie on the curve
 // but aren't actually in the cyclic subgroup of prime order that is usually called G1.

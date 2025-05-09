@@ -1,9 +1,12 @@
 extern crate proc_macro;
+extern crate alloc;
 
 use std::sync::atomic::AtomicUsize;
 
 use openvm_macros_common::{string_to_bytes, MacroArgs};
 use proc_macro::TokenStream;
+use num_bigint::BigUint;
+use num_prime::nt_funcs::is_prime;
 use quote::format_ident;
 use syn::{
     parse::{Parse, ParseStream},
@@ -34,7 +37,6 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
         let struct_name = item.name.to_string();
         let struct_name = syn::Ident::new(&struct_name, span.into());
         let mut modulus: Option<String> = None;
-        let mut impl_field: Option<bool> = None;
         for param in item.params {
             match param.name.to_string().as_str() {
                 "modulus" => {
@@ -48,22 +50,6 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         return syn::Error::new_spanned(
                             param.value,
                             "Expected a string literal for macro argument `modulus`",
-                        )
-                        .to_compile_error()
-                        .into();
-                    }
-                }
-                "impl_field" => {
-                    if let syn::Expr::Lit(syn::ExprLit {
-                        lit: syn::Lit::Bool(value),
-                        ..
-                    }) = param.value
-                    {
-                        impl_field = Some(value.value());
-                    } else {
-                        return syn::Error::new_spanned(
-                            param.value,
-                            "Expected a boolean literal for macro argument `impl_field`",
                         )
                         .to_compile_error()
                         .into();
@@ -83,8 +69,6 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
         let modulus_bytes = string_to_bytes(&modulus);
         let mut limbs = modulus_bytes.len();
         let mut block_size = 32;
-
-        let impl_field = impl_field.unwrap_or(false);
 
         if limbs <= 32 {
             limbs = 32;
@@ -757,7 +741,10 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
         output.push(result);
 
-        if impl_field {
+        let modulus_biguint = BigUint::from_bytes_le(&modulus_bytes);
+        let modulus_is_prime = is_prime(&modulus_biguint, None);
+
+        if modulus_is_prime.probably() {
             // implement Field and Sqrt traits for prime moduli
             let field_and_sqrt_impl = TokenStream::from(quote::quote_spanned! { span.into() =>
                 impl ::openvm_algebra_guest::Field for #struct_name {
@@ -1063,8 +1050,8 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
 
         });
 
-        // This function will be defined regardless of whether impl_field is true or false,
-        // but it will be called only if the impl_field is true.
+        // This function will be defined regardless of whether the modulus is prime or not,
+        // but it will be called only if the modulus is prime.
         let hint_sqrt_extern_func = syn::Ident::new(
             &format!("hint_sqrt_extern_func_{}", modulus_hex),
             span.into(),

@@ -42,34 +42,6 @@ pub type Scalar = Bn254Scalar;
 pub type G1Affine = Bn254G1Affine;
 pub use g2::G2Affine;
 
-impl Field for Fp {
-    type SelfRef<'a> = &'a Self;
-    const ZERO: Self = <Self as IntMod>::ZERO;
-    const ONE: Self = <Self as IntMod>::ONE;
-
-    fn double_assign(&mut self) {
-        IntMod::double_assign(self);
-    }
-
-    fn square_assign(&mut self) {
-        IntMod::square_assign(self);
-    }
-}
-
-impl Field for Scalar {
-    type SelfRef<'a> = &'a Self;
-    const ZERO: Self = <Self as IntMod>::ZERO;
-    const ONE: Self = <Self as IntMod>::ONE;
-
-    fn double_assign(&mut self) {
-        IntMod::double_assign(self);
-    }
-
-    fn square_assign(&mut self) {
-        IntMod::square_assign(self);
-    }
-}
-
 impl CyclicGroup for G1Affine {
     // https://eips.ethereum.org/EIPS/eip-197
     const GENERATOR: Self = G1Affine {

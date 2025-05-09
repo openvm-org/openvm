@@ -277,8 +277,7 @@ fn openvm_struct_impl(ast: &syn::ItemStruct, modulus: &BigUint) -> proc_macro2::
     quote! {
         ::openvm_algebra_moduli_macros::moduli_declare! {
             #struct_ident {
-                modulus = #modulus_str,
-                impl_field = true
+                modulus = #modulus_str
             }
         }
     }
