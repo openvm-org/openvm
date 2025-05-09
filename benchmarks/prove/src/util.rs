@@ -136,7 +136,15 @@ impl BenchmarkCli {
         }
     }
 
-    pub fn build_bench_program(&self, program_name: &str) -> Result<Elf> {
+    pub fn build_bench_program<VC>(
+        &self,
+        program_name: &str,
+        vm_config: &VC,
+        init_file_name: Option<&str>,
+    ) -> Result<Elf>
+    where
+        VC: VmConfig<F>,
+    {
         let profile = if self.profiling {
             "profiling"
         } else {
@@ -144,6 +152,7 @@ impl BenchmarkCli {
         }
         .to_string();
         let manifest_dir = get_programs_dir().join(program_name);
+        vm_config.write_to_init_file(&manifest_dir, init_file_name)?;
         build_elf(&manifest_dir, profile)
     }
 

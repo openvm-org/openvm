@@ -29,29 +29,7 @@ openvm_algebra_guest::moduli_macros::moduli_declare! {
     Mersenne61 { modulus = "0x1fffffffffffffff" },
 }
 
-openvm_algebra_guest::moduli_macros::moduli_init! {
-    "1000000000000000003", // Mod1e18
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F", // secp256k1 Coordinate field
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141", // secp256k1 Scalar field
-    "0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff", // secp256r1=p256 Coordinate field
-    "0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551", // secp256r1=p256 Scalar field
-    "0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47", // Bn254Fp Coordinate field
-    "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001", // Bn254 Scalar
-    "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab", // BLS12-381 Coordinate field
-    "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001", // BLS12-381 Scalar field
-    "0x1fffffffffffffff",
-    "7",
-}
-
-openvm_ecc_guest::sw_macros::sw_init! {
-    Secp256k1Point, P256Point,
-    Bn254G1Affine, Bls12_381G1Affine
-}
-
-openvm_algebra_guest::complex_macros::complex_init! {
-    Bn254Fp2 { mod_idx = 5 },
-    Bls12_381Fp2 { mod_idx = 7 },
-}
+openvm::init!();
 
 fn materialize_modular_chip<T: IntMod>() {
     // hopefully the compiler doesn't optimize out the operations
