@@ -1,20 +1,15 @@
-use std::{
-    collections::BTreeMap,
-    iter,
-    marker::PhantomData,
-    sync::{Arc, Mutex},
-};
+use std::{collections::BTreeMap, iter, marker::PhantomData};
 
 use getset::{Getters, MutGetters};
 use openvm_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
-    is_zero::IsZeroSubAir,
     utils::next_power_of_two_or_zero,
     var_range::{
         SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
     },
     TraceSubRowGenerator,
 };
+use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     interaction::PermutationCheckBus,
@@ -29,9 +24,10 @@ use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
 use super::{
-    online::{GuestMemory, INITIAL_TIMESTAMP},
+    online::INITIAL_TIMESTAMP,
     paged_vec::{AddressMap, PAGE_SIZE},
     volatile::VolatileBoundaryChip,
+    MemoryAddress,
 };
 use crate::{
     arch::{hasher::HasherChip, MemoryConfig},
@@ -39,13 +35,9 @@ use crate::{
         adapter::AccessAdapterInventory,
         dimensions::MemoryDimensions,
         merkle::{MemoryMerkleChip, SerialReceiver},
-        offline_checker::{
-            MemoryBaseAuxCols, MemoryBridge, MemoryBus, MemoryReadAuxCols,
-            MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols, AUX_LEN,
-        },
-        online::{MemoryLogEntry, TracingMemory},
+        offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
+        online::{AccessMetadata, TracingMemory},
         persistent::PersistentBoundaryChip,
-        tree::MemoryNode,
     },
 };
 
@@ -100,25 +92,6 @@ pub struct MemoryController<F> {
     // addr_space -> Memory data structure
     pub memory: TracingMemory<F>,
     pub access_adapters: AccessAdapterInventory<F>,
-    // Filled during finalization.
-    final_state: Option<FinalState<F>>,
-}
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug)]
-enum FinalState<F> {
-    Volatile(VolatileFinalState<F>),
-    #[allow(dead_code)]
-    Persistent(PersistentFinalState<F>),
-}
-#[derive(Debug, Default)]
-struct VolatileFinalState<F> {
-    _marker: PhantomData<F>,
-}
-#[allow(dead_code)]
-#[derive(Debug)]
-struct PersistentFinalState<F> {
-    final_memory: Equipartition<F, CHUNK>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -240,7 +213,12 @@ impl<F: PrimeField32> MemoryController<F> {
                     range_checker.clone(),
                 ),
             },
-            memory: TracingMemory::new(&mem_config, range_checker.clone(), memory_bus),
+            memory: TracingMemory::new(
+                &mem_config,
+                range_checker.clone(),
+                memory_bus,
+                RV32_REGISTER_NUM_LIMBS,
+            ),
             access_adapters: AccessAdapterInventory::new(
                 range_checker.clone(),
                 memory_bus,
@@ -249,7 +227,6 @@ impl<F: PrimeField32> MemoryController<F> {
             ),
             range_checker,
             range_checker_bus,
-            final_state: None,
         }
     }
 
@@ -284,8 +261,8 @@ impl<F: PrimeField32> MemoryController<F> {
             memory_bus,
             mem_config,
             interface_chip,
-            memory: TracingMemory::new(&mem_config, range_checker.clone(), memory_bus), /* it is expected that the memory will be
-                                                                                         * set later */
+            memory: TracingMemory::new(&mem_config, range_checker.clone(), memory_bus, CHUNK), /* it is expected that the memory will be
+                                                                                                * set later */
             access_adapters: AccessAdapterInventory::new(
                 range_checker.clone(),
                 memory_bus,
@@ -294,7 +271,6 @@ impl<F: PrimeField32> MemoryController<F> {
             ),
             range_checker,
             range_checker_bus,
-            final_state: None,
         }
     }
 
@@ -337,6 +313,7 @@ impl<F: PrimeField32> MemoryController<F> {
             &self.mem_config,
             self.range_checker.clone(),
             self.memory_bus,
+            CHUNK,
         )
         .with_image(memory.clone(), self.mem_config.access_capacity);
 
@@ -463,46 +440,151 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     /// Returns the final memory state if persistent.
+    #[allow(clippy::assertions_on_constants)]
     pub fn finalize<H>(&mut self, hasher: Option<&mut H>)
     where
         H: HasherChip<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
-        if self.final_state.is_some() {
-            return;
-        }
-        todo!();
-
+        let touched_blocks = self.memory.touched_blocks().collect::<Vec<_>>();
+        // First, let's split everything into blocks of ALIGN
+        let aligned_final_memory = {
+            let mut final_memory = TimestampedEquipartition::<F, RV32_REGISTER_NUM_LIMBS>::new();
+            for ((addr_space, ptr), metadata) in touched_blocks {
+                if metadata.block_size == AccessMetadata::OCCUPIED {
+                    continue;
+                }
+                assert!(
+                    metadata.block_size >= RV32_REGISTER_NUM_LIMBS as u32,
+                    "How come some block size is less than RV32_REGISTER_NUM_LIMBS, isn't this the alignment?"
+                );
+                let values = (0..metadata.block_size)
+                    .map(|i| self.memory.data.get_f::<F>(addr_space, ptr + i))
+                    .collect::<Vec<_>>();
+                for start in (0..metadata.block_size).step_by(RV32_REGISTER_NUM_LIMBS) {
+                    final_memory.insert(
+                        (addr_space, ptr + start),
+                        TimestampedValues {
+                            timestamp: metadata.timestamp,
+                            values: values
+                                [(start as usize)..(start as usize + RV32_REGISTER_NUM_LIMBS)]
+                                .try_into()
+                                .unwrap(),
+                        },
+                    );
+                }
+                self.memory.execute_splits::<RV32_REGISTER_NUM_LIMBS, true>(
+                    MemoryAddress::new(addr_space, ptr),
+                    &values,
+                    metadata.timestamp,
+                );
+            }
+            final_memory
+        };
         match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
-                // let final_memory = offline_memory.finalize::<1>(&mut self.access_adapters);
-                // boundary_chip.finalize(final_memory);
-                // self.final_state = Some(FinalState::Volatile(VolatileFinalState::default()));
+                let mut final_memory = TimestampedEquipartition::<F, 1>::new();
+                for ((addr_space, ptr), ts_values) in aligned_final_memory {
+                    let TimestampedValues {
+                        timestamp,
+                        mut values,
+                    } = ts_values;
+                    for (i, &v) in values.iter().enumerate() {
+                        final_memory.insert(
+                            (addr_space, ptr + i as u32),
+                            TimestampedValues {
+                                timestamp,
+                                values: [v],
+                            },
+                        );
+                    }
+                    self.memory.execute_splits::<1, false>(
+                        MemoryAddress::new(addr_space, ptr),
+                        &values,
+                        timestamp,
+                    );
+                    values.fill(F::ZERO);
+                    self.memory.execute_merges::<1, false>(
+                        MemoryAddress::new(addr_space, ptr),
+                        &values,
+                        &vec![INITIAL_TIMESTAMP; values.len()],
+                    );
+                }
+
+                for i in 0..self.access_adapters.num_access_adapters() {
+                    let width = self.memory.adapter_inventory_trace_cursor.width(i);
+                    self.access_adapters.set_trace(
+                        i,
+                        self.memory.adapter_inventory_trace_cursor.extract_trace(i),
+                        width,
+                    );
+                }
+
+                boundary_chip.finalize(final_memory);
             }
             MemoryInterface::Persistent {
-                merkle_chip,
                 boundary_chip,
+                merkle_chip,
                 initial_memory,
             } => {
                 let hasher = hasher.unwrap();
-                // let final_partition = offline_memory.finalize::<CHUNK>(&mut
-                // self.access_adapters);
+                assert!(CHUNK % RV32_REGISTER_NUM_LIMBS == 0);
+                assert!(CHUNK >= RV32_REGISTER_NUM_LIMBS);
+                let mut current_values = [F::ZERO; CHUNK];
+                let mut current_cnt = 0;
+                let mut current_address = MemoryAddress::new(0, 0);
+                let mut current_timestamps = vec![0; CHUNK / RV32_REGISTER_NUM_LIMBS];
+                let mut final_memory = TimestampedEquipartition::<F, CHUNK>::new();
+                for ((addr_space, ptr), ts_values) in aligned_final_memory {
+                    let TimestampedValues { timestamp, values } = ts_values;
+                    if current_cnt == 0 {
+                        current_address = MemoryAddress::new(addr_space, ptr);
+                    } else {
+                        debug_assert_eq!(current_address.address_space, addr_space);
+                        debug_assert_eq!(current_address.pointer + current_cnt as u32, ptr);
+                    }
+                    current_values[current_cnt..(current_cnt + values.len())]
+                        .copy_from_slice(&values);
+                    current_timestamps[current_cnt / RV32_REGISTER_NUM_LIMBS] = timestamp;
+                    current_cnt += values.len();
+                    if current_cnt != CHUNK {
+                        continue;
+                    }
+                    final_memory.insert(
+                        (current_address.address_space, current_address.pointer),
+                        TimestampedValues {
+                            timestamp: *current_timestamps.iter().max().unwrap(),
+                            values: current_values,
+                        },
+                    );
+                    self.memory
+                        .execute_merges::<RV32_REGISTER_NUM_LIMBS, false>(
+                            current_address,
+                            &current_values,
+                            &current_timestamps,
+                        );
+                    // We do not need to implement the initial splits here,
+                    // because this has been done in the controller on the first access.
 
-                // boundary_chip.finalize(initial_memory, &final_partition, hasher);
-                // let final_memory_values = final_partition
-                //     .into_par_iter()
-                //     .map(|(key, value)| (key, value.values))
-                //     .collect();
-                // let initial_node = MemoryNode::tree_from_memory(
-                //     merkle_chip.air.memory_dimensions,
-                //     initial_memory,
-                //     hasher,
-                // );
-                // merkle_chip.finalize(&initial_node, &final_memory_values, hasher);
-                // self.final_state = Some(FinalState::Persistent(PersistentFinalState {
-                //     final_memory: final_memory_values.clone(),
-                // }));
+                    current_cnt = 0;
+                }
+
+                for i in 0..self.access_adapters.num_access_adapters() {
+                    let width = self.memory.adapter_inventory_trace_cursor.width(i);
+                    self.access_adapters.set_trace(
+                        i,
+                        self.memory.adapter_inventory_trace_cursor.extract_trace(i),
+                        width,
+                    );
+                }
+
+                boundary_chip.finalize(initial_memory, &final_memory, hasher);
+                let final_memory_values = final_memory
+                    .into_par_iter()
+                    .map(|(key, value)| (key, value.values))
+                    .collect();
+                merkle_chip.finalize(initial_memory.clone(), &final_memory_values, hasher);
             }
-        };
+        }
     }
 
     pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>

@@ -19,6 +19,7 @@ use openvm_stark_sdk::{
 };
 use rand::RngCore;
 
+use super::memory_to_partition;
 use crate::{
     arch::testing::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
     system::memory::{
@@ -178,20 +179,6 @@ fn test<const CHUNK: usize>(
         ],
     )
     .expect("Verification failed");
-}
-
-fn memory_to_partition<F: PrimeField32, const N: usize>(
-    memory: &MemoryImage,
-) -> Equipartition<F, N> {
-    let mut memory_partition = Equipartition::new();
-    for ((address_space, pointer), value) in memory.items() {
-        let label = (address_space, pointer / N as u32);
-        let chunk = memory_partition
-            .entry(label)
-            .or_insert_with(|| [F::default(); N]);
-        chunk[(pointer % N as u32) as usize] = value;
-    }
-    memory_partition
 }
 
 fn random_test<const CHUNK: usize>(
