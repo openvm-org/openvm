@@ -1,7 +1,7 @@
 use openvm_circuit::arch::instructions::program::Program;
 use openvm_instructions::{
     instruction::{DebugInfo, Instruction},
-    program::{DEFAULT_MAX_NUM_PUBLIC_VALUES, DEFAULT_PC_STEP},
+    program::DEFAULT_PC_STEP,
     LocalOpcode, PhantomDiscriminant, PublishOpcode, SysPhantom, SystemOpcode, VmOpcode,
 };
 use openvm_rv32im_transpiler::BranchEqualOpcode;
@@ -565,7 +565,7 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
         }
     }
 
-    let mut result = Program::new_empty(DEFAULT_PC_STEP, 0, DEFAULT_MAX_NUM_PUBLIC_VALUES);
+    let mut result = Program::new_empty(DEFAULT_PC_STEP, 0);
     result.push_instruction_and_debug_info(init_register_0, init_debug_info);
     for block in program.blocks.iter() {
         for (instruction, debug_info) in block.0.iter().zip(block.1.iter()) {

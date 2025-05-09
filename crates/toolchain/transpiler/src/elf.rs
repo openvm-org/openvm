@@ -19,8 +19,6 @@ use openvm_instructions::exe::FnBound;
 use openvm_instructions::{exe::FnBounds, program::MAX_ALLOWED_PC};
 use openvm_platform::WORD_SIZE;
 
-pub const ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
-
 /// RISC-V 32IM ELF (Executable and Linkable Format) File.
 ///
 /// This file represents a binary in the ELF format, specifically the RISC-V 32IM architecture
@@ -40,9 +38,6 @@ pub struct Elf {
     pub(crate) pc_base: u32,
     /// The initial memory image, useful for global constants.
     pub(crate) memory_image: BTreeMap<u32, u32>,
-    /// The upper bound of the number of public values the program would publish.
-    /// TODO: read from project config.
-    pub(crate) max_num_public_values: usize,
     /// Debug info for spanning benchmark metrics by function.
     pub(crate) fn_bounds: FnBounds,
 }
@@ -61,7 +56,6 @@ impl Elf {
             pc_start,
             pc_base,
             memory_image,
-            max_num_public_values: ELF_DEFAULT_MAX_NUM_PUBLIC_VALUES,
             fn_bounds,
         }
     }

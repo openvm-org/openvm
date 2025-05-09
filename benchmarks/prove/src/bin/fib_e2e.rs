@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_circuit::arch::instructions::{exe::VmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES};
+use openvm_circuit::arch::{instructions::exe::VmExe, DEFAULT_MAX_NUM_PUBLIC_VALUES};
 use openvm_native_recursion::halo2::utils::{CacheHalo2ParamsReader, DEFAULT_PARAMS_DIR};
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{

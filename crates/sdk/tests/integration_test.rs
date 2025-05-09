@@ -115,9 +115,7 @@ fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<VmCommittedExe<SC>> 
             builder.assign(&b, c);
         });
         builder.halt();
-        let mut program = builder.compile_isa();
-        program.max_num_public_values = NUM_PUB_VALUES;
-        program
+        builder.compile_isa()
     };
     Sdk::new()
         .commit_app_exe(
@@ -343,10 +341,6 @@ fn test_static_verifier_custom_pv_handler() {
     let app_pk = sdk.app_keygen(app_config.clone()).unwrap();
     let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
     println!("app_config: {:?}", app_config.app_vm_config);
-    println!(
-        "app_committed_exe max_num_public_values: {:?}",
-        app_committed_exe.exe.program.max_num_public_values
-    );
     let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
 
     // Generate PK using custom PV handler

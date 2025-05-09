@@ -4356,12 +4356,16 @@ name = "openvm-instructions"
 version = "1.2.0"
 dependencies = [
  "backtrace",
+ "bitcode",
+ "criterion",
  "derive-new 0.6.0",
  "itertools 0.14.0",
  "num-bigint 0.4.6",
  "num-traits",
  "openvm-instructions-derive",
  "openvm-stark-backend",
+ "p3-baby-bear",
+ "rand",
  "serde",
  "strum",
  "strum_macros",
