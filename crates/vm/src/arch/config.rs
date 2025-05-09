@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use derive_new::new;
 use openvm_circuit::system::memory::MemoryTraceHeights;
-use openvm_instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -17,6 +16,7 @@ use crate::system::memory::BOUNDARY_AIR_OFFSET;
 // sbox is decomposed to have this max degree for Poseidon2. We set to 3 so quotient_degree = 2
 // allows log_blowup = 1
 const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 3;
+pub const DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
 /// Width of Poseidon2 VM uses.
 pub const POSEIDON2_WIDTH: usize = 16;
 /// Returns a Poseidon2 config for the VM.

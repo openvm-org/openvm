@@ -2,7 +2,7 @@ use std::iter;
 
 use openvm_instructions::{
     instruction::Instruction,
-    program::{Program, DEFAULT_MAX_NUM_PUBLIC_VALUES, DEFAULT_PC_STEP},
+    program::{Program, DEFAULT_PC_STEP},
     LocalOpcode,
 };
 use openvm_native_compiler::{
@@ -265,12 +265,7 @@ fn test_program_with_undefined_instructions() {
         )),
     ];
 
-    let program = Program::new_without_debug_infos_with_option(
-        &instructions,
-        DEFAULT_PC_STEP,
-        0,
-        DEFAULT_MAX_NUM_PUBLIC_VALUES,
-    );
+    let program = Program::new_without_debug_infos_with_option(&instructions, DEFAULT_PC_STEP, 0);
 
     interaction_test(program, vec![0, 2, 5]);
 }
