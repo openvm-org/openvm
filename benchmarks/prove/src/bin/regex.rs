@@ -14,7 +14,8 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
 
-    let elf = args.build_bench_program("regex")?;
+    let config = Keccak256Rv32Config::default();
+    let elf = args.build_bench_program("regex", &config, None)?;
     let exe = VmExe::from_elf(
         elf.clone(),
         Transpiler::<BabyBear>::default()
@@ -27,11 +28,6 @@ fn main() -> Result<()> {
         let data = include_str!("../../../guest/regex/regex_email.txt");
 
         let fe_bytes = data.to_owned().into_bytes();
-        args.bench_from_exe(
-            "regex_program",
-            Keccak256Rv32Config::default(),
-            exe,
-            StdIn::from_bytes(&fe_bytes),
-        )
+        args.bench_from_exe("regex_program", config, exe, StdIn::from_bytes(&fe_bytes))
     })
 }

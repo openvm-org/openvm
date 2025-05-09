@@ -97,7 +97,9 @@ impl Rv32ImEcRecoverConfig {
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
 
-    let elf = args.build_bench_program("ecrecover")?;
+    let config = Rv32ImEcRecoverConfig::for_curves(vec![SECP256K1_CONFIG.clone()]);
+
+    let elf = args.build_bench_program("ecrecover", &config, None)?;
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
@@ -133,11 +135,6 @@ fn main() -> Result<()> {
                 .map(|s| make_input(&signing_key, s.as_bytes()))
                 .collect::<Vec<_>>(),
         );
-        args.bench_from_exe(
-            "ecrecover_program",
-            Rv32ImEcRecoverConfig::for_curves(vec![SECP256K1_CONFIG.clone()]),
-            exe,
-            input_stream.into(),
-        )
+        args.bench_from_exe("ecrecover_program", config, exe, input_stream.into())
     })
 }

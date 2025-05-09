@@ -15,13 +15,7 @@ use revm_precompile::{
     utilities::right_pad, Error as PrecompileError, PrecompileOutput, PrecompileResult,
 };
 
-openvm_algebra_guest::moduli_macros::moduli_init! {
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
-}
-openvm_ecc_guest::sw_macros::sw_init! {
-    Secp256k1Point,
-}
+openvm::init!();
 
 pub fn main() {
     let expected_address = read_vec();

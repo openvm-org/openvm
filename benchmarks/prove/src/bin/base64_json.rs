@@ -14,7 +14,8 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
 
-    let elf = args.build_bench_program("base64_json")?;
+    let config = Keccak256Rv32Config::default();
+    let elf = args.build_bench_program("base64_json", &config, None)?;
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
@@ -28,11 +29,6 @@ fn main() -> Result<()> {
         let data = include_str!("../../../guest/base64_json/json_payload_encoded.txt");
 
         let fe_bytes = data.to_owned().into_bytes();
-        args.bench_from_exe(
-            "base64_json",
-            Keccak256Rv32Config::default(),
-            exe,
-            StdIn::from_bytes(&fe_bytes),
-        )
+        args.bench_from_exe("base64_json", config, exe, StdIn::from_bytes(&fe_bytes))
     })
 }

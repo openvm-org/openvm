@@ -12,7 +12,6 @@ use openvm_stark_sdk::bench::run_with_metric_collection;
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
 
-    let elf = args.build_bench_program("pairing")?;
     let vm_config = SdkVmConfig::builder()
         .system(SystemConfig::default().with_continuations().into())
         .rv32i(Default::default())
@@ -32,6 +31,7 @@ fn main() -> Result<()> {
         ]))
         .pairing(PairingExtension::new(vec![PairingCurve::Bn254]))
         .build();
+    let elf = args.build_bench_program("pairing", &vm_config, None)?;
     let sdk = Sdk::new();
     let exe = sdk.transpile(elf, vm_config.transpiler()).unwrap();
 
