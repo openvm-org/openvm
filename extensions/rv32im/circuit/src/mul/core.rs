@@ -23,8 +23,6 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use serde_big_array::BigArray;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -160,8 +158,8 @@ where
         + for<'a> AdapterTraceStep<
             F,
             CTX,
-            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
-            WriteData = [u8; NUM_LIMBS],
+            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
+            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
             TraceContext<'a> = (),
         >,
 {
@@ -184,12 +182,15 @@ where
             MulOpcode::MUL
         );
 
-        let mut row_slice = &mut trace[*trace_offset..*trace_offset + width];
+        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
 
-        let (rs1, rs2) = self.adapter.read(state.memory, instruction, adapter_row);
+        let [rs1, rs2] = self
+            .adapter
+            .read(state.memory, instruction, adapter_row)
+            .into();
 
         let (a, carry) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1, &rs2);
 
@@ -206,7 +207,7 @@ where
 
         // TODO(ayush): avoid this conversion
         self.adapter
-            .write(state.memory, instruction, adapter_row, &a);
+            .write(state.memory, instruction, adapter_row, &[a].into());
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -229,8 +230,8 @@ where
     A: 'static
         + for<'a> AdapterExecutorE1<
             F,
-            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
-            WriteData = [u8; NUM_LIMBS],
+            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
+            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
         >,
 {
     fn execute_e1<Mem, Ctx>(
@@ -250,11 +251,11 @@ where
             MulOpcode::MUL
         );
 
-        let (rs1, rs2) = self.adapter.read(state.memory, instruction);
+        let [rs1, rs2] = self.adapter.read(state.memory, instruction).into();
 
         let (rd, _) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1, &rs2);
 
-        self.adapter.write(state.memory, instruction, &rd);
+        self.adapter.write(state.memory, instruction, &[rd].into());
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

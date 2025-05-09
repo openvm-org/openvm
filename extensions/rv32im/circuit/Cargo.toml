@@ -21,7 +21,6 @@ derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
 eyre.workspace = true
-test-case.workspace = true
 
 # for div_rem:
 num-bigint.workspace = true
@@ -32,6 +31,7 @@ serde-big-array.workspace = true
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
+test-case.workspace = true
 
 [features]
 default = ["parallel", "jemalloc"]

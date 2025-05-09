@@ -12,7 +12,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -161,15 +161,18 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
 }
 
 #[derive(derive_new::new)]
-pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize>;
+pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize> {
+    // TODO(arayi): use reference to bitwise lookup chip with lifetimes instead
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+}
 
 impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     for Rv32BaseAluAdapterStep<LIMB_BITS>
 {
     const WIDTH: usize = size_of::<Rv32BaseAluAdapterCols<u8>>();
-    type ReadData = ([u8; RV32_REGISTER_NUM_LIMBS], [u8; RV32_REGISTER_NUM_LIMBS]);
-    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
-    type TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>;
+    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
+    type WriteData = [[u8; RV32_REGISTER_NUM_LIMBS]; 1];
+    type TraceContext<'a> = ();
 
     #[inline(always)]
     fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]) {
@@ -218,7 +221,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
             tracing_read_imm(memory, c.as_canonical_u32(), &mut adapter_row.rs2)
         };
 
-        (rs1, rs2)
+        [rs1, rs2]
     }
 
     #[inline(always)]
@@ -240,7 +243,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
             memory,
             RV32_REGISTER_AS,
             a.as_canonical_u32(),
-            data,
+            &data[0],
             &mut adapter_row.writes_aux,
         );
     }
@@ -249,7 +252,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     fn fill_trace_row(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
-        bitwise_lookup_chip: &BitwiseOperationLookupChip<LIMB_BITS>,
+        _ctx: (),
         adapter_row: &mut [F],
     ) {
         let adapter_row: &mut Rv32BaseAluAdapterCols<F> = adapter_row.borrow_mut();
@@ -264,7 +267,8 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
         } else {
             let rs2_imm = adapter_row.rs2.as_canonical_u32();
             let mask = (1 << RV32_CELL_BITS) - 1;
-            bitwise_lookup_chip.request_range(rs2_imm & mask, (rs2_imm >> 8) & mask);
+            self.bitwise_lookup_chip
+                .request_range(rs2_imm & mask, (rs2_imm >> 8) & mask);
         }
         timestamp += 1;
 
@@ -277,8 +281,8 @@ where
     F: PrimeField32,
 {
     // TODO(ayush): directly use u32
-    type ReadData = ([u8; RV32_REGISTER_NUM_LIMBS], [u8; RV32_REGISTER_NUM_LIMBS]);
-    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
+    type WriteData = [[u8; RV32_REGISTER_NUM_LIMBS]; 1];
 
     #[inline(always)]
     fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
@@ -307,7 +311,7 @@ where
             imm_le
         };
 
-        (rs1, rs2)
+        [rs1, rs2]
     }
 
     #[inline(always)]
@@ -319,6 +323,6 @@ where
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        memory_write(memory, d.as_canonical_u32(), a.as_canonical_u32(), rd);
+        memory_write(memory, d.as_canonical_u32(), a.as_canonical_u32(), &rd[0]);
     }
 }

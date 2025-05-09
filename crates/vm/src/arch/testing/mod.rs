@@ -140,7 +140,11 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         pointer: usize,
         writes: Vec<[F; NUM_LIMBS]>,
     ) {
-        self.write(1usize, register, [F::from_canonical_usize(pointer)]);
+        self.write(
+            1usize,
+            register,
+            pointer.to_le_bytes().map(F::from_canonical_u8),
+        );
         for (i, &write) in writes.iter().enumerate() {
             self.write(2usize, pointer + i * NUM_LIMBS, write);
         }

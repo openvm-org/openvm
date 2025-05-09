@@ -55,7 +55,7 @@ fn create_test_chip(
             BaseAluCoreAir::new(bitwise_bus, BaseAluOpcode::CLASS_OFFSET),
         ),
         Rv32BaseAluStep::new(
-            Rv32BaseAluAdapterStep::new(),
+            Rv32BaseAluAdapterStep::new(bitwise_chip.clone()),
             bitwise_chip.clone(),
             BaseAluOpcode::CLASS_OFFSET,
         ),

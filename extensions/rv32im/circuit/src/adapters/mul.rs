@@ -20,7 +20,6 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-use serde::{Deserialize, Serialize};
 
 use super::{tracing_write, RV32_REGISTER_NUM_LIMBS};
 use crate::adapters::{memory_read, memory_write, tracing_read};
@@ -132,8 +131,8 @@ where
     F: PrimeField32,
 {
     const WIDTH: usize = size_of::<Rv32MultAdapterCols<u8>>();
-    type ReadData = ([u8; RV32_REGISTER_NUM_LIMBS], [u8; RV32_REGISTER_NUM_LIMBS]);
-    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
+    type WriteData = [[u8; RV32_REGISTER_NUM_LIMBS]; 1];
     type TraceContext<'a> = ();
 
     #[inline(always)]
@@ -171,7 +170,7 @@ where
             &mut adapter_row.reads_aux[1],
         );
 
-        (rs1, rs2)
+        [rs1, rs2]
     }
 
     #[inline(always)]
@@ -193,7 +192,7 @@ where
             memory,
             RV32_REGISTER_AS,
             a.as_canonical_u32(),
-            data,
+            &data[0],
             &mut adapter_row.writes_aux,
         )
     }
@@ -224,8 +223,8 @@ where
     F: PrimeField32,
 {
     // TODO(ayush): directly use u32
-    type ReadData = ([u8; RV32_REGISTER_NUM_LIMBS], [u8; RV32_REGISTER_NUM_LIMBS]);
-    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
+    type WriteData = [[u8; RV32_REGISTER_NUM_LIMBS]; 1];
 
     #[inline(always)]
     fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
@@ -241,7 +240,7 @@ where
         let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
             memory_read(memory, RV32_REGISTER_AS, c.as_canonical_u32());
 
-        (rs1, rs2)
+        [rs1, rs2]
     }
 
     #[inline(always)]
@@ -253,6 +252,6 @@ where
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        memory_write(memory, RV32_REGISTER_AS, a.as_canonical_u32(), rd);
+        memory_write(memory, RV32_REGISTER_AS, a.as_canonical_u32(), &rd[0]);
     }
 }

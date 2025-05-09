@@ -5,11 +5,12 @@ use openvm_bigint_transpiler::{
 };
 use openvm_circuit::{
     arch::{
-        SystemConfig, SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+        ExecutionBridge, SystemConfig, SystemPort, VmExtension, VmInventory, VmInventoryBuilder,
+        VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
@@ -24,6 +25,9 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
 use crate::*;
+
+// TODO: this should be decided after e2 execution
+const MAX_INS_CAPACITY: usize = 1 << 22;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Int256Rv32Config {
@@ -69,7 +73,7 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
     [1 << 8, 32 * (1 << 8)]
 }
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutorE1, From, AnyEnum)]
 pub enum Int256Executor<F: PrimeField32> {
     BaseAlu256(Rv32BaseAlu256Chip<F>),
     LessThan256(Rv32LessThan256Chip<F>),
@@ -101,6 +105,8 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             program_bus,
             memory_bridge,
         } = builder.system_port();
+        let execution_bridge = ExecutionBridge::new(execution_bus, program_bus);
+
         let range_checker_chip = builder.system_base().range_checker_chip.clone();
         let bitwise_lu_chip = if let Some(&chip) = builder
             .find_chip::<SharedBitwiseOperationLookupChip<8>>()
@@ -113,8 +119,8 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
-        let offline_memory = builder.system_base().offline_memory();
-        let address_bits = builder.system_config().memory_config.pointer_max_bits;
+        // let offline_memory = builder.system_base().offline_memory();
+        let pointer_max_bits = builder.system_config().memory_config.pointer_max_bits;
 
         let range_tuple_chip = if let Some(chip) = builder
             .find_chip::<SharedRangeTupleCheckerChip<2>>()
@@ -133,66 +139,97 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
         };
 
         let base_alu_chip = Rv32BaseAlu256Chip::new(
-            Rv32HeapAdapterChip::new(
-                execution_bus,
-                program_bus,
-                memory_bridge,
-                address_bits,
-                bitwise_lu_chip.clone(),
+            VmAirWrapper::new(
+                Rv32HeapAdapterAir::new(
+                    execution_bridge,
+                    memory_bridge,
+                    bitwise_lu_chip.bus(),
+                    pointer_max_bits,
+                ),
+                BaseAluCoreAir::new(bitwise_lu_chip.bus(), Rv32BaseAlu256Opcode::CLASS_OFFSET),
             ),
-            BaseAluCoreChip::new(bitwise_lu_chip.clone(), Rv32BaseAlu256Opcode::CLASS_OFFSET),
-            offline_memory.clone(),
+            Rv32BaseAlu256Step::new(
+                Rv32HeapAdapterStep::new(pointer_max_bits, bitwise_lu_chip.clone()),
+                bitwise_lu_chip.clone(),
+                Rv32BaseAlu256Opcode::CLASS_OFFSET,
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
         );
+
         inventory.add_executor(
             base_alu_chip,
             Rv32BaseAlu256Opcode::iter().map(|x| x.global_opcode()),
         )?;
 
         let less_than_chip = Rv32LessThan256Chip::new(
-            Rv32HeapAdapterChip::new(
-                execution_bus,
-                program_bus,
-                memory_bridge,
-                address_bits,
-                bitwise_lu_chip.clone(),
+            VmAirWrapper::new(
+                Rv32HeapAdapterAir::new(
+                    execution_bridge,
+                    memory_bridge,
+                    bitwise_lu_chip.bus(),
+                    pointer_max_bits,
+                ),
+                LessThanCoreAir::new(bitwise_lu_chip.bus(), Rv32LessThan256Opcode::CLASS_OFFSET),
             ),
-            LessThanCoreChip::new(bitwise_lu_chip.clone(), Rv32LessThan256Opcode::CLASS_OFFSET),
-            offline_memory.clone(),
+            Rv32LessThan256Step::new(
+                Rv32HeapAdapterStep::new(pointer_max_bits, bitwise_lu_chip.clone()),
+                bitwise_lu_chip.clone(),
+                Rv32LessThan256Opcode::CLASS_OFFSET,
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
         );
+
         inventory.add_executor(
             less_than_chip,
             Rv32LessThan256Opcode::iter().map(|x| x.global_opcode()),
         )?;
 
         let branch_equal_chip = Rv32BranchEqual256Chip::new(
-            Rv32HeapBranchAdapterChip::new(
-                execution_bus,
-                program_bus,
-                memory_bridge,
-                address_bits,
-                bitwise_lu_chip.clone(),
+            VmAirWrapper::new(
+                Rv32HeapBranchAdapterAir::new(
+                    execution_bridge,
+                    memory_bridge,
+                    bitwise_lu_chip.bus(),
+                    pointer_max_bits,
+                ),
+                BranchEqualCoreAir::new(Rv32BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
             ),
-            BranchEqualCoreChip::new(Rv32BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
-            offline_memory.clone(),
+            Rv32BranchEqual256Step::new(
+                Rv32HeapBranchAdapterStep::new(pointer_max_bits, bitwise_lu_chip.clone()),
+                Rv32BranchEqual256Opcode::CLASS_OFFSET,
+                DEFAULT_PC_STEP,
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
         );
+
         inventory.add_executor(
             branch_equal_chip,
             Rv32BranchEqual256Opcode::iter().map(|x| x.global_opcode()),
         )?;
 
         let branch_less_than_chip = Rv32BranchLessThan256Chip::new(
-            Rv32HeapBranchAdapterChip::new(
-                execution_bus,
-                program_bus,
-                memory_bridge,
-                address_bits,
-                bitwise_lu_chip.clone(),
+            VmAirWrapper::new(
+                Rv32HeapBranchAdapterAir::new(
+                    execution_bridge,
+                    memory_bridge,
+                    bitwise_lu_chip.bus(),
+                    pointer_max_bits,
+                ),
+                BranchLessThanCoreAir::new(
+                    bitwise_lu_chip.bus(),
+                    Rv32BranchLessThan256Opcode::CLASS_OFFSET,
+                ),
             ),
-            BranchLessThanCoreChip::new(
+            Rv32BranchLessThan256Step::new(
+                Rv32HeapBranchAdapterStep::new(pointer_max_bits, bitwise_lu_chip.clone()),
                 bitwise_lu_chip.clone(),
                 Rv32BranchLessThan256Opcode::CLASS_OFFSET,
             ),
-            offline_memory.clone(),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
             branch_less_than_chip,
@@ -200,36 +237,53 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
         )?;
 
         let multiplication_chip = Rv32Multiplication256Chip::new(
-            Rv32HeapAdapterChip::new(
-                execution_bus,
-                program_bus,
-                memory_bridge,
-                address_bits,
-                bitwise_lu_chip.clone(),
+            VmAirWrapper::new(
+                Rv32HeapAdapterAir::new(
+                    execution_bridge,
+                    memory_bridge,
+                    bitwise_lu_chip.bus(),
+                    pointer_max_bits,
+                ),
+                MultiplicationCoreAir::new(*range_tuple_chip.bus(), Rv32Mul256Opcode::CLASS_OFFSET),
             ),
-            MultiplicationCoreChip::new(range_tuple_chip, Rv32Mul256Opcode::CLASS_OFFSET),
-            offline_memory.clone(),
+            Rv32Multiplication256Step::new(
+                Rv32HeapAdapterStep::new(pointer_max_bits, bitwise_lu_chip.clone()),
+                range_tuple_chip.clone(),
+                Rv32Mul256Opcode::CLASS_OFFSET,
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
         );
+
         inventory.add_executor(
             multiplication_chip,
             Rv32Mul256Opcode::iter().map(|x| x.global_opcode()),
         )?;
 
         let shift_chip = Rv32Shift256Chip::new(
-            Rv32HeapAdapterChip::new(
-                execution_bus,
-                program_bus,
-                memory_bridge,
-                address_bits,
-                bitwise_lu_chip.clone(),
+            VmAirWrapper::new(
+                Rv32HeapAdapterAir::new(
+                    execution_bridge,
+                    memory_bridge,
+                    bitwise_lu_chip.bus(),
+                    pointer_max_bits,
+                ),
+                ShiftCoreAir::new(
+                    bitwise_lu_chip.bus(),
+                    range_checker_chip.bus(),
+                    Rv32Shift256Opcode::CLASS_OFFSET,
+                ),
             ),
-            ShiftCoreChip::new(
+            Rv32Shift256Step::new(
+                Rv32HeapAdapterStep::new(pointer_max_bits, bitwise_lu_chip.clone()),
                 bitwise_lu_chip.clone(),
-                range_checker_chip,
+                range_checker_chip.clone(),
                 Rv32Shift256Opcode::CLASS_OFFSET,
             ),
-            offline_memory.clone(),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
         );
+
         inventory.add_executor(
             shift_chip,
             Rv32Shift256Opcode::iter().map(|x| x.global_opcode()),
