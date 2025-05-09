@@ -214,13 +214,9 @@ pub fn display_program_with_pc<F: Field>(program: &Program<F>) {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-struct SerializedInstructionsAndDebugInfos<F> {
-    instruction_and_index: Vec<(Instruction<F>, u32)>,
-    total_length: u32,
-}
-
-// `debug_info` is stick with a specific binary. Serializ
+// `debug_info` is based on the symbol table of the binary. Usually serializing `debug_info` is not
+// meaningful because the program is executed by another binary. So here we only serialize
+// instructions.
 fn serialize_instructions_and_debug_infos<F: Serialize, S: Serializer>(
     data: &[Option<(Instruction<F>, Option<DebugInfo>)>],
     serializer: S,
@@ -247,4 +243,51 @@ fn deserialize_instructions_and_debug_infos<'de, F: Deserialize<'de>, D: Deseria
         ret[i as usize] = Some((inst, None));
     }
     Ok(ret)
+}
+
+#[cfg(test)]
+mod tests {
+    use itertools::izip;
+    use p3_baby_bear::BabyBear;
+
+    use super::*;
+    use crate::VmOpcode;
+
+    type F = BabyBear;
+
+    #[test]
+    fn test_program_serde() {
+        let mut program = Program::<F>::new_empty(4, 0);
+        program.instructions_and_debug_infos.push(Some((
+            Instruction::from_isize(VmOpcode::from_usize(113), 1, 2, 3, 4, 5),
+            None,
+        )));
+        program.instructions_and_debug_infos.push(None);
+        program.instructions_and_debug_infos.push(None);
+        program.instructions_and_debug_infos.push(Some((
+            Instruction::from_isize(VmOpcode::from_usize(145), 10, 20, 30, 40, 50),
+            None,
+        )));
+        program.instructions_and_debug_infos.push(Some((
+            Instruction::from_isize(VmOpcode::from_usize(145), 10, 20, 30, 40, 50),
+            None,
+        )));
+        program.instructions_and_debug_infos.push(None);
+        let bytes = bitcode::serialize(&program).unwrap();
+        let de_program: Program<F> = bitcode::deserialize(&bytes).unwrap();
+        for (expected_ins, ins) in izip!(
+            &program.instructions_and_debug_infos,
+            &de_program.instructions_and_debug_infos
+        ) {
+            match (expected_ins, ins) {
+                (Some(expected_ins), Some(ins)) => {
+                    assert_eq!(expected_ins.0, ins.0);
+                }
+                (None, None) => {}
+                _ => {
+                    panic!("Different instructions after serialization");
+                }
+            }
+        }
+    }
 }
