@@ -24,7 +24,6 @@ pub fn main() {
     }
     #[cfg(feature = "getrandom-unsupported")]
     {
-        // not a good random function!
         assert!(get_random_u128().is_err());
     }
 }
