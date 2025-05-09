@@ -243,6 +243,7 @@ impl<F, const R: usize, const W: usize> AdapterExecutorE1<F> for NativeAdapterSt
 where
     F: PrimeField32,
 {
+    const WIDTH: usize = size_of::<NativeAdapterCols<u8, R, W>>();
     type ReadData = [F; R];
     type WriteData = [F; W];
 

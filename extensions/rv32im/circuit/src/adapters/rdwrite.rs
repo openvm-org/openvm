@@ -21,7 +21,6 @@ use openvm_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-use serde::{Deserialize, Serialize};
 
 use super::RV32_REGISTER_NUM_LIMBS;
 use crate::adapters::{memory_write, tracing_write};
@@ -261,6 +260,7 @@ impl<F> AdapterExecutorE1<F> for Rv32RdWriteAdapterStep
 where
     F: PrimeField32,
 {
+    const WIDTH: usize = size_of::<Rv32RdWriteAdapterCols<u8>>();
     type ReadData = ();
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
@@ -378,6 +378,7 @@ impl<F> AdapterExecutorE1<F> for Rv32CondRdWriteAdapterStep
 where
     F: PrimeField32,
 {
+    const WIDTH: usize = size_of::<Rv32CondRdWriteAdapterCols<u8>>();
     type ReadData = ();
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 

@@ -345,7 +345,7 @@ where
 
         let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let mut row: &mut Rv32HintStoreCols<F> =
+        let row: &mut Rv32HintStoreCols<F> =
             trace[*trace_offset..*trace_offset + width].borrow_mut();
 
         row.from_state.pc = F::from_canonical_u32(*state.pc);
@@ -535,6 +535,10 @@ where
     where
         Mem: GuestMemory,
     {
+        state.ctx.trace_heights[0] += 1;
+        state.ctx.total_trace_cells += Rv32HintStoreCols::<F>::width();
+        state.ctx.total_interactions += 1;
+
         let state = VmStateMut {
             pc: state.pc,
             memory: state.memory,

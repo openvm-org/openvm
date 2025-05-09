@@ -21,7 +21,6 @@ use openvm_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-use serde::{Deserialize, Serialize};
 
 use super::RV32_REGISTER_NUM_LIMBS;
 use crate::adapters::{memory_read, memory_write, tracing_read, tracing_write};
@@ -237,6 +236,7 @@ impl<F> AdapterExecutorE1<F> for Rv32JalrAdapterStep
 where
     F: PrimeField32,
 {
+    const WIDTH: usize = size_of::<Rv32JalrAdapterCols<u8>>();
     // TODO(ayush): directly use u32
     type ReadData = [u8; RV32_REGISTER_NUM_LIMBS];
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];

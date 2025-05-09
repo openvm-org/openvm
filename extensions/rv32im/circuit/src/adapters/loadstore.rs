@@ -556,6 +556,7 @@ impl<F> AdapterExecutorE1<F> for Rv32LoadStoreAdapterStep
 where
     F: PrimeField32,
 {
+    const WIDTH: usize = size_of::<Rv32LoadStoreAdapterCols<u8>>();
     // TODO(ayush): directly use u32
     type ReadData = (
         ([u8; RV32_REGISTER_NUM_LIMBS], [u8; RV32_REGISTER_NUM_LIMBS]),

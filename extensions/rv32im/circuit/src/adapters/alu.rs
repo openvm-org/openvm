@@ -280,6 +280,7 @@ impl<F, const LIMB_BITS: usize> AdapterExecutorE1<F> for Rv32BaseAluAdapterStep<
 where
     F: PrimeField32,
 {
+    const WIDTH: usize = size_of::<Rv32BaseAluAdapterCols<u8>>();
     // TODO(ayush): directly use u32
     type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
     type WriteData = [[u8; RV32_REGISTER_NUM_LIMBS]; 1];

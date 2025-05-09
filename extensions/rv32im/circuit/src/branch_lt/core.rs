@@ -26,7 +26,6 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use strum::IntoEnumIterator;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -388,10 +387,16 @@ where
         &mut self,
         state: VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
+        chip_index: usize,
     ) -> Result<()>
     where
         Mem: GuestMemory,
     {
+        state.ctx.trace_heights[chip_index] += 1;
+        state.ctx.total_trace_cells +=
+            A::WIDTH + BranchLessThanCoreCols::<F, NUM_LIMBS, LIMB_BITS>::width();
+        state.ctx.total_interactions += 2;
+
         let state = VmStateMut {
             pc: state.pc,
             memory: state.memory,

@@ -305,7 +305,7 @@ where
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let mut row_slice = &mut trace[*trace_offset..*trace_offset + width];
+        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
@@ -410,10 +410,15 @@ where
         &mut self,
         state: VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
+        chip_index: usize,
     ) -> Result<()>
     where
         Mem: GuestMemory,
     {
+        state.ctx.trace_heights[chip_index] += 1;
+        state.ctx.total_trace_cells += A::WIDTH + LoadStoreCoreCols::<F, NUM_CELLS>::width();
+        // state.ctx.total_interactions += 1;
+
         let state = VmStateMut {
             pc: state.pc,
             memory: state.memory,

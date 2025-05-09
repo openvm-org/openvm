@@ -29,7 +29,6 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::adapters::{Rv32RdWriteAdapterCols, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 
@@ -194,16 +193,19 @@ where
 }
 
 pub struct Rv32AuipcStep<A> {
+    chip_index: usize,
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
 impl<A> Rv32AuipcStep<A> {
     pub fn new(
+        chip_index: usize,
         adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     ) -> Self {
         Self {
+            chip_index,
             adapter,
             bitwise_lookup_chip,
         }
@@ -239,7 +241,7 @@ where
         let local_opcode =
             Rv32AuipcOpcode::from_usize(opcode.local_opcode_idx(Rv32AuipcOpcode::CLASS_OFFSET));
 
-        let mut row_slice = &mut trace[*trace_offset..*trace_offset + width];
+        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
@@ -337,10 +339,16 @@ where
         &mut self,
         state: VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
+        chip_index: usize,
     ) -> Result<()>
     where
         Mem: GuestMemory,
     {
+        state.ctx.trace_heights[chip_index] += 1;
+        state.ctx.total_trace_cells += A::WIDTH + Rv32AuipcCoreCols::<F>::width();
+        // TODO(ayush): is there a way to calculate it automatically?
+        state.ctx.total_interactions += RV32_REGISTER_NUM_LIMBS / 2 + RV32_REGISTER_NUM_LIMBS - 1;
+
         let state = VmStateMut {
             pc: state.pc,
             memory: state.memory,

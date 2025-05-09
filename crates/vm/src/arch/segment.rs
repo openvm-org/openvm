@@ -57,8 +57,8 @@ pub type E1VmSegmentExecutor<F, VC> =
 // E2 (metered) execution
 pub struct MeteredCtx {
     pub trace_heights: Vec<usize>,
-    pub total_trace_cells: u64,
-    pub total_interactions: u64,
+    pub total_trace_cells: usize,
+    pub total_interactions: usize,
 }
 
 pub type MeteredVmSegmentExecutor<F, VC> =

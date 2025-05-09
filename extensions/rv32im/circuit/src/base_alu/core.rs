@@ -309,10 +309,17 @@ where
         &mut self,
         state: VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
+        chip_index: usize,
     ) -> Result<()>
     where
         Mem: GuestMemory,
     {
+        state.ctx.trace_heights[chip_index] += 1;
+        state.ctx.total_trace_cells +=
+            A::WIDTH + BaseAluCoreCols::<F, NUM_LIMBS, LIMB_BITS>::width();
+        // TODO(ayush): calculate properly, add adapter
+        state.ctx.total_interactions += NUM_LIMBS;
+
         let state = VmStateMut {
             pc: state.pc,
             memory: state.memory,

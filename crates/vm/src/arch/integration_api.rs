@@ -386,6 +386,8 @@ pub trait AdapterExecutorE1<F>
 where
     F: PrimeField32,
 {
+    /// Adapter row width
+    const WIDTH: usize;
     type ReadData;
     type WriteData;
 
@@ -412,12 +414,11 @@ pub trait StepExecutorE1<F> {
         &mut self,
         state: VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
+        chip_index: usize,
     ) -> Result<()>
     where
         Mem: GuestMemory;
 }
-
-const DEFAULT_RECORDS_CAPACITY: usize = 1 << 20;
 
 impl<F, A, S> InsExecutorE1<F> for NewVmChipWrapper<F, A, S>
 where
@@ -439,11 +440,12 @@ where
         &mut self,
         state: VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
+        chip_index: usize,
     ) -> Result<()>
     where
         Mem: GuestMemory,
     {
-        self.step.execute_e2(state, instruction)
+        self.step.execute_e2(state, instruction, chip_index)
     }
 }
 
