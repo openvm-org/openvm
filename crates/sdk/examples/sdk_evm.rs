@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use std::path::PathBuf;
     ///
     /// let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    /// path.push("guest");
+    /// path.push("guest/fib");
     /// let target_path = path.to_str().unwrap();
     /// ```
     // ANCHOR: build

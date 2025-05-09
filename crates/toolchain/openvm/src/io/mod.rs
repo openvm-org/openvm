@@ -126,6 +126,16 @@ pub fn reveal_u32(x: u32, index: usize) {
     println!("reveal {} at byte location {}", x, index * 4);
 }
 
+/// Store u32 `x` to the native address `native_addr` as 4 field element in byte.
+#[allow(unused_variables)]
+#[inline(always)]
+pub fn store_u32_to_native(native_addr: u32, x: u32) {
+    #[cfg(target_os = "zkvm")]
+    openvm_rv32im_guest::store_to_native!(native_addr, x);
+    #[cfg(not(target_os = "zkvm"))]
+    panic!("store_to_native_u32 cannot run on non-zkVM platforms");
+}
+
 /// A no-alloc writer to print to stdout on host machine for debugging purposes.
 pub struct Writer;
 
