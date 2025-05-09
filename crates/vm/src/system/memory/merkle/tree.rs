@@ -35,21 +35,26 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
     /// Shared logic for both from_memory and finalize.
     fn process_layers<CompressFn>(
         &mut self,
-        mut layer: Vec<(u64, [F; CHUNK])>,
+        layer: Vec<(u64, [F; CHUNK])>,
         md: &MemoryDimensions,
         mut rows: Option<&mut Vec<MemoryMerkleCols<F, CHUNK>>>,
         mut compress: CompressFn,
     ) where
         CompressFn: FnMut(&[F; CHUNK], &[F; CHUNK]) -> [F; CHUNK],
     {
-        eprintln!("memdims: {:?}", md);
+        let mut layer = layer
+            .into_iter()
+            .map(|(index, values)| (index, values, self.get_node(index)))
+            .collect::<Vec<_>>();
         for height in 1..=self.height {
             let mut i = 0;
             let mut new_layer = Vec::new();
             while i < layer.len() {
-                let (index, values) = layer[i];
+                let (index, values, old_values) = layer[i];
                 let par_index = index >> 1;
                 i += 1;
+
+                let par_old_values = self.get_node(par_index);
 
                 // Lowest `label_section_height` bits of `par_index` are the address label,
                 // The remaining highest are the address space label.
@@ -57,10 +62,6 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                 let parent_address_label = (par_index & ((1 << label_section_height) - 1)) as u32;
                 let parent_as_label =
                     ((par_index & !(1 << (self.height - height))) >> label_section_height) as u32;
-                eprintln!(
-                    "par_index, height: {}, {}; as, address: {}, {}",
-                    par_index, height, parent_as_label, parent_address_label
-                );
 
                 // Only record rows if requested
                 if let Some(rows) = rows.as_deref_mut() {
@@ -83,7 +84,7 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
 
                 if i < layer.len() && layer[i].0 == index ^ 1 {
                     // sibling found
-                    let (_, sibling_values) = layer[i];
+                    let (_, sibling_values, sibling_old_values) = layer[i];
                     i += 1;
                     let combined = compress(&values, &sibling_values);
 
@@ -101,10 +102,12 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                             left_direction_different: F::ONE,
                             right_direction_different: F::ONE,
                         });
+                        // This is a hacky way to say "and we also want to record the old values"
+                        compress(&old_values, &sibling_old_values);
                     }
 
                     self.nodes.insert(index ^ 1, sibling_values);
-                    new_layer.push((par_index, combined));
+                    new_layer.push((par_index, combined, par_old_values));
                 } else {
                     // no sibling found
                     let sibling_values = self.get_node(index ^ 1);
@@ -130,10 +133,16 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                             left_direction_different: F::from_bool(is_left),
                             right_direction_different: F::from_bool(!is_left),
                         });
+                        // This is a hacky way to say "and we also want to record the old values"
+                        if is_left {
+                            compress(&old_values, &self.get_node(index | 1));
+                        } else {
+                            compress(&self.get_node(index & !1), &old_values);
+                        }
                     }
 
                     self.nodes.insert(index ^ 1, sibling_values);
-                    new_layer.push((par_index, combined));
+                    new_layer.push((par_index, combined, par_old_values));
                 }
             }
             layer = new_layer;
@@ -169,7 +178,6 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
         touched: &Equipartition<F, CHUNK>,
         md: &MemoryDimensions,
     ) -> FinalState<CHUNK, F> {
-        eprintln!("touched: {:?}", touched);
         let init_root = self.get_node(1);
         let layer: Vec<_> = touched
             .iter()
@@ -193,7 +201,6 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
         self.process_layers(layer, md, Some(&mut rows), |left, right| {
             hasher.compress_and_record(left, right)
         });
-        eprintln!("rows: {:?}", rows);
         let final_root = self.get_node(1);
         FinalState {
             rows,
