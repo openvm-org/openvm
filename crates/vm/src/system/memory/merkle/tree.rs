@@ -99,8 +99,8 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                             parent_hash: combined,
                             left_child_hash: values,
                             right_child_hash: sibling_values,
-                            left_direction_different: F::ONE,
-                            right_direction_different: F::ONE,
+                            left_direction_different: F::ZERO,
+                            right_direction_different: F::ZERO,
                         });
                         // This is a hacky way to say "and we also want to record the old values"
                         compress(&old_values, &sibling_old_values);
@@ -130,8 +130,8 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                             parent_hash: combined,
                             left_child_hash: left,
                             right_child_hash: right,
-                            left_direction_different: F::from_bool(is_left),
-                            right_direction_different: F::from_bool(!is_left),
+                            left_direction_different: F::from_bool(!is_left),
+                            right_direction_different: F::from_bool(is_left),
                         });
                         // This is a hacky way to say "and we also want to record the old values"
                         if is_left {
