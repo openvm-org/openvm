@@ -9,14 +9,14 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-openvm-platform = { workspace = true, features = [
-    "rust-runtime",
-    "export-getrandom",
-] }
+openvm-platform = { workspace = true, features = ["rust-runtime"] }
 openvm-custom-insn = { workspace = true }
 openvm-rv32im-guest = { workspace = true }
 serde = { workspace = true, features = ["alloc"] }
 bytemuck = { workspace = true, features = ["extern_crate_alloc"] }
+
+[target.'cfg(target_os = "zkvm")'.dependencies]
+getrandom = { version = "0.3", optional = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint.workspace = true
@@ -25,10 +25,9 @@ num-bigint.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["serde"] }
 
 [features]
-default = []
-# The zkVM exposes a getrandom implementation that panics by default.
-# This (currently unimplemented) feature expose a getrandom implementation that uses host randomness.
-getrandom = ["openvm-platform/getrandom"]
+default = ["getrandom-unsupported"]
+# Defines a custom getrandom backend that always errors. This feature should be enabled if you are sure getrandom is never used but it is pulled in as a compilation dependency.
+getrandom-unsupported = ["dep:getrandom"]
 # The zkVM uses a bump-pointer heap allocator by default which does not free
 # memory. This will use a slower linked-list heap allocator to reclaim memory.
 heap-embedded-alloc = ["openvm-platform/heap-embedded-alloc"]

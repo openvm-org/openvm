@@ -3918,6 +3918,7 @@ version = "1.2.0"
 dependencies = [
  "bytemuck",
  "chrono",
+ "getrandom 0.3.1",
  "num-bigint 0.4.6",
  "openvm-custom-insn",
  "openvm-platform",
@@ -4673,7 +4674,6 @@ version = "1.2.0"
 dependencies = [
  "critical-section",
  "embedded-alloc",
- "getrandom 0.2.15",
  "libm",
  "openvm-custom-insn",
  "openvm-rv32im-guest",

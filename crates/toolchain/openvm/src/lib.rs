@@ -18,6 +18,8 @@ use openvm_platform::rust_rt;
 #[cfg(target_os = "zkvm")]
 pub use openvm_rv32im_guest::*;
 
+#[cfg(target_os = "zkvm")]
+mod getrandom;
 pub mod io;
 #[cfg(all(feature = "std", target_os = "zkvm"))]
 pub mod pal_abi;
