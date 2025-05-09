@@ -1,4 +1,4 @@
-use alloy_primitives::{keccak256, Bytes, B256, B512};
+use alloy_primitives::{Bytes, B256, B512};
 use k256::{
     ecdsa::{Error, RecoveryId, Signature},
     Secp256k1,
@@ -9,7 +9,7 @@ use openvm_ecc_guest::{
     algebra::IntMod, ecdsa::VerifyingKey, k256::Secp256k1Point, weierstrass::WeierstrassPoint,
 };
 #[allow(unused_imports, clippy::single_component_path_imports)]
-use openvm_keccak256_guest;
+use openvm_keccak256::keccak256;
 // export native keccak
 use revm_precompile::{
     utilities::right_pad, Error as PrecompileError, PrecompileOutput, PrecompileResult,
@@ -50,7 +50,7 @@ pub fn ecrecover(sig: &B512, mut recid: u8, msg: &B256) -> Result<B256, Error> {
     encoded[..32].copy_from_slice(&public_key.x().to_be_bytes());
     encoded[32..].copy_from_slice(&public_key.y().to_be_bytes());
     // hash it
-    let mut hash = keccak256(encoded);
+    let mut hash = keccak256(&encoded);
     // truncate to 20 bytes
     hash[..12].fill(0);
     Ok(B256::from(hash))
