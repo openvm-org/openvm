@@ -22,11 +22,6 @@ openvm_algebra_guest::complex_macros::complex_init! {
 const PAIR_ELEMENT_LEN: usize = 32 * (2 + 4); // 1 G1Affine (2 Fp), 1 G2Affine (4 Fp)
 
 pub fn main() {
-    setup_all_moduli();
-    setup_all_complex_extensions();
-    // Pairing doesn't need G1Affine intrinsics, but we trigger it anyways to test the chips
-    setup_all_curves();
-
     // copied from https://github.com/bluealloy/revm/blob/9e39df5dbc5fdc98779c644629b28b8bee75794a/crates/precompile/src/bn128.rs#L395
     let input = hex::decode(
         "\

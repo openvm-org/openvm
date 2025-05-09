@@ -1292,6 +1292,7 @@ dependencies = [
  "eyre",
  "hex",
  "openvm-build",
+ "openvm-circuit",
  "openvm-native-recursion",
  "openvm-sdk",
  "openvm-stark-backend",
@@ -3917,6 +3918,7 @@ version = "1.1.2"
 dependencies = [
  "bytemuck",
  "chrono",
+ "getrandom 0.3.1",
  "num-bigint 0.4.6",
  "openvm-custom-insn",
  "openvm-platform",
@@ -3968,6 +3970,7 @@ version = "1.1.2"
 dependencies = [
  "halo2curves-axiom",
  "num-bigint 0.4.6",
+ "once_cell",
  "openvm-algebra-complex-macros",
  "openvm-algebra-moduli-macros",
  "serde-big-array",
@@ -4667,7 +4670,6 @@ version = "1.1.2"
 dependencies = [
  "critical-section",
  "embedded-alloc",
- "getrandom 0.2.15",
  "libm",
  "openvm-custom-insn",
  "openvm-rv32im-guest",
@@ -7281,9 +7283,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.44.2"
+version = "1.43.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6b88822cbe49de4185e3a4cbf8321dd487cf5fe0c5c65695fef6346371e9c48"
+checksum = "492a604e2fd7f814268a378409e6c92b5525d747d10db9a229723f55a417958c"
 dependencies = [
  "backtrace",
  "bytes",

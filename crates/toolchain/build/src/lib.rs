@@ -233,6 +233,9 @@ pub(crate) fn encode_rust_flags(rustc_flags: &[&str]) -> String {
             "link-arg=--fatal-warnings",
             "-C",
             "panic=abort",
+            // https://docs.rs/getrandom/0.3.2/getrandom/index.html#opt-in-backends
+            "--cfg",
+            "getrandom_backend=\"custom\"",
         ],
     ]
     .concat()

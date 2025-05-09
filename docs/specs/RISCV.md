@@ -132,7 +132,9 @@ generates classes `Bls12381` and `Bn254` that represent the elements of the corr
 
 ### Field Arithmetic
 
-For each created modular class, one must call a corresponding `setup_*` function once at the beginning of the program. For example, for the structs above this would be `setup_0()` and `setup_1()`. This function generates the `setup` intrinsics which are distinguished by the `rs2` operand that specifies the chip this instruction is passed to..
+For each created modular class, one must call a corresponding `setup_*` function before using the intrinsics.
+For example, for the structs above this would be `setup_0()` and `setup_1()`. This function generates the `setup` intrinsics which are distinguished by the `rs2` operand that specifies the chip this instruction is passed to.
+For developer convenience, in the Rust function bindings for these intrinsics, each modulus's `setup_*` function is automatically called on the first use of any of its intrinsics.
 
 We use `config.mod_idx(N)` to denote the index of `N` in this list. In the list below, `idx` denotes `config.mod_idx(N)`.
 

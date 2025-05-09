@@ -12,8 +12,8 @@ use openvm_build::{
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, verify_segments,
-        ContinuationVmProof, ExecutionError, VerifiedExecutionPayload, VmConfig, VmExecutor,
-        VmVerificationError,
+        ContinuationVmProof, ExecutionError, InitFileGenerator, VerifiedExecutionPayload, VmConfig,
+        VmExecutor, VmVerificationError,
     },
     system::{
         memory::{tree::public_values::extract_public_values, CHUNK},
@@ -42,7 +42,7 @@ use openvm_transpiler::{
 use snark_verifier_sdk::{evm::gen_evm_verifier_sol_code, halo2::aggregation::AggregationCircuit};
 
 use crate::{
-    config::AggConfig,
+    config::{AggConfig, SdkVmConfig},
     keygen::{AggProvingKey, AggStarkProvingKey},
     prover::{AppProver, StarkProver},
 };
@@ -125,9 +125,12 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
     pub fn build<P: AsRef<Path>>(
         &self,
         guest_opts: GuestOptions,
+        vm_config: &SdkVmConfig,
         pkg_dir: P,
         target_filter: &Option<TargetFilter>,
+        init_file_name: Option<&str>, // If None, we use "openvm-init.rs"
     ) -> Result<Elf> {
+        vm_config.write_to_init_file(pkg_dir.as_ref(), init_file_name)?;
         let pkg = get_package(pkg_dir.as_ref());
         let target_dir = match build_guest_package(&pkg, &guest_opts, None, target_filter) {
             Ok(target_dir) => target_dir,

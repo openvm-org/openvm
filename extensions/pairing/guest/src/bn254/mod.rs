@@ -66,6 +66,10 @@ sw_declare! {
     Bn254G1Affine { mod_type = Bn254Fp, b = CURVE_B },
 }
 
+#[cfg(not(target_os = "zkvm"))]
+// Used in WeierstrassExtension config
+pub const BN254_ECC_STRUCT_NAME: &str = "Bn254G1Affine";
+
 pub type Fp = Bn254Fp;
 pub type Scalar = Bn254Scalar;
 pub type G1Affine = Bn254G1Affine;

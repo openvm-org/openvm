@@ -24,14 +24,7 @@ mod bn254 {
 
     use super::*;
 
-    openvm_algebra_moduli_macros::moduli_init! {
-        "0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47",
-        "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001"
-    }
-
-    openvm_algebra_complex_macros::complex_init! {
-        Bn254Fp2 { mod_idx = 0 },
-    }
+    openvm::init!("openvm_init_pairing_check_fallback_bn254.rs");
 
     // Wrapper so that we can override `pairing_check_hint`
     struct Bn254Wrapper(Bn254);
@@ -101,8 +94,6 @@ mod bn254 {
     }
 
     pub fn test_pairing_check(io: &[u8]) {
-        setup_0();
-        setup_all_complex_extensions();
         let s0 = &io[0..32 * 2];
         let s1 = &io[32 * 2..32 * 4];
         let q0 = &io[32 * 4..32 * 8];
@@ -138,14 +129,7 @@ mod bls12_381 {
 
     use super::*;
 
-    openvm_algebra_moduli_macros::moduli_init! {
-        "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
-        "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001"
-    }
-
-    openvm_algebra_complex_macros::complex_init! {
-        Bls12_381Fp2 { mod_idx = 0 },
-    }
+    openvm::init!("openvm_init_pairing_check_fallback_bls12_381.rs");
 
     // Wrapper so that we can override `pairing_check_hint`
     struct Bls12_381Wrapper(Bls12_381);
@@ -216,8 +200,6 @@ mod bls12_381 {
     }
 
     pub fn test_pairing_check(io: &[u8]) {
-        setup_0();
-        setup_all_complex_extensions();
         let s0 = &io[0..48 * 2];
         let s1 = &io[48 * 2..48 * 4];
         let q0 = &io[48 * 4..48 * 8];

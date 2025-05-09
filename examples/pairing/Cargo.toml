@@ -7,16 +7,17 @@ edition = "2021"
 members = []
 
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
-    "std",
-] }
-openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-algebra-moduli-macros = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-algebra-complex-macros = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-pairing-guest = { git = "https://github.com/openvm-org/openvm.git", features = [
+
+openvm = { path = "../../crates/toolchain/openvm", features = ["std"] }
+openvm-algebra-guest = { path = "../../extensions/algebra/guest" }
+openvm-algebra-moduli-macros = { path = "../../extensions/algebra/moduli-macros" }
+openvm-algebra-complex-macros = { path = "../../extensions/algebra/complex-macros" }
+openvm-ecc-guest = { path = "../../extensions/ecc/guest" }
+openvm-pairing-guest = { path = "../../extensions/pairing/guest", features = [
     "bls12_381",
 ] }
+openvm-platform = { path = "../../crates/toolchain/platform" }
+
 hex-literal = { version = "0.4.1", default-features = false }
 
 [features]
