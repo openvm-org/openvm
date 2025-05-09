@@ -1,14 +1,8 @@
-use std::{
-    collections::BTreeMap,
-    iter,
-    marker::PhantomData,
-    sync::{Arc, Mutex},
-};
+use std::{collections::BTreeMap, iter, marker::PhantomData};
 
 use getset::{Getters, MutGetters};
 use openvm_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
-    is_zero::IsZeroSubAir,
     utils::next_power_of_two_or_zero,
     var_range::{
         SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
@@ -30,7 +24,7 @@ use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
 use super::{
-    online::{GuestMemory, INITIAL_TIMESTAMP},
+    online::INITIAL_TIMESTAMP,
     paged_vec::{AddressMap, PAGE_SIZE},
     volatile::VolatileBoundaryChip,
     MemoryAddress,
@@ -41,13 +35,9 @@ use crate::{
         adapter::AccessAdapterInventory,
         dimensions::MemoryDimensions,
         merkle::{MemoryMerkleChip, SerialReceiver},
-        offline_checker::{
-            MemoryBaseAuxCols, MemoryBridge, MemoryBus, MemoryReadAuxCols,
-            MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols, AUX_LEN,
-        },
-        online::{AccessMetadata, MemoryLogEntry, TracingMemory},
+        offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
+        online::{AccessMetadata, TracingMemory},
         persistent::PersistentBoundaryChip,
-        tree::MemoryNode,
     },
 };
 
@@ -102,25 +92,6 @@ pub struct MemoryController<F> {
     // addr_space -> Memory data structure
     pub memory: TracingMemory<F>,
     pub access_adapters: AccessAdapterInventory<F>,
-    // Filled during finalization.
-    final_state: Option<FinalState<F>>,
-}
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug)]
-enum FinalState<F> {
-    Volatile(VolatileFinalState<F>),
-    #[allow(dead_code)]
-    Persistent(PersistentFinalState<F>),
-}
-#[derive(Debug, Default)]
-struct VolatileFinalState<F> {
-    _marker: PhantomData<F>,
-}
-#[allow(dead_code)]
-#[derive(Debug)]
-struct PersistentFinalState<F> {
-    final_memory: Equipartition<F, CHUNK>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -256,7 +227,6 @@ impl<F: PrimeField32> MemoryController<F> {
             ),
             range_checker,
             range_checker_bus,
-            final_state: None,
         }
     }
 
@@ -301,7 +271,6 @@ impl<F: PrimeField32> MemoryController<F> {
             ),
             range_checker,
             range_checker_bus,
-            final_state: None,
         }
     }
 
@@ -476,13 +445,6 @@ impl<F: PrimeField32> MemoryController<F> {
     where
         H: HasherChip<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
-        if self.final_state.is_some() {
-            return;
-        }
-
-        // self.replay_access_log();
-        // let mut offline_memory = self.offline_memory.lock().unwrap();
-
         let touched_blocks = self.memory.touched_blocks().collect::<Vec<_>>();
         // First, let's split everything into blocks of ALIGN
         let aligned_final_memory = {
@@ -615,15 +577,12 @@ impl<F: PrimeField32> MemoryController<F> {
                     );
                 }
 
-                boundary_chip.finalize(&initial_memory, &final_memory, hasher);
+                boundary_chip.finalize(initial_memory, &final_memory, hasher);
                 let final_memory_values = final_memory
                     .into_par_iter()
                     .map(|(key, value)| (key, value.values))
                     .collect();
                 merkle_chip.finalize(initial_memory.clone(), &final_memory_values, hasher);
-                self.final_state = Some(FinalState::Persistent(PersistentFinalState {
-                    final_memory: final_memory_values.clone(),
-                }));
             }
         }
     }

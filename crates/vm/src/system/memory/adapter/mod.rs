@@ -1,11 +1,10 @@
-use std::{borrow::BorrowMut, cmp::max, io::Cursor, sync::Arc};
+use std::{borrow::BorrowMut, io::Cursor, sync::Arc};
 
 pub use air::*;
 pub use columns::*;
 use enum_dispatch::enum_dispatch;
 use openvm_circuit_primitives::{
-    is_less_than::IsLtSubAir, utils::next_power_of_two_or_zero,
-    var_range::SharedVariableRangeCheckerChip, TraceSubRowGenerator,
+    is_less_than::IsLtSubAir, var_range::SharedVariableRangeCheckerChip, TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_stark_backend::{
@@ -14,7 +13,6 @@ use openvm_stark_backend::{
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    p3_maybe_rayon::prelude::*,
     p3_util::log2_strict_usize,
     prover::types::AirProofInput,
     AirRef, Chip, ChipUsageGetter,
