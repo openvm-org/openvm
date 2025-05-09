@@ -24,9 +24,9 @@ openvm::init!("openvm_init_full_limbs.rs");
 // Test that random masking does not overflow
 fn main() {
     use ff::Field;
-    use rand::rngs::OsRng;
 
     // randomness is not supported in OpenVM
+    // use rand::rngs::OsRng;
     // let _ = F384p::random(OsRng);
 
     test(F384p::ZERO);
