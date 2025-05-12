@@ -166,7 +166,7 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const READ_SIZE: usize> VmA
 
 pub struct Rv32HeapBranchAdapterStep<const NUM_READS: usize, const READ_SIZE: usize> {
     pub pointer_max_bits: usize,
-    
+    // TODO(arayi): use reference to bitwise lookup chip with lifetimes instead
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 

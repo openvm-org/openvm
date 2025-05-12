@@ -162,6 +162,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
 
 #[derive(derive_new::new)]
 pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize> {
+    // TODO(arayi): use reference to bitwise lookup chip with lifetimes instead
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 

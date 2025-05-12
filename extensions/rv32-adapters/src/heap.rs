@@ -24,7 +24,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
 };
 
-use crate::{Rv32VecHeapAdapterStep, Rv32VecHeapAdapterAir, Rv32VecHeapAdapterCols};
+use crate::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterCols, Rv32VecHeapAdapterStep};
 
 /// This adapter reads from NUM_READS <= 2 pointers and writes to 1 pointer.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers

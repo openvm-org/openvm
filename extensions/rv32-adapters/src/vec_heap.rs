@@ -270,6 +270,7 @@ pub struct Rv32VecHeapAdapterStep<
     const WRITE_SIZE: usize,
 > {
     pointer_max_bits: usize,
+    // TODO(arayi): use reference to bitwise lookup chip with lifetimes instead
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
