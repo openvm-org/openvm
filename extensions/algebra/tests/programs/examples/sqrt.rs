@@ -1,9 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use openvm_algebra_guest::{Field, IntMod, Sqrt};
-
 extern crate alloc;
+
+use openvm_algebra_guest::{Field, IntMod, Sqrt};
 
 openvm::entry!(main);
 
