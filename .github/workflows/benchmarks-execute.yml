@@ -135,7 +135,7 @@ jobs:
         working-directory: benchmarks/execute
         run: cargo codspeed build
 
-      - name: RunCodSpeedHQ/action benchmarks with CodSpeed
+      - name: Run benchmarks with CodSpeed
         uses: CodSpeedHQ/action@v3
         with:
           working-directory: benchmarks/execute
