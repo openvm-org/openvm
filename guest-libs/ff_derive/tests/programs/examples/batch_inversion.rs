@@ -15,7 +15,7 @@ use openvm_ff_derive::openvm_prime_field;
 #[PrimeFieldReprEndianness = "little"]
 struct Bls381K12Scalar([u64; 4]);
 
-openvm::init!("openvm_init_batch_inversion.rs");
+openvm::init!("openvm_init_batch_inversion_std.rs");
 
 fn main() {
     use ff::{BatchInverter, Field};
