@@ -25,6 +25,7 @@ use openvm_native_circuit::{
     CastFExtension, CastFExtensionExecutor, CastFExtensionPeriphery, Native, NativeExecutor,
     NativePeriphery,
 };
+use openvm_native_transpiler::LongFormTranspilerExtension;
 use openvm_pairing_circuit::{
     PairingExtension, PairingExtensionExecutor, PairingExtensionPeriphery,
 };
@@ -138,6 +139,9 @@ impl SdkVmConfig {
         }
         if self.sha256.is_some() {
             transpiler = transpiler.with_extension(Sha256TranspilerExtension);
+        }
+        if self.native.is_some() {
+            transpiler = transpiler.with_extension(LongFormTranspilerExtension);
         }
         if self.rv32m.is_some() {
             transpiler = transpiler.with_extension(Rv32MTranspilerExtension);

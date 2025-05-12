@@ -31,6 +31,8 @@ pub mod utils;
 
 #[cfg(not(target_os = "zkvm"))]
 pub mod host;
+#[cfg(target_os = "zkvm")]
+pub mod verify_stark;
 
 #[cfg(target_os = "zkvm")]
 core::arch::global_asm!(include_str!("memset.s"));
