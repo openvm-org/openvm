@@ -1,39 +1,38 @@
-use std::{
-    cell::RefCell,
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+use std::{cell::RefCell, rc::Rc};
 
 use openvm_algebra_circuit::Fp2;
-use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
-use openvm_circuit_derive::InstructionExecutor;
-use openvm_circuit_primitives::var_range::{
-    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+use openvm_circuit::{
+    arch::ExecutionBridge,
+    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
+};
+use openvm_circuit_derive::{InsExecutorE1, InstructionExecutor};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip,
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
-    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir,
 };
 use openvm_pairing_transpiler::PairingOpcode;
-use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
 use openvm_stark_backend::p3_field::PrimeField32;
+
+use crate::{PairingHeapAdapterAir, PairingHeapAdapterStep};
+
+use super::PairingHeapAdapterChip;
 
 // Input: two AffinePoint<Fp2>: 4 field elements each
 // Output: (AffinePoint<Fp2>, UnevaluatedLine<Fp2>, UnevaluatedLine<Fp2>) -> 2*2 + 2*2 + 2*2 = 12
 // field elements
-#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1)]
 pub struct MillerDoubleAndAddStepChip<
     F: PrimeField32,
     const INPUT_BLOCKS: usize,
     const OUTPUT_BLOCKS: usize,
     const BLOCK_SIZE: usize,
->(
-    pub  VmChipWrapper<
-        F,
-        Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-        FieldExpressionCoreChip,
-    >,
-);
+>(pub PairingHeapAdapterChip<F, 2,INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE>);
 
 impl<
         F: PrimeField32,
@@ -43,23 +42,40 @@ impl<
     > MillerDoubleAndAddStepChip<F, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE>
 {
     pub fn new(
-        adapter: Rv32VecHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        execution_bridge: ExecutionBridge,
+        memory_bridge: MemoryBridge,
+        mem_helper: SharedMemoryHelper<F>,
+        pointer_max_bits: usize,
         config: ExprBuilderConfig,
         offset: usize,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         range_checker: SharedVariableRangeCheckerChip,
-        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+        height: usize,
     ) -> Self {
         let expr = miller_double_and_add_step_expr(config, range_checker.bus());
-        let core = FieldExpressionCoreChip::new(
+        let local_opcode_idx = vec![PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize];
+
+        let air = PairingHeapAdapterAir::new(
+            Rv32VecHeapAdapterAir::new(
+                execution_bridge,
+                memory_bridge,
+                bitwise_lookup_chip.bus(),
+                pointer_max_bits,
+            ),
+            FieldExpressionCoreAir::new(expr.clone(), offset, local_opcode_idx.clone(), vec![]),
+        );
+
+        let step = PairingHeapAdapterStep::new(
+            Rv32VecHeapAdapterStep::new(pointer_max_bits, bitwise_lookup_chip),
             expr,
             offset,
-            vec![PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize],
+            local_opcode_idx,
             vec![],
             range_checker,
             "MillerDoubleAndAddStep",
             false,
         );
-        Self(VmChipWrapper::new(adapter, core, offline_memory))
+        Self(PairingHeapAdapterChip::new(air, step, height, mem_helper))
     }
 }
 
@@ -118,7 +134,7 @@ mod tests {
         bn254::BN254_MODULUS, halo2curves_shims::bn254::Bn254, pairing::MillerStep,
     };
     use openvm_pairing_transpiler::PairingOpcode;
-    use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
+    use openvm_rv32_adapters::rv32_write_heap_default;
     use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{rngs::StdRng, SeedableRng};
@@ -129,30 +145,29 @@ mod tests {
     const NUM_LIMBS: usize = 32;
     const LIMB_BITS: usize = 8;
     const BLOCK_SIZE: usize = 32;
+    const MAX_INS_CAPACITY: usize = 128;
 
     #[test]
     #[allow(non_snake_case)]
     fn test_miller_double_and_add() {
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+        let config = ExprBuilderConfig {
+            modulus: BN254_MODULUS.clone(),
+            num_limbs: NUM_LIMBS,
+            limb_bits: LIMB_BITS,
+        };
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
         let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-        let adapter = Rv32VecHeapAdapterChip::<F, 2, 4, 12, BLOCK_SIZE, BLOCK_SIZE>::new(
-            tester.execution_bus(),
-            tester.program_bus(),
+        let mut chip = MillerDoubleAndAddStepChip::<F, 4, 12, BLOCK_SIZE>::new(
+            tester.execution_bridge(),
             tester.memory_bridge(),
+            tester.memory_helper(),
             tester.address_bits(),
-            bitwise_chip.clone(),
-        );
-        let mut chip = MillerDoubleAndAddStepChip::new(
-            adapter,
-            ExprBuilderConfig {
-                modulus: BN254_MODULUS.clone(),
-                limb_bits: LIMB_BITS,
-                num_limbs: NUM_LIMBS,
-            },
+            config,
             PairingOpcode::CLASS_OFFSET,
+            bitwise_chip.clone(),
             tester.range_checker(),
-            tester.offline_memory_mutex_arc(),
+            MAX_INS_CAPACITY,
         );
 
         let mut rng0 = StdRng::seed_from_u64(2);
@@ -168,8 +183,8 @@ mod tests {
         let (Q_daa, l_qa, l_sqs) = Bn254::miller_double_and_add_step(&Q_ecpoint, &Q_ecpoint2);
         let result = chip
             .0
-            .core
-            .expr()
+            .step
+            .expr
             .execute_with_output(inputs.to_vec(), vec![]);
         assert_eq!(result.len(), 12); // AffinePoint<Fp2> and 4 Fp2 coefficients
         assert_eq!(result[0], bn254_fq_to_biguint(Q_daa.x.c0));
@@ -205,7 +220,7 @@ mod tests {
             &mut tester,
             input1_limbs,
             input2_limbs,
-            chip.0.core.air.offset + PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
+            chip.0.step.offset + PairingOpcode::MILLER_DOUBLE_AND_ADD_STEP as usize,
         );
 
         tester.execute(&mut chip, &instruction);

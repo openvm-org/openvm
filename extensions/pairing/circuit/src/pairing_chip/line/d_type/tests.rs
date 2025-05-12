@@ -20,10 +20,7 @@ use openvm_pairing_guest::{
     pairing::{Evaluatable, LineMulDType, UnevaluatedLine},
 };
 use openvm_pairing_transpiler::PairingOpcode;
-use openvm_rv32_adapters::{
-    rv32_write_heap_default, rv32_write_heap_default_with_increment, Rv32VecHeapAdapterChip,
-    Rv32VecHeapTwoReadsAdapterChip,
-};
+use openvm_rv32_adapters::{rv32_write_heap_default, rv32_write_heap_default_with_increment};
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{rngs::StdRng, SeedableRng};
@@ -34,30 +31,31 @@ type F = BabyBear;
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
 const BLOCK_SIZE: usize = 32;
+const MAX_INS_CAPACITY: usize = 128;
 
 #[test]
 fn test_mul_013_by_013() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+    let config = ExprBuilderConfig {
+        modulus: BN254_MODULUS.clone(),
+        num_limbs: NUM_LIMBS,
+        limb_bits: LIMB_BITS,
+    };
+
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let adapter = Rv32VecHeapAdapterChip::<F, 2, 4, 10, BLOCK_SIZE, BLOCK_SIZE>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
+
+    let mut chip = EcLineMul013By013Chip::<F, 4, 10, BLOCK_SIZE>::new(
+        tester.execution_bridge(),
         tester.memory_bridge(),
+        tester.memory_helper(),
         tester.address_bits(),
-        bitwise_chip.clone(),
-    );
-    let mut chip = EcLineMul013By013Chip::new(
-        adapter,
-        tester.memory_controller().borrow().range_checker.clone(),
-        ExprBuilderConfig {
-            modulus: BN254_MODULUS.clone(),
-            num_limbs: NUM_LIMBS,
-            limb_bits: LIMB_BITS,
-        },
+        config,
         BN254_XI_ISIZE,
         PairingOpcode::CLASS_OFFSET,
-        tester.offline_memory_mutex_arc(),
+        bitwise_chip.clone(),
+        tester.range_checker(),
+        MAX_INS_CAPACITY,
     );
 
     let mut rng0 = StdRng::seed_from_u64(8);
@@ -87,10 +85,10 @@ fn test_mul_013_by_013() {
 
     let vars = chip
         .0
-        .core
-        .expr()
+        .step
+        .expr
         .execute([input_line0.clone(), input_line1.clone()].concat(), vec![]);
-    let output_indices = chip.0.core.expr().builder.output_indices.clone();
+    let output_indices = chip.0.step.expr.builder.output_indices.clone();
     let output = output_indices
         .iter()
         .map(|i| vars[*i].clone())
@@ -123,7 +121,7 @@ fn test_mul_013_by_013() {
         &mut tester,
         input_line0_limbs,
         input_line1_limbs,
-        chip.0.core.air.offset + PairingOpcode::MUL_013_BY_013 as usize,
+        chip.0.step.offset + PairingOpcode::MUL_013_BY_013 as usize,
     );
 
     tester.execute(&mut chip, &instruction);
@@ -134,26 +132,24 @@ fn test_mul_013_by_013() {
 #[test]
 fn test_mul_by_01234() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+    let config = ExprBuilderConfig {
+        modulus: BN254_MODULUS.clone(),
+        num_limbs: NUM_LIMBS,
+        limb_bits: LIMB_BITS,
+    };
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let adapter = Rv32VecHeapTwoReadsAdapterChip::<F, 12, 10, 12, BLOCK_SIZE, BLOCK_SIZE>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
+    let mut chip = EcLineMulBy01234Chip::<F, 12, 10, 12, BLOCK_SIZE>::new(
+        tester.execution_bridge(),
         tester.memory_bridge(),
+        tester.memory_helper(),
         tester.address_bits(),
-        bitwise_chip.clone(),
-    );
-    let mut chip = EcLineMulBy01234Chip::new(
-        adapter,
-        ExprBuilderConfig {
-            modulus: BN254_MODULUS.clone(),
-            num_limbs: NUM_LIMBS,
-            limb_bits: LIMB_BITS,
-        },
+        config,
         BN254_XI_ISIZE,
         PairingOpcode::CLASS_OFFSET,
+        bitwise_chip.clone(),
         tester.range_checker(),
-        tester.offline_memory_mutex_arc(),
+        MAX_INS_CAPACITY,
     );
 
     let mut rng = StdRng::seed_from_u64(8);
@@ -176,10 +172,10 @@ fn test_mul_by_01234() {
 
     let vars = chip
         .0
-        .core
-        .expr()
+        .step
+        .expr
         .execute([input_f.clone(), input_x.clone()].concat(), vec![]);
-    let output_indices = chip.0.core.expr().builder.output_indices.clone();
+    let output_indices = chip.0.step.expr.builder.output_indices.clone();
     let output = output_indices
         .iter()
         .map(|i| vars[*i].clone())
@@ -211,7 +207,7 @@ fn test_mul_by_01234() {
         input_f_limbs,
         input_x_limbs,
         512,
-        chip.0.core.air.offset + PairingOpcode::MUL_BY_01234 as usize,
+        chip.0.step.offset + PairingOpcode::MUL_BY_01234 as usize,
     );
 
     tester.execute(&mut chip, &instruction);
@@ -229,19 +225,16 @@ fn test_evaluate_line() {
     };
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let adapter = Rv32VecHeapTwoReadsAdapterChip::<F, 4, 2, 4, BLOCK_SIZE, BLOCK_SIZE>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
+    let mut chip = EvaluateLineChip::<F, 4, 2, 4, BLOCK_SIZE>::new(
+        tester.execution_bridge(),
         tester.memory_bridge(),
+        tester.memory_helper(),
         tester.address_bits(),
-        bitwise_chip.clone(),
-    );
-    let mut chip = EvaluateLineChip::new(
-        adapter,
         config,
         PairingOpcode::CLASS_OFFSET,
+        bitwise_chip.clone(),
         tester.range_checker(),
-        tester.offline_memory_mutex_arc(),
+        MAX_INS_CAPACITY,
     );
 
     let mut rng = StdRng::seed_from_u64(42);
@@ -267,7 +260,7 @@ fn test_evaluate_line() {
     };
     let evaluated = uneval.evaluate(&(x_over_y, y_inv));
 
-    let result = chip.0.core.expr().execute_with_output(inputs, vec![]);
+    let result = chip.0.step.expr.execute_with_output(inputs, vec![]);
     assert_eq!(result.len(), 4);
     assert_eq!(result[0], bn254_fq_to_biguint(evaluated.b.c0));
     assert_eq!(result[1], bn254_fq_to_biguint(evaluated.b.c1));
@@ -278,7 +271,7 @@ fn test_evaluate_line() {
         &mut tester,
         input_limbs,
         vec![],
-        chip.0.core.air.offset + PairingOpcode::EVALUATE_LINE as usize,
+        chip.0.step.offset + PairingOpcode::EVALUATE_LINE as usize,
     );
 
     tester.execute(&mut chip, &instruction);

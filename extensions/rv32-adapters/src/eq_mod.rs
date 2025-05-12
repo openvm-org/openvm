@@ -1,22 +1,19 @@
 use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
+    iter,
 };
 
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
-        ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
-        VmAdapterInterface,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface,
+        ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
     },
-    system::{
-        memory::{
-            offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryController, OfflineMemory, RecordId,
-        },
-        program::ProgramBus,
+    system::memory::{
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        online::{GuestMemory, TracingMemory},
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
@@ -29,16 +26,16 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
 use openvm_rv32im_circuit::adapters::{
-    read_rv32_register, tmp_convert_to_u8s, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+    memory_read, memory_write, new_read_rv32_register, tracing_read, tracing_write, RV32_CELL_BITS,
+    RV32_REGISTER_NUM_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-use serde::{Deserialize, Serialize};
-use serde_big_array::BigArray;
-use serde_with::serde_as;
+
+// TODO(arayi): Is there a reason we read the inputs block by block instead of reading them all at once?
 
 /// This adapter reads from NUM_READS <= 2 pointers and writes to a register.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
@@ -227,71 +224,152 @@ impl<
     }
 }
 
-pub struct Rv32IsEqualModAdapterChip<
-    F: Field,
+pub struct Rv32IsEqualModeAdapterStep<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
     const TOTAL_READ_SIZE: usize,
 > {
-    pub air: Rv32IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>,
+    pointer_max_bits: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-    _marker: PhantomData<F>,
 }
 
 impl<
-        F: PrimeField32,
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
-    > Rv32IsEqualModAdapterChip<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    > Rv32IsEqualModeAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
     pub fn new(
-        execution_bus: ExecutionBus,
-        program_bus: ProgramBus,
-        memory_bridge: MemoryBridge,
-        address_bits: usize,
+        pointer_max_bits: usize,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     ) -> Self {
         assert!(NUM_READS <= 2);
         assert_eq!(TOTAL_READ_SIZE, BLOCKS_PER_READ * BLOCK_SIZE);
         assert!(
-            RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits < RV32_CELL_BITS,
-            "address_bits={address_bits} needs to be large enough for high limb range check"
+            RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - pointer_max_bits < RV32_CELL_BITS,
+            "pointer_max_bits={pointer_max_bits} needs to be large enough for high limb range check"
         );
         Self {
-            air: Rv32IsEqualModAdapterAir {
-                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                memory_bridge,
-                bus: bitwise_lookup_chip.bus(),
-                address_bits,
-            },
+            pointer_max_bits,
             bitwise_lookup_chip,
-            _marker: PhantomData,
         }
     }
 }
 
-#[repr(C)]
-#[serde_as]
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Rv32IsEqualModReadRecord<
-    const NUM_READS: usize,
-    const BLOCKS_PER_READ: usize,
-    const BLOCK_SIZE: usize,
-> {
-    #[serde(with = "BigArray")]
-    pub rs: [RecordId; NUM_READS],
-    #[serde_as(as = "[[_; BLOCKS_PER_READ]; NUM_READS]")]
-    pub reads: [[RecordId; BLOCKS_PER_READ]; NUM_READS],
-}
+impl<
+        F: PrimeField32,
+        CTX,
+        const NUM_READS: usize,
+        const BLOCKS_PER_READ: usize,
+        const BLOCK_SIZE: usize,
+        const TOTAL_READ_SIZE: usize,
+    > AdapterTraceStep<F, CTX>
+    for Rv32IsEqualModeAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+where
+    F: PrimeField32,
+{
+    const WIDTH: usize =
+        Rv32IsEqualModAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width();
+    type ReadData = [[u8; TOTAL_READ_SIZE]; NUM_READS];
+    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+    type TraceContext<'a> = ();
 
-#[repr(C)]
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Rv32IsEqualModWriteRecord {
-    pub from_state: ExecutionState<u32>,
-    pub rd_id: RecordId,
+    fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]) {
+        let cols: &mut Rv32IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
+            adapter_row.borrow_mut();
+        cols.from_state.pc = F::from_canonical_u32(pc);
+        cols.from_state.timestamp = F::from_canonical_u32(memory.timestamp);
+    }
+
+    fn read(
+        &self,
+        memory: &mut TracingMemory<F>,
+        instruction: &Instruction<F>,
+        adapter_row: &mut [F],
+    ) -> Self::ReadData {
+        let Instruction { b, c, d, e, .. } = *instruction;
+
+        let e = e.as_canonical_u32();
+        let d = d.as_canonical_u32();
+        debug_assert_eq!(d, RV32_REGISTER_AS);
+        debug_assert_eq!(e, RV32_MEMORY_AS);
+
+        let cols: &mut Rv32IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
+            adapter_row.borrow_mut();
+
+        // Read register values
+        let rs_vals: [_; NUM_READS] = from_fn(|i| {
+            let addr = if i == 0 { b } else { c };
+            cols.rs_ptr[i] = addr;
+            let rs_val = tracing_read(memory, e, addr.as_canonical_u32(), &mut cols.rs_read_aux[i]);
+            cols.rs_val[i] = rs_val.map(F::from_canonical_u8);
+            u32::from_le_bytes(rs_val)
+        });
+
+        // Read memory values
+        let read_data: [[[_; BLOCK_SIZE]; BLOCKS_PER_READ]; NUM_READS] = from_fn(|i| {
+            assert!(rs_vals[i] as usize + TOTAL_READ_SIZE - 1 < (1 << self.pointer_max_bits));
+            from_fn(|j| {
+                tracing_read(
+                    memory,
+                    e,
+                    rs_vals[i] + (j * BLOCK_SIZE) as u32,
+                    &mut cols.heap_read_aux[i][j],
+                )
+            })
+        });
+
+        read_data.map(|r| {
+            let read = r.iter().flatten().copied().collect::<Vec<_>>();
+            read.try_into().unwrap()
+        })
+    }
+
+    fn write(
+        &self,
+        memory: &mut TracingMemory<F>,
+        instruction: &Instruction<F>,
+        adapter_row: &mut [F],
+        data: &Self::WriteData,
+    ) {
+        let Instruction { a, d, .. } = *instruction;
+        let cols: &mut Rv32IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
+            adapter_row.borrow_mut();
+        cols.rd_ptr = a;
+        tracing_write(
+            memory,
+            d.as_canonical_u32(),
+            a.as_canonical_u32(),
+            data,
+            &mut cols.writes_aux,
+        );
+    }
+
+    fn fill_trace_row(
+        &self,
+        _mem_helper: &MemoryAuxColsFactory<F>,
+        _ctx: (),
+        adapter_row: &mut [F],
+    ) {
+        let cols: &mut Rv32IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
+            adapter_row.borrow_mut();
+
+        // Range checks:
+        let need_range_check: Vec<u32> = cols
+            .rs_val
+            .iter()
+            .map(|&val| val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
+            .chain(iter::once(0)) // in case NUM_READS is odd
+            .collect();
+        debug_assert!(self.pointer_max_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
+        let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits;
+        for pair in need_range_check.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(pair[0] << limb_shift_bits, pair[1] << limb_shift_bits);
+        }
+    }
 }
 
 impl<
@@ -300,138 +378,41 @@ impl<
         const BLOCKS_PER_READ: usize,
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
-    > VmAdapterChip<F>
-    for Rv32IsEqualModAdapterChip<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    > AdapterExecutorE1<F>
+    for Rv32IsEqualModeAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
-    type ReadRecord = Rv32IsEqualModReadRecord<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>;
-    type WriteRecord = Rv32IsEqualModWriteRecord;
-    type Air = Rv32IsEqualModAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>;
-    type Interface = BasicAdapterInterface<
-        F,
-        MinimalInstruction<F>,
-        NUM_READS,
-        1,
-        TOTAL_READ_SIZE,
-        RV32_REGISTER_NUM_LIMBS,
-    >;
+    type ReadData = [[u8; TOTAL_READ_SIZE]; NUM_READS];
+    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
-    fn preprocess(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        instruction: &Instruction<F>,
-    ) -> Result<(
-        <Self::Interface as VmAdapterInterface<F>>::Reads,
-        Self::ReadRecord,
-    )> {
+    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
+    where
+        Mem: GuestMemory,
+    {
         let Instruction { b, c, d, e, .. } = *instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
+        let d = d.as_canonical_u32();
+        let e = e.as_canonical_u32();
+        debug_assert_eq!(d, RV32_REGISTER_AS);
+        debug_assert_eq!(e, RV32_MEMORY_AS);
 
-        let mut rs_vals = [0; NUM_READS];
-        let rs_records: [_; NUM_READS] = from_fn(|i| {
+        // Read register values
+        let rs_vals = from_fn(|i| {
             let addr = if i == 0 { b } else { c };
-            let (record, val) = read_rv32_register(memory, d, addr);
-            rs_vals[i] = val;
-            record
+            new_read_rv32_register(memory, d, addr.as_canonical_u32())
         });
 
-        let read_records = rs_vals.map(|address| {
-            debug_assert!(address < (1 << self.air.address_bits));
-            from_fn(|i| {
-                memory.read::<u8, BLOCK_SIZE>(
-                    e,
-                    F::from_canonical_u32(address + (i * BLOCK_SIZE) as u32),
-                )
-            })
-        });
-
-        let read_data = read_records.map(|r| {
-            let read = r.map(|x| x.1);
-            let mut read_it = read.iter().flatten();
-            from_fn(|_| *(read_it.next().unwrap())).map(F::from_canonical_u8)
-        });
-        let record = Rv32IsEqualModReadRecord {
-            rs: rs_records,
-            reads: read_records.map(|r| r.map(|x| x.0)),
-        };
-
-        Ok((read_data, record))
+        // Read memory values
+        rs_vals.map(|address| {
+            assert!(address as usize + TOTAL_READ_SIZE - 1 < (1 << self.pointer_max_bits));
+            memory_read(memory, e, address)
+        })
     }
 
-    fn postprocess(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-        output: AdapterRuntimeContext<F, Self::Interface>,
-        _read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
+    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData)
+    where
+        Mem: GuestMemory,
+    {
         let Instruction { a, d, .. } = *instruction;
-        let (rd_id, _) = memory.write(d, a, &tmp_convert_to_u8s(output.writes[0]));
-
-        debug_assert!(
-            memory.timestamp() - from_state.timestamp
-                == (NUM_READS * (BLOCKS_PER_READ + 1) + 1) as u32,
-            "timestamp delta is {}, expected {}",
-            memory.timestamp() - from_state.timestamp,
-            NUM_READS * (BLOCKS_PER_READ + 1) + 1
-        );
-
-        Ok((
-            ExecutionState {
-                pc: from_state.pc + DEFAULT_PC_STEP,
-                timestamp: memory.timestamp(),
-            },
-            Self::WriteRecord { from_state, rd_id },
-        ))
-    }
-
-    fn generate_trace_row(
-        &self,
-        row_slice: &mut [F],
-        read_record: Self::ReadRecord,
-        write_record: Self::WriteRecord,
-        memory: &OfflineMemory<F>,
-    ) {
-        let aux_cols_factory = memory.aux_cols_factory();
-        let row_slice: &mut Rv32IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
-            row_slice.borrow_mut();
-        row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-
-        let rs = read_record.rs.map(|r| memory.record_by_id(r));
-        for (i, r) in rs.iter().enumerate() {
-            row_slice.rs_ptr[i] = r.pointer;
-            row_slice.rs_val[i].copy_from_slice(r.data_slice());
-            aux_cols_factory.generate_read_aux(r, &mut row_slice.rs_read_aux[i]);
-            for (j, x) in read_record.reads[i].iter().enumerate() {
-                let read = memory.record_by_id(*x);
-                aux_cols_factory.generate_read_aux(read, &mut row_slice.heap_read_aux[i][j]);
-            }
-        }
-
-        let rd = memory.record_by_id(write_record.rd_id);
-        row_slice.rd_ptr = rd.pointer;
-        aux_cols_factory.generate_write_aux(rd, &mut row_slice.writes_aux);
-
-        // Range checks
-        let need_range_check: [u32; 2] = from_fn(|i| {
-            if i < NUM_READS {
-                rs[i]
-                    .data_at(RV32_REGISTER_NUM_LIMBS - 1)
-                    .as_canonical_u32()
-            } else {
-                0
-            }
-        });
-        let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.air.address_bits;
-        self.bitwise_lookup_chip.request_range(
-            need_range_check[0] << limb_shift_bits,
-            need_range_check[1] << limb_shift_bits,
-        );
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
+        memory_write(memory, d.as_canonical_u32(), a.as_canonical_u32(), data);
     }
 }

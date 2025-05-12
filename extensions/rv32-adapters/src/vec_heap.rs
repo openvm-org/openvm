@@ -262,7 +262,7 @@ impl<
 }
 
 #[derive(derive_new::new)]
-pub struct RV32VecHeapAdapterStep<
+pub struct Rv32VecHeapAdapterStep<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
@@ -282,7 +282,7 @@ impl<
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
     > AdapterTraceStep<F, CTX>
-    for RV32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+    for Rv32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
 {
     const WIDTH: usize = Rv32VecHeapAdapterCols::<
         F,
@@ -438,7 +438,7 @@ impl<
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
     > AdapterExecutorE1<F>
-    for RV32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+    for Rv32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
 {
     type ReadData = [[[u8; READ_SIZE]; BLOCKS_PER_READ]; NUM_READS];
     type WriteData = [[u8; WRITE_SIZE]; BLOCKS_PER_WRITE];

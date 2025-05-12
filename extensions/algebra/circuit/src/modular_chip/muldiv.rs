@@ -1,21 +1,25 @@
-use std::{
-    cell::RefCell,
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+use std::{cell::RefCell, rc::Rc};
 
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
-use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
-use openvm_circuit_derive::InstructionExecutor;
-use openvm_circuit_primitives::var_range::{
-    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+use openvm_circuit::{
+    arch::ExecutionBridge,
+    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+
+use openvm_circuit_derive::{InsExecutorE1, InstructionExecutor};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip,
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+    Chip, ChipUsageGetter,
+};
+use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
-    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip, FieldVariable, SymbolicExpr,
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldVariable, SymbolicExpr,
 };
-use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_rv32_adapters::{Rv32VecHeapAdapterStep, Rv32VecHeapAdapterAir};
 use openvm_stark_backend::p3_field::PrimeField32;
+
+use super::{ModularAir, ModularChip, ModularStep};
 
 pub fn muldiv_expr(
     config: ExprBuilderConfig,
@@ -58,39 +62,58 @@ pub fn muldiv_expr(
     )
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1)]
 pub struct ModularMulDivChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    pub  VmChipWrapper<
-        F,
-        Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-        FieldExpressionCoreChip,
-    >,
+    pub ModularChip<F, BLOCKS, BLOCK_SIZE>,
 );
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
     ModularMulDivChip<F, BLOCKS, BLOCK_SIZE>
 {
     pub fn new(
-        adapter: Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        execution_bridge: ExecutionBridge,
+        memory_bridge: MemoryBridge,
+        mem_helper: SharedMemoryHelper<F>,
+        pointer_max_bits: usize,
         config: ExprBuilderConfig,
         offset: usize,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         range_checker: SharedVariableRangeCheckerChip,
-        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+        height: usize,
     ) -> Self {
         let (expr, is_mul_flag, is_div_flag) = muldiv_expr(config, range_checker.bus());
-        let core = FieldExpressionCoreChip::new(
+
+        let local_opcode_idx = vec![
+            Rv32ModularArithmeticOpcode::MUL as usize,
+            Rv32ModularArithmeticOpcode::DIV as usize,
+            Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize,
+        ];
+        let opcode_flag_idx = vec![is_mul_flag, is_div_flag];
+        let air = ModularAir::new(
+            Rv32VecHeapAdapterAir::new(
+                execution_bridge,
+                memory_bridge,
+                bitwise_lookup_chip.bus(),
+                pointer_max_bits,
+            ),
+            FieldExpressionCoreAir::new(
+                expr.clone(),
+                offset,
+                local_opcode_idx.clone(),
+                opcode_flag_idx.clone(),
+            ),
+        );
+
+        let step = ModularStep::new(
+            Rv32VecHeapAdapterStep::new(pointer_max_bits, bitwise_lookup_chip),
             expr,
             offset,
-            vec![
-                Rv32ModularArithmeticOpcode::MUL as usize,
-                Rv32ModularArithmeticOpcode::DIV as usize,
-                Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize,
-            ],
-            vec![is_mul_flag, is_div_flag],
+            local_opcode_idx,
+            opcode_flag_idx,
             range_checker,
             "ModularMulDiv",
             false,
         );
-        Self(VmChipWrapper::new(adapter, core, offline_memory))
+        Self(ModularChip::new(air, step, height, mem_helper))
     }
 }

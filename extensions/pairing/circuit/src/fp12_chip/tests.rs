@@ -1,8 +1,5 @@
 use num_bigint::BigUint;
-use openvm_circuit::arch::{
-    testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    VmChipWrapper,
-};
+use openvm_circuit::arch::testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
@@ -11,7 +8,7 @@ use openvm_mod_circuit_builder::{
     test_utils::{
         biguint_to_limbs, bls12381_fq12_random, bn254_fq12_random, bn254_fq12_to_biguint_vec,
     },
-    ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
+    ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir,
 };
 use openvm_pairing_guest::{
     bls12_381::{
@@ -21,12 +18,17 @@ use openvm_pairing_guest::{
     bn254::{BN254_BLOCK_SIZE, BN254_LIMB_BITS, BN254_MODULUS, BN254_NUM_LIMBS, BN254_XI_ISIZE},
 };
 use openvm_pairing_transpiler::{Bls12381Fp12Opcode, Bn254Fp12Opcode, Fp12Opcode};
-use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
+use openvm_rv32_adapters::{
+    rv32_write_heap_default, Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep,
+};
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
+use crate::{PairingHeapAdapterAir, PairingHeapAdapterChip, PairingHeapAdapterStep};
+
 use super::{fp12_add_expr, fp12_mul_expr, fp12_sub_expr};
 
+const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
 #[allow(clippy::too_many_arguments)]
@@ -45,26 +47,35 @@ fn test_fp12_fn<
     y: Vec<BigUint>,
     var_len: usize,
 ) {
-    let core = FieldExpressionCoreChip::new(
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+    let air = PairingHeapAdapterAir::new(
+        Rv32VecHeapAdapterAir::new(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            bitwise_chip.bus(),
+            tester.address_bits(),
+        ),
+        FieldExpressionCoreAir::new(expr.clone(), offset, vec![local_opcode_idx], vec![]),
+    );
+
+    let step = PairingHeapAdapterStep::new(
+        Rv32VecHeapAdapterStep::new(tester.address_bits(), bitwise_chip.clone()),
         expr,
         offset,
         vec![local_opcode_idx],
         vec![],
-        tester.memory_controller().borrow().range_checker.clone(),
+        tester.range_checker(),
         name,
         false,
     );
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let adapter =
-        Rv32VecHeapAdapterChip::<F, 2, INPUT_SIZE, INPUT_SIZE, BLOCK_SIZE, BLOCK_SIZE>::new(
-            tester.execution_bus(),
-            tester.program_bus(),
-            tester.memory_bridge(),
-            tester.address_bits(),
-            bitwise_chip.clone(),
-        );
+    let mut chip = PairingHeapAdapterChip::<F, 2, INPUT_SIZE, INPUT_SIZE, BLOCK_SIZE>::new(
+        air,
+        step,
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
+    );
 
     let x_limbs = x
         .iter()
@@ -78,16 +89,15 @@ fn test_fp12_fn<
             biguint_to_limbs::<NUM_LIMBS>(y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32)
         })
         .collect::<Vec<[BabyBear; NUM_LIMBS]>>();
-    let mut chip = VmChipWrapper::new(adapter, core, tester.offline_memory_mutex_arc());
 
-    let res = chip.core.air.expr.execute([x, y].concat(), vec![]);
+    let res = chip.step.expr.execute([x, y].concat(), vec![]);
     assert_eq!(res.len(), var_len);
 
     let instruction = rv32_write_heap_default(
         &mut tester,
         x_limbs,
         y_limbs,
-        chip.core.air.offset + local_opcode_idx,
+        chip.step.offset + local_opcode_idx,
     );
     tester.execute(&mut chip, &instruction);
 
@@ -103,10 +113,7 @@ fn test_fp12_add_bn254() {
         num_limbs: BN254_NUM_LIMBS,
         limb_bits: BN254_LIMB_BITS,
     };
-    let expr = fp12_add_expr(
-        config,
-        tester.memory_controller().borrow().range_checker.bus(),
-    );
+    let expr = fp12_add_expr(config, tester.range_checker().bus());
 
     let x = bn254_fq12_to_biguint_vec(bn254_fq12_random(1));
     let y = bn254_fq12_to_biguint_vec(bn254_fq12_random(2));
@@ -131,10 +138,7 @@ fn test_fp12_sub_bn254() {
         num_limbs: BN254_NUM_LIMBS,
         limb_bits: BN254_LIMB_BITS,
     };
-    let expr = fp12_sub_expr(
-        config,
-        tester.memory_controller().borrow().range_checker.bus(),
-    );
+    let expr = fp12_sub_expr(config, tester.range_checker().bus());
 
     let x = bn254_fq12_to_biguint_vec(bn254_fq12_random(59));
     let y = bn254_fq12_to_biguint_vec(bn254_fq12_random(3));
@@ -160,11 +164,7 @@ fn test_fp12_mul_bn254() {
         limb_bits: BN254_LIMB_BITS,
     };
     let xi = BN254_XI_ISIZE;
-    let expr = fp12_mul_expr(
-        config,
-        tester.memory_controller().borrow().range_checker.bus(),
-        xi,
-    );
+    let expr = fp12_mul_expr(config, tester.range_checker().bus(), xi);
 
     let x = bn254_fq12_to_biguint_vec(bn254_fq12_random(5));
     let y = bn254_fq12_to_biguint_vec(bn254_fq12_random(25));
@@ -189,10 +189,7 @@ fn test_fp12_add_bls12381() {
         num_limbs: BLS12_381_NUM_LIMBS,
         limb_bits: BLS12_381_LIMB_BITS,
     };
-    let expr = fp12_add_expr(
-        config,
-        tester.memory_controller().borrow().range_checker.bus(),
-    );
+    let expr = fp12_add_expr(config, tester.range_checker().bus());
 
     let x = bls12381_fq12_random(3);
     let y = bls12381_fq12_random(99);
@@ -217,10 +214,7 @@ fn test_fp12_sub_bls12381() {
         num_limbs: BLS12_381_NUM_LIMBS,
         limb_bits: BLS12_381_LIMB_BITS,
     };
-    let expr = fp12_sub_expr(
-        config,
-        tester.memory_controller().borrow().range_checker.bus(),
-    );
+    let expr = fp12_sub_expr(config, tester.range_checker().bus());
 
     let x = bls12381_fq12_random(8);
     let y = bls12381_fq12_random(9);
@@ -249,11 +243,7 @@ fn test_fp12_mul_bls12381() {
         limb_bits: BLS12_381_LIMB_BITS,
     };
     let xi = BLS12_381_XI_ISIZE;
-    let expr = fp12_mul_expr(
-        config,
-        tester.memory_controller().borrow().range_checker.bus(),
-        xi,
-    );
+    let expr = fp12_mul_expr(config, tester.range_checker().bus(), xi);
 
     let x = bls12381_fq12_random(5);
     let y = bls12381_fq12_random(25);

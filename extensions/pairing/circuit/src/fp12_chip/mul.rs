@@ -1,56 +1,86 @@
-use std::{
-    cell::RefCell,
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+use std::{cell::RefCell, rc::Rc};
 
-use openvm_circuit::{arch::VmChipWrapper, system::memory::OfflineMemory};
-use openvm_circuit_derive::InstructionExecutor;
-use openvm_circuit_primitives::var_range::{
-    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+use openvm_circuit::{
+    arch::ExecutionBridge,
+    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
+};
+use openvm_circuit_derive::{InsExecutorE1, InstructionExecutor};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip,
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
-    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreChip,
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir,
 };
 use openvm_pairing_transpiler::Fp12Opcode;
-use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
+use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::Fp12;
+use crate::{Fp12, PairingHeapAdapterAir, PairingHeapAdapterChip, PairingHeapAdapterStep};
 // Input: Fp12 * 2
 // Output: Fp12
-#[derive(Chip, ChipUsageGetter, InstructionExecutor)]
-pub struct Fp12MulChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    pub  VmChipWrapper<
-        F,
-        Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-        FieldExpressionCoreChip,
-    >,
-);
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1)]
+pub struct Fp12MulChip<
+    F: PrimeField32,
+    const INPUT_BLOCKS: usize,
+    const OUTPUT_BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+>(pub PairingHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE>);
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
-    Fp12MulChip<F, BLOCKS, BLOCK_SIZE>
+impl<
+        F: PrimeField32,
+        const INPUT_BLOCKS: usize,
+        const OUTPUT_BLOCKS: usize,
+        const BLOCK_SIZE: usize,
+    > Fp12MulChip<F, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE>
 {
     pub fn new(
-        adapter: Rv32VecHeapAdapterChip<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        execution_bridge: ExecutionBridge,
+        memory_bridge: MemoryBridge,
+        mem_helper: SharedMemoryHelper<F>,
+        pointer_max_bits: usize,
         config: ExprBuilderConfig,
         xi: [isize; 2],
         offset: usize,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         range_checker: SharedVariableRangeCheckerChip,
-        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+        height: usize,
     ) -> Self {
+        assert!(
+            xi[0].unsigned_abs() < 1 << config.limb_bits,
+            "expect xi to be small"
+        ); // not a hard rule, but we expect xi to be small
+        assert!(
+            xi[1].unsigned_abs() < 1 << config.limb_bits,
+            "expect xi to be small"
+        );
+
         let expr = fp12_mul_expr(config, range_checker.bus(), xi);
-        let core = FieldExpressionCoreChip::new(
+        let local_opcode_idx = vec![Fp12Opcode::MUL as usize];
+
+        let air = PairingHeapAdapterAir::new(
+            Rv32VecHeapAdapterAir::new(
+                execution_bridge,
+                memory_bridge,
+                bitwise_lookup_chip.bus(),
+                pointer_max_bits,
+            ),
+            FieldExpressionCoreAir::new(expr.clone(), offset, local_opcode_idx.clone(), vec![]),
+        );
+
+        let step = PairingHeapAdapterStep::new(
+            Rv32VecHeapAdapterStep::new(pointer_max_bits, bitwise_lookup_chip),
             expr,
             offset,
-            vec![Fp12Opcode::MUL as usize],
+            local_opcode_idx,
             vec![],
             range_checker,
             "Fp12Mul",
             false,
         );
-        Self(VmChipWrapper::new(adapter, core, offline_memory))
+        Self(PairingHeapAdapterChip::new(air, step, height, mem_helper))
     }
 }
 
@@ -95,6 +125,7 @@ mod tests {
     use super::*;
 
     const LIMB_BITS: usize = 8;
+    const MAX_INS_CAPACITY: usize = 128;
     type F = BabyBear;
 
     #[test]
@@ -110,21 +141,17 @@ mod tests {
         };
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
         let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-        let adapter = Rv32VecHeapAdapterChip::<F, 2, 12, 12, BLOCK_SIZE, BLOCK_SIZE>::new(
-            tester.execution_bus(),
-            tester.program_bus(),
+        let mut chip = Fp12MulChip::<F, 12, 12, BLOCK_SIZE>::new(
+            tester.execution_bridge(),
             tester.memory_bridge(),
+            tester.memory_helper(),
             tester.address_bits(),
-            bitwise_chip.clone(),
-        );
-
-        let mut chip = Fp12MulChip::new(
-            adapter,
             config,
             BN254_XI_ISIZE,
             Fp12Opcode::CLASS_OFFSET,
+            bitwise_chip.clone(),
             tester.range_checker(),
-            tester.offline_memory_mutex_arc(),
+            MAX_INS_CAPACITY,
         );
 
         let mut rng = StdRng::seed_from_u64(64);
@@ -139,8 +166,8 @@ mod tests {
         let cmp = bn254_fq12_to_biguint_vec(x * y);
         let res = chip
             .0
-            .core
-            .expr()
+            .step
+            .expr
             .execute_with_output(inputs.clone(), vec![true]);
         assert_eq!(res.len(), cmp.len());
         for i in 0..res.len() {
@@ -166,7 +193,7 @@ mod tests {
             x_limbs,
             y_limbs,
             512,
-            chip.0.core.air.offset + Fp12Opcode::MUL as usize,
+            chip.0.step.offset + Fp12Opcode::MUL as usize,
         );
         tester.execute(&mut chip, &instruction);
         let tester = tester.build().load(chip).load(bitwise_chip).finalize();

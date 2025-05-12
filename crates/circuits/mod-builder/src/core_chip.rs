@@ -1,24 +1,24 @@
 use itertools::Itertools;
 use num_bigint::BigUint;
-use num_traits::Zero;
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, DynAdapterInterface, DynArray, MinimalInstruction,
-    Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, DynAdapterInterface, DynArray,
+        MinimalInstruction, Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
+    },
+    system::memory::online::{GuestMemory, TracingMemory},
 };
 use openvm_circuit_primitives::{
     var_range::SharedVariableRangeCheckerChip, SubAir, TraceSubRowGenerator,
 };
-use openvm_instructions::instruction::Instruction;
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
     rap::BaseAirWithPublicValues,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
-use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, DisplayFromStr};
 
 use crate::{
     utils::{biguint_to_limbs_vec, limbs_to_biguint},
@@ -165,27 +165,21 @@ where
     }
 }
 
-#[serde_as]
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-pub struct FieldExpressionRecord {
-    #[serde_as(as = "Vec<DisplayFromStr>")]
-    pub inputs: Vec<BigUint>,
-    pub flags: Vec<bool>,
-}
-
-pub struct FieldExpressionCoreChip {
-    pub air: FieldExpressionCoreAir,
+// TODO(arayi): use lifetimes and references for fields
+pub struct FieldExpressionStep<A> {
+    adapter: A,
+    pub expr: FieldExpr,
+    pub offset: usize,
+    pub local_opcode_idx: Vec<usize>,
+    pub opcode_flag_idx: Vec<usize>,
     pub range_checker: SharedVariableRangeCheckerChip,
-
     pub name: String,
-
-    /// Whether to finalize the trace. True if all-zero rows don't satisfy the constraints (e.g.
-    /// there is int_add)
     pub should_finalize: bool,
 }
 
-impl FieldExpressionCoreChip {
+impl<A> FieldExpressionStep<A> {
     pub fn new(
+        adapter: A,
         expr: FieldExpr,
         offset: usize,
         local_opcode_idx: Vec<usize>,
@@ -194,145 +188,225 @@ impl FieldExpressionCoreChip {
         name: &str,
         should_finalize: bool,
     ) -> Self {
-        let air = FieldExpressionCoreAir::new(expr, offset, local_opcode_idx, opcode_flag_idx);
         tracing::info!(
-            "FieldExpressionCoreChip: opcode={name}, main_width={}",
-            BaseAir::<BabyBear>::width(&air)
+            "FieldExpressionCoreStep: opcode={name}, main_width={}",
+            BaseAir::<BabyBear>::width(&expr)
         );
         Self {
-            air,
+            adapter,
+            expr,
+            offset,
+            local_opcode_idx,
+            opcode_flag_idx,
             range_checker,
             name: name.to_string(),
             should_finalize,
         }
     }
+    pub fn num_inputs(&self) -> usize {
+        self.expr.builder.num_input
+    }
 
-    pub fn expr(&self) -> &FieldExpr {
-        &self.air.expr
+    pub fn num_vars(&self) -> usize {
+        self.expr.builder.num_variables
+    }
+
+    pub fn num_flags(&self) -> usize {
+        self.expr.builder.num_flags
+    }
+
+    pub fn output_indices(&self) -> &[usize] {
+        &self.expr.builder.output_indices
     }
 }
 
-impl<F: PrimeField32, I> VmCoreChip<F, I> for FieldExpressionCoreChip
+impl<F, CTX, A> TraceStep<F, CTX> for FieldExpressionStep<A>
 where
-    I: VmAdapterInterface<F>,
-    I::Reads: Into<DynArray<F>>,
-    AdapterRuntimeContext<F, I>: From<AdapterRuntimeContext<F, DynAdapterInterface<F>>>,
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            CTX,
+            ReadData: Into<DynArray<u8>>,
+            WriteData: From<DynArray<u8>>,
+            TraceContext<'a> = (),
+        >,
 {
-    type Record = FieldExpressionRecord;
-    type Air = FieldExpressionCoreAir;
+    fn get_opcode_name(&self, _opcode: usize) -> String {
+        self.name.clone()
+    }
 
-    fn execute_instruction(
-        &self,
+    fn execute(
+        &mut self,
+        state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        _from_pc: u32,
-        reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let field_element_limbs = self.air.expr.canonical_num_limbs();
-        let limb_bits = self.air.expr.canonical_limb_bits();
-        let data: DynArray<_> = reads.into();
-        let data = data.0;
-        assert_eq!(data.len(), self.air.num_inputs() * field_element_limbs);
-        let data_u32: Vec<u32> = data.iter().map(|x| x.as_canonical_u32()).collect();
+        trace: &mut [F],
+        trace_offset: &mut usize,
+        width: usize,
+    ) -> Result<()> {
+        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
+        let (adapter_row, core_row) = row_slice.split_at_mut(A::WIDTH);
+
+        A::start(*state.pc, state.memory, adapter_row);
+
+        let field_element_limbs = self.expr.canonical_num_limbs();
+        let limb_bits = self.expr.canonical_limb_bits();
+        let data: DynArray<_> = self
+            .adapter
+            .read(state.memory, instruction, adapter_row)
+            .into();
+        let data = data.0.iter().map(|&x| x as u32).collect_vec();
+        assert_eq!(data.len(), self.num_inputs() * field_element_limbs);
 
         let mut inputs = vec![];
-        for i in 0..self.air.num_inputs() {
+        for i in 0..self.num_inputs() {
             let start = i * field_element_limbs;
             let end = start + field_element_limbs;
-            let limb_slice = &data_u32[start..end];
+            let limb_slice = &data[start..end];
             let input = limbs_to_biguint(limb_slice, limb_bits);
             inputs.push(input);
         }
 
         let Instruction { opcode, .. } = instruction;
-        let local_opcode_idx = opcode.local_opcode_idx(self.air.offset);
+        let local_opcode_idx = opcode.local_opcode_idx(self.offset);
         let mut flags = vec![];
 
         // If the chip doesn't need setup, (right now) it must be single op chip and thus no flag is
         // needed. Otherwise, there is a flag for each opcode and will be derived by
         // is_valid - sum(flags).
-        if self.expr().needs_setup() {
-            flags = vec![false; self.air.num_flags()];
-            self.air
-                .opcode_flag_idx
+        if self.expr.needs_setup() {
+            flags = vec![false; self.num_flags()];
+            self.opcode_flag_idx
                 .iter()
                 .enumerate()
                 .for_each(|(i, &flag_idx)| {
-                    flags[flag_idx] = local_opcode_idx == self.air.local_opcode_idx[i]
+                    flags[flag_idx] = local_opcode_idx == self.local_opcode_idx[i]
                 });
         }
 
-        let vars = self.air.expr.execute(inputs.clone(), flags.clone());
-        assert_eq!(vars.len(), self.air.num_vars());
+        let vars = self.expr.execute(inputs.clone(), flags.clone());
+        assert_eq!(vars.len(), self.num_vars());
 
         let outputs: Vec<BigUint> = self
-            .air
             .output_indices()
             .iter()
             .map(|&i| vars[i].clone())
             .collect();
-        let writes: Vec<F> = outputs
+        let writes: DynArray<_> = outputs
             .iter()
             .map(|x| biguint_to_limbs_vec(x.clone(), limb_bits, field_element_limbs))
             .concat()
             .into_iter()
-            .map(|x| F::from_canonical_u32(x))
+            .map(|x| x as u8)
+            .collect::<Vec<_>>()
+            .into();
+
+        // TODO(arayi): Should move this to fill_trace_row
+        self.expr
+            .generate_subrow((self.range_checker.as_ref(), inputs, flags), core_row);
+
+        self.adapter
+            .write(state.memory, instruction, adapter_row, &writes.into());
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        *trace_offset += width;
+        Ok(())
+    }
+}
+
+impl<F, A> StepExecutorE1<F> for FieldExpressionStep<A>
+where
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterExecutorE1<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
+{
+    fn execute_e1<Mem, Ctx>(
+        &mut self,
+        state: VmStateMut<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Mem: GuestMemory,
+    {
+        let field_element_limbs = self.expr.canonical_num_limbs();
+        let limb_bits = self.expr.canonical_limb_bits();
+        let data: DynArray<_> = self.adapter.read(state.memory, instruction).into();
+        let data = data.0.iter().map(|&x| x as u32).collect_vec();
+        assert_eq!(data.len(), self.num_inputs() * field_element_limbs);
+        // let data_u32: Vec<u32> = data.iter().map(|x| x.as_canonical_u32()).collect();
+
+        let mut inputs = vec![];
+        for i in 0..self.num_inputs() {
+            let start = i * field_element_limbs;
+            let end = start + field_element_limbs;
+            let limb_slice = &data[start..end];
+            let input = limbs_to_biguint(limb_slice, limb_bits);
+            inputs.push(input);
+        }
+
+        let Instruction { opcode, .. } = instruction;
+        let local_opcode_idx = opcode.local_opcode_idx(self.offset);
+        let mut flags = vec![];
+
+        // If the chip doesn't need setup, (right now) it must be single op chip and thus no flag is
+        // needed. Otherwise, there is a flag for each opcode and will be derived by
+        // is_valid - sum(flags).
+        if self.expr.needs_setup() {
+            flags = vec![false; self.num_flags()];
+            self.opcode_flag_idx
+                .iter()
+                .enumerate()
+                .for_each(|(i, &flag_idx)| {
+                    flags[flag_idx] = local_opcode_idx == self.local_opcode_idx[i]
+                });
+        }
+
+        let vars = self.expr.execute(inputs.clone(), flags.clone());
+        assert_eq!(vars.len(), self.num_vars());
+
+        let outputs: Vec<BigUint> = self
+            .output_indices()
+            .iter()
+            .map(|&i| vars[i].clone())
             .collect();
+        let writes: DynArray<_> = outputs
+            .iter()
+            .map(|x| biguint_to_limbs_vec(x.clone(), limb_bits, field_element_limbs))
+            .concat()
+            .into_iter()
+            .map(|x| x as u8)
+            .collect::<Vec<_>>()
+            .into();
 
-        let ctx = AdapterRuntimeContext::<_, DynAdapterInterface<_>>::without_pc(writes);
-        Ok((ctx.into(), FieldExpressionRecord { inputs, flags }))
-    }
-
-    fn get_opcode_name(&self, _opcode: usize) -> String {
-        self.name.clone()
-    }
-
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        self.air.expr.generate_subrow(
-            (self.range_checker.as_ref(), record.inputs, record.flags),
-            row_slice,
-        );
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
-    }
-
-    fn finalize(&self, trace: &mut RowMajorMatrix<F>, num_records: usize) {
-        if !self.should_finalize || num_records == 0 {
-            return;
-        }
-
-        let core_width = <Self::Air as BaseAir<F>>::width(&self.air);
-        let adapter_width = trace.width() - core_width;
-        let dummy_row = self.generate_dummy_trace_row(adapter_width, core_width);
-        for row in trace.rows_mut().skip(num_records) {
-            row.copy_from_slice(&dummy_row);
-        }
+        self.adapter
+            .write(state.memory, instruction, &writes.into());
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        Ok(())
     }
 }
 
-impl FieldExpressionCoreChip {
-    // We will be setting is_valid = 0. That forces all flags be 0 (otherwise setup will be -1).
-    // We generate a dummy row with all flags set to 0, then we set is_valid = 0.
-    fn generate_dummy_trace_row<F: PrimeField32>(
-        &self,
-        adapter_width: usize,
-        core_width: usize,
-    ) -> Vec<F> {
-        let record = FieldExpressionRecord {
-            inputs: vec![BigUint::zero(); self.air.num_inputs()],
-            flags: vec![false; self.air.num_flags()],
-        };
-        let mut row = vec![F::ZERO; adapter_width + core_width];
-        let core_row = &mut row[adapter_width..];
-        // We **do not** want this trace row to update the range checker
-        // so we must create a temporary range checker
-        let tmp_range_checker = SharedVariableRangeCheckerChip::new(self.range_checker.bus());
-        self.air.expr.generate_subrow(
-            (tmp_range_checker.as_ref(), record.inputs, record.flags),
-            core_row,
-        );
-        core_row[0] = F::ZERO; // is_valid = 0
-        row
-    }
-}
+// impl FieldExpressionCoreChip {
+//     // We will be setting is_valid = 0. That forces all flags be 0 (otherwise setup will be -1).
+//     // We generate a dummy row with all flags set to 0, then we set is_valid = 0.
+//     fn generate_dummy_trace_row<F: PrimeField32>(
+//         &self,
+//         adapter_width: usize,
+//         core_width: usize,
+//     ) -> Vec<F> {
+//         let record = FieldExpressionRecord {
+//             inputs: vec![BigUint::zero(); self.air.num_inputs()],
+//             flags: vec![false; self.air.num_flags()],
+//         };
+//         let mut row = vec![F::ZERO; adapter_width + core_width];
+//         let core_row = &mut row[adapter_width..];
+//         // We **do not** want this trace row to update the range checker
+//         // so we must create a temporary range checker
+//         let tmp_range_checker = SharedVariableRangeCheckerChip::new(self.range_checker.bus());
+//         self.air.expr.generate_subrow(
+//             (tmp_range_checker.as_ref(), record.inputs, record.flags),
+//             core_row,
+//         );
+//         core_row[0] = F::ZERO; // is_valid = 0
+//         row
+//     }
+// }
