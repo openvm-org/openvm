@@ -72,6 +72,10 @@ the guest must take care to validate all data and account for behavior in cases 
 | printstr    | I   | 0001011     | 011    | 0x1       | Tries to convert `[rd..rd + rs1]_2` to UTF-8 string and print to host stdout. Will print error message if conversion fails.                                                |
 | hintrandom  | I   | 0001011     | 011    | 0x2       | Resets the hint stream to `4 * rd` random bytes from `rand::rngs::OsRng` on the host.                                                                                      |
 
+| RISC-V Inst  | FMT | opcode[6:0] | funct3  | funct7 | RISC-V description and notes                                                                                                 |
+|--------------|-----|-------------|---------|--------|------------------------------------------------------------------------------------------------------------------------------|
+| nativestorew | R   | 0001011     | 111     | 0x2    | Stores the 4-byte word `rs1` at address `rd` in native address space. The address `rd` must be aligned to a 4-byte boundary. |
+
 ## Keccak Extension
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | funct7 | RISC-V description and notes                |
