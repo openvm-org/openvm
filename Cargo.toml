@@ -140,6 +140,7 @@ openvm-native-circuit = { path = "extensions/native/circuit", default-features =
 openvm-native-compiler = { path = "extensions/native/compiler", default-features = false }
 openvm-native-compiler-derive = { path = "extensions/native/compiler/derive", default-features = false }
 openvm-native-recursion = { path = "extensions/native/recursion", default-features = false }
+openvm-native-transpiler = { path = "extensions/native/transpiler", default-features = false }
 openvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
 openvm-keccak256-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
 openvm-keccak256-guest = { path = "extensions/keccak256/guest", default-features = false }
