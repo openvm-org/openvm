@@ -14,8 +14,8 @@ use crate::P256;
 // --- Define the OpenVM modular arithmetic and ecc types ---
 
 moduli_declare! {
-    P256Coord { modulus = "0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff", impl_field = true },
-    P256Scalar { modulus = "0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551", impl_field = true },
+    P256Coord { modulus = "0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff" },
+    P256Scalar { modulus = "0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551" },
 }
 
 // from_const_bytes is little endian
