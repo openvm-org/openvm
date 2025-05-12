@@ -7,6 +7,7 @@ use crate::{
     system::memory::{dimensions::MemoryDimensions, AddressMap, Equipartition, PAGE_SIZE},
 };
 
+#[derive(Debug)]
 pub struct MerkleTree<F, const CHUNK: usize> {
     /// Height of the tree -- the root is the only node at height `height`,
     /// and the leaves are at height `0`.
@@ -63,23 +64,6 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                 let parent_as_label =
                     ((par_index & !(1 << (self.height - height))) >> label_section_height) as u32;
 
-                // Only record rows if requested
-                if let Some(rows) = rows.as_deref_mut() {
-                    rows.push(MemoryMerkleCols {
-                        expand_direction: F::ONE,
-                        height_section: F::from_bool(height > md.address_height),
-                        parent_height: F::from_canonical_usize(height),
-                        is_root: F::from_bool(height == md.overall_height()),
-                        parent_as_label: F::from_canonical_u32(parent_as_label),
-                        parent_address_label: F::from_canonical_u32(parent_address_label),
-                        parent_hash: self.get_node(par_index),
-                        left_child_hash: self.get_node(index),
-                        right_child_hash: self.get_node(index ^ 1),
-                        left_direction_different: F::ZERO,
-                        right_direction_different: F::ZERO,
-                    });
-                }
-
                 self.nodes.insert(index, values);
 
                 if i < layer.len() && layer[i].0 == index ^ 1 {
@@ -88,7 +72,21 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                     i += 1;
                     let combined = compress(&values, &sibling_values);
 
+                    // Only record rows if requested
                     if let Some(rows) = rows.as_deref_mut() {
+                        rows.push(MemoryMerkleCols {
+                            expand_direction: F::ONE,
+                            height_section: F::from_bool(height > md.address_height),
+                            parent_height: F::from_canonical_usize(height),
+                            is_root: F::from_bool(height == md.overall_height()),
+                            parent_as_label: F::from_canonical_u32(parent_as_label),
+                            parent_address_label: F::from_canonical_u32(parent_address_label),
+                            parent_hash: self.get_node(par_index),
+                            left_child_hash: old_values,
+                            right_child_hash: sibling_old_values,
+                            left_direction_different: F::ZERO,
+                            right_direction_different: F::ZERO,
+                        });
                         rows.push(MemoryMerkleCols {
                             expand_direction: F::NEG_ONE,
                             height_section: F::from_bool(height > md.address_height),
@@ -121,6 +119,19 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
 
                     if let Some(rows) = rows.as_deref_mut() {
                         rows.push(MemoryMerkleCols {
+                            expand_direction: F::ONE,
+                            height_section: F::from_bool(height > md.address_height),
+                            parent_height: F::from_canonical_usize(height),
+                            is_root: F::from_bool(height == md.overall_height()),
+                            parent_as_label: F::from_canonical_u32(parent_as_label),
+                            parent_address_label: F::from_canonical_u32(parent_address_label),
+                            parent_hash: self.get_node(par_index),
+                            left_child_hash: if is_left { old_values } else { left },
+                            right_child_hash: if is_left { right } else { old_values },
+                            left_direction_different: F::ZERO,
+                            right_direction_different: F::ZERO,
+                        });
+                        rows.push(MemoryMerkleCols {
                             expand_direction: F::NEG_ONE,
                             height_section: F::from_bool(height > md.address_height),
                             parent_height: F::from_canonical_usize(height),
@@ -135,13 +146,12 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                         });
                         // This is a hacky way to say "and we also want to record the old values"
                         if is_left {
-                            compress(&old_values, &self.get_node(index | 1));
+                            compress(&old_values, &right);
                         } else {
-                            compress(&self.get_node(index & !1), &old_values);
+                            compress(&left, &old_values);
                         }
                     }
 
-                    self.nodes.insert(index ^ 1, sibling_values);
                     new_layer.push((par_index, combined, par_old_values));
                 }
             }
@@ -163,7 +173,7 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
             .iter()
             .map(|((addr_sp, ptr), v)| {
                 (
-                    (1 << tree.height) + md.label_to_index((*addr_sp, *ptr / CHUNK as u32)),
+                    (1 << tree.height) + md.label_to_index((*addr_sp, *ptr)),
                     hasher.hash(v),
                 )
             })
