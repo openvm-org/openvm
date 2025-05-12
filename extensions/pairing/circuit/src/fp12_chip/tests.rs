@@ -24,7 +24,7 @@ use openvm_rv32_adapters::{
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use crate::{PairingHeapAdapterAir, PairingHeapAdapterChip, PairingHeapAdapterStep};
+use crate::{Fp12Air, Fp12Chip, Fp12Step};
 
 use super::{fp12_add_expr, fp12_mul_expr, fp12_sub_expr};
 
@@ -49,7 +49,7 @@ fn test_fp12_fn<
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let air = PairingHeapAdapterAir::new(
+    let air = Fp12Air::new(
         Rv32VecHeapAdapterAir::new(
             tester.execution_bridge(),
             tester.memory_bridge(),
@@ -59,7 +59,7 @@ fn test_fp12_fn<
         FieldExpressionCoreAir::new(expr.clone(), offset, vec![local_opcode_idx], vec![]),
     );
 
-    let step = PairingHeapAdapterStep::new(
+    let step = Fp12Step::new(
         Rv32VecHeapAdapterStep::new(tester.address_bits(), bitwise_chip.clone()),
         expr,
         offset,
@@ -70,7 +70,7 @@ fn test_fp12_fn<
         false,
     );
 
-    let mut chip = PairingHeapAdapterChip::<F, 2, INPUT_SIZE, INPUT_SIZE, BLOCK_SIZE>::new(
+    let mut chip = Fp12Chip::<F, 2, INPUT_SIZE, INPUT_SIZE, BLOCK_SIZE>::new(
         air,
         step,
         MAX_INS_CAPACITY,

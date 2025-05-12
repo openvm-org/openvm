@@ -14,8 +14,15 @@ use openvm_rv32_adapters::{
 };
 
 /// Two types of PairingChips are implemented:
-/// - PairingHeapAdapterChip: used by `EcLineMul013By013Chip`, `EcLineMul023By023Chip`
-/// - PairingTwoReadsChip: used by `EcLineMulBy01234Chip`, `EcLineMulBy02345Chip`, `EvaluateLineChip`
+/// - PairingHeapAdapterChip is used by:
+///     - `EcLineMul013By013Chip`
+///     - `EcLineMul023By023Chip`
+///     - `MillerDoubleAndAddStepChip`
+///     - `MillerDoubleStepChip`
+/// - PairingTwoReadsChip is used by:
+///     - `EcLineMulBy01234Chip`
+///     - `EcLineMulBy02345Chip`
+///     - `EvaluateLineChip`
 pub(crate) type PairingHeapAdapterAir<
     const NUM_READS: usize,
     const INPUT_BLOCKS: usize,

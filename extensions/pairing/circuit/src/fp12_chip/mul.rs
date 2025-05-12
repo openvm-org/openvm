@@ -18,7 +18,9 @@ use openvm_pairing_transpiler::Fp12Opcode;
 use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{Fp12, PairingHeapAdapterAir, PairingHeapAdapterChip, PairingHeapAdapterStep};
+use crate::{Fp12, Fp12Air, Fp12Step};
+
+use super::Fp12Chip;
 // Input: Fp12 * 2
 // Output: Fp12
 #[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1)]
@@ -27,7 +29,7 @@ pub struct Fp12MulChip<
     const INPUT_BLOCKS: usize,
     const OUTPUT_BLOCKS: usize,
     const BLOCK_SIZE: usize,
->(pub PairingHeapAdapterChip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE>);
+>(pub Fp12Chip<F, 2, INPUT_BLOCKS, OUTPUT_BLOCKS, BLOCK_SIZE>);
 
 impl<
         F: PrimeField32,
@@ -60,7 +62,7 @@ impl<
         let expr = fp12_mul_expr(config, range_checker.bus(), xi);
         let local_opcode_idx = vec![Fp12Opcode::MUL as usize];
 
-        let air = PairingHeapAdapterAir::new(
+        let air = Fp12Air::new(
             Rv32VecHeapAdapterAir::new(
                 execution_bridge,
                 memory_bridge,
@@ -70,7 +72,7 @@ impl<
             FieldExpressionCoreAir::new(expr.clone(), offset, local_opcode_idx.clone(), vec![]),
         );
 
-        let step = PairingHeapAdapterStep::new(
+        let step = Fp12Step::new(
             Rv32VecHeapAdapterStep::new(pointer_max_bits, bitwise_lookup_chip),
             expr,
             offset,
@@ -80,7 +82,7 @@ impl<
             "Fp12Mul",
             false,
         );
-        Self(PairingHeapAdapterChip::new(air, step, height, mem_helper))
+        Self(Fp12Chip::new(air, step, height, mem_helper))
     }
 }
 
