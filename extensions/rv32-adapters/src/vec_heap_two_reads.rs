@@ -349,11 +349,7 @@ impl<
     type WriteData = [[u8; WRITE_SIZE]; BLOCKS_PER_WRITE];
     type TraceContext<'a> = ();
 
-    fn start(
-        pc: u32,
-        memory: &openvm_circuit::system::memory::online::TracingMemory<F>,
-        adapter_row: &mut [F],
-    ) {
+    fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]) {
         let adapter_cols: &mut Rv32VecHeapTwoReadsAdapterCols<
             F,
             BLOCKS_PER_READ1,

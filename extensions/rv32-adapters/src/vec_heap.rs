@@ -360,7 +360,7 @@ impl<
 
     fn write(
         &self,
-        memory: &mut openvm_circuit::system::memory::online::TracingMemory<F>,
+        memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
         data: &Self::WriteData,
