@@ -4055,7 +4055,6 @@ dependencies = [
 name = "openvm-benchmarks-execute"
 version = "1.1.1-rc.0"
 dependencies = [
- "cargo-openvm",
  "clap",
  "criterion",
  "derive_more 1.0.0",
@@ -4063,11 +4062,8 @@ dependencies = [
  "eyre",
  "openvm-benchmarks-utils",
  "openvm-circuit",
- "openvm-keccak256-circuit",
- "openvm-keccak256-transpiler",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
- "openvm-sdk",
  "openvm-stark-sdk",
  "openvm-transpiler",
  "tracing",
