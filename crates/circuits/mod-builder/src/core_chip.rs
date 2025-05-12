@@ -333,7 +333,6 @@ where
         let data: DynArray<_> = self.adapter.read(state.memory, instruction).into();
         let data = data.0.iter().map(|&x| x as u32).collect_vec();
         assert_eq!(data.len(), self.num_inputs() * field_element_limbs);
-        // let data_u32: Vec<u32> = data.iter().map(|x| x.as_canonical_u32()).collect();
 
         let mut inputs = vec![];
         for i in 0..self.num_inputs() {
