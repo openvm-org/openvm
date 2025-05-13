@@ -15,7 +15,9 @@ use openvm_stark_backend::{
 use program::Program;
 
 use super::{
-    execution_control::{E1ExecutionControl, ExecutionControl, TracegenExecutionControl},
+    execution_control::{
+        E1ExecutionControl, ExecutionControl, MeteredExecutionControl, TracegenExecutionControl,
+    },
     ExecutionError, GenerationError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights,
     VmConfig,
 };
@@ -55,25 +57,32 @@ pub type E1VmSegmentExecutor<F, VC> =
     VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, E1Ctx, E1ExecutionControl>;
 
 // E2 (metered) execution
+#[derive(Default)]
 pub struct MeteredCtx {
     pub trace_heights: Vec<usize>,
     pub total_trace_cells: usize,
     pub total_interactions: usize,
 }
 
+impl MeteredCtx {
+    pub fn new_with_len(len: usize) -> Self {
+        Self {
+            trace_heights: vec![0; len],
+            total_trace_cells: 0,
+            total_interactions: 0,
+        }
+    }
+}
+
 pub type MeteredVmSegmentExecutor<F, VC> =
-    VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, MeteredCtx, E1ExecutionControl>;
+    VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, MeteredCtx, MeteredExecutionControl>;
 
 // E3 (tracegen) execution
 pub type TracegenCtx = ();
 pub type TracegenVmSegmentExecutor<F, VC> =
     VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, TracegenCtx, TracegenExecutionControl>;
 
-#[derive(Default, derive_new::new)]
-pub struct ExecutionSegmentState<Mem, Ctx>
-where
-    Ctx: Default,
-{
+pub struct ExecutionSegmentState<Mem, Ctx> {
     pub memory: Option<Mem>,
     pub pc: u32,
     // TODO(ayush): do we need both exit_code and is_terminated?
@@ -82,18 +91,15 @@ where
     pub ctx: Ctx,
 }
 
-impl<Mem, Ctx> ExecutionSegmentState<Mem, Ctx>
-where
-    Ctx: Default,
-{
-    pub fn with_pc(mut self, pc: u32) -> Self {
-        self.pc = pc;
-        self
-    }
-
-    pub fn with_ctx(mut self, ctx: Ctx) -> Self {
-        self.ctx = ctx;
-        self
+impl<Mem, Ctx> ExecutionSegmentState<Mem, Ctx> {
+    pub fn new_with_pc_and_ctx(pc: u32, ctx: Ctx) -> Self {
+        Self {
+            memory: None,
+            pc,
+            ctx,
+            exit_code: 0,
+            is_terminated: false,
+        }
     }
 }
 
@@ -102,7 +108,6 @@ where
     F: PrimeField32,
     VC: VmConfig<F>,
     Mem: GuestMemory,
-    Ctx: Default,
     Ctrl: ExecutionControl<F, VC, Mem = Mem, Ctx = Ctx>,
 {
     /// Creates a new execution segment from a program and initial state, using parent VM config
@@ -154,17 +159,18 @@ where
     }
 
     /// Stopping is triggered by should_stop() or if VM is terminated
-    pub fn execute_from_pc(
+    pub fn execute_from_pc_with_ctx(
         &mut self,
         pc: u32,
         memory: Option<Mem>,
+        ctx: Ctx,
     ) -> Result<ExecutionSegmentState<Mem, Ctx>, ExecutionError> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
         // Call the pre-execution hook
         self.control.on_segment_start(pc, &mut self.chip_complex);
 
-        let mut state = ExecutionSegmentState::default().with_pc(pc);
+        let mut state = ExecutionSegmentState::new_with_pc_and_ctx(pc, ctx);
         loop {
             // Fetch, decode and execute single instruction
             let terminated_exit_code = self.execute_instruction(&mut state, &mut prev_backtrace)?;

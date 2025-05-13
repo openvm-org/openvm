@@ -266,3 +266,85 @@ where
         Ok(())
     }
 }
+
+pub struct MeteredExecutionControl {
+    pub final_memory: Option<MemoryImage>,
+}
+
+impl<F, VC> ExecutionControl<F, VC> for MeteredExecutionControl
+where
+    F: PrimeField32,
+    VC: VmConfig<F>,
+    VC::Executor: InsExecutorE1<F>,
+{
+    type Ctx = E1Ctx;
+    type Mem = AddressMap<PAGE_SIZE>;
+
+    fn new(_chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>) -> Self {
+        Self { final_memory: None }
+    }
+
+    fn should_stop(
+        &mut self,
+        _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
+    ) -> bool {
+        false
+    }
+
+    fn on_segment_start(
+        &mut self,
+        _pc: u32,
+        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+    ) {
+    }
+
+    fn on_segment_end(
+        &mut self,
+        _pc: u32,
+        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+    ) {
+        self.final_memory = Some(chip_complex.base.memory_controller.memory_image().clone());
+    }
+
+    fn on_terminate(
+        &mut self,
+        _pc: u32,
+        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        _exit_code: u32,
+    ) {
+        self.final_memory = Some(chip_complex.base.memory_controller.memory_image().clone());
+    }
+
+    /// Execute a single instruction
+    fn execute_instruction(
+        &mut self,
+        state: &mut ExecutionSegmentState<Self::Ctx>,
+        // instruction: &Instruction<F>,
+        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+    ) -> Result<(), ExecutionError>
+    where
+        F: PrimeField32,
+        Self::Ctx: Default,
+    {
+        let (instruction, _) = chip_complex.base.program_chip.get_instruction(state.pc)?;
+
+        let &Instruction { opcode, .. } = instruction;
+
+        if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
+            let memory_controller = &mut chip_complex.base.memory_controller;
+            let vm_state = VmStateMut {
+                pc: &mut state.pc,
+                memory: &mut memory_controller.memory.data,
+                ctx: &mut (),
+            };
+            executor.execute_e1(vm_state, instruction)?;
+        } else {
+            return Err(ExecutionError::DisabledOperation {
+                pc: state.pc,
+                opcode,
+            });
+        };
+
+        Ok(())
+    }
+}

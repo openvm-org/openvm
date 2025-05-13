@@ -127,6 +127,7 @@ pub trait InsExecutorE1<F> {
         state: VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
+        width: usize,
     ) -> Result<()>
     where
         Mem: GuestMemory,
@@ -154,12 +155,14 @@ where
         state: VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
+        width: usize,
     ) -> Result<()>
     where
         Mem: GuestMemory,
         F: PrimeField32,
     {
-        self.borrow_mut().execute_e2(state, instruction, chip_index)
+        self.borrow_mut()
+            .execute_e2(state, instruction, chip_index, width)
     }
 }
 

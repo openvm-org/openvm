@@ -1,12 +1,16 @@
 use clap::{Parser, ValueEnum};
 use eyre::Result;
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
-use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
+use openvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmExecutor};
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_stark_sdk::{bench::run_with_metric_collection, p3_baby_bear::BabyBear};
+use openvm_stark_sdk::{
+    bench::run_with_metric_collection,
+    config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Engine},
+    p3_baby_bear::BabyBear,
+};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -122,10 +126,36 @@ fn main() -> Result<()> {
 
             let exe = VmExe::from_elf(elf, transpiler)?;
 
+            let chip_interactions: Vec<usize> = {
+                let vm = VirtualMachine::new(default_engine(), vm_config.clone());
+                let pk = vm.keygen();
+                pk.get_vk()
+                    .inner
+                    .per_air
+                    .iter()
+                    .map(|vk| vk.symbolic_constraints.interactions.len())
+                    .collect()
+            };
+
+            // All chips list
+            // let program_rap = Arc::new(self.program_chip().air) as AirRef<SC>;
+            // let connector_rap = Arc::new(self.connector_chip().air) as AirRef<SC>;
+            // [program_rap, connector_rap]
+            //     .into_iter()
+            //     .chain(self._public_values_chip().map(|chip| chip.air()))
+            //     .chain(self.memory_controller().airs())
+            //     .chain(self.chips_excluding_pv_chip().map(|chip| match chip {
+            //         Either::Executor(chip) => chip.air(),
+            //         Either::Periphery(chip) => chip.air(),
+            //     }))
+            //     .chain(once(self.range_checker_chip().air()))
+            //     .collect()
+
             let executor = VmExecutor::new(vm_config);
             executor
-                .execute_e1(exe, vec![])
+                .execute_e2(exe, vec![], chip_interactions)
                 .expect("Failed to execute program");
+
             tracing::info!("Completed program: {}", program);
         }
         tracing::info!("All programs executed successfully");
