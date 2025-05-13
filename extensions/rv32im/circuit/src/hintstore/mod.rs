@@ -5,22 +5,18 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutorE1,
-        InstructionExecutor, NewVmChipWrapper, Result, StepExecutorE1, Streams, TraceStep,
+        ExecutionBridge, ExecutionError, ExecutionState, NewVmChipWrapper, Result, StepExecutorE1, Streams, TraceStep,
         VmStateMut,
     },
-    system::{
-        memory::{
+    system::memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
             online::{GuestMemory, TracingMemory},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, RecordId,
+            MemoryAddress, MemoryAuxColsFactory, RecordId,
         },
-        program::ProgramBus,
-    },
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    utils::{next_power_of_two_or_zero, not},
+    utils::not,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -34,20 +30,16 @@ use openvm_rv32im_transpiler::{
     Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW},
 };
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProofInput,
-    rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    p3_matrix::Matrix,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use rand::distributions::weighted;
 use serde::{Deserialize, Serialize};
 
 use crate::adapters::{
-    decompose, memory_read, memory_write, tmp_convert_to_u8s, tracing_read, tracing_write,
+    decompose, memory_read, memory_write, tracing_read, tracing_write,
 };
 
 #[cfg(test)]
@@ -345,7 +337,7 @@ where
 
         let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let mut row: &mut Rv32HintStoreCols<F> =
+        let row: &mut Rv32HintStoreCols<F> =
             trace[*trace_offset..*trace_offset + width].borrow_mut();
 
         row.from_state.pc = F::from_canonical_u32(*state.pc);

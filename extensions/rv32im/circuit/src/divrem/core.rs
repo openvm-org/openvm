@@ -464,7 +464,7 @@ where
             );
         }
 
-        let c_sum_f = F::from_canonical_u32(c.iter().fold(0, |acc, c| acc + c));
+        let c_sum_f = F::from_canonical_u32(c.iter().sum());
         let c_sum_inv_f = c_sum_f.try_inverse().unwrap_or(F::ZERO);
 
         let r_sum_f = r
