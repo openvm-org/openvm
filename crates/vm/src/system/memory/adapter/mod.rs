@@ -322,6 +322,9 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
         let height = trace.height();
         trace.pad_to_height(height.next_power_of_two(), F::ZERO);
         trace
+        // TODO(AG): everything related to the calculated trace height
+        // needs to be in memory controller, who owns these traces.
+
         // let width = BaseAir::<F>::width(&self.air);
         // let height = if let Some(oh) = self.overridden_height {
         //     assert!(
