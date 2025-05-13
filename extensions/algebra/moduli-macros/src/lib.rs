@@ -1,12 +1,12 @@
-extern crate proc_macro;
 extern crate alloc;
+extern crate proc_macro;
 
 use std::sync::atomic::AtomicUsize;
 
-use openvm_macros_common::{string_to_bytes, MacroArgs};
-use proc_macro::TokenStream;
 use num_bigint::BigUint;
 use num_prime::nt_funcs::is_prime;
+use openvm_macros_common::{string_to_bytes, MacroArgs};
+use proc_macro::TokenStream;
 use quote::format_ident;
 use syn::{
     parse::{Parse, ParseStream},

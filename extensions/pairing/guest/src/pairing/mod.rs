@@ -96,7 +96,7 @@ mod tests {
         "13",
     }
 
-   #[test]
+    #[test]
     fn test_pairing_check_fallback() {
         let a = F13::from_u8(2);
         let b = BigUint::from(12u32);
