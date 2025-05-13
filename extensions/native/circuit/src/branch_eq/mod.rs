@@ -1,9 +1,8 @@
-use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
-use openvm_rv32im_circuit::{BranchEqualCoreAir, BranchEqualCoreChip};
+use openvm_circuit::arch::{NewVmChipWrapper, VmAirWrapper};
+use openvm_rv32im_circuit::{BranchEqualCoreAir, BranchEqualStep};
 
-use super::adapters::branch_native_adapter::{BranchNativeAdapterAir, BranchNativeAdapterChip};
+use crate::adapters::branch_native_adapter::{BranchNativeAdapterAir, BranchNativeAdapterStep};
 
 pub type NativeBranchEqAir = VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1>>;
-pub type NativeBranchEqualStep = BranchEqualStep<NativeBranchAdapterStep, 1>;
-pub type NativeBranchEqualChip<F> =
-    NewVmChipWrapper<F, NativeBranchEqualAir, NativeBranchEqualStep>;
+pub type NativeBranchEqualStep = BranchEqualStep<BranchNativeAdapterStep, 1>;
+pub type NativeBranchEqualChip<F> = NewVmChipWrapper<F, NativeBranchEqAir, NativeBranchEqualStep>;

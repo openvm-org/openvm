@@ -1,6 +1,6 @@
 use openvm_circuit::system::memory::{
     offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
-    online::TracingMemory,
+    online::{GuestMemory, TracingMemory},
 };
 use openvm_native_compiler::conversion::AS;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -13,6 +13,44 @@ pub mod convert_adapter;
 pub mod loadstore_native_adapter;
 // 2 reads, 1 write, read size = write size = N, no imm support, read/write to address space d
 pub mod native_vectorized_adapter;
+
+#[inline(always)]
+pub fn memory_read<F, Mem, const N: usize>(memory: &Mem, ptr: u32) -> [u8; N]
+where
+    Mem: GuestMemory,
+{
+    // SAFETY:
+    // - address space `AS::Native` will always have cell type `F` and minimum alignment of `1`
+    unsafe { memory.read::<F, N>(AS::Native, ptr) }
+}
+
+#[inline(always)]
+pub fn memory_read_or_imm<F, Mem>(memory: &Mem, addr_space: u32, ptr_or_imm: F) -> F
+where
+    F: PrimeField32,
+    Mem: GuestMemory,
+{
+    debug_assert!(
+        addr_space.as_canonical_u32() == AS::Immediate
+            || addr_space.as_canonical_u32() == AS::Native
+    );
+
+    if addr_space == AS::Native {
+        let [result]: [F; 1] = memory_read(memory, ptr_or_imm.as_canonical_u32());
+        result
+    } else {
+        ptr_or_imm
+    }
+}
+#[inline(always)]
+pub fn memory_write<F, Mem, const N: usize>(memory: &mut Mem, ptr: u32, data: &[u8; N])
+where
+    Mem: GuestMemory,
+{
+    // SAFETY:
+    // - address space `AS::Native` will always have cell type `F` and minimum alignment of `1`
+    unsafe { memory.write::<F, N>(AS::Native, ptr, data) }
+}
 
 /// Atomic read operation which increments the timestamp by 1.
 /// Returns `(t_prev, [ptr:BLOCK_SIZE]_4)` where `t_prev` is the timestamp of the last memory
@@ -79,13 +117,11 @@ pub fn tracing_write<F, const BLOCK_SIZE: usize>(
 
 /// Reads value at `_ptr` from memory and records the memory access in mutable buffer.
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
-///
-/// Assumes that `addr_space` is [Immediate] or [Native].
 #[inline(always)]
 pub fn tracing_read_or_imm<F>(
     memory: &mut TracingMemory<F>,
     addr_space: u32,
-    ptr_or_imm: u32,
+    ptr_or_imm: F,
     addr_space_mut: &mut F,
     (ptr_or_imm_mut, aux_cols): (&mut F, &mut MemoryReadAuxCols<F>),
 ) -> F
@@ -95,19 +131,16 @@ where
     debug_assert!(addr_space == AS::Immediate || addr_space == AS::Native);
 
     if addr_space == AS::Immediate {
-        // TODO(ayush): check this
         *addr_space_mut = F::ZERO;
-        let imm = ptr_or_imm;
-        *ptr_or_imm_mut = F::from_canonical_u32(imm);
-        debug_assert_eq!(imm >> 24, 0); // highest byte should be zero to prevent overflow
+        *ptr_or_imm_mut = ptr_or_imm;
         memory.increment_timestamp();
-        let mut imm_le = imm.to_le_bytes();
-        // Important: we set the highest byte equal to the second highest byte, using the assumption
-        // that imm is at most 24 bits
-        imm_le[3] = imm_le[2];
-        imm_le
+        ptr_or_imm
     } else {
         *addr_space_mut = F::from_canonical_u32(AS::Native);
-        tracing_read(memory, ptr_or_imm, (ptr_or_imm_mut, aux_cols))
+        tracing_read(
+            memory,
+            ptr_or_imm.as_canonical_u32(),
+            (ptr_or_imm_mut, aux_cols),
+        )
     }
 }
