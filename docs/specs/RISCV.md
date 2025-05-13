@@ -76,6 +76,9 @@ the guest must take care to validate all data and account for behavior in cases 
 |--------------|-----|-------------|---------|--------|------------------------------------------------------------------------------------------------------------------------------|
 | nativestorew | R   | 0001011     | 111     | 0x2    | Stores the 4-byte word `rs1` at address `rd` in native address space. The address `rd` must be aligned to a 4-byte boundary. |
 
+`nativestorew` connects RV32 address space and native address space. We put it in RV32 extension because its 
+implementation is here. But we use `funct3 = 111` because the native extension has an available slot.
+
 ## Keccak Extension
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | funct7 | RISC-V description and notes                |
@@ -120,6 +123,8 @@ These use the _custom-0_ opcode prefix and funct3 = 0b111.
 | ----------- | --- | ----------- | ------ | ------ | --------------------------------------------------------- |
 | lfii        | R   | 0001011     | 111    | 0      | Long Form Instruction Indicator. `rd = rs1 = rs2 = 0`     |
 | gi          | R   | 0001011     | 111    | 1      | Gap Indicator. `rd = rs1 = rs2 = 0`                       |
+
+`nativestorew` also uses `funct3 = 111`. It's listed in the RV32 extension.
 
 ## Algebra Extension
 
