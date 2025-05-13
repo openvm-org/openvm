@@ -268,6 +268,7 @@ where
         state: VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
+        num_interactions: usize,
     ) -> Result<()>
     where
         Mem: GuestMemory,
@@ -275,7 +276,7 @@ where
         state.ctx.trace_heights[chip_index] += 1;
         state.ctx.total_trace_cells +=
             A::WIDTH + MultiplicationCoreCols::<F, NUM_LIMBS, LIMB_BITS>::width();
-        state.ctx.total_interactions += NUM_LIMBS;
+        state.ctx.total_interactions += num_interactions;
 
         let state = VmStateMut {
             pc: state.pc,

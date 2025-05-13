@@ -12,35 +12,29 @@ use openvm_stark_backend::{
     utils::metrics_span,
     Chip,
 };
-use program::Program;
 
 use super::{
     execution_control::{
         E1ExecutionControl, ExecutionControl, MeteredExecutionControl, TracegenExecutionControl,
     },
-    ExecutionError, GenerationError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights,
-    VmConfig,
+    ExecutionError, GenerationError, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{instructions::*, InstructionExecutor},
-    system::{
-        connector::DEFAULT_SUSPEND_EXIT_CODE,
-        memory::{online::GuestMemory, paged_vec::PAGE_SIZE, AddressMap, MemoryImage},
-    },
+    system::connector::DEFAULT_SUSPEND_EXIT_CODE,
 };
 
-pub struct VmSegmentExecutor<F, VC, Mem, Ctx, Ctrl>
+pub struct VmSegmentExecutor<F, VC, Ctrl>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
-    Mem: GuestMemory,
-    Ctrl: ExecutionControl<F, VC, Mem = Mem, Ctx = Ctx>,
+    Ctrl: ExecutionControl<F, VC>,
 {
     pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
     /// Execution control for determining segmentation and stopping conditions
-    pub control: Ctrl,
+    pub ctrl: Ctrl,
 
     pub trace_height_constraints: Vec<LinearConstraint>,
 
@@ -51,92 +45,24 @@ where
     pub metrics: VmMetrics,
 }
 
-// E1 execution
-pub type E1Ctx = ();
-pub type E1VmSegmentExecutor<F, VC> =
-    VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, E1Ctx, E1ExecutionControl>;
-
-// E2 (metered) execution
-#[derive(Default)]
-pub struct MeteredCtx {
-    pub trace_heights: Vec<usize>,
-    pub total_trace_cells: usize,
-    pub total_interactions: usize,
-}
-
-impl MeteredCtx {
-    pub fn new_with_len(len: usize) -> Self {
-        Self {
-            trace_heights: vec![0; len],
-            total_trace_cells: 0,
-            total_interactions: 0,
-        }
-    }
-}
-
-pub type MeteredVmSegmentExecutor<F, VC> =
-    VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, MeteredCtx, MeteredExecutionControl>;
-
-// E3 (tracegen) execution
-pub type TracegenCtx = ();
-pub type TracegenVmSegmentExecutor<F, VC> =
-    VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, TracegenCtx, TracegenExecutionControl>;
-
-pub struct ExecutionSegmentState<Mem, Ctx> {
-    pub memory: Option<Mem>,
-    pub pc: u32,
-    // TODO(ayush): do we need both exit_code and is_terminated?
-    pub exit_code: u32,
-    pub is_terminated: bool,
-    pub ctx: Ctx,
-}
-
-impl<Mem, Ctx> ExecutionSegmentState<Mem, Ctx> {
-    pub fn new_with_pc_and_ctx(pc: u32, ctx: Ctx) -> Self {
-        Self {
-            memory: None,
-            pc,
-            ctx,
-            exit_code: 0,
-            is_terminated: false,
-        }
-    }
-}
-
-impl<F, VC, Mem, Ctx, Ctrl> VmSegmentExecutor<F, VC, Mem, Ctx, Ctrl>
+impl<F, VC, Ctrl> VmSegmentExecutor<F, VC, Ctrl>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
-    Mem: GuestMemory,
-    Ctrl: ExecutionControl<F, VC, Mem = Mem, Ctx = Ctx>,
+    Ctrl: ExecutionControl<F, VC>,
 {
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(
-        config: &VC,
-        program: Program<F>,
-        init_streams: Streams<F>,
-        initial_memory: Option<MemoryImage>,
+        chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
         trace_height_constraints: Vec<LinearConstraint>,
         #[allow(unused_variables)] fn_bounds: FnBounds,
+        ctrl: Ctrl,
     ) -> Self {
-        let mut chip_complex = config.create_chip_complex().unwrap();
-        chip_complex.set_streams(init_streams);
-        let program = if !config.system().profiling {
-            program.strip_debug_infos()
-        } else {
-            program
-        };
-        chip_complex.set_program(program);
-
-        if let Some(initial_memory) = initial_memory {
-            chip_complex.set_initial_memory(initial_memory);
-        }
         let air_names = chip_complex.air_names();
-        let control = Ctrl::new(&chip_complex);
 
         Self {
             chip_complex,
-            control,
+            ctrl,
             air_names,
             trace_height_constraints,
             #[cfg(feature = "bench-metrics")]
@@ -163,12 +89,12 @@ where
         &mut self,
         pc: u32,
         memory: Option<Mem>,
-        ctx: Ctx,
-    ) -> Result<ExecutionSegmentState<Mem, Ctx>, ExecutionError> {
+        ctx: Ctrl::Ctx,
+    ) -> Result<ExecutionSegmentState<Mem, Ctrl::Ctx>, ExecutionError> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
         // Call the pre-execution hook
-        self.control.on_segment_start(pc, &mut self.chip_complex);
+        self.ctrl.on_segment_start(pc, &mut self.chip_complex);
 
         let mut state = ExecutionSegmentState::new_with_pc_and_ctx(pc, ctx);
         loop {
@@ -178,14 +104,13 @@ where
             if let Some(exit_code) = terminated_exit_code {
                 state.exit_code = exit_code;
                 state.is_terminated = true;
-                self.control
+                self.ctrl
                     .on_terminate(state.pc, &mut self.chip_complex, exit_code);
                 break;
             }
             if self.should_stop() {
                 state.exit_code = DEFAULT_SUSPEND_EXIT_CODE;
-                self.control
-                    .on_segment_end(state.pc, &mut self.chip_complex);
+                self.ctrl.on_segment_end(state.pc, &mut self.chip_complex);
                 break;
             }
         }
@@ -197,7 +122,7 @@ where
     // TODO(ayush): clean this up, separate to smaller functions
     fn execute_instruction(
         &mut self,
-        state: &mut ExecutionSegmentState<Mem, Ctx>,
+        state: &mut ExecutionSegmentState<Mem, Ctrl::Ctx>,
         prev_backtrace: &mut Option<Backtrace>,
     ) -> Result<Option<u32>, ExecutionError> {
         let pc = state.pc;
@@ -277,7 +202,7 @@ where
         }
 
         // Check with the execution control policy
-        self.control.should_stop(&self.chip_complex)
+        self.ctrl.should_stop(&self.chip_complex)
     }
 
     // TODO(ayush): this is not relevant for e1/e2 execution
@@ -323,6 +248,56 @@ where
 
             #[cfg(feature = "function-span")]
             self.metrics.update_current_fn(pc);
+        }
+    }
+}
+
+// E1 execution
+pub type E1Ctx = ();
+pub type E1VmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, E1ExecutionControl>;
+
+// E2 (metered) execution
+#[derive(Default)]
+pub struct MeteredCtx {
+    pub trace_heights: Vec<usize>,
+    pub total_trace_cells: usize,
+    pub total_interactions: usize,
+}
+
+impl MeteredCtx {
+    pub fn new_with_len(len: usize) -> Self {
+        Self {
+            trace_heights: vec![0; len],
+            total_trace_cells: 0,
+            total_interactions: 0,
+        }
+    }
+}
+
+pub type MeteredVmSegmentExecutor<'a, F, VC> =
+    VmSegmentExecutor<F, VC, MeteredExecutionControl<'a>>;
+
+// E3 (tracegen) execution
+pub type TracegenCtx = ();
+pub type TracegenVmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, TracegenExecutionControl>;
+
+pub struct ExecutionSegmentState<Mem, Ctx> {
+    pub memory: Option<Mem>,
+    pub pc: u32,
+    // TODO(ayush): do we need both exit_code and is_terminated?
+    pub exit_code: u32,
+    pub is_terminated: bool,
+    pub ctx: Ctx,
+}
+
+impl<Ctx> ExecutionSegmentState<Ctx> {
+    pub fn new_with_pc_and_ctx(pc: u32, ctx: Ctx) -> Self {
+        Self {
+            memory: None,
+            pc,
+            ctx,
+            exit_code: 0,
+            is_terminated: false,
         }
     }
 }

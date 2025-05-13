@@ -158,12 +158,14 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         &mut self,
                         state: ::openvm_circuit::arch::VmStateMut<Mem, ::openvm_circuit::arch::MeteredCtx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        chip_index: usize,
+                        num_interactions: usize,
                     ) -> ::openvm_circuit::arch::Result<()>
                     where
                         Mem: ::openvm_circuit::system::memory::online::GuestMemory,
                         F: ::openvm_stark_backend::p3_field::PrimeField32
                     {
-                        self.0.execute_e2(state, instruction)
+                        self.0.execute_e2(state, instruction, chip_index, num_interactions)
                     }
                 }
             }
@@ -202,7 +204,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
             let execute_e2_arms = variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_e2(x, state, instruction)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_e2(x, state, instruction, chip_index, num_interactions)
                 }
             }).collect::<Vec<_>>();
 
@@ -226,6 +228,8 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         &mut self,
                         state: ::openvm_circuit::arch::VmStateMut<Mem, openvm_circuit::arch::MeteredCtx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
+                        chip_index: usize,
+                        num_interactions: usize,
                     ) -> ::openvm_circuit::arch::Result<()>
                     where
                         Mem: ::openvm_circuit::system::memory::online::GuestMemory,

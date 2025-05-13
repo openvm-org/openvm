@@ -2,12 +2,19 @@ use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{
-    E1Ctx, ExecutionError, ExecutionSegmentState, TracegenCtx, VmChipComplex, VmConfig, VmStateMut,
+    E1Ctx, ExecutionError, ExecutionSegmentState, MeteredCtx, TracegenCtx, VmChipComplex, VmConfig,
+    VmStateMut,
 };
 use crate::{
     arch::{ExecutionState, InsExecutorE1, InstructionExecutor},
     system::memory::{online::GuestMemory, AddressMap, MemoryImage, PAGE_SIZE},
 };
+
+// Metered execution thresholds
+// TODO(ayush): fix these values
+const MAX_TRACE_HEIGHT: usize = (1 << 22) - 100;
+const MAX_TRACE_CELLS: usize = MAX_TRACE_HEIGHT * 120;
+const MAX_INTERACTIONS: usize = MAX_TRACE_HEIGHT * 120;
 
 /// Check segment every 100 instructions.
 const SEGMENT_CHECK_INTERVAL: usize = 100;
@@ -23,12 +30,12 @@ where
     /// Host context
     type Ctx;
 
-    fn new(chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>) -> Self;
-
-    /// Determines if execution should stop
-    // TODO(ayush): rename to should_suspend
-    fn should_stop(&mut self, chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>)
-        -> bool;
+    /// Determines if execution should suspend
+    fn should_suspend(
+        &mut self,
+        vm_state: &mut ExecutionSegmentState<Self::Ctx>,
+        chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
+    ) -> bool;
 
     /// Called before segment execution begins
     fn on_segment_start(
@@ -62,8 +69,7 @@ where
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
     where
-        F: PrimeField32,
-        Self::Ctx: Default;
+        F: PrimeField32;
 }
 
 /// Implementation of the ExecutionControl trait using the old segmentation strategy
@@ -91,16 +97,9 @@ where
     type Ctx = TracegenCtx;
     type Mem = AddressMap<PAGE_SIZE>;
 
-    fn new(chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>) -> Self {
-        Self {
-            final_memory: None,
-            since_last_segment_check: 0,
-            air_names: chip_complex.air_names(),
-        }
-    }
-
-    fn should_stop(
+    fn should_suspend(
         &mut self,
+        _vm_state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
         // Avoid checking segment too often.
@@ -188,6 +187,7 @@ where
 }
 
 /// Implementation of the ExecutionControl trait using the old segmentation strategy
+#[derive(Default)]
 pub struct E1ExecutionControl {
     pub final_memory: Option<MemoryImage>,
 }
@@ -201,12 +201,9 @@ where
     type Ctx = E1Ctx;
     type Mem = AddressMap<PAGE_SIZE>;
 
-    fn new(_chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>) -> Self {
-        Self { final_memory: None }
-    }
-
-    fn should_stop(
+    fn should_suspend(
         &mut self,
+        _vm_state: &mut ExecutionSegmentState<Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
         false
@@ -253,7 +250,7 @@ where
             let vm_state = VmStateMut {
                 pc: &mut state.pc,
                 memory: state.memory.as_mut().unwrap(),
-                ctx: &mut (),
+                ctx: &mut state.ctx,
             };
             executor.execute_e1(vm_state, instruction)?;
         } else {
@@ -267,27 +264,55 @@ where
     }
 }
 
-pub struct MeteredExecutionControl {
+pub struct MeteredExecutionControl<'a> {
+    pub num_interactions: &'a [usize],
+    pub since_last_segment_check: usize,
     pub final_memory: Option<MemoryImage>,
 }
 
-impl<F, VC> ExecutionControl<F, VC> for MeteredExecutionControl
+impl<'a> MeteredExecutionControl<'a> {
+    pub fn new(num_interactions: &'a [usize]) -> Self {
+        Self {
+            num_interactions,
+            since_last_segment_check: 0,
+            final_memory: None,
+        }
+    }
+}
+
+impl<F, VC> ExecutionControl<F, VC> for MeteredExecutionControl<'_>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
     VC::Executor: InsExecutorE1<F>,
 {
-    type Ctx = E1Ctx;
+    type Ctx = MeteredCtx;
     type Mem = AddressMap<PAGE_SIZE>;
 
-    fn new(_chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>) -> Self {
-        Self { final_memory: None }
-    }
-
-    fn should_stop(
+    fn should_suspend(
         &mut self,
+        vm_state: &mut ExecutionSegmentState<Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
+        // Avoid checking segment too often.
+        if self.since_last_segment_check != SEGMENT_CHECK_INTERVAL {
+            self.since_last_segment_check += 1;
+            return false;
+        }
+        self.since_last_segment_check = 0;
+
+        if vm_state.ctx.total_trace_cells > MAX_TRACE_CELLS {
+            return true;
+        }
+        if vm_state.ctx.total_interactions > MAX_INTERACTIONS {
+            return true;
+        }
+        for &height in vm_state.ctx.trace_heights.iter() {
+            if height > MAX_TRACE_HEIGHT {
+                return true;
+            }
+        }
+
         false
     }
 
@@ -326,18 +351,30 @@ where
         F: PrimeField32,
         Self::Ctx: Default,
     {
-        let (instruction, _) = chip_complex.base.program_chip.get_instruction(state.pc)?;
+        let (instruction, _) = chip_complex
+            .base
+            .program_chip
+            .get_instruction(state.pc)?
+            .clone();
 
-        let &Instruction { opcode, .. } = instruction;
+        let Instruction { opcode, .. } = instruction;
 
-        if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
+        // Program | Connector | Public Values | Memory ... | Executors (except Public Values) | Range Checker
+        // TODO(ayush): no magic number, cache
+        let mut offset = 2 + chip_complex.memory_controller().num_airs();
+        if chip_complex.config().has_public_values_chip() {
+            offset += 1;
+        }
+
+        if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_id(&opcode) {
             let memory_controller = &mut chip_complex.base.memory_controller;
             let vm_state = VmStateMut {
                 pc: &mut state.pc,
                 memory: &mut memory_controller.memory.data,
-                ctx: &mut (),
+                ctx: &mut state.ctx,
             };
-            executor.execute_e1(vm_state, instruction)?;
+            let index = offset + i;
+            executor.execute_e2(vm_state, &instruction, index, self.num_interactions[index])?;
         } else {
             return Err(ExecutionError::DisabledOperation {
                 pc: state.pc,

@@ -129,27 +129,13 @@ fn main() -> Result<()> {
             let chip_interactions: Vec<usize> = {
                 let vm = VirtualMachine::new(default_engine(), vm_config.clone());
                 let pk = vm.keygen();
-                pk.get_vk()
-                    .inner
+                let vk = pk.get_vk();
+                vk.inner
                     .per_air
                     .iter()
                     .map(|vk| vk.symbolic_constraints.interactions.len())
                     .collect()
             };
-
-            // All chips list
-            // let program_rap = Arc::new(self.program_chip().air) as AirRef<SC>;
-            // let connector_rap = Arc::new(self.connector_chip().air) as AirRef<SC>;
-            // [program_rap, connector_rap]
-            //     .into_iter()
-            //     .chain(self._public_values_chip().map(|chip| chip.air()))
-            //     .chain(self.memory_controller().airs())
-            //     .chain(self.chips_excluding_pv_chip().map(|chip| match chip {
-            //         Either::Executor(chip) => chip.air(),
-            //         Either::Periphery(chip) => chip.air(),
-            //     }))
-            //     .chain(once(self.range_checker_chip().air()))
-            //     .collect()
 
             let executor = VmExecutor::new(vm_config);
             executor

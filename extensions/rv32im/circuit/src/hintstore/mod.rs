@@ -5,22 +5,18 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        E1Ctx, ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutorE1,
-        InstructionExecutor, MeteredCtx, NewVmChipWrapper, Result, StepExecutorE1, Streams,
-        TraceStep, VmStateMut,
+        E1Ctx, ExecutionBridge, ExecutionError, ExecutionState, MeteredCtx, NewVmChipWrapper,
+        Result, StepExecutorE1, Streams, TraceStep, VmStateMut,
     },
-    system::{
-        memory::{
-            offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            online::{GuestMemory, TracingMemory},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, RecordId,
-        },
-        program::ProgramBus,
+    system::memory::{
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        online::{GuestMemory, TracingMemory},
+        MemoryAddress, MemoryAuxColsFactory, RecordId,
     },
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    utils::{next_power_of_two_or_zero, not},
+    utils::not,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -34,21 +30,15 @@ use openvm_rv32im_transpiler::{
     Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW},
 };
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProofInput,
-    rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    p3_matrix::Matrix,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use rand::distributions::weighted;
 use serde::{Deserialize, Serialize};
 
-use crate::adapters::{
-    decompose, memory_read, memory_write, tmp_convert_to_u8s, tracing_read, tracing_write,
-};
+use crate::adapters::{decompose, memory_read, memory_write, tracing_read, tracing_write};
 
 #[cfg(test)]
 mod tests;
@@ -531,13 +521,15 @@ where
         &mut self,
         state: VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
+        chip_index: usize,
+        num_interactions: usize,
     ) -> Result<()>
     where
         Mem: GuestMemory,
     {
-        state.ctx.trace_heights[0] += 1;
+        state.ctx.trace_heights[chip_index] += 1;
         state.ctx.total_trace_cells += Rv32HintStoreCols::<F>::width();
-        state.ctx.total_interactions += 1;
+        state.ctx.total_interactions += num_interactions;
 
         let state = VmStateMut {
             pc: state.pc,

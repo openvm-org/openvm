@@ -337,6 +337,11 @@ impl<E, P> VmInventory<E, P> {
         self.executors.get_mut(*id)
     }
 
+    pub fn get_mut_executor_with_id(&mut self, opcode: &VmOpcode) -> Option<(&mut E, ExecutorId)> {
+        let id = self.instruction_lookup.get(opcode)?;
+        self.executors.get_mut(*id).map(|executor| (executor, *id))
+    }
+
     pub fn executors(&self) -> &[E] {
         &self.executors
     }

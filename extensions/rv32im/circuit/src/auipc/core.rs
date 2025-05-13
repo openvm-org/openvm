@@ -193,19 +193,16 @@ where
 }
 
 pub struct Rv32AuipcStep<A> {
-    chip_index: usize,
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
 impl<A> Rv32AuipcStep<A> {
     pub fn new(
-        chip_index: usize,
         adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     ) -> Self {
         Self {
-            chip_index,
             adapter,
             bitwise_lookup_chip,
         }
@@ -340,14 +337,14 @@ where
         state: VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
+        num_interactions: usize,
     ) -> Result<()>
     where
         Mem: GuestMemory,
     {
         state.ctx.trace_heights[chip_index] += 1;
         state.ctx.total_trace_cells += A::WIDTH + Rv32AuipcCoreCols::<F>::width();
-        // TODO(ayush): is there a way to calculate it automatically?
-        state.ctx.total_interactions += RV32_REGISTER_NUM_LIMBS / 2 + RV32_REGISTER_NUM_LIMBS - 1;
+        state.ctx.total_interactions += num_interactions;
 
         let state = VmStateMut {
             pc: state.pc,

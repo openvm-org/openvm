@@ -415,7 +415,7 @@ pub trait StepExecutorE1<F> {
         state: VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
-        width: usize,
+        num_interactions: usize,
     ) -> Result<()>
     where
         Mem: GuestMemory;
@@ -442,12 +442,13 @@ where
         state: VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
-        width: usize,
+        num_interactions: usize,
     ) -> Result<()>
     where
         Mem: GuestMemory,
     {
-        self.step.execute_e2(state, instruction, chip_index, width)
+        self.step
+            .execute_e2(state, instruction, chip_index, num_interactions)
     }
 }
 
