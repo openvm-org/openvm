@@ -24,42 +24,12 @@ openvm_algebra_moduli_macros::moduli_declare! {
 
 const CURVE_B_5MOD8: Fp5mod8 = Fp5mod8::from_const_u8(3);
 
-impl Field for Fp5mod8 {
-    const ZERO: Self = <Self as IntMod>::ZERO;
-    const ONE: Self = <Self as IntMod>::ONE;
-
-    type SelfRef<'a> = &'a Self;
-
-    fn double_assign(&mut self) {
-        IntMod::double_assign(self);
-    }
-
-    fn square_assign(&mut self) {
-        IntMod::square_assign(self);
-    }
-}
-
 const CURVE_A_1MOD4: Fp1mod4 = Fp1mod4::from_const_bytes(hex!(
     "FEFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000"
 ));
 const CURVE_B_1MOD4: Fp1mod4 = Fp1mod4::from_const_bytes(hex!(
     "B4FF552343390B27BAD8BFD7B7B04450563241F5ABB3040C850A05B400000000"
 ));
-
-impl Field for Fp1mod4 {
-    const ZERO: Self = <Self as IntMod>::ZERO;
-    const ONE: Self = <Self as IntMod>::ONE;
-
-    type SelfRef<'a> = &'a Self;
-
-    fn double_assign(&mut self) {
-        IntMod::double_assign(self);
-    }
-
-    fn square_assign(&mut self) {
-        IntMod::square_assign(self);
-    }
-}
 
 openvm_ecc_sw_macros::sw_declare! {
     CurvePoint5mod8 {

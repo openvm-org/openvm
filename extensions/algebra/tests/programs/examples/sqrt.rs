@@ -1,16 +1,15 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use openvm_algebra_guest::{Field, IntMod, Sqrt};
-
 extern crate alloc;
+
+use openvm_algebra_guest::{Field, IntMod, Sqrt};
 
 openvm::entry!(main);
 
 openvm_algebra_moduli_macros::moduli_declare! {
     Secp256k1Coord {
         modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
-        impl_field = true
     }
 }
 
