@@ -9,7 +9,6 @@ use openvm_circuit_primitives::{
     },
     TraceSubRowGenerator,
 };
-use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     interaction::PermutationCheckBus,
@@ -213,12 +212,7 @@ impl<F: PrimeField32> MemoryController<F> {
                     range_checker.clone(),
                 ),
             },
-            memory: TracingMemory::new(
-                &mem_config,
-                range_checker.clone(),
-                memory_bus,
-                RV32_REGISTER_NUM_LIMBS,
-            ),
+            memory: TracingMemory::new(&mem_config, range_checker.clone(), memory_bus, 1),
             access_adapters: AccessAdapterInventory::new(
                 range_checker.clone(),
                 memory_bus,
@@ -439,6 +433,155 @@ impl<F: PrimeField32> MemoryController<F> {
         self.memory.timestamp()
     }
 
+    /// Returns the equipartition of the touched blocks.
+    /// Has side effects (namely setting the traces for the access adapters).
+    fn touched_blocks_to_equipartition<const CHUNK: usize, const INITIAL_MERGES: bool>(
+        &mut self,
+        touched_blocks: Vec<((u32, u32), AccessMetadata)>,
+    ) -> TimestampedEquipartition<F, CHUNK> {
+        let mut current_values = [F::ZERO; CHUNK];
+        let mut current_cnt = 0;
+        let mut current_address = MemoryAddress::new(0, 0);
+        let mut current_timestamps = vec![0; CHUNK];
+        let mut final_memory = TimestampedEquipartition::<F, CHUNK>::new();
+        for ((addr_space, ptr), metadata) in touched_blocks {
+            let AccessMetadata {
+                timestamp,
+                block_size,
+            } = metadata;
+            if current_cnt > 0
+                && (current_address.address_space != addr_space
+                    || current_address.pointer + CHUNK as u32 <= ptr)
+            {
+                let min_block_size =
+                    self.memory.min_block_size[current_address.address_space as usize] as usize;
+                current_values[current_cnt..].fill(F::ZERO);
+                current_timestamps[(current_cnt / min_block_size)..].fill(INITIAL_TIMESTAMP);
+                self.memory.execute_merges::<false>(
+                    current_address,
+                    min_block_size,
+                    &current_values,
+                    &current_timestamps,
+                );
+                final_memory.insert(
+                    (current_address.address_space, current_address.pointer),
+                    TimestampedValues {
+                        timestamp: *current_timestamps
+                            .iter()
+                            .take(current_cnt.div_ceil(min_block_size))
+                            .max()
+                            .unwrap(),
+                        values: current_values,
+                    },
+                );
+                current_cnt = 0;
+            }
+            let min_block_size = self.memory.min_block_size[addr_space as usize] as usize;
+            if current_cnt == 0 {
+                let rem = ptr & (CHUNK as u32 - 1);
+                if rem != 0 {
+                    current_values[..(rem as usize)].fill(F::ZERO);
+                    current_address = MemoryAddress::new(addr_space, ptr - rem);
+                } else {
+                    current_address = MemoryAddress::new(addr_space, ptr);
+                }
+            } else {
+                let offset = (ptr - current_address.pointer) as usize;
+                current_values[current_cnt..offset].fill(F::ZERO);
+                current_timestamps[(current_cnt / min_block_size)..(offset / min_block_size)]
+                    .fill(INITIAL_TIMESTAMP);
+                current_cnt = offset;
+            }
+            debug_assert!(block_size >= min_block_size as u32);
+            debug_assert!(ptr % min_block_size as u32 == 0);
+
+            let values = (0..block_size)
+                .map(|i| self.memory.data.get_f::<F>(addr_space, ptr + i))
+                .collect::<Vec<_>>();
+            self.memory.execute_splits::<false>(
+                MemoryAddress::new(addr_space, ptr),
+                min_block_size.min(CHUNK),
+                &values,
+                metadata.timestamp,
+            );
+            if INITIAL_MERGES {
+                debug_assert_eq!(CHUNK, 1);
+                let initial_values = vec![F::ZERO; min_block_size];
+                let initial_timestamps = vec![INITIAL_TIMESTAMP; min_block_size / CHUNK];
+                for i in (0..block_size).step_by(min_block_size) {
+                    self.memory.execute_merges::<false>(
+                        MemoryAddress::new(addr_space, ptr + i),
+                        CHUNK,
+                        &initial_values,
+                        &initial_timestamps,
+                    );
+                }
+            }
+            for i in 0..block_size {
+                current_values[current_cnt] = values[i as usize];
+                if current_cnt & (min_block_size - 1) == 0 {
+                    current_timestamps[current_cnt / min_block_size] = timestamp;
+                }
+                current_cnt += 1;
+                if current_cnt == CHUNK {
+                    self.memory.execute_merges::<false>(
+                        current_address,
+                        min_block_size,
+                        &current_values,
+                        &current_timestamps,
+                    );
+                    final_memory.insert(
+                        (current_address.address_space, current_address.pointer),
+                        TimestampedValues {
+                            timestamp: *current_timestamps
+                                .iter()
+                                .take(current_cnt.div_ceil(min_block_size))
+                                .max()
+                                .unwrap(),
+                            values: current_values,
+                        },
+                    );
+                    current_address.pointer += current_cnt as u32;
+                    current_cnt = 0;
+                }
+            }
+        }
+        if current_cnt > 0 {
+            let min_block_size =
+                self.memory.min_block_size[current_address.address_space as usize] as usize;
+            current_values[current_cnt..].fill(F::ZERO);
+            current_timestamps[(current_cnt / min_block_size)..].fill(INITIAL_TIMESTAMP);
+            self.memory.execute_merges::<false>(
+                current_address,
+                min_block_size,
+                &current_values,
+                &current_timestamps,
+            );
+            final_memory.insert(
+                (current_address.address_space, current_address.pointer),
+                TimestampedValues {
+                    timestamp: *current_timestamps
+                        .iter()
+                        .take(current_cnt.div_ceil(min_block_size))
+                        .max()
+                        .unwrap(),
+                    values: current_values,
+                },
+            );
+        }
+
+        for i in 0..self.access_adapters.num_access_adapters() {
+            let width = self.memory.adapter_inventory_trace_cursor.width(i);
+            self.access_adapters.set_trace(
+                i,
+                self.memory.adapter_inventory_trace_cursor.extract_trace(i),
+                width,
+            );
+        }
+
+        final_memory
+    }
+
     /// Returns the final memory state if persistent.
     #[allow(clippy::assertions_on_constants)]
     pub fn finalize<H>(&mut self, hasher: Option<&mut H>)
@@ -446,82 +589,24 @@ impl<F: PrimeField32> MemoryController<F> {
         H: HasherChip<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
         let touched_blocks = self.memory.touched_blocks().collect::<Vec<_>>();
-        // First, let's split everything into blocks of ALIGN
-        let aligned_final_memory = {
-            let mut final_memory = TimestampedEquipartition::<F, RV32_REGISTER_NUM_LIMBS>::new();
-            for ((addr_space, ptr), metadata) in touched_blocks {
-                if metadata.block_size == AccessMetadata::OCCUPIED {
-                    continue;
-                }
-                assert!(
-                    metadata.block_size >= self.memory.min_block_size[addr_space as usize],
-                    "How come some block size is less than RV32_REGISTER_NUM_LIMBS, isn't this the alignment for anything in risc-v?"
-                );
-                let values = (0..metadata.block_size)
-                    .map(|i| self.memory.data.get_f::<F>(addr_space, ptr + i))
-                    .collect::<Vec<_>>();
-                for start in (0..metadata.block_size).step_by(RV32_REGISTER_NUM_LIMBS) {
-                    final_memory.insert(
-                        (addr_space, ptr + start),
-                        TimestampedValues {
-                            timestamp: metadata.timestamp,
-                            values: values
-                                [(start as usize)..(start as usize + RV32_REGISTER_NUM_LIMBS)]
-                                .try_into()
-                                .unwrap(),
-                        },
-                    );
-                }
-                self.memory.execute_splits::<true>(
-                    MemoryAddress::new(addr_space, ptr),
-                    RV32_REGISTER_NUM_LIMBS,
-                    &values,
-                    metadata.timestamp,
-                );
+
+        let mut final_memory_volatile = None;
+        let mut final_memory_persistent = None;
+
+        match &self.interface_chip {
+            MemoryInterface::Volatile { .. } => {
+                final_memory_volatile =
+                    Some(self.touched_blocks_to_equipartition::<1, true>(touched_blocks));
             }
-            final_memory
-        };
+            MemoryInterface::Persistent { .. } => {
+                final_memory_persistent =
+                    Some(self.touched_blocks_to_equipartition::<CHUNK, false>(touched_blocks));
+            }
+        }
+
         match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
-                let mut final_memory = TimestampedEquipartition::<F, 1>::new();
-                for ((addr_space, ptr), ts_values) in aligned_final_memory {
-                    let TimestampedValues {
-                        timestamp,
-                        mut values,
-                    } = ts_values;
-                    for (i, &v) in values.iter().enumerate() {
-                        final_memory.insert(
-                            (addr_space, ptr + i as u32),
-                            TimestampedValues {
-                                timestamp,
-                                values: [v],
-                            },
-                        );
-                    }
-                    self.memory.execute_splits::<false>(
-                        MemoryAddress::new(addr_space, ptr),
-                        1,
-                        &values,
-                        timestamp,
-                    );
-                    values.fill(F::ZERO);
-                    self.memory.execute_merges::<false>(
-                        MemoryAddress::new(addr_space, ptr),
-                        1,
-                        &values,
-                        &vec![INITIAL_TIMESTAMP; values.len()],
-                    );
-                }
-
-                for i in 0..self.access_adapters.num_access_adapters() {
-                    let width = self.memory.adapter_inventory_trace_cursor.width(i);
-                    self.access_adapters.set_trace(
-                        i,
-                        self.memory.adapter_inventory_trace_cursor.extract_trace(i),
-                        width,
-                    );
-                }
-
+                let final_memory = final_memory_volatile.unwrap();
                 boundary_chip.finalize(final_memory);
             }
             MemoryInterface::Persistent {
@@ -529,57 +614,9 @@ impl<F: PrimeField32> MemoryController<F> {
                 merkle_chip,
                 initial_memory,
             } => {
+                let final_memory = final_memory_persistent.unwrap();
+
                 let hasher = hasher.unwrap();
-                assert!(CHUNK % RV32_REGISTER_NUM_LIMBS == 0);
-                assert!(CHUNK >= RV32_REGISTER_NUM_LIMBS);
-                let mut current_values = [F::ZERO; CHUNK];
-                let mut current_cnt = 0;
-                let mut current_address = MemoryAddress::new(0, 0);
-                let mut current_timestamps = vec![0; CHUNK / RV32_REGISTER_NUM_LIMBS];
-                let mut final_memory = TimestampedEquipartition::<F, CHUNK>::new();
-                for ((addr_space, ptr), ts_values) in aligned_final_memory {
-                    let TimestampedValues { timestamp, values } = ts_values;
-                    if current_cnt == 0 {
-                        current_address = MemoryAddress::new(addr_space, ptr);
-                    } else {
-                        debug_assert_eq!(current_address.address_space, addr_space);
-                        debug_assert_eq!(current_address.pointer + current_cnt as u32, ptr);
-                    }
-                    current_values[current_cnt..(current_cnt + values.len())]
-                        .copy_from_slice(&values);
-                    current_timestamps[current_cnt / RV32_REGISTER_NUM_LIMBS] = timestamp;
-                    current_cnt += values.len();
-                    if current_cnt != CHUNK {
-                        continue;
-                    }
-                    final_memory.insert(
-                        (current_address.address_space, current_address.pointer),
-                        TimestampedValues {
-                            timestamp: *current_timestamps.iter().max().unwrap(),
-                            values: current_values,
-                        },
-                    );
-                    self.memory.execute_merges::<false>(
-                        current_address,
-                        RV32_REGISTER_NUM_LIMBS,
-                        &current_values,
-                        &current_timestamps,
-                    );
-                    // We do not need to implement the initial splits here,
-                    // because this has been done in the controller on the first access.
-
-                    current_cnt = 0;
-                }
-
-                for i in 0..self.access_adapters.num_access_adapters() {
-                    let width = self.memory.adapter_inventory_trace_cursor.width(i);
-                    self.access_adapters.set_trace(
-                        i,
-                        self.memory.adapter_inventory_trace_cursor.extract_trace(i),
-                        width,
-                    );
-                }
-
                 boundary_chip.finalize(initial_memory, &final_memory, hasher);
                 let final_memory_values = final_memory
                     .into_par_iter()

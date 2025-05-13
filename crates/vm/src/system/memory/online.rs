@@ -337,7 +337,9 @@ impl<F: PrimeField32> TracingMemory<F> {
                 break false;
             } else if current_metadata.block_size == 0 {
                 // Initialize
-                cur_ptr -= cur_ptr % (self.initial_block_size / align);
+                if self.initial_block_size > align {
+                    cur_ptr -= cur_ptr % (self.initial_block_size / align);
+                }
                 self.set_meta_block(
                     address_space,
                     cur_ptr * align,
@@ -357,15 +359,17 @@ impl<F: PrimeField32> TracingMemory<F> {
             block_timestamps[cur_ptr.saturating_sub(begin)
                 ..((cur_ptr + (current_metadata.block_size as usize) / align).min(end) - begin)]
                 .fill(current_metadata.timestamp);
-            // Split
-            let address = MemoryAddress::new(address_space as u32, (cur_ptr * seg_size) as u32);
-            let values = (0..current_metadata.block_size as usize)
-                .map(|i| {
-                    self.data
-                        .get_f(address.address_space, address.pointer + (i as u32))
-                })
-                .collect::<Vec<_>>();
-            self.execute_splits::<true>(address, align, &values, current_metadata.timestamp);
+            if current_metadata.block_size > align as u32 {
+                // Split
+                let address = MemoryAddress::new(address_space as u32, (cur_ptr * seg_size) as u32);
+                let values = (0..current_metadata.block_size as usize)
+                    .map(|i| {
+                        self.data
+                            .get_f(address.address_space, address.pointer + (i as u32))
+                    })
+                    .collect::<Vec<_>>();
+                self.execute_splits::<true>(address, align, &values, current_metadata.timestamp);
+            }
             cur_ptr += current_metadata.block_size as usize;
         };
         if need_to_merge {
