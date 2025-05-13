@@ -58,7 +58,7 @@ fn create_test_chip(
             LessThanCoreAir::new(bitwise_bus, LessThanOpcode::CLASS_OFFSET),
         ),
         LessThanStep::new(
-            Rv32BaseAluAdapterStep::new(),
+            Rv32BaseAluAdapterStep::new(bitwise_chip.clone()),
             bitwise_chip.clone(),
             LessThanOpcode::CLASS_OFFSET,
         ),

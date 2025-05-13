@@ -53,7 +53,7 @@ pub fn decompose<F: PrimeField32>(value: u32) -> [F; RV32_REGISTER_NUM_LIMBS] {
 }
 
 #[inline(always)]
-pub fn memory_read<Mem>(memory: &Mem, address_space: u32, ptr: u32) -> [u8; RV32_REGISTER_NUM_LIMBS]
+pub fn memory_read<Mem, const N: usize>(memory: &Mem, address_space: u32, ptr: u32) -> [u8; N]
 where
     Mem: GuestMemory,
 {
@@ -67,15 +67,15 @@ where
     // SAFETY:
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
-    unsafe { memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(address_space, ptr) }
+    unsafe { memory.read::<u8, N>(address_space, ptr) }
 }
 
 #[inline(always)]
-pub fn memory_write<Mem>(
+pub fn memory_write<Mem, const N: usize>(
     memory: &mut Mem,
     address_space: u32,
     ptr: u32,
-    data: &[u8; RV32_REGISTER_NUM_LIMBS],
+    data: &[u8; N],
 ) where
     Mem: GuestMemory,
 {
@@ -89,18 +89,18 @@ pub fn memory_write<Mem>(
     // SAFETY:
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
-    unsafe { memory.write::<u8, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, data) }
+    unsafe { memory.write::<u8, N>(address_space, ptr, data) }
 }
 
 /// Atomic read operation which increments the timestamp by 1.
 /// Returns `(t_prev, [ptr:4]_{address_space})` where `t_prev` is the timestamp of the last memory
 /// access.
 #[inline(always)]
-pub fn timed_read<F: PrimeField32>(
+pub fn timed_read<F: PrimeField32, const N: usize>(
     memory: &mut TracingMemory<F>,
     address_space: u32,
     ptr: u32,
-) -> (u32, [u8; RV32_REGISTER_NUM_LIMBS]) {
+) -> (u32, [u8; N]) {
     debug_assert!(
         address_space == RV32_REGISTER_AS
             || address_space == RV32_MEMORY_AS
@@ -110,18 +110,16 @@ pub fn timed_read<F: PrimeField32>(
     // SAFETY:
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
-    unsafe {
-        memory.read::<u8, RV32_REGISTER_NUM_LIMBS, RV32_REGISTER_NUM_LIMBS>(address_space, ptr)
-    }
+    unsafe { memory.read::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr) }
 }
 
 #[inline(always)]
-pub fn timed_write<F: PrimeField32>(
+pub fn timed_write<F: PrimeField32, const N: usize>(
     memory: &mut TracingMemory<F>,
     address_space: u32,
     ptr: u32,
-    val: &[u8; RV32_REGISTER_NUM_LIMBS],
-) -> (u32, [u8; RV32_REGISTER_NUM_LIMBS]) {
+    data: &[u8; N],
+) -> (u32, [u8; N]) {
     // TODO(ayush): should this allow public values address space
     debug_assert!(
         address_space == RV32_REGISTER_AS
@@ -130,27 +128,21 @@ pub fn timed_write<F: PrimeField32>(
     );
 
     // SAFETY:
-    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_ASwill always have cell type `u8` and
+    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
-    unsafe {
-        memory.write::<u8, RV32_REGISTER_NUM_LIMBS, RV32_REGISTER_NUM_LIMBS>(
-            address_space,
-            ptr,
-            val,
-        )
-    }
+    unsafe { memory.write::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, data) }
 }
 
 /// Reads register value at `reg_ptr` from memory and records the memory access in mutable buffer.
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
 #[inline(always)]
-pub fn tracing_read<F>(
+pub fn tracing_read<F, const N: usize>(
     memory: &mut TracingMemory<F>,
     address_space: u32,
     ptr: u32,
     aux_cols: &mut MemoryReadAuxCols<F>, /* TODO[jpw]: switch to raw u8
                                           * buffer */
-) -> [u8; RV32_REGISTER_NUM_LIMBS]
+) -> [u8; N]
 where
     F: PrimeField32,
 {
@@ -162,18 +154,18 @@ where
 /// Writes `reg_ptr, reg_val` into memory and records the memory access in mutable buffer.
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
 #[inline(always)]
-pub fn tracing_write<F>(
+pub fn tracing_write<F, const N: usize>(
     memory: &mut TracingMemory<F>,
     address_space: u32,
     ptr: u32,
-    val: &[u8; RV32_REGISTER_NUM_LIMBS],
-    aux_cols: &mut MemoryWriteAuxCols<F, RV32_REGISTER_NUM_LIMBS>, /* TODO[jpw]: switch to raw
-                                                                    * u8
-                                                                    * buffer */
+    data: &[u8; N],
+    aux_cols: &mut MemoryWriteAuxCols<F, N>, /* TODO[jpw]: switch to raw
+                                              * u8
+                                              * buffer */
 ) where
     F: PrimeField32,
 {
-    let (t_prev, data_prev) = timed_write(memory, address_space, ptr, val);
+    let (t_prev, data_prev) = timed_write(memory, address_space, ptr, data);
     aux_cols.set_prev(
         F::from_canonical_u32(t_prev),
         data_prev.map(F::from_canonical_u8),
@@ -182,16 +174,16 @@ pub fn tracing_write<F>(
 
 // TODO(ayush): this is bad but not sure how to avoid
 #[inline(always)]
-pub fn tracing_write_with_base_aux<F>(
+pub fn tracing_write_with_base_aux<F, const N: usize>(
     memory: &mut TracingMemory<F>,
     address_space: u32,
     ptr: u32,
-    val: &[u8; RV32_REGISTER_NUM_LIMBS],
+    data: &[u8; N],
     base_aux_cols: &mut MemoryBaseAuxCols<F>,
 ) where
     F: PrimeField32,
 {
-    let (t_prev, _) = timed_write(memory, address_space, ptr, val);
+    let (t_prev, _) = timed_write(memory, address_space, ptr, data);
     base_aux_cols.set_prev(F::from_canonical_u32(t_prev));
 }
 
@@ -229,6 +221,11 @@ pub fn read_rv32_register<F: PrimeField32>(
     let record = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(address_space, pointer);
     let val = u32::from_le_bytes(record.1);
     (record.0, val)
+}
+
+#[inline(always)]
+pub fn new_read_rv32_register<Mem: GuestMemory>(memory: &Mem, address_space: u32, ptr: u32) -> u32 {
+    u32::from_le_bytes(memory_read(memory, address_space, ptr))
 }
 
 /// Peeks at the value of a register without updating the memory state or incrementing the

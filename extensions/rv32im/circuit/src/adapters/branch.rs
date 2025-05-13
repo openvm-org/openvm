@@ -20,7 +20,6 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-use serde::{Deserialize, Serialize};
 
 use super::RV32_REGISTER_NUM_LIMBS;
 use crate::adapters::{memory_read, tracing_read};
@@ -115,7 +114,7 @@ where
     F: PrimeField32,
 {
     const WIDTH: usize = size_of::<Rv32BranchAdapterCols<u8>>();
-    type ReadData = ([u8; RV32_REGISTER_NUM_LIMBS], [u8; RV32_REGISTER_NUM_LIMBS]);
+    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
     type WriteData = ();
     type TraceContext<'a> = ();
 
@@ -155,7 +154,7 @@ where
             &mut adapter_row.reads_aux[1],
         );
 
-        (rs1, rs2)
+        [rs1, rs2]
     }
 
     #[inline(always)]
@@ -191,7 +190,7 @@ where
     F: PrimeField32,
 {
     // TODO(ayush): directly use u32
-    type ReadData = ([u8; RV32_REGISTER_NUM_LIMBS], [u8; RV32_REGISTER_NUM_LIMBS]);
+    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
     type WriteData = ();
 
     #[inline(always)]
@@ -209,7 +208,7 @@ where
         let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
             memory_read(memory, RV32_REGISTER_AS, b.as_canonical_u32());
 
-        (rs1, rs2)
+        [rs1, rs2]
     }
 
     #[inline(always)]

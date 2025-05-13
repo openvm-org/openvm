@@ -14,9 +14,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{
-        BitwiseOperationLookupBus, BitwiseOperationLookupChip, SharedBitwiseOperationLookupChip,
-    },
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -28,8 +26,6 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use serde_big_array::BigArray;
 use strum::IntoEnumIterator;
 
 #[repr(C)]
@@ -199,9 +195,9 @@ where
         + for<'a> AdapterTraceStep<
             F,
             CTX,
-            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
-            WriteData = [u8; NUM_LIMBS],
-            TraceContext<'a> = &'a BitwiseOperationLookupChip<LIMB_BITS>,
+            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
+            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
+            TraceContext<'a> = (),
         >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -222,12 +218,15 @@ where
 
         let local_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let mut row_slice = &mut trace[*trace_offset..*trace_offset + width];
+        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
 
-        let (rs1, rs2) = self.adapter.read(state.memory, instruction, adapter_row);
+        let [rs1, rs2] = self
+            .adapter
+            .read(state.memory, instruction, adapter_row)
+            .into();
 
         let (cmp_result, _, _, _) = run_less_than::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
 
@@ -241,7 +240,7 @@ where
         output[0] = cmp_result as u8;
 
         self.adapter
-            .write(state.memory, instruction, adapter_row, &output);
+            .write(state.memory, instruction, adapter_row, &[output].into());
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -253,8 +252,7 @@ where
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-        self.adapter
-            .fill_trace_row(mem_helper, self.bitwise_lookup_chip.as_ref(), adapter_row);
+        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
 
         let core_row: &mut LessThanCoreCols<_, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 
@@ -333,8 +331,8 @@ where
     A: 'static
         + for<'a> AdapterExecutorE1<
             F,
-            ReadData = ([u8; NUM_LIMBS], [u8; NUM_LIMBS]),
-            WriteData = [u8; NUM_LIMBS],
+            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
+            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
         >,
 {
     fn execute_e1<Mem, Ctx>(
@@ -349,7 +347,7 @@ where
 
         let less_than_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let (rs1, rs2) = self.adapter.read(state.memory, instruction);
+        let [rs1, rs2] = self.adapter.read(state.memory, instruction).into();
 
         // Run the comparison
         let (cmp_result, _, _, _) =
@@ -357,7 +355,7 @@ where
         let mut rd = [0u8; NUM_LIMBS];
         rd[0] = cmp_result as u8;
 
-        self.adapter.write(state.memory, instruction, &rd);
+        self.adapter.write(state.memory, instruction, &[rd].into());
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
