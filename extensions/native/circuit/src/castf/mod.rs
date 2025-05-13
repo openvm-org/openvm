@@ -1,4 +1,4 @@
-use openvm_circuit::arch::{NewVmChipWrapper, VmAirWrapper, VmChipWrapper};
+use openvm_circuit::arch::{NewVmChipWrapper, VmAirWrapper};
 
 use super::adapters::convert_adapter::{ConvertAdapterAir, ConvertAdapterStep};
 
