@@ -96,20 +96,6 @@ mod tests {
         "13",
     }
 
-    impl Field for F13 {
-        type SelfRef<'a> = &'a Self;
-        const ZERO: Self = <Self as IntMod>::ZERO;
-        const ONE: Self = <Self as IntMod>::ONE;
-
-        fn double_assign(&mut self) {
-            IntMod::double_assign(self);
-        }
-
-        fn square_assign(&mut self) {
-            IntMod::square_assign(self);
-        }
-    }
-
     #[test]
     fn test_pairing_check_fallback() {
         let a = F13::from_u8(2);
