@@ -1,12 +1,5 @@
 use std::borrow::BorrowMut;
 
-use super::core::run_mulh;
-use crate::{
-    adapters::{Rv32MultAdapterAir, Rv32MultAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-    mulh::{MulHCoreCols, MulHStep, Rv32MulHChip},
-    test_utils::get_verification_error,
-    MulHCoreAir,
-};
 use openvm_circuit::{
     arch::{
         testing::{
@@ -34,6 +27,14 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::rngs::StdRng;
 use test_case::test_case;
+
+use super::core::run_mulh;
+use crate::{
+    adapters::{Rv32MultAdapterAir, Rv32MultAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+    mulh::{MulHCoreCols, MulHStep, Rv32MulHChip},
+    test_utils::get_verification_error,
+    MulHCoreAir,
+};
 
 const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)

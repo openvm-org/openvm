@@ -58,7 +58,7 @@ where
     fn execute_instruction(
         &mut self,
         vm_state: &mut ExecutionSegmentState,
-        // instruction: &Instruction<F>,
+        instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
     where
@@ -156,14 +156,13 @@ where
     fn execute_instruction(
         &mut self,
         state: &mut ExecutionSegmentState,
-        // instruction: &Instruction<F>,
+        instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
     {
         let timestamp = chip_complex.memory_controller().timestamp();
-        let (instruction, _) = chip_complex.base.program_chip.get_instruction(state.pc)?;
 
         let &Instruction { opcode, .. } = instruction;
 
@@ -239,14 +238,12 @@ where
     fn execute_instruction(
         &mut self,
         state: &mut ExecutionSegmentState,
-        // instruction: &Instruction<F>,
+        instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
     {
-        let (instruction, _) = chip_complex.base.program_chip.get_instruction(state.pc)?;
-
         let &Instruction { opcode, .. } = instruction;
 
         if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {

@@ -215,8 +215,9 @@ where
         *prev_backtrace = trace.cloned();
 
         // Execute the instruction using the control implementation
+        // TODO(AG): maybe avoid cloning the instruction?
         self.control
-            .execute_instruction(state, &mut self.chip_complex)?;
+            .execute_instruction(state, &instruction.clone(), &mut self.chip_complex)?;
 
         // Update metrics if enabled
         #[cfg(feature = "bench-metrics")]

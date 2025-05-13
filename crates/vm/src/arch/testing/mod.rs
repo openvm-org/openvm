@@ -1,11 +1,19 @@
+use std::{
+    borrow::Borrow,
+    iter::zip,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
+
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
 use openvm_instructions::instruction::Instruction;
+use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::VerificationData,
-    interaction::BusIndex,
+    interaction::{BusIndex, PermutationCheckBus},
     p3_field::PrimeField32,
     p3_matrix::dense::{DenseMatrix, RowMajorMatrix},
     prover::types::AirProofInput,
@@ -30,9 +38,11 @@ use crate::{
     arch::{ExecutionState, MemoryConfig},
     system::{
         memory::{
+            interface::MemoryInterface,
             offline_checker::{MemoryBridge, MemoryBus},
             MemoryController, SharedMemoryHelper,
         },
+        poseidon2::Poseidon2PeripheryChip,
         program::ProgramBus,
     },
 };
@@ -250,6 +260,31 @@ impl VmChipTestBuilder<BabyBear> {
     }
 }
 
+impl<F: PrimeField32> VmChipTestBuilder<F> {
+    pub fn default_persistent() -> Self {
+        let mem_config = MemoryConfig::default();
+        let range_checker = SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
+            RANGE_CHECKER_BUS,
+            mem_config.decomp,
+        ));
+        let memory_controller = MemoryController::with_persistent_memory(
+            MemoryBus::new(MEMORY_BUS),
+            mem_config,
+            range_checker,
+            PermutationCheckBus::new(MEMORY_MERKLE_BUS),
+            PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
+        );
+        Self {
+            memory: MemoryTester::new(memory_controller),
+            execution: ExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
+            program: ProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
+            rng: StdRng::seed_from_u64(0),
+            default_register: 0,
+            default_pointer: 0,
+        }
+    }
+}
+
 impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
     fn default() -> Self {
         setup_tracing_with_log_level(Level::INFO);
@@ -304,27 +339,48 @@ where
     }
 
     pub fn finalize(mut self) -> Self {
-        if let Some(mut memory_tester) = self.memory.take() {
+        if let Some(memory_tester) = self.memory.take() {
             // Balance memory boundaries
-            memory_tester.finalize();
-            let memory_controller = memory_tester.controller;
+            let mut memory_controller = memory_tester.controller;
             let range_checker = memory_controller.range_checker.clone();
-            drop(memory_controller);
-            // dummy memory interactions:
-            for mem_chip in memory_tester.chip_for_block.into_values() {
-                self = self.load(mem_chip);
-            }
-            {
-                // todo: boundary and adapter stuff
-                // let airs = memory_controller.borrow().airs();
-                // let air_proof_inputs = Rc::try_unwrap(memory_controller)
-                //     .unwrap_or_else(|_| panic!("Memory controller was not dropped"))
-                //     .into_inner()
-                //     .generate_air_proof_inputs();
-                // self.air_proof_inputs.extend(
-                //     zip(airs, air_proof_inputs).filter(|(_, input)| input.main_trace_height() >
-                // 0), );
-            }
+            match &memory_controller.interface_chip {
+                MemoryInterface::Volatile { .. } => {
+                    memory_controller.finalize(None::<&mut Poseidon2PeripheryChip<Val<SC>>>);
+                    // dummy memory interactions:
+                    for mem_chip in memory_tester.chip_for_block.into_values() {
+                        self = self.load(mem_chip);
+                    }
+                    {
+                        let airs = memory_controller.borrow().airs();
+                        let air_proof_inputs = memory_controller.generate_air_proof_inputs();
+                        self.air_proof_inputs.extend(
+                            zip(airs, air_proof_inputs)
+                                .filter(|(_, input)| input.main_trace_height() > 0),
+                        );
+                    }
+                }
+                MemoryInterface::Persistent { .. } => {
+                    let mut poseidon_chip = Poseidon2PeripheryChip::new(
+                        Poseidon2Config::default(),
+                        POSEIDON2_DIRECT_BUS,
+                        3,
+                    );
+                    memory_controller.finalize(Some(&mut poseidon_chip));
+                    // dummy memory interactions:
+                    for mem_chip in memory_tester.chip_for_block.into_values() {
+                        self = self.load(mem_chip);
+                    }
+                    {
+                        let airs = memory_controller.borrow().airs();
+                        let air_proof_inputs = memory_controller.generate_air_proof_inputs();
+                        self.air_proof_inputs.extend(
+                            zip(airs, air_proof_inputs)
+                                .filter(|(_, input)| input.main_trace_height() > 0),
+                        );
+                    }
+                    self = self.load(poseidon_chip);
+                }
+            };
             self = self.load(range_checker); // this must be last because other trace generation
                                              // mutates its state
         }

@@ -110,3 +110,34 @@ jobs:
             echo -e "\nBenchmark Summary:"
             cat "$SUMMARY_FILE"
           fi
+
+  codspeed-benchmarks:
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=8cpu-linux-x64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+
+      - name: Install codspeed
+        run: cargo binstall --no-confirm --force cargo-codspeed
+
+      - name: Build benchmarks
+        working-directory: benchmarks/execute
+        run: cargo codspeed build
+
+      - name: Run benchmarks with CodSpeed
+        uses: CodSpeedHQ/action@v3
+        with:
+          working-directory: benchmarks/execute
+          run: cargo codspeed run
+          token: ${{ secrets.CODSPEED_TOKEN }}
