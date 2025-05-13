@@ -190,23 +190,25 @@ impl<F: PrimeField32> TracingMemory<F> {
         );
     }
 
-    pub(crate) fn execute_splits<const ALIGN: usize, const UPDATE_META: bool>(
+    pub(crate) fn execute_splits<const UPDATE_META: bool>(
         &mut self,
         address: MemoryAddress<u32, u32>,
+        align: usize,
         values: &[F],
         timestamp: u32,
     ) {
         if UPDATE_META {
-            for i in 0..(values.len() / ALIGN) {
-                self.set_meta_block::<ALIGN>(
+            for i in 0..(values.len() / align) {
+                self.set_meta_block(
                     address.address_space as usize,
-                    address.pointer as usize + i * ALIGN,
-                    ALIGN,
+                    address.pointer as usize + i * align,
+                    align,
+                    align,
                     timestamp,
                 );
             }
         }
-        let mut size = ALIGN;
+        let mut size = align;
         let MemoryAddress {
             address_space,
             pointer,
@@ -227,21 +229,23 @@ impl<F: PrimeField32> TracingMemory<F> {
         }
     }
 
-    pub(crate) fn execute_merges<const ALIGN: usize, const UPDATE_META: bool>(
+    pub(crate) fn execute_merges<const UPDATE_META: bool>(
         &mut self,
         address: MemoryAddress<u32, u32>,
+        align: usize,
         values: &[F],
         timestamps: &[u32],
     ) {
         if UPDATE_META {
-            self.set_meta_block::<ALIGN>(
+            self.set_meta_block(
                 address.address_space as usize,
                 address.pointer as usize,
+                align,
                 values.len(),
                 *timestamps.iter().max().unwrap(),
             );
         }
-        let mut size = ALIGN;
+        let mut size = align;
         let MemoryAddress {
             address_space,
             pointer,
@@ -249,11 +253,11 @@ impl<F: PrimeField32> TracingMemory<F> {
         while size < values.len() {
             size *= 2;
             for i in (0..values.len()).step_by(size) {
-                let left_timestamp = timestamps[(i / ALIGN)..((i + size / 2) / ALIGN)]
+                let left_timestamp = timestamps[(i / align)..((i + size / 2) / align)]
                     .iter()
                     .max()
                     .unwrap();
-                let right_timestamp = timestamps[((i + size / 2) / ALIGN)..((i + size) / ALIGN)]
+                let right_timestamp = timestamps[((i + size / 2) / align)..((i + size) / align)]
                     .iter()
                     .max()
                     .unwrap();
@@ -272,14 +276,15 @@ impl<F: PrimeField32> TracingMemory<F> {
     }
 
     /// Updates the metadata with the given block.
-    fn set_meta_block<const ALIGN: usize>(
+    fn set_meta_block(
         &mut self,
         address_space: usize,
         pointer: usize,
+        align: usize,
         block_size: usize,
         timestamp: u32,
     ) {
-        let ptr = pointer / ALIGN;
+        let ptr = pointer / align;
         let meta = unsafe { self.meta.get_unchecked_mut(address_space) };
         meta.set(
             ptr * size_of::<AccessMetadata>(),
@@ -288,7 +293,7 @@ impl<F: PrimeField32> TracingMemory<F> {
                 block_size: block_size as u32,
             },
         );
-        for i in 1..(block_size / ALIGN) {
+        for i in 1..(block_size / align) {
             meta.set(
                 (ptr + i) * size_of::<AccessMetadata>(),
                 &AccessMetadata {
@@ -304,17 +309,18 @@ impl<F: PrimeField32> TracingMemory<F> {
     /// actions. In the end of this process, we have this segment intact in our `meta`.
     ///
     /// Caller must ensure alignment (e.g. via `assert_alignment`) prior to calling this function.
-    fn prev_access_time<T: Copy + Debug, const BLOCK_SIZE: usize, const ALIGN: usize>(
+    fn prev_access_time<T: Copy + Debug, const BLOCK_SIZE: usize>(
         &mut self,
         address_space: usize,
         pointer: usize,
+        align: usize,
     ) -> u32 {
         let size = size_of::<T>();
-        let seg_size = ALIGN * size;
-        let num_segs = BLOCK_SIZE / ALIGN;
+        let seg_size = align * size;
+        let num_segs = BLOCK_SIZE / align;
 
-        let begin = pointer / ALIGN;
-        let end = begin + BLOCK_SIZE / ALIGN;
+        let begin = pointer / align;
+        let end = begin + BLOCK_SIZE / align;
 
         let mut prev_ts = INITIAL_TIMESTAMP;
         let mut block_timestamps = vec![INITIAL_TIMESTAMP; num_segs];
@@ -331,10 +337,11 @@ impl<F: PrimeField32> TracingMemory<F> {
                 break false;
             } else if current_metadata.block_size == 0 {
                 // Initialize
-                cur_ptr -= cur_ptr % (self.initial_block_size / ALIGN);
-                self.set_meta_block::<ALIGN>(
+                cur_ptr -= cur_ptr % (self.initial_block_size / align);
+                self.set_meta_block(
                     address_space,
-                    cur_ptr * ALIGN,
+                    cur_ptr * align,
+                    align,
                     self.initial_block_size,
                     INITIAL_TIMESTAMP,
                 );
@@ -348,7 +355,7 @@ impl<F: PrimeField32> TracingMemory<F> {
                     .get::<AccessMetadata>(cur_ptr * size_of::<AccessMetadata>());
             }
             block_timestamps[cur_ptr.saturating_sub(begin)
-                ..((cur_ptr + (current_metadata.block_size as usize) / ALIGN).min(end) - begin)]
+                ..((cur_ptr + (current_metadata.block_size as usize) / align).min(end) - begin)]
                 .fill(current_metadata.timestamp);
             // Split
             let address = MemoryAddress::new(address_space as u32, (cur_ptr * seg_size) as u32);
@@ -358,7 +365,7 @@ impl<F: PrimeField32> TracingMemory<F> {
                         .get_f(address.address_space, address.pointer + (i as u32))
                 })
                 .collect::<Vec<_>>();
-            self.execute_splits::<ALIGN, true>(address, &values, current_metadata.timestamp);
+            self.execute_splits::<true>(address, align, &values, current_metadata.timestamp);
             cur_ptr += current_metadata.block_size as usize;
         };
         if need_to_merge {
@@ -366,8 +373,9 @@ impl<F: PrimeField32> TracingMemory<F> {
             let values = (0..BLOCK_SIZE)
                 .map(|i| self.data.get_f(address_space as u32, (pointer + i) as u32))
                 .collect::<Vec<_>>();
-            self.execute_merges::<ALIGN, true>(
+            self.execute_merges::<true>(
                 MemoryAddress::new(address_space as u32, pointer as u32),
+                align,
                 &values,
                 &block_timestamps,
             );
@@ -407,11 +415,17 @@ impl<F: PrimeField32> TracingMemory<F> {
     {
         self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
         let t_prev =
-            self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(address_space as usize, pointer as usize);
+            self.prev_access_time::<T, BLOCK_SIZE>(address_space as usize, pointer as usize, ALIGN);
         let t_curr = self.timestamp;
         self.timestamp += 1;
         let values = self.data.read(address_space, pointer);
-        self.set_meta_block::<ALIGN>(address_space as usize, pointer as usize, BLOCK_SIZE, t_curr);
+        self.set_meta_block(
+            address_space as usize,
+            pointer as usize,
+            ALIGN,
+            BLOCK_SIZE,
+            t_curr,
+        );
 
         (t_prev, values)
     }
@@ -449,11 +463,17 @@ impl<F: PrimeField32> TracingMemory<F> {
     {
         self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
         let t_prev =
-            self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(address_space as usize, pointer as usize);
+            self.prev_access_time::<T, BLOCK_SIZE>(address_space as usize, pointer as usize, ALIGN);
         let values_prev = self.data.replace(address_space, pointer, values);
         let t_curr = self.timestamp;
         self.timestamp += 1;
-        self.set_meta_block::<ALIGN>(address_space as usize, pointer as usize, BLOCK_SIZE, t_curr);
+        self.set_meta_block(
+            address_space as usize,
+            pointer as usize,
+            ALIGN,
+            BLOCK_SIZE,
+            t_curr,
+        );
 
         (t_prev, values_prev)
     }

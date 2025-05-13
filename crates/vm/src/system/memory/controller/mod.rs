@@ -454,8 +454,8 @@ impl<F: PrimeField32> MemoryController<F> {
                     continue;
                 }
                 assert!(
-                    metadata.block_size >= RV32_REGISTER_NUM_LIMBS as u32,
-                    "How come some block size is less than RV32_REGISTER_NUM_LIMBS, isn't this the alignment?"
+                    metadata.block_size >= self.memory.min_block_size[addr_space as usize],
+                    "How come some block size is less than RV32_REGISTER_NUM_LIMBS, isn't this the alignment for anything in risc-v?"
                 );
                 let values = (0..metadata.block_size)
                     .map(|i| self.memory.data.get_f::<F>(addr_space, ptr + i))
@@ -472,8 +472,9 @@ impl<F: PrimeField32> MemoryController<F> {
                         },
                     );
                 }
-                self.memory.execute_splits::<RV32_REGISTER_NUM_LIMBS, true>(
+                self.memory.execute_splits::<true>(
                     MemoryAddress::new(addr_space, ptr),
+                    RV32_REGISTER_NUM_LIMBS,
                     &values,
                     metadata.timestamp,
                 );
@@ -497,14 +498,16 @@ impl<F: PrimeField32> MemoryController<F> {
                             },
                         );
                     }
-                    self.memory.execute_splits::<1, false>(
+                    self.memory.execute_splits::<false>(
                         MemoryAddress::new(addr_space, ptr),
+                        1,
                         &values,
                         timestamp,
                     );
                     values.fill(F::ZERO);
-                    self.memory.execute_merges::<1, false>(
+                    self.memory.execute_merges::<false>(
                         MemoryAddress::new(addr_space, ptr),
+                        1,
                         &values,
                         &vec![INITIAL_TIMESTAMP; values.len()],
                     );
@@ -556,12 +559,12 @@ impl<F: PrimeField32> MemoryController<F> {
                             values: current_values,
                         },
                     );
-                    self.memory
-                        .execute_merges::<RV32_REGISTER_NUM_LIMBS, false>(
-                            current_address,
-                            &current_values,
-                            &current_timestamps,
-                        );
+                    self.memory.execute_merges::<false>(
+                        current_address,
+                        RV32_REGISTER_NUM_LIMBS,
+                        &current_values,
+                        &current_timestamps,
+                    );
                     // We do not need to implement the initial splits here,
                     // because this has been done in the controller on the first access.
 
