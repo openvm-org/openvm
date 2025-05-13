@@ -368,7 +368,7 @@ pub(crate) fn build(
             })
             .collect()
     } else {
-        vec![get_package(manifest_path)]
+        vec![get_package(manifest_dir)]
     };
 
     // Find elf paths of all targets for all built packages
