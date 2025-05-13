@@ -4826,7 +4826,6 @@ dependencies = [
  "openvm-pairing-circuit",
  "openvm-pairing-transpiler",
  "openvm-rv32im-circuit",
- "openvm-rv32im-guest",
  "openvm-rv32im-transpiler",
  "openvm-sha256-circuit",
  "openvm-sha256-transpiler",
@@ -5016,6 +5015,29 @@ dependencies = [
  "rrs-lib",
  "rustc-demangle",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "openvm-verify-stark"
+version = "1.1.2"
+dependencies = [
+ "openvm-native-recursion",
+ "openvm-rv32im-guest",
+ "openvm-sdk",
+ "openvm-stark-sdk",
+]
+
+[[package]]
+name = "openvm-verify-stark-integration-tests"
+version = "1.1.2"
+dependencies = [
+ "eyre",
+ "openvm-build",
+ "openvm-circuit",
+ "openvm-native-compiler",
+ "openvm-sdk",
+ "openvm-stark-sdk",
+ "openvm-verify-stark",
 ]
 
 [[package]]

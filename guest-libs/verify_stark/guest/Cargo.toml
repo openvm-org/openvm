@@ -1,0 +1,16 @@
+[package]
+name = "openvm-verify-stark"
+description = "OpenVM guest library for verifying STARKs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+openvm-native-recursion.workspace = true
+openvm-rv32im-guest.workspace = true
+openvm-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true }

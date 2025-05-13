@@ -98,33 +98,6 @@ pub fn read_u32() -> u32 {
     u32::from_le_bytes(bytes.try_into().unwrap())
 }
 
-/// Compute the hint key for `verify_openvm_stark` function, which reads a stark proof from stream
-/// `kv_store`.
-pub fn compute_hint_key_for_verify_openvm_stark(
-    asm_filename: &str,
-    exe_commit_u32: &[u32; 8],
-    vm_commit_u32: &[u32; 8],
-    pvs_u32: &[u32],
-) -> Vec<u8> {
-    asm_filename
-        .as_bytes()
-        .iter()
-        .cloned()
-        .chain(exe_commit_u32.iter().flat_map(|x| x.to_le_bytes()))
-        .chain(vm_commit_u32.iter().flat_map(|x| x.to_le_bytes()))
-        .chain(pvs_u32.iter().flat_map(|x| x.to_le_bytes()))
-        .collect()
-}
-
-/// Encode the public values in guest program(revealed by `reveal_u32`) into the format in proofs.
-pub fn encode_rv32_public_values(logic_pvs: &[u32]) -> Vec<u32> {
-    logic_pvs
-        .iter()
-        .flat_map(|x| x.to_le_bytes())
-        .map(|x| x as u32)
-        .collect()
-}
-
 #[cfg(all(feature = "std", test, not(target_os = "zkvm")))]
 mod tests {
     use alloc::vec;

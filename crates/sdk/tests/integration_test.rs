@@ -1,13 +1,11 @@
 use std::{borrow::Borrow, path::PathBuf, sync::Arc};
 
 use eyre::Result;
-use openvm::host::{compute_hint_key_for_verify_openvm_stark, encode_rv32_public_values};
 use openvm_build::GuestOptions;
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, ContinuationVmProof, ExecutionError,
         GenerationError, SingleSegmentVmExecutor, SystemConfig, VmConfig, VmExecutor,
-        DEFAULT_MAX_NUM_PUBLIC_VALUES,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
@@ -29,11 +27,9 @@ use openvm_native_recursion::{
         wrapper::Halo2WrapperProvingKey,
         RawEvmProof,
     },
-    hints::Hintable,
     types::InnerConfig,
     vars::StarkProofVariable,
 };
-use openvm_rv32im_guest::hint_load_by_key_encode;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
@@ -41,7 +37,7 @@ use openvm_sdk::{
     codec::{Decode, Encode},
     commit::AppExecutionCommit,
     config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config, SdkSystemConfig, SdkVmConfig},
-    keygen::{AggStarkProvingKey, AppProvingKey},
+    keygen::AppProvingKey,
     types::{EvmHalo2Verifier, EvmProof},
     DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
@@ -577,91 +573,4 @@ fn test_segmentation_retry() {
         })
         .sum();
     assert!(new_total_height < total_height);
-}
-#[test]
-fn test_verify_openvm_stark_e2e() -> Result<()> {
-    const ASM_FILENAME: &str = "root_verifier.asm";
-    let sdk = Sdk::new();
-    let guest_opts = GuestOptions::default();
-    let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    pkg_dir.push("guest/fib");
-    let elf = sdk.build(guest_opts.clone(), &pkg_dir, &Default::default())?;
-
-    let vm_config = SdkVmConfig::builder()
-        .system(SdkSystemConfig {
-            config: SystemConfig::default().with_continuations(),
-        })
-        .rv32i(Default::default())
-        .rv32m(Default::default())
-        .io(Default::default())
-        .native(Default::default())
-        .build();
-    assert!(vm_config.system.config.continuation_enabled);
-
-    let app_exe = sdk.transpile(elf, vm_config.transpiler())?;
-    let fri_params = FriParameters::new_for_testing(LEAF_LOG_BLOWUP);
-    let app_config = AppConfig::new_with_leaf_fri_params(fri_params, vm_config.clone(), fri_params);
-
-    let app_pk = sdk.app_keygen(app_config.clone())?;
-    let committed_app_exe = sdk.commit_app_exe(fri_params, app_exe.clone())?;
-
-    let commits =
-        AppExecutionCommit::compute(&vm_config, &committed_app_exe, &app_pk.leaf_committed_exe);
-
-    let agg_pk = AggStarkProvingKey::keygen(AggStarkConfig {
-        max_num_user_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
-        leaf_fri_params: FriParameters::new_for_testing(LEAF_LOG_BLOWUP),
-        internal_fri_params: FriParameters::new_for_testing(INTERNAL_LOG_BLOWUP),
-        root_fri_params: FriParameters::new_for_testing(ROOT_LOG_BLOWUP),
-        profiling: false,
-        compiler_options: CompilerOptions {
-            enable_cycle_tracker: true,
-            ..Default::default()
-        },
-        root_max_constraint_degree: (1 << ROOT_LOG_BLOWUP) + 1,
-    });
-    let asm = sdk.generate_root_verifier_asm(&agg_pk);
-    let asm_path = format!(
-        "{}/guest/verify_openvm_stark/{}",
-        env!("CARGO_MANIFEST_DIR"),
-        ASM_FILENAME
-    );
-    std::fs::write(asm_path, asm)?;
-
-    let e2e_stark_proof = sdk.generate_e2e_stark_proof(
-        Arc::new(app_pk),
-        committed_app_exe,
-        agg_pk,
-        StdIn::default(),
-    )?;
-
-    let verify_exe = {
-        let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-        pkg_dir.push("guest/verify_openvm_stark");
-        let elf = sdk.build(guest_opts.clone(), &pkg_dir, &Default::default())?;
-        sdk.transpile(elf, vm_config.transpiler())?
-    };
-
-    // app_exe publishes 7th and 8th fibonacci numbers.
-    let pvs = [13u32, 21, 0, 0, 0, 0, 0, 0];
-    let pvs_u32 = encode_rv32_public_values(&pvs);
-
-    let mut stdin = StdIn::default();
-    let key = compute_hint_key_for_verify_openvm_stark(
-        ASM_FILENAME,
-        &commits.exe_commit,
-        &commits.vm_commit,
-        &pvs_u32,
-    );
-    let to_encode: Vec<Vec<F>> = e2e_stark_proof.proof.write();
-    let value = hint_load_by_key_encode(&to_encode);
-    stdin.add_key_value(key, value);
-
-    stdin.write(&commits.exe_commit);
-    stdin.write(&commits.vm_commit);
-    stdin.write(&pvs_u32);
-
-    sdk.execute(verify_exe, vm_config, stdin)?;
-
-    Ok(())
 }
