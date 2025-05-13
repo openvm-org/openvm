@@ -86,7 +86,12 @@ pub struct BuildArgs {
     )]
     pub exe_commit_output: PathBuf,
 
-    #[arg(long, default_value = OPENVM_DEFAULT_INIT_FILE_NAME, help = "Name of the init file")]
+    #[arg(
+        long,
+        default_value = OPENVM_DEFAULT_INIT_FILE_NAME,
+        help = "Name of the init file",
+        help_heading = "OpenVM Options"
+    )]
     pub init_file_name: String,
 }
 
@@ -265,10 +270,7 @@ pub struct BuildCargoArgs {
 }
 
 // Returns the path to the ELF file if it is unique.
-pub(crate) fn build(
-    build_args: &BuildArgs,
-    cargo_args: &BuildCargoArgs,
-) -> Result<Option<Vec<PathBuf>>> {
+pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Option<Vec<PathBuf>>> {
     println!("[openvm] Building the package...");
 
     // Find manifest directory using either manifest_path or find_manifest_dir
@@ -324,12 +326,14 @@ pub(crate) fn build(
         guest_options.options.push(example.clone());
     }
 
+    let all_bins = cargo_args.bins || cargo_args.all_targets;
+    let all_examples = cargo_args.examples || cargo_args.all_targets;
+
     let boolean_flags = [
         ("--workspace", cargo_args.workspace),
         ("--lib", cargo_args.lib),
-        ("--bins", cargo_args.bins),
-        ("--examples", cargo_args.examples),
-        ("--all-targets", cargo_args.all_targets),
+        ("--bins", all_bins),
+        ("--examples", all_examples),
         ("--all-features", cargo_args.all_features),
         ("--no-default-features", cargo_args.no_default_features),
         ("--verbose", cargo_args.verbose),
@@ -382,9 +386,9 @@ pub(crate) fn build(
                     // types). If no target selection flags are set, then all bin targets are
                     // built by default.
                     if target.is_example() {
-                        return cargo_args.examples || cargo_args.example.contains(&target.name);
+                        return all_examples || cargo_args.example.contains(&target.name);
                     } else if target.is_bin() {
-                        return cargo_args.bins
+                        return all_bins
                             || cargo_args.bin.contains(&target.name)
                             || (!cargo_args.examples
                                 && cargo_args.bin.is_empty()
@@ -446,64 +450,4 @@ pub(crate) fn build(
     // Return elf paths of all targets for all built packages
     println!("[openvm] Successfully built the packages");
     Ok(Some(elf_paths))
-}
-
-#[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
-
-    use eyre::Result;
-    use openvm_build::RUSTC_TARGET;
-
-    use super::*;
-
-    #[test]
-    fn test_build_with_profile() -> Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let target_dir = temp_dir.path();
-        let build_args = BuildArgs {
-            no_transpile: true,
-            config: PathBuf::from(DEFAULT_APP_CONFIG_PATH),
-            exe_output: PathBuf::from(DEFAULT_APP_EXE_PATH),
-            committed_exe_output: PathBuf::from(DEFAULT_COMMITTED_APP_EXE_PATH),
-            exe_commit_output: PathBuf::from(DEFAULT_EXE_COMMIT_PATH),
-            init_file_name: OPENVM_DEFAULT_INIT_FILE_NAME.to_string(),
-        };
-
-        let cargo_args = BuildCargoArgs {
-            package: vec![],
-            workspace: false,
-            exclude: vec![],
-            lib: false,
-            bin: vec![],
-            bins: false,
-            example: vec![],
-            examples: false,
-            all_targets: false,
-            all_features: false,
-            no_default_features: false,
-            features: vec![],
-            profile: "dev".to_string(),
-            target_dir: Some(target_dir.to_path_buf()),
-            verbose: false,
-            quiet: false,
-            color: "always".to_string(),
-            manifest_path: Some(
-                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .join("example")
-                    .join("Cargo.toml"),
-            ),
-            ignore_rust_version: false,
-            locked: false,
-            offline: false,
-            frozen: false,
-        };
-        build(&build_args, &cargo_args)?;
-        assert!(
-            target_dir.join(RUSTC_TARGET).join("debug").exists(),
-            "did not build with dev profile"
-        );
-        temp_dir.close()?;
-        Ok(())
-    }
 }
