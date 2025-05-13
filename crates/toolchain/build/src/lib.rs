@@ -66,6 +66,27 @@ pub fn get_package(manifest_dir: impl AsRef<Path>) -> Package {
     matching.pop().unwrap()
 }
 
+/// Returns all packages from the Cargo.toml manifest at the given `manifest_dir`.
+pub fn get_workspace_packages(manifest_dir: impl AsRef<Path>) -> Vec<Package> {
+    let manifest_path = fs::canonicalize(manifest_dir.as_ref().join("Cargo.toml")).unwrap();
+    let manifest_meta = MetadataCommand::new()
+        .manifest_path(&manifest_path)
+        .no_deps()
+        .exec()
+        .unwrap_or_else(|e| {
+            panic!(
+                "cargo metadata command failed for manifest path: {}: {e:?}",
+                manifest_path.display()
+            )
+        });
+    let packages: Vec<Package> = manifest_meta
+        .packages
+        .into_iter()
+        .filter(|pkg: &Package| manifest_meta.workspace_members.contains(&pkg.id))
+        .collect();
+    packages
+}
+
 /// Determines and returns the build target directory from the Cargo manifest at
 /// the given `manifest_path`.
 pub fn get_target_dir(manifest_path: impl AsRef<Path>) -> PathBuf {
@@ -75,6 +96,18 @@ pub fn get_target_dir(manifest_path: impl AsRef<Path>) -> PathBuf {
         .exec()
         .expect("cargo metadata command failed")
         .target_directory
+        .into()
+}
+
+/// Returns the workspace root directory from the Cargo manifest at
+/// the given `manifest_path`.
+pub fn get_workspace_root(manifest_path: impl AsRef<Path>) -> PathBuf {
+    MetadataCommand::new()
+        .manifest_path(manifest_path.as_ref())
+        .no_deps()
+        .exec()
+        .expect("cargo metadata command failed")
+        .workspace_root
         .into()
 }
 
@@ -367,6 +400,72 @@ pub fn build_guest_package(
                 .map(|t| t.kind == "example")
                 .unwrap_or(false),
         ))
+    }
+}
+
+/// Generic wrapper call to cargo build
+pub fn build_generic(guest_opts: &GuestOptions) -> eyre::Result<PathBuf> {
+    if is_skip_build() || guest_opts.target_dir.is_none() {
+        return Err(eyre::eyre!("Skipping build"));
+    }
+
+    // Check if the required toolchain and rust-src component are installed, and if not, install
+    // them. This requires that `rustup` is installed.
+    if ensure_toolchain_installed(RUSTUP_TOOLCHAIN_NAME, &["rust-src"]).is_err() {
+        return Err(eyre::eyre!("rustup toolchain commands failed. Please ensure rustup is installed (https://www.rust-lang.org/tools/install)"));
+    }
+
+    let target_dir = guest_opts.target_dir.as_ref().unwrap();
+    fs::create_dir_all(target_dir).unwrap();
+    let rust_flags: Vec<_> = guest_opts.rustc_flags.iter().map(|s| s.as_str()).collect();
+
+    let mut cmd = cargo_command("build", &rust_flags);
+
+    if !guest_opts.features.is_empty() {
+        cmd.args(["--features", guest_opts.features.join(",").as_str()]);
+    }
+    cmd.args(["--target-dir", target_dir.to_str().unwrap()]);
+
+    let profile = if let Some(profile) = &guest_opts.profile {
+        profile
+    } else {
+        "release"
+    };
+    cmd.args(["--profile", profile]);
+
+    cmd.args(&guest_opts.options);
+
+    let command_string = format!(
+        "{} {}",
+        cmd.get_program().to_string_lossy(),
+        cmd.get_args()
+            .map(|arg| arg.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+    tty_println(&format!("cargo command: {command_string}"));
+
+    let mut child = cmd
+        .stderr(Stdio::piped())
+        .env("CARGO_TERM_COLOR", "always")
+        .spawn()
+        .expect("cargo build failed");
+    let stderr = child.stderr.take().unwrap();
+
+    tty_println(&format!("openvm build: Starting build for {RUSTC_TARGET}"));
+
+    for line in BufReader::new(stderr).lines() {
+        tty_println(&format!("openvm build: {}", line.unwrap()));
+    }
+
+    let res = child.wait().expect("Guest 'cargo build' failed");
+    if !res.success() {
+        Err(eyre::eyre!(
+            "Guest 'cargo build' failed with code {}",
+            res.code().unwrap_or(1)
+        ))
+    } else {
+        Ok(get_dir_with_profile(target_dir, profile, false))
     }
 }
 

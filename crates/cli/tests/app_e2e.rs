@@ -17,8 +17,8 @@ fn test_cli_app_e2e() -> Result<()> {
         &[
             "openvm",
             "build",
-            "--manifest-dir",
-            "example",
+            "--manifest-path",
+            "example/Cargo.toml",
             "--config",
             "example/openvm.toml",
             "--exe-output",
@@ -86,7 +86,10 @@ fn test_cli_app_e2e() -> Result<()> {
 #[test]
 fn test_cli_app_e2e_default_paths() -> Result<()> {
     run_cmd("cargo", &["install", "--path", ".", "--force"])?;
-    run_cmd("cargo", &["openvm", "build", "--manifest-dir", "example"])?;
+    run_cmd(
+        "cargo",
+        &["openvm", "build", "--manifest-path", "example/Cargo.toml"],
+    )?;
     run_cmd("cargo", &["openvm", "keygen"])?;
     run_cmd("cargo", &["openvm", "run"])?;
     run_cmd("cargo", &["openvm", "prove", "app"])?;
