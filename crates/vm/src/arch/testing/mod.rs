@@ -337,7 +337,6 @@ where
     pub fn finalize(mut self) -> Self {
         if let Some(memory_tester) = self.memory.take() {
             // Balance memory boundaries
-            // memory_tester.finalize();
             let mut memory_controller = memory_tester.controller;
             let range_checker = memory_controller.range_checker.clone();
             match &memory_controller.interface_chip {

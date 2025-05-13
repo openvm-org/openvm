@@ -5,8 +5,6 @@ use openvm_circuit::system::memory::MemoryController;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::Rng;
 
-use crate::system::memory::INITIAL_TIMESTAMP;
-
 pub mod air;
 
 /// A dummy testing chip that will add unconstrained messages into the [MemoryBus].
@@ -99,13 +97,6 @@ impl<F: PrimeField32> MemoryTester<F> {
             .get_mut(&N)
             .unwrap()
             .send(addr_space as u32, ptr as u32, &data, t);
-    }
-
-    /// Fills in dummy memory chips to balance the memory bus with the initial and final boundary
-    /// messages. Taking a volatile memory approach: any touched address will be initialized with
-    /// zero.
-    pub fn finalize(&mut self) {
-        panic!("should not be called");
     }
 }
 
