@@ -64,7 +64,6 @@ Similar to `moduli_declare!`, this macro also creates extern functions for arith
 extern "C" {
     fn sw_add_extern_func_Secp256k1Point(rd: usize, rs1: usize, rs2: usize);
     fn sw_double_extern_func_Secp256k1Point(rd: usize, rs1: usize);
-    fn hint_decompress_extern_func_Secp256k1Point(rs1: usize, rs2: usize);
 }
 ```
 
