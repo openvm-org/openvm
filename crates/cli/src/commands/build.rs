@@ -378,8 +378,9 @@ pub(crate) fn build(
             pkg.targets
                 .iter()
                 .filter(move |target| {
-                    // We only build bin and example targets (note they are mutually exclusive types).
-                    // If no target selection flags are set, then all bin targets are built by default.
+                    // We only build bin and example targets (note they are mutually exclusive
+                    // types). If no target selection flags are set, then all bin targets are
+                    // built by default.
                     if target.is_example() {
                         return cargo_args.examples || cargo_args.example.contains(&target.name);
                     } else if target.is_bin() {
