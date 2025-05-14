@@ -1,12 +1,7 @@
-#[cfg(feature = "pipeline")]
-use std::sync::mpsc;
 use std::{marker::PhantomData, mem, sync::Arc};
 
 use async_trait::async_trait;
-#[cfg(feature = "pipeline")]
-use openvm_circuit::arch::{ExecutionSegment, VmExecutorNextSegmentState};
-#[cfg(feature = "pipeline")]
-use openvm_circuit::system::memory::paged_vec::AddressMap;
+#[allow(unused_imports)] // for GenerationError that not used in pipeline mode
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, GenerationError, SingleSegmentVmExecutor, Streams,
@@ -14,8 +9,6 @@ use openvm_circuit::{
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
-#[cfg(feature = "pipeline")]
-use openvm_stark_backend::prover::types::ProofInput;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::PrimeField32,
@@ -29,6 +22,20 @@ use crate::prover::vm::{
     types::VmProvingKey, AsyncContinuationVmProver, AsyncSingleSegmentVmProver,
     ContinuationVmProof, ContinuationVmProver, SingleSegmentVmProver,
 };
+
+#[cfg(feature = "pipeline")]
+mod pipeline_crates {
+    pub use std::sync::mpsc;
+
+    pub use openvm_circuit::{
+        arch::{ExecutionSegment, VmExecutorNextSegmentState},
+        system::memory::paged_vec::AddressMap,
+    };
+    pub use openvm_stark_backend::prover::types::ProofInput;
+}
+
+#[cfg(feature = "pipeline")]
+use self::pipeline_crates::*;
 
 pub struct VmLocalProver<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> {
     pub pk: Arc<VmProvingKey<SC, VC>>,
@@ -73,6 +80,7 @@ impl<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> VmLocalProver<SC, VC, E>
     }
 }
 
+#[cfg(not(feature = "pipeline"))]
 const MAX_SEGMENTATION_RETRIES: usize = 4;
 
 impl<
@@ -103,6 +111,7 @@ where
 
         // This loop should typically iterate exactly once. Only in exceptional cases will the
         // segmentation produce an invalid segment and we will have to retry.
+        #[cfg(not(feature = "pipeline"))]
         let mut retries = 0;
 
         #[cfg(not(feature = "pipeline"))]

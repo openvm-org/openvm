@@ -1,18 +1,12 @@
-#[cfg(feature = "pipeline")]
-use std::sync::mpsc;
 use std::sync::Arc;
 
 use openvm_circuit::arch::ContinuationVmProof;
-#[cfg(feature = "pipeline")]
-use openvm_circuit::arch::{SingleSegmentVmExecutor, Streams, VirtualMachine};
 use openvm_continuations::verifier::{
     internal::types::InternalVmVerifierInput, leaf::types::LeafVmVerifierInput,
     root::types::RootVmVerifierInput,
 };
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
-#[cfg(feature = "pipeline")]
-use openvm_stark_backend::{config::Val, prover::types::ProofInput};
 use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::proof::Proof};
 use tracing::info_span;
 
@@ -25,6 +19,17 @@ use crate::{
     },
     NonRootCommittedExe, RootSC, F, SC,
 };
+
+#[cfg(feature = "pipeline")]
+mod pipeline_crates {
+    pub use std::sync::mpsc;
+
+    pub use openvm_circuit::arch::{SingleSegmentVmExecutor, Streams, VirtualMachine};
+    pub use openvm_stark_backend::{config::Val, prover::types::ProofInput};
+}
+
+#[cfg(feature = "pipeline")]
+use self::pipeline_crates::*;
 
 pub struct AggStarkProver<E: StarkFriEngine<SC>> {
     leaf_prover: VmLocalProver<SC, NativeConfig, E>,
