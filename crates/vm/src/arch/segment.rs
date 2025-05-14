@@ -93,10 +93,11 @@ where
     ) -> Result<ExecutionSegmentState<Mem, Ctrl::Ctx>, ExecutionError> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
-        // Call the pre-execution hook
-        self.ctrl.on_segment_start(pc, &mut self.chip_complex);
-
         let mut state = ExecutionSegmentState::new_with_pc_and_ctx(pc, ctx);
+
+        // Call the pre-execution hook
+        self.ctrl.on_segment_start(&state, &mut self.chip_complex);
+
         loop {
             // Fetch, decode and execute single instruction
             let terminated_exit_code = self.execute_instruction(&mut state, &mut prev_backtrace)?;
@@ -105,12 +106,12 @@ where
                 state.exit_code = exit_code;
                 state.is_terminated = true;
                 self.ctrl
-                    .on_terminate(state.pc, &mut self.chip_complex, exit_code);
+                    .on_terminate(&state, &mut self.chip_complex, exit_code);
                 break;
             }
-            if self.should_stop() {
+            if self.should_suspend(&state) {
                 state.exit_code = DEFAULT_SUSPEND_EXIT_CODE;
-                self.ctrl.on_segment_end(state.pc, &mut self.chip_complex);
+                self.ctrl.on_segment_end(&state, &mut self.chip_complex);
                 break;
             }
         }
@@ -196,13 +197,13 @@ where
     }
 
     /// Returns bool of whether to switch to next segment or not.
-    fn should_stop(&mut self) -> bool {
+    fn should_suspend(&mut self, state: &ExecutionSegmentState<Ctrl::Ctx>) -> bool {
         if !self.system_config().continuation_enabled {
             return false;
         }
 
         // Check with the execution control policy
-        self.ctrl.should_stop(&self.chip_complex)
+        self.ctrl.should_suspend(state, &self.chip_complex)
     }
 
     // TODO(ayush): this is not relevant for e1/e2 execution
@@ -257,7 +258,7 @@ pub type E1Ctx = ();
 pub type E1VmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, E1ExecutionControl>;
 
 // E2 (metered) execution
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct MeteredCtx {
     pub trace_heights: Vec<usize>,
     pub total_trace_cells: usize,

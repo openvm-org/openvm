@@ -337,9 +337,18 @@ impl<E, P> VmInventory<E, P> {
         self.executors.get_mut(*id)
     }
 
-    pub fn get_mut_executor_with_id(&mut self, opcode: &VmOpcode) -> Option<(&mut E, ExecutorId)> {
-        let id = self.instruction_lookup.get(opcode)?;
-        self.executors.get_mut(*id).map(|executor| (executor, *id))
+    pub fn get_mut_executor_with_index(&mut self, opcode: &VmOpcode) -> Option<(&mut E, usize)> {
+        let id = *self.instruction_lookup.get(opcode)?;
+
+        self.executors.get_mut(id).map(|executor| {
+            let insertion_id = self.insertion_order
+                    .iter()
+                    .rev()
+                    .position(|chip_id| matches!(chip_id, ChipId::Executor(exec_id) | ChipId::Periphery(exec_id) if *exec_id == id))
+                    .unwrap();
+
+            (executor, insertion_id)
+        })
     }
 
     pub fn executors(&self) -> &[E] {
@@ -826,7 +835,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     }
 
     // we always need to special case it because we need to fix the air id.
-    fn public_values_chip_idx(&self) -> Option<ExecutorId> {
+    pub(crate) fn public_values_chip_idx(&self) -> Option<ExecutorId> {
         self.config
             .has_public_values_chip()
             .then_some(Self::PV_EXECUTOR_IDX)

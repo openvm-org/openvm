@@ -527,8 +527,28 @@ where
     where
         Mem: GuestMemory,
     {
-        state.ctx.trace_heights[chip_index] += 1;
-        state.ctx.total_trace_cells += Rv32HintStoreCols::<F>::width();
+        // TODO(ayush): remove duplication
+        let &Instruction {
+            opcode,
+            a: num_words_ptr,
+            ..
+        } = instruction;
+
+        let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+
+        let num_words = if local_opcode == HINT_STOREW {
+            1
+        } else {
+            let num_words_limbs = memory_read(
+                state.memory,
+                RV32_REGISTER_AS,
+                num_words_ptr.as_canonical_u32(),
+            );
+            u32::from_le_bytes(num_words_limbs)
+        };
+
+        state.ctx.trace_heights[chip_index] += num_words as usize;
+        state.ctx.total_trace_cells += Rv32HintStoreCols::<F>::width() * num_words as usize;
         state.ctx.total_interactions += num_interactions;
 
         let state = VmStateMut {

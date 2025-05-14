@@ -437,7 +437,7 @@ where
                 Some(state.memory),
             )
             .unwrap();
-            let ctrl = MeteredExecutionControl::new(&num_interactions);
+            let ctrl = MeteredExecutionControl::new(&num_interactions, chip_complex.air_names());
             let mut segment = MeteredVmSegmentExecutor::<F, VC>::new(
                 chip_complex,
                 self.trace_height_constraints.clone(),

@@ -8,7 +8,9 @@ use openvm_rv32im_transpiler::{
 };
 use openvm_stark_sdk::{
     bench::run_with_metric_collection,
-    config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Engine},
+    config::baby_bear_poseidon2::{
+        default_engine, BabyBearPoseidon2Config, BabyBearPoseidon2Engine,
+    },
     p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -22,10 +24,10 @@ enum BuildProfile {
 // const DEFAULT_APP_CONFIG_PATH: &str = "./openvm.toml";
 
 static AVAILABLE_PROGRAMS: &[&str] = &[
-    "fibonacci_recursive",
+    // "fibonacci_recursive",
     "fibonacci_iterative",
-    "quicksort",
-    "bubblesort",
+    // "quicksort",
+    // "bubblesort",
     // "pairing",
     // "keccak256",
     // "keccak256_iter",
@@ -121,8 +123,8 @@ fn main() -> Result<()> {
 
             let transpiler = Transpiler::<BabyBear>::default()
                 .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension);
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension);
 
             let exe = VmExe::from_elf(elf, transpiler)?;
 
@@ -138,9 +140,25 @@ fn main() -> Result<()> {
             };
 
             let executor = VmExecutor::new(vm_config);
+            println!("-------------------------------------------------------");
+            println!("Metered");
+            println!("-------------------------------------------------------");
             executor
-                .execute_e2(exe, vec![], chip_interactions)
+                .execute_e2(exe.clone(), vec![], chip_interactions)
                 .expect("Failed to execute program");
+            println!("-------------------------------------------------------");
+            println!("Tracegen execute");
+            println!("-------------------------------------------------------");
+            executor
+                .execute(exe.clone(), vec![])
+                .expect("Failed to execute program");
+            println!("-------------------------------------------------------");
+            println!("Tracegen");
+            println!("-------------------------------------------------------");
+            executor
+                .execute_and_generate::<BabyBearPoseidon2Config>(exe, vec![])
+                .expect("Failed to execute program");
+            println!("-------------------------------------------------------");
 
             tracing::info!("Completed program: {}", program);
         }
