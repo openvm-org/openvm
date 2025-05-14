@@ -5,9 +5,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, E1Ctx, MeteredCtx,
-        MinimalInstruction, Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir,
-        VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, E1Ctx, E1E2ExecutionCtx,
+        MeteredCtx, MinimalInstruction, Result, StepExecutorE1, TraceStep, VmAdapterInterface,
+        VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -235,13 +235,14 @@ where
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
         >,
 {
-    fn execute_e1<Mem>(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
-        state: VmStateMut<Mem, E1Ctx>,
+        state: &mut VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
         Mem: GuestMemory,
+        Ctx: E1E2ExecutionCtx,
     {
         let Instruction { opcode, .. } = instruction;
 
@@ -252,11 +253,11 @@ where
             MulOpcode::MUL
         );
 
-        let [rs1, rs2] = self.adapter.read(state.memory, instruction).into();
+        let [rs1, rs2] = self.adapter.read(state, instruction).into();
 
         let (rd, _) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1, &rs2);
 
-        self.adapter.write(state.memory, instruction, &[rd].into());
+        self.adapter.write(state, instruction, &[rd].into());
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -265,7 +266,7 @@ where
 
     fn execute_e2<Mem>(
         &mut self,
-        state: VmStateMut<Mem, MeteredCtx>,
+        state: &mut VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()>
@@ -273,12 +274,6 @@ where
         Mem: GuestMemory,
     {
         state.ctx.trace_heights[chip_index] += 1;
-
-        let state = VmStateMut {
-            pc: state.pc,
-            memory: state.memory,
-            ctx: &mut E1Ctx::default(),
-        };
         self.execute_e1(state, instruction)?;
 
         Ok(())

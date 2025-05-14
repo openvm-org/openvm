@@ -28,7 +28,7 @@ use serde_big_array::BigArray;
 
 use super::memory::{online::TracingMemory, MemoryAuxColsFactory};
 use crate::{
-    arch::{AdapterExecutorE1, AdapterTraceStep},
+    arch::{AdapterExecutorE1, AdapterTraceStep, VmStateMut},
     system::memory::{online::GuestMemory, RecordId},
 };
 
@@ -243,12 +243,15 @@ impl<F, const R: usize, const W: usize> AdapterExecutorE1<F> for NativeAdapterSt
 where
     F: PrimeField32,
 {
-    const WIDTH: usize = size_of::<NativeAdapterCols<u8, R, W>>();
     type ReadData = [F; R];
     type WriteData = [F; W];
 
     #[inline(always)]
-    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
+    fn read<Mem, Ctx>(
+        &self,
+        state: &mut VmStateMut<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
     where
         Mem: GuestMemory,
     {
@@ -258,28 +261,42 @@ where
 
         let mut reads = [F::ZERO; R];
         if R >= 1 {
-            let [value] =
-                unsafe { memory.read::<F, 1>(e.as_canonical_u32(), b.as_canonical_u32()) };
+            let [value] = unsafe {
+                state
+                    .memory
+                    .read::<F, 1>(e.as_canonical_u32(), b.as_canonical_u32())
+            };
             reads[0] = value;
         }
         if R >= 2 {
-            let [value] =
-                unsafe { memory.read::<F, 1>(f.as_canonical_u32(), c.as_canonical_u32()) };
+            let [value] = unsafe {
+                state
+                    .memory
+                    .read::<F, 1>(f.as_canonical_u32(), c.as_canonical_u32())
+            };
             reads[1] = value;
         }
         reads
     }
 
     #[inline(always)]
-    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData)
-    where
+    fn write<Mem, Ctx>(
+        &self,
+        state: &mut VmStateMut<Mem, Ctx>,
+        instruction: &Instruction<F>,
+        data: &Self::WriteData,
+    ) where
         Mem: GuestMemory,
     {
         assert!(W <= 1);
 
         let &Instruction { a, d, .. } = instruction;
         if W >= 1 {
-            unsafe { memory.write(d.as_canonical_u32(), a.as_canonical_u32(), data) };
+            unsafe {
+                state
+                    .memory
+                    .write(d.as_canonical_u32(), a.as_canonical_u32(), data)
+            };
         }
     }
 }

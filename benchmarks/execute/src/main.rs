@@ -24,10 +24,10 @@ enum BuildProfile {
 // const DEFAULT_APP_CONFIG_PATH: &str = "./openvm.toml";
 
 static AVAILABLE_PROGRAMS: &[&str] = &[
-    "fibonacci_recursive",
-    "fibonacci_iterative",
+    // "fibonacci_recursive",
+    // "fibonacci_iterative",
     "quicksort",
-    "bubblesort",
+    // "bubblesort",
     // "pairing",
     // "keccak256",
     // "keccak256_iter",
@@ -154,18 +154,12 @@ fn main() -> Result<()> {
                 .execute_e2(exe.clone(), vec![], widths, interactions)
                 .expect("Failed to execute program");
             println!("-------------------------------------------------------");
-            println!("Tracegen execute");
+            println!("Tracegen");
             println!("-------------------------------------------------------");
             executor
-                .execute(exe.clone(), vec![])
+                .execute(exe, vec![])
                 .expect("Failed to execute program");
             println!("-------------------------------------------------------");
-            // println!("Tracegen");
-            // println!("-------------------------------------------------------");
-            // executor
-            //     .execute_and_generate::<BabyBearPoseidon2Config>(exe, vec![])
-            //     .expect("Failed to execute program");
-            // println!("-------------------------------------------------------");
 
             tracing::info!("Completed program: {}", program);
         }

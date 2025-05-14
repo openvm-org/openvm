@@ -2,8 +2,8 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, E1Ctx, MeteredCtx, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, E1Ctx, E1E2ExecutionCtx,
+        MeteredCtx, Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -378,20 +378,21 @@ where
             WriteData = [u8; NUM_CELLS],
         >,
 {
-    fn execute_e1<Mem>(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
-        state: VmStateMut<Mem, E1Ctx>,
+        state: &mut VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
         Mem: GuestMemory,
+        Ctx: E1E2ExecutionCtx,
     {
         let Instruction { opcode, .. } = instruction;
 
         // Get the local opcode for this instruction
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let ((prev_data, read_data), shift_amount) = self.adapter.read(state.memory, instruction);
+        let ((prev_data, read_data), shift_amount) = self.adapter.read(state, instruction);
         let prev_data = prev_data.map(F::from_canonical_u8);
         let read_data = read_data.map(F::from_canonical_u8);
 
@@ -399,7 +400,7 @@ where
         let write_data = run_write_data(local_opcode, read_data, prev_data, shift_amount);
         let write_data = write_data.map(|x| x.as_canonical_u32() as u8);
 
-        self.adapter.write(state.memory, instruction, &write_data);
+        self.adapter.write(state, instruction, &write_data);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -408,7 +409,7 @@ where
 
     fn execute_e2<Mem>(
         &mut self,
-        state: VmStateMut<Mem, MeteredCtx>,
+        state: &mut VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()>
@@ -416,12 +417,6 @@ where
         Mem: GuestMemory,
     {
         state.ctx.trace_heights[chip_index] += 1;
-
-        let state = VmStateMut {
-            pc: state.pc,
-            memory: state.memory,
-            ctx: &mut E1Ctx::default(),
-        };
         self.execute_e1(state, instruction)?;
 
         Ok(())

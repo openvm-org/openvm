@@ -1,5 +1,5 @@
 use openvm_instructions::instruction::Instruction;
-use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
+use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::Matrix, ChipUsageGetter};
 
 use super::{
     ChipId, E1Ctx, ExecutionError, ExecutionSegmentState, MeteredCtx, TracegenCtx, VmChipComplex,
@@ -7,7 +7,7 @@ use super::{
 };
 use crate::{
     arch::{ExecutionState, InsExecutorE1, InstructionExecutor},
-    system::memory::{online::GuestMemory, AddressMap, MemoryImage, PAGE_SIZE},
+    system::memory::{adapter::GenericAccessAdapterChip, interface::MemoryInterface, MemoryImage},
 };
 
 // Metered execution thresholds
@@ -25,8 +25,6 @@ where
     F: PrimeField32,
     VC: VmConfig<F>,
 {
-    /// Guest memory type
-    type Mem: GuestMemory;
     /// Host context
     type Ctx;
 
@@ -95,7 +93,6 @@ where
     VC: VmConfig<F>,
 {
     type Ctx = TracegenCtx;
-    type Mem = AddressMap<PAGE_SIZE>;
 
     fn should_suspend(
         &mut self,
@@ -152,7 +149,74 @@ where
         {
             println!("{:<10} \t|\t{}", height, name);
         }
-        // dbg!(chip_complex.current_trace_cells());
+
+        // Print adapter names, widths, and cursor positions
+        let memory = &chip_complex.memory_controller().memory;
+        let air_names = memory.access_adapter_inventory.air_names();
+        let widths = &memory.adapter_inventory_trace_cursor.widths;
+        let cursors = &memory.adapter_inventory_trace_cursor.cursors;
+        println!("Before finalize:");
+        for ((name, &width), cursor) in air_names.iter().zip(widths.iter()).zip(cursors.iter()) {
+            println!(
+                "{:<10} \t|\t{:<5} \t|\t{}",
+                cursor.position() as usize / width,
+                width,
+                name
+            );
+        }
+
+        match &chip_complex.memory_controller().interface_chip {
+            MemoryInterface::Persistent {
+                boundary_chip,
+                merkle_chip,
+                ..
+            } => {
+                dbg!(boundary_chip.touched_labels.len());
+                dbg!(merkle_chip.num_touched_nonleaves);
+            }
+            MemoryInterface::Volatile { boundary_chip } => {
+                if let Some(final_memory) = &boundary_chip.final_memory {
+                    dbg!(final_memory.len());
+                }
+            }
+        };
+
+        // TODO(ayush): remove
+        chip_complex.finalize_memory();
+        println!("After finalize:");
+        for chip in chip_complex
+            .memory_controller()
+            .access_adapters
+            .chips
+            .iter()
+        {
+            let name = chip.air_name();
+            let width = chip.trace_width();
+            let height = match chip {
+                GenericAccessAdapterChip::N2(c) => c.trace.height(),
+                GenericAccessAdapterChip::N4(c) => c.trace.height(),
+                GenericAccessAdapterChip::N8(c) => c.trace.height(),
+                GenericAccessAdapterChip::N16(c) => c.trace.height(),
+                GenericAccessAdapterChip::N32(c) => c.trace.height(),
+            };
+            println!("{:<10} \t|\t{:<5} \t|\t{}", height, width, name);
+        }
+
+        match &chip_complex.memory_controller().interface_chip {
+            MemoryInterface::Persistent {
+                boundary_chip,
+                merkle_chip,
+                ..
+            } => {
+                dbg!(boundary_chip.touched_labels.len());
+                dbg!(merkle_chip.num_touched_nonleaves);
+            }
+            MemoryInterface::Volatile { boundary_chip } => {
+                if let Some(final_memory) = &boundary_chip.final_memory {
+                    dbg!(final_memory.len());
+                }
+            }
+        };
 
         let timestamp = chip_complex.memory_controller().timestamp();
         chip_complex
@@ -208,7 +272,6 @@ where
     VC::Executor: InsExecutorE1<F>,
 {
     type Ctx = E1Ctx;
-    type Mem = AddressMap<PAGE_SIZE>;
 
     fn should_suspend(
         &mut self,
@@ -256,12 +319,12 @@ where
         let &Instruction { opcode, .. } = instruction;
 
         if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
-            let vm_state = VmStateMut {
+            let mut vm_state = VmStateMut {
                 pc: &mut state.pc,
                 memory: state.memory.as_mut().unwrap(),
                 ctx: &mut state.ctx,
             };
-            executor.execute_e1(vm_state, instruction)?;
+            executor.execute_e1(&mut vm_state, instruction)?;
         } else {
             return Err(ExecutionError::DisabledOperation {
                 pc: state.pc,
@@ -321,7 +384,6 @@ where
     VC::Executor: InsExecutorE1<F>,
 {
     type Ctx = MeteredCtx;
-    type Mem = AddressMap<PAGE_SIZE>;
 
     fn should_suspend(
         &mut self,
@@ -410,6 +472,9 @@ where
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         _exit_code: u32,
     ) {
+        dbg!(state.ctx.memory_ops);
+        dbg!(state.ctx.memory_addresses.len());
+
         for ((name, height), width) in self
             .air_names
             .iter()
@@ -444,13 +509,13 @@ where
 
         if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode) {
             let memory_controller = &mut chip_complex.base.memory_controller;
-            let vm_state = VmStateMut {
+            let mut vm_state = VmStateMut {
                 pc: &mut state.pc,
                 memory: &mut memory_controller.memory.data,
                 ctx: &mut state.ctx,
             };
             let index = offset + i;
-            executor.execute_e2(vm_state, instruction, index)?;
+            executor.execute_e2(&mut vm_state, instruction, index)?;
         } else {
             return Err(ExecutionError::DisabledOperation {
                 pc: state.pc,

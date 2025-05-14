@@ -452,7 +452,7 @@ where
                 segment.metrics = state.metrics;
             }
 
-            let ctx = MeteredCtx::new_with_len(widths.len());
+            let ctx = MeteredCtx::new_with_len(interactions.len());
             let exec_state = metrics_span("execute_time_ms", || {
                 segment.execute_from_pc_with_ctx(state.pc, ctx)
             })?;

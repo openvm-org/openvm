@@ -114,8 +114,8 @@ pub struct TracingMemory<F> {
     /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
     /// all memory accesses in `addr_space` must be aligned to this block size.
     pub(super) min_block_size: Vec<u32>,
-    pub(super) access_adapter_inventory: AccessAdapterInventory<F>,
-    pub(super) adapter_inventory_trace_cursor: AdapterInventoryTraceCursor<F>,
+    pub access_adapter_inventory: AccessAdapterInventory<F>,
+    pub adapter_inventory_trace_cursor: AdapterInventoryTraceCursor<F>,
 }
 
 impl<F: PrimeField32> TracingMemory<F> {

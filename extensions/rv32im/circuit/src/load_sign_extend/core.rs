@@ -5,8 +5,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, E1Ctx, MeteredCtx, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, E1Ctx, E1E2ExecutionCtx,
+        MeteredCtx, Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -314,13 +314,14 @@ where
             WriteData = [u8; NUM_CELLS],
         >,
 {
-    fn execute_e1<Mem>(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
-        state: VmStateMut<Mem, E1Ctx>,
+        state: &mut VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
         Mem: GuestMemory,
+        Ctx: E1E2ExecutionCtx,
     {
         let Instruction { opcode, .. } = instruction;
 
@@ -328,7 +329,7 @@ where
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
 
-        let ((_, read_data), shift_amount) = self.adapter.read(state.memory, instruction);
+        let ((_, read_data), shift_amount) = self.adapter.read(state, instruction);
         let read_data = read_data.map(F::from_canonical_u8);
 
         // TODO(ayush): clean this up for e1
@@ -340,7 +341,7 @@ where
         );
         let write_data = write_data.map(|x| x.as_canonical_u32() as u8);
 
-        self.adapter.write(state.memory, instruction, &write_data);
+        self.adapter.write(state, instruction, &write_data);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -349,7 +350,7 @@ where
 
     fn execute_e2<Mem>(
         &mut self,
-        state: VmStateMut<Mem, MeteredCtx>,
+        state: &mut VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()>
@@ -357,12 +358,6 @@ where
         Mem: GuestMemory,
     {
         state.ctx.trace_heights[chip_index] += 1;
-
-        let state = VmStateMut {
-            pc: state.pc,
-            memory: state.memory,
-            ctx: &mut E1Ctx::default(),
-        };
         self.execute_e1(state, instruction)?;
 
         Ok(())

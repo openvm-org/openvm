@@ -5,8 +5,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, E1Ctx, ImmInstruction, MeteredCtx,
-        Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, E1Ctx, E1E2ExecutionCtx,
+        ImmInstruction, MeteredCtx, Result, StepExecutorE1, TraceStep, VmAdapterInterface,
+        VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -227,19 +228,20 @@ where
     F: PrimeField32,
     A: 'static + for<'a> AdapterExecutorE1<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
 {
-    fn execute_e1<Mem>(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
-        state: VmStateMut<Mem, E1Ctx>,
+        state: &mut VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
         Mem: GuestMemory,
+        Ctx: E1E2ExecutionCtx,
     {
         let &Instruction { opcode, c: imm, .. } = instruction;
 
         let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let [rs1, rs2] = self.adapter.read(state.memory, instruction).into();
+        let [rs1, rs2] = self.adapter.read(state, instruction).into();
 
         // TODO(ayush): probably don't need the other values
         let (cmp_result, _, _) = run_eq::<F, NUM_LIMBS>(branch_eq_opcode, &rs1, &rs2);
@@ -257,7 +259,7 @@ where
 
     fn execute_e2<Mem>(
         &mut self,
-        state: VmStateMut<Mem, MeteredCtx>,
+        state: &mut VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()>
@@ -265,12 +267,6 @@ where
         Mem: GuestMemory,
     {
         state.ctx.trace_heights[chip_index] += 1;
-
-        let state = VmStateMut {
-            pc: state.pc,
-            memory: state.memory,
-            ctx: &mut E1Ctx::default(),
-        };
         self.execute_e1(state, instruction)?;
 
         Ok(())

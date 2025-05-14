@@ -5,8 +5,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        E1Ctx, ExecutionBridge, ExecutionError, ExecutionState, MeteredCtx, NewVmChipWrapper,
-        Result, StepExecutorE1, Streams, TraceStep, VmStateMut,
+        E1Ctx, E1E2ExecutionCtx, ExecutionBridge, ExecutionError, ExecutionState, MeteredCtx,
+        NewVmChipWrapper, Result, StepExecutorE1, Streams, TraceStep, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -452,13 +452,14 @@ impl<F> StepExecutorE1<F> for Rv32HintStoreStep<F>
 where
     F: PrimeField32,
 {
-    fn execute_e1<Mem>(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
-        state: VmStateMut<Mem, E1Ctx>,
+        state: &mut VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
         Mem: GuestMemory,
+        Ctx: E1E2ExecutionCtx,
     {
         let &Instruction {
             opcode,
@@ -519,7 +520,7 @@ where
 
     fn execute_e2<Mem>(
         &mut self,
-        state: VmStateMut<Mem, MeteredCtx>,
+        state: &mut VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()>
@@ -547,12 +548,6 @@ where
         };
 
         state.ctx.trace_heights[chip_index] += num_words as usize;
-
-        let state = VmStateMut {
-            pc: state.pc,
-            memory: state.memory,
-            ctx: &mut E1Ctx::default(),
-        };
         self.execute_e1(state, instruction)?;
 
         Ok(())

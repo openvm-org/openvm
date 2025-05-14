@@ -26,8 +26,9 @@ use serde_big_array::BigArray;
 use super::memory::{online::GuestMemory, MemoryController};
 use crate::{
     arch::{
-        E1Ctx, ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutorE1,
-        InstructionExecutor, MeteredCtx, PcIncOrSet, PhantomSubExecutor, Streams, VmStateMut,
+        E1Ctx, E1E2ExecutionCtx, ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState,
+        InsExecutorE1, InstructionExecutor, MeteredCtx, PcIncOrSet, PhantomSubExecutor, Streams,
+        VmStateMut,
     },
     system::program::ProgramBus,
 };
@@ -128,14 +129,15 @@ impl<F> InsExecutorE1<F> for PhantomChip<F>
 where
     F: PrimeField32,
 {
-    fn execute_e1<Mem>(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
-        state: VmStateMut<Mem, E1Ctx>,
+        state: &mut VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError>
     where
-        Mem: GuestMemory,
         F: PrimeField32,
+        Mem: GuestMemory,
+        Ctx: E1E2ExecutionCtx,
     {
         let &Instruction {
             opcode, a, b, c, ..
@@ -180,19 +182,14 @@ where
 
     fn execute_e2<Mem>(
         &mut self,
-        state: VmStateMut<Mem, MeteredCtx>,
+        state: &mut VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
-        chip_index: usize,
+        _chip_index: usize,
     ) -> Result<(), ExecutionError>
     where
         Mem: GuestMemory,
         F: PrimeField32,
     {
-        let state = VmStateMut {
-            pc: state.pc,
-            memory: state.memory,
-            ctx: &mut E1Ctx::default(),
-        };
         self.execute_e1(state, instruction)?;
 
         Ok(())

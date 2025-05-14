@@ -16,7 +16,8 @@ use openvm_stark_backend::{
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{
-    E1Ctx, ExecutionState, InsExecutorE1, InstructionExecutor, MeteredCtx, Result, VmStateMut,
+    E1Ctx, E1E2ExecutionCtx, ExecutionState, InsExecutorE1, InstructionExecutor, MeteredCtx,
+    Result, VmStateMut,
 };
 use crate::system::memory::{
     online::{GuestMemory, TracingMemory},
@@ -386,33 +387,42 @@ pub trait AdapterExecutorE1<F>
 where
     F: PrimeField32,
 {
-    /// Adapter row width
-    const WIDTH: usize;
     type ReadData;
     type WriteData;
 
-    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
+    fn read<Mem, Ctx>(
+        &self,
+        state: &mut VmStateMut<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
     where
-        Mem: GuestMemory;
+        Mem: GuestMemory,
+        Ctx: E1E2ExecutionCtx;
 
-    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData)
-    where
-        Mem: GuestMemory;
+    fn write<Mem, Ctx>(
+        &self,
+        state: &mut VmStateMut<Mem, Ctx>,
+        instruction: &Instruction<F>,
+        data: &Self::WriteData,
+    ) where
+        Mem: GuestMemory,
+        Ctx: E1E2ExecutionCtx;
 }
 
 // TODO: Rename core/step to operator
 pub trait StepExecutorE1<F> {
-    fn execute_e1<Mem>(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
-        state: VmStateMut<Mem, E1Ctx>,
+        state: &mut VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
-        Mem: GuestMemory;
+        Mem: GuestMemory,
+        Ctx: E1E2ExecutionCtx;
 
     fn execute_e2<Mem>(
         &mut self,
-        state: VmStateMut<Mem, MeteredCtx>,
+        state: &mut VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()>
@@ -425,20 +435,21 @@ where
     F: PrimeField32,
     S: StepExecutorE1<F>,
 {
-    fn execute_e1<Mem>(
+    fn execute_e1<Mem, Ctx>(
         &mut self,
-        state: VmStateMut<Mem, E1Ctx>,
+        state: &mut VmStateMut<Mem, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
         Mem: GuestMemory,
+        Ctx: E1E2ExecutionCtx,
     {
         self.step.execute_e1(state, instruction)
     }
 
     fn execute_e2<Mem>(
         &mut self,
-        state: VmStateMut<Mem, MeteredCtx>,
+        state: &mut VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()>

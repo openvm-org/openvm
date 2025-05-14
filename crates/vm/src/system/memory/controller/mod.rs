@@ -572,11 +572,8 @@ impl<F: PrimeField32> MemoryController<F> {
 
         for i in 0..self.access_adapters.num_access_adapters() {
             let width = self.memory.adapter_inventory_trace_cursor.width(i);
-            self.access_adapters.set_trace(
-                i,
-                self.memory.adapter_inventory_trace_cursor.extract_trace(i),
-                width,
-            );
+            let trace = self.memory.adapter_inventory_trace_cursor.extract_trace(i);
+            self.access_adapters.set_trace(i, trace, width);
         }
 
         final_memory

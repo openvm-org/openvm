@@ -3,7 +3,8 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface,
-        ExecutionBridge, ExecutionState, SignedImmInstruction, VmAdapterAir,
+        E1E2ExecutionCtx, ExecutionBridge, ExecutionState, SignedImmInstruction, VmAdapterAir,
+        VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -23,7 +24,9 @@ use openvm_stark_backend::{
 };
 
 use super::RV32_REGISTER_NUM_LIMBS;
-use crate::adapters::{memory_read, memory_write, tracing_read, tracing_write};
+use crate::adapters::{
+    memory_read_from_state, memory_write_from_state, tracing_read, tracing_write,
+};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
@@ -236,30 +239,39 @@ impl<F> AdapterExecutorE1<F> for Rv32JalrAdapterStep
 where
     F: PrimeField32,
 {
-    const WIDTH: usize = size_of::<Rv32JalrAdapterCols<u8>>();
     // TODO(ayush): directly use u32
     type ReadData = [u8; RV32_REGISTER_NUM_LIMBS];
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
     #[inline(always)]
-    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
+    fn read<Mem, Ctx>(
+        &self,
+        state: &mut VmStateMut<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
     where
         Mem: GuestMemory,
+        Ctx: E1E2ExecutionCtx,
     {
         let Instruction { b, d, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
         let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
-            memory_read(memory, RV32_REGISTER_AS, b.as_canonical_u32());
+            memory_read_from_state(state, RV32_REGISTER_AS, b.as_canonical_u32());
 
         rs1
     }
 
     #[inline(always)]
-    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData)
-    where
+    fn write<Mem, Ctx>(
+        &self,
+        state: &mut VmStateMut<Mem, Ctx>,
+        instruction: &Instruction<F>,
+        data: &Self::WriteData,
+    ) where
         Mem: GuestMemory,
+        Ctx: E1E2ExecutionCtx,
     {
         let Instruction {
             a, d, f: enabled, ..
@@ -268,7 +280,7 @@ where
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
         if *enabled != F::ZERO {
-            memory_write(memory, RV32_REGISTER_AS, a.as_canonical_u32(), data);
+            memory_write_from_state(state, RV32_REGISTER_AS, a.as_canonical_u32(), data);
         }
     }
 }

@@ -123,18 +123,18 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
 
 pub struct PersistentBoundaryChip<F, const CHUNK: usize> {
     pub air: PersistentBoundaryAir<CHUNK>,
-    touched_labels: TouchedLabels<F, CHUNK>,
+    pub touched_labels: TouchedLabels<F, CHUNK>,
     overridden_height: Option<usize>,
 }
 
 #[derive(Debug)]
-enum TouchedLabels<F, const CHUNK: usize> {
+pub enum TouchedLabels<F, const CHUNK: usize> {
     Running(FxHashSet<(u32, u32)>),
     Final(Vec<FinalTouchedLabel<F, CHUNK>>),
 }
 
 #[derive(Debug)]
-struct FinalTouchedLabel<F, const CHUNK: usize> {
+pub struct FinalTouchedLabel<F, const CHUNK: usize> {
     address_space: u32,
     label: u32,
     init_values: [F; CHUNK],
@@ -159,7 +159,8 @@ impl<F: PrimeField32, const CHUNK: usize> TouchedLabels<F, CHUNK> {
             _ => panic!("Cannot touch after finalization"),
         }
     }
-    fn len(&self) -> usize {
+
+    pub fn len(&self) -> usize {
         match self {
             TouchedLabels::Running(touched_labels) => touched_labels.len(),
             TouchedLabels::Final(touched_labels) => touched_labels.len(),

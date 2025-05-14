@@ -1,10 +1,13 @@
 use std::ops::Mul;
 
-use openvm_circuit::system::memory::{
-    offline_checker::{MemoryBaseAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
-    online::{GuestMemory, TracingMemory},
-    tree::public_values::PUBLIC_VALUES_AS,
-    MemoryController, RecordId,
+use openvm_circuit::{
+    arch::{E1E2ExecutionCtx, VmStateMut},
+    system::memory::{
+        offline_checker::{MemoryBaseAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
+        online::{GuestMemory, TracingMemory},
+        tree::public_values::PUBLIC_VALUES_AS,
+        MemoryController, RecordId,
+    },
 };
 use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
@@ -90,6 +93,36 @@ pub fn memory_write<Mem, const N: usize>(
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
     unsafe { memory.write::<u8, N>(address_space, ptr, data) }
+}
+
+#[inline(always)]
+pub fn memory_read_from_state<Mem, Ctx, const N: usize>(
+    state: &mut VmStateMut<Mem, Ctx>,
+    address_space: u32,
+    ptr: u32,
+) -> [u8; N]
+where
+    Mem: GuestMemory,
+    Ctx: E1E2ExecutionCtx,
+{
+    state.ctx.on_memory_read(address_space, ptr, N);
+
+    memory_read(state.memory, address_space, ptr)
+}
+
+#[inline(always)]
+pub fn memory_write_from_state<Mem, Ctx, const N: usize>(
+    state: &mut VmStateMut<Mem, Ctx>,
+    address_space: u32,
+    ptr: u32,
+    data: &[u8; N],
+) where
+    Mem: GuestMemory,
+    Ctx: E1E2ExecutionCtx,
+{
+    state.ctx.on_memory_write(address_space, ptr, N);
+
+    memory_write(state.memory, address_space, ptr, data)
 }
 
 /// Atomic read operation which increments the timestamp by 1.

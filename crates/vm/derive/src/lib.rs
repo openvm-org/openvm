@@ -142,27 +142,28 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                 .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InsExecutorE1<F> });
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<F> for #name #ty_generics #where_clause {
-                    fn execute_e1<Mem>(
+                    fn execute_e1<Mem, Ctx>(
                         &mut self,
-                        state: ::openvm_circuit::arch::VmStateMut<Mem, ::openvm_circuit::arch::E1Ctx>,
+                        state: &mut ::openvm_circuit::arch::VmStateMut<Mem, Ctx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                     ) -> ::openvm_circuit::arch::Result<()>
                     where
-                        Mem: ::openvm_circuit::system::memory::online::GuestMemory,
-                        F: ::openvm_stark_backend::p3_field::PrimeField32
+                        F: ::openvm_stark_backend::p3_field::PrimeField32,
+                        Mem: ::openvm_circuit::system::memory::online::GuestMemory
+                        Ctx: ::openvm_circuit::arch::E1E2ExecutionCtx,
                     {
                         self.0.execute_e1(state, instruction)
                     }
 
                     fn execute_e2<Mem>(
                         &mut self,
-                        state: ::openvm_circuit::arch::VmStateMut<Mem, ::openvm_circuit::arch::MeteredCtx>,
+                        state: &mut ::openvm_circuit::arch::VmStateMut<Mem, ::openvm_circuit::arch::MeteredCtx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         chip_index: usize,
                     ) -> ::openvm_circuit::arch::Result<()>
                     where
-                        Mem: ::openvm_circuit::system::memory::online::GuestMemory,
-                        F: ::openvm_stark_backend::p3_field::PrimeField32
+                        F: ::openvm_stark_backend::p3_field::PrimeField32,
+                        Mem: ::openvm_circuit::system::memory::online::GuestMemory
                     {
                         self.0.execute_e2(state, instruction, chip_index)
                     }
@@ -209,14 +210,15 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
 
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic> for #name #ty_generics {
-                    fn execute_e1<Mem>(
+                    fn execute_e1<Mem, Ctx>(
                         &mut self,
-                        state: ::openvm_circuit::arch::VmStateMut<Mem, ::openvm_circuit::arch::E1Ctx>,
+                        state: &mut ::openvm_circuit::arch::VmStateMut<Mem, Ctx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
                     ) -> ::openvm_circuit::arch::Result<()>
                     where
+                        #first_ty_generic: ::openvm_stark_backend::p3_field::PrimeField32,
                         Mem: ::openvm_circuit::system::memory::online::GuestMemory,
-                        #first_ty_generic: ::openvm_stark_backend::p3_field::PrimeField32
+                        Ctx: ::openvm_circuit::arch::E1E2ExecutionCtx,
                     {
                         match self {
                             #(#execute_e1_arms,)*
@@ -225,7 +227,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
 
                     fn execute_e2<Mem>(
                         &mut self,
-                        state: ::openvm_circuit::arch::VmStateMut<Mem, openvm_circuit::arch::MeteredCtx>,
+                        state: &mut ::openvm_circuit::arch::VmStateMut<Mem, openvm_circuit::arch::MeteredCtx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
                         chip_index: usize,
                     ) -> ::openvm_circuit::arch::Result<()>

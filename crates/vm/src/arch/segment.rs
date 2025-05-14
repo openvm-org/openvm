@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use backtrace::Backtrace;
 use openvm_instructions::{
     exe::FnBounds,
@@ -262,12 +264,18 @@ pub type E1VmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, E1ExecutionContro
 #[derive(Default, Debug)]
 pub struct MeteredCtx {
     pub trace_heights: Vec<usize>,
+    // Accesses of size [1, 2, 4, 8, 16, 32]
+    // TODO(ayush): no magic number
+    pub memory_ops: [usize; 6],
+    pub memory_addresses: BTreeSet<(u32, u32)>,
 }
 
 impl MeteredCtx {
     pub fn new_with_len(len: usize) -> Self {
         Self {
             trace_heights: vec![0; len],
+            memory_ops: [0; 6],
+            memory_addresses: BTreeSet::new(),
         }
     }
 }
@@ -297,5 +305,30 @@ impl<Ctx> ExecutionSegmentState<Ctx> {
             exit_code: 0,
             is_terminated: false,
         }
+    }
+}
+
+// TODO(ayush): better name
+pub trait E1E2ExecutionCtx {
+    fn on_memory_read(&mut self, address_space: u32, ptr: u32, size: usize);
+    fn on_memory_write(&mut self, address_space: u32, ptr: u32, size: usize);
+}
+
+impl E1E2ExecutionCtx for E1Ctx {
+    fn on_memory_read(&mut self, _address_space: u32, _ptr: u32, _size: usize) {}
+    fn on_memory_write(&mut self, _address_space: u32, _ptr: u32, _size: usize) {}
+}
+
+impl E1E2ExecutionCtx for MeteredCtx {
+    fn on_memory_read(&mut self, address_space: u32, ptr: u32, size: usize) {
+        let log2_size = size.trailing_zeros() as usize;
+        self.memory_ops[log2_size] += 1;
+        self.memory_addresses.insert((address_space, ptr));
+    }
+
+    fn on_memory_write(&mut self, address_space: u32, ptr: u32, size: usize) {
+        let log2_size = size.trailing_zeros() as usize;
+        self.memory_ops[log2_size] += 1;
+        self.memory_addresses.insert((address_space, ptr));
     }
 }

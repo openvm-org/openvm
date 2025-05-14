@@ -3,7 +3,8 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface,
-        ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
+        E1E2ExecutionCtx, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
+        VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -30,7 +31,7 @@ use openvm_stark_backend::{
 use super::{
     tracing_read, tracing_read_imm, tracing_write, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
-use crate::adapters::{memory_read, memory_write};
+use crate::adapters::{memory_read_from_state, memory_write_from_state};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -280,15 +281,19 @@ impl<F, const LIMB_BITS: usize> AdapterExecutorE1<F> for Rv32BaseAluAdapterStep<
 where
     F: PrimeField32,
 {
-    const WIDTH: usize = size_of::<Rv32BaseAluAdapterCols<u8>>();
     // TODO(ayush): directly use u32
     type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
     type WriteData = [[u8; RV32_REGISTER_NUM_LIMBS]; 1];
 
     #[inline(always)]
-    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
+    fn read<Mem, Ctx>(
+        &self,
+        state: &mut VmStateMut<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
     where
         Mem: GuestMemory,
+        Ctx: E1E2ExecutionCtx,
     {
         let Instruction { b, c, d, e, .. } = instruction;
 
@@ -298,11 +303,11 @@ where
         );
 
         let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
-            memory_read(memory, RV32_REGISTER_AS, b.as_canonical_u32());
+            memory_read_from_state(state, RV32_REGISTER_AS, b.as_canonical_u32());
 
         let rs2 = if e.as_canonical_u32() == RV32_REGISTER_AS {
             let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
-                memory_read(memory, RV32_REGISTER_AS, c.as_canonical_u32());
+                memory_read_from_state(state, RV32_REGISTER_AS, c.as_canonical_u32());
             rs2
         } else {
             let imm = c.as_canonical_u32();
@@ -316,14 +321,19 @@ where
     }
 
     #[inline(always)]
-    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData)
-    where
+    fn write<Mem, Ctx>(
+        &self,
+        state: &mut VmStateMut<Mem, Ctx>,
+        instruction: &Instruction<F>,
+        rd: &Self::WriteData,
+    ) where
         Mem: GuestMemory,
+        Ctx: E1E2ExecutionCtx,
     {
         let Instruction { a, d, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        memory_write(memory, d.as_canonical_u32(), a.as_canonical_u32(), &rd[0]);
+        memory_write_from_state(state, d.as_canonical_u32(), a.as_canonical_u32(), &rd[0]);
     }
 }
