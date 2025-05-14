@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+ use std::{cell::RefCell, rc::Rc};
 
 use openvm_algebra_circuit::Fp2;
 use openvm_circuit::{
@@ -213,7 +213,7 @@ mod tests {
         };
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
         let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-        let mut chip = MillerDoubleStepChip::<F, 4, 8, BLOCK_SIZE>::new(
+        let mut chip = MillerDoubleStepChip::<F, 12, 24, BLOCK_SIZE>::new(
             tester.execution_bridge(),
             tester.memory_bridge(),
             tester.memory_helper(),

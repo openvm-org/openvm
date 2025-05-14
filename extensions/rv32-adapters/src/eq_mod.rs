@@ -35,8 +35,6 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
-// TODO(arayi): Is there a reason we read the inputs block by block instead of reading them all at once?
-
 /// This adapter reads from NUM_READS <= 2 pointers and writes to a register.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
 ///   (address space 1).
@@ -44,7 +42,7 @@ use openvm_stark_backend::{
 ///   starting from the addresses in `rs[0]` (and `rs[1]` if `R = 2`).
 /// * Writes are to 32-bit register rd.
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, Debug)]
 pub struct Rv32IsEqualModAdapterCols<
     T,
     const NUM_READS: usize,
@@ -303,7 +301,7 @@ where
         let rs_vals: [_; NUM_READS] = from_fn(|i| {
             let addr = if i == 0 { b } else { c };
             cols.rs_ptr[i] = addr;
-            let rs_val = tracing_read(memory, e, addr.as_canonical_u32(), &mut cols.rs_read_aux[i]);
+            let rs_val = tracing_read(memory, d, addr.as_canonical_u32(), &mut cols.rs_read_aux[i]);
             cols.rs_val[i] = rs_val.map(F::from_canonical_u8);
             u32::from_le_bytes(rs_val)
         });
@@ -349,12 +347,29 @@ where
 
     fn fill_trace_row(
         &self,
-        _mem_helper: &MemoryAuxColsFactory<F>,
+        mem_helper: &MemoryAuxColsFactory<F>,
         _ctx: (),
         adapter_row: &mut [F],
     ) {
         let cols: &mut Rv32IsEqualModAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE> =
             adapter_row.borrow_mut();
+        let mut timestamp = cols.from_state.timestamp.as_canonical_u32();
+        let mut timestamp_pp = || {
+            timestamp += 1;
+            timestamp - 1
+        };
+
+        cols.rs_read_aux.iter_mut().for_each(|aux| {
+            mem_helper.fill_from_prev(timestamp_pp(), aux.as_mut());
+        });
+
+        cols.heap_read_aux.iter_mut().for_each(|reads| {
+            reads
+                .iter_mut()
+                .for_each(|aux| mem_helper.fill_from_prev(timestamp_pp(), aux.as_mut()));
+        });
+
+        mem_helper.fill_from_prev(timestamp_pp(), cols.writes_aux.as_mut());
 
         // Range checks:
         let need_range_check: Vec<u32> = cols

@@ -17,7 +17,7 @@ use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir,
 };
-use openvm_rv32_adapters::{Rv32VecHeapAdapterStep, Rv32VecHeapAdapterAir};
+use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::Fp2;
@@ -131,8 +131,7 @@ mod tests {
     use openvm_pairing_guest::bn254::BN254_MODULUS;
     use openvm_rv32_adapters::rv32_write_heap_default;
     use openvm_stark_backend::p3_field::FieldAlgebra;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
-    use rand::{rngs::StdRng, SeedableRng};
+    use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 
     use super::Fp2AddSubChip;
 
@@ -147,8 +146,7 @@ mod tests {
         chip: &mut Fp2AddSubChip<F, 2, NUM_LIMBS>,
         modulus: &BigUint,
     ) {
-        // TODO(arayi): Why not create_seeded_rng?
-        let mut rng = StdRng::seed_from_u64(42);
+        let mut rng = create_seeded_rng();
         let x = Fq2::random(&mut rng);
         let y = Fq2::random(&mut rng);
         let inputs = [x.c0, x.c1, y.c0, y.c1].map(bn254_fq_to_biguint);

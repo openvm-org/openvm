@@ -60,7 +60,7 @@ impl<
         );
 
         let expr = mul_013_by_013_expr(config, range_checker.bus(), xi);
-        let local_opcode_idx = vec![PairingOpcode::MUL_023_BY_023 as usize];
+        let local_opcode_idx = vec![PairingOpcode::MUL_013_BY_013 as usize];
 
         let air = PairingHeapAdapterAir::new(
             Rv32VecHeapAdapterAir::new(
