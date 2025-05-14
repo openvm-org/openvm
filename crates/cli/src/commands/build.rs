@@ -57,7 +57,7 @@ pub struct BuildArgs {
     #[arg(
         long,
         default_value = DEFAULT_APP_CONFIG_PATH,
-        help = "Path to the SDK config .toml file that specifies the transpiler extensions",
+        help = "Path to the OpenVM config .toml file that specifies the VM extensions",
         help_heading = "OpenVM Options"
     )]
     pub config: PathBuf,
@@ -408,7 +408,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Opti
         })
         .collect::<Vec<_>>();
 
-    // Transpile and commit, storing in get_target_dir/.openvm by default
+    // Transpile and commit, storing in target_dir/openvm/${profile} by default
     if !build_args.no_transpile {
         for elf_path in &elf_paths {
             println!("[openvm] Transpiling the package...");

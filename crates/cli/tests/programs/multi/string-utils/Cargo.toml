@@ -12,4 +12,4 @@ path = "src/main.rs"
 
 [[example]]
 name = "palindrome"
-path = "examples/palindrome.rs" 
+path = "examples/palindrome.rs"

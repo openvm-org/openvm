@@ -12,4 +12,4 @@ path = "src/main.rs"
 
 [[example]]
 name = "fibonacci"
-path = "examples/fibonacci.rs" 
+path = "examples/fibonacci.rs"
