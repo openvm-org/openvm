@@ -1,9 +1,9 @@
 use openvm_instructions::instruction::Instruction;
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 
 use super::{
-    E1Ctx, ExecutionError, ExecutionSegmentState, MeteredCtx, TracegenCtx, VmChipComplex, VmConfig,
-    VmStateMut,
+    ChipId, E1Ctx, ExecutionError, ExecutionSegmentState, MeteredCtx, TracegenCtx, VmChipComplex,
+    VmConfig, VmStateMut,
 };
 use crate::{
     arch::{ExecutionState, InsExecutorE1, InstructionExecutor},
@@ -40,7 +40,7 @@ where
     /// Called before segment execution begins
     fn on_segment_start(
         &mut self,
-        state: &ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     );
 
@@ -48,14 +48,14 @@ where
     /// Called after segment execution completes
     fn on_segment_end(
         &mut self,
-        state: &ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     );
 
     /// Called after program termination
     fn on_terminate(
         &mut self,
-        state: &ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         exit_code: u32,
     );
@@ -117,7 +117,7 @@ where
 
     fn on_segment_start(
         &mut self,
-        state: &ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
         let timestamp = chip_complex.memory_controller().timestamp();
@@ -128,7 +128,7 @@ where
 
     fn on_segment_end(
         &mut self,
-        state: &ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
         let timestamp = chip_complex.memory_controller().timestamp();
@@ -141,7 +141,7 @@ where
 
     fn on_terminate(
         &mut self,
-        state: &ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         exit_code: u32,
     ) {
@@ -164,7 +164,7 @@ where
     /// Execute a single instruction
     fn execute_instruction<Mem: GuestMemory>(
         &mut self,
-        state: &mut ExecutionSegmentState<Mem>,
+        state: &mut ExecutionSegmentState<Mem, Self::Ctx>,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
@@ -220,14 +220,14 @@ where
 
     fn on_segment_start(
         &mut self,
-        _state: &ExecutionSegmentState<Self::Ctx>,
+        _state: &mut ExecutionSegmentState<Self::Ctx>,
         _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
     }
 
     fn on_segment_end(
         &mut self,
-        _state: &ExecutionSegmentState<Self::Ctx>,
+        _state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
         self.final_memory = Some(chip_complex.base.memory_controller.memory_image().clone());
@@ -235,7 +235,7 @@ where
 
     fn on_terminate(
         &mut self,
-        _state: &ExecutionSegmentState<Self::Ctx>,
+        _state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         _exit_code: u32,
     ) {
@@ -245,7 +245,7 @@ where
     /// Execute a single instruction
     fn execute_instruction<Mem: GuestMemory>(
         &mut self,
-        state: &mut ExecutionSegmentState<Mem>,
+        state: &mut ExecutionSegmentState<Mem, Self::Ctx>,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
@@ -274,7 +274,8 @@ where
 }
 
 pub struct MeteredExecutionControl<'a> {
-    pub num_interactions: &'a [usize],
+    pub widths: &'a [usize],
+    pub interactions: &'a [usize],
     pub since_last_segment_check: usize,
     pub final_memory: Option<MemoryImage>,
     // TODO(ayush): remove
@@ -282,13 +283,34 @@ pub struct MeteredExecutionControl<'a> {
 }
 
 impl<'a> MeteredExecutionControl<'a> {
-    pub fn new(num_interactions: &'a [usize], air_names: Vec<String>) -> Self {
+    pub fn new(widths: &'a [usize], interactions: &'a [usize], air_names: Vec<String>) -> Self {
         Self {
-            num_interactions,
+            widths,
+            interactions,
             since_last_segment_check: 0,
             final_memory: None,
             air_names,
         }
+    }
+
+    /// Calculate the total cells used based on trace heights and widths
+    // TODO(ayush): account for preprocessed and permutation columns
+    fn calculate_total_cells(&self, trace_heights: &[usize]) -> usize {
+        trace_heights
+            .iter()
+            .zip(self.widths)
+            .map(|(&height, &width)| height.next_power_of_two() * width)
+            .sum()
+    }
+
+    /// Calculate the total interactions based on trace heights and interaction counts
+    fn calculate_total_interactions(&self, trace_heights: &[usize]) -> usize {
+        trace_heights
+            .iter()
+            .zip(self.interactions)
+            // TODO(ayush): should this have next_power_of_two
+            .map(|(&height, &interactions)| height.next_power_of_two() * interactions)
+            .sum()
     }
 }
 
@@ -313,16 +335,23 @@ where
         }
         self.since_last_segment_check = 0;
 
-        if state.ctx.total_trace_cells > MAX_TRACE_CELLS {
+        if state
+            .ctx
+            .trace_heights
+            .iter()
+            .any(|&height| height.next_power_of_two() > MAX_TRACE_HEIGHT)
+        {
             return true;
         }
-        if state.ctx.total_interactions > MAX_INTERACTIONS {
+
+        let total_cells = self.calculate_total_cells(&state.ctx.trace_heights);
+        if total_cells > MAX_TRACE_CELLS {
             return true;
         }
-        for &height in state.ctx.trace_heights.iter() {
-            if height > MAX_TRACE_HEIGHT {
-                return true;
-            }
+
+        let total_interactions = self.calculate_total_interactions(&state.ctx.trace_heights);
+        if total_interactions > MAX_INTERACTIONS {
+            return true;
         }
 
         false
@@ -330,14 +359,46 @@ where
 
     fn on_segment_start(
         &mut self,
-        _state: &ExecutionSegmentState<Self::Ctx>,
-        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        state: &mut ExecutionSegmentState<Self::Ctx>,
+        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
+        // Program | Connector | Public Values | Memory ... | Executors (except Public Values) | Range Checker
+
+        state.ctx.trace_heights[0] = chip_complex.program_chip().true_program_length;
+        state.ctx.trace_heights[1] = 2; // Connector chip
+
+        let mut offset = 2;
+        offset += chip_complex.memory_controller().num_airs();
+
+        // Add heights for periphery chips with constant heights
+        for (i, chip_id) in chip_complex
+            .inventory
+            .insertion_order
+            .iter()
+            .rev()
+            .enumerate()
+        {
+            if let &ChipId::Periphery(id) = chip_id {
+                let chip_index = offset + i;
+                if let Some(constant_height) =
+                    chip_complex.inventory.periphery[id].constant_trace_height()
+                {
+                    state.ctx.trace_heights[chip_index] = constant_height;
+                }
+            }
+        }
+
+        if let (Some(range_checker_height), Some(last_height)) = (
+            chip_complex.range_checker_chip().constant_trace_height(),
+            state.ctx.trace_heights.last_mut(),
+        ) {
+            *last_height = range_checker_height;
+        }
     }
 
     fn on_segment_end(
         &mut self,
-        state: &ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
         self.final_memory = Some(chip_complex.base.memory_controller.memory_image().clone());
@@ -345,12 +406,17 @@ where
 
     fn on_terminate(
         &mut self,
-        state: &ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         _exit_code: u32,
     ) {
-        for (name, height) in self.air_names.iter().zip(state.ctx.trace_heights.iter()) {
-            println!("{:<10} \t|\t{}", height, name);
+        for ((name, height), width) in self
+            .air_names
+            .iter()
+            .zip(state.ctx.trace_heights.iter())
+            .zip(self.widths.iter())
+        {
+            println!("{:<10} \t|\t{:<5} \t|\t{}", height, width, name);
         }
         self.final_memory = Some(chip_complex.base.memory_controller.memory_image().clone());
     }
@@ -359,24 +425,19 @@ where
     fn execute_instruction(
         &mut self,
         state: &mut ExecutionSegmentState<Self::Ctx>,
-        // instruction: &Instruction<F>,
+        instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
         Self::Ctx: Default,
     {
-        let (instruction, _) = chip_complex
-            .base
-            .program_chip
-            .get_instruction(state.pc)?
-            .clone();
-
-        let Instruction { opcode, .. } = instruction;
+        let &Instruction { opcode, .. } = instruction;
 
         // Program | Connector | Public Values | Memory ... | Executors (except Public Values) | Range Checker
         // TODO(ayush): no magic number, cache
-        let mut offset = 2 + chip_complex.memory_controller().num_airs();
+        let mut offset = 2;
+        offset += chip_complex.memory_controller().num_airs();
         if chip_complex.config().has_public_values_chip() {
             offset += 1;
         }
@@ -389,7 +450,7 @@ where
                 ctx: &mut state.ctx,
             };
             let index = offset + i;
-            executor.execute_e2(vm_state, &instruction, index, self.num_interactions[index])?;
+            executor.execute_e2(vm_state, instruction, index)?;
         } else {
             return Err(ExecutionError::DisabledOperation {
                 pc: state.pc,

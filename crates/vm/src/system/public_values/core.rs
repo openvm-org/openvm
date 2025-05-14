@@ -242,7 +242,6 @@ where
         state: VmStateMut<Mem, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
-        num_interactions: usize,
     ) -> Result<()>
     where
         Mem: GuestMemory,

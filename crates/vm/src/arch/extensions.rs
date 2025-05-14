@@ -211,7 +211,7 @@ pub struct VmInventory<E, P> {
     pub periphery: Vec<P>,
     /// Order of insertion. The reverse of this will be the order the chips are destroyed
     /// to generate trace.
-    insertion_order: Vec<ChipId>,
+    pub insertion_order: Vec<ChipId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -341,11 +341,15 @@ impl<E, P> VmInventory<E, P> {
         let id = *self.instruction_lookup.get(opcode)?;
 
         self.executors.get_mut(id).map(|executor| {
-            let insertion_id = self.insertion_order
-                    .iter()
-                    .rev()
-                    .position(|chip_id| matches!(chip_id, ChipId::Executor(exec_id) | ChipId::Periphery(exec_id) if *exec_id == id))
-                    .unwrap();
+            let insertion_id = self
+                .insertion_order
+                .iter()
+                .rev()
+                .position(|chip_id| match chip_id {
+                    ChipId::Executor(exec_id) => *exec_id == id,
+                    _ => false,
+                })
+                .unwrap();
 
             (executor, insertion_id)
         })

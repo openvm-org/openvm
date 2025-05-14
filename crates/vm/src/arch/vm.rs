@@ -409,7 +409,8 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-        num_interactions: Vec<usize>,
+        widths: Vec<usize>,
+        interactions: Vec<usize>,
     ) -> Result<(), ExecutionError>
     where
         VC::Executor: InsExecutorE1<F>,
@@ -437,7 +438,8 @@ where
                 Some(state.memory),
             )
             .unwrap();
-            let ctrl = MeteredExecutionControl::new(&num_interactions, chip_complex.air_names());
+            let ctrl =
+                MeteredExecutionControl::new(&widths, &interactions, chip_complex.air_names());
             let mut segment = MeteredVmSegmentExecutor::<F, VC>::new(
                 chip_complex,
                 self.trace_height_constraints.clone(),
@@ -450,7 +452,7 @@ where
                 segment.metrics = state.metrics;
             }
 
-            let ctx = MeteredCtx::new_with_len(num_interactions.len());
+            let ctx = MeteredCtx::new_with_len(widths.len());
             let exec_state = metrics_span("execute_time_ms", || {
                 segment.execute_from_pc_with_ctx(state.pc, ctx)
             })?;

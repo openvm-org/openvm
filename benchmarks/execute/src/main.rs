@@ -24,10 +24,10 @@ enum BuildProfile {
 // const DEFAULT_APP_CONFIG_PATH: &str = "./openvm.toml";
 
 static AVAILABLE_PROGRAMS: &[&str] = &[
-    // "fibonacci_recursive",
+    "fibonacci_recursive",
     "fibonacci_iterative",
-    // "quicksort",
-    // "bubblesort",
+    "quicksort",
+    "bubblesort",
     // "pairing",
     // "keccak256",
     // "keccak256_iter",
@@ -128,15 +128,22 @@ fn main() -> Result<()> {
 
             let exe = VmExe::from_elf(elf, transpiler)?;
 
-            let chip_interactions: Vec<usize> = {
+            let (widths, interactions): (Vec<usize>, Vec<usize>) = {
                 let vm = VirtualMachine::new(default_engine(), vm_config.clone());
                 let pk = vm.keygen();
                 let vk = pk.get_vk();
                 vk.inner
                     .per_air
                     .iter()
-                    .map(|vk| vk.symbolic_constraints.interactions.len())
-                    .collect()
+                    .map(|vk| {
+                        // let total_width = vk.params.width.preprocessed.unwrap_or(0)
+                        //     + vk.params.width.cached_mains.iter().sum::<usize>()
+                        //     + vk.params.width.common_main
+                        //     + vk.params.width.after_challenge.iter().sum::<usize>();
+                        let total_width = vk.params.width.main_widths().iter().sum::<usize>();
+                        (total_width, vk.symbolic_constraints.interactions.len())
+                    })
+                    .unzip()
             };
 
             let executor = VmExecutor::new(vm_config);
@@ -144,7 +151,7 @@ fn main() -> Result<()> {
             println!("Metered");
             println!("-------------------------------------------------------");
             executor
-                .execute_e2(exe.clone(), vec![], chip_interactions)
+                .execute_e2(exe.clone(), vec![], widths, interactions)
                 .expect("Failed to execute program");
             println!("-------------------------------------------------------");
             println!("Tracegen execute");
@@ -153,12 +160,12 @@ fn main() -> Result<()> {
                 .execute(exe.clone(), vec![])
                 .expect("Failed to execute program");
             println!("-------------------------------------------------------");
-            println!("Tracegen");
-            println!("-------------------------------------------------------");
-            executor
-                .execute_and_generate::<BabyBearPoseidon2Config>(exe, vec![])
-                .expect("Failed to execute program");
-            println!("-------------------------------------------------------");
+            // println!("Tracegen");
+            // println!("-------------------------------------------------------");
+            // executor
+            //     .execute_and_generate::<BabyBearPoseidon2Config>(exe, vec![])
+            //     .expect("Failed to execute program");
+            // println!("-------------------------------------------------------");
 
             tracing::info!("Completed program: {}", program);
         }

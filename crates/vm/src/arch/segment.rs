@@ -96,7 +96,8 @@ where
         let mut state = ExecutionSegmentState::new_with_pc_and_ctx(pc, ctx);
 
         // Call the pre-execution hook
-        self.ctrl.on_segment_start(&state, &mut self.chip_complex);
+        self.ctrl
+            .on_segment_start(&mut state, &mut self.chip_complex);
 
         loop {
             // Fetch, decode and execute single instruction
@@ -106,12 +107,12 @@ where
                 state.exit_code = exit_code;
                 state.is_terminated = true;
                 self.ctrl
-                    .on_terminate(&state, &mut self.chip_complex, exit_code);
+                    .on_terminate(&mut state, &mut self.chip_complex, exit_code);
                 break;
             }
             if self.should_suspend(&state) {
                 state.exit_code = DEFAULT_SUSPEND_EXIT_CODE;
-                self.ctrl.on_segment_end(&state, &mut self.chip_complex);
+                self.ctrl.on_segment_end(&mut state, &mut self.chip_complex);
                 break;
             }
         }
@@ -184,7 +185,7 @@ where
 
         // Execute the instruction using the control implementation
         // TODO(AG): maybe avoid cloning the instruction?
-        self.control
+        self.ctrl
             .execute_instruction(state, &instruction.clone(), &mut self.chip_complex)?;
 
         // Update metrics if enabled
@@ -261,16 +262,12 @@ pub type E1VmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, E1ExecutionContro
 #[derive(Default, Debug)]
 pub struct MeteredCtx {
     pub trace_heights: Vec<usize>,
-    pub total_trace_cells: usize,
-    pub total_interactions: usize,
 }
 
 impl MeteredCtx {
     pub fn new_with_len(len: usize) -> Self {
         Self {
             trace_heights: vec![0; len],
-            total_trace_cells: 0,
-            total_interactions: 0,
         }
     }
 }
