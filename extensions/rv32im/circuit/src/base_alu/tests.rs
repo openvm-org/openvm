@@ -90,23 +90,19 @@ fn set_and_execute(
         )
     };
 
-    // let (instruction, rd) = rv32_rand_write_register_or_imm(
-    //     tester,
-    //     b,
-    //     c,
-    //     c_imm,
-    //     opcode.global_opcode().as_usize(),
-    //     rng,
-    // );
-    tester.write(2, 1024, [F::ONE; 4]);
-    tester.write(2, 1028, [F::ONE; 4]);
-    let sm = tester.read(2, 1024);
-    assert_eq!(sm, [F::ONE; 8]);
-    // tester.execute(chip, &instruction);
+    let (instruction, rd) = rv32_rand_write_register_or_imm(
+        tester,
+        b,
+        c,
+        c_imm,
+        opcode.global_opcode().as_usize(),
+        rng,
+    );
+    tester.execute(chip, &instruction);
 
-    // let a = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c)
-    //     .map(F::from_canonical_u8);
-    // assert_eq!(a, tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd))
+    let a = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c)
+        .map(F::from_canonical_u8);
+    assert_eq!(a, tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd))
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -116,7 +112,7 @@ fn set_and_execute(
 // passes all constraints.
 //////////////////////////////////////////////////////////////////////////////////////
 
-#[test_case(ADD, 1)]
+#[test_case(ADD, 100)]
 #[test_case(SUB, 100)]
 #[test_case(XOR, 100)]
 #[test_case(OR, 100)]

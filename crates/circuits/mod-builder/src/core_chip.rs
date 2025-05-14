@@ -400,28 +400,3 @@ where
     }
 }
 
-// impl FieldExpressionCoreChip {
-//     // We will be setting is_valid = 0. That forces all flags be 0 (otherwise setup will be -1).
-//     // We generate a dummy row with all flags set to 0, then we set is_valid = 0.
-//     fn generate_dummy_trace_row<F: PrimeField32>(
-//         &self,
-//         adapter_width: usize,
-//         core_width: usize,
-//     ) -> Vec<F> {
-//         let record = FieldExpressionRecord {
-//             inputs: vec![BigUint::zero(); self.air.num_inputs()],
-//             flags: vec![false; self.air.num_flags()],
-//         };
-//         let mut row = vec![F::ZERO; adapter_width + core_width];
-//         let core_row = &mut row[adapter_width..];
-//         // We **do not** want this trace row to update the range checker
-//         // so we must create a temporary range checker
-//         let tmp_range_checker = SharedVariableRangeCheckerChip::new(self.range_checker.bus());
-//         self.air.expr.generate_subrow(
-//             (tmp_range_checker.as_ref(), record.inputs, record.flags),
-//             core_row,
-//         );
-//         core_row[0] = F::ZERO; // is_valid = 0
-//         row
-//     }
-// }
