@@ -260,57 +260,12 @@ where
 
         A::start(*state.pc, state.memory, adapter_row);
 
-        let field_element_limbs = self.expr.canonical_num_limbs();
-        let limb_bits = self.expr.canonical_limb_bits();
         let data: DynArray<_> = self
             .adapter
             .read(state.memory, instruction, adapter_row)
             .into();
-        let data = data.0.iter().map(|&x| x as u32).collect_vec();
-        assert_eq!(data.len(), self.num_inputs() * field_element_limbs);
 
-        let mut inputs = vec![];
-        for i in 0..self.num_inputs() {
-            let start = i * field_element_limbs;
-            let end = start + field_element_limbs;
-            let limb_slice = &data[start..end];
-            let input = limbs_to_biguint(limb_slice, limb_bits);
-            inputs.push(input);
-        }
-
-        let Instruction { opcode, .. } = instruction;
-        let local_opcode_idx = opcode.local_opcode_idx(self.offset);
-        let mut flags = vec![];
-
-        // If the chip doesn't need setup, (right now) it must be single op chip and thus no flag is
-        // needed. Otherwise, there is a flag for each opcode and will be derived by
-        // is_valid - sum(flags).
-        if self.expr.needs_setup() {
-            flags = vec![false; self.num_flags()];
-            self.opcode_flag_idx
-                .iter()
-                .enumerate()
-                .for_each(|(i, &flag_idx)| {
-                    flags[flag_idx] = local_opcode_idx == self.local_opcode_idx[i]
-                });
-        }
-
-        let vars = self.expr.execute(inputs.clone(), flags.clone());
-        assert_eq!(vars.len(), self.num_vars());
-
-        let outputs: Vec<BigUint> = self
-            .output_indices()
-            .iter()
-            .map(|&i| vars[i].clone())
-            .collect();
-        let writes: DynArray<_> = outputs
-            .iter()
-            .map(|x| biguint_to_limbs_vec(x.clone(), limb_bits, field_element_limbs))
-            .concat()
-            .into_iter()
-            .map(|x| x as u8)
-            .collect::<Vec<_>>()
-            .into();
+        let (writes, inputs, flags) = run_field_expression(self, &data, instruction);
 
         // TODO(arayi): Should move this to fill_trace_row
         self.expr
@@ -344,55 +299,9 @@ where
     where
         Mem: GuestMemory,
     {
-        let field_element_limbs = self.expr.canonical_num_limbs();
-        let limb_bits = self.expr.canonical_limb_bits();
         let data: DynArray<_> = self.adapter.read(state.memory, instruction).into();
-        let data = data.0.iter().map(|&x| x as u32).collect_vec();
-        assert_eq!(data.len(), self.num_inputs() * field_element_limbs);
 
-        let mut inputs = vec![];
-        for i in 0..self.num_inputs() {
-            let start = i * field_element_limbs;
-            let end = start + field_element_limbs;
-            let limb_slice = &data[start..end];
-            let input = limbs_to_biguint(limb_slice, limb_bits);
-            inputs.push(input);
-        }
-
-        let Instruction { opcode, .. } = instruction;
-        let local_opcode_idx = opcode.local_opcode_idx(self.offset);
-        let mut flags = vec![];
-
-        // If the chip doesn't need setup, (right now) it must be single op chip and thus no flag is
-        // needed. Otherwise, there is a flag for each opcode and will be derived by
-        // is_valid - sum(flags).
-        if self.expr.needs_setup() {
-            flags = vec![false; self.num_flags()];
-            self.opcode_flag_idx
-                .iter()
-                .enumerate()
-                .for_each(|(i, &flag_idx)| {
-                    flags[flag_idx] = local_opcode_idx == self.local_opcode_idx[i]
-                });
-        }
-
-        let vars = self.expr.execute(inputs.clone(), flags.clone());
-        assert_eq!(vars.len(), self.num_vars());
-
-        let outputs: Vec<BigUint> = self
-            .output_indices()
-            .iter()
-            .map(|&i| vars[i].clone())
-            .collect();
-        let writes: DynArray<_> = outputs
-            .iter()
-            .map(|x| biguint_to_limbs_vec(x.clone(), limb_bits, field_element_limbs))
-            .concat()
-            .into_iter()
-            .map(|x| x as u8)
-            .collect::<Vec<_>>()
-            .into();
-
+        let writes = run_field_expression(self, &data, instruction).0;
         self.adapter
             .write(state.memory, instruction, &writes.into());
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
@@ -400,3 +309,60 @@ where
     }
 }
 
+fn run_field_expression<F: PrimeField32, A>(
+    step: &FieldExpressionStep<A>,
+    data: &DynArray<u8>,
+    instruction: &Instruction<F>,
+) -> (DynArray<u8>, Vec<BigUint>, Vec<bool>) {
+    let field_element_limbs = step.expr.canonical_num_limbs();
+    let limb_bits = step.expr.canonical_limb_bits();
+
+    let data = data.0.iter().map(|&x| x as u32).collect_vec();
+
+    assert_eq!(data.len(), step.num_inputs() * field_element_limbs);
+
+    let mut inputs = vec![];
+    for i in 0..step.num_inputs() {
+        let start = i * field_element_limbs;
+        let end = start + field_element_limbs;
+        let limb_slice = &data[start..end];
+        let input = limbs_to_biguint(limb_slice, limb_bits);
+        inputs.push(input);
+    }
+
+    let Instruction { opcode, .. } = instruction;
+    let local_opcode_idx = opcode.local_opcode_idx(step.offset);
+    let mut flags = vec![];
+
+    // If the chip doesn't need setup, (right now) it must be single op chip and thus no flag is
+    // needed. Otherwise, there is a flag for each opcode and will be derived by
+    // is_valid - sum(flags).
+    if step.expr.needs_setup() {
+        flags = vec![false; step.num_flags()];
+        step.opcode_flag_idx
+            .iter()
+            .enumerate()
+            .for_each(|(i, &flag_idx)| {
+                flags[flag_idx] = local_opcode_idx == step.local_opcode_idx[i]
+            });
+    }
+
+    let vars = step.expr.execute(inputs.clone(), flags.clone());
+    assert_eq!(vars.len(), step.num_vars());
+
+    let outputs: Vec<BigUint> = step
+        .output_indices()
+        .iter()
+        .map(|&i| vars[i].clone())
+        .collect();
+    let writes: DynArray<_> = outputs
+        .iter()
+        .map(|x| biguint_to_limbs_vec(x.clone(), limb_bits, field_element_limbs))
+        .concat()
+        .into_iter()
+        .map(|x| x as u8)
+        .collect::<Vec<_>>()
+        .into();
+
+    (writes, inputs, flags)
+}
