@@ -337,18 +337,28 @@ impl<F: PrimeField32> TracingMemory<F> {
                 break false;
             } else if current_metadata.block_size == 0 {
                 // Initialize
-                if self.initial_block_size > align {
+                if self.initial_block_size < align {
+                    // Only happens in volatile, so empty initial memory
+                    self.set_meta_block(
+                        address_space,
+                        cur_ptr * align,
+                        align,
+                        align,
+                        INITIAL_TIMESTAMP,
+                    );
+                    current_metadata = AccessMetadata::new(INITIAL_TIMESTAMP, align as u32);
+                } else {
                     cur_ptr -= cur_ptr % (self.initial_block_size / align);
+                    self.set_meta_block(
+                        address_space,
+                        cur_ptr * align,
+                        align,
+                        self.initial_block_size,
+                        INITIAL_TIMESTAMP,
+                    );
+                    current_metadata =
+                        AccessMetadata::new(INITIAL_TIMESTAMP, self.initial_block_size as u32);
                 }
-                self.set_meta_block(
-                    address_space,
-                    cur_ptr * align,
-                    align,
-                    self.initial_block_size,
-                    INITIAL_TIMESTAMP,
-                );
-                current_metadata =
-                    AccessMetadata::new(INITIAL_TIMESTAMP, self.initial_block_size as u32);
             }
             prev_ts = prev_ts.max(current_metadata.timestamp);
             while current_metadata.block_size == AccessMetadata::OCCUPIED {
@@ -370,7 +380,7 @@ impl<F: PrimeField32> TracingMemory<F> {
                     .collect::<Vec<_>>();
                 self.execute_splits::<true>(address, align, &values, current_metadata.timestamp);
             }
-            cur_ptr += current_metadata.block_size as usize;
+            cur_ptr += current_metadata.block_size as usize / align;
         };
         if need_to_merge {
             // Merge

@@ -31,7 +31,7 @@ use rand::rngs::StdRng;
 
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
-const BLOCK_SIZE: usize = 32;
+const _BLOCK_SIZE: usize = 32;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
@@ -44,7 +44,7 @@ mod addsubtests {
 
     fn set_and_execute_addsub(
         tester: &mut VmChipTestBuilder<F>,
-        chip: &mut ModularAddSubChip<F, 2, NUM_LIMBS>,
+        chip: &mut ModularAddSubChip<F, 1, NUM_LIMBS>,
         modulus: &BigUint,
         is_setup: bool,
     ) {
@@ -88,7 +88,7 @@ mod addsubtests {
         let data_as = 2;
         let address1 = 0u32;
         let address2 = 128u32;
-        let address3 = (1 << 28) + 1234; // a large memory address to test heap adapter
+        let address3 = (1 << 28) + 1228; // a large memory address to test heap adapter
 
         write_ptr_reg(tester, ptr_as, addr_ptr1, address1);
         write_ptr_reg(tester, ptr_as, addr_ptr2, address2);
@@ -112,13 +112,8 @@ mod addsubtests {
         tester.execute(chip, &instruction);
 
         let expected_limbs = biguint_to_limbs::<NUM_LIMBS>(expected_answer, LIMB_BITS);
-        for i in (0..NUM_LIMBS).step_by(4) {
-            let address = address3 as usize + i;
-            let read_vals = tester.read::<4>(data_as, address);
-            for (j, expected) in expected_limbs[i..i + 4].iter().enumerate() {
-                assert_eq!(F::from_canonical_u32(*expected), read_vals[j]);
-            }
-        }
+        let read_vals = tester.read::<NUM_LIMBS>(data_as, address3 as usize);
+        assert_eq!(read_vals, expected_limbs.map(F::from_canonical_u32));
     }
 
     #[test_case(0, secp256k1_coord_prime(), 50)]
@@ -164,7 +159,7 @@ mod muldivtests {
 
     fn set_and_execute_muldiv(
         tester: &mut VmChipTestBuilder<F>,
-        chip: &mut ModularMulDivChip<F, 2, NUM_LIMBS>,
+        chip: &mut ModularMulDivChip<F, 1, NUM_LIMBS>,
         modulus: &BigUint,
         is_setup: bool,
     ) {
@@ -189,8 +184,8 @@ mod muldivtests {
         };
 
         let expected_answer = match op - MUL_LOCAL {
-            0 => (&a + &b) % modulus,
-            1 => (&a + modulus - &b) % modulus,
+            0 => (&a * &b) % modulus,
+            1 => (&a * b.modinv(modulus).unwrap()) % modulus,
             2 => a.clone() % modulus,
             _ => panic!(),
         };
@@ -232,13 +227,8 @@ mod muldivtests {
         tester.execute(chip, &instruction);
 
         let expected_limbs = biguint_to_limbs::<NUM_LIMBS>(expected_answer, LIMB_BITS);
-        for i in (0..NUM_LIMBS).step_by(4) {
-            let address = address3 as usize + i;
-            let read_vals = tester.read::<4>(data_as, address);
-            for (j, expected) in expected_limbs[i..i + 4].iter().enumerate() {
-                assert_eq!(F::from_canonical_u32(*expected), read_vals[j]);
-            }
-        }
+        let read_vals = tester.read::<NUM_LIMBS>(data_as, address3 as usize);
+        assert_eq!(read_vals, expected_limbs.map(F::from_canonical_u32));
     }
 
     #[test_case(0, secp256k1_coord_prime(), 50)]
@@ -282,7 +272,10 @@ mod is_equal_tests {
     use openvm_rv32_adapters::{Rv32IsEqualModAdapterAir, Rv32IsEqualModeAdapterStep};
     use openvm_stark_backend::{
         p3_air::BaseAir,
-        p3_matrix::{dense::DenseMatrix, Matrix},
+        p3_matrix::{
+            dense::{DenseMatrix, RowMajorMatrix},
+            Matrix,
+        },
         utils::disable_debug_builder,
         verifier::VerificationError,
     };
@@ -408,7 +401,7 @@ mod is_equal_tests {
 
         let modulus_limbs = modulus_limbs.map(F::from_canonical_u8);
 
-        for _ in 0..num_tests {
+        for i in 0..num_tests {
             set_and_execute_is_equal(
                 &mut tester,
                 &mut chip,
@@ -416,7 +409,7 @@ mod is_equal_tests {
                 &modulus,
                 opcode_offset,
                 modulus_limbs,
-                false,
+                i == 0, // the first test is a setup test
                 None,
                 None,
             );
@@ -434,7 +427,7 @@ mod is_equal_tests {
             modulus_limbs,
             false,
             Some(b),
-            None,
+            Some(b),
         );
 
         let tester = tester.build().load(chip).load(bitwise_chip).finalize();
@@ -456,8 +449,7 @@ mod is_equal_tests {
     >(
         modulus: BigUint,
         opcode_offset: usize,
-        b: [F; READ_LIMBS],
-        c: [F; READ_LIMBS],
+        test_case: usize,
         expected_error: VerificationError,
     ) {
         let mut rng = create_seeded_rng();
@@ -484,38 +476,42 @@ mod is_equal_tests {
             opcode_offset,
             modulus_limbs,
             true,
-            Some(b),
-            Some(c),
+            None,
+            None,
         );
 
         let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
         let modify_trace = |trace: &mut DenseMatrix<F>| {
-            let mut values = trace.row_slice(0).to_vec();
-            let row_slice: &mut ModularIsEqualCoreCols<_, READ_LIMBS> =
-                values.split_at_mut(adapter_width).1.borrow_mut();
-            if row_slice.b[0] == F::ONE {
+            let mut trace_row = trace.row_slice(0).to_vec();
+            let cols: &mut ModularIsEqualCoreCols<_, READ_LIMBS> =
+                trace_row.split_at_mut(adapter_width).1.borrow_mut();
+            if test_case == 1 {
                 // test the constraint that c_lt_mark = 2 when is_setup = 1
-                row_slice.c_lt_mark = F::ONE;
-                row_slice.lt_marker = [F::ZERO; READ_LIMBS];
-                row_slice.lt_marker[READ_LIMBS - 1] = F::ONE;
-                row_slice.c_lt_diff = modulus_limbs[READ_LIMBS - 1] - row_slice.c[READ_LIMBS - 1];
-                row_slice.b_lt_diff = modulus_limbs[READ_LIMBS - 1] - row_slice.b[READ_LIMBS - 1];
-            } else if row_slice.b[0] == F::from_canonical_u32(2) {
+                cols.b[0] = F::from_canonical_u32(1);
+                cols.c_lt_mark = F::ONE;
+                cols.lt_marker = [F::ZERO; READ_LIMBS];
+                cols.lt_marker[READ_LIMBS - 1] = F::ONE;
+                cols.c_lt_diff = modulus_limbs[READ_LIMBS - 1] - cols.c[READ_LIMBS - 1];
+                cols.b_lt_diff = modulus_limbs[READ_LIMBS - 1] - cols.b[READ_LIMBS - 1];
+            } else if test_case == 2 {
                 // test the constraint that b[i] = N[i] for all i when prefix_sum is not 1 or
                 // lt_marker_sum - is_setup
-                row_slice.c_lt_mark = F::from_canonical_u8(2);
-                row_slice.lt_marker = [F::ZERO; READ_LIMBS];
-                row_slice.lt_marker[READ_LIMBS - 1] = F::from_canonical_u8(2);
-                row_slice.c_lt_diff = modulus_limbs[READ_LIMBS - 1] - row_slice.c[READ_LIMBS - 1];
-            } else if row_slice.b[0] == F::from_canonical_u32(3) {
+                cols.b[0] = F::from_canonical_u32(2);
+                cols.c_lt_mark = F::from_canonical_u8(2);
+                cols.lt_marker = [F::ZERO; READ_LIMBS];
+                cols.lt_marker[READ_LIMBS - 1] = F::from_canonical_u8(2);
+                cols.c_lt_diff = modulus_limbs[READ_LIMBS - 1] - cols.c[READ_LIMBS - 1];
+            } else if test_case == 3 {
                 // test the constraint that sum_i lt_marker[i] = 2 when is_setup = 1
-                row_slice.c_lt_mark = F::from_canonical_u8(2);
-                row_slice.lt_marker = [F::ZERO; READ_LIMBS];
-                row_slice.lt_marker[READ_LIMBS - 1] = F::from_canonical_u8(2);
-                row_slice.lt_marker[0] = F::ONE;
-                row_slice.b_lt_diff = modulus_limbs[0] - row_slice.b[0];
-                row_slice.c_lt_diff = modulus_limbs[READ_LIMBS - 1] - row_slice.c[READ_LIMBS - 1];
+                cols.b[0] = F::from_canonical_u32(3);
+                cols.c_lt_mark = F::from_canonical_u8(2);
+                cols.lt_marker = [F::ZERO; READ_LIMBS];
+                cols.lt_marker[READ_LIMBS - 1] = F::from_canonical_u8(2);
+                cols.lt_marker[0] = F::ONE;
+                cols.b_lt_diff = modulus_limbs[0] - cols.b[0];
+                cols.c_lt_diff = modulus_limbs[READ_LIMBS - 1] - cols.c[READ_LIMBS - 1];
             }
+            *trace = RowMajorMatrix::new(trace_row, trace.width());
         };
 
         disable_debug_builder();
@@ -529,64 +525,48 @@ mod is_equal_tests {
 
     #[test]
     fn negative_test_modular_is_equal_1x32() {
-        let c_limbs = [F::ZERO; 32];
-        let mut b_limbs = [F::ZERO; 32];
-        b_limbs[0] = F::from_canonical_u32(1);
         run_negative_is_equal_test::<1, 32, 32>(
             secp256k1_coord_prime(),
             17,
-            b_limbs,
-            c_limbs,
+            1,
             VerificationError::OodEvaluationMismatch,
         );
 
-        b_limbs[0] = F::from_canonical_u32(2);
         run_negative_is_equal_test::<1, 32, 32>(
             secp256k1_coord_prime(),
             17,
-            b_limbs,
-            c_limbs,
+            2,
             VerificationError::OodEvaluationMismatch,
         );
 
-        b_limbs[0] = F::from_canonical_u32(3);
         run_negative_is_equal_test::<1, 32, 32>(
             secp256k1_coord_prime(),
             17,
-            b_limbs,
-            c_limbs,
+            3,
             VerificationError::OodEvaluationMismatch,
         );
     }
 
     #[test]
     fn negative_test_modular_is_equal_3x16() {
-        let c_limbs = [F::ZERO; 48];
-        let mut b_limbs = [F::ZERO; 48];
-        b_limbs[0] = F::from_canonical_u32(1);
         run_negative_is_equal_test::<3, 16, 48>(
             BLS12_381_MODULUS.clone(),
             17,
-            b_limbs,
-            c_limbs,
+            1,
             VerificationError::OodEvaluationMismatch,
         );
 
-        b_limbs[0] = F::from_canonical_u32(2);
         run_negative_is_equal_test::<3, 16, 48>(
             BLS12_381_MODULUS.clone(),
             17,
-            b_limbs,
-            c_limbs,
+            2,
             VerificationError::OodEvaluationMismatch,
         );
 
-        b_limbs[0] = F::from_canonical_u32(3);
         run_negative_is_equal_test::<3, 16, 48>(
             BLS12_381_MODULUS.clone(),
             17,
-            b_limbs,
-            c_limbs,
+            3,
             VerificationError::OodEvaluationMismatch,
         );
     }

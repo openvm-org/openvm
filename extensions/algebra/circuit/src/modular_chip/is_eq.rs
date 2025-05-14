@@ -35,7 +35,7 @@ use openvm_stark_backend::{
 // at runtime (i.e. when chip is instantiated).
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, Debug)]
 pub struct ModularIsEqualCoreCols<T, const READ_LIMBS: usize> {
     pub is_valid: T,
     pub is_setup: T,
@@ -339,8 +339,8 @@ where
         cols.b = b.map(F::from_canonical_u8);
         cols.c = c.map(F::from_canonical_u8);
 
-        let (b_cmp, b_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.modulus_limbs);
-        let (c_cmp, c_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.modulus_limbs);
+        let (b_cmp, _) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.modulus_limbs);
+        let (c_cmp, _) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.modulus_limbs);
         let is_setup = instruction.opcode.local_opcode_idx(self.offset)
             == Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize;
 
@@ -350,12 +350,6 @@ where
             assert!(b_cmp, "{:?} >= {:?}", b, self.modulus_limbs);
         }
         assert!(c_cmp, "{:?} >= {:?}", c, self.modulus_limbs);
-        if !is_setup {
-            self.bitwise_lookup_chip.request_range(
-                (self.modulus_limbs[b_diff_idx] - b[b_diff_idx] - 1) as u32,
-                (self.modulus_limbs[c_diff_idx] - c[c_diff_idx] - 1) as u32,
-            );
-        }
 
         let mut write_data = [0u8; WRITE_LIMBS];
         write_data[0] = (b == c) as u8;
@@ -369,7 +363,7 @@ where
     }
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (adapter_row, core_row) = row_slice.split_at_mut(A::WIDTH);
         self.adapter.fill_trace_row(mem_helper, (), adapter_row);
         let cols: &mut ModularIsEqualCoreCols<F, READ_LIMBS> = core_row.borrow_mut();
 
@@ -379,21 +373,18 @@ where
             (&cols.b, &cols.c),
             (&mut cols.eq_marker, &mut cols.cmp_result),
         );
-
-        let b_diff_idx = cols
-            .eq_marker
-            .iter()
-            .position(|x| *x != F::ZERO)
-            .unwrap_or(READ_LIMBS);
-        let c_diff_idx = cols
-            .eq_marker
-            .iter()
-            .position(|x| *x != F::ZERO)
-            .unwrap_or(READ_LIMBS);
+        let b = cols.b.map(|x| x.as_canonical_u32() as u8);
+        let c = cols.c.map(|x| x.as_canonical_u32() as u8);
+        let (_, b_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.modulus_limbs);
+        let (_, c_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.modulus_limbs);
 
         if cols.is_setup != F::ONE {
             cols.b_lt_diff =
                 F::from_canonical_u8(self.modulus_limbs[b_diff_idx]) - cols.b[b_diff_idx];
+            self.bitwise_lookup_chip.request_range(
+                (self.modulus_limbs[b_diff_idx] - b[b_diff_idx] - 1) as u32,
+                (self.modulus_limbs[c_diff_idx] - c[c_diff_idx] - 1) as u32,
+            );
         }
         cols.c_lt_diff = F::from_canonical_u8(self.modulus_limbs[c_diff_idx]) - cols.c[c_diff_idx];
         cols.c_lt_mark = if b_diff_idx == c_diff_idx {

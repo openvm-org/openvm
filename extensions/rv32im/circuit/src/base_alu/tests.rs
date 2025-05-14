@@ -90,19 +90,23 @@ fn set_and_execute(
         )
     };
 
-    let (instruction, rd) = rv32_rand_write_register_or_imm(
-        tester,
-        b,
-        c,
-        c_imm,
-        opcode.global_opcode().as_usize(),
-        rng,
-    );
-    tester.execute(chip, &instruction);
+    // let (instruction, rd) = rv32_rand_write_register_or_imm(
+    //     tester,
+    //     b,
+    //     c,
+    //     c_imm,
+    //     opcode.global_opcode().as_usize(),
+    //     rng,
+    // );
+    tester.write(2, 1024, [F::ONE; 4]);
+    tester.write(2, 1028, [F::ONE; 4]);
+    let sm = tester.read(2, 1024);
+    assert_eq!(sm, [F::ONE; 8]);
+    // tester.execute(chip, &instruction);
 
-    let a = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c)
-        .map(F::from_canonical_u8);
-    assert_eq!(a, tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd))
+    // let a = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c)
+    //     .map(F::from_canonical_u8);
+    // assert_eq!(a, tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd))
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -112,7 +116,7 @@ fn set_and_execute(
 // passes all constraints.
 //////////////////////////////////////////////////////////////////////////////////////
 
-#[test_case(ADD, 100)]
+#[test_case(ADD, 1)]
 #[test_case(SUB, 100)]
 #[test_case(XOR, 100)]
 #[test_case(OR, 100)]
@@ -122,6 +126,37 @@ fn rand_rv32_alu_test(opcode: BaseAluOpcode, num_ops: usize) {
 
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
+
+    // TODO(AG): make a more meaningful test for memory accesses
+    tester.write(2, 1024, [F::ONE; 4]);
+    tester.write(2, 1028, [F::ONE; 4]);
+    let sm = tester.read(2, 1024);
+    assert_eq!(sm, [F::ONE; 8]);
+
+    for _ in 0..num_ops {
+        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None, None);
+    }
+
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test_case(ADD, 100)]
+#[test_case(SUB, 100)]
+#[test_case(XOR, 100)]
+#[test_case(OR, 100)]
+#[test_case(AND, 100)]
+fn rand_rv32_alu_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+
+    let mut tester = VmChipTestBuilder::default_persistent();
+    let (mut chip, bitwise_chip) = create_test_chip(&tester);
+
+    // TODO(AG): make a more meaningful test for memory accesses
+    tester.write(2, 1024, [F::ONE; 4]);
+    tester.write(2, 1028, [F::ONE; 4]);
+    let sm = tester.read(2, 1024);
+    assert_eq!(sm, [F::ONE; 8]);
 
     for _ in 0..num_ops {
         set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None, None);

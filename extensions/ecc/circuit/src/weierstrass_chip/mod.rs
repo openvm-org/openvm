@@ -7,19 +7,33 @@ pub use double::*;
 #[cfg(test)]
 mod tests;
 
-
 use openvm_circuit::arch::{NewVmChipWrapper, VmAirWrapper};
 
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionStep};
 use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
 
-pub(crate) type WeierstrassAir<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper<
-    Rv32VecHeapAdapterAir<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+pub(crate) type WeierstrassAir<
+    const NUM_READS: usize,
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+> = VmAirWrapper<
+    Rv32VecHeapAdapterAir<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
     FieldExpressionCoreAir,
 >;
 
-pub(crate) type WeierstrassStep<const BLOCKS: usize, const BLOCK_SIZE: usize> =
-    FieldExpressionStep<Rv32VecHeapAdapterStep<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>;
+pub(crate) type WeierstrassStep<
+    const NUM_READS: usize,
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+> = FieldExpressionStep<Rv32VecHeapAdapterStep<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>;
 
-pub(crate) type WeierstrassChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> =
-    NewVmChipWrapper<F, WeierstrassAir<BLOCKS, BLOCK_SIZE>, WeierstrassStep<BLOCKS, BLOCK_SIZE>>;
+pub(crate) type WeierstrassChip<
+    F,
+    const NUM_READS: usize,
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+> = NewVmChipWrapper<
+    F,
+    WeierstrassAir<NUM_READS, BLOCKS, BLOCK_SIZE>,
+    WeierstrassStep<NUM_READS, BLOCKS, BLOCK_SIZE>,
+>;

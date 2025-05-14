@@ -6,7 +6,10 @@ use openvm_circuit::{
         MinimalInstruction, Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir,
         VmStateMut,
     },
-    system::memory::online::{GuestMemory, TracingMemory},
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::{
     var_range::SharedVariableRangeCheckerChip, SubAir, TraceSubRowGenerator,
@@ -188,6 +191,14 @@ impl<A> FieldExpressionStep<A> {
         name: &str,
         should_finalize: bool,
     ) -> Self {
+        let opcode_flag_idx = if opcode_flag_idx.is_empty() && expr.needs_setup() {
+            // single op chip that needs setup, so there is only one default flag, must be 0.
+            vec![0]
+        } else {
+            // multi ops chip or no-setup chip, use as is.
+            opcode_flag_idx
+        };
+        assert_eq!(opcode_flag_idx.len(), local_opcode_idx.len() - 1);
         tracing::info!(
             "FieldExpressionCoreStep: opcode={name}, main_width={}",
             BaseAir::<BabyBear>::width(&expr)
@@ -311,6 +322,11 @@ where
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         *trace_offset += width;
         Ok(())
+    }
+
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row: &mut [F]) {
+        let (adapter_row, _) = row.split_at_mut(A::WIDTH);
+        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
     }
 }
 
