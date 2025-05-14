@@ -26,3 +26,14 @@ pub fn read_config_toml_or_default(config: &PathBuf) -> Result<AppConfig<SdkVmCo
         Ok(default_app_config())
     }
 }
+
+pub fn find_manifest_dir(mut current_dir: PathBuf) -> Result<PathBuf> {
+    current_dir = current_dir.canonicalize()?;
+    while !current_dir.join("Cargo.toml").exists() {
+        current_dir = current_dir
+            .parent()
+            .expect("Could not find Cargo.toml in current directory or any parent directory")
+            .to_path_buf();
+    }
+    Ok(current_dir)
+}
