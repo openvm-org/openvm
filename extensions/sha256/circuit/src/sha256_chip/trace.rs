@@ -28,7 +28,7 @@ use super::{
 };
 use crate::{
     sha256_chip::{PaddingFlags, SHA256_READ_SIZE},
-    SHA256_BLOCK_CELLS,
+    SHA256VM_ROUND_WIDTH, SHA256_BLOCK_CELLS,
 };
 
 impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
@@ -51,7 +51,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
         } = instruction;
         let d = d.as_canonical_u32();
         let e = e.as_canonical_u32();
-        debug_assert_eq!(opcode.as_usize(), Rv32Sha256Opcode::SHA256.local_usize());
+        debug_assert_eq!(*opcode, Rv32Sha256Opcode::SHA256.global_opcode());
         debug_assert_eq!(d, RV32_REGISTER_AS);
         debug_assert_eq!(e, RV32_MEMORY_AS);
 
@@ -112,7 +112,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
         // let global_idx = *trace_offset / (SHA256_ROWS_PER_BLOCK * width) + 1;
         let mut prev_hash = SHA256_H;
         trace
-            .chunks_mut(width)
+            .chunks_mut(width * SHA256_ROWS_PER_BLOCK)
             .enumerate()
             .take(num_blocks)
             .for_each(|(block_idx, block_slice)| {
@@ -123,7 +123,8 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
                     .enumerate()
                     .take(4)
                     .for_each(|(row_idx, row)| {
-                        let cols: &mut Sha256VmRoundCols<F> = row.borrow_mut();
+                        let cols: &mut Sha256VmRoundCols<F> =
+                            row[..SHA256VM_ROUND_WIDTH].borrow_mut();
                         read_data[row_idx] = tracing_read::<_, SHA256_READ_SIZE>(
                             state.memory,
                             e,
@@ -161,7 +162,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
                     block_idx,
                     is_last_block,
                 );
-
+                println!("digest_cols: {:?}", digest_cols);
                 Sha256StepHelper::get_block_hash(&mut prev_hash, padded_input);
             });
 
@@ -172,7 +173,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
             e,
             dst,
             &prev_hash
-                .map(|x| x.to_le_bytes())
+                .map(|x| x.to_be_bytes())
                 .concat()
                 .try_into()
                 .unwrap(),
@@ -207,22 +208,19 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
                 if block_idx * SHA256_ROWS_PER_BLOCK >= rows_used {
                     // Fill in the invalid rows
                     block_slice.par_chunks_mut(width).for_each(|row| {
-                        let cols: &mut Sha256VmRoundCols<F> = row.borrow_mut();
+                        let cols: &mut Sha256VmRoundCols<F> =
+                            row[..SHA256VM_ROUND_WIDTH].borrow_mut();
                         self.inner.generate_default_row(&mut cols.inner);
                     });
                     return;
                 }
-                let (block_slice, digest_row) =
-                    block_slice.split_at_mut(width * (SHA256_ROWS_PER_BLOCK - 1));
-                let digest_cols: &mut Sha256VmDigestCols<F> =
-                    digest_row[..SHA256VM_DIGEST_WIDTH].borrow_mut();
 
                 // The read data is kept in the buffer of the first 4 round cols
                 let read_data: [u8; SHA256_BLOCK_CELLS] = block_slice
                     .chunks_exact(width)
                     .take(4)
                     .map(|row| {
-                        let cols: &Sha256VmRoundCols<F> = row.borrow();
+                        let cols: &Sha256VmRoundCols<F> = row[..SHA256VM_ROUND_WIDTH].borrow();
                         cols.inner.message_schedule.carry_or_buffer.as_flattened()
                     })
                     .flatten()
@@ -230,16 +228,28 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
                     .collect::<Vec<_>>()
                     .try_into()
                     .unwrap();
-                let local_block_idx =
-                    digest_cols.inner.flags.local_block_idx.as_canonical_u32() as usize;
-                let len = digest_cols.control.len.as_canonical_u32();
+
+                let digest_offset = width * (SHA256_ROWS_PER_BLOCK - 1);
+                let (local_block_idx, len, is_last_block, prev_hash) = {
+                    let digest_cols: &mut Sha256VmDigestCols<F> = block_slice
+                        [digest_offset..digest_offset + SHA256VM_DIGEST_WIDTH]
+                        .borrow_mut();
+                    (
+                        digest_cols.inner.flags.local_block_idx.as_canonical_u32() as usize,
+                        digest_cols.control.len.as_canonical_u32(),
+                        digest_cols.inner.flags.is_last_block.is_one(),
+                        digest_cols
+                            .inner
+                            .prev_hash
+                            .map(|x| x[0].as_canonical_u32() + (x[1].as_canonical_u32() << 16)),
+                    )
+                };
                 let mut has_padding_occurred = local_block_idx * SHA256_BLOCK_CELLS > len as usize;
                 let message_left = if has_padding_occurred {
                     0
                 } else {
                     len as usize - local_block_idx * SHA256_BLOCK_CELLS
                 };
-                let is_last_block = digest_cols.inner.flags.is_last_block.is_one();
 
                 let padded_input = get_padded_input(read_data, len, local_block_idx, is_last_block);
                 let padded_input: [u32; SHA256_BLOCK_WORDS] = array::from_fn(|j| {
@@ -249,11 +259,6 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
                             .unwrap(),
                     )
                 });
-
-                let prev_hash = digest_cols
-                    .inner
-                    .prev_hash
-                    .map(|x| x[0].as_canonical_u32() + x[1].as_canonical_u32() << 16);
 
                 self.inner.generate_block_trace::<F>(
                     block_slice,
@@ -266,17 +271,22 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
                     block_idx as u32 + 1, // global block index is 1-based
                     local_block_idx as u32,
                 );
+
+                let (round_rows, digest_row) = block_slice.split_at_mut(digest_offset);
+                let digest_cols: &mut Sha256VmDigestCols<F> =
+                    digest_row[..SHA256VM_DIGEST_WIDTH].borrow_mut();
                 let len = digest_cols.control.len;
                 let read_ptr = digest_cols.control.read_ptr;
                 let timestamp = digest_cols.control.cur_timestamp;
 
                 // Fill in the first 4 round rows
-                block_slice
+                round_rows
                     .chunks_mut(width)
                     .take(4)
                     .enumerate()
                     .for_each(|(row, row_slice)| {
-                        let cols: &mut Sha256VmRoundCols<F> = row_slice.borrow_mut();
+                        let cols: &mut Sha256VmRoundCols<F> =
+                            row_slice[..SHA256VM_ROUND_WIDTH].borrow_mut();
                         cols.control.len = len;
                         cols.control.read_ptr =
                             read_ptr - F::from_canonical_usize(SHA256_READ_SIZE * (4 - row));
@@ -312,15 +322,18 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
                             .map(F::from_canonical_u32);
                         }
                         cols.control.padding_occurred = F::from_bool(has_padding_occurred);
+                        println!("cols: {:?}", cols);
+
                     });
 
                 // Fill in the remaining round rows
 
-                block_slice
+                round_rows
                     .par_chunks_mut(width)
                     .skip(4)
                     .for_each(|row_slice| {
-                        let cols: &mut Sha256VmRoundCols<F> = row_slice.borrow_mut();
+                        let cols: &mut Sha256VmRoundCols<F> =
+                            row_slice[..SHA256VM_ROUND_WIDTH].borrow_mut();
                         cols.control.len = len;
                         cols.control.read_ptr = read_ptr;
                         cols.control.cur_timestamp = timestamp;

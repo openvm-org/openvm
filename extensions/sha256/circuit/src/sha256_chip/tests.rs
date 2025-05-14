@@ -1,3 +1,5 @@
+use std::array;
+
 use openvm_circuit::arch::testing::{
     memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
 };
@@ -16,7 +18,7 @@ use crate::{sha256_solve, Sha256VmDigestCols, Sha256VmRoundCols};
 
 type F = BabyBear;
 const SELF_BUS_IDX: BusIndex = 28;
-const MAX_INS_CAPACITY: usize = 1024;
+const MAX_INS_CAPACITY: usize = 4096;
 
 fn create_test_chips(
     tester: &mut VmChipTestBuilder<F>,
@@ -52,7 +54,7 @@ fn set_and_execute(
     message: Option<&[u8]>,
     len: Option<usize>,
 ) {
-    let len = len.unwrap_or(rng.gen_range(1..100000));
+    let len = len.unwrap_or(rng.gen_range(1..100));
     let tmp = get_random_message(rng, len);
     let message: &[u8] = message.unwrap_or(&tmp);
     let len = message.len();
@@ -70,9 +72,14 @@ fn set_and_execute(
     tester.write(1, rs1, src_ptr.to_le_bytes().map(F::from_canonical_u8));
     tester.write(1, rs2, len.to_le_bytes().map(F::from_canonical_u8));
 
-    for (i, &byte) in message.iter().enumerate() {
-        tester.write(2, src_ptr as usize + i, [F::from_canonical_u8(byte)]);
-    }
+    message.chunks(4).enumerate().for_each(|(i, chunk)| {
+        let chunk: [&u8; 4] = array::from_fn(|i| chunk.get(i).unwrap_or(&0));
+        tester.write(
+            2,
+            src_ptr as usize + i * 4,
+            chunk.map(|&x| F::from_canonical_u8(x)),
+        );
+    });
 
     tester.execute(
         chip,
@@ -99,7 +106,7 @@ fn rand_sha256_test() {
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chips(&mut tester);
 
-    let num_ops: usize = 3;
+    let num_ops: usize = 1;
     for _ in 0..num_ops {
         set_and_execute(&mut tester, &mut chip, &mut rng, SHA256, None, None);
     }

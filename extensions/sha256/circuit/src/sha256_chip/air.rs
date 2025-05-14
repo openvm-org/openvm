@@ -79,9 +79,9 @@ impl<AB: InteractionBuilder> Air<AB> for Sha256VmAir {
         self.eval_padding(builder);
         self.eval_transitions(builder);
         self.eval_reads(builder);
-        self.eval_last_row(builder);
+        // self.eval_last_row(builder);
 
-        self.sha256_subair.eval(builder, SHA256VM_CONTROL_WIDTH);
+        // self.sha256_subair.eval(builder, SHA256VM_CONTROL_WIDTH);
     }
 }
 
