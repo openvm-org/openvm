@@ -19,6 +19,7 @@ pub struct VmCli {
 }
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)]
 pub enum VmCliCommands {
     Build(BuildCmd),
     Keygen(KeygenCmd),

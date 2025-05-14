@@ -17,7 +17,7 @@ use openvm_sdk::{
     DefaultStaticVerifierPvHandler, Sdk,
 };
 
-use crate::default::{DEFAULT_AGG_PK_PATH, DEFAULT_EVM_HALO2_VERIFIER_PATH, DEFAULT_PARAMS_DIR};
+use crate::default::{default_agg_pk_path, default_evm_halo2_verifier_path, default_params_dir};
 
 #[derive(Parser)]
 #[command(
@@ -28,14 +28,18 @@ pub struct EvmProvingSetupCmd {}
 
 impl EvmProvingSetupCmd {
     pub async fn run(&self) -> Result<()> {
-        if PathBuf::from(DEFAULT_AGG_PK_PATH).exists()
-            && PathBuf::from(DEFAULT_EVM_HALO2_VERIFIER_PATH)
+        let default_agg_pk_path = default_agg_pk_path();
+        let default_params_dir = default_params_dir();
+        let default_evm_halo2_verifier_path = default_evm_halo2_verifier_path();
+
+        if PathBuf::from(&default_agg_pk_path).exists()
+            && PathBuf::from(&default_evm_halo2_verifier_path)
                 .join(EVM_HALO2_VERIFIER_PARENT_NAME)
                 .exists()
-            && PathBuf::from(DEFAULT_EVM_HALO2_VERIFIER_PATH)
+            && PathBuf::from(&default_evm_halo2_verifier_path)
                 .join(EVM_HALO2_VERIFIER_BASE_NAME)
                 .exists()
-            && PathBuf::from(DEFAULT_EVM_HALO2_VERIFIER_PATH)
+            && PathBuf::from(&default_evm_halo2_verifier_path)
                 .join("interfaces")
                 .join(EVM_HALO2_VERIFIER_INTERFACE_NAME)
                 .exists()
@@ -49,7 +53,7 @@ impl EvmProvingSetupCmd {
         }
 
         Self::download_params(10, 24).await?;
-        let params_reader = CacheHalo2ParamsReader::new(DEFAULT_PARAMS_DIR);
+        let params_reader = CacheHalo2ParamsReader::new(default_params_dir);
         let agg_config = AggConfig::default();
         let sdk = Sdk::new();
 
@@ -60,10 +64,10 @@ impl EvmProvingSetupCmd {
         let verifier = sdk.generate_halo2_verifier_solidity(&params_reader, &agg_pk)?;
 
         println!("Writing proving key to file...");
-        write_agg_pk_to_file(agg_pk, DEFAULT_AGG_PK_PATH)?;
+        write_agg_pk_to_file(agg_pk, &default_agg_pk_path)?;
 
         println!("Writing verifier contract to file...");
-        write_evm_halo2_verifier_to_folder(verifier, DEFAULT_EVM_HALO2_VERIFIER_PATH)?;
+        write_evm_halo2_verifier_to_folder(verifier, &default_evm_halo2_verifier_path)?;
 
         Ok(())
     }
@@ -76,7 +80,9 @@ impl EvmProvingSetupCmd {
     }
 
     async fn download_params(min_k: u32, max_k: u32) -> Result<()> {
-        create_dir_all(DEFAULT_PARAMS_DIR)?;
+        let default_params_dir = default_params_dir();
+        create_dir_all(&default_params_dir)?;
+
         let config = defaults(BehaviorVersion::latest())
             .region(Region::new("us-east-1"))
             .no_credentials()
@@ -86,7 +92,7 @@ impl EvmProvingSetupCmd {
 
         for k in min_k..=max_k {
             let file_name = format!("kzg_bn254_{}.srs", k);
-            let local_file_path = PathBuf::from(DEFAULT_PARAMS_DIR).join(&file_name);
+            let local_file_path = PathBuf::from(&default_params_dir).join(&file_name);
             if !local_file_path.exists() {
                 println!("Downloading {}", file_name);
                 let key = format!("challenge_0085/{}", file_name);
