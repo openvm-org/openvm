@@ -105,7 +105,7 @@ where
     Mem: GuestMemory,
     Ctx: E1E2ExecutionCtx,
 {
-    state.ctx.on_memory_read(address_space, ptr, N);
+    state.ctx.on_memory_operation(address_space, ptr, N);
 
     memory_read(state.memory, address_space, ptr)
 }
@@ -120,7 +120,7 @@ pub fn memory_write_from_state<Mem, Ctx, const N: usize>(
     Mem: GuestMemory,
     Ctx: E1E2ExecutionCtx,
 {
-    state.ctx.on_memory_write(address_space, ptr, N);
+    state.ctx.on_memory_operation(address_space, ptr, N);
 
     memory_write(state.memory, address_space, ptr, data)
 }

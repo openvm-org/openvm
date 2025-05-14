@@ -10,10 +10,12 @@ use openvm_stark_backend::{
     keygen::types::LinearConstraint,
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
+    p3_util::log2_strict_usize,
     prover::types::{CommittedTraceData, ProofInput},
     utils::metrics_span,
     Chip,
 };
+use riscv::RV32_IMM_AS;
 
 use super::{
     execution_control::{
@@ -25,7 +27,10 @@ use super::{
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{instructions::*, InstructionExecutor},
-    system::connector::DEFAULT_SUSPEND_EXIT_CODE,
+    system::{
+        connector::DEFAULT_SUSPEND_EXIT_CODE,
+        memory::{dimensions::MemoryDimensions, CHUNK},
+    },
 };
 
 pub struct VmSegmentExecutor<F, VC, Ctrl>
@@ -261,19 +266,31 @@ pub type E1Ctx = ();
 pub type E1VmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, E1ExecutionControl>;
 
 // E2 (metered) execution
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct MeteredCtx {
+    continuations_enabled: bool,
+    memory_dimensions: MemoryDimensions,
+    addr_space_alignment_bytes: Vec<usize>,
+
+    // Trace heights for each chip
     pub trace_heights: Vec<usize>,
     // Accesses of size [1, 2, 4, 8, 16, 32]
     // TODO(ayush): no magic number
     pub memory_ops: [usize; 6],
-    pub memory_addresses: BTreeSet<(u32, u32)>,
+    // (addr_space, addr, size)
+    pub memory_addresses: BTreeSet<(u8, u32, u8)>,
 }
 
 impl MeteredCtx {
-    pub fn new_with_len(len: usize) -> Self {
+    pub fn new(
+        num_traces: usize,
+        continuations_enabled: bool,
+        memory_dimensions: MemoryDimensions,
+    ) -> Self {
         Self {
-            trace_heights: vec![0; len],
+            continuations_enabled,
+            memory_dimensions,
+            trace_heights: vec![0; num_traces],
             memory_ops: [0; 6],
             memory_addresses: BTreeSet::new(),
         }
@@ -310,25 +327,62 @@ impl<Ctx> ExecutionSegmentState<Ctx> {
 
 // TODO(ayush): better name
 pub trait E1E2ExecutionCtx {
-    fn on_memory_read(&mut self, address_space: u32, ptr: u32, size: usize);
-    fn on_memory_write(&mut self, address_space: u32, ptr: u32, size: usize);
+    fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: usize);
 }
 
 impl E1E2ExecutionCtx for E1Ctx {
-    fn on_memory_read(&mut self, _address_space: u32, _ptr: u32, _size: usize) {}
-    fn on_memory_write(&mut self, _address_space: u32, _ptr: u32, _size: usize) {}
+    fn on_memory_operation(&mut self, _address_space: u32, _ptr: u32, _size: usize) {}
 }
 
 impl E1E2ExecutionCtx for MeteredCtx {
-    fn on_memory_read(&mut self, address_space: u32, ptr: u32, size: usize) {
-        let log2_size = size.trailing_zeros() as usize;
-        self.memory_ops[log2_size] += 1;
-        self.memory_addresses.insert((address_space, ptr));
-    }
+    fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: usize) {
+        debug_assert!(address_space != RV32_IMM_AS);
 
-    fn on_memory_write(&mut self, address_space: u32, ptr: u32, size: usize) {
-        let log2_size = size.trailing_zeros() as usize;
-        self.memory_ops[log2_size] += 1;
-        self.memory_addresses.insert((address_space, ptr));
+        self.memory_ops[log2_strict_usize(size)] += 1;
+        // TODO(ayush): access adapter heights based on this
+
+        // TODO(ayush): see if this can be approximated by total number of reads/writes for AS != register
+        self.memory_addresses
+            .insert((address_space as u8, ptr, size as u8));
+
+        let log2_chunk = log2_strict_usize(CHUNK);
+        self.trace_heights[offset + log2_chunk] = leaf_indices.len() * 2;
+
+        // Calculate unique chunks and inner nodes in Merkle tree
+        let height = self.memory_dimensions.overall_height();
+
+        // Map memory addresses to leaf indices in the Merkle tree
+        let leaf_indices: BTreeSet<u64> = self
+            .memory_addresses
+            .iter()
+            .map(|&(space, addr, _size)| {
+                let block_id = addr / CHUNK as u32;
+                (1 << height)
+                    + (((space as u32 - self.memory_dimensions.as_offset) as u64)
+                        << self.memory_dimensions.address_height)
+                    + block_id as u64
+            })
+            .collect();
+
+        // Sum up the heights of the XORs between consecutive leaf indices
+        let path_divergences = leaf_indices
+            .iter()
+            .zip(leaf_indices.iter().skip(1))
+            .map(|(&lhs, &rhs)| (lhs ^ rhs).checked_ilog2().map_or(0, |bits| bits as usize))
+            .sum::<usize>();
+
+        let modified_nodes_count = height + path_divergences;
+
+        // | Boundary | Merkle | Access Adapters |
+        let mut offset = 2;
+        self.trace_heights[offset] = leaf_indices.len();
+
+        if self.continuations_enabled {
+            offset += 1;
+            self.trace_heights[offset] = modified_nodes_count * 2;
+        }
+
+        let log2_chunk = log2_strict_usize(CHUNK);
+        self.trace_heights[offset + log2_chunk] = leaf_indices.len() * 2;
     }
 }

@@ -1,5 +1,9 @@
+use std::collections::BTreeSet;
+
 use openvm_instructions::instruction::Instruction;
-use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::Matrix, ChipUsageGetter};
+use openvm_stark_backend::{
+    p3_field::PrimeField32, p3_matrix::Matrix, p3_util::log2_strict_usize, ChipUsageGetter,
+};
 
 use super::{
     ChipId, E1Ctx, ExecutionError, ExecutionSegmentState, MeteredCtx, TracegenCtx, VmChipComplex,
@@ -7,14 +11,16 @@ use super::{
 };
 use crate::{
     arch::{ExecutionState, InsExecutorE1, InstructionExecutor},
-    system::memory::{adapter::GenericAccessAdapterChip, interface::MemoryInterface, MemoryImage},
+    system::memory::{
+        adapter::GenericAccessAdapterChip, interface::MemoryInterface, MemoryImage, CHUNK,
+    },
 };
 
 // Metered execution thresholds
 // TODO(ayush): fix these values
-const MAX_TRACE_HEIGHT: usize = (1 << 22) - 100;
-const MAX_TRACE_CELLS: usize = MAX_TRACE_HEIGHT * 120;
-const MAX_INTERACTIONS: usize = MAX_TRACE_HEIGHT * 120;
+const MAX_TRACE_HEIGHT: usize = usize::MAX - 1;
+const MAX_TRACE_CELLS: usize = usize::MAX - 1;
+const MAX_INTERACTIONS: usize = usize::MAX - 1;
 
 /// Check segment every 100 instructions.
 const SEGMENT_CHECK_INTERVAL: usize = 100;
@@ -150,73 +156,8 @@ where
             println!("{:<10} \t|\t{}", height, name);
         }
 
-        // Print adapter names, widths, and cursor positions
-        let memory = &chip_complex.memory_controller().memory;
-        let air_names = memory.access_adapter_inventory.air_names();
-        let widths = &memory.adapter_inventory_trace_cursor.widths;
-        let cursors = &memory.adapter_inventory_trace_cursor.cursors;
-        println!("Before finalize:");
-        for ((name, &width), cursor) in air_names.iter().zip(widths.iter()).zip(cursors.iter()) {
-            println!(
-                "{:<10} \t|\t{:<5} \t|\t{}",
-                cursor.position() as usize / width,
-                width,
-                name
-            );
-        }
-
-        match &chip_complex.memory_controller().interface_chip {
-            MemoryInterface::Persistent {
-                boundary_chip,
-                merkle_chip,
-                ..
-            } => {
-                dbg!(boundary_chip.touched_labels.len());
-                dbg!(merkle_chip.num_touched_nonleaves);
-            }
-            MemoryInterface::Volatile { boundary_chip } => {
-                if let Some(final_memory) = &boundary_chip.final_memory {
-                    dbg!(final_memory.len());
-                }
-            }
-        };
-
         // TODO(ayush): remove
         chip_complex.finalize_memory();
-        println!("After finalize:");
-        for chip in chip_complex
-            .memory_controller()
-            .access_adapters
-            .chips
-            .iter()
-        {
-            let name = chip.air_name();
-            let width = chip.trace_width();
-            let height = match chip {
-                GenericAccessAdapterChip::N2(c) => c.trace.height(),
-                GenericAccessAdapterChip::N4(c) => c.trace.height(),
-                GenericAccessAdapterChip::N8(c) => c.trace.height(),
-                GenericAccessAdapterChip::N16(c) => c.trace.height(),
-                GenericAccessAdapterChip::N32(c) => c.trace.height(),
-            };
-            println!("{:<10} \t|\t{:<5} \t|\t{}", height, width, name);
-        }
-
-        match &chip_complex.memory_controller().interface_chip {
-            MemoryInterface::Persistent {
-                boundary_chip,
-                merkle_chip,
-                ..
-            } => {
-                dbg!(boundary_chip.touched_labels.len());
-                dbg!(merkle_chip.num_touched_nonleaves);
-            }
-            MemoryInterface::Volatile { boundary_chip } => {
-                if let Some(final_memory) = &boundary_chip.final_memory {
-                    dbg!(final_memory.len());
-                }
-            }
-        };
 
         let timestamp = chip_complex.memory_controller().timestamp();
         chip_complex
@@ -234,7 +175,6 @@ where
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
-        Self::Ctx: Default,
     {
         let timestamp = chip_complex.memory_controller().timestamp();
 
@@ -314,7 +254,6 @@ where
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
-        Self::Ctx: Default,
     {
         let &Instruction { opcode, .. } = instruction;
 
@@ -472,9 +411,6 @@ where
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         _exit_code: u32,
     ) {
-        dbg!(state.ctx.memory_ops);
-        dbg!(state.ctx.memory_addresses.len());
-
         for ((name, height), width) in self
             .air_names
             .iter()
@@ -483,6 +419,7 @@ where
         {
             println!("{:<10} \t|\t{:<5} \t|\t{}", height, width, name);
         }
+
         self.final_memory = Some(chip_complex.base.memory_controller.memory_image().clone());
     }
 
@@ -495,7 +432,6 @@ where
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
-        Self::Ctx: Default,
     {
         let &Instruction { opcode, .. } = instruction;
 
