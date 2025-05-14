@@ -35,14 +35,13 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
-use crate::{
-    Rv32BaseAlu256Step, Rv32BranchEqual256Step, Rv32BranchLessThan256Step, Rv32LessThan256Step,
-    Rv32Multiplication256Step, Rv32Shift256Step,
-};
-
 use super::{
     Rv32BaseAlu256Chip, Rv32BranchEqual256Chip, Rv32BranchLessThan256Chip, Rv32LessThan256Chip,
     Rv32Multiplication256Chip, Rv32Shift256Chip,
+};
+use crate::{
+    Rv32BaseAlu256Step, Rv32BranchEqual256Step, Rv32BranchLessThan256Step, Rv32LessThan256Step,
+    Rv32Multiplication256Step, Rv32Shift256Step,
 };
 
 type F = BabyBear;

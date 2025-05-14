@@ -1,14 +1,8 @@
-use std::{
-    collections::BTreeMap,
-    iter,
-    marker::PhantomData,
-    sync::{Arc, Mutex},
-};
+use std::{collections::BTreeMap, iter, marker::PhantomData};
 
 use getset::{Getters, MutGetters};
 use openvm_circuit_primitives::{
     assert_less_than::{AssertLtSubAir, LessThanAuxCols},
-    is_zero::IsZeroSubAir,
     utils::next_power_of_two_or_zero,
     var_range::{
         SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
@@ -29,9 +23,10 @@ use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
 use super::{
-    online::{GuestMemory, INITIAL_TIMESTAMP},
+    online::INITIAL_TIMESTAMP,
     paged_vec::{AddressMap, PAGE_SIZE},
     volatile::VolatileBoundaryChip,
+    MemoryAddress,
 };
 use crate::{
     arch::{hasher::HasherChip, MemoryConfig},
@@ -39,13 +34,9 @@ use crate::{
         adapter::AccessAdapterInventory,
         dimensions::MemoryDimensions,
         merkle::{MemoryMerkleChip, SerialReceiver},
-        offline_checker::{
-            MemoryBaseAuxCols, MemoryBridge, MemoryBus, MemoryReadAuxCols,
-            MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols, AUX_LEN,
-        },
-        online::{MemoryLogEntry, TracingMemory},
+        offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
+        online::{AccessMetadata, TracingMemory},
         persistent::PersistentBoundaryChip,
-        tree::MemoryNode,
     },
 };
 
@@ -100,25 +91,6 @@ pub struct MemoryController<F> {
     // addr_space -> Memory data structure
     pub memory: TracingMemory<F>,
     pub access_adapters: AccessAdapterInventory<F>,
-    // Filled during finalization.
-    final_state: Option<FinalState<F>>,
-}
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug)]
-enum FinalState<F> {
-    Volatile(VolatileFinalState<F>),
-    #[allow(dead_code)]
-    Persistent(PersistentFinalState<F>),
-}
-#[derive(Debug, Default)]
-struct VolatileFinalState<F> {
-    _marker: PhantomData<F>,
-}
-#[allow(dead_code)]
-#[derive(Debug)]
-struct PersistentFinalState<F> {
-    final_memory: Equipartition<F, CHUNK>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -240,7 +212,7 @@ impl<F: PrimeField32> MemoryController<F> {
                     range_checker.clone(),
                 ),
             },
-            memory: TracingMemory::new(&mem_config, range_checker.clone(), memory_bus),
+            memory: TracingMemory::new(&mem_config, range_checker.clone(), memory_bus, 1),
             access_adapters: AccessAdapterInventory::new(
                 range_checker.clone(),
                 memory_bus,
@@ -249,7 +221,6 @@ impl<F: PrimeField32> MemoryController<F> {
             ),
             range_checker,
             range_checker_bus,
-            final_state: None,
         }
     }
 
@@ -284,8 +255,8 @@ impl<F: PrimeField32> MemoryController<F> {
             memory_bus,
             mem_config,
             interface_chip,
-            memory: TracingMemory::new(&mem_config, range_checker.clone(), memory_bus), /* it is expected that the memory will be
-                                                                                         * set later */
+            memory: TracingMemory::new(&mem_config, range_checker.clone(), memory_bus, CHUNK), /* it is expected that the memory will be
+                                                                                                * set later */
             access_adapters: AccessAdapterInventory::new(
                 range_checker.clone(),
                 memory_bus,
@@ -294,7 +265,6 @@ impl<F: PrimeField32> MemoryController<F> {
             ),
             range_checker,
             range_checker_bus,
-            final_state: None,
         }
     }
 
@@ -337,6 +307,7 @@ impl<F: PrimeField32> MemoryController<F> {
             &self.mem_config,
             self.range_checker.clone(),
             self.memory_bus,
+            CHUNK,
         )
         .with_image(memory.clone(), self.mem_config.access_capacity);
 
@@ -462,47 +433,198 @@ impl<F: PrimeField32> MemoryController<F> {
         self.memory.timestamp()
     }
 
+    /// Returns the equipartition of the touched blocks.
+    /// Has side effects (namely setting the traces for the access adapters).
+    fn touched_blocks_to_equipartition<const CHUNK: usize, const INITIAL_MERGES: bool>(
+        &mut self,
+        touched_blocks: Vec<((u32, u32), AccessMetadata)>,
+    ) -> TimestampedEquipartition<F, CHUNK> {
+        let mut current_values = [F::ZERO; CHUNK];
+        let mut current_cnt = 0;
+        let mut current_address = MemoryAddress::new(0, 0);
+        let mut current_timestamps = vec![0; CHUNK];
+        let mut final_memory = TimestampedEquipartition::<F, CHUNK>::new();
+        for ((addr_space, ptr), metadata) in touched_blocks {
+            let AccessMetadata {
+                timestamp,
+                block_size,
+            } = metadata;
+            if current_cnt > 0
+                && (current_address.address_space != addr_space
+                    || current_address.pointer + CHUNK as u32 <= ptr)
+            {
+                let min_block_size =
+                    self.memory.min_block_size[current_address.address_space as usize] as usize;
+                current_values[current_cnt..].fill(F::ZERO);
+                current_timestamps[(current_cnt / min_block_size)..].fill(INITIAL_TIMESTAMP);
+                self.memory.execute_merges::<false>(
+                    current_address,
+                    min_block_size,
+                    &current_values,
+                    &current_timestamps,
+                );
+                final_memory.insert(
+                    (current_address.address_space, current_address.pointer),
+                    TimestampedValues {
+                        timestamp: *current_timestamps
+                            .iter()
+                            .take(current_cnt.div_ceil(min_block_size))
+                            .max()
+                            .unwrap(),
+                        values: current_values,
+                    },
+                );
+                current_cnt = 0;
+            }
+            let min_block_size = self.memory.min_block_size[addr_space as usize] as usize;
+            if current_cnt == 0 {
+                let rem = ptr & (CHUNK as u32 - 1);
+                if rem != 0 {
+                    current_values[..(rem as usize)].fill(F::ZERO);
+                    current_address = MemoryAddress::new(addr_space, ptr - rem);
+                } else {
+                    current_address = MemoryAddress::new(addr_space, ptr);
+                }
+            } else {
+                let offset = (ptr - current_address.pointer) as usize;
+                current_values[current_cnt..offset].fill(F::ZERO);
+                current_timestamps[(current_cnt / min_block_size)..(offset / min_block_size)]
+                    .fill(INITIAL_TIMESTAMP);
+                current_cnt = offset;
+            }
+            debug_assert!(block_size >= min_block_size as u32);
+            debug_assert!(ptr % min_block_size as u32 == 0);
+
+            let values = (0..block_size)
+                .map(|i| self.memory.data.get_f::<F>(addr_space, ptr + i))
+                .collect::<Vec<_>>();
+            self.memory.execute_splits::<false>(
+                MemoryAddress::new(addr_space, ptr),
+                min_block_size.min(CHUNK),
+                &values,
+                metadata.timestamp,
+            );
+            if INITIAL_MERGES {
+                debug_assert_eq!(CHUNK, 1);
+                let initial_values = vec![F::ZERO; min_block_size];
+                let initial_timestamps = vec![INITIAL_TIMESTAMP; min_block_size / CHUNK];
+                for i in (0..block_size).step_by(min_block_size) {
+                    self.memory.execute_merges::<false>(
+                        MemoryAddress::new(addr_space, ptr + i),
+                        CHUNK,
+                        &initial_values,
+                        &initial_timestamps,
+                    );
+                }
+            }
+            for i in 0..block_size {
+                current_values[current_cnt] = values[i as usize];
+                if current_cnt & (min_block_size - 1) == 0 {
+                    current_timestamps[current_cnt / min_block_size] = timestamp;
+                }
+                current_cnt += 1;
+                if current_cnt == CHUNK {
+                    self.memory.execute_merges::<false>(
+                        current_address,
+                        min_block_size,
+                        &current_values,
+                        &current_timestamps,
+                    );
+                    final_memory.insert(
+                        (current_address.address_space, current_address.pointer),
+                        TimestampedValues {
+                            timestamp: *current_timestamps
+                                .iter()
+                                .take(current_cnt.div_ceil(min_block_size))
+                                .max()
+                                .unwrap(),
+                            values: current_values,
+                        },
+                    );
+                    current_address.pointer += current_cnt as u32;
+                    current_cnt = 0;
+                }
+            }
+        }
+        if current_cnt > 0 {
+            let min_block_size =
+                self.memory.min_block_size[current_address.address_space as usize] as usize;
+            current_values[current_cnt..].fill(F::ZERO);
+            current_timestamps[(current_cnt / min_block_size)..].fill(INITIAL_TIMESTAMP);
+            self.memory.execute_merges::<false>(
+                current_address,
+                min_block_size,
+                &current_values,
+                &current_timestamps,
+            );
+            final_memory.insert(
+                (current_address.address_space, current_address.pointer),
+                TimestampedValues {
+                    timestamp: *current_timestamps
+                        .iter()
+                        .take(current_cnt.div_ceil(min_block_size))
+                        .max()
+                        .unwrap(),
+                    values: current_values,
+                },
+            );
+        }
+
+        for i in 0..self.access_adapters.num_access_adapters() {
+            let width = self.memory.adapter_inventory_trace_cursor.width(i);
+            self.access_adapters.set_trace(
+                i,
+                self.memory.adapter_inventory_trace_cursor.extract_trace(i),
+                width,
+            );
+        }
+
+        final_memory
+    }
+
     /// Returns the final memory state if persistent.
+    #[allow(clippy::assertions_on_constants)]
     pub fn finalize<H>(&mut self, hasher: Option<&mut H>)
     where
         H: HasherChip<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
-        if self.final_state.is_some() {
-            return;
+        let touched_blocks = self.memory.touched_blocks().collect::<Vec<_>>();
+
+        let mut final_memory_volatile = None;
+        let mut final_memory_persistent = None;
+
+        match &self.interface_chip {
+            MemoryInterface::Volatile { .. } => {
+                final_memory_volatile =
+                    Some(self.touched_blocks_to_equipartition::<1, true>(touched_blocks));
+            }
+            MemoryInterface::Persistent { .. } => {
+                final_memory_persistent =
+                    Some(self.touched_blocks_to_equipartition::<CHUNK, false>(touched_blocks));
+            }
         }
-        todo!();
 
         match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
-                // let final_memory = offline_memory.finalize::<1>(&mut self.access_adapters);
-                // boundary_chip.finalize(final_memory);
-                // self.final_state = Some(FinalState::Volatile(VolatileFinalState::default()));
+                let final_memory = final_memory_volatile.unwrap();
+                boundary_chip.finalize(final_memory);
             }
             MemoryInterface::Persistent {
-                merkle_chip,
                 boundary_chip,
+                merkle_chip,
                 initial_memory,
             } => {
-                let hasher = hasher.unwrap();
-                // let final_partition = offline_memory.finalize::<CHUNK>(&mut
-                // self.access_adapters);
+                let final_memory = final_memory_persistent.unwrap();
 
-                // boundary_chip.finalize(initial_memory, &final_partition, hasher);
-                // let final_memory_values = final_partition
-                //     .into_par_iter()
-                //     .map(|(key, value)| (key, value.values))
-                //     .collect();
-                // let initial_node = MemoryNode::tree_from_memory(
-                //     merkle_chip.air.memory_dimensions,
-                //     initial_memory,
-                //     hasher,
-                // );
-                // merkle_chip.finalize(&initial_node, &final_memory_values, hasher);
-                // self.final_state = Some(FinalState::Persistent(PersistentFinalState {
-                //     final_memory: final_memory_values.clone(),
-                // }));
+                let hasher = hasher.unwrap();
+                boundary_chip.finalize(initial_memory, &final_memory, hasher);
+                let final_memory_values = final_memory
+                    .into_par_iter()
+                    .map(|(key, value)| (key, value.values))
+                    .collect();
+                merkle_chip.finalize(initial_memory.clone(), &final_memory_values, hasher);
             }
-        };
+        }
     }
 
     pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>
