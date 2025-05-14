@@ -305,7 +305,41 @@ pub fn build_guest_package(
     runtime_lib: Option<&str>,
     target_filter: &Option<TargetFilter>,
 ) -> Result<PathBuf, Option<i32>> {
-    if is_skip_build() {
+    let mut new_opts = guest_opts.clone();
+
+    if new_opts.target_dir.is_none() {
+        new_opts.target_dir = Some(get_target_dir(&pkg.manifest_path));
+    }
+
+    new_opts.options.extend(vec![
+        "--manifest-path".into(),
+        pkg.manifest_path.to_string(),
+    ]);
+
+    if let Some(runtime_lib) = runtime_lib {
+        new_opts.rustc_flags.extend(vec![
+            String::from("-C"),
+            format!("link_arg={}", runtime_lib),
+        ]);
+    }
+
+    let mut example = false;
+    if let Some(target_filter) = target_filter {
+        new_opts.options.extend(vec![
+            format!("--{}", target_filter.kind),
+            target_filter.name.clone(),
+        ]);
+        example = target_filter.kind == "example";
+    }
+
+    let res = build_generic(&new_opts);
+    res.map(|path| if example { path.join("examples") } else { path })
+}
+
+/// Generic wrapper call to cargo build
+pub fn build_generic(guest_opts: &GuestOptions) -> Result<PathBuf, Option<i32>> {
+    if is_skip_build() || guest_opts.target_dir.is_none() {
+        eprintln!("Skipping build");
         return Err(None);
     }
 
@@ -314,105 +348,6 @@ pub fn build_guest_package(
     if let Err(code) = ensure_toolchain_installed(RUSTUP_TOOLCHAIN_NAME, &["rust-src"]) {
         eprintln!("rustup toolchain commands failed. Please ensure rustup is installed (https://www.rust-lang.org/tools/install)");
         return Err(Some(code));
-    }
-
-    let target_dir = guest_opts
-        .target_dir
-        .clone()
-        .unwrap_or_else(|| get_target_dir(pkg.manifest_path.clone()));
-
-    fs::create_dir_all(&target_dir).unwrap();
-
-    let runtime_rust_flags = runtime_lib
-        .map(|lib| vec![String::from("-C"), format!("link_arg={}", lib)])
-        .unwrap_or_default();
-    let rust_flags: Vec<_> = [
-        runtime_rust_flags
-            .iter()
-            .map(|s| s.as_str())
-            .collect::<Vec<_>>(),
-        guest_opts.rustc_flags.iter().map(|s| s.as_str()).collect(),
-    ]
-    .concat();
-
-    let mut cmd = cargo_command("build", &rust_flags);
-
-    let features_str = guest_opts.features.join(",");
-    if !features_str.is_empty() {
-        cmd.args(["--features", &features_str]);
-    }
-
-    cmd.args([
-        "--manifest-path",
-        pkg.manifest_path.as_str(),
-        "--target-dir",
-        target_dir.to_str().unwrap(),
-    ]);
-
-    if let Some(target_filter) = target_filter {
-        cmd.args([
-            format!("--{}", target_filter.kind).as_str(),
-            target_filter.name.as_str(),
-        ]);
-    }
-
-    let profile = if let Some(profile) = &guest_opts.profile {
-        profile
-    } else {
-        "release"
-    };
-    cmd.args(["--profile", profile]);
-
-    cmd.args(&guest_opts.options);
-
-    let command_string = format!(
-        "{} {}",
-        cmd.get_program().to_string_lossy(),
-        cmd.get_args()
-            .map(|arg| arg.to_string_lossy())
-            .collect::<Vec<_>>()
-            .join(" ")
-    );
-    tty_println(&format!("cargo command: {command_string}"));
-
-    let mut child = cmd
-        .stderr(Stdio::piped())
-        .env("CARGO_TERM_COLOR", "always")
-        .spawn()
-        .expect("cargo build failed");
-    let stderr = child.stderr.take().unwrap();
-
-    tty_println(&format!("{}: Starting build for {RUSTC_TARGET}", pkg.name));
-
-    for line in BufReader::new(stderr).lines() {
-        tty_println(&format!("{}: {}", pkg.name, line.unwrap()));
-    }
-
-    let res = child.wait().expect("Guest 'cargo build' failed");
-    if !res.success() {
-        Err(res.code())
-    } else {
-        Ok(get_dir_with_profile(
-            &target_dir,
-            profile,
-            target_filter
-                .as_ref()
-                .map(|t| t.kind == "example")
-                .unwrap_or(false),
-        ))
-    }
-}
-
-/// Generic wrapper call to cargo build
-pub fn build_generic(guest_opts: &GuestOptions) -> eyre::Result<PathBuf> {
-    if is_skip_build() || guest_opts.target_dir.is_none() {
-        return Err(eyre::eyre!("Skipping build"));
-    }
-
-    // Check if the required toolchain and rust-src component are installed, and if not, install
-    // them. This requires that `rustup` is installed.
-    if ensure_toolchain_installed(RUSTUP_TOOLCHAIN_NAME, &["rust-src"]).is_err() {
-        return Err(eyre::eyre!("rustup toolchain commands failed. Please ensure rustup is installed (https://www.rust-lang.org/tools/install)"));
     }
 
     let target_dir = guest_opts.target_dir.as_ref().unwrap();
@@ -460,10 +395,7 @@ pub fn build_generic(guest_opts: &GuestOptions) -> eyre::Result<PathBuf> {
 
     let res = child.wait().expect("Guest 'cargo build' failed");
     if !res.success() {
-        Err(eyre::eyre!(
-            "Guest 'cargo build' failed with code {}",
-            res.code().unwrap_or(1)
-        ))
+        Err(res.code())
     } else {
         Ok(get_dir_with_profile(target_dir, profile, false))
     }

@@ -269,8 +269,8 @@ pub struct BuildCargoArgs {
     pub frozen: bool,
 }
 
-// Returns the path to the ELF file if it is unique.
-pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Option<Vec<PathBuf>>> {
+// Returns the paths to the ELF file for each built executable target.
+pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Vec<PathBuf>> {
     println!("[openvm] Building the package...");
 
     // Find manifest directory using either manifest_path or find_manifest_dir
@@ -331,7 +331,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Opti
 
     let boolean_flags = [
         ("--workspace", cargo_args.workspace),
-        ("--lib", cargo_args.lib),
+        ("--lib", cargo_args.lib || cargo_args.all_targets),
         ("--bins", all_bins),
         ("--examples", all_examples),
         ("--all-features", cargo_args.all_features),
@@ -350,10 +350,15 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Opti
     }
 
     // Build (allowing passed options to decide what gets built)
-    let target_dir = build_generic(&guest_options)?;
-    if cargo_args.lib {
-        return Ok(None);
-    }
+    let target_dir = match build_generic(&guest_options) {
+        Ok(target_dir) => target_dir,
+        Err(None) => {
+            return Err(eyre::eyre!("Failed to build guest"));
+        }
+        Err(Some(code)) => {
+            return Err(eyre::eyre!("Failed to build guest: code = {}", code));
+        }
+    };
 
     // Write to init file
     let app_config = read_config_toml_or_default(&build_args.config)?;
@@ -391,6 +396,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Opti
                         return all_bins
                             || cargo_args.bin.contains(&target.name)
                             || (!cargo_args.examples
+                                && !cargo_args.lib
                                 && cargo_args.bin.is_empty()
                                 && cargo_args.example.is_empty());
                     }
@@ -409,6 +415,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Opti
         .collect::<Vec<_>>();
 
     // Transpile and commit, storing in target_dir/openvm/${profile} by default
+    // TODO[stephen]: actually implement target_dir change
     if !build_args.no_transpile {
         for elf_path in &elf_paths {
             println!("[openvm] Transpiling the package...");
@@ -449,5 +456,5 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Opti
 
     // Return elf paths of all targets for all built packages
     println!("[openvm] Successfully built the packages");
-    Ok(Some(elf_paths))
+    Ok(elf_paths)
 }

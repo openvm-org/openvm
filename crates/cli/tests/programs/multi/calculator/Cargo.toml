@@ -6,6 +6,10 @@ edition = "2021"
 [dependencies]
 openvm = { path = "../../../../../toolchain/openvm" }
 
+[lib]
+name = "calculator"
+path = "src/lib.rs"
+
 [[bin]]
 name = "calculator"
 path = "src/main.rs"

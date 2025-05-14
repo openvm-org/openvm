@@ -84,8 +84,14 @@ fn test_multi_target_build() -> Result<()> {
     let mut cargo_args = default_cargo_args("multi");
     cargo_args.target_dir = Some(target_dir.to_path_buf());
 
+    // Build lib
+    cargo_args.lib = true;
+    let build_result = build(&build_args, &cargo_args)?;
+    assert!(build_result.is_empty());
+
     // Build bins
-    let build_result = build(&build_args, &cargo_args)?.unwrap();
+    cargo_args.lib = false;
+    let build_result = build(&build_args, &cargo_args)?;
     let binary_names: Vec<String> = build_result
         .iter()
         .map(|path| path.file_stem().unwrap().to_string_lossy().to_string())
@@ -96,7 +102,7 @@ fn test_multi_target_build() -> Result<()> {
 
     // Build examples
     cargo_args.examples = true;
-    let build_result = build(&build_args, &cargo_args)?.unwrap();
+    let build_result = build(&build_args, &cargo_args)?;
     let example_names: Vec<String> = build_result
         .iter()
         .map(|path| path.file_stem().unwrap().to_string_lossy().to_string())
@@ -107,7 +113,7 @@ fn test_multi_target_build() -> Result<()> {
 
     // Build examples and a single bin
     cargo_args.bin = vec!["calculator".to_string()];
-    let build_result = build(&build_args, &cargo_args)?.unwrap();
+    let build_result = build(&build_args, &cargo_args)?;
     let exe_names: Vec<String> = build_result
         .iter()
         .map(|path| path.file_stem().unwrap().to_string_lossy().to_string())
@@ -121,7 +127,7 @@ fn test_multi_target_build() -> Result<()> {
     cargo_args.bin = vec![];
     cargo_args.examples = false;
     cargo_args.all_targets = true;
-    let build_result = build(&build_args, &cargo_args)?.unwrap();
+    let build_result = build(&build_args, &cargo_args)?;
     let all_names: Vec<String> = build_result
         .iter()
         .map(|path| path.file_stem().unwrap().to_string_lossy().to_string())
