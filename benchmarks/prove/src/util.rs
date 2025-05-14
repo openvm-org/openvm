@@ -155,9 +155,9 @@ impl BenchmarkCli {
         input_stream: StdIn,
     ) -> Result<()>
     where
-        VC: VmConfig<F>,
-        VC::Executor: Chip<SC>,
-        VC::Periphery: Chip<SC>,
+        VC: VmConfig<F> + 'static + Send,
+        VC::Executor: Chip<SC> + Send,
+        VC::Periphery: Chip<SC> + Send,
     {
         let app_config = self.app_config(vm_config);
         bench_from_exe::<VC, BabyBearPoseidon2Engine>(
@@ -181,7 +181,7 @@ impl BenchmarkCli {
 /// 6. Verify STARK proofs.
 ///
 /// Returns the data necessary for proof aggregation.
-pub fn bench_from_exe<VC, E: StarkFriEngine<SC>>(
+pub fn bench_from_exe<VC, E: StarkFriEngine<SC> + Send + 'static>(
     bench_name: impl ToString,
     app_config: AppConfig<VC>,
     exe: impl Into<VmExe<F>>,
@@ -189,9 +189,9 @@ pub fn bench_from_exe<VC, E: StarkFriEngine<SC>>(
     leaf_vm_config: Option<NativeConfig>,
 ) -> Result<()>
 where
-    VC: VmConfig<F>,
-    VC::Executor: Chip<SC>,
-    VC::Periphery: Chip<SC>,
+    VC: VmConfig<F> + 'static + Send,
+    VC::Executor: Chip<SC> + Send,
+    VC::Periphery: Chip<SC> + Send,
 {
     let bench_name = bench_name.to_string();
     // 1. Generate proving key from config.
