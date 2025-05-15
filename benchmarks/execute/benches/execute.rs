@@ -10,10 +10,10 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
 static AVAILABLE_PROGRAMS: &[&str] = &[
-    // "fibonacci_recursive",
-    // "fibonacci_iterative",
-    // "quicksort",
-    // "bubblesort",
+    "fibonacci_recursive",
+    "fibonacci_iterative",
+    "quicksort",
+    "bubblesort",
     "factorial_iterative_u256",
     // "pairing",
     // "keccak256",
