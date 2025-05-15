@@ -80,6 +80,7 @@ pub fn u32_into_limbs<const NUM_LIMBS: usize>(num: u32) -> [u32; NUM_LIMBS] {
     array::from_fn(|i| (num >> (limb_bits * i)) & ((1 << limb_bits) - 1))
 }
 
+/// Convert a u32 into a an array of 2 16-bit limbs in little endian
 pub fn u32_into_u16s(num: u32) -> [u32; 2] {
     [num & 0xffff, num >> 16]
 }
