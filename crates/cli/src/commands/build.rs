@@ -12,18 +12,11 @@ use openvm_build::{
     GuestOptions,
 };
 use openvm_circuit::arch::{InitFileGenerator, OPENVM_DEFAULT_INIT_FILE_NAME};
-use openvm_sdk::{
-    commit::{commit_app_exe, committed_exe_as_bn254},
-    fs::write_exe_to_file,
-    Sdk,
-};
+use openvm_sdk::{commit::commit_app_exe, fs::write_exe_to_file, Sdk};
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 
 use crate::{
-    default::{
-        DEFAULT_APP_CONFIG_PATH, DEFAULT_APP_EXE_PATH, DEFAULT_COMMITTED_APP_EXE_PATH,
-        DEFAULT_EXE_COMMIT_PATH,
-    },
+    default::{DEFAULT_APP_CONFIG_PATH, DEFAULT_APP_EXE_PATH, DEFAULT_COMMITTED_APP_EXE_PATH},
     util::{find_manifest_dir, read_config_toml_or_default},
 };
 
@@ -77,14 +70,6 @@ pub struct BuildArgs {
         help_heading = "OpenVM Options"
     )]
     pub committed_exe_output: PathBuf,
-
-    #[arg(
-        long,
-        default_value = DEFAULT_EXE_COMMIT_PATH,
-        help = "Output path for the exe commit (bn254 commit of committed program)",
-        help_heading = "OpenVM Options"
-    )]
-    pub exe_commit_output: PathBuf,
 
     #[arg(
         long,
@@ -428,13 +413,6 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Vec<
             let committed_exe = commit_app_exe(app_config.app_fri_params.fri_params, exe.clone());
             write_exe_to_file(exe, output_path)?;
 
-            if let Some(parent) = build_args.exe_commit_output.parent() {
-                create_dir_all(parent)?;
-            }
-            write(
-                &build_args.exe_commit_output,
-                committed_exe_as_bn254(&committed_exe).value.to_bytes(),
-            )?;
             if let Some(parent) = build_args.committed_exe_output.parent() {
                 create_dir_all(parent)?;
             }
