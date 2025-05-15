@@ -246,7 +246,9 @@ where
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
         }
-        let state = metrics_span("execute_time_ms", || segment.execute_from_pc(from_state.pc))?;
+        let state = metrics_span("execute_time_ms", || {
+            segment.execute_from_pc(from_state.pc, None)
+        })?;
 
         if state.is_terminated {
             return Ok(VmExecutorOneSegmentResult {
@@ -339,7 +341,7 @@ where
                 // TODO(ayush): avoid clones
                 exe.program.clone(),
                 state.input,
-                Some(state.memory),
+                None,
                 self.trace_height_constraints.clone(),
                 exe.fn_bounds.clone(),
             );
@@ -348,7 +350,9 @@ where
                 segment.metrics = state.metrics;
             }
 
-            let exec_state = metrics_span("execute_time_ms", || segment.execute_from_pc(state.pc))?;
+            let exec_state = metrics_span("execute_time_ms", || {
+                segment.execute_from_pc(state.pc, Some(state.memory))
+            })?;
 
             if exec_state.is_terminated {
                 // Check exit code for the final segment
@@ -561,7 +565,9 @@ where
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
         }
-        metrics_span("execute_time_ms", || segment.execute_from_pc(exe.pc_start))?;
+        metrics_span("execute_time_ms", || {
+            segment.execute_from_pc(exe.pc_start, None)
+        })?;
         Ok(segment)
     }
 }

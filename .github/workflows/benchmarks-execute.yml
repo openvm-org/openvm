@@ -2,7 +2,8 @@ name: "benchmarks-execute"
 
 on:
   push:
-    branches: ["main"]
+    # TODO(ayush): remove after feat/new-execution is merged
+    branches: ["main", "feat/new-execution"]
   pull_request:
     types: [opened, synchronize, reopened, labeled]
     branches: ["**"]
