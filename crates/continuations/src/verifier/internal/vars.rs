@@ -6,7 +6,7 @@ use openvm_stark_sdk::openvm_stark_backend::proof::Proof;
 
 use crate::{
     verifier::{
-        internal::types::{E2eStarkProof, InternalVmVerifierInput},
+        internal::types::{InternalVmVerifierInput, VmStarkProof},
         utils::write_field_slice,
     },
     C, F, SC,
@@ -44,7 +44,7 @@ impl Hintable<C> for InternalVmVerifierInput<SC> {
     }
 }
 
-impl Hintable<C> for E2eStarkProof<SC> {
+impl Hintable<C> for VmStarkProof<SC> {
     type HintVariable = E2eStarkProofVariable<C>;
 
     fn read(builder: &mut Builder<C>) -> Self::HintVariable {

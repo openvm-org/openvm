@@ -4,8 +4,7 @@ use openvm_circuit::{
     arch::{instructions::exe::VmExe, VmConfig},
     system::program::trace::VmCommittedExe,
 };
-use openvm_continuations::verifier::leaf::LeafVmVerifierConfig;
-use openvm_native_compiler::{conversion::CompilerOptions, ir::DIGEST_SIZE};
+use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_stark_backend::{config::StarkGenericConfig, p3_field::PrimeField32};
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
@@ -14,14 +13,16 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
     p3_bn254_fr::Bn254Fr,
 };
+use serde::{Deserialize, Serialize};
 
-use crate::{keygen::AppProvingKey, NonRootCommittedExe, F, SC};
+use crate::{NonRootCommittedExe, F, SC};
 
 /// `AppExecutionCommit` has all the commitments users should check against the final proof.
-pub struct AppExecutionCommit<T> {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AppExecutionCommit {
     /// Commitment of the leaf VM verifier program which commits the VmConfig of App VM.
     /// Internal verifier will verify `leaf_vm_verifier_commit`.
-    pub leaf_vm_verifier_commit: [T; DIGEST_SIZE],
+    pub vm_commit: [u32; DIGEST_SIZE],
     /// Commitment of the executable. It's computed as
     /// compress(
     ///     compress(
@@ -31,10 +32,10 @@ pub struct AppExecutionCommit<T> {
     ///     hash(right_pad(pc_start, 0))
     /// )
     /// `right_pad` example, if pc_start = 123, right_pad(pc_start, 0) = \[123,0,0,0,0,0,0,0\]
-    pub exe_commit: [T; DIGEST_SIZE],
+    pub exe_commit: [u32; DIGEST_SIZE],
 }
 
-impl AppExecutionCommit<F> {
+impl AppExecutionCommit {
     /// Users should use this function to compute `AppExecutionCommit` and check it against the
     /// final proof.
     pub fn compute<VC: VmConfig<F>>(
@@ -42,25 +43,27 @@ impl AppExecutionCommit<F> {
         app_exe: &NonRootCommittedExe,
         leaf_vm_verifier_exe: &NonRootCommittedExe,
     ) -> Self {
-        let exe_commit = app_exe
+        let exe_commit: [F; DIGEST_SIZE] = app_exe
             .compute_exe_commit(&app_vm_config.system().memory_config)
             .into();
-        let leaf_vm_verifier_commit: [F; DIGEST_SIZE] =
-            leaf_vm_verifier_exe.committed_program.commitment.into();
+        let vm_commit: [F; DIGEST_SIZE] = leaf_vm_verifier_exe.committed_program.commitment.into();
 
         Self {
-            leaf_vm_verifier_commit,
-            exe_commit,
+            vm_commit: vm_commit.map(|x| x.as_canonical_u32()),
+            exe_commit: exe_commit.map(|x| x.as_canonical_u32()),
         }
     }
 
-    pub fn app_config_commit_to_bn254(&self) -> Bn254Fr {
-        babybear_digest_to_bn254(&self.leaf_vm_verifier_commit)
+    pub fn vm_commit_to_bn254(&self) -> Bn254Fr {
+        babybear_u32_digest_to_bn254(&self.vm_commit)
     }
 
     pub fn exe_commit_to_bn254(&self) -> Bn254Fr {
-        babybear_digest_to_bn254(&self.exe_commit)
+        babybear_u32_digest_to_bn254(&self.exe_commit)
     }
+}
+fn babybear_u32_digest_to_bn254(digest: &[u32; DIGEST_SIZE]) -> Bn254Fr {
+    babybear_digest_to_bn254(&digest.map(F::from_canonical_u32))
 }
 
 pub(crate) fn babybear_digest_to_bn254(digest: &[F; DIGEST_SIZE]) -> Bn254Fr {
@@ -72,25 +75,6 @@ pub(crate) fn babybear_digest_to_bn254(digest: &[F; DIGEST_SIZE]) -> Bn254Fr {
         base *= order;
     });
     ret
-}
-
-pub fn generate_leaf_committed_exe<VC: VmConfig<F>>(
-    leaf_fri_params: FriParameters,
-    compiler_options: CompilerOptions,
-    app_pk: &AppProvingKey<VC>,
-) -> Arc<NonRootCommittedExe> {
-    let app_vm_vk = app_pk.app_vm_pk.vm_pk.get_vk();
-    let leaf_engine = BabyBearPoseidon2Engine::new(leaf_fri_params);
-    let leaf_program = LeafVmVerifierConfig {
-        app_fri_params: app_pk.app_vm_pk.fri_params,
-        app_system_config: app_pk.app_vm_pk.vm_config.system().clone(),
-        compiler_options,
-    }
-    .build_program(&app_vm_vk);
-    Arc::new(VmCommittedExe::commit(
-        leaf_program.into(),
-        leaf_engine.config.pcs(),
-    ))
 }
 
 pub fn commit_app_exe(
