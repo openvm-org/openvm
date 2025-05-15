@@ -1,7 +1,6 @@
 use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
-    iter::once,
 };
 
 use itertools::izip;
@@ -307,19 +306,17 @@ where
         cols.heap_read_aux.iter_mut().for_each(|aux| {
             mem_helper.fill_from_prev(timestamp_pp(), aux.as_mut());
         });
-        
+
         // Range checks:
-        let need_range_check: Vec<u32> = cols
-            .rs_val
-            .iter()
-            .map(|&val| val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
-            .chain(once(0)) // in case NUM_READS is odd
-            .collect();
         debug_assert!(self.pointer_max_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
         let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits;
-        for pair in need_range_check.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] << limb_shift_bits, pair[1] << limb_shift_bits);
-        }
+        self.bitwise_lookup_chip.request_range(
+            cols.rs_val[0][RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+            if NUM_READS > 1 {
+                cols.rs_val[1][RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits
+            } else {
+                0
+            },
+        );
     }
 }

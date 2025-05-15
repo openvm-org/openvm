@@ -1,5 +1,6 @@
 use itertools::Itertools;
 use num_bigint::BigUint;
+use num_traits::Zero;
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, DynAdapterInterface, DynArray,
@@ -283,6 +284,20 @@ where
         let (adapter_row, _) = row.split_at_mut(A::WIDTH);
         self.adapter.fill_trace_row(mem_helper, (), adapter_row);
     }
+
+    // We will be setting is_valid = 0. That forces all flags be 0 (otherwise setup will be -1).
+    // We generate a dummy row with all flags set to 0, then we set is_valid = 0.
+    fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, row: &mut [F]) {
+        let inputs: Vec<BigUint> = vec![BigUint::zero(); self.num_inputs()];
+        let flags: Vec<bool> = vec![false; self.num_flags()];
+        let core_row = &mut row[A::WIDTH..];
+        // We **do not** want this trace row to update the range checker
+        // so we must create a temporary range checker
+        let tmp_range_checker = SharedVariableRangeCheckerChip::new(self.range_checker.bus());
+        self.expr
+            .generate_subrow((tmp_range_checker.as_ref(), inputs, flags), core_row);
+        core_row[0] = F::ZERO; // is_valid = 0
+    }
 }
 
 impl<F, A> StepExecutorE1<F> for FieldExpressionStep<A>
@@ -321,7 +336,7 @@ fn run_field_expression<F: PrimeField32, A>(
 
     assert_eq!(data.len(), step.num_inputs() * field_element_limbs);
 
-    let mut inputs = vec![];
+    let mut inputs = Vec::with_capacity(step.num_inputs());
     for i in 0..step.num_inputs() {
         let start = i * field_element_limbs;
         let end = start + field_element_limbs;

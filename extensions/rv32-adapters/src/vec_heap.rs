@@ -430,17 +430,22 @@ impl<
         });
 
         // Range checks:
-        let need_range_check: Vec<u32> = cols
-            .rs_val
-            .iter()
-            .chain(std::iter::repeat_n(&cols.rd_val, 2))
-            .map(|&val| val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
-            .collect();
         debug_assert!(self.pointer_max_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
         let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits;
-        for pair in need_range_check.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] << limb_shift_bits, pair[1] << limb_shift_bits);
+        if NUM_READS > 1 {
+            self.bitwise_lookup_chip.request_range(
+                cols.rs_val[0][RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+                cols.rs_val[1][RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+            );
+            self.bitwise_lookup_chip.request_range(
+                cols.rd_val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+                cols.rd_val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+            );
+        } else {
+            self.bitwise_lookup_chip.request_range(
+                cols.rs_val[0][RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+                cols.rd_val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+            );
         }
     }
 }

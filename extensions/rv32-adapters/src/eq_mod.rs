@@ -1,7 +1,6 @@
 use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
-    iter,
 };
 
 use itertools::izip;
@@ -307,21 +306,19 @@ where
         });
 
         // Read memory values
-        let read_data: [[[_; BLOCK_SIZE]; BLOCKS_PER_READ]; NUM_READS] = from_fn(|i| {
+        from_fn(|i| {
             assert!(rs_vals[i] as usize + TOTAL_READ_SIZE - 1 < (1 << self.pointer_max_bits));
-            from_fn(|j| {
-                tracing_read(
+            from_fn::<_, BLOCKS_PER_READ, _>(|j| {
+                tracing_read::<_, BLOCK_SIZE>(
                     memory,
                     e,
                     rs_vals[i] + (j * BLOCK_SIZE) as u32,
                     &mut cols.heap_read_aux[i][j],
                 )
             })
-        });
-
-        read_data.map(|r| {
-            let read = r.iter().flatten().copied().collect::<Vec<_>>();
-            read.try_into().unwrap()
+            .concat()
+            .try_into()
+            .unwrap()
         })
     }
 
@@ -372,18 +369,16 @@ where
         mem_helper.fill_from_prev(timestamp_pp(), cols.writes_aux.as_mut());
 
         // Range checks:
-        let need_range_check: Vec<u32> = cols
-            .rs_val
-            .iter()
-            .map(|&val| val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
-            .chain(iter::once(0)) // in case NUM_READS is odd
-            .collect();
         debug_assert!(self.pointer_max_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
         let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits;
-        for pair in need_range_check.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] << limb_shift_bits, pair[1] << limb_shift_bits);
-        }
+        self.bitwise_lookup_chip.request_range(
+            cols.rs_val[0][RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+            if NUM_READS > 1 {
+                cols.rs_val[1][RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits
+            } else {
+                0
+            },
+        );
     }
 }
 

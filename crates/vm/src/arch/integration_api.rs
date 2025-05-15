@@ -187,6 +187,11 @@ pub trait TraceStep<F, CTX> {
             .for_each(|row_slice| {
                 self.fill_trace_row(mem_helper, row_slice);
             });
+        trace[rows_used * width..]
+            .par_chunks_exact_mut(width)
+            .for_each(|row_slice| {
+                self.fill_dummy_trace_row(mem_helper, row_slice);
+            });
     }
 
     /// Populates `row_slice`. This function will always be called after
@@ -199,6 +204,13 @@ pub trait TraceStep<F, CTX> {
         unreachable!("fill_trace_row is not implemented")
     }
 
+    /// Populates `row_slice`. This function will be called on dummy rows.
+    /// By default the trace is padded with empty (all 0) rows to make the height a power of 2.
+    ///
+    /// The provided `row_slice` will have length equal to the width of the AIR.
+    fn fill_dummy_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        // By default, the row is filled with zeroes
+    }
     /// Returns a list of public values to publish.
     fn generate_public_values(&self) -> Vec<F> {
         vec![]
@@ -299,9 +311,6 @@ where
         assert!(height.checked_mul(self.width).unwrap() <= self.trace_buffer.len());
         self.trace_buffer.truncate(height * self.width);
         let mem_helper = self.mem_helper.as_borrowed();
-        // This zip only goes through used rows.
-        // TODO: check if zero-init assumption changes
-        // The padding(=dummy) rows between rows_used..height are ASSUMED to be filled with zeros.
         self.step
             .fill_trace(&mem_helper, &mut self.trace_buffer, self.width, rows_used);
         drop(self.mem_helper);
