@@ -4694,6 +4694,8 @@ dependencies = [
  "derive_more 1.0.0",
  "eyre",
  "openvm-benchmarks-utils",
+ "openvm-bigint-circuit",
+ "openvm-bigint-transpiler",
  "openvm-circuit",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",

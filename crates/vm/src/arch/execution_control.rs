@@ -1,5 +1,5 @@
 use openvm_instructions::instruction::Instruction;
-use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
+use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::Matrix, ChipUsageGetter};
 
 use super::{
     ChipId, E1Ctx, ExecutionError, ExecutionSegmentState, MeteredCtx, TracegenCtx, VmChipComplex,
@@ -7,7 +7,9 @@ use super::{
 };
 use crate::{
     arch::{ExecutionState, InsExecutorE1, InstructionExecutor},
-    system::memory::{online::GuestMemory, AddressMap, MemoryImage, PAGE_SIZE},
+    system::memory::{
+        adapter::GenericAccessAdapterChip, online::GuestMemory, AddressMap, MemoryImage, PAGE_SIZE,
+    },
 };
 
 // Metered execution thresholds
@@ -145,6 +147,21 @@ where
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         exit_code: u32,
     ) {
+        // Print adapter names, widths, and cursor positions
+        let memory = &chip_complex.memory_controller().memory;
+        let air_names = memory.access_adapter_inventory.air_names();
+        let widths = &memory.adapter_inventory_trace_cursor.widths;
+        let cursors = &memory.adapter_inventory_trace_cursor.cursors;
+        println!("Before finalize:");
+        for ((name, &width), cursor) in air_names.iter().zip(widths.iter()).zip(cursors.iter()) {
+            println!(
+                "{:<10} \t|\t{:<5} \t|\t{}",
+                cursor.position() as usize / width,
+                width,
+                name
+            );
+        }
+
         for (name, height) in self
             .air_names
             .iter()
@@ -155,6 +172,25 @@ where
 
         // TODO(ayush): remove
         chip_complex.finalize_memory();
+
+        println!("After finalize:");
+        for chip in chip_complex
+            .memory_controller()
+            .access_adapters
+            .chips
+            .iter()
+        {
+            let name = chip.air_name();
+            let width = chip.trace_width();
+            let height = match chip {
+                GenericAccessAdapterChip::N2(c) => c.trace.height(),
+                GenericAccessAdapterChip::N4(c) => c.trace.height(),
+                GenericAccessAdapterChip::N8(c) => c.trace.height(),
+                GenericAccessAdapterChip::N16(c) => c.trace.height(),
+                GenericAccessAdapterChip::N32(c) => c.trace.height(),
+            };
+            println!("{:<10} \t|\t{:<5} \t|\t{}", height, width, name);
+        }
 
         let timestamp = chip_complex.memory_controller().timestamp();
         chip_complex

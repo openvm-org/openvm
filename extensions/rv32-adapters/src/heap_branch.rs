@@ -7,7 +7,8 @@ use itertools::izip;
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface,
-        ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
+        E1E2ExecutionCtx, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
+        VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols},
@@ -25,7 +26,8 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
 use openvm_rv32im_circuit::adapters::{
-    memory_read, new_read_rv32_register, tracing_read, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+    memory_read_from_state, new_read_rv32_register, tracing_read, RV32_CELL_BITS,
+    RV32_REGISTER_NUM_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -187,43 +189,6 @@ impl<const NUM_READS: usize, const READ_SIZE: usize>
         }
     }
 }
-impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterExecutorE1<F>
-    for Rv32HeapBranchAdapterStep<NUM_READS, READ_SIZE>
-{
-    type ReadData = [[u8; READ_SIZE]; NUM_READS];
-    type WriteData = ();
-
-    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
-    where
-        Mem: GuestMemory,
-    {
-        let Instruction { a, b, d, e, .. } = *instruction;
-
-        let d = d.as_canonical_u32();
-        let e = e.as_canonical_u32();
-        debug_assert_eq!(d, RV32_REGISTER_AS);
-        debug_assert_eq!(e, RV32_MEMORY_AS);
-
-        // Read register values
-        let rs_vals = from_fn(|i| {
-            let addr = if i == 0 { a } else { b };
-            new_read_rv32_register(memory, d, addr.as_canonical_u32())
-        });
-
-        // Read memory values
-        rs_vals.map(|address| {
-            assert!(address as usize + READ_SIZE - 1 < (1 << self.pointer_max_bits));
-            memory_read(memory, e, address)
-        })
-    }
-
-    fn write<Mem>(&self, _memory: &mut Mem, _instruction: &Instruction<F>, _data: &Self::WriteData)
-    where
-        Mem: GuestMemory,
-    {
-        // This function intentionally does nothing
-    }
-}
 
 impl<F, CTX, const NUM_READS: usize, const READ_SIZE: usize> AdapterTraceStep<F, CTX>
     for Rv32HeapBranchAdapterStep<NUM_READS, READ_SIZE>
@@ -318,5 +283,53 @@ where
                 0
             },
         );
+    }
+}
+
+impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterExecutorE1<F>
+    for Rv32HeapBranchAdapterStep<NUM_READS, READ_SIZE>
+{
+    type ReadData = [[u8; READ_SIZE]; NUM_READS];
+    type WriteData = ();
+
+    fn read<Mem, Ctx>(
+        &self,
+        state: &mut VmStateMut<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
+    where
+        Mem: GuestMemory,
+        Ctx: E1E2ExecutionCtx,
+    {
+        let Instruction { a, b, d, e, .. } = *instruction;
+
+        let d = d.as_canonical_u32();
+        let e = e.as_canonical_u32();
+        debug_assert_eq!(d, RV32_REGISTER_AS);
+        debug_assert_eq!(e, RV32_MEMORY_AS);
+
+        // Read register values
+        let rs_vals = from_fn(|i| {
+            let addr = if i == 0 { a } else { b };
+            new_read_rv32_register(state, d, addr.as_canonical_u32())
+        });
+
+        // Read memory values
+        rs_vals.map(|address| {
+            assert!(address as usize + READ_SIZE - 1 < (1 << self.pointer_max_bits));
+            memory_read_from_state(state, e, address)
+        })
+    }
+
+    fn write<Mem, Ctx>(
+        &self,
+        _state: &mut VmStateMut<Mem, Ctx>,
+        _instruction: &Instruction<F>,
+        _data: &Self::WriteData,
+    ) where
+        Mem: GuestMemory,
+        Ctx: E1E2ExecutionCtx,
+    {
+        // This function intentionally does nothing
     }
 }

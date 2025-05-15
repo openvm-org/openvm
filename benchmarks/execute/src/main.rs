@@ -1,8 +1,9 @@
 use clap::{Parser, ValueEnum};
 use eyre::Result;
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
+use openvm_bigint_circuit::Int256Rv32Config;
+use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmExecutor};
-use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
@@ -24,10 +25,11 @@ enum BuildProfile {
 // const DEFAULT_APP_CONFIG_PATH: &str = "./openvm.toml";
 
 static AVAILABLE_PROGRAMS: &[&str] = &[
-    "fibonacci_recursive",
-    "fibonacci_iterative",
-    "quicksort",
-    "bubblesort",
+    // "fibonacci_recursive",
+    // "fibonacci_iterative",
+    // "quicksort",
+    // "bubblesort",
+    "factorial_iterative_u256",
     // "pairing",
     // "keccak256",
     // "keccak256_iter",
@@ -119,12 +121,13 @@ fn main() -> Result<()> {
             // let config_path = program_dir.join(DEFAULT_APP_CONFIG_PATH);
             // let vm_config = read_config_toml_or_default(&config_path)?.app_vm_config;
             // let transpiler = vm_config.transpiler;
-            let vm_config = Rv32ImConfig::default();
+            let vm_config = Int256Rv32Config::default();
 
             let transpiler = Transpiler::<BabyBear>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension);
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Int256TranspilerExtension);
 
             let exe = VmExe::from_elf(elf, transpiler)?;
 

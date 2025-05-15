@@ -3,7 +3,7 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface,
-        ExecutionBridge, MinimalInstruction, VmAdapterAir,
+        E1E2ExecutionCtx, ExecutionBridge, MinimalInstruction, VmAdapterAir, VmStateMut,
     },
     system::memory::{
         offline_checker::MemoryBridge,
@@ -172,20 +172,28 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
     type ReadData = [[u8; READ_SIZE]; NUM_READS];
     type WriteData = [[u8; WRITE_SIZE]; 1];
 
-    #[inline(always)]
-    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
+    fn read<Mem, Ctx>(
+        &self,
+        state: &mut VmStateMut<Mem, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
     where
         Mem: GuestMemory,
+        Ctx: E1E2ExecutionCtx,
     {
-        let read_data = AdapterExecutorE1::<F>::read(&self.0, memory, instruction);
+        let read_data = AdapterExecutorE1::<F>::read(&self.0, state, instruction);
         read_data.map(|r| r[0])
     }
 
-    #[inline(always)]
-    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData)
-    where
+    fn write<Mem, Ctx>(
+        &self,
+        state: &mut VmStateMut<Mem, Ctx>,
+        instruction: &Instruction<F>,
+        data: &Self::WriteData,
+    ) where
         Mem: GuestMemory,
+        Ctx: E1E2ExecutionCtx,
     {
-        AdapterExecutorE1::<F>::write(&self.0, memory, instruction, data);
+        AdapterExecutorE1::<F>::write(&self.0, state, instruction, data);
     }
 }

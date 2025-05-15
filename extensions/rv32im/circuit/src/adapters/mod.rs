@@ -257,8 +257,16 @@ pub fn read_rv32_register<F: PrimeField32>(
 }
 
 #[inline(always)]
-pub fn new_read_rv32_register<Mem: GuestMemory>(memory: &Mem, address_space: u32, ptr: u32) -> u32 {
-    u32::from_le_bytes(memory_read(memory, address_space, ptr))
+pub fn new_read_rv32_register<Mem, Ctx>(
+    state: &mut VmStateMut<Mem, Ctx>,
+    address_space: u32,
+    ptr: u32,
+) -> u32
+where
+    Mem: GuestMemory,
+    Ctx: E1E2ExecutionCtx,
+{
+    u32::from_le_bytes(memory_read_from_state(state, address_space, ptr))
 }
 
 /// Peeks at the value of a register without updating the memory state or incrementing the
