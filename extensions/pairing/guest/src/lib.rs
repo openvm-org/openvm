@@ -28,6 +28,7 @@ pub use openvm_algebra_guest as algebra;
 /// These should **only** be importable on a host machine.
 #[cfg(all(feature = "halo2curves", not(target_os = "zkvm")))]
 pub mod halo2curves_shims;
+
 /// Traits for optimal Ate pairing check using intrinsic functions.
 pub mod pairing;
 

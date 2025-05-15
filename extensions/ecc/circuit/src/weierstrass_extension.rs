@@ -248,9 +248,10 @@ pub(crate) mod phantom {
     };
 
     use eyre::bail;
-    use num_bigint::{BigUint, RandBigInt};
+    use num_bigint::BigUint;
     use num_integer::Integer;
-    use num_traits::{FromPrimitive, One};
+    use num_traits::One;
+    use openvm_algebra_circuit::{find_non_qr, mod_sqrt};
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
         system::memory::MemoryController,
@@ -259,7 +260,6 @@ pub(crate) mod phantom {
     use openvm_instructions::{riscv::RV32_MEMORY_AS, PhantomDiscriminant};
     use openvm_rv32im_circuit::adapters::unsafe_read_rv32_register;
     use openvm_stark_backend::p3_field::PrimeField32;
-    use rand::{rngs::StdRng, SeedableRng};
 
     use super::CurveConfig;
 
@@ -382,61 +382,6 @@ pub(crate) mod phantom {
         }
     }
 
-    /// Find the square root of `x` modulo `modulus` with `non_qr` a
-    /// quadratic nonresidue of the field.
-    pub fn mod_sqrt(x: &BigUint, modulus: &BigUint, non_qr: &BigUint) -> Option<BigUint> {
-        if modulus % 4u32 == BigUint::from_u8(3).unwrap() {
-            // x^(1/2) = x^((p+1)/4) when p = 3 mod 4
-            let exponent = (modulus + BigUint::one()) >> 2;
-            let ret = x.modpow(&exponent, modulus);
-            if &ret * &ret % modulus == x % modulus {
-                Some(ret)
-            } else {
-                None
-            }
-        } else {
-            // Tonelli-Shanks algorithm
-            // https://en.wikipedia.org/wiki/Tonelli%E2%80%93Shanks_algorithm#The_algorithm
-            let mut q = modulus - BigUint::one();
-            let mut s = 0;
-            while &q % 2u32 == BigUint::ZERO {
-                s += 1;
-                q /= 2u32;
-            }
-            let z = non_qr;
-            let mut m = s;
-            let mut c = z.modpow(&q, modulus);
-            let mut t = x.modpow(&q, modulus);
-            let mut r = x.modpow(&((q + BigUint::one()) >> 1), modulus);
-            loop {
-                if t == BigUint::ZERO {
-                    return Some(BigUint::ZERO);
-                }
-                if t == BigUint::one() {
-                    return Some(r);
-                }
-                let mut i = 0;
-                let mut tmp = t.clone();
-                while tmp != BigUint::one() && i < m {
-                    tmp = &tmp * &tmp % modulus;
-                    i += 1;
-                }
-                if i == m {
-                    // self is not a quadratic residue
-                    return None;
-                }
-                for _ in 0..m - i - 1 {
-                    c = &c * &c % modulus;
-                }
-                let b = c;
-                m = i;
-                c = &b * &b % modulus;
-                t = ((t * &b % modulus) * &b) % modulus;
-                r = (r * b) % modulus;
-            }
-        }
-    }
-
     #[derive(Clone)]
     pub struct NonQrHintSubEx {
         pub supported_curves: Vec<CurveConfig>,
@@ -492,35 +437,6 @@ pub(crate) mod phantom {
                 .collect();
             streams.hint_stream = hint_bytes;
             Ok(())
-        }
-    }
-
-    // Returns a non-quadratic residue in the field
-    fn find_non_qr(modulus: &BigUint) -> BigUint {
-        if modulus % 4u32 == BigUint::from(3u8) {
-            // p = 3 mod 4 then -1 is a quadratic residue
-            modulus - BigUint::one()
-        } else if modulus % 8u32 == BigUint::from(5u8) {
-            // p = 5 mod 8 then 2 is a non-quadratic residue
-            // since 2^((p-1)/2) = (-1)^((p^2-1)/8)
-            BigUint::from_u8(2u8).unwrap()
-        } else {
-            let mut rng = StdRng::from_entropy();
-            let mut non_qr = rng.gen_biguint_range(
-                &BigUint::from_u8(2).unwrap(),
-                &(modulus - BigUint::from_u8(1).unwrap()),
-            );
-            // To check if non_qr is a quadratic nonresidue, we compute non_qr^((p-1)/2)
-            // If the result is p-1, then non_qr is a quadratic nonresidue
-            // Otherwise, non_qr is a quadratic residue
-            let exponent = (modulus - BigUint::one()) >> 1;
-            while non_qr.modpow(&exponent, modulus) != modulus - BigUint::one() {
-                non_qr = rng.gen_biguint_range(
-                    &BigUint::from_u8(2).unwrap(),
-                    &(modulus - BigUint::from_u8(1).unwrap()),
-                );
-            }
-            non_qr
         }
     }
 }

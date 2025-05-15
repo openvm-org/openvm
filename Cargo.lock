@@ -2030,7 +2030,7 @@ dependencies = [
  "base16ct 0.2.0",
  "crypto-bigint 0.5.5",
  "digest 0.10.7",
- "ff 0.13.0",
+ "ff 0.13.1",
  "generic-array",
  "group 0.13.0",
  "pkcs8 0.10.2",
@@ -2313,9 +2313,9 @@ dependencies = [
 
 [[package]]
 name = "ff"
-version = "0.13.0"
+version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ded41244b729663b1e574f1b4fb731469f69f79c17667b5d776b16cda0479449"
+checksum = "c0b50bfb653653f9ca9095b427bed08ab8d75a137839d9ad64eb11810d5b6393"
 dependencies = [
  "bitvec",
  "byteorder",
@@ -2326,12 +2326,11 @@ dependencies = [
 
 [[package]]
 name = "ff_derive"
-version = "0.13.0"
+version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9f54704be45ed286151c5e11531316eaef5b8f5af7d597b806fdb8af108d84a"
+checksum = "f10d12652036b0e99197587c6ba87a8fc3031986499973c030d8b44fcc151b60"
 dependencies = [
  "addchain",
- "cfg-if",
  "num-bigint 0.3.3",
  "num-integer",
  "num-traits",
@@ -2640,7 +2639,7 @@ version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0f9ef7462f7c099f518d754361858f86d8a07af53ba9af0fe635bbccb151a63"
 dependencies = [
- "ff 0.13.0",
+ "ff 0.13.1",
  "rand_core",
  "subtle",
 ]
@@ -2691,7 +2690,7 @@ checksum = "62f0ca78d12ac5c893f286d7cdfe3869290305ab8cac376e2592cdc8396da102"
 dependencies = [
  "blake2b_simd",
  "crossbeam",
- "ff 0.13.0",
+ "ff 0.13.1",
  "group 0.13.0",
  "halo2curves-axiom",
  "itertools 0.11.0",
@@ -2768,7 +2767,7 @@ checksum = "b756596082144af6e57105a20403b7b80fe9dccd085700b74fae3af523b74dba"
 dependencies = [
  "blake2",
  "digest 0.10.7",
- "ff 0.13.0",
+ "ff 0.13.1",
  "group 0.13.0",
  "halo2derive",
  "hex",
@@ -2797,7 +2796,7 @@ checksum = "dd8309e4638b4f1bcf6613d72265a84074d26034c35edc5d605b5688e580b8b8"
 dependencies = [
  "blake2b_simd",
  "digest 0.10.7",
- "ff 0.13.0",
+ "ff 0.13.1",
  "group 0.13.0",
  "hex",
  "lazy_static",
@@ -3782,6 +3781,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-modular"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64a5fe11d4135c3bcdf3a95b18b194afa9608a5f6ff034f5d857bc9a27fb0119"
+dependencies = [
+ "num-bigint 0.4.6",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-prime"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e238432a7881ec7164503ccc516c014bf009be7984cde1ba56837862543bdec3"
+dependencies = [
+ "bitvec",
+ "either",
+ "lru",
+ "num-bigint 0.4.6",
+ "num-integer",
+ "num-modular",
+ "num-traits",
+ "rand",
+]
+
+[[package]]
 name = "num-rational"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3932,6 +3958,7 @@ version = "1.1.2"
 dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
+ "eyre",
  "halo2curves-axiom",
  "itertools 0.14.0",
  "num-bigint 0.4.6",
@@ -3973,6 +4000,8 @@ dependencies = [
  "once_cell",
  "openvm-algebra-complex-macros",
  "openvm-algebra-moduli-macros",
+ "openvm-custom-insn",
+ "openvm-rv32im-guest",
  "serde-big-array",
  "strum_macros",
 ]
@@ -3981,6 +4010,8 @@ dependencies = [
 name = "openvm-algebra-moduli-macros"
 version = "1.1.2"
 dependencies = [
+ "num-bigint 0.4.6",
+ "num-prime",
  "openvm-macros-common",
  "quote",
  "syn 2.0.98",
@@ -4120,21 +4151,6 @@ dependencies = [
  "serde",
  "serde-big-array",
  "strum_macros",
-]
-
-[[package]]
-name = "openvm-bigint-integration-tests"
-version = "1.1.2"
-dependencies = [
- "eyre",
- "openvm-bigint-circuit",
- "openvm-bigint-transpiler",
- "openvm-circuit",
- "openvm-instructions",
- "openvm-rv32im-transpiler",
- "openvm-stark-sdk",
- "openvm-toolchain-tests",
- "openvm-transpiler",
 ]
 
 [[package]]
@@ -4316,6 +4332,7 @@ name = "openvm-ecc-integration-tests"
 version = "1.1.2"
 dependencies = [
  "eyre",
+ "halo2curves-axiom",
  "hex-literal",
  "num-bigint 0.4.6",
  "openvm-algebra-circuit",
@@ -4417,21 +4434,6 @@ version = "1.1.2"
 dependencies = [
  "openvm-platform",
  "tiny-keccak",
-]
-
-[[package]]
-name = "openvm-keccak256-integration-tests"
-version = "1.1.2"
-dependencies = [
- "eyre",
- "openvm-circuit",
- "openvm-instructions",
- "openvm-keccak256-circuit",
- "openvm-keccak256-transpiler",
- "openvm-rv32im-transpiler",
- "openvm-stark-sdk",
- "openvm-toolchain-tests",
- "openvm-transpiler",
 ]
 
 [[package]]
@@ -4628,31 +4630,6 @@ dependencies = [
  "serde",
  "strum_macros",
  "subtle",
-]
-
-[[package]]
-name = "openvm-pairing-integration-tests"
-version = "1.1.2"
-dependencies = [
- "eyre",
- "num-bigint 0.4.6",
- "num-traits",
- "openvm",
- "openvm-algebra-circuit",
- "openvm-algebra-transpiler",
- "openvm-circuit",
- "openvm-ecc-circuit",
- "openvm-ecc-guest",
- "openvm-ecc-transpiler",
- "openvm-instructions",
- "openvm-pairing-circuit",
- "openvm-pairing-guest",
- "openvm-pairing-transpiler",
- "openvm-rv32im-transpiler",
- "openvm-stark-sdk",
- "openvm-toolchain-tests",
- "openvm-transpiler",
- "rand",
 ]
 
 [[package]]
@@ -4885,21 +4862,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-sha256-integration-tests"
-version = "1.1.2"
-dependencies = [
- "eyre",
- "openvm-circuit",
- "openvm-instructions",
- "openvm-rv32im-transpiler",
- "openvm-sha256-circuit",
- "openvm-sha256-transpiler",
- "openvm-stark-sdk",
- "openvm-toolchain-tests",
- "openvm-transpiler",
-]
-
-[[package]]
 name = "openvm-sha256-transpiler"
 version = "1.1.2"
 dependencies = [
@@ -4947,7 +4909,7 @@ source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.0.1#e540dbd
 dependencies = [
  "derivative",
  "derive_more 0.99.19",
- "ff 0.13.0",
+ "ff 0.13.1",
  "itertools 0.14.0",
  "metrics",
  "metrics-tracing-context",
@@ -5100,7 +5062,7 @@ name = "p3-bn254-fr"
 version = "0.1.0"
 source = "git+https://github.com/Plonky3/Plonky3.git?rev=1ba4e5c#1ba4e5c40417f4f7aae86bcca56b6484b4b2490b"
 dependencies = [
- "ff 0.13.0",
+ "ff 0.13.1",
  "halo2curves",
  "num-bigint 0.4.6",
  "p3-field",
@@ -5505,7 +5467,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3e57598f73cc7e1b2ac63c79c517b31a0877cd7c402cdcaa311b5208de7a095"
 dependencies = [
  "blake2b_simd",
- "ff 0.13.0",
+ "ff 0.13.1",
  "group 0.13.0",
  "lazy_static",
  "rand",
@@ -5708,7 +5670,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e4aaeda7a092e21165cc5f0cbc738e72a46f31c03c3cbd87b71ceae9d2d93bc"
 dependencies = [
  "bitvec",
- "ff 0.13.0",
+ "ff 0.13.1",
  "lazy_static",
  "log",
  "rand",

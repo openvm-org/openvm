@@ -17,6 +17,8 @@ pub enum ModArithBaseFunct7 {
     DivMod,
     IsEqMod,
     SetupMod,
+    HintNonQr,
+    HintSqrt,
 }
 
 impl ModArithBaseFunct7 {
@@ -54,11 +56,13 @@ pub use field::Field;
 use num_bigint::BigUint;
 pub use openvm_algebra_complex_macros as complex_macros;
 pub use openvm_algebra_moduli_macros as moduli_macros;
+#[cfg(target_os = "zkvm")]
+pub use openvm_custom_insn;
+#[cfg(target_os = "zkvm")]
+pub use openvm_rv32im_guest;
 pub use serde_big_array::BigArray;
 use strum_macros::FromRepr;
 
-/// Field traits
-pub mod field;
 /// Implementation of this library's traits on halo2curves types.
 /// Used for testing and also VM runtime execution.
 /// These should **only** be importable on a host machine.
@@ -67,6 +71,8 @@ mod halo2curves;
 
 /// Exponentiation by bytes
 mod exp_bytes;
+/// Field traits
+pub mod field;
 pub use exp_bytes::*;
 pub use once_cell;
 
@@ -232,4 +238,12 @@ pub trait Reduce: Sized {
     fn reduce_be_bytes(bytes: &[u8]) -> Self {
         Self::reduce_le_bytes(&bytes.iter().rev().copied().collect::<Vec<_>>())
     }
+}
+
+// Note that we use a hint-based approach to prove whether the square root exists.
+// This approach works for prime moduli, but not necessarily for composite moduli,
+// which is why the Sqrt trait requires the Field trait, not just the IntMod trait.
+pub trait Sqrt: Field {
+    /// Returns a square root of `self` if it exists.
+    fn sqrt(&self) -> Option<Self>;
 }

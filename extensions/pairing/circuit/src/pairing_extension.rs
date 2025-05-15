@@ -103,11 +103,12 @@ pub(crate) mod phantom {
     use std::collections::VecDeque;
 
     use eyre::bail;
+    use halo2curves_axiom::ff;
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
         system::memory::MemoryController,
     };
-    use openvm_ecc_guest::{algebra::field::FieldExtension, halo2curves::ff, AffinePoint};
+    use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
     use openvm_instructions::{
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
         PhantomDiscriminant,
@@ -168,7 +169,7 @@ pub(crate) mod phantom {
 
         match PairingCurve::from_repr(c_upper as usize) {
             Some(PairingCurve::Bn254) => {
-                use openvm_ecc_guest::halo2curves::bn256::{Fq, Fq12, Fq2};
+                use halo2curves_axiom::bn256::{Fq, Fq12, Fq2};
                 use openvm_pairing_guest::halo2curves_shims::bn254::Bn254;
                 const N: usize = BN254_NUM_LIMBS;
                 if p_len != q_len {
@@ -210,7 +211,7 @@ pub(crate) mod phantom {
                 );
             }
             Some(PairingCurve::Bls12_381) => {
-                use openvm_ecc_guest::halo2curves::bls12_381::{Fq, Fq12, Fq2};
+                use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
                 use openvm_pairing_guest::halo2curves_shims::bls12_381::Bls12_381;
                 const N: usize = BLS12_381_NUM_LIMBS;
                 if p_len != q_len {

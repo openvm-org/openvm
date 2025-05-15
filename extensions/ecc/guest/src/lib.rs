@@ -3,8 +3,6 @@ extern crate self as openvm_ecc_guest;
 #[macro_use]
 extern crate alloc;
 
-#[cfg(feature = "halo2curves")]
-pub use halo2curves_axiom as halo2curves;
 pub use once_cell;
 pub use openvm_algebra_guest as algebra;
 pub use openvm_ecc_sw_macros as sw_macros;

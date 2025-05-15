@@ -17,6 +17,9 @@ The functional part is provided by the `openvm-algebra-guest` crate, which is a 
 - `Field` trait:
   Provides constants `ZERO` and `ONE` and methods for basic arithmetic operations within a field.
 
+- `Sqrt` trait:
+    Implements square root in a field using hinting.
+
 ## Modular arithmetic
 
 To [leverage](./overview.md) compile-time known moduli for performance, you declare, initialize, and then set up the arithmetic structures:
@@ -30,7 +33,9 @@ moduli_declare! {
 }
 ```
 
-This creates `Bls12_381Fp` and `Bn254Fp` structs, each implementing the `IntMod` trait. The modulus parameter must be a string literal in decimal or hexadecimal format.
+This creates `Bls12_381Fp` and `Bn254Fp` structs, each implementing the `IntMod` trait.
+Since both moduli are prime, both structs also implement the `Field` and `Sqrt` traits.
+The modulus parameter must be a string literal in decimal or hexadecimal format.
 
 2. **Init**: Use the `init!` macro exactly once in the final binary:
 

@@ -114,6 +114,14 @@ mod algebra_impl_0 {
         }
         // ...
     }
+
+    impl Field for Mod1e18 {
+        // ...
+    }
+
+    impl Sqrt for Mod1e18 {
+        // ...
+    }
 }
 ```
 

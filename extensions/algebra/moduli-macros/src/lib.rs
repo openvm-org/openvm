@@ -1,7 +1,10 @@
+extern crate alloc;
 extern crate proc_macro;
 
 use std::sync::atomic::AtomicUsize;
 
+use num_bigint::BigUint;
+use num_prime::nt_funcs::is_prime;
 use openvm_macros_common::{string_to_bytes, MacroArgs};
 use proc_macro::TokenStream;
 use quote::format_ident;
@@ -44,9 +47,12 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     {
                         modulus = Some(value.value());
                     } else {
-                        return syn::Error::new_spanned(param.value, "Expected a string literal")
-                            .to_compile_error()
-                            .into();
+                        return syn::Error::new_spanned(
+                            param.value,
+                            "Expected a string literal for macro argument `modulus`",
+                        )
+                        .to_compile_error()
+                        .into();
                     }
                 }
                 _ => {
@@ -98,6 +104,8 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
         create_extern_func!(mul_extern_func);
         create_extern_func!(div_extern_func);
         create_extern_func!(is_eq_extern_func);
+        create_extern_func!(hint_sqrt_extern_func);
+        create_extern_func!(hint_non_qr_extern_func);
         create_extern_func!(moduli_setup_extern_func);
 
         let block_size = proc_macro::Literal::usize_unsuffixed(block_size);
@@ -127,6 +135,8 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                 fn #mul_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #div_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #is_eq_extern_func(rs1: usize, rs2: usize) -> bool;
+                fn #hint_sqrt_extern_func(rs1: usize);
+                fn #hint_non_qr_extern_func();
                 fn #moduli_setup_extern_func();
             }
 
@@ -719,10 +729,10 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                 fn reduce_le_bytes(bytes: &[u8]) -> Self {
                     let mut res = <Self as openvm_algebra_guest::IntMod>::ZERO;
                     // base should be 2 ^ #limbs which exceeds what Self can represent
-                    let mut base = Self::from_le_bytes(&[255u8; #limbs]);
+                    let mut base = <Self as openvm_algebra_guest::IntMod>::from_le_bytes(&[255u8; #limbs]);
                     base += <Self as openvm_algebra_guest::IntMod>::ONE;
                     for chunk in bytes.chunks(#limbs).rev() {
-                        res = res * &base + Self::from_le_bytes(chunk);
+                        res = res * &base + <Self as openvm_algebra_guest::IntMod>::from_le_bytes(chunk);
                     }
                     res
                 }
@@ -730,6 +740,157 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
         });
 
         output.push(result);
+
+        let modulus_biguint = BigUint::from_bytes_le(&modulus_bytes);
+        let modulus_is_prime = is_prime(&modulus_biguint, None);
+
+        if modulus_is_prime.probably() {
+            // implement Field and Sqrt traits for prime moduli
+            let field_and_sqrt_impl = TokenStream::from(quote::quote_spanned! { span.into() =>
+                impl ::openvm_algebra_guest::Field for #struct_name {
+                    const ZERO: Self = <Self as ::openvm_algebra_guest::IntMod>::ZERO;
+                    const ONE: Self = <Self as ::openvm_algebra_guest::IntMod>::ONE;
+
+                    type SelfRef<'a> = &'a Self;
+
+                    fn double_assign(&mut self) {
+                        ::openvm_algebra_guest::IntMod::double_assign(self);
+                    }
+
+                    fn square_assign(&mut self) {
+                        ::openvm_algebra_guest::IntMod::square_assign(self);
+                    }
+
+                }
+
+                impl openvm_algebra_guest::Sqrt for #struct_name {
+                    // Returns a sqrt of self if it exists, otherwise None.
+                    // Note that we use a hint-based approach to prove whether the square root exists.
+                    // This approach works for prime moduli, but not necessarily for composite moduli,
+                    // which is why we have the sqrt method in the Field trait, not the IntMod trait.
+                    fn sqrt(&self) -> Option<Self> {
+                        match self.honest_host_sqrt() {
+                            // self is a square
+                            Some(Some(sqrt)) => Some(sqrt),
+                            // self is not a square
+                            Some(None) => None,
+                            // host is dishonest
+                            None => {
+                                // host is dishonest, enter infinite loop
+                                loop {
+                                    openvm::io::println("ERROR: Square root hint is invalid. Entering infinite loop.");
+                                }
+                            }
+                        }
+                    }
+                }
+
+                impl #struct_name {
+                    // Returns None if the hint is incorrect (i.e. the host is dishonest)
+                    // Returns Some(None) if the hint proves that self is not a quadratic residue
+                    // Otherwise, returns Some(Some(sqrt)) where sqrt is a square root of self
+                    fn honest_host_sqrt(&self) -> Option<Option<Self>> {
+                        let (is_square, sqrt) = self.hint_sqrt_impl()?;
+
+                        if is_square {
+                            // ensure sqrt < modulus
+                            <Self as ::openvm_algebra_guest::IntMod>::assert_reduced(&sqrt);
+
+                            if &(&sqrt * &sqrt) == self {
+                                Some(Some(sqrt))
+                            } else {
+                                None
+                            }
+                        } else {
+                            // ensure sqrt < modulus
+                            <Self as ::openvm_algebra_guest::IntMod>::assert_reduced(&sqrt);
+
+                            if &sqrt * &sqrt == self * Self::get_non_qr() {
+                                Some(None)
+                            } else {
+                                None
+                            }
+                        }
+                    }
+
+
+                    // Returns None if the hint is malformed.
+                    // Otherwise, returns Some((is_square, sqrt)) where sqrt is a square root of self if is_square is true,
+                    // and a square root of self * non_qr if is_square is false.
+                    fn hint_sqrt_impl(&self) -> Option<(bool, Self)> {
+                        #[cfg(not(target_os = "zkvm"))]
+                        {
+                            unimplemented!();
+                        }
+                        #[cfg(target_os = "zkvm")]
+                        {
+                            use ::openvm_algebra_guest::{openvm_custom_insn, openvm_rv32im_guest}; // needed for hint_store_u32! and hint_buffer_u32!
+
+                            let is_square = core::mem::MaybeUninit::<u32>::uninit();
+                            let sqrt = core::mem::MaybeUninit::<#struct_name>::uninit();
+                            unsafe {
+                                #hint_sqrt_extern_func(self as *const #struct_name as usize);
+                                let is_square_ptr = is_square.as_ptr() as *const u32;
+                                openvm_rv32im_guest::hint_store_u32!(is_square_ptr);
+                                openvm_rv32im_guest::hint_buffer_u32!(sqrt.as_ptr() as *const u8, <#struct_name as ::openvm_algebra_guest::IntMod>::NUM_LIMBS / 4);
+                                let is_square = is_square.assume_init();
+                                if is_square == 0 || is_square == 1 {
+                                    Some((is_square == 1, sqrt.assume_init()))
+                                } else {
+                                    None
+                                }
+                            }
+                        }
+                    }
+
+                    // Generate a non quadratic residue by using a hint
+                    fn init_non_qr() -> alloc::boxed::Box<#struct_name> {
+                        #[cfg(not(target_os = "zkvm"))]
+                        {
+                            unimplemented!();
+                        }
+                        #[cfg(target_os = "zkvm")]
+                        {
+                            use ::openvm_algebra_guest::{openvm_custom_insn, openvm_rv32im_guest}; // needed for hint_buffer_u32!
+
+                            let mut non_qr_uninit = core::mem::MaybeUninit::<Self>::uninit();
+                            let mut non_qr;
+                            unsafe {
+                                #hint_non_qr_extern_func();
+                                let ptr = non_qr_uninit.as_ptr() as *const u8;
+                                openvm_rv32im_guest::hint_buffer_u32!(ptr, <Self as ::openvm_algebra_guest::IntMod>::NUM_LIMBS / 4);
+                                non_qr = non_qr_uninit.assume_init();
+                            }
+                            // ensure non_qr < modulus
+                            <Self as ::openvm_algebra_guest::IntMod>::assert_reduced(&non_qr);
+
+                            use ::openvm_algebra_guest::{DivUnsafe, ExpBytes};
+                            // construct exp = (p-1)/2 as an integer by first constraining exp = (p-1)/2 (mod p) and then exp < p
+                            let exp = -<Self as ::openvm_algebra_guest::IntMod>::ONE.div_unsafe(Self::from_const_u8(2));
+                            <Self as ::openvm_algebra_guest::IntMod>::assert_reduced(&exp);
+
+                            if non_qr.exp_bytes(true, &<Self as ::openvm_algebra_guest::IntMod>::to_be_bytes(&exp)) != -<Self as ::openvm_algebra_guest::IntMod>::ONE
+                            {
+                                // non_qr is not a non quadratic residue, so host is dishonest
+                                loop {
+                                    openvm::io::println("ERROR: Non quadratic residue hint is invalid. Entering infinite loop.");
+                                }
+                            }
+
+                            alloc::boxed::Box::new(non_qr)
+                        }
+                    }
+
+                    // This function is public for use in tests
+                    pub fn get_non_qr() -> &'static #struct_name {
+                        static non_qr: ::openvm_algebra_guest::once_cell::race::OnceBox<#struct_name> = ::openvm_algebra_guest::once_cell::race::OnceBox::new();
+                        &non_qr.get_or_init(Self::init_non_qr)
+                    }
+                }
+            });
+
+            output.push(field_and_sqrt_impl);
+        }
     }
 
     TokenStream::from_iter(output)
@@ -866,6 +1027,46 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
                     rs2 = In rs2
                 );
                 x != 0
+            }
+        });
+
+        let hint_non_qr_extern_func = syn::Ident::new(
+            &format!("hint_non_qr_extern_func_{}", modulus_hex),
+            span.into(),
+        );
+        externs.push(quote::quote_spanned! { span.into() =>
+            #[no_mangle]
+            extern "C" fn #hint_non_qr_extern_func() {
+                openvm::platform::custom_insn_r!(
+                    opcode = ::openvm_algebra_guest::OPCODE,
+                    funct3 = ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
+                    funct7 = ::openvm_algebra_guest::ModArithBaseFunct7::HintNonQr as usize + #mod_idx * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                    rd = Const "x0",
+                    rs1 = Const "x0",
+                    rs2 = Const "x0"
+                );
+            }
+
+
+        });
+
+        // This function will be defined regardless of whether the modulus is prime or not,
+        // but it will be called only if the modulus is prime.
+        let hint_sqrt_extern_func = syn::Ident::new(
+            &format!("hint_sqrt_extern_func_{}", modulus_hex),
+            span.into(),
+        );
+        externs.push(quote::quote_spanned! { span.into() =>
+            #[no_mangle]
+            extern "C" fn #hint_sqrt_extern_func(rs1: usize) {
+                openvm::platform::custom_insn_r!(
+                    opcode = ::openvm_algebra_guest::OPCODE,
+                    funct3 = ::openvm_algebra_guest::MODULAR_ARITHMETIC_FUNCT3 as usize,
+                    funct7 = ::openvm_algebra_guest::ModArithBaseFunct7::HintSqrt as usize + #mod_idx * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
+                    rd = Const "x0",
+                    rs1 = In rs1,
+                    rs2 = Const "x0"
+                );
             }
         });
 
