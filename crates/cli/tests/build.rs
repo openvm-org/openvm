@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use cargo_openvm::{
     commands::{build, BuildArgs, BuildCargoArgs},
-    default::{DEFAULT_APP_EXE_PATH, DEFAULT_COMMITTED_APP_EXE_PATH, DEFAULT_EXE_COMMIT_PATH},
+    default::{DEFAULT_APP_EXE_PATH, DEFAULT_COMMITTED_APP_EXE_PATH},
 };
 use eyre::Result;
 use openvm_build::RUSTC_TARGET;
@@ -18,7 +18,6 @@ fn default_build_args(example: &str) -> BuildArgs {
             .join("openvm.toml"),
         exe_output: PathBuf::from(DEFAULT_APP_EXE_PATH),
         committed_exe_output: PathBuf::from(DEFAULT_COMMITTED_APP_EXE_PATH),
-        exe_commit_output: PathBuf::from(DEFAULT_EXE_COMMIT_PATH),
         init_file_name: OPENVM_DEFAULT_INIT_FILE_NAME.to_string(),
     }
 }
