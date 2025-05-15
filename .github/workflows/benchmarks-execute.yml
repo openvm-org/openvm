@@ -113,16 +113,10 @@ jobs:
           fi
 
   codspeed-benchmarks:
-    strategy:
-      matrix:
-        mode: ["instrumentation", "walltime"]
-
-    name: Run ${{ matrix.mode }} benchmarks
+    name: Run codspeed benchmarks
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=8cpu-linux-x64
-    env:
-      CODSPEED_RUNNER_MODE: ${{ matrix.mode }}
 
     steps:
       - uses: actions/checkout@v4
@@ -142,11 +136,15 @@ jobs:
 
       - name: Build benchmarks
         working-directory: benchmarks/execute
-        run: cargo codspeed build
+        run: |
+          cargo codspeed build --measurement-mode instrumentation
+          cargo codspeed build --measurement-mode walltime
 
       - name: Run benchmarks with CodSpeed
         uses: CodSpeedHQ/action@v3
         with:
           working-directory: benchmarks/execute
-          run: cargo codspeed run
+          run: |
+            cargo codspeed run --measurement-mode instrumentation
+            cargo codspeed run --measurement-mode walltime
           token: ${{ secrets.CODSPEED_TOKEN }}
