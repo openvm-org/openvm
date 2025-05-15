@@ -58,10 +58,6 @@ hex.workspace = true
 forge-fmt = { workspace = true, optional = true }
 rrs-lib = { workspace = true }
 
-[dev-dependencies]
-openvm-rv32im-guest.workspace = true
-
-
 [features]
 default = ["parallel", "jemalloc", "evm-verify"]
 evm-prove = ["openvm-native-recursion/evm-prove"]

@@ -30,15 +30,15 @@ pub struct InternalVmVerifierInput<SC: StarkGenericConfig> {
 }
 assert_impl_all!(InternalVmVerifierInput<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
 
-/// The final output of the internal VM verifier.
+/// A proof which can prove OpenVM program execution.
 #[derive(Deserialize, Serialize, Derivative)]
 #[serde(bound = "")]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
-pub struct E2eStarkProof<SC: StarkGenericConfig> {
+pub struct VmStarkProof<SC: StarkGenericConfig> {
     pub proof: Proof<SC>,
     pub user_public_values: Vec<Val<SC>>,
 }
-assert_impl_all!(E2eStarkProof<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
+assert_impl_all!(VmStarkProof<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
 
 /// Aggregated state of all segments
 #[derive(Debug, Clone, Copy, AlignedBorrow)]
