@@ -1,7 +1,7 @@
 use core::hint::black_box;
 use openvm as _;
 
-const N: u64 = 100_000;
+const N: u64 = 500_000;
 
 pub fn main() {
     let mut a: u64 = 0;
