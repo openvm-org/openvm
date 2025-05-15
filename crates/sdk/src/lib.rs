@@ -21,7 +21,7 @@ use openvm_circuit::{
     },
 };
 use openvm_continuations::verifier::{
-    internal::types::E2eStarkProof,
+    internal::types::VmStarkProof,
     root::{types::RootVmVerifierInput, RootVmVerifierConfig},
 };
 pub use openvm_continuations::{
@@ -61,7 +61,7 @@ pub mod prover;
 mod stdin;
 pub use stdin::*;
 
-use crate::keygen::asm::program_to_asm;
+use crate::{config::AggStarkConfig, keygen::asm::program_to_asm};
 
 pub mod fs;
 pub mod types;
@@ -264,6 +264,11 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         Ok(agg_pk)
     }
 
+    pub fn agg_stark_keygen(&self, config: AggStarkConfig) -> Result<AggStarkProvingKey> {
+        let agg_pk = AggStarkProvingKey::keygen(config);
+        Ok(agg_pk)
+    }
+
     pub fn generate_root_verifier_asm(&self, agg_stark_pk: &AggStarkProvingKey) -> String {
         let kernel_asm = RootVmVerifierConfig {
             leaf_fri_params: agg_stark_pk.leaf_vm_pk.fri_params,
@@ -305,7 +310,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         app_exe: Arc<NonRootCommittedExe>,
         agg_stark_pk: AggStarkProvingKey,
         inputs: StdIn,
-    ) -> Result<E2eStarkProof<SC>>
+    ) -> Result<VmStarkProof<SC>>
     where
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,

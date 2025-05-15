@@ -103,6 +103,14 @@ impl ProveCmd {
                 sdk.set_agg_tree_config(*agg_tree_config);
                 let (app_pk, committed_exe, input) =
                     Self::prepare_execution(&sdk, app_pk, exe, input)?;
+                let commits = AppExecutionCommit::compute(
+                    &app_pk.app_vm_pk.vm_config,
+                    &committed_exe,
+                    &app_pk.leaf_committed_exe,
+                );
+                println!("exe commit: {:?}", commits.exe_commit);
+                println!("vm commit: {:?}", commits.vm_commit);
+
                 let agg_pk = read_agg_pk_from_file(default_agg_pk_path()).map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
                 })?;
@@ -129,6 +137,14 @@ impl ProveCmd {
                 let params_reader = CacheHalo2ParamsReader::new(default_params_dir());
                 let (app_pk, committed_exe, input) =
                     Self::prepare_execution(&sdk, app_pk, exe, input)?;
+                let commits = AppExecutionCommit::compute(
+                    &app_pk.app_vm_pk.vm_config,
+                    &committed_exe,
+                    &app_pk.leaf_committed_exe,
+                );
+                println!("exe commit: {:?}", commits.exe_commit_to_bn254());
+                println!("vm commit: {:?}", commits.vm_commit_to_bn254());
+
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
                 let agg_pk = read_agg_pk_from_file(default_agg_pk_path()).map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
@@ -154,14 +170,6 @@ impl ProveCmd {
         let app_pk: Arc<AppProvingKey<SdkVmConfig>> = Arc::new(read_app_pk_from_file(app_pk)?);
         let app_exe = read_exe_from_file(exe)?;
         let committed_exe = sdk.commit_app_exe(app_pk.app_fri_params(), app_exe)?;
-
-        let commits = AppExecutionCommit::compute(
-            &app_pk.app_vm_pk.vm_config,
-            &committed_exe,
-            &app_pk.leaf_committed_exe,
-        );
-        println!("app_pk commit: {:?}", commits.app_config_commit_to_bn254());
-        println!("exe commit: {:?}", commits.exe_commit_to_bn254());
 
         let input = read_to_stdin(input)?;
         Ok((app_pk, committed_exe, input))
