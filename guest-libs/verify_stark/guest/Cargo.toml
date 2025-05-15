@@ -14,3 +14,12 @@ openvm-native-recursion.workspace = true
 openvm-rv32im-guest.workspace = true
 openvm-sdk = { workspace = true }
 openvm-stark-sdk = { workspace = true }
+
+[dev-dependencies]
+openvm-sdk = { workspace = true }
+openvm-circuit = { workspace = true, features = ["parallel"] }
+openvm-stark-sdk = { workspace = true }
+openvm-build.workspace = true
+openvm-native-compiler.workspace = true
+openvm-verify-stark.workspace = true
+eyre.workspace = true

@@ -67,7 +67,6 @@ members = [
     "extensions/pairing/guest",
     "extensions/pairing/tests",
     "guest-libs/verify_stark/guest",
-    "guest-libs/verify_stark/tests",
 ]
 exclude = ["crates/sdk/example"]
 resolver = "2"
