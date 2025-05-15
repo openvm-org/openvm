@@ -227,10 +227,7 @@ where
     type WriteData = [[u8; RV32_REGISTER_NUM_LIMBS]; 1];
 
     #[inline(always)]
-    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
-    where
-        Mem: GuestMemory,
-    {
+    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
         let Instruction { b, c, d, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
@@ -244,10 +241,7 @@ where
     }
 
     #[inline(always)]
-    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData)
-    where
-        Mem: GuestMemory,
-    {
+    fn write(&self, memory: &mut GuestMemory, instruction: &Instruction<F>, rd: &Self::WriteData) {
         let Instruction { a, d, .. } = *instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);

@@ -128,13 +128,12 @@ impl<F> InsExecutorE1<F> for PhantomChip<F>
 where
     F: PrimeField32,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError>
     where
-        Mem: GuestMemory,
         F: PrimeField32,
     {
         let &Instruction {

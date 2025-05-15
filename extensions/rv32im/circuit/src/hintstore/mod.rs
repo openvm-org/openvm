@@ -462,14 +462,11 @@ impl<F> StepExecutorE1<F> for Rv32HintStoreStep<F>
 where
     F: PrimeField32,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         let &Instruction {
             opcode,
             a: num_words_ptr,

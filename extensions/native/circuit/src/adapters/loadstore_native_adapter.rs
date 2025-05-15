@@ -243,16 +243,15 @@ where
     }
 }
 
-impl<Mem, F, const READ_SIZE: usize, const WRITE_SIZE: usize> AdapterExecutorE1<Mem, F>
+impl<F, const READ_SIZE: usize, const WRITE_SIZE: usize> AdapterExecutorE1<F>
     for NativeLoadStoreAdapterStep<READ_SIZE, WRITE_SIZE>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
 {
     type ReadData = (F, [F; NUM_CELLS]);
     type WriteData = [F; NUM_CELLS];
 
-    fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read(memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
         let Instruction {
             opcode,
             a,
@@ -294,7 +293,7 @@ where
         (read_cell, data_read)
     }
 
-    fn write(memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData) {
+    fn write(memory: &mut GuestMemory, instruction: &Instruction<F>, data: &Self::WriteData) {
         let Instruction {
             opcode,
             a,

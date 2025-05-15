@@ -29,12 +29,11 @@ use crate::{
     },
 };
 
-pub struct VmSegmentExecutor<F, VC, Mem, Ctx, Ctrl>
+pub struct VmSegmentExecutor<F, VC, Ctx, Ctrl>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
-    Mem: GuestMemory,
-    Ctrl: ExecutionControl<F, VC, Mem = Mem, Ctx = Ctx>,
+    Ctrl: ExecutionControl<F, VC, Ctx = Ctx>,
 {
     pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
     /// Execution control for determining segmentation and stopping conditions
@@ -49,30 +48,28 @@ where
     pub metrics: VmMetrics,
 }
 
-pub type E1VmSegmentExecutor<F, VC> =
-    VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, (), E1ExecutionControl>;
+pub type E1VmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, (), E1ExecutionControl>;
 
 // pub struct TracegenCtx;
 pub type TracegenCtx = ();
-pub type TracegenVmStateMut<'a> = VmStateMut<'a, AddressMap<PAGE_SIZE>, TracegenCtx>;
+pub type TracegenVmStateMut<'a> = VmStateMut<'a, GuestMemory, TracegenCtx>;
 
 pub type TracegenVmSegmentExecutor<F, VC> =
-    VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, TracegenCtx, TracegenExecutionControl>;
+    VmSegmentExecutor<F, VC, TracegenCtx, TracegenExecutionControl>;
 
 #[derive(derive_new::new)]
-pub struct ExecutionSegmentState<Mem: GuestMemory> {
-    pub memory: Option<Mem>,
+pub struct ExecutionSegmentState {
+    pub memory: Option<GuestMemory>,
     pub pc: u32,
     pub exit_code: u32,
     pub is_terminated: bool,
 }
 
-impl<F, VC, Mem, Ctx, Ctrl> VmSegmentExecutor<F, VC, Mem, Ctx, Ctrl>
+impl<F, VC, Ctx, Ctrl> VmSegmentExecutor<F, VC, Ctx, Ctrl>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
-    Mem: GuestMemory,
-    Ctrl: ExecutionControl<F, VC, Mem = Mem, Ctx = Ctx>,
+    Ctrl: ExecutionControl<F, VC, Ctx = Ctx>,
 {
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(
@@ -126,8 +123,8 @@ where
     pub fn execute_from_pc(
         &mut self,
         pc: u32,
-        memory: Option<Mem>,
-    ) -> Result<ExecutionSegmentState<Mem>, ExecutionError> {
+        memory: Option<GuestMemory>,
+    ) -> Result<ExecutionSegmentState, ExecutionError> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
         // Call the pre-execution hook
@@ -160,7 +157,7 @@ where
     // TODO(ayush): clean this up, separate to smaller functions
     fn execute_instruction(
         &mut self,
-        state: &mut ExecutionSegmentState<Mem>,
+        state: &mut ExecutionSegmentState,
         prev_backtrace: &mut Option<Backtrace>,
     ) -> Result<Option<u32>, ExecutionError> {
         let pc = state.pc;

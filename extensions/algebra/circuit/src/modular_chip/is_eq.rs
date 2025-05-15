@@ -426,15 +426,14 @@ where
     }
 }
 
-impl<Mem, Ctx, F, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
-    InsExecutorE1<Mem, Ctx, F> for ModularIsEqualCoreChip<READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
+impl<Ctx, F, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
+    InsExecutorE1<Ctx, F> for ModularIsEqualCoreChip<READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
 {
     fn execute_e1(
         &mut self,
-        _state: &mut VmExecutionState<Mem, Ctx>,
+        _state: &mut VmExecutionState<Ctx>,
         _instruction: &Instruction<F>,
     ) -> Result<()> {
         todo!("Implement execute_e1")

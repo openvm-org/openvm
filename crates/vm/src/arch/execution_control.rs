@@ -18,8 +18,6 @@ where
     F: PrimeField32,
     VC: VmConfig<F>,
 {
-    /// Guest memory type
-    type Mem: GuestMemory;
     /// Host context
     type Ctx;
 
@@ -55,9 +53,9 @@ where
 
     /// Execute a single instruction
     // TODO(ayush): change instruction to Instruction<u32> / PInstruction
-    fn execute_instruction<Mem: GuestMemory>(
+    fn execute_instruction(
         &mut self,
-        vm_state: &mut ExecutionSegmentState<Mem>,
+        vm_state: &mut ExecutionSegmentState,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
@@ -88,7 +86,6 @@ where
     VC: VmConfig<F>,
 {
     type Ctx = TracegenCtx;
-    type Mem = AddressMap<PAGE_SIZE>;
 
     fn new(chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>) -> Self {
         Self {
@@ -153,9 +150,9 @@ where
     }
 
     /// Execute a single instruction
-    fn execute_instruction<Mem: GuestMemory>(
+    fn execute_instruction(
         &mut self,
-        state: &mut ExecutionSegmentState<Mem>,
+        state: &mut ExecutionSegmentState,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
@@ -197,7 +194,6 @@ where
     VC::Executor: InsExecutorE1<F>,
 {
     type Ctx = ();
-    type Mem = AddressMap<PAGE_SIZE>;
 
     fn new(_chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>) -> Self {
         Self { final_memory: None }
@@ -235,9 +231,9 @@ where
     }
 
     /// Execute a single instruction
-    fn execute_instruction<Mem: GuestMemory>(
+    fn execute_instruction(
         &mut self,
-        state: &mut ExecutionSegmentState<Mem>,
+        state: &mut ExecutionSegmentState,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>

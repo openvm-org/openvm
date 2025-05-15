@@ -358,40 +358,40 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
     }
 }
 
-impl<const PAGE_SIZE: usize> GuestMemory for AddressMap<PAGE_SIZE> {
-    unsafe fn read<T, const BLOCK_SIZE: usize>(&self, addr_space: u32, ptr: u32) -> [T; BLOCK_SIZE]
-    where
-        T: Copy + Debug,
-    {
-        debug_assert_eq!(
-            size_of::<T>(),
-            self.cell_size[(addr_space - self.as_offset) as usize]
-        );
-        let read = self
-            .paged_vecs
-            .get_unchecked((addr_space - self.as_offset) as usize)
-            .get((ptr as usize) * size_of::<T>());
-        read
-    }
+// impl<const PAGE_SIZE: usize> GuestMemory for AddressMap<PAGE_SIZE> {
+//     unsafe fn read<T, const BLOCK_SIZE: usize>(&self, addr_space: u32, ptr: u32) -> [T;
+// BLOCK_SIZE]     where
+//         T: Copy + Debug,
+//     {
+//         debug_assert_eq!(
+//             size_of::<T>(),
+//             self.cell_size[(addr_space - self.as_offset) as usize]
+//         );
+//         let read = self
+//             .paged_vecs
+//             .get_unchecked((addr_space - self.as_offset) as usize)
+//             .get((ptr as usize) * size_of::<T>());
+//         read
+//     }
 
-    unsafe fn write<T, const BLOCK_SIZE: usize>(
-        &mut self,
-        addr_space: u32,
-        ptr: u32,
-        values: &[T; BLOCK_SIZE],
-    ) where
-        T: Copy + Debug,
-    {
-        debug_assert_eq!(
-            size_of::<T>(),
-            self.cell_size[(addr_space - self.as_offset) as usize],
-            "addr_space={addr_space}"
-        );
-        self.paged_vecs
-            .get_unchecked_mut((addr_space - self.as_offset) as usize)
-            .set((ptr as usize) * size_of::<T>(), values);
-    }
-}
+//     unsafe fn write<T, const BLOCK_SIZE: usize>(
+//         &mut self,
+//         addr_space: u32,
+//         ptr: u32,
+//         values: &[T; BLOCK_SIZE],
+//     ) where
+//         T: Copy + Debug,
+//     {
+//         debug_assert_eq!(
+//             size_of::<T>(),
+//             self.cell_size[(addr_space - self.as_offset) as usize],
+//             "addr_space={addr_space}"
+//         );
+//         self.paged_vecs
+//             .get_unchecked_mut((addr_space - self.as_offset) as usize)
+//             .set((ptr as usize) * size_of::<T>(), values);
+//     }
+// }
 
 #[cfg(test)]
 mod tests {

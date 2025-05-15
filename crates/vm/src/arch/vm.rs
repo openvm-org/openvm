@@ -33,6 +33,7 @@ use crate::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{
             merkle::MemoryMerklePvs,
+            online::GuestMemory,
             paged_vec::AddressMap,
             tree::public_values::{UserPublicValuesProof, UserPublicValuesProofError},
             MemoryImage, CHUNK,
@@ -351,7 +352,7 @@ where
             }
 
             let exec_state = metrics_span("execute_time_ms", || {
-                segment.execute_from_pc(state.pc, Some(state.memory))
+                segment.execute_from_pc(state.pc, Some(GuestMemory::new(state.memory)))
             })?;
 
             if exec_state.is_terminated {
