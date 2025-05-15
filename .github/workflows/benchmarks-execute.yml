@@ -113,9 +113,17 @@ jobs:
           fi
 
   codspeed-benchmarks:
+    strategy:
+      matrix:
+        include:
+          - mode: "instrumentation"
+          - mode: "walltime"
+
+    name: Run ${{ matrix.mode }} benchmarks
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=8cpu-linux-x64
+
     steps:
       - uses: actions/checkout@v4
 
