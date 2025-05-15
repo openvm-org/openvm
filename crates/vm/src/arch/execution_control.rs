@@ -55,9 +55,9 @@ where
 
     /// Execute a single instruction
     // TODO(ayush): change instruction to Instruction<u32> / PInstruction
-    fn execute_instruction(
+    fn execute_instruction<Mem: GuestMemory>(
         &mut self,
-        vm_state: &mut ExecutionSegmentState,
+        vm_state: &mut ExecutionSegmentState<Mem>,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
@@ -153,9 +153,9 @@ where
     }
 
     /// Execute a single instruction
-    fn execute_instruction(
+    fn execute_instruction<Mem: GuestMemory>(
         &mut self,
-        state: &mut ExecutionSegmentState,
+        state: &mut ExecutionSegmentState<Mem>,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
@@ -235,9 +235,9 @@ where
     }
 
     /// Execute a single instruction
-    fn execute_instruction(
+    fn execute_instruction<Mem: GuestMemory>(
         &mut self,
-        state: &mut ExecutionSegmentState,
+        state: &mut ExecutionSegmentState<Mem>,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
@@ -247,10 +247,9 @@ where
         let &Instruction { opcode, .. } = instruction;
 
         if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
-            let memory_controller = &mut chip_complex.base.memory_controller;
             let vm_state = VmStateMut {
                 pc: &mut state.pc,
-                memory: &mut memory_controller.memory.data,
+                memory: state.memory.as_mut().unwrap(),
                 ctx: &mut (),
             };
             executor.execute_e1(vm_state, instruction)?;

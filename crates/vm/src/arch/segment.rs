@@ -60,7 +60,8 @@ pub type TracegenVmSegmentExecutor<F, VC> =
     VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, TracegenCtx, TracegenExecutionControl>;
 
 #[derive(derive_new::new)]
-pub struct ExecutionSegmentState {
+pub struct ExecutionSegmentState<Mem: GuestMemory> {
+    pub memory: Option<Mem>,
     pub pc: u32,
     pub exit_code: u32,
     pub is_terminated: bool,
@@ -122,13 +123,17 @@ where
     }
 
     /// Stopping is triggered by should_stop() or if VM is terminated
-    pub fn execute_from_pc(&mut self, pc: u32) -> Result<ExecutionSegmentState, ExecutionError> {
+    pub fn execute_from_pc(
+        &mut self,
+        pc: u32,
+        memory: Option<Mem>,
+    ) -> Result<ExecutionSegmentState<Mem>, ExecutionError> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
         // Call the pre-execution hook
         self.control.on_segment_start(pc, &mut self.chip_complex);
 
-        let mut state = ExecutionSegmentState::new(pc, 0, false);
+        let mut state = ExecutionSegmentState::new(memory, pc, 0, false);
         loop {
             // Fetch, decode and execute single instruction
             let terminated_exit_code = self.execute_instruction(&mut state, &mut prev_backtrace)?;
@@ -155,7 +160,7 @@ where
     // TODO(ayush): clean this up, separate to smaller functions
     fn execute_instruction(
         &mut self,
-        state: &mut ExecutionSegmentState,
+        state: &mut ExecutionSegmentState<Mem>,
         prev_backtrace: &mut Option<Backtrace>,
     ) -> Result<Option<u32>, ExecutionError> {
         let pc = state.pc;
