@@ -488,14 +488,14 @@ impl<
         debug_assert!(self.pointer_max_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
 
         let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits;
-        let rs1_val = cols.rs1_val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32();
-        let rs2_val = cols.rs2_val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32();
-        let rd_val = cols.rd_val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32();
-
-        self.bitwise_lookup_chip
-            .request_range(rs1_val << limb_shift_bits, rs2_val << limb_shift_bits);
-        self.bitwise_lookup_chip
-            .request_range(rd_val << limb_shift_bits, rd_val << limb_shift_bits);
+        self.bitwise_lookup_chip.request_range(
+            cols.rs1_val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+            cols.rs2_val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+        );
+        self.bitwise_lookup_chip.request_range(
+            cols.rd_val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+            cols.rd_val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+        );
     }
 }
 

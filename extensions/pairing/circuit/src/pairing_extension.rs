@@ -19,8 +19,6 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::FromRepr;
 
-use super::*;
-
 // All the supported pairing curves.
 #[derive(Clone, Copy, Debug, FromRepr, Serialize, Deserialize)]
 #[repr(usize)]
@@ -62,12 +60,7 @@ pub struct PairingExtension {
 
 #[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, InsExecutorE1)]
 pub enum PairingExtensionExecutor<F: PrimeField32> {
-    // bn254 (32 limbs)
-    MillerDoubleAndAddStepRv32_32(MillerDoubleAndAddStepChip<F, 4, 12, 32>),
-    EvaluateLineRv32_32(EvaluateLineChip<F, 4, 2, 4, 32>),
-    // bls12-381 (48 limbs)
-    MillerDoubleAndAddStepRv32_48(MillerDoubleAndAddStepChip<F, 12, 36, 16>),
-    EvaluateLineRv32_48(EvaluateLineChip<F, 12, 6, 12, 16>),
+    Phantom(PhantomChip<F>),
 }
 
 #[derive(ChipUsageGetter, Chip, AnyEnum, From)]
