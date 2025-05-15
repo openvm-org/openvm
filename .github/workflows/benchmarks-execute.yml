@@ -134,17 +134,32 @@ jobs:
       - name: Install codspeed
         run: cargo binstall --no-confirm --force cargo-codspeed
 
-      - name: Build benchmarks
+      - name: Build instrumentation benchmarks
         working-directory: benchmarks/execute
-        run: |
-          cargo codspeed build --measurement-mode instrumentation
-          cargo codspeed build --measurement-mode walltime
+        run: cargo codspeed build
+        env:
+          CODSPEED_RUNNER_MODE: instrumentation
 
-      - name: Run benchmarks with CodSpeed
+      - name: Build walltime benchmarks
+        working-directory: benchmarks/execute
+        run: cargo codspeed build
+        env:
+          CODSPEED_RUNNER_MODE: walltime
+
+      - name: Execute instrumentation benchmarks with CodSpeed
         uses: CodSpeedHQ/action@v3
         with:
           working-directory: benchmarks/execute
-          run: |
-            cargo codspeed run --measurement-mode instrumentation
-            cargo codspeed run --measurement-mode walltime
+          run: cargo codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}
+        env:
+          CODSPEED_RUNNER_MODE: instrumentation
+
+      - name: Execute walltime benchmarks with CodSpeed
+        uses: CodSpeedHQ/action@v3
+        with:
+          working-directory: benchmarks/execute
+          run: cargo codspeed run
+          token: ${{ secrets.CODSPEED_TOKEN }}
+        env:
+          CODSPEED_RUNNER_MODE: walltime
