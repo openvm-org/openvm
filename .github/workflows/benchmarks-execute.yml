@@ -121,6 +121,8 @@ jobs:
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=8cpu-linux-x64
+    env:
+      CODSPEED_RUNNER_MODE: ${{ matrix.mode }}
 
     steps:
       - uses: actions/checkout@v4
@@ -148,4 +150,3 @@ jobs:
           working-directory: benchmarks/execute
           run: cargo codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}
-          mode: ${{ matrix.mode }}
