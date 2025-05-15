@@ -16,8 +16,8 @@ use openvm_instructions::{
 };
 use openvm_rv32im_circuit::adapters::{memory_read, tracing_read, tracing_write};
 use openvm_sha256_air::{
-    get_flag_pt_array, Sha256StepHelper, SHA256_BLOCK_BITS, SHA256_BLOCK_WORDS, SHA256_H,
-    SHA256_ROWS_PER_BLOCK, SHA256_WORD_U8S,
+    get_flag_pt_array, u32_into_u16s, Sha256StepHelper, SHA256_BLOCK_BITS, SHA256_BLOCK_WORDS,
+    SHA256_H, SHA256_ROWS_PER_BLOCK, SHA256_WORD_U8S,
 };
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_maybe_rayon::prelude::*};
@@ -67,6 +67,8 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
             let last_digest_row: &mut Sha256VmDigestCols<F> =
                 trace[last_row_offset..last_row_offset + SHA256VM_DIGEST_WIDTH].borrow_mut();
 
+            last_digest_row.from_state.timestamp = F::from_canonical_u32(state.memory.timestamp());
+            last_digest_row.from_state.pc = F::from_canonical_u32(*state.pc);
             let dst = tracing_read(
                 state.memory,
                 d,
@@ -85,8 +87,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
                 c.as_canonical_u32(),
                 &mut last_digest_row.register_reads_aux[2],
             );
-            last_digest_row.from_state.timestamp = F::from_canonical_u32(state.memory.timestamp());
-            last_digest_row.from_state.pc = F::from_canonical_u32(*state.pc);
+
             last_digest_row.rd_ptr = *a;
             last_digest_row.rs1_ptr = *b;
             last_digest_row.rs2_ptr = *c;
@@ -150,7 +151,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
                 let digest_cols: &mut Sha256VmDigestCols<F> =
                     digest_row[..SHA256VM_DIGEST_WIDTH].borrow_mut();
                 digest_cols.inner.prev_hash =
-                    prev_hash.map(|x| [x & 0xffff, x >> 16].map(F::from_canonical_u32));
+                    prev_hash.map(|x| u32_into_u16s(x).map(F::from_canonical_u32));
                 digest_cols.inner.flags.local_block_idx = F::from_canonical_usize(block_idx);
                 digest_cols.inner.flags.is_last_block = F::from_bool(is_last_block);
                 digest_cols.control.len = F::from_canonical_u32(len);
@@ -162,7 +163,6 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
                     block_idx,
                     is_last_block,
                 );
-                println!("digest_cols: {:?}", digest_cols);
                 Sha256StepHelper::get_block_hash(&mut prev_hash, padded_input);
             });
 
@@ -187,7 +187,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
 
     fn fill_trace(
         &self,
-        _mem_helper: &MemoryAuxColsFactory<F>,
+        mem_helper: &MemoryAuxColsFactory<F>,
         trace: &mut [F],
         width: usize,
         rows_used: usize,
@@ -291,6 +291,10 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
                         cols.control.read_ptr =
                             read_ptr - F::from_canonical_usize(SHA256_READ_SIZE * (4 - row));
                         cols.control.cur_timestamp = timestamp - F::from_canonical_usize(4 - row);
+                        mem_helper.fill_from_prev(
+                            cols.control.cur_timestamp.as_canonical_u32(),
+                            cols.read_aux.as_mut(),
+                        );
                         if (row + 1) * SHA256_READ_SIZE <= message_left {
                             cols.control.pad_flags = get_flag_pt_array(
                                 &self.padding_encoder,
@@ -322,8 +326,6 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
                             .map(F::from_canonical_u32);
                         }
                         cols.control.padding_occurred = F::from_bool(has_padding_occurred);
-                        println!("cols: {:?}", cols);
-
                     });
 
                 // Fill in the remaining round rows
@@ -353,6 +355,15 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
                     get_flag_pt_array(&self.padding_encoder, PaddingFlags::NotConsidered as usize)
                         .map(F::from_canonical_u32);
                 if is_last_block {
+                    let mut timestamp = digest_cols.from_state.timestamp.as_canonical_u32();
+                    digest_cols.register_reads_aux.iter_mut().for_each(|aux| {
+                        mem_helper.fill_from_prev(timestamp, aux.as_mut());
+                        timestamp += 1;
+                    });
+                    mem_helper.fill_from_prev(
+                        digest_cols.control.cur_timestamp.as_canonical_u32(),
+                        digest_cols.writes_aux.as_mut(),
+                    );
                     self.bitwise_lookup_chip.request_range(
                         digest_cols.dst_ptr[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()
                             * mem_ptr_shift,

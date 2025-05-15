@@ -54,7 +54,7 @@ fn set_and_execute(
     message: Option<&[u8]>,
     len: Option<usize>,
 ) {
-    let len = len.unwrap_or(rng.gen_range(1..100));
+    let len = len.unwrap_or(rng.gen_range(1..3000));
     let tmp = get_random_message(rng, len);
     let message: &[u8] = message.unwrap_or(&tmp);
     let len = message.len();
@@ -106,7 +106,7 @@ fn rand_sha256_test() {
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chips(&mut tester);
 
-    let num_ops: usize = 1;
+    let num_ops: usize = 10;
     for _ in 0..num_ops {
         set_and_execute(&mut tester, &mut chip, &mut rng, SHA256, None, None);
     }
