@@ -270,15 +270,15 @@ pub type E1VmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, E1ExecutionContro
 pub struct MeteredCtx {
     continuations_enabled: bool,
     memory_dimensions: MemoryDimensions,
-    addr_space_alignment_bytes: Vec<usize>,
+    // addr_space_alignment_bytes: Vec<usize>,
 
     // Trace heights for each chip
     pub trace_heights: Vec<usize>,
     // Accesses of size [1, 2, 4, 8, 16, 32]
     // TODO(ayush): no magic number
     pub memory_ops: [usize; 6],
-    // (addr_space, addr, size)
-    pub memory_addresses: BTreeSet<(u8, u32, u8)>,
+    // Indices of leaf nodes in the memory merkle tree
+    pub leaf_indices: BTreeSet<u64>,
 }
 
 impl MeteredCtx {
@@ -292,7 +292,7 @@ impl MeteredCtx {
             memory_dimensions,
             trace_heights: vec![0; num_traces],
             memory_ops: [0; 6],
-            memory_addresses: BTreeSet::new(),
+            leaf_indices: BTreeSet::new(),
         }
     }
 }
@@ -341,48 +341,77 @@ impl E1E2ExecutionCtx for MeteredCtx {
         self.memory_ops[log2_strict_usize(size)] += 1;
         // TODO(ayush): access adapter heights based on this
 
-        // TODO(ayush): see if this can be approximated by total number of reads/writes for AS != register
-        self.memory_addresses
-            .insert((address_space as u8, ptr, size as u8));
-
-        let log2_chunk = log2_strict_usize(CHUNK);
-        self.trace_heights[offset + log2_chunk] = leaf_indices.len() * 2;
-
         // Calculate unique chunks and inner nodes in Merkle tree
-        let height = self.memory_dimensions.overall_height();
+        let mt_height = self.memory_dimensions.overall_height();
 
-        // Map memory addresses to leaf indices in the Merkle tree
-        let leaf_indices: BTreeSet<u64> = self
-            .memory_addresses
-            .iter()
-            .map(|&(space, addr, _size)| {
-                let block_id = addr / CHUNK as u32;
-                (1 << height)
-                    + (((space as u32 - self.memory_dimensions.as_offset) as u64)
-                        << self.memory_dimensions.address_height)
-                    + block_id as u64
-            })
-            .collect();
+        // TODO(ayush): see if this can be approximated by total number of reads/writes for AS != register
+        let num_chunks = size.div_ceil(CHUNK);
+        for i in 0..num_chunks {
+            let addr = ptr.wrapping_add((i * CHUNK) as u32);
+            let block_id = addr / CHUNK as u32;
+            let leaf_index = self
+                .memory_dimensions
+                .label_to_index((address_space, block_id));
 
-        // Sum up the heights of the XORs between consecutive leaf indices
-        let path_divergences = leaf_indices
-            .iter()
-            .zip(leaf_indices.iter().skip(1))
-            .map(|(&lhs, &rhs)| (lhs ^ rhs).checked_ilog2().map_or(0, |bits| bits as usize))
-            .sum::<usize>();
+            // TODO(ayush): see if insertion and finding pred/succ can be done in single binary search pass
+            if self.leaf_indices.insert(leaf_index) {
+                // | Boundary | Merkle | Access Adapters |
+                // TODO(ayush): no magic numbers
+                let mut offset = 2;
 
-        let modified_nodes_count = height + path_divergences;
+                // Boundary chip
+                self.trace_heights[offset] += 1;
 
-        // | Boundary | Merkle | Access Adapters |
-        let mut offset = 2;
-        self.trace_heights[offset] = leaf_indices.len();
+                if self.continuations_enabled {
+                    // Merkle chip
+                    offset += 1;
 
-        if self.continuations_enabled {
-            offset += 1;
-            self.trace_heights[offset] = modified_nodes_count * 2;
+                    let height_change =
+                        calculate_merkle_height_changes(leaf_index, &self.leaf_indices, mt_height);
+                    self.trace_heights[offset] += height_change * 2;
+                }
+
+                // 8-byte access adapter
+                let log2_chunk = log2_strict_usize(CHUNK);
+                self.trace_heights[offset + log2_chunk] += 2;
+            }
         }
-
-        let log2_chunk = log2_strict_usize(CHUNK);
-        self.trace_heights[offset + log2_chunk] = leaf_indices.len() * 2;
     }
+}
+
+/// Updates Merkle tree heights based on a new leaf index
+fn calculate_merkle_height_changes(
+    leaf_index: u64,
+    leaf_indices: &BTreeSet<u64>,
+    height: usize,
+) -> usize {
+    if leaf_indices.len() == 1 {
+        return height;
+    }
+
+    // Find predecessor and successor nodes
+    let pred = leaf_indices.range(..leaf_index).next_back().copied();
+    let succ = leaf_indices.range(leaf_index + 1..).next().copied();
+
+    let mut diff = 0;
+
+    // Add new divergences between pred and leaf_index
+    if let Some(p) = pred {
+        let new_divergence = (p ^ leaf_index).ilog2() as usize;
+        diff += new_divergence;
+    }
+
+    // Add new divergences between leaf_index and succ
+    if let Some(s) = succ {
+        let new_divergence = (leaf_index ^ s).ilog2() as usize;
+        diff += new_divergence;
+    }
+
+    // Remove old divergence between pred and succ if both existed
+    if let (Some(p), Some(s)) = (pred, succ) {
+        let old_divergence = (p ^ s).ilog2() as usize;
+        diff -= old_divergence;
+    }
+
+    diff
 }
