@@ -115,9 +115,7 @@ jobs:
   codspeed-benchmarks:
     strategy:
       matrix:
-        include:
-          - mode: "instrumentation"
-          - mode: "walltime"
+        mode: ["instrumentation", "walltime"]
 
     name: Run ${{ matrix.mode }} benchmarks
     runs-on:
@@ -150,3 +148,4 @@ jobs:
           working-directory: benchmarks/execute
           run: cargo codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}
+          mode: ${{ matrix.mode }}
