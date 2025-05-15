@@ -22,7 +22,7 @@ use crate::{
 };
 
 /// A helper struct for the SHA256 trace generation.
-/// Also, seperates the inner AIR from the trace generation.
+/// Also, separates the inner AIR from the trace generation.
 pub struct Sha256StepHelper {
     pub row_idx_encoder: Encoder,
 }
