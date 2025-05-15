@@ -92,15 +92,15 @@ where
     }
 
     /// Stopping is triggered by should_stop() or if VM is terminated
-    pub fn execute_from_pc_with_ctx(
+    pub fn execute_from_pc(
         &mut self,
         pc: u32,
-        memory: Option<Mem>,
+        memory: Option<Ctrl::Mem>,
         ctx: Ctrl::Ctx,
-    ) -> Result<ExecutionSegmentState<Mem, Ctrl::Ctx>, ExecutionError> {
+    ) -> Result<ExecutionSegmentState<Ctrl::Mem, Ctrl::Ctx>, ExecutionError> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
-        let mut state = ExecutionSegmentState::new_with_pc_and_ctx(pc, ctx);
+        let mut state = ExecutionSegmentState::new(pc, memory, ctx, 0, false);
 
         // Call the pre-execution hook
         self.ctrl
@@ -131,7 +131,7 @@ where
     // TODO(ayush): clean this up, separate to smaller functions
     fn execute_instruction(
         &mut self,
-        state: &mut ExecutionSegmentState<Mem, Ctrl::Ctx>,
+        state: &mut ExecutionSegmentState<Ctrl::Mem, Ctrl::Ctx>,
         prev_backtrace: &mut Option<Backtrace>,
     ) -> Result<Option<u32>, ExecutionError> {
         let pc = state.pc;
@@ -205,7 +205,7 @@ where
     }
 
     /// Returns bool of whether to switch to next segment or not.
-    fn should_suspend(&mut self, state: &ExecutionSegmentState<Ctrl::Ctx>) -> bool {
+    fn should_suspend(&mut self, state: &ExecutionSegmentState<Ctrl::Mem, Ctrl::Ctx>) -> bool {
         if !self.system_config().continuation_enabled {
             return false;
         }
@@ -261,6 +261,7 @@ where
     }
 }
 
+// TODO(ayush): add clk cycle count
 // E1 execution
 pub type E1Ctx = ();
 pub type E1VmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, E1ExecutionControl>;
@@ -304,25 +305,14 @@ pub type MeteredVmSegmentExecutor<'a, F, VC> =
 pub type TracegenCtx = ();
 pub type TracegenVmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, TracegenExecutionControl>;
 
+#[derive(derive_new::new)]
 pub struct ExecutionSegmentState<Mem, Ctx> {
-    pub memory: Option<Mem>,
     pub pc: u32,
+    pub memory: Option<Mem>,
+    pub ctx: Ctx,
     // TODO(ayush): do we need both exit_code and is_terminated?
     pub exit_code: u32,
     pub is_terminated: bool,
-    pub ctx: Ctx,
-}
-
-impl<Ctx> ExecutionSegmentState<Ctx> {
-    pub fn new_with_pc_and_ctx(pc: u32, ctx: Ctx) -> Self {
-        Self {
-            memory: None,
-            pc,
-            ctx,
-            exit_code: 0,
-            is_terminated: false,
-        }
-    }
 }
 
 // TODO(ayush): better name
@@ -367,7 +357,7 @@ impl E1E2ExecutionCtx for MeteredCtx {
                     offset += 1;
 
                     let height_change =
-                        calculate_merkle_height_changes(leaf_index, &self.leaf_indices, mt_height);
+                        calculate_merkle_node_updates(&self.leaf_indices, leaf_index, mt_height);
                     self.trace_heights[offset] += height_change * 2;
                 }
 
@@ -379,10 +369,9 @@ impl E1E2ExecutionCtx for MeteredCtx {
     }
 }
 
-/// Updates Merkle tree heights based on a new leaf index
-fn calculate_merkle_height_changes(
-    leaf_index: u64,
+fn calculate_merkle_node_updates(
     leaf_indices: &BTreeSet<u64>,
+    leaf_index: u64,
     height: usize,
 ) -> usize {
     if leaf_indices.len() == 1 {

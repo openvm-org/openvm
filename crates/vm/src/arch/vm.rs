@@ -258,7 +258,7 @@ where
             segment.set_override_trace_heights(overridden_heights.clone());
         }
         let state = metrics_span("execute_time_ms", || {
-            segment.execute_from_pc_with_ctx(from_state.pc, None, ())
+            segment.execute_from_pc(from_state.pc, None, ())
         })?;
 
         if state.is_terminated {
@@ -367,7 +367,7 @@ where
             }
 
             let exec_state = metrics_span("execute_time_ms", || {
-                segment.execute_from_pc_with_ctx(state.pc, Some(state.memory), ())
+                segment.execute_from_pc(state.pc, Some(state.memory), ())
             })?;
 
             if exec_state.is_terminated {
@@ -435,7 +435,7 @@ where
                 &self.config,
                 exe.program.clone(),
                 state.input,
-                Some(state.memory),
+                None,
             )
             .unwrap();
             let ctrl =
@@ -465,7 +465,7 @@ where
                     .memory_dimensions(),
             );
             let exec_state = metrics_span("execute_time_ms", || {
-                segment.execute_from_pc_with_ctx(state.pc, ctx)
+                segment.execute_from_pc(state.pc, Some(state.memory), ctx)
             })?;
 
             if exec_state.is_terminated {
@@ -687,7 +687,7 @@ where
             segment.set_override_trace_heights(overridden_heights.clone());
         }
         metrics_span("execute_time_ms", || {
-            segment.execute_from_pc_with_ctx(exe.pc_start, None, ())
+            segment.execute_from_pc(exe.pc_start, None, ())
         })?;
         Ok(segment)
     }

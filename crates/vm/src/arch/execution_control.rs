@@ -1,9 +1,5 @@
-use std::collections::BTreeSet;
-
 use openvm_instructions::instruction::Instruction;
-use openvm_stark_backend::{
-    p3_field::PrimeField32, p3_matrix::Matrix, p3_util::log2_strict_usize, ChipUsageGetter,
-};
+use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 
 use super::{
     ChipId, E1Ctx, ExecutionError, ExecutionSegmentState, MeteredCtx, TracegenCtx, VmChipComplex,
@@ -11,9 +7,7 @@ use super::{
 };
 use crate::{
     arch::{ExecutionState, InsExecutorE1, InstructionExecutor},
-    system::memory::{
-        adapter::GenericAccessAdapterChip, interface::MemoryInterface, MemoryImage, CHUNK,
-    },
+    system::memory::{online::GuestMemory, AddressMap, MemoryImage, PAGE_SIZE},
 };
 
 // Metered execution thresholds
@@ -33,18 +27,20 @@ where
 {
     /// Host context
     type Ctx;
+    /// Guest Memory
+    type Mem: GuestMemory;
 
     /// Determines if execution should suspend
     fn should_suspend(
         &mut self,
-        state: &ExecutionSegmentState<Self::Ctx>,
+        state: &ExecutionSegmentState<Self::Mem, Self::Ctx>,
         chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool;
 
     /// Called before segment execution begins
     fn on_segment_start(
         &mut self,
-        state: &mut ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     );
 
@@ -52,23 +48,23 @@ where
     /// Called after segment execution completes
     fn on_segment_end(
         &mut self,
-        state: &mut ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     );
 
     /// Called after program termination
     fn on_terminate(
         &mut self,
-        state: &mut ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         exit_code: u32,
     );
 
     /// Execute a single instruction
     // TODO(ayush): change instruction to Instruction<u32> / PInstruction
-    fn execute_instruction<Mem: GuestMemory>(
+    fn execute_instruction(
         &mut self,
-        state: &mut ExecutionSegmentState<Mem, Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
@@ -98,11 +94,12 @@ where
     F: PrimeField32,
     VC: VmConfig<F>,
 {
+    type Mem = AddressMap<PAGE_SIZE>;
     type Ctx = TracegenCtx;
 
     fn should_suspend(
         &mut self,
-        _state: &ExecutionSegmentState<Self::Ctx>,
+        _state: &ExecutionSegmentState<Self::Mem, Self::Ctx>,
         chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
         // Avoid checking segment too often.
@@ -120,7 +117,7 @@ where
 
     fn on_segment_start(
         &mut self,
-        state: &mut ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
         let timestamp = chip_complex.memory_controller().timestamp();
@@ -131,7 +128,7 @@ where
 
     fn on_segment_end(
         &mut self,
-        state: &mut ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
         let timestamp = chip_complex.memory_controller().timestamp();
@@ -144,7 +141,7 @@ where
 
     fn on_terminate(
         &mut self,
-        state: &mut ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         exit_code: u32,
     ) {
@@ -167,9 +164,9 @@ where
     }
 
     /// Execute a single instruction
-    fn execute_instruction<Mem: GuestMemory>(
+    fn execute_instruction(
         &mut self,
-        state: &mut ExecutionSegmentState<Mem, Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
@@ -211,11 +208,12 @@ where
     VC: VmConfig<F>,
     VC::Executor: InsExecutorE1<F>,
 {
+    type Mem = AddressMap<PAGE_SIZE>;
     type Ctx = E1Ctx;
 
     fn should_suspend(
         &mut self,
-        _state: &ExecutionSegmentState<Self::Ctx>,
+        _state: &ExecutionSegmentState<Self::Mem, Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
         false
@@ -223,14 +221,14 @@ where
 
     fn on_segment_start(
         &mut self,
-        _state: &mut ExecutionSegmentState<Self::Ctx>,
+        _state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
         _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
     }
 
     fn on_segment_end(
         &mut self,
-        _state: &mut ExecutionSegmentState<Self::Ctx>,
+        _state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
         self.final_memory = Some(chip_complex.base.memory_controller.memory_image().clone());
@@ -238,7 +236,7 @@ where
 
     fn on_terminate(
         &mut self,
-        _state: &mut ExecutionSegmentState<Self::Ctx>,
+        _state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         _exit_code: u32,
     ) {
@@ -246,9 +244,9 @@ where
     }
 
     /// Execute a single instruction
-    fn execute_instruction<Mem: GuestMemory>(
+    fn execute_instruction(
         &mut self,
-        state: &mut ExecutionSegmentState<Mem, Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
@@ -322,11 +320,12 @@ where
     VC: VmConfig<F>,
     VC::Executor: InsExecutorE1<F>,
 {
+    type Mem = AddressMap<PAGE_SIZE>;
     type Ctx = MeteredCtx;
 
     fn should_suspend(
         &mut self,
-        state: &ExecutionSegmentState<Self::Ctx>,
+        state: &ExecutionSegmentState<Self::Mem, Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
         // Avoid checking segment too often.
@@ -360,7 +359,7 @@ where
 
     fn on_segment_start(
         &mut self,
-        state: &mut ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
         // Program | Connector | Public Values | Memory ... | Executors (except Public Values) | Range Checker
@@ -399,7 +398,7 @@ where
 
     fn on_segment_end(
         &mut self,
-        state: &mut ExecutionSegmentState<Self::Ctx>,
+        _state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
         self.final_memory = Some(chip_complex.base.memory_controller.memory_image().clone());
@@ -407,7 +406,7 @@ where
 
     fn on_terminate(
         &mut self,
-        state: &mut ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         _exit_code: u32,
     ) {
@@ -426,7 +425,7 @@ where
     /// Execute a single instruction
     fn execute_instruction(
         &mut self,
-        state: &mut ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
@@ -444,10 +443,9 @@ where
         }
 
         if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode) {
-            let memory_controller = &mut chip_complex.base.memory_controller;
             let mut vm_state = VmStateMut {
                 pc: &mut state.pc,
-                memory: &mut memory_controller.memory.data,
+                memory: state.memory.as_mut().unwrap(),
                 ctx: &mut state.ctx,
             };
             let index = offset + i;
