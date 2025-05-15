@@ -85,7 +85,3 @@ pub fn commit_app_exe(
     let app_engine = BabyBearPoseidon2Engine::new(app_fri_params);
     Arc::new(VmCommittedExe::<SC>::commit(exe, app_engine.config.pcs()))
 }
-
-pub fn committed_exe_as_bn254(committed_exe: &NonRootCommittedExe) -> Bn254Fr {
-    babybear_digest_to_bn254(&committed_exe.get_program_commit().into())
-}

@@ -8,13 +8,15 @@ use openvm_sdk::{
     commit::AppExecutionCommit,
     config::{AggregationTreeConfig, SdkVmConfig},
     fs::{
-        encode_to_file, read_agg_pk_from_file, read_app_pk_from_file, read_exe_from_file,
+        encode_to_file, read_agg_stark_pk_from_file, read_app_pk_from_file, read_exe_from_file,
         write_app_proof_to_file,
     },
     keygen::AppProvingKey,
     NonRootCommittedExe, Sdk, StdIn,
 };
 
+#[cfg(feature = "evm-prove")]
+use crate::util::read_default_agg_pk;
 use crate::{
     default::*,
     input::{read_to_stdin, Input},
@@ -110,16 +112,11 @@ impl ProveCmd {
                 );
                 println!("exe commit: {:?}", commits.exe_commit);
                 println!("vm commit: {:?}", commits.vm_commit);
-
-                let agg_pk = read_agg_pk_from_file(default_agg_pk_path()).map_err(|e| {
+                let agg_stark_pk = read_agg_stark_pk_from_file(default_agg_stark_pk_path()).map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
                 })?;
-                let stark_proof = sdk.generate_e2e_stark_proof(
-                    app_pk,
-                    committed_exe,
-                    agg_pk.agg_stark_pk,
-                    input,
-                )?;
+                let stark_proof =
+                    sdk.generate_e2e_stark_proof(app_pk, committed_exe, agg_stark_pk, input)?;
                 encode_to_file(output, stark_proof)?;
             }
             #[cfg(feature = "evm-prove")]
@@ -146,7 +143,7 @@ impl ProveCmd {
                 println!("vm commit: {:?}", commits.vm_commit_to_bn254());
 
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
-                let agg_pk = read_agg_pk_from_file(default_agg_pk_path()).map_err(|e| {
+                let agg_pk = read_default_agg_pk().map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
                 })?;
                 let evm_proof =
