@@ -7,12 +7,11 @@ use openvm_sdk::{
     Sdk,
 };
 
+use super::KeygenCargoArgs;
 use crate::{
     default::*,
     global::{app_vk_path, manifest_path_and_dir, target_dir},
 };
-
-use super::KeygenCargoArgs;
 
 #[derive(Parser)]
 #[command(name = "verify", about = "Verify a proof")]
@@ -80,15 +79,14 @@ impl VerifyCmd {
                     read_evm_halo2_verifier_from_folder, read_evm_proof_from_file,
                 };
 
-                let evm_verifier = read_evm_halo2_verifier_from_folder(
-                    default_evm_halo2_verifier_path(),
-                )
-                .map_err(|e| {
-                    eyre::eyre!(
+                let evm_verifier =
+                    read_evm_halo2_verifier_from_folder(default_evm_halo2_verifier_path())
+                        .map_err(|e| {
+                            eyre::eyre!(
                         "Failed to read EVM verifier: {}\nPlease run 'cargo openvm setup' first",
                         e
                     )
-                })?;
+                        })?;
                 let evm_proof = read_evm_proof_from_file(proof)?;
                 sdk.verify_evm_halo2_proof(&evm_verifier, evm_proof)?;
             }

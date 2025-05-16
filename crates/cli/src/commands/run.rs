@@ -5,14 +5,13 @@ use eyre::Result;
 use openvm_circuit::arch::OPENVM_DEFAULT_INIT_FILE_NAME;
 use openvm_sdk::{fs::read_exe_from_file, Sdk};
 
+use super::{build, BuildArgs, BuildCargoArgs};
 use crate::{
     default::DEFAULT_APP_CONFIG_PATH,
     global::get_single_target_name,
     input::{read_to_stdin, Input},
     util::read_config_toml_or_default,
 };
-
-use super::{build, BuildArgs, BuildCargoArgs};
 
 #[derive(Parser)]
 #[command(name = "run", about = "Run an OpenVM program")]

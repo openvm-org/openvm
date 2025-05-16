@@ -1,3 +1,5 @@
+use std::{env::var, fs::read, path::PathBuf};
+
 use clap::Parser;
 use eyre::Result;
 use itertools::izip;
@@ -7,8 +9,6 @@ use openvm_build::{
 use openvm_circuit::arch::{InitFileGenerator, OPENVM_DEFAULT_INIT_FILE_NAME};
 use openvm_sdk::{fs::write_exe_to_file, Sdk};
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
-
-use std::{env::var, fs::read, path::PathBuf};
 
 use crate::{
     default::DEFAULT_APP_CONFIG_PATH,

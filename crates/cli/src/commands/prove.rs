@@ -15,6 +15,7 @@ use openvm_sdk::{
     NonRootCommittedExe, Sdk,
 };
 
+use super::{keygen, RunArgs, RunCargoArgs};
 #[cfg(feature = "evm-prove")]
 use crate::util::read_default_agg_pk;
 use crate::{
@@ -23,8 +24,6 @@ use crate::{
     global::{app_pk_path, app_vk_path, get_single_target_name, manifest_path_and_dir, target_dir},
     input::read_to_stdin,
 };
-
-use super::{keygen, RunArgs, RunCargoArgs};
 
 #[derive(Parser)]
 #[command(name = "prove", about = "Generate a program proof")]
