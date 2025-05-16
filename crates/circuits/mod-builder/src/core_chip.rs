@@ -306,14 +306,11 @@ where
     A: 'static
         + for<'a> AdapterExecutorE1<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         let data: DynArray<_> = self.adapter.read(state.memory, instruction).into();
 
         let writes = run_field_expression(self, &data, instruction).0;

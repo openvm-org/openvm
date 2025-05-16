@@ -12,6 +12,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols},
+            online::GuestMemory,
             MemoryAddress, MemoryController, OfflineMemory,
         },
         native_adapter::NativeReadRecord,
@@ -195,15 +196,14 @@ where
     }
 }
 
-impl<Mem, F> AdapterExecutorE1<Mem, F> for BranchNativeAdapterStep
+impl<F> AdapterExecutorE1<F> for BranchNativeAdapterStep
 where
-    Mem: GuestMemory,
     F: PrimeField32,
 {
     type ReadData = (F, F);
     type WriteData = ();
 
-    fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read(memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
         let Instruction { a, b, d, e, .. } = instruction;
 
         let read1 = unsafe { memory.read(d.as_canonical_u32(), a.as_canonical_u32()) };
@@ -212,7 +212,7 @@ where
         (read1, read2)
     }
 
-    fn write(_memory: &mut Mem, _instruction: &Instruction<F>, _data: &Self::WriteData) {}
+    fn write(_memory: &mut GuestMemory, _instruction: &Instruction<F>, _data: &Self::WriteData) {}
 }
 
 // impl<F: PrimeField32> VmAdapterChip<F> for BranchNativeAdapterChip<F> {

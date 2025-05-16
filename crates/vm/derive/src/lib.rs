@@ -142,13 +142,12 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                 .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InsExecutorE1<F> });
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<F> for #name #ty_generics #where_clause {
-                    fn execute_e1<Mem, Ctx>(
+                    fn execute_e1<Ctx>(
                         &mut self,
-                        state: ::openvm_circuit::arch::VmStateMut<Mem, Ctx>,
+                        state: ::openvm_circuit::arch::VmStateMut<::openvm_circuit::system::memory::online::GuestMemory, Ctx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                     ) -> ::openvm_circuit::arch::Result<()>
                     where
-                        Mem: ::openvm_circuit::system::memory::online::GuestMemory,
                         F: ::openvm_stark_backend::p3_field::PrimeField32
                     {
                         self.0.execute_e1(state, instruction)
@@ -190,13 +189,12 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
 
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic> for #name #ty_generics {
-                    fn execute_e1<Mem, Ctx>(
+                    fn execute_e1<Ctx>(
                         &mut self,
-                        state: ::openvm_circuit::arch::VmStateMut<Mem, Ctx>,
+                        state: ::openvm_circuit::arch::VmStateMut<::openvm_circuit::system::memory::online::GuestMemory, Ctx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
                     ) -> ::openvm_circuit::arch::Result<()>
                     where
-                        Mem: ::openvm_circuit::system::memory::online::GuestMemory,
                         #first_ty_generic: ::openvm_stark_backend::p3_field::PrimeField32
                     {
                         match self {

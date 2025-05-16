@@ -265,17 +265,10 @@ where
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
     #[inline(always)]
-    fn read<Mem>(&self, _memory: &mut Mem, _instruction: &Instruction<F>) -> Self::ReadData
-    where
-        Mem: GuestMemory,
-    {
-    }
+    fn read(&self, _memory: &mut GuestMemory, _instruction: &Instruction<F>) -> Self::ReadData {}
 
     #[inline(always)]
-    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData)
-    where
-        Mem: GuestMemory,
-    {
+    fn write(&self, memory: &mut GuestMemory, instruction: &Instruction<F>, rd: &Self::WriteData) {
         let Instruction { a, d, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
@@ -382,18 +375,12 @@ where
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
     #[inline(always)]
-    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
-    where
-        Mem: GuestMemory,
-    {
+    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
         <Rv32RdWriteAdapterStep as AdapterExecutorE1<F>>::read(&self.inner, memory, instruction)
     }
 
     #[inline(always)]
-    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, rd: &Self::WriteData)
-    where
-        Mem: GuestMemory,
-    {
+    fn write(&self, memory: &mut GuestMemory, instruction: &Instruction<F>, rd: &Self::WriteData) {
         let Instruction { f: enabled, .. } = instruction;
 
         if *enabled != F::ZERO {

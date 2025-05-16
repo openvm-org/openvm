@@ -394,10 +394,7 @@ impl<
     type ReadData = [[u8; TOTAL_READ_SIZE]; NUM_READS];
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
-    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
-    where
-        Mem: GuestMemory,
-    {
+    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
         let Instruction { b, c, d, e, .. } = *instruction;
 
         let d = d.as_canonical_u32();
@@ -418,10 +415,12 @@ impl<
         })
     }
 
-    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData)
-    where
-        Mem: GuestMemory,
-    {
+    fn write(
+        &self,
+        memory: &mut GuestMemory,
+        instruction: &Instruction<F>,
+        data: &Self::WriteData,
+    ) {
         let Instruction { a, d, .. } = *instruction;
         memory_write(memory, d.as_canonical_u32(), a.as_canonical_u32(), data);
     }

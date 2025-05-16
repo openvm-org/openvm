@@ -332,14 +332,11 @@ where
             WriteData = [u8; RV32_REGISTER_NUM_LIMBS],
         >,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         let Instruction { opcode, c, g, .. } = instruction;
 
         let local_opcode =

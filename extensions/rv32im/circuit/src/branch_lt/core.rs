@@ -358,14 +358,11 @@ where
     F: PrimeField32,
     A: 'static + for<'a> AdapterExecutorE1<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         let &Instruction { opcode, c: imm, .. } = instruction;
 
         let blt_opcode = BranchLessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));

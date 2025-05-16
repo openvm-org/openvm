@@ -542,14 +542,11 @@ where
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
         >,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         let Instruction { opcode, .. } = *instruction;
 
         // Determine opcode and operation type

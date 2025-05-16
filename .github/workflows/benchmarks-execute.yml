@@ -1,4 +1,4 @@
-name: "benchmarks-execute"
+name: "Execution benchmarks"
 
 on:
   push:
@@ -19,6 +19,10 @@ on:
       - ".github/workflows/benchmarks-execute.yml"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -27,15 +31,14 @@ jobs:
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=8cpu-linux-x64
+      - extras=s3-cache
     steps:
+      - uses: runs-on/action@v1
       - uses: actions/checkout@v4
-
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
+          cache-on-failure: true
 
       - name: Run execution benchmarks
         working-directory: benchmarks/execute
@@ -113,32 +116,39 @@ jobs:
           fi
 
   codspeed-benchmarks:
+    name: Run codspeed ${{ matrix.mode }} benchmarks
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=8cpu-linux-x64
-    steps:
-      - uses: actions/checkout@v4
+      - extras=s3-cache
 
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
+    strategy:
+      matrix:
+        mode: [instrumentation, walltime]
+    env:
+      CODSPEED_RUNNER_MODE: ${{ matrix.mode }}
+
+    steps:
+      - uses: runs-on/action@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
+          cache-on-failure: true
 
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@main
-
       - name: Install codspeed
         run: cargo binstall --no-confirm --force cargo-codspeed
 
       - name: Build benchmarks
         working-directory: benchmarks/execute
         run: cargo codspeed build
-
-      - name: Run benchmarks with CodSpeed
+      - name: Run benchmarks
         uses: CodSpeedHQ/action@v3
         with:
           working-directory: benchmarks/execute
           run: cargo codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}
+        env:
+          CODSPEED_RUNNER_MODE: ${{ matrix.mode }}

@@ -12,6 +12,7 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
+            online::GuestMemory,
             MemoryAddress, MemoryController, OfflineMemory,
         },
         native_adapter::{NativeReadRecord, NativeWriteRecord},
@@ -199,15 +200,14 @@ where
     }
 }
 
-impl<Mem, F> AdapterExecutorE1<Mem, F> for AluNativeAdapterStep
+impl<F> AdapterExecutorE1<F> for AluNativeAdapterStep
 where
-    Mem: GuestMemory,
     F: PrimeField32,
 {
     type ReadData = (F, F);
     type WriteData = F;
 
-    fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read(memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
         let Instruction { b, c, e, f, .. } = instruction;
 
         let [read1]: [F; 1] = unsafe { memory.read(e.as_canonical_u32(), b.as_canonical_u32()) };
@@ -216,7 +216,7 @@ where
         (read1, read2)
     }
 
-    fn write(memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData) {
+    fn write(memory: &mut GuestMemory, instruction: &Instruction<F>, data: &Self::WriteData) {
         let Instruction { a, .. } = instruction;
 
         unsafe { memory.write(AS::Native, a.as_canonical_u32(), &[data]) };

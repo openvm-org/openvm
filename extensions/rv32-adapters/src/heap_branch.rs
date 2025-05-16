@@ -193,10 +193,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterExe
     type ReadData = [[u8; READ_SIZE]; NUM_READS];
     type WriteData = ();
 
-    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
-    where
-        Mem: GuestMemory,
-    {
+    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
         let Instruction { a, b, d, e, .. } = *instruction;
 
         let d = d.as_canonical_u32();
@@ -217,10 +214,12 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterExe
         })
     }
 
-    fn write<Mem>(&self, _memory: &mut Mem, _instruction: &Instruction<F>, _data: &Self::WriteData)
-    where
-        Mem: GuestMemory,
-    {
+    fn write(
+        &self,
+        _memory: &mut GuestMemory,
+        _instruction: &Instruction<F>,
+        _data: &Self::WriteData,
+    ) {
         // This function intentionally does nothing
     }
 }

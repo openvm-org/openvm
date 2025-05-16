@@ -291,7 +291,8 @@ fn test_p256_double() {
     );
 
     tester.execute(&mut chip, &instruction);
-    // Adding another row to make sure there are dummy rows, and that the dummy row constraints are satisfied
+    // Adding another row to make sure there are dummy rows, and that the dummy row constraints are
+    // satisfied
     tester.execute(&mut chip, &instruction);
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
 

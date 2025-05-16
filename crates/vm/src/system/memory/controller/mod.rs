@@ -269,7 +269,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn memory_image(&self) -> &MemoryImage {
-        &self.memory.data
+        &self.memory.data.memory
     }
 
     pub fn set_override_trace_heights(&mut self, overridden_heights: MemoryTraceHeights) {
@@ -496,7 +496,7 @@ impl<F: PrimeField32> MemoryController<F> {
             debug_assert!(ptr % min_block_size as u32 == 0);
 
             let values = (0..block_size)
-                .map(|i| self.memory.data.get_f::<F>(addr_space, ptr + i))
+                .map(|i| self.memory.data.memory.get_f::<F>(addr_space, ptr + i))
                 .collect::<Vec<_>>();
             self.memory.execute_splits::<false>(
                 MemoryAddress::new(addr_space, ptr),

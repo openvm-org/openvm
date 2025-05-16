@@ -21,13 +21,12 @@ use openvm_rv32_adapters::{rv32_write_heap_default, write_ptr_reg};
 use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use rand::Rng;
+use rand::{rngs::StdRng, Rng};
 
 use super::{
     ModularAddSubChip, ModularIsEqualChip, ModularIsEqualCoreAir, ModularIsEqualCoreCols,
     ModularMulDivChip,
 };
-use rand::rngs::StdRng;
 
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
@@ -37,8 +36,9 @@ type F = BabyBear;
 
 #[cfg(test)]
 mod addsubtests {
-    use super::*;
     use test_case::test_case;
+
+    use super::*;
 
     const ADD_LOCAL: usize = Rv32ModularArithmeticOpcode::ADD as usize;
 
@@ -152,8 +152,9 @@ mod addsubtests {
 
 #[cfg(test)]
 mod muldivtests {
-    use super::*;
     use test_case::test_case;
+
+    use super::*;
 
     const MUL_LOCAL: usize = Rv32ModularArithmeticOpcode::MUL as usize;
 
@@ -266,9 +267,6 @@ mod muldivtests {
 
 #[cfg(test)]
 mod is_equal_tests {
-    use crate::modular_chip::{ModularIsEqualAir, ModularIsEqualStep};
-
-    use super::*;
     use openvm_rv32_adapters::{Rv32IsEqualModAdapterAir, Rv32IsEqualModeAdapterStep};
     use openvm_stark_backend::{
         p3_air::BaseAir,
@@ -279,6 +277,9 @@ mod is_equal_tests {
         utils::disable_debug_builder,
         verifier::VerificationError,
     };
+
+    use super::*;
+    use crate::modular_chip::{ModularIsEqualAir, ModularIsEqualStep};
 
     fn create_test_chips<
         const NUM_LANES: usize,

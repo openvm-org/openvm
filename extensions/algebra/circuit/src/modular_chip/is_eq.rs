@@ -422,14 +422,11 @@ where
             WriteData: From<[u8; WRITE_LIMBS]>,
         >,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode =

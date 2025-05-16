@@ -563,10 +563,7 @@ where
     );
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
-    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
-    where
-        Mem: GuestMemory,
-    {
+    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
         let Instruction {
             opcode,
             a,
@@ -621,10 +618,12 @@ where
         ((prev_data, read_data), shift_amount)
     }
 
-    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData)
-    where
-        Mem: GuestMemory,
-    {
+    fn write(
+        &self,
+        memory: &mut GuestMemory,
+        instruction: &Instruction<F>,
+        data: &Self::WriteData,
+    ) {
         // TODO(ayush): remove duplication with read
         let &Instruction {
             opcode,

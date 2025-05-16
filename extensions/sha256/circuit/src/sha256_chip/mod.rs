@@ -68,13 +68,11 @@ impl Sha256VmStep {
 }
 
 impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
-    where
-        Mem: GuestMemory,
     {
         let &Instruction {
             opcode,

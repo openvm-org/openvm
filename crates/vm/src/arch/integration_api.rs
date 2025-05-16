@@ -387,24 +387,18 @@ where
     type ReadData;
     type WriteData;
 
-    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
-    where
-        Mem: GuestMemory;
+    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData;
 
-    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData)
-    where
-        Mem: GuestMemory;
+    fn write(&self, memory: &mut GuestMemory, instruction: &Instruction<F>, data: &Self::WriteData);
 }
 
 // TODO: Rename core/step to operator
 pub trait StepExecutorE1<F> {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory;
+    ) -> Result<()>;
 }
 
 const DEFAULT_RECORDS_CAPACITY: usize = 1 << 20;
@@ -414,14 +408,11 @@ where
     F: PrimeField32,
     S: StepExecutorE1<F>,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         self.step.execute_e1(state, instruction)
     }
 }

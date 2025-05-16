@@ -463,10 +463,7 @@ impl<
     type ReadData = [[[u8; READ_SIZE]; BLOCKS_PER_READ]; NUM_READS];
     type WriteData = [[u8; WRITE_SIZE]; BLOCKS_PER_WRITE];
 
-    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
-    where
-        Mem: GuestMemory,
-    {
+    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
         let Instruction { b, c, d, e, .. } = *instruction;
 
         let d = d.as_canonical_u32();
@@ -489,10 +486,12 @@ impl<
         })
     }
 
-    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData)
-    where
-        Mem: GuestMemory,
-    {
+    fn write(
+        &self,
+        memory: &mut GuestMemory,
+        instruction: &Instruction<F>,
+        data: &Self::WriteData,
+    ) {
         let Instruction { a, d, e, .. } = *instruction;
         let rd_val = new_read_rv32_register(memory, d.as_canonical_u32(), a.as_canonical_u32());
         assert!(rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1 < (1 << self.pointer_max_bits));
