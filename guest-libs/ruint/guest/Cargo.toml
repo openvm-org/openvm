@@ -57,12 +57,10 @@ openvm-ruint = { path = ".", features = ["arbitrary", "proptest"] }
 ark-bn254-03 = { version = "0.3.0", package = "ark-bn254" }
 ark-bn254-04 = { version = "0.4.0", package = "ark-bn254" }
 
-criterion = "0.5"
 rand = "0.8"
 
 approx = "0.5"
 bincode = "1.3"
-hex = "0.4"
 hex-literal = "0.4"
 postgres = "0.19"
 proptest = "1.2"

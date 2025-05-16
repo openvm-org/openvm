@@ -15,13 +15,15 @@ openvm-algebra-guest = { workspace = true }
 openvm-algebra-moduli-macros = { workspace = true }
 openvm-ecc-guest = { workspace = true }
 openvm-ecc-sw-macros = { workspace = true }
-openvm-sha256-guest = { workspace = true }
-openvm-rv32im-guest = { workspace = true }
-openvm-custom-insn = { workspace = true }
 
 elliptic-curve = { workspace = true }
 ecdsa = { workspace = true }
-num-bigint = { workspace = true }
 serde = { workspace = true }
 hex-literal = { workspace = true }
 ff = { workspace = true }
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+num-bigint = { workspace = true }
+
+[package.metadata.cargo-shear]
+ignored = ["openvm", "serde", "num-bigint"]
