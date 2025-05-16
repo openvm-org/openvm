@@ -49,9 +49,9 @@ jobs:
         working-directory: examples/ecc
         run: |
           cargo openvm build
-          mv target/openvm/app.vmexe app1.vmexe
+          mv target/openvm/release/app.vmexe app1.vmexe
           cargo openvm build
-          cmp app1.vmexe target/openvm/app.vmexe || (echo "Build is not deterministic!" && exit 1)
+          cmp app1.vmexe target/openvm/release/app.vmexe || (echo "Build is not deterministic!" && exit 1)
 
       - name: Build and run book examples
         working-directory: examples
