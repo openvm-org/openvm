@@ -37,3 +37,4 @@ openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
+test-case = {workspace = true}

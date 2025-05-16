@@ -25,8 +25,8 @@ use test_case::test_case;
 use super::{run_write_data, LoadStoreCoreAir, LoadStoreStep, Rv32LoadStoreChip};
 use crate::{
     adapters::{
-        compose, Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterStep, RV32_CELL_BITS,
-        RV32_REGISTER_NUM_LIMBS,
+        compose, Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterCols, Rv32LoadStoreAdapterStep,
+        RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     loadstore::LoadStoreCoreCols,
     test_utils::get_verification_error,
@@ -98,9 +98,7 @@ fn set_and_execute(
     let mem_as = mem_as.unwrap_or(if is_load {
         *[1, 2].choose(rng).unwrap()
     } else {
-        *[2, 3].choose(rng).unwrap()
-        // TODO(ayush): should this allow 4?
-        // *[2, 3, 4].choose(rng).unwrap()
+        *[2, 3, 4].choose(rng).unwrap()
     });
 
     let ptr_val = imm_ext.wrapping_add(compose(rs1));
@@ -210,6 +208,7 @@ struct LoadStorePrankValues {
     write_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     flags: Option<[u32; 4]>,
     is_load: Option<bool>,
+    mem_as: Option<u32>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -218,7 +217,6 @@ fn run_negative_loadstore_test(
     rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     imm: Option<u32>,
     imm_sign: Option<u32>,
-    mem_as: Option<usize>,
     prank_vals: LoadStorePrankValues,
     interaction_error: bool,
 ) {
@@ -234,14 +232,15 @@ fn run_negative_loadstore_test(
         rs1,
         imm,
         imm_sign,
-        mem_as,
+        None,
     );
 
     let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
-        let (_, core_row) = trace_row.split_at_mut(adapter_width);
+        let (adapter_row, core_row) = trace_row.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv32LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
         let core_cols: &mut LoadStoreCoreCols<F, RV32_REGISTER_NUM_LIMBS> = core_row.borrow_mut();
 
         if let Some(read_data) = prank_vals.read_data {
@@ -258,6 +257,9 @@ fn run_negative_loadstore_test(
         }
         if let Some(is_load) = prank_vals.is_load {
             core_cols.is_load = F::from_bool(is_load);
+        }
+        if let Some(mem_as) = prank_vals.mem_as {
+            adapter_cols.mem_as = F::from_canonical_u32(mem_as);
         }
 
         *trace = RowMajorMatrix::new(trace_row, trace.width());
@@ -278,7 +280,6 @@ fn negative_wrong_opcode_tests() {
         None,
         None,
         None,
-        None,
         LoadStorePrankValues {
             is_load: Some(false),
             ..Default::default()
@@ -291,7 +292,6 @@ fn negative_wrong_opcode_tests() {
         Some([4, 0, 0, 0]),
         Some(1),
         None,
-        None,
         LoadStorePrankValues {
             flags: Some([0, 0, 0, 2]),
             ..Default::default()
@@ -303,7 +303,6 @@ fn negative_wrong_opcode_tests() {
         STOREH,
         Some([11, 169, 76, 28]),
         Some(37121),
-        None,
         None,
         LoadStorePrankValues {
             flags: Some([1, 0, 1, 0]),
@@ -321,13 +320,13 @@ fn negative_write_data_tests() {
         Some([13, 11, 156, 23]),
         Some(43641),
         None,
-        None,
         LoadStorePrankValues {
             read_data: Some([175, 33, 198, 250]),
             prev_data: Some([90, 121, 64, 205]),
             write_data: Some([175, 33, 0, 0]),
             flags: Some([0, 2, 0, 0]),
             is_load: Some(true),
+            mem_as: None,
         },
         true,
     );
@@ -337,13 +336,13 @@ fn negative_write_data_tests() {
         Some([45, 123, 87, 24]),
         Some(28122),
         Some(0),
-        None,
         LoadStorePrankValues {
             read_data: Some([175, 33, 198, 250]),
             prev_data: Some([90, 121, 64, 205]),
             write_data: Some([175, 121, 64, 205]),
             flags: Some([0, 0, 1, 1]),
             is_load: None,
+            mem_as: None,
         },
         false,
     );
@@ -356,28 +355,34 @@ fn negative_wrong_address_space_tests() {
         None,
         None,
         None,
-        Some(3),
-        LoadStorePrankValues::default(),
+        LoadStorePrankValues {
+            mem_as: Some(3),
+            ..Default::default()
+        },
         false,
     );
-    // TODO(ayush): add back
-    // run_negative_loadstore_test(
-    //     LOADW,
-    //     None,
-    //     None,
-    //     None,
-    //     Some(4),
-    //     LoadStorePrankValues::default(),
-    //     false,
-    // );
+
+    run_negative_loadstore_test(
+        LOADW,
+        None,
+        None,
+        None,
+        LoadStorePrankValues {
+            mem_as: Some(4),
+            ..Default::default()
+        },
+        false,
+    );
 
     run_negative_loadstore_test(
         STOREW,
         None,
         None,
         None,
-        Some(1),
-        LoadStorePrankValues::default(),
+        LoadStorePrankValues {
+            mem_as: Some(1),
+            ..Default::default()
+        },
         false,
     );
 }

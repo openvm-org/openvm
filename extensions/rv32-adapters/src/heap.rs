@@ -24,7 +24,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
 };
 
-use crate::{RV32VecHeapAdapterStep, Rv32VecHeapAdapterAir, Rv32VecHeapAdapterCols};
+use crate::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterCols, Rv32VecHeapAdapterStep};
 
 /// This adapter reads from NUM_READS <= 2 pointers and writes to 1 pointer.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
@@ -96,7 +96,7 @@ pub struct Rv32HeapAdapterStep<
     const NUM_READS: usize,
     const READ_SIZE: usize,
     const WRITE_SIZE: usize,
->(RV32VecHeapAdapterStep<NUM_READS, 1, 1, READ_SIZE, WRITE_SIZE>);
+>(Rv32VecHeapAdapterStep<NUM_READS, 1, 1, READ_SIZE, WRITE_SIZE>);
 
 impl<const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
     Rv32HeapAdapterStep<NUM_READS, READ_SIZE, WRITE_SIZE>
@@ -110,7 +110,7 @@ impl<const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
             RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - pointer_max_bits < RV32_CELL_BITS,
             "pointer_max_bits={pointer_max_bits} needs to be large enough for high limb range check"
         );
-        Rv32HeapAdapterStep(RV32VecHeapAdapterStep::new(
+        Rv32HeapAdapterStep(Rv32VecHeapAdapterStep::new(
             pointer_max_bits,
             bitwise_lookup_chip,
         ))

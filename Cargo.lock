@@ -4674,6 +4674,7 @@ dependencies = [
  "serde-big-array",
  "serde_with",
  "strum",
+ "test-case",
 ]
 
 [[package]]

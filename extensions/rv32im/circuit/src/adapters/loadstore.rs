@@ -32,7 +32,6 @@ use openvm_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-use serde::{Deserialize, Serialize};
 
 use super::RV32_REGISTER_NUM_LIMBS;
 use crate::adapters::{
@@ -389,7 +388,18 @@ where
 
         // We need to keep values of some cells to keep them unchanged when writing to those cells
         let prev_data = match local_opcode {
-            STOREW | STOREH | STOREB => memory_read(memory.data(), e.as_canonical_u32(), ptr_val),
+            STOREW | STOREH | STOREB => {
+                if e.as_canonical_u32() == 4 {
+                    unsafe {
+                        memory
+                            .data()
+                            .read::<F, 4>(4, ptr_val)
+                            .map(|x| x.as_canonical_u32() as u8)
+                    }
+                } else {
+                    memory_read(memory.data(), e.as_canonical_u32(), ptr_val)
+                }
+            }
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
                 memory_read(memory.data(), d.as_canonical_u32(), a.as_canonical_u32())
             }
@@ -459,13 +469,27 @@ where
                     let ptr = mem_ptr_limbs[0] + mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
                     let ptr = ptr & 0xfffffffc;
 
-                    tracing_write_with_base_aux(
-                        memory,
-                        e.as_canonical_u32(),
-                        ptr,
-                        data,
-                        &mut adapter_row.write_base_aux,
-                    );
+                    // TODO(arayi): This workaround should be temporary
+                    if e.as_canonical_u32() == 4 {
+                        let (t_prev, _) = unsafe {
+                            memory.write::<F, 4, 1>(
+                                e.as_canonical_u32(),
+                                ptr,
+                                &data.map(F::from_canonical_u8),
+                            )
+                        };
+                        adapter_row
+                            .write_base_aux
+                            .set_prev(F::from_canonical_u32(t_prev));
+                    } else {
+                        tracing_write_with_base_aux(
+                            memory,
+                            e.as_canonical_u32(),
+                            ptr,
+                            data,
+                            &mut adapter_row.write_base_aux,
+                        );
+                    }
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => {
                     tracing_write_with_base_aux(

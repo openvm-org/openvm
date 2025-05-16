@@ -1,7 +1,7 @@
 use core::hint::black_box;
 use openvm as _;
 
-const N: u64 = 25;
+const N: u64 = 26;
 
 pub fn main() {
     let n = black_box(N);

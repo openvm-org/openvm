@@ -5,7 +5,7 @@ use openvm_circuit::{
     arch::{VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_circuit::CurveConfig;
@@ -18,8 +18,6 @@ use openvm_pairing_transpiler::PairingPhantom;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::FromRepr;
-
-use super::*;
 
 // All the supported pairing curves.
 #[derive(Clone, Copy, Debug, FromRepr, Serialize, Deserialize)]
@@ -60,14 +58,9 @@ pub struct PairingExtension {
     pub supported_curves: Vec<PairingCurve>,
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, InsExecutorE1)]
 pub enum PairingExtensionExecutor<F: PrimeField32> {
-    // bn254 (32 limbs)
-    MillerDoubleAndAddStepRv32_32(MillerDoubleAndAddStepChip<F, 4, 12, 32>),
-    EvaluateLineRv32_32(EvaluateLineChip<F, 4, 2, 4, 32>),
-    // bls12-381 (48 limbs)
-    MillerDoubleAndAddStepRv32_48(MillerDoubleAndAddStepChip<F, 12, 36, 16>),
-    EvaluateLineRv32_48(EvaluateLineChip<F, 12, 6, 12, 16>),
+    Phantom(PhantomChip<F>),
 }
 
 #[derive(ChipUsageGetter, Chip, AnyEnum, From)]

@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_mod_circuit_builder::{test_utils::biguint_to_limbs, ExprBuilderConfig, FieldExpr};
-use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
+use openvm_rv32_adapters::rv32_write_heap_default;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
@@ -19,6 +19,7 @@ use super::{EcAddNeChip, EcDoubleChip};
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
 const BLOCK_SIZE: usize = 32;
+const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
 lazy_static::lazy_static! {
@@ -87,21 +88,20 @@ fn test_add_ne() {
     };
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let adapter = Rv32VecHeapAdapterChip::<F, 2, 2, 2, BLOCK_SIZE, BLOCK_SIZE>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
+
+    let mut chip = EcAddNeChip::<F, 2, BLOCK_SIZE>::new(
+        tester.execution_bridge(),
         tester.memory_bridge(),
+        tester.memory_helper(),
         tester.address_bits(),
-        bitwise_chip.clone(),
-    );
-    let mut chip = EcAddNeChip::new(
-        adapter,
         config,
         Rv32WeierstrassOpcode::CLASS_OFFSET,
+        bitwise_chip.clone(),
         tester.range_checker(),
-        tester.offline_memory_mutex_arc(),
+        MAX_INS_CAPACITY,
     );
-    assert_eq!(chip.0.core.expr().builder.num_variables, 3); // lambda, x3, y3
+
+    assert_eq!(chip.0.step.expr.builder.num_variables, 3); // lambda, x3, y3
 
     let (p1_x, p1_y) = SampleEcPoints[0].clone();
     let (p2_x, p2_y) = SampleEcPoints[1].clone();
@@ -117,21 +117,21 @@ fn test_add_ne() {
 
     let r = chip
         .0
-        .core
-        .expr()
+        .step
+        .expr
         .execute(vec![p1_x, p1_y, p2_x, p2_y], vec![true]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     assert_eq!(r[1], SampleEcPoints[2].0);
     assert_eq!(r[2], SampleEcPoints[2].1);
 
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(chip.0.core.expr()).try_into().unwrap();
+    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.step.expr).try_into().unwrap();
     let mut one_limbs = [BabyBear::ONE; NUM_LIMBS];
     one_limbs[0] = BabyBear::ONE;
     let setup_instruction = rv32_write_heap_default(
         &mut tester,
         vec![prime_limbs, one_limbs], // inputs[0] = prime, others doesn't matter
         vec![one_limbs, one_limbs],
-        chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+        chip.0.step.offset + Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
     );
     tester.execute(&mut chip, &setup_instruction);
 
@@ -139,7 +139,7 @@ fn test_add_ne() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![p2_x_limbs, p2_y_limbs],
-        chip.0.core.air.offset + Rv32WeierstrassOpcode::EC_ADD_NE as usize,
+        chip.0.step.offset + Rv32WeierstrassOpcode::EC_ADD_NE as usize,
     );
 
     tester.execute(&mut chip, &instruction);
@@ -159,12 +159,17 @@ fn test_double() {
     };
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let adapter = Rv32VecHeapAdapterChip::<F, 1, 2, 2, BLOCK_SIZE, BLOCK_SIZE>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
+    let mut chip = EcDoubleChip::<F, 2, BLOCK_SIZE>::new(
+        tester.execution_bridge(),
         tester.memory_bridge(),
+        tester.memory_helper(),
         tester.address_bits(),
+        config,
+        Rv32WeierstrassOpcode::CLASS_OFFSET,
         bitwise_chip.clone(),
+        tester.range_checker(),
+        BigUint::zero(),
+        MAX_INS_CAPACITY,
     );
 
     let (p1_x, p1_y) = SampleEcPoints[1].clone();
@@ -173,29 +178,21 @@ fn test_double() {
     let p1_y_limbs =
         biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
 
-    let mut chip = EcDoubleChip::new(
-        adapter,
-        tester.memory_controller().borrow().range_checker.clone(),
-        config,
-        Rv32WeierstrassOpcode::CLASS_OFFSET,
-        BigUint::zero(),
-        tester.offline_memory_mutex_arc(),
-    );
-    assert_eq!(chip.0.core.air.expr.builder.num_variables, 3); // lambda, x3, y3
+    assert_eq!(chip.0.step.expr.builder.num_variables, 3); // lambda, x3, y3
 
-    let r = chip.0.core.air.expr.execute(vec![p1_x, p1_y], vec![true]);
+    let r = chip.0.step.expr.execute(vec![p1_x, p1_y], vec![true]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     assert_eq!(r[1], SampleEcPoints[3].0);
     assert_eq!(r[2], SampleEcPoints[3].1);
 
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core.air.expr).try_into().unwrap();
+    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.step.expr).try_into().unwrap();
     let a_limbs = [BabyBear::ZERO; NUM_LIMBS];
     let setup_instruction = rv32_write_heap_default(
         &mut tester,
         vec![prime_limbs, a_limbs], /* inputs[0] = prime, inputs[1] = a coeff of weierstrass
                                      * equation */
         vec![],
-        chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+        chip.0.step.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
     );
     tester.execute(&mut chip, &setup_instruction);
 
@@ -203,7 +200,7 @@ fn test_double() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![],
-        chip.0.core.air.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
+        chip.0.step.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
     );
 
     tester.execute(&mut chip, &instruction);
@@ -227,12 +224,18 @@ fn test_p256_double() {
     .unwrap();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let adapter = Rv32VecHeapAdapterChip::<F, 1, 2, 2, BLOCK_SIZE, BLOCK_SIZE>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
+
+    let mut chip = EcDoubleChip::<F, 2, BLOCK_SIZE>::new(
+        tester.execution_bridge(),
         tester.memory_bridge(),
+        tester.memory_helper(),
         tester.address_bits(),
+        config,
+        Rv32WeierstrassOpcode::CLASS_OFFSET,
         bitwise_chip.clone(),
+        tester.range_checker(),
+        a.clone(),
+        MAX_INS_CAPACITY,
     );
 
     // Testing data from: http://point-at-infinity.org/ecc/nisttv
@@ -251,17 +254,9 @@ fn test_p256_double() {
     let p1_y_limbs =
         biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
 
-    let mut chip = EcDoubleChip::new(
-        adapter,
-        tester.memory_controller().borrow().range_checker.clone(),
-        config,
-        Rv32WeierstrassOpcode::CLASS_OFFSET,
-        a.clone(),
-        tester.offline_memory_mutex_arc(),
-    );
-    assert_eq!(chip.0.core.air.expr.builder.num_variables, 3); // lambda, x3, y3
+    assert_eq!(chip.0.step.expr.builder.num_variables, 3); // lambda, x3, y3
 
-    let r = chip.0.core.air.expr.execute(vec![p1_x, p1_y], vec![true]);
+    let r = chip.0.step.expr.execute(vec![p1_x, p1_y], vec![true]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     let expected_double_x = BigUint::from_str_radix(
         "7CF27B188D034F7E8A52380304B51AC3C08969E277F21B35A60B48FC47669978",
@@ -276,7 +271,7 @@ fn test_p256_double() {
     assert_eq!(r[1], expected_double_x);
     assert_eq!(r[2], expected_double_y);
 
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core.air.expr).try_into().unwrap();
+    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.step.expr).try_into().unwrap();
     let a_limbs =
         biguint_to_limbs::<NUM_LIMBS>(a.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
     let setup_instruction = rv32_write_heap_default(
@@ -284,7 +279,7 @@ fn test_p256_double() {
         vec![prime_limbs, a_limbs], /* inputs[0] = prime, inputs[1] = a coeff of weierstrass
                                      * equation */
         vec![],
-        chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+        chip.0.step.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
     );
     tester.execute(&mut chip, &setup_instruction);
 
@@ -292,9 +287,11 @@ fn test_p256_double() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![],
-        chip.0.core.air.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
+        chip.0.step.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
     );
 
+    tester.execute(&mut chip, &instruction);
+    // Adding another row to make sure there are dummy rows, and that the dummy row constraints are satisfied
     tester.execute(&mut chip, &instruction);
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
 

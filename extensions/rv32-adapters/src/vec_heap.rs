@@ -43,7 +43,7 @@ use openvm_stark_backend::{
 /// * Writes take the form of `BLOCKS_PER_WRITE` consecutive writes of size `WRITE_SIZE` to the
 ///   heap, starting from the address in `rd`.
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, Debug)]
 pub struct Rv32VecHeapAdapterCols<
     T,
     const NUM_READS: usize,
@@ -262,7 +262,7 @@ impl<
 }
 
 #[derive(derive_new::new)]
-pub struct RV32VecHeapAdapterStep<
+pub struct Rv32VecHeapAdapterStep<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
@@ -283,7 +283,7 @@ impl<
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
     > AdapterTraceStep<F, CTX>
-    for RV32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+    for Rv32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
 {
     const WIDTH: usize = Rv32VecHeapAdapterCols::<
         F,
@@ -316,7 +316,7 @@ impl<
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
     ) -> Self::ReadData {
-        let Instruction { b, c, d, e, .. } = *instruction;
+        let Instruction { a, b, c, d, e, .. } = *instruction;
 
         let e = e.as_canonical_u32();
         let d = d.as_canonical_u32();
@@ -336,10 +336,14 @@ impl<
         let rs_vals: [_; NUM_READS] = from_fn(|i| {
             let addr = if i == 0 { b } else { c };
             cols.rs_ptr[i] = addr;
-            let rs_val = tracing_read(memory, e, addr.as_canonical_u32(), &mut cols.rs_read_aux[i]);
+            let rs_val = tracing_read(memory, d, addr.as_canonical_u32(), &mut cols.rs_read_aux[i]);
             cols.rs_val[i] = rs_val.map(F::from_canonical_u8);
             u32::from_le_bytes(rs_val)
         });
+
+        cols.rd_ptr = a;
+        let rd_val = tracing_read(memory, d, a.as_canonical_u32(), &mut cols.rd_read_aux);
+        cols.rd_val = rd_val.map(F::from_canonical_u8);
 
         // Read memory values
         from_fn(|i| {
@@ -360,14 +364,12 @@ impl<
 
     fn write(
         &self,
-        memory: &mut openvm_circuit::system::memory::online::TracingMemory<F>,
+        memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
         data: &Self::WriteData,
     ) {
-        let Instruction { a, d, e, .. } = *instruction;
-
-        let e = e.as_canonical_u32();
+        let e = instruction.e.as_canonical_u32();
         let cols: &mut Rv32VecHeapAdapterCols<
             F,
             NUM_READS,
@@ -377,16 +379,7 @@ impl<
             WRITE_SIZE,
         > = adapter_row.borrow_mut();
 
-        cols.rd_ptr = a;
-        let rd_val = tracing_read(
-            memory,
-            d.as_canonical_u32(),
-            a.as_canonical_u32(),
-            &mut cols.rd_read_aux,
-        );
-        cols.rd_val = rd_val.map(F::from_canonical_u8);
-
-        let rd_val = u32::from_le_bytes(rd_val);
+        let rd_val = u32::from_le_bytes(cols.rd_val.map(|x| x.as_canonical_u32() as u8));
         assert!(rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1 < (1 << self.pointer_max_bits));
 
         for i in 0..BLOCKS_PER_WRITE {
@@ -402,7 +395,7 @@ impl<
 
     fn fill_trace_row(
         &self,
-        _mem_helper: &MemoryAuxColsFactory<F>,
+        mem_helper: &MemoryAuxColsFactory<F>,
         _ctx: (),
         adapter_row: &mut [F],
     ) {
@@ -415,18 +408,44 @@ impl<
             WRITE_SIZE,
         > = adapter_row.borrow_mut();
 
+        let mut timestamp = cols.from_state.timestamp.as_canonical_u32();
+        let mut timestamp_pp = || {
+            timestamp += 1;
+            timestamp - 1
+        };
+
+        cols.rs_read_aux
+            .iter_mut()
+            .for_each(|aux| mem_helper.fill_from_prev(timestamp_pp(), aux.as_mut()));
+        mem_helper.fill_from_prev(timestamp_pp(), cols.rd_read_aux.as_mut());
+
+        cols.reads_aux.iter_mut().for_each(|reads| {
+            reads
+                .iter_mut()
+                .for_each(|aux| mem_helper.fill_from_prev(timestamp_pp(), aux.as_mut()));
+        });
+
+        cols.writes_aux.iter_mut().for_each(|write| {
+            mem_helper.fill_from_prev(timestamp_pp(), write.as_mut());
+        });
+
         // Range checks:
-        let need_range_check: Vec<u32> = cols
-            .rs_val
-            .iter()
-            .chain(std::iter::repeat_n(&cols.rd_val, 2))
-            .map(|&val| val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
-            .collect();
         debug_assert!(self.pointer_max_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
         let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits;
-        for pair in need_range_check.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] << limb_shift_bits, pair[1] << limb_shift_bits);
+        if NUM_READS > 1 {
+            self.bitwise_lookup_chip.request_range(
+                cols.rs_val[0][RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+                cols.rs_val[1][RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+            );
+            self.bitwise_lookup_chip.request_range(
+                cols.rd_val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+                cols.rd_val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+            );
+        } else {
+            self.bitwise_lookup_chip.request_range(
+                cols.rs_val[0][RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+                cols.rd_val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+            );
         }
     }
 }
@@ -439,7 +458,7 @@ impl<
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
     > AdapterExecutorE1<F>
-    for RV32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+    for Rv32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
 {
     type ReadData = [[[u8; READ_SIZE]; BLOCKS_PER_READ]; NUM_READS];
     type WriteData = [[u8; WRITE_SIZE]; BLOCKS_PER_WRITE];
