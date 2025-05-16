@@ -100,17 +100,20 @@ pub fn write_evm_proof_to_file<P: AsRef<Path>>(proof: EvmProof, path: P) -> Resu
 }
 
 pub fn read_evm_halo2_verifier_from_folder<P: AsRef<Path>>(folder: P) -> Result<EvmHalo2Verifier> {
-    let halo2_verifier_code_path = folder.as_ref().join(EVM_HALO2_VERIFIER_PARENT_NAME);
-    let openvm_verifier_code_path = folder.as_ref().join(EVM_HALO2_VERIFIER_BASE_NAME);
-    let interface_path = folder
+    let folder = folder
         .as_ref()
+        .join("src")
+        .join(format!("v{}", OPENVM_VERSION));
+    let halo2_verifier_code_path = folder.join(EVM_HALO2_VERIFIER_PARENT_NAME);
+    let openvm_verifier_code_path = folder.join(EVM_HALO2_VERIFIER_BASE_NAME);
+    let interface_path = folder
         .join("interfaces")
         .join(EVM_HALO2_VERIFIER_INTERFACE_NAME);
     let halo2_verifier_code = read_to_string(halo2_verifier_code_path)?;
     let openvm_verifier_code = read_to_string(openvm_verifier_code_path)?;
     let interface = read_to_string(interface_path)?;
 
-    let artifact_path = folder.as_ref().join(EVM_VERIFIER_ARTIFACT_FILENAME);
+    let artifact_path = folder.join(EVM_VERIFIER_ARTIFACT_FILENAME);
     let artifact: EvmVerifierByteCode = serde_json::from_reader(File::open(artifact_path)?)?;
 
     Ok(EvmHalo2Verifier {
