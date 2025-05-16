@@ -8,9 +8,12 @@
 
 - Adds `OpenVmHalo2Verifier` generation to the SDK which is a thin wrapper around the original `Halo2Verifier` contract exposing a more user-friendly interface.
 - Updates the CLI to generate the new `OpenVmHalo2Verifier` contract during `cargo openvm setup`.
-- Remoes the ability to generate the old `Halo2Verifier` contract from the SDK.
+- Removes the ability to generate the old `Halo2Verifier` contract from the SDK and CLI.
 - Changes the `EvmProof` struct to align with the interface of the `OpenVmHalo2Verifier` contract.
 - Formats the verifier contract during generation for better readability on block explorers.
 - For verifier contract compilation, explicitly sets the `solc` config via standard-json input for metadata consistency.
 
 ## v1.1.0 (2025-05-02)
+
+### Security Fixes
+- Fixes security vulnerability [OpenVM allows the byte decomposition of pc in AUIPC chip to overflow](https://github.com/advisories/GHSA-jf2r-x3j4-23m7)
