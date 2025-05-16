@@ -91,15 +91,9 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
             last_digest_row.rd_ptr = *a;
             last_digest_row.rs1_ptr = *b;
             last_digest_row.rs2_ptr = *c;
-            last_digest_row
-                .dst_ptr
-                .copy_from_slice(&dst.map(F::from_canonical_u8));
-            last_digest_row
-                .src_ptr
-                .copy_from_slice(&src.map(F::from_canonical_u8));
-            last_digest_row
-                .len_data
-                .copy_from_slice(&len.map(F::from_canonical_u8));
+            last_digest_row.dst_ptr = dst.map(F::from_canonical_u8);
+            last_digest_row.src_ptr = src.map(F::from_canonical_u8);
+            last_digest_row.len_data = len.map(F::from_canonical_u8);
             (u32::from_le_bytes(dst), u32::from_le_bytes(src))
         };
 
