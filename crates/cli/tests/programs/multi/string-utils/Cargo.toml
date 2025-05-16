@@ -1,5 +1,5 @@
 [package]
-name = "openvm-string-utils"
+name = "openvm-cli-example-string-utils"
 version = "0.0.0"
 edition = "2021"
 
