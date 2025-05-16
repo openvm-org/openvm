@@ -31,7 +31,8 @@ pub(crate) fn manifest_path_and_dir(manifest_path: &Option<PathBuf>) -> Result<(
                 "manifest_path must be a path to a Cargo.toml file"
             ));
         }
-        let _ = MANIFEST_DIR.set(manifest_path.parent().unwrap().to_path_buf());
+        let canonical_path = manifest_path.canonicalize()?;
+        let _ = MANIFEST_DIR.set(canonical_path.parent().unwrap().to_path_buf());
         MANIFEST_DIR.get().unwrap().clone()
     } else {
         find_manifest_dir(PathBuf::from("."))?
