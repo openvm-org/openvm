@@ -26,17 +26,17 @@ enum BuildProfile {
 
 static AVAILABLE_PROGRAMS: &[&str] = &[
     "fibonacci_recursive",
-    // "fibonacci_iterative",
-    // "quicksort",
-    // "bubblesort",
+    "fibonacci_iterative",
+    "quicksort",
+    "bubblesort",
     "factorial_iterative_u256",
+    "revm_snailtracer",
     // "pairing",
     // "keccak256",
     // "keccak256_iter",
     // "sha256",
     // "sha256_iter",
     // "revm_transfer",
-    // "revm_snailtracer",
 ];
 
 #[derive(Parser)]

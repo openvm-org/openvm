@@ -15,13 +15,13 @@ static AVAILABLE_PROGRAMS: &[&str] = &[
     "quicksort",
     "bubblesort",
     "factorial_iterative_u256",
+    "revm_snailtracer",
     // "pairing",
     // "keccak256",
     // "keccak256_iter",
     // "sha256",
     // "sha256_iter",
     // "revm_transfer",
-    // "revm_snailtracer",
 ];
 
 fn main() {

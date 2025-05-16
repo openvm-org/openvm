@@ -463,6 +463,14 @@ where
                     .memory_controller()
                     .mem_config()
                     .memory_dimensions(),
+                segment
+                    .chip_complex
+                    .memory_controller()
+                    .memory
+                    .min_block_size
+                    .iter()
+                    .map(|&x| x as usize)
+                    .collect(),
             );
             let exec_state = metrics_span("execute_time_ms", || {
                 segment.execute_from_pc(state.pc, Some(state.memory), ctx)

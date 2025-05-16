@@ -8,7 +8,8 @@ use super::{
 use crate::{
     arch::{ExecutionState, InsExecutorE1, InstructionExecutor},
     system::memory::{
-        adapter::GenericAccessAdapterChip, online::GuestMemory, AddressMap, MemoryImage, PAGE_SIZE,
+        adapter::GenericAccessAdapterChip, online::GuestMemory, AddressMap, MemoryImage, CHUNK,
+        PAGE_SIZE,
     },
 };
 
@@ -446,6 +447,25 @@ where
         _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         _exit_code: u32,
     ) {
+        // TODO(ayush): this should be in should_suspend
+        let indices_to_process: Vec<_> = state
+            .ctx
+            .leaf_indices
+            .iter()
+            .map(|&idx| {
+                let (addr_space, block_id) = state.ctx.memory_dimensions.index_to_label(idx);
+                (addr_space, block_id)
+            })
+            .collect();
+        for (addr_space, block_id) in indices_to_process {
+            state
+                .ctx
+                .update_access_adapter_heights(addr_space, block_id * CHUNK as u32, CHUNK);
+        }
+
+        // CHUNK-byte access adapter
+        // self.trace_heights[offset + CHUNK_BITS] += 1;
+
         for ((name, height), width) in self
             .air_names
             .iter()
