@@ -95,6 +95,9 @@ pub fn read_evm_proof_from_file<P: AsRef<Path>>(path: P) -> Result<EvmProof> {
 }
 
 pub fn write_evm_proof_to_file<P: AsRef<Path>>(proof: EvmProof, path: P) -> Result<()> {
+    if let Some(parent) = path.as_ref().parent() {
+        create_dir_all(parent)?;
+    }
     serde_json::to_writer(File::create(path)?, &proof)?;
     Ok(())
 }

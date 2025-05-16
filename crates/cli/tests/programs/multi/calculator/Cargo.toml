@@ -1,5 +1,5 @@
 [package]
-name = "openvm-calculator"
+name = "openvm-cli-example-calculator"
 version = "0.0.0"
 edition = "2021"
 

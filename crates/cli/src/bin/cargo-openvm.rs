@@ -26,7 +26,7 @@ pub enum VmCliCommands {
     Prove(ProveCmd),
     Run(RunCmd),
     #[cfg(feature = "evm-verify")]
-    Setup(EvmProvingSetupCmd),
+    Setup(SetupCmd),
     Verify(VerifyCmd),
 }
 
