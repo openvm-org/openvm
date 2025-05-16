@@ -218,6 +218,7 @@ pub fn read_rv32_register<F: PrimeField32>(
     (record.0, val)
 }
 
+// TODO(AG): if "register", why `address_space` is not hardcoded to be 1?
 #[inline(always)]
 pub fn new_read_rv32_register(memory: &GuestMemory, address_space: u32, ptr: u32) -> u32 {
     u32::from_le_bytes(memory_read(memory, address_space, ptr))

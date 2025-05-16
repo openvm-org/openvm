@@ -365,11 +365,11 @@ impl<T: FieldAlgebra> From<(u32, Option<T>)> for PcIncOrSet<T> {
 pub trait PhantomSubExecutor<F>: Send {
     fn phantom_execute(
         &mut self,
-        memory: &MemoryController<F>,
+        memory: &GuestMemory,
         streams: &mut Streams<F>,
         discriminant: PhantomDiscriminant,
-        a: F,
-        b: F,
+        a: u32,
+        b: u32,
         c_upper: u16,
     ) -> eyre::Result<()>;
 }
