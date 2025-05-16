@@ -8,8 +8,8 @@ use openvm_circuit::arch::{NewVmChipWrapper, VmAirWrapper};
 use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionStep};
 use openvm_rv32_adapters::{
-    Rv32VecHeapAdapterStep, Rv32IsEqualModAdapterAir, Rv32IsEqualModeAdapterStep,
-    Rv32VecHeapAdapterAir,
+    Rv32IsEqualModAdapterAir, Rv32IsEqualModeAdapterStep, Rv32VecHeapAdapterAir,
+    Rv32VecHeapAdapterStep,
 };
 
 #[cfg(test)]

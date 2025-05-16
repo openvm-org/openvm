@@ -5,7 +5,7 @@ mod muldiv;
 pub use muldiv::*;
 use openvm_circuit::arch::{NewVmChipWrapper, VmAirWrapper};
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionStep};
-use openvm_rv32_adapters::{Rv32VecHeapAdapterStep, Rv32VecHeapAdapterAir};
+use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
 
 pub(crate) type Fp2Air<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper<
     Rv32VecHeapAdapterAir<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
