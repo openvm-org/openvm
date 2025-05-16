@@ -3,7 +3,7 @@ use openvm as _;
 use openvm_bigint_guest::U256;
 
 // This will overflow but that is fine
-const N: u32 = 70_000;
+const N: u32 = 65_000;
 
 pub fn main() {
     let mut acc = U256::from_u32(1);

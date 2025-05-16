@@ -264,19 +264,19 @@ where
 
     fn on_segment_end(
         &mut self,
-        _state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
-        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
+        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
-        self.final_memory = Some(chip_complex.base.memory_controller.memory_image().clone());
+        self.final_memory = state.memory.clone();
     }
 
     fn on_terminate(
         &mut self,
-        _state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
-        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
+        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         _exit_code: u32,
     ) {
-        self.final_memory = Some(chip_complex.base.memory_controller.memory_image().clone());
+        self.final_memory = state.memory.clone();
     }
 
     /// Execute a single instruction
@@ -434,16 +434,16 @@ where
 
     fn on_segment_end(
         &mut self,
-        _state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
-        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
+        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
-        self.final_memory = Some(chip_complex.base.memory_controller.memory_image().clone());
+        self.final_memory = state.memory.clone();
     }
 
     fn on_terminate(
         &mut self,
         state: &mut ExecutionSegmentState<Self::Mem, Self::Ctx>,
-        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         _exit_code: u32,
     ) {
         for ((name, height), width) in self
@@ -455,7 +455,7 @@ where
             println!("{:<10} \t|\t{:<5} \t|\t{}", height, width, name);
         }
 
-        self.final_memory = Some(chip_complex.base.memory_controller.memory_image().clone());
+        self.final_memory = state.memory.clone();
     }
 
     /// Execute a single instruction

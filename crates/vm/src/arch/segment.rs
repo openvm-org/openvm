@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use backtrace::Backtrace;
 use openvm_instructions::{
@@ -275,9 +275,8 @@ pub struct MeteredCtx {
 
     // Trace heights for each chip
     pub trace_heights: Vec<usize>,
-    // Accesses of size [1, 2, 4, 8, 16, 32]
-    // TODO(ayush): no magic number
-    pub memory_ops: [usize; 6],
+    // Map from (addr_space, addr) -> (size, offset)
+    pub last_memory_access: BTreeMap<(u8, u32), (u8, u8)>,
     // Indices of leaf nodes in the memory merkle tree
     pub leaf_indices: BTreeSet<u64>,
 }
@@ -292,7 +291,7 @@ impl MeteredCtx {
             continuations_enabled,
             memory_dimensions,
             trace_heights: vec![0; num_traces],
-            memory_ops: [0; 6],
+            last_memory_access: BTreeMap::new(),
             leaf_indices: BTreeSet::new(),
         }
     }
@@ -328,15 +327,75 @@ impl E1E2ExecutionCtx for MeteredCtx {
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: usize) {
         debug_assert!(address_space != RV32_IMM_AS);
 
-        self.memory_ops[log2_strict_usize(size)] += 1;
-        // TODO(ayush): access adapter heights based on this
+        // TODO(ayush): no magic numbers
+        let mut adapter_offset = 2;
+        if self.continuations_enabled {
+            adapter_offset += 1;
+        }
+
+        // TODO(ayush): no magic number, store alignment in self
+        let ALIGN: usize = 4;
+        let CHUNK_BITS = log2_strict_usize(CHUNK);
+
+        // Skip adapters if this is a repeated access to the same location with same size
+        let last_access = self.last_memory_access.get(&(address_space as u8, ptr));
+        if !matches!(last_access, Some(&(last_access_size, 0)) if size == last_access_size as usize)
+        {
+            let mut ptr_start = ptr;
+            if let Some(&(_, last_access_offset)) = last_access {
+                // Go to the start of block
+                ptr_start = ptr.wrapping_sub(last_access_offset as u32);
+            }
+
+            // Split previous block
+            let mut curr_block = ptr_start / ALIGN as u32;
+            let end_block = curr_block + size as u32 / ALIGN as u32;
+            while curr_block < end_block {
+                let curr_block_size = if let Some(&(last_access_size, _)) = self
+                    .last_memory_access
+                    .get(&(address_space as u8, curr_block.wrapping_mul(ALIGN as u32)))
+                {
+                    last_access_size as usize
+                } else {
+                    // Initial memory access only happens at CHUNK boundary
+                    let chunk_offset = curr_block % (CHUNK / ALIGN) as u32;
+                    curr_block -= chunk_offset;
+                    CHUNK
+                };
+
+                if curr_block_size > ALIGN {
+                    update_access_adapters_split(
+                        &mut self.trace_heights,
+                        curr_block_size,
+                        adapter_offset,
+                    );
+                    add_memory_access_split(
+                        &mut self.last_memory_access,
+                        (address_space, curr_block.wrapping_mul(ALIGN as u32)),
+                        curr_block_size,
+                        ALIGN,
+                    );
+                }
+
+                curr_block += (curr_block_size / ALIGN) as u32;
+            }
+
+            // merge
+            update_access_adapters_merge(&mut self.trace_heights, size, adapter_offset);
+            add_memory_access_merge(
+                &mut self.last_memory_access,
+                (address_space, ptr),
+                size,
+                ALIGN,
+            );
+        }
 
         // Calculate unique chunks and inner nodes in Merkle tree
         let mt_height = self.memory_dimensions.overall_height();
 
         // TODO(ayush): see if this can be approximated by total number of reads/writes for AS != register
-        let num_chunks = size.div_ceil(CHUNK);
-        for i in 0..num_chunks {
+        let num_blocks = size.div_ceil(CHUNK);
+        for i in 0..num_blocks {
             let addr = ptr.wrapping_add((i * CHUNK) as u32);
             let block_id = addr / CHUNK as u32;
             let leaf_index = self
@@ -361,11 +420,57 @@ impl E1E2ExecutionCtx for MeteredCtx {
                     self.trace_heights[offset] += height_change * 2;
                 }
 
-                // 8-byte access adapter
-                let log2_chunk = log2_strict_usize(CHUNK);
-                self.trace_heights[offset + log2_chunk] += 2;
+                // CHUNK-byte access adapter
+                // TODO(ayush): add back
+                // self.trace_heights[offset + CHUNK_BITS] += 1;
             }
         }
+    }
+}
+
+fn update_access_adapters_split(trace_heights: &mut [usize], size: usize, adapter_offset: usize) {
+    let size_bits = log2_strict_usize(size);
+    for adapter_bits in (3..=size_bits).rev() {
+        trace_heights[adapter_offset + adapter_bits] += 1 << (size_bits - adapter_bits);
+    }
+}
+
+fn update_access_adapters_merge(trace_heights: &mut [usize], size: usize, adapter_offset: usize) {
+    let size_bits = log2_strict_usize(size);
+    for adapter_bits in (3..=size_bits).rev() {
+        trace_heights[adapter_offset + adapter_bits] += 1 << (size_bits - adapter_bits);
+    }
+}
+
+fn add_memory_access_split(
+    memory_access_map: &mut BTreeMap<(u8, u32), (u8, u8)>,
+    (address_space, ptr): (u32, u32),
+    size: usize,
+    align: usize,
+) {
+    debug_assert_eq!(size % align, 0, "Size must be a multiple of alignment");
+    let num_chunks = size / align;
+    for i in 0..num_chunks {
+        let curr_ptr = ptr.wrapping_add(i as u32 * align as u32);
+        let key = (address_space as u8, curr_ptr);
+        let value = (align as u8, 0);
+        memory_access_map.insert(key, value);
+    }
+}
+
+fn add_memory_access_merge(
+    memory_access_map: &mut BTreeMap<(u8, u32), (u8, u8)>,
+    (address_space, ptr): (u32, u32),
+    size: usize,
+    align: usize,
+) {
+    debug_assert_eq!(size % align, 0, "Size must be a multiple of alignment");
+    let num_chunks = size / align;
+    for i in 0..num_chunks {
+        let curr_ptr = ptr.wrapping_add(i as u32 * align as u32);
+        let key = (address_space as u8, curr_ptr);
+        let value = (size as u8, (i * align) as u8);
+        memory_access_map.insert(key, value);
     }
 }
 
@@ -374,6 +479,7 @@ fn calculate_merkle_node_updates(
     leaf_index: u64,
     height: usize,
 ) -> usize {
+    // First node requires height many updates
     if leaf_indices.len() == 1 {
         return height;
     }

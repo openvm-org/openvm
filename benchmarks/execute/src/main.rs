@@ -25,7 +25,7 @@ enum BuildProfile {
 // const DEFAULT_APP_CONFIG_PATH: &str = "./openvm.toml";
 
 static AVAILABLE_PROGRAMS: &[&str] = &[
-    // "fibonacci_recursive",
+    "fibonacci_recursive",
     // "fibonacci_iterative",
     // "quicksort",
     // "bubblesort",
