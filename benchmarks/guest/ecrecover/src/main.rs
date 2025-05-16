@@ -1,13 +1,7 @@
 use alloy_primitives::{Bytes, B256, B512};
-use k256::{
-    ecdsa::{Error, RecoveryId, Signature},
-    Secp256k1,
-};
+use k256::ecdsa::{Error, RecoveryId, Signature, VerifyingKey};
 use openvm::io::read_vec;
-#[allow(unused_imports)]
-use openvm_ecc_guest::{
-    algebra::IntMod, ecdsa::VerifyingKey, k256::Secp256k1Point, weierstrass::WeierstrassPoint,
-};
+use openvm_k256::Secp256k1Point;
 #[allow(unused_imports, clippy::single_component_path_imports)]
 use openvm_keccak256::keccak256;
 // export native keccak
@@ -26,8 +20,7 @@ pub fn main() {
     }
 }
 
-// OpenVM version of ecrecover precompile.
-pub fn ecrecover(sig: &B512, mut recid: u8, msg: &B256) -> Result<B256, Error> {
+fn ecrecover(sig: &B512, mut recid: u8, msg: &B256) -> Result<B256, Error> {
     // parse signature
     let mut sig = Signature::from_slice(sig.as_slice())?;
     if let Some(sig_normalized) = sig.normalize_s() {
@@ -36,15 +29,13 @@ pub fn ecrecover(sig: &B512, mut recid: u8, msg: &B256) -> Result<B256, Error> {
     }
     let recid = RecoveryId::from_byte(recid).expect("recovery ID is valid");
 
-    // annoying: Signature::to_bytes copies from slice
-    let recovered_key =
-        VerifyingKey::<Secp256k1>::recover_from_prehash_noverify(&msg[..], &sig.to_bytes(), recid)?;
-    let public_key = recovered_key.as_affine();
-    let mut encoded = [0u8; 64];
-    encoded[..32].copy_from_slice(&public_key.x().to_be_bytes());
-    encoded[32..].copy_from_slice(&public_key.y().to_be_bytes());
-    // hash it
-    let mut hash = keccak256(&encoded);
+    let recovered_key = VerifyingKey::recover_from_prehash(&msg[..], &sig, recid)?;
+    let mut hash = keccak256(
+        &recovered_key
+            .to_encoded_point(/* compress = */ false)
+            .as_bytes()[1..],
+    );
+
     // truncate to 20 bytes
     hash[..12].fill(0);
     Ok(B256::from(hash))
