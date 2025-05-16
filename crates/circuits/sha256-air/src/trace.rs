@@ -16,7 +16,7 @@ use super::{
 };
 use crate::{
     big_sig0, big_sig1, ch, columns::Sha256DigestCols, limbs_into_u32, maj, small_sig0, small_sig1,
-    u32_into_limbs, u32_into_u16s, SHA256_BLOCK_U8S, SHA256_H, SHA256_INVALID_CARRY_A,
+    u32_into_bits_field, u32_into_u16s, SHA256_BLOCK_U8S, SHA256_H, SHA256_INVALID_CARRY_A,
     SHA256_INVALID_CARRY_E, SHA256_K, SHA256_ROUNDS_PER_ROW, SHA256_ROWS_PER_BLOCK,
     SHA256_WORD_BITS, SHA256_WORD_U16S, SHA256_WORD_U8S,
 };
@@ -93,10 +93,8 @@ impl Sha256StepHelper {
                 // W_idx = M_idx
                 if i < 4 {
                     for j in 0..SHA256_ROUNDS_PER_ROW {
-                        cols.message_schedule.w[j] = u32_into_limbs::<SHA256_WORD_BITS>(
-                            input[i * SHA256_ROUNDS_PER_ROW + j],
-                        )
-                        .map(F::from_canonical_u32);
+                        cols.message_schedule.w[j] =
+                            u32_into_bits_field::<F>(input[i * SHA256_ROUNDS_PER_ROW + j]);
                     }
                 }
                 // W_idx = SIG1(W_{idx-2}) + W_{idx-7} + SIG0(W_{idx-15}) + W_{idx-16}
@@ -110,10 +108,9 @@ impl Sha256StepHelper {
                             message_schedule[idx - 16],
                         ];
                         let w: u32 = nums.iter().fold(0, |acc, &num| acc.wrapping_add(num));
-                        cols.message_schedule.w[j] =
-                            u32_into_limbs::<SHA256_WORD_BITS>(w).map(F::from_canonical_u32);
+                        cols.message_schedule.w[j] = u32_into_bits_field::<F>(w);
 
-                        let nums_limbs = nums.iter().map(|x| u32_into_u16s(*x)).collect::<Vec<_>>();
+                        let nums_limbs = nums.map(|x| u32_into_u16s(x));
                         let w_limbs = u32_into_u16s(w);
 
                         // fill in the carrys
@@ -156,13 +153,11 @@ impl Sha256StepHelper {
 
                     // e = d + t1
                     let e = work_vars[3].wrapping_add(t1_sum);
-                    cols.work_vars.e[j] =
-                        u32_into_limbs::<SHA256_WORD_BITS>(e).map(F::from_canonical_u32);
+                    cols.work_vars.e[j] = u32_into_bits_field::<F>(e);
                     let e_limbs = u32_into_u16s(e);
                     // a = t1 + t2
                     let a = t1_sum.wrapping_add(t2_sum);
-                    cols.work_vars.a[j] =
-                        u32_into_limbs::<SHA256_WORD_BITS>(a).map(F::from_canonical_u32);
+                    cols.work_vars.a[j] = u32_into_bits_field::<F>(a);
                     let a_limbs = u32_into_u16s(a);
                     // fill in the carrys
                     for k in 0..SHA256_WORD_U16S {
@@ -228,28 +223,27 @@ impl Sha256StepHelper {
                 cols.flags.local_block_idx = F::from_canonical_u32(local_block_idx);
                 let final_hash: [u32; SHA256_HASH_WORDS] =
                     array::from_fn(|i| work_vars[i].wrapping_add(prev_hash[i]));
-                let final_hash_limbs: [[u32; SHA256_WORD_U8S]; SHA256_HASH_WORDS] =
-                    array::from_fn(|i| u32_into_limbs::<SHA256_WORD_U8S>(final_hash[i]));
+                let final_hash_limbs: [[u8; SHA256_WORD_U8S]; SHA256_HASH_WORDS] =
+                    array::from_fn(|i| final_hash[i].to_le_bytes());
                 // need to ensure final hash limbs are bytes, in order for
                 //   prev_hash[i] + work_vars[i] == final_hash[i]
                 // to be constrained correctly
                 for word in final_hash_limbs.iter() {
                     for chunk in word.chunks(2) {
-                        bitwise_lookup_chip.request_range(chunk[0], chunk[1]);
+                        bitwise_lookup_chip.request_range(chunk[0] as u32, chunk[1] as u32);
                     }
                 }
                 cols.final_hash = array::from_fn(|i| {
-                    array::from_fn(|j| F::from_canonical_u32(final_hash_limbs[i][j]))
+                    array::from_fn(|j| F::from_canonical_u8(final_hash_limbs[i][j]))
                 });
                 cols.prev_hash = prev_hash.map(|f| u32_into_u16s(f).map(F::from_canonical_u32));
                 let hash = if is_last_block {
-                    SHA256_H.map(u32_into_limbs::<SHA256_WORD_BITS>)
+                    SHA256_H.map(u32_into_bits_field::<F>)
                 } else {
                     cols.final_hash
-                        .map(|f| limbs_into_u32(f.map(|x| x.as_canonical_u32())))
-                        .map(u32_into_limbs::<SHA256_WORD_BITS>)
-                }
-                .map(|x| x.map(F::from_canonical_u32));
+                        .map(|f| u32::from_le_bytes(f.map(|x| x.as_canonical_u32() as u8)))
+                        .map(u32_into_bits_field::<F>)
+                };
 
                 for i in 0..SHA256_ROUNDS_PER_ROW {
                     cols.hash.a[i] = hash[SHA256_ROUNDS_PER_ROW - i - 1];
@@ -346,9 +340,7 @@ impl Sha256StepHelper {
         cols.message_schedule.carry_or_buffer =
             [[F::ZERO; SHA256_WORD_U16S * 2]; SHA256_ROUNDS_PER_ROW];
 
-        let hash = SHA256_H
-            .map(u32_into_limbs::<SHA256_WORD_BITS>)
-            .map(|x| x.map(F::from_canonical_u32));
+        let hash = SHA256_H.map(u32_into_bits_field::<F>);
 
         for i in 0..SHA256_ROUNDS_PER_ROW {
             cols.work_vars.a[i] = hash[SHA256_ROUNDS_PER_ROW - i - 1];
