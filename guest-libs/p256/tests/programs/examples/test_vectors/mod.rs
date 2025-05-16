@@ -88,10 +88,12 @@ pub const ADD_TEST_VECTORS: &[([u8; 32], [u8; 32])] = &[
     ),
 ];
 
-//// Scalar multiplication with the generator.
+/// Scalar multiplication with the generator.
 ///
 /// These are the test vectors from <http://point-at-infinity.org/ecc/nisttv> that are not
 /// part of [`ADD_TEST_VECTORS`].
+// clippy thinks this is unused for some reason, but it's used in mul.rs
+#[allow(dead_code)]
 pub const MUL_TEST_VECTORS: &[([u8; 32], [u8; 32], [u8; 32])] = &[
     (
         hex!("000000000000000000000000000000000000000000000000018EBBB95EED0E13"),

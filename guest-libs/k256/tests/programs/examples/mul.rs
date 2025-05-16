@@ -3,7 +3,6 @@
 
 use elliptic_curve::{CurveArithmetic, Group, PrimeField};
 use openvm_k256::Secp256k1;
-
 // clippy thinks this is unused, but it's used in the init! macro
 #[allow(unused)]
 use openvm_k256::Secp256k1Point;
@@ -34,7 +33,7 @@ pub fn main() {
             )
         }))
     {
-        let p = generator * &k;
+        let p = generator * k;
         assert_eq!(p.x_be_bytes(), coords.0);
         assert_eq!(p.y_be_bytes(), coords.1);
     }

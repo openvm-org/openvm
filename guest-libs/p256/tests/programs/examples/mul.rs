@@ -34,7 +34,7 @@ pub fn main() {
             )
         }))
     {
-        let p = generator * &k;
+        let p = generator * k;
         assert_eq!(p.x_be_bytes(), coords.0);
         assert_eq!(p.y_be_bytes(), coords.1);
     }

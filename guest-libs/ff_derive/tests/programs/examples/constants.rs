@@ -35,13 +35,13 @@ fn main() {
 
     // ROOT_OF_UNITY^{2^s} mod m == 1
     assert_eq!(
-        Bls381K12Scalar::ROOT_OF_UNITY.pow(&[1u64 << Bls381K12Scalar::S, 0, 0, 0]),
+        Bls381K12Scalar::ROOT_OF_UNITY.pow([1u64 << Bls381K12Scalar::S, 0, 0, 0]),
         Bls381K12Scalar::ONE,
     );
 
     // DELTA^{t} mod m == 1
     assert_eq!(
-        Bls381K12Scalar::DELTA.pow(&[
+        Bls381K12Scalar::DELTA.pow([
             0xfffe5bfeffffffff,
             0x09a1d80553bda402,
             0x299d7d483339d808,

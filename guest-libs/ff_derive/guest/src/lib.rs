@@ -1190,6 +1190,8 @@ fn prime_field_impl(
         // on our zkvm-compatible struct, so we need to conditionally implement them
         #[cfg(not(target_os = "zkvm"))]
         mod #impl_module_ident {
+            use super::{#name, MODULUS_LIMBS};
+
             impl ::core::clone::Clone for #name {
                 fn clone(&self) -> #name {
                     *self

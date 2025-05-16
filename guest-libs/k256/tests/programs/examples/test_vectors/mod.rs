@@ -93,6 +93,8 @@ pub const ADD_TEST_VECTORS: &[([u8; 32], [u8; 32])] = &[
 ///
 /// Vectors for secp256k1 are difficult to find. These are the vectors from:
 /// <https://web.archive.org/web/20190724010836/https://chuckbatson.wordpress.com/2014/11/26/secp256k1-test-vectors/>
+// clippy thinks this is unused for some reason, but it's used in mul.rs
+#[allow(dead_code)]
 pub const MUL_TEST_VECTORS: &[([u8; 32], [u8; 32], [u8; 32])] = &[
     (
         hex!("000000000000000000000000000000000000000000000000018EBBB95EED0E13"),

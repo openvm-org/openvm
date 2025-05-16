@@ -5,6 +5,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 use core::hint::black_box;
+
 use hex::FromHex;
 use openvm_sha2::sha256;
 

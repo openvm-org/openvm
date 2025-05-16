@@ -29,9 +29,12 @@ fn main() {
     );
 
     // Test Eq
-    assert_eq!(Bls381K12Scalar::ZERO, Bls381K12Scalar::ZERO);
-    assert_eq!(Bls381K12Scalar::ONE, Bls381K12Scalar::ONE);
-    assert_eq!(neg_one, neg_one);
+    #[allow(clippy::eq_op)]
+    {
+        assert_eq!(Bls381K12Scalar::ZERO, Bls381K12Scalar::ZERO);
+        assert_eq!(Bls381K12Scalar::ONE, Bls381K12Scalar::ONE);
+        assert_eq!(neg_one, neg_one);
+    }
 
     // Test is_zero
     assert!(bool::from(Bls381K12Scalar::ZERO.is_zero()));

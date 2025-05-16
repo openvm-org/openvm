@@ -22,7 +22,7 @@ pub fn mult(a: &Matrix, b: &Matrix) -> Matrix {
     for i in 0..N {
         for j in 0..N {
             for k in 0..N {
-                c[i][j] += &a[i][k] * &b[k][j];
+                c[i][j] += a[i][k] * b[k][j];
             }
         }
     }
@@ -42,11 +42,11 @@ pub fn bin_exp(mut base: Matrix, mut exp: U256) -> Matrix {
     let mut result = get_identity_matrix();
     let one = U256::from_u8(1).unwrap();
     while exp > U256::from_u8(0).unwrap() {
-        if (&exp & &one) == one {
+        if (exp & one) == one {
             result = mult(&result, &base);
         }
         base = mult(&base, &base);
-        exp >>= &one;
+        exp >>= one;
     }
     result
 }
@@ -64,7 +64,7 @@ pub fn main() {
 
     let a: Matrix = get_matrix(1);
     let c = bin_exp(a, U256::from_u8(51).unwrap());
-    let two_to_200 = one << &U256::from_u8(200).unwrap();
+    let two_to_200 = one << U256::from_u8(200).unwrap();
 
     for i in 0..N {
         for j in 0..N {
@@ -76,54 +76,54 @@ pub fn main() {
     }
 
     // Shift right tests
-    if two_to_200 >> &U256::from_u8(200).unwrap() != one {
+    if two_to_200 >> U256::from_u8(200).unwrap() != one {
         print("FAIL: 2^200 >> 200 == 1 test failed");
         panic!();
     }
-    if two_to_200 >> &U256::from_u8(201).unwrap() != zero {
+    if two_to_200 >> U256::from_u8(201).unwrap() != zero {
         print("FAIL: 2^200 >> 201 == 0 test failed");
         panic!();
     }
 
     // Xor tests
-    if &two_to_200 ^ &two_to_200 != zero {
+    if two_to_200 ^ two_to_200 != zero {
         print("FAIL: 2^200 ^ 2^200 == 0 test failed");
         panic!();
     }
 
-    if &two_to_200 ^ &one != &two_to_200 + &one {
+    if two_to_200 ^ one != two_to_200 + one {
         print("FAIL: 2^200 ^ 1 == 2^200 + 1 test failed");
         panic!();
     }
 
     // Or tests
-    if &one | &one != one {
+    if one | one != one {
         print("FAIL: 1 | 1 == 1 test failed");
         panic!();
     }
 
-    if &two_to_200 | &one != &two_to_200 + &one {
+    if two_to_200 | one != two_to_200 + one {
         print("FAIL: 2^200 | 1 = 2^200 + 1 test failed");
         panic!();
     }
 
     // Other tests
-    if &zero - &one <= zero {
+    if zero - one <= zero {
         print("FAIL: 0 - 1 > 0 test failed (should have wrapped)");
         panic!();
     }
 
-    if &zero - &one + &one != zero {
+    if zero - one + one != zero {
         print("FAIL: 0 - 1 + 1 == 0 test failed (should have wrapped)");
         panic!();
     }
 
-    if one << &U256::from_u32(256).unwrap() != zero {
+    if one << U256::from_u32(256).unwrap() != zero {
         print("FAIL: 1 << 256 == 0 test failed");
         panic!();
     }
 
-    if two_to_200.clone() != two_to_200 {
+    if two_to_200 != two_to_200 {
         print("FAIL: 2^200 clone test failed");
         panic!();
     }
