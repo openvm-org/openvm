@@ -7,7 +7,12 @@ use openvm_sdk::{
     Sdk,
 };
 
-use crate::default::*;
+use crate::{
+    default::*,
+    global::{app_vk_path, manifest_path_and_dir, target_dir},
+};
+
+use super::KeygenCargoArgs;
 
 #[derive(Parser)]
 #[command(name = "verify", about = "Verify a proof")]
@@ -19,15 +24,35 @@ pub struct VerifyCmd {
 #[derive(Parser)]
 enum VerifySubCommand {
     App {
-        #[arg(long, action, help = "Path to app verifying key", default_value = DEFAULT_APP_VK_PATH)]
-        app_vk: PathBuf,
+        #[arg(
+            long,
+            action,
+            help = "Path to app verifying key, by default will search for it in ${target_dir}/openvm/app.vk",
+            help_heading = "OpenVM Options"
+        )]
+        app_vk: Option<PathBuf>,
 
-        #[arg(long, action, help = "Path to app proof", default_value = DEFAULT_APP_PROOF_PATH)]
+        #[arg(
+            long,
+            action,
+            default_value = DEFAULT_APP_PROOF_PATH,
+            help = "Path to app proof",
+            help_heading = "OpenVM Options"
+        )]
         proof: PathBuf,
+
+        #[command(flatten)]
+        cargo_args: KeygenCargoArgs,
     },
     #[cfg(feature = "evm-verify")]
     Evm {
-        #[arg(long, action, help = "Path to EVM proof", default_value = DEFAULT_EVM_PROOF_PATH)]
+        #[arg(
+            long,
+            action,
+            default_value = DEFAULT_EVM_PROOF_PATH,
+            help = "Path to EVM proof",
+            help_heading = "OpenVM Options"
+        )]
         proof: PathBuf,
     },
 }
@@ -36,8 +61,16 @@ impl VerifyCmd {
     pub fn run(&self) -> Result<()> {
         let sdk = Sdk::new();
         match &self.command {
-            VerifySubCommand::App { app_vk, proof } => {
-                let app_vk = read_app_vk_from_file(app_vk)?;
+            VerifySubCommand::App {
+                app_vk,
+                proof,
+                cargo_args,
+            } => {
+                let (manifest_path, _) = manifest_path_and_dir(&cargo_args.manifest_path)?;
+                let target_dir = target_dir(&cargo_args.target_dir, &manifest_path);
+                let app_vk_path = app_vk_path(app_vk, &target_dir);
+
+                let app_vk = read_app_vk_from_file(app_vk_path)?;
                 let app_proof = read_app_proof_from_file(proof)?;
                 sdk.verify_app_proof(&app_vk, &app_proof)?;
             }

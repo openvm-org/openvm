@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod default;
+pub mod global;
 pub mod input;
 pub mod util;
 

@@ -95,9 +95,53 @@ fn test_cli_app_e2e_default_paths() -> Result<()> {
             "tests/programs/fibonacci/Cargo.toml",
         ],
     )?;
-    run_cmd("cargo", &["openvm", "keygen"])?;
-    run_cmd("cargo", &["openvm", "run"])?;
-    run_cmd("cargo", &["openvm", "prove", "app"])?;
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "keygen",
+            "--manifest-path",
+            "tests/programs/fibonacci/Cargo.toml",
+        ],
+    )?;
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "run",
+            "--manifest-path",
+            "tests/programs/fibonacci/Cargo.toml",
+        ],
+    )?;
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "prove",
+            "app",
+            "--manifest-path",
+            "tests/programs/fibonacci/Cargo.toml",
+        ],
+    )?;
+    run_cmd("cargo", &["openvm", "verify", "app"])?;
+    Ok(())
+}
+
+#[test]
+fn test_cli_app_e2e_simplified() -> Result<()> {
+    run_cmd("cargo", &["install", "--path", ".", "--force"])?;
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "prove",
+            "app",
+            "--manifest-path",
+            "tests/programs/multi/Cargo.toml",
+            "--example",
+            "fibonacci",
+        ],
+    )?;
     run_cmd("cargo", &["openvm", "verify", "app"])?;
     Ok(())
 }
