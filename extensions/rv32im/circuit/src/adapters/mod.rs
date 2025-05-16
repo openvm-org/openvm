@@ -135,14 +135,13 @@ pub fn tracing_read<F, const N: usize>(
     memory: &mut TracingMemory<F>,
     address_space: u32,
     ptr: u32,
-    aux_cols: &mut MemoryReadAuxCols<F>, /* TODO[jpw]: switch to raw u8
-                                          * buffer */
+    prev_timestamp: &mut u32,
 ) -> [u8; N]
 where
     F: PrimeField32,
 {
     let (t_prev, data) = timed_read(memory, address_space, ptr);
-    aux_cols.set_prev(F::from_canonical_u32(t_prev));
+    *prev_timestamp = t_prev;
     data
 }
 
@@ -154,17 +153,14 @@ pub fn tracing_write<F, const N: usize>(
     address_space: u32,
     ptr: u32,
     data: &[u8; N],
-    aux_cols: &mut MemoryWriteAuxCols<F, N>, /* TODO[jpw]: switch to raw
-                                              * u8
-                                              * buffer */
+    prev_timestamp: &mut u32,
+    prev_data: &mut [u8; N],
 ) where
     F: PrimeField32,
 {
     let (t_prev, data_prev) = timed_write(memory, address_space, ptr, data);
-    aux_cols.set_prev(
-        F::from_canonical_u32(t_prev),
-        data_prev.map(F::from_canonical_u8),
-    );
+    *prev_timestamp = t_prev;
+    *prev_data = data_prev;
 }
 
 // TODO(ayush): this is bad but not sure how to avoid

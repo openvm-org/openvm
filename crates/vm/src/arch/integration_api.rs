@@ -152,6 +152,13 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
     pub instruction: I::ProcessedInstruction,
 }
 
+/// Given some minimum metadata of type `Layout` that specifies the record size, the `RecordArena`
+/// should allocate a buffer, of size possibly larger than the record, and then return mutable
+/// pointers to the record within the buffer.
+pub trait RecordArena<Layout, RecordMut> {
+    fn alloc(&mut self, layout: Layout) -> RecordMut;
+}
+
 /// Interface for trace generation of a single instruction.The trace is provided as a mutable
 /// buffer during both instruction execution and trace generation.
 /// It is expected that no additional memory allocation is necessary and the trace buffer
