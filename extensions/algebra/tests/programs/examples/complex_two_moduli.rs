@@ -9,22 +9,15 @@ openvm_algebra_moduli_macros::moduli_declare! {
     Mod1 { modulus = "998244353" },
     Mod2 { modulus = "1000000007" }
 }
-openvm_algebra_moduli_macros::moduli_init! {
-    "998244353", "1000000007"
-}
 
 openvm_algebra_complex_macros::complex_declare! {
     Complex1 { mod_type = Mod1 },
     Complex2 { mod_type = Mod2 },
 }
 
-openvm_algebra_complex_macros::complex_init! {
-    Complex1 { mod_idx = 0 }, Complex2 { mod_idx = 1 },
-}
+openvm::init!("openvm_init_complex_two_moduli.rs");
 
 pub fn main() {
-    setup_all_moduli();
-    setup_all_complex_extensions();
     let a = Complex1::new(Mod1::ZERO, Mod1::from_u32(998244352));
     let b = Complex2::new(Mod2::ZERO, Mod2::from_u32(1000000006));
     assert_eq!(a.clone() * &a * &a * &a * &a, a);

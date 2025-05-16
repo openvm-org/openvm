@@ -47,7 +47,7 @@ impl VerifyCmd {
                     read_evm_halo2_verifier_from_folder, read_evm_proof_from_file,
                 };
 
-                let evm_verifier = read_evm_halo2_verifier_from_folder(DEFAULT_EVM_HALO2_VERIFIER_PATH).map_err(|e| {
+                let evm_verifier = read_evm_halo2_verifier_from_folder(default_evm_halo2_verifier_path()).map_err(|e| {
                     eyre::eyre!("Failed to read EVM verifier: {}\nPlease run 'cargo openvm evm-proving-setup' first", e)
                 })?;
                 let evm_proof = read_evm_proof_from_file(proof)?;

@@ -44,6 +44,10 @@ sw_declare! {
     Secp256k1Point { mod_type = Secp256k1Coord, b = CURVE_B },
 }
 
+#[cfg(not(target_os = "zkvm"))]
+// Used in WeierstrassExtension config
+pub const SECP256K1_ECC_STRUCT_NAME: &str = "Secp256k1Point";
+
 impl Field for Secp256k1Coord {
     const ZERO: Self = <Self as IntMod>::ZERO;
     const ONE: Self = <Self as IntMod>::ONE;

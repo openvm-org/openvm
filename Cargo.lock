@@ -1292,6 +1292,7 @@ dependencies = [
  "eyre",
  "hex",
  "openvm-build",
+ "openvm-circuit",
  "openvm-native-recursion",
  "openvm-sdk",
  "openvm-stark-backend",
@@ -3917,6 +3918,7 @@ version = "1.1.2"
 dependencies = [
  "bytemuck",
  "chrono",
+ "getrandom 0.3.1",
  "num-bigint 0.4.6",
  "openvm-custom-insn",
  "openvm-platform",
@@ -3968,6 +3970,7 @@ version = "1.1.2"
 dependencies = [
  "halo2curves-axiom",
  "num-bigint 0.4.6",
+ "once_cell",
  "openvm-algebra-complex-macros",
  "openvm-algebra-moduli-macros",
  "serde-big-array",
@@ -4356,12 +4359,16 @@ name = "openvm-instructions"
 version = "1.1.2"
 dependencies = [
  "backtrace",
+ "bitcode",
+ "criterion",
  "derive-new 0.6.0",
  "itertools 0.14.0",
  "num-bigint 0.4.6",
  "num-traits",
  "openvm-instructions-derive",
  "openvm-stark-backend",
+ "p3-baby-bear",
+ "rand",
  "serde",
  "strum",
  "strum_macros",
@@ -4667,7 +4674,6 @@ version = "1.1.2"
 dependencies = [
  "critical-section",
  "embedded-alloc",
- "getrandom 0.2.15",
  "libm",
  "openvm-custom-insn",
  "openvm-rv32im-guest",
@@ -4749,6 +4755,7 @@ name = "openvm-rv32im-guest"
 version = "1.1.2"
 dependencies = [
  "openvm-custom-insn",
+ "p3-field",
  "strum_macros",
 ]
 
@@ -4761,6 +4768,7 @@ dependencies = [
  "openvm-circuit",
  "openvm-instructions",
  "openvm-rv32im-circuit",
+ "openvm-rv32im-guest",
  "openvm-rv32im-transpiler",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
@@ -4816,6 +4824,7 @@ dependencies = [
  "openvm-native-circuit",
  "openvm-native-compiler",
  "openvm-native-recursion",
+ "openvm-native-transpiler",
  "openvm-pairing-circuit",
  "openvm-pairing-transpiler",
  "openvm-rv32im-circuit",
@@ -4826,6 +4835,7 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-transpiler",
  "p3-fri",
+ "rrs-lib",
  "serde",
  "serde_json",
  "serde_with",
@@ -5007,6 +5017,20 @@ dependencies = [
  "rrs-lib",
  "rustc-demangle",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "openvm-verify-stark"
+version = "1.1.2"
+dependencies = [
+ "eyre",
+ "openvm-circuit",
+ "openvm-native-compiler",
+ "openvm-native-recursion",
+ "openvm-rv32im-guest",
+ "openvm-sdk",
+ "openvm-stark-sdk",
+ "openvm-verify-stark",
 ]
 
 [[package]]
@@ -7281,9 +7305,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.44.2"
+version = "1.43.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6b88822cbe49de4185e3a4cbf8321dd487cf5fe0c5c65695fef6346371e9c48"
+checksum = "492a604e2fd7f814268a378409e6c92b5525d747d10db9a229723f55a417958c"
 dependencies = [
  "backtrace",
  "bytes",

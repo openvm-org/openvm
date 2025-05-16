@@ -30,6 +30,20 @@ pub struct ModularExtension {
     pub supported_modulus: Vec<BigUint>,
 }
 
+impl ModularExtension {
+    // Generates a call to the moduli_init! macro with moduli in the correct order
+    pub fn generate_moduli_init(&self) -> String {
+        let supported_moduli = self
+            .supported_modulus
+            .iter()
+            .map(|modulus| format!("\"{}\"", modulus))
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        format!("openvm_algebra_guest::moduli_macros::moduli_init! {{ {supported_moduli} }}",)
+    }
+}
+
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From)]
 pub enum ModularExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime

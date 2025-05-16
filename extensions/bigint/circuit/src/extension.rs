@@ -5,7 +5,8 @@ use openvm_bigint_transpiler::{
 };
 use openvm_circuit::{
     arch::{
-        SystemConfig, SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+        InitFileGenerator, SystemConfig, SystemPort, VmExtension, VmInventory, VmInventoryBuilder,
+        VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
@@ -38,6 +39,9 @@ pub struct Int256Rv32Config {
     #[extension]
     pub bigint: Int256,
 }
+
+// Default implementation uses no init file
+impl InitFileGenerator for Int256Rv32Config {}
 
 impl Default for Int256Rv32Config {
     fn default() -> Self {

@@ -66,6 +66,7 @@ members = [
     "extensions/pairing/transpiler",
     "extensions/pairing/guest",
     "extensions/pairing/tests",
+    "guest-libs/verify_stark/guest",
 ]
 exclude = ["crates/sdk/example"]
 resolver = "2"
@@ -140,6 +141,7 @@ openvm-native-circuit = { path = "extensions/native/circuit", default-features =
 openvm-native-compiler = { path = "extensions/native/compiler", default-features = false }
 openvm-native-compiler-derive = { path = "extensions/native/compiler/derive", default-features = false }
 openvm-native-recursion = { path = "extensions/native/recursion", default-features = false }
+openvm-native-transpiler = { path = "extensions/native/transpiler", default-features = false }
 openvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
 openvm-keccak256-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
 openvm-keccak256-guest = { path = "extensions/keccak256/guest", default-features = false }
@@ -161,6 +163,7 @@ openvm-ecc-sw-macros = { path = "extensions/ecc/sw-macros", default-features = f
 openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
 openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
+openvm-verify-stark = { path = "guest-libs/verify_stark/guest", default-features = false }
 
 # Benchmarking
 openvm-benchmarks-utils = { path = "benchmarks/utils", default-features = false }

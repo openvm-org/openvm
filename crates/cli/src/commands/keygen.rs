@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::Parser;
 use eyre::Result;
@@ -37,10 +37,19 @@ pub struct KeygenCmd {
 
 impl KeygenCmd {
     pub fn run(&self) -> Result<()> {
-        let app_config = read_config_toml_or_default(&self.config)?;
-        let app_pk = Sdk::new().app_keygen(app_config)?;
-        write_app_vk_to_file(app_pk.get_app_vk(), &self.vk_output)?;
-        write_app_pk_to_file(app_pk, &self.output)?;
+        keygen(&self.config, &self.output, &self.vk_output)?;
         Ok(())
     }
+}
+
+pub(crate) fn keygen(
+    config: impl AsRef<Path>,
+    output: impl AsRef<Path>,
+    vk_output: impl AsRef<Path>,
+) -> Result<()> {
+    let app_config = read_config_toml_or_default(config)?;
+    let app_pk = Sdk::new().app_keygen(app_config)?;
+    write_app_vk_to_file(app_pk.get_app_vk(), vk_output.as_ref())?;
+    write_app_pk_to_file(app_pk, output.as_ref())?;
+    Ok(())
 }

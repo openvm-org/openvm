@@ -7,20 +7,20 @@ use tempfile::tempdir;
 fn test_cli_app_e2e() -> Result<()> {
     let temp_dir = tempdir()?;
     run_cmd("cargo", &["install", "--path", ".", "--force"])?;
-    let temp_exe = temp_dir.path().join("example.vmexe");
-    let temp_pk = temp_dir.path().join("example.pk");
-    let temp_vk = temp_dir.path().join("example.vk");
-    let temp_proof = temp_dir.path().join("example.apppf");
+    let temp_exe = temp_dir.path().join("fibonacci.vmexe");
+    let temp_pk = temp_dir.path().join("fibonacci.pk");
+    let temp_vk = temp_dir.path().join("fibonacci.vk");
+    let temp_proof = temp_dir.path().join("fibonacci.apppf");
 
     run_cmd(
         "cargo",
         &[
             "openvm",
             "build",
-            "--manifest-dir",
-            "example",
+            "--manifest-path",
+            "tests/programs/fibonacci/Cargo.toml",
             "--config",
-            "example/openvm.toml",
+            "tests/programs/fibonacci/openvm.toml",
             "--exe-output",
             temp_exe.to_str().unwrap(),
         ],
@@ -32,7 +32,7 @@ fn test_cli_app_e2e() -> Result<()> {
             "openvm",
             "keygen",
             "--config",
-            "example/openvm.toml",
+            "tests/programs/fibonacci/openvm.toml",
             "--output",
             temp_pk.to_str().unwrap(),
             "--vk-output",
@@ -48,7 +48,7 @@ fn test_cli_app_e2e() -> Result<()> {
             "--exe",
             temp_exe.to_str().unwrap(),
             "--config",
-            "example/openvm.toml",
+            "tests/programs/fibonacci/openvm.toml",
         ],
     )?;
 
@@ -86,7 +86,15 @@ fn test_cli_app_e2e() -> Result<()> {
 #[test]
 fn test_cli_app_e2e_default_paths() -> Result<()> {
     run_cmd("cargo", &["install", "--path", ".", "--force"])?;
-    run_cmd("cargo", &["openvm", "build", "--manifest-dir", "example"])?;
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "build",
+            "--manifest-path",
+            "tests/programs/fibonacci/Cargo.toml",
+        ],
+    )?;
     run_cmd("cargo", &["openvm", "keygen"])?;
     run_cmd("cargo", &["openvm", "run"])?;
     run_cmd("cargo", &["openvm", "prove", "app"])?;

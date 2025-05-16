@@ -72,6 +72,13 @@ the guest must take care to validate all data and account for behavior in cases 
 | printstr    | I   | 0001011     | 011    | 0x1       | Tries to convert `[rd..rd + rs1]_2` to UTF-8 string and print to host stdout. Will print error message if conversion fails.                                                |
 | hintrandom  | I   | 0001011     | 011    | 0x2       | Resets the hint stream to `4 * rd` random bytes from `rand::rngs::OsRng` on the host.                                                                                      |
 
+| RISC-V Inst  | FMT | opcode[6:0] | funct3  | funct7 | RISC-V description and notes                                                                                                 |
+|--------------|-----|-------------|---------|--------|------------------------------------------------------------------------------------------------------------------------------|
+| nativestorew | R   | 0001011     | 111     | 0x2    | Stores the 4-byte word `rs1` at address `rd` in native address space. The address `rd` must be aligned to a 4-byte boundary. |
+
+`nativestorew` connects RV32 address space and native address space. We put it in RV32 extension because its 
+implementation is here. But we use `funct3 = 111` because the native extension has an available slot.
+
 ## Keccak Extension
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | funct7 | RISC-V description and notes                |
@@ -117,6 +124,8 @@ These use the _custom-0_ opcode prefix and funct3 = 0b111.
 | lfii        | R   | 0001011     | 111    | 0      | Long Form Instruction Indicator. `rd = rs1 = rs2 = 0`     |
 | gi          | R   | 0001011     | 111    | 1      | Gap Indicator. `rd = rs1 = rs2 = 0`                       |
 
+`nativestorew` also uses `funct3 = 111`. It's listed in the RV32 extension.
+
 ## Algebra Extension
 
 Modular arithmetic instructions depend on the modulus `N`. The ordered list of supported moduli should be saved in the `.openvm` section of the ELF file in the serialized format. This is achieved by the `moduli_declare!` macro; for example, the following code
@@ -132,7 +141,9 @@ generates classes `Bls12381` and `Bn254` that represent the elements of the corr
 
 ### Field Arithmetic
 
-For each created modular class, one must call a corresponding `setup_*` function once at the beginning of the program. For example, for the structs above this would be `setup_0()` and `setup_1()`. This function generates the `setup` intrinsics which are distinguished by the `rs2` operand that specifies the chip this instruction is passed to..
+For each created modular class, one must call a corresponding `setup_*` function before using the intrinsics.
+For example, for the structs above this would be `setup_0()` and `setup_1()`. This function generates the `setup` intrinsics which are distinguished by the `rs2` operand that specifies the chip this instruction is passed to.
+For developer convenience, in the Rust function bindings for these intrinsics, each modulus's `setup_*` function is automatically called on the first use of any of its intrinsics.
 
 We use `config.mod_idx(N)` to denote the index of `N` in this list. In the list below, `idx` denotes `config.mod_idx(N)`.
 

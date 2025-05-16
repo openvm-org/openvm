@@ -8,6 +8,8 @@ use openvm_ecc_guest::{
 // ANCHOR_END: imports
 
 // ANCHOR: init
+openvm::init!();
+/* The init! macro will expand to the following
 openvm_algebra_guest::moduli_macros::moduli_init! {
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
@@ -16,12 +18,11 @@ openvm_algebra_guest::moduli_macros::moduli_init! {
 openvm_ecc_guest::sw_macros::sw_init! {
     Secp256k1Point,
 }
+*/
 // ANCHOR_END: init
 
 // ANCHOR: main
 pub fn main() {
-    setup_all_moduli();
-    setup_all_curves();
     let x1 = Secp256k1Coord::from_u32(1);
     let y1 = Secp256k1Coord::from_le_bytes(&hex!(
         "EEA7767E580D75BC6FDD7F58D2A84C2614FB22586068DB63B346C6E60AF21842"

@@ -1,0 +1,19 @@
+[package]
+name = "openvm-calculator"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../../../toolchain/openvm" }
+
+[lib]
+name = "calculator"
+path = "src/lib.rs"
+
+[[bin]]
+name = "calculator"
+path = "src/main.rs"
+
+[[example]]
+name = "fibonacci"
+path = "examples/fibonacci.rs"
