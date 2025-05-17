@@ -17,7 +17,7 @@ mod tests;
 pub struct MemoryMerkleChip<const CHUNK: usize, F> {
     pub air: MemoryMerkleAir<CHUNK>,
     touched_nodes: FxHashSet<(usize, u32, u32)>,
-    num_touched_nonleaves: usize,
+    pub num_touched_nonleaves: usize,
     final_state: Option<FinalState<CHUNK, F>>,
     overridden_height: Option<usize>,
 }

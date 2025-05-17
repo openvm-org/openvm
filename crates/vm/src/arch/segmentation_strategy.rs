@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
+pub const DEFAULT_MAX_SEGMENT_LEN: usize = (1 << 22) - 100;
 // a heuristic number for the maximum number of cells per chip in a segment
 // a few reasons for this number:
 //  1. `VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8>` is
 //    the chip with the most cells in a segment from the reth-benchmark.
 //  2. `VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8>`:
 //    its trace width is 36 and its after challenge trace width is 80.
-const DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT: usize = DEFAULT_MAX_SEGMENT_LEN * 120;
+pub const DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT: usize = DEFAULT_MAX_SEGMENT_LEN * 120;
 
 pub trait SegmentationStrategy:
     std::fmt::Debug + Send + Sync + std::panic::UnwindSafe + std::panic::RefUnwindSafe

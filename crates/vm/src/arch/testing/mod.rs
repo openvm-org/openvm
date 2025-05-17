@@ -1,9 +1,4 @@
-use std::{
-    borrow::Borrow,
-    iter::zip,
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+use std::{borrow::Borrow, iter::zip};
 
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,

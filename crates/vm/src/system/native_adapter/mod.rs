@@ -28,7 +28,7 @@ use serde_big_array::BigArray;
 
 use super::memory::{online::TracingMemory, MemoryAuxColsFactory};
 use crate::{
-    arch::{AdapterExecutorE1, AdapterTraceStep},
+    arch::{AdapterExecutorE1, AdapterTraceStep, VmStateMut},
     system::memory::{online::GuestMemory, RecordId},
 };
 
@@ -247,29 +247,39 @@ where
     type WriteData = [F; W];
 
     #[inline(always)]
-    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read<Ctx>(
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData {
         assert!(R <= 2);
 
         let &Instruction { b, c, e, f, .. } = instruction;
 
         let mut reads = [F::ZERO; R];
         if R >= 1 {
-            let [value] =
-                unsafe { memory.read::<F, 1>(e.as_canonical_u32(), b.as_canonical_u32()) };
+            let [value] = unsafe {
+                state
+                    .memory
+                    .read::<F, 1>(e.as_canonical_u32(), b.as_canonical_u32())
+            };
             reads[0] = value;
         }
         if R >= 2 {
-            let [value] =
-                unsafe { memory.read::<F, 1>(f.as_canonical_u32(), c.as_canonical_u32()) };
+            let [value] = unsafe {
+                state
+                    .memory
+                    .read::<F, 1>(f.as_canonical_u32(), c.as_canonical_u32())
+            };
             reads[1] = value;
         }
         reads
     }
 
     #[inline(always)]
-    fn write(
+    fn write<Ctx>(
         &self,
-        memory: &mut GuestMemory,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
     ) {
@@ -277,7 +287,11 @@ where
 
         let &Instruction { a, d, .. } = instruction;
         if W >= 1 {
-            unsafe { memory.write(d.as_canonical_u32(), a.as_canonical_u32(), data) };
+            unsafe {
+                state
+                    .memory
+                    .write(d.as_canonical_u32(), a.as_canonical_u32(), data)
+            };
         }
     }
 }

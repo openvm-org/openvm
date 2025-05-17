@@ -11,7 +11,7 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::Streams;
+use super::{E1E2ExecutionCtx, MeteredCtx, Streams};
 use crate::system::{
     memory::{
         online::{GuestMemory, TracingMemory},
@@ -115,8 +115,18 @@ pub trait InstructionExecutor<F> {
 pub trait InsExecutorE1<F> {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        F: PrimeField32,
+        Ctx: E1E2ExecutionCtx;
+
+    fn execute_e2(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
     ) -> Result<()>
     where
         F: PrimeField32;
@@ -128,13 +138,26 @@ where
 {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
         F: PrimeField32,
+        Ctx: E1E2ExecutionCtx,
     {
         self.borrow_mut().execute_e1(state, instruction)
+    }
+
+    fn execute_e2(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()>
+    where
+        F: PrimeField32,
+    {
+        self.borrow_mut().execute_e2(state, instruction, chip_index)
     }
 }
 

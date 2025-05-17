@@ -26,8 +26,9 @@ use serde_big_array::BigArray;
 use super::memory::{online::GuestMemory, MemoryController};
 use crate::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutorE1,
-        InstructionExecutor, PcIncOrSet, PhantomSubExecutor, Streams, VmStateMut,
+        E1Ctx, E1E2ExecutionCtx, ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState,
+        InsExecutorE1, InstructionExecutor, MeteredCtx, PcIncOrSet, PhantomSubExecutor, Streams,
+        VmStateMut,
     },
     system::program::ProgramBus,
 };
@@ -130,11 +131,12 @@ where
 {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
+        Ctx: E1E2ExecutionCtx,
     {
         let &Instruction {
             opcode, a, b, c, ..
@@ -176,6 +178,20 @@ where
 
         Ok(())
     }
+
+    fn execute_e2(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        _chip_index: usize,
+    ) -> Result<(), ExecutionError>
+    where
+        F: PrimeField32,
+    {
+        self.execute_e1(state, instruction)?;
+
+        Ok(())
+    }
 }
 
 impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
@@ -193,12 +209,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
             is_valid: F::ONE,
         });
 
-        let state = VmStateMut {
+        let mut state = VmStateMut {
             pc: &mut pc,
             memory: &mut memory.memory.data,
-            ctx: &mut (),
+            ctx: &mut E1Ctx::default(),
         };
-        self.execute_e1(state, instruction)?;
+        self.execute_e1(&mut state, instruction)?;
         memory.increment_timestamp();
 
         Ok(ExecutionState {

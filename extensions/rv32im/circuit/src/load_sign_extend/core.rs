@@ -5,8 +5,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, Result, StepExecutorE1, TraceStep,
-        VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, E1E2ExecutionCtx, MeteredCtx,
+        Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -235,7 +235,7 @@ where
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
 
-        let mut row_slice = &mut trace[*trace_offset..*trace_offset + width];
+        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
@@ -316,16 +316,19 @@ where
 {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
 
-        let ((_, read_data), shift_amount) = self.adapter.read(state.memory, instruction);
+        let ((_, read_data), shift_amount) = self.adapter.read(state, instruction);
         let read_data = read_data.map(F::from_canonical_u8);
 
         // TODO(ayush): clean this up for e1
@@ -337,9 +340,21 @@ where
         );
         let write_data = write_data.map(|x| x.as_canonical_u32() as u8);
 
-        self.adapter.write(state.memory, instruction, &write_data);
+        self.adapter.write(state, instruction, &write_data);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+
+    fn execute_e2(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        state.ctx.trace_heights[chip_index] += 1;
+        self.execute_e1(state, instruction)?;
 
         Ok(())
     }

@@ -30,6 +30,15 @@ impl MemoryDimensions {
         debug_assert!(block_id < (1 << self.address_height));
         (((addr_space - self.as_offset) as u64) << self.address_height) + block_id as u64
     }
+
+    /// Convert an index in the memory merkle tree to an address label (address space, block id).
+    ///
+    /// This function performs the inverse operation of `label_to_index`.
+    pub fn index_to_label(&self, index: u64) -> (u32, u32) {
+        let block_id = (index & ((1 << self.address_height) - 1)) as u32;
+        let addr_space = (index >> self.address_height) as u32 + self.as_offset;
+        (addr_space, block_id)
+    }
 }
 
 impl MemoryConfig {

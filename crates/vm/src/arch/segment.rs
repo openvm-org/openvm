@@ -1,3 +1,5 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use backtrace::Backtrace;
 use openvm_instructions::{
     exe::FnBounds,
@@ -8,16 +10,18 @@ use openvm_stark_backend::{
     keygen::types::LinearConstraint,
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
+    p3_util::log2_strict_usize,
     prover::types::{CommittedTraceData, ProofInput},
     utils::metrics_span,
     Chip,
 };
-use program::Program;
+use riscv::RV32_IMM_AS;
 
 use super::{
-    execution_control::{E1ExecutionControl, ExecutionControl, TracegenExecutionControl},
-    ExecutionError, GenerationError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights,
-    VmConfig, VmStateMut,
+    execution_control::{
+        E1ExecutionControl, ExecutionControl, MeteredExecutionControl, TracegenExecutionControl,
+    },
+    ExecutionError, GenerationError, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -25,19 +29,19 @@ use crate::{
     arch::{instructions::*, InstructionExecutor},
     system::{
         connector::DEFAULT_SUSPEND_EXIT_CODE,
-        memory::{online::GuestMemory, paged_vec::PAGE_SIZE, AddressMap, MemoryImage},
+        memory::{dimensions::MemoryDimensions, online::GuestMemory, CHUNK},
     },
 };
 
-pub struct VmSegmentExecutor<F, VC, Ctx, Ctrl>
+pub struct VmSegmentExecutor<F, VC, Ctrl>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
-    Ctrl: ExecutionControl<F, VC, Ctx = Ctx>,
+    Ctrl: ExecutionControl<F, VC>,
 {
     pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
     /// Execution control for determining segmentation and stopping conditions
-    pub control: Ctrl,
+    pub ctrl: Ctrl,
 
     pub trace_height_constraints: Vec<LinearConstraint>,
 
@@ -48,56 +52,24 @@ where
     pub metrics: VmMetrics,
 }
 
-pub type E1VmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, (), E1ExecutionControl>;
-
-// pub struct TracegenCtx;
-pub type TracegenCtx = ();
-pub type TracegenVmStateMut<'a> = VmStateMut<'a, GuestMemory, TracegenCtx>;
-
-pub type TracegenVmSegmentExecutor<F, VC> =
-    VmSegmentExecutor<F, VC, TracegenCtx, TracegenExecutionControl>;
-
-#[derive(derive_new::new)]
-pub struct ExecutionSegmentState {
-    pub memory: Option<GuestMemory>,
-    pub pc: u32,
-    pub exit_code: u32,
-    pub is_terminated: bool,
-}
-
-impl<F, VC, Ctx, Ctrl> VmSegmentExecutor<F, VC, Ctx, Ctrl>
+impl<F, VC, Ctrl> VmSegmentExecutor<F, VC, Ctrl>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
-    Ctrl: ExecutionControl<F, VC, Ctx = Ctx>,
+    Ctrl: ExecutionControl<F, VC>,
 {
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(
-        config: &VC,
-        program: Program<F>,
-        init_streams: Streams<F>,
-        initial_memory: Option<MemoryImage>,
+        chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
         trace_height_constraints: Vec<LinearConstraint>,
         #[allow(unused_variables)] fn_bounds: FnBounds,
+        ctrl: Ctrl,
     ) -> Self {
-        let mut chip_complex = config.create_chip_complex().unwrap();
-        chip_complex.set_streams(init_streams);
-        let program = if !config.system().profiling {
-            program.strip_debug_infos()
-        } else {
-            program
-        };
-        chip_complex.set_program(program);
-
-        if let Some(initial_memory) = initial_memory {
-            chip_complex.set_initial_memory(initial_memory);
-        }
         let air_names = chip_complex.air_names();
-        let control = Ctrl::new(&chip_complex);
 
         Self {
             chip_complex,
-            control,
+            ctrl,
             air_names,
             trace_height_constraints,
             #[cfg(feature = "bench-metrics")]
@@ -124,28 +96,30 @@ where
         &mut self,
         pc: u32,
         memory: Option<GuestMemory>,
-    ) -> Result<ExecutionSegmentState, ExecutionError> {
+        ctx: Ctrl::Ctx,
+    ) -> Result<ExecutionSegmentState<Ctrl::Ctx>, ExecutionError> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
-        // Call the pre-execution hook
-        self.control.on_segment_start(pc, &mut self.chip_complex);
+        let mut state = ExecutionSegmentState::new(pc, memory, ctx, 0, false);
 
-        let mut state = ExecutionSegmentState::new(memory, pc, 0, false);
+        // Call the pre-execution hook
+        self.ctrl
+            .on_segment_start(&mut state, &mut self.chip_complex);
+
         loop {
             // Fetch, decode and execute single instruction
             let terminated_exit_code = self.execute_instruction(&mut state, &mut prev_backtrace)?;
 
             if let Some(exit_code) = terminated_exit_code {
-                state.is_terminated = true;
                 state.exit_code = exit_code;
-                self.control
-                    .on_terminate(state.pc, &mut self.chip_complex, exit_code);
+                state.is_terminated = true;
+                self.ctrl
+                    .on_terminate(&mut state, &mut self.chip_complex, exit_code);
                 break;
             }
-            if self.should_stop() {
+            if self.should_suspend(&state) {
                 state.exit_code = DEFAULT_SUSPEND_EXIT_CODE;
-                self.control
-                    .on_segment_end(state.pc, &mut self.chip_complex);
+                self.ctrl.on_segment_end(&mut state, &mut self.chip_complex);
                 break;
             }
         }
@@ -157,7 +131,7 @@ where
     // TODO(ayush): clean this up, separate to smaller functions
     fn execute_instruction(
         &mut self,
-        state: &mut ExecutionSegmentState,
+        state: &mut ExecutionSegmentState<Ctrl::Ctx>,
         prev_backtrace: &mut Option<Backtrace>,
     ) -> Result<Option<u32>, ExecutionError> {
         let pc = state.pc;
@@ -218,7 +192,7 @@ where
 
         // Execute the instruction using the control implementation
         // TODO(AG): maybe avoid cloning the instruction?
-        self.control
+        self.ctrl
             .execute_instruction(state, &instruction.clone(), &mut self.chip_complex)?;
 
         // Update metrics if enabled
@@ -231,16 +205,16 @@ where
     }
 
     /// Returns bool of whether to switch to next segment or not.
-    fn should_stop(&mut self) -> bool {
+    fn should_suspend(&mut self, state: &ExecutionSegmentState<Ctrl::Ctx>) -> bool {
         if !self.system_config().continuation_enabled {
             return false;
         }
 
         // Check with the execution control policy
-        self.control.should_stop(&self.chip_complex)
+        self.ctrl.should_suspend(state, &self.chip_complex)
     }
 
-    // TODO(ayush): not sure what to do of these
+    // TODO(ayush): this is not relevant for e1/e2 execution
     /// Generate ProofInput to prove the segment. Should be called after ::execute
     pub fn generate_proof_input<SC: StarkGenericConfig>(
         #[allow(unused_mut)] mut self,
@@ -285,4 +259,265 @@ where
             self.metrics.update_current_fn(pc);
         }
     }
+}
+
+// TODO(ayush): add clk cycle count
+// E1 execution
+pub type E1Ctx = ();
+pub type E1VmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, E1ExecutionControl>;
+
+// E2 (metered) execution
+#[derive(Debug)]
+pub struct MeteredCtx {
+    continuations_enabled: bool,
+    pub memory_dimensions: MemoryDimensions,
+    addr_space_alignment_bytes: Vec<usize>,
+
+    // Trace heights for each chip
+    pub trace_heights: Vec<usize>,
+    // Map from (addr_space, addr) -> (size, offset)
+    pub last_memory_access: BTreeMap<(u8, u32), (u8, u8)>,
+    // Indices of leaf nodes in the memory merkle tree
+    pub leaf_indices: BTreeSet<u64>,
+}
+
+impl MeteredCtx {
+    pub fn new(
+        num_traces: usize,
+        continuations_enabled: bool,
+        memory_dimensions: MemoryDimensions,
+        addr_space_alignment_bytes: Vec<usize>,
+    ) -> Self {
+        Self {
+            continuations_enabled,
+            memory_dimensions,
+            addr_space_alignment_bytes,
+            trace_heights: vec![0; num_traces],
+            last_memory_access: BTreeMap::new(),
+            leaf_indices: BTreeSet::new(),
+        }
+    }
+}
+
+pub type MeteredVmSegmentExecutor<'a, F, VC> =
+    VmSegmentExecutor<F, VC, MeteredExecutionControl<'a>>;
+
+// E3 (tracegen) execution
+pub type TracegenCtx = ();
+pub type TracegenVmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, TracegenExecutionControl>;
+
+#[derive(derive_new::new)]
+pub struct ExecutionSegmentState<Ctx> {
+    pub pc: u32,
+    pub memory: Option<GuestMemory>,
+    pub ctx: Ctx,
+    // TODO(ayush): do we need both exit_code and is_terminated?
+    pub exit_code: u32,
+    pub is_terminated: bool,
+}
+
+// TODO(ayush): better name
+pub trait E1E2ExecutionCtx {
+    fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: usize);
+}
+
+impl E1E2ExecutionCtx for E1Ctx {
+    fn on_memory_operation(&mut self, _address_space: u32, _ptr: u32, _size: usize) {}
+}
+
+impl MeteredCtx {
+    pub fn update_access_adapter_heights(&mut self, address_space: u32, ptr: u32, size: usize) {
+        let align = self.addr_space_alignment_bytes[address_space as usize];
+
+        // Skip adapters if this is a repeated access to the same location with same size
+        let last_access = self.last_memory_access.get(&(address_space as u8, ptr));
+        if !matches!(last_access, Some(&(last_access_size, 0)) if size == last_access_size as usize)
+        {
+            // TODO(ayush): no magic numbers
+            let mut adapter_offset = 2;
+            if self.continuations_enabled {
+                adapter_offset += 1;
+            }
+
+            let mut ptr_start = ptr;
+            if let Some(&(_, last_access_offset)) = last_access {
+                // Go to the start of block
+                ptr_start = ptr.wrapping_sub(last_access_offset as u32);
+            }
+
+            // Split intersecting blocks to align bytes
+            let mut curr_block = ptr_start / align as u32;
+            let end_block = curr_block + (size / align) as u32;
+            while curr_block < end_block {
+                let curr_block_size = if let Some(&(last_access_size, _)) = self
+                    .last_memory_access
+                    .get(&(address_space as u8, curr_block.wrapping_mul(align as u32)))
+                {
+                    last_access_size as usize
+                } else {
+                    // Initial memory access only happens at CHUNK boundary
+                    let chunk_offset = curr_block % (CHUNK / align) as u32;
+                    curr_block -= chunk_offset;
+                    CHUNK
+                };
+
+                // TODO(ayush): why are we splitting in the case when we only
+                //              read at mutually exclusive CHUNK boundaries?
+                if curr_block_size > align {
+                    let curr_ptr = curr_block.wrapping_mul(align as u32);
+                    add_memory_access_split(
+                        &mut self.last_memory_access,
+                        (address_space, curr_ptr),
+                        curr_block_size,
+                        align,
+                    );
+                    update_access_adapters_split(
+                        &mut self.trace_heights,
+                        curr_block_size,
+                        adapter_offset,
+                    );
+                }
+
+                curr_block += (curr_block_size / align) as u32;
+            }
+
+            // Merge added blocks from align to size bytes
+            add_memory_access_merge(
+                &mut self.last_memory_access,
+                (address_space, ptr),
+                size,
+                align,
+            );
+            update_access_adapters_merge(&mut self.trace_heights, size, adapter_offset);
+        }
+    }
+
+    fn update_boundary_merkle_height(&mut self, address_space: u32, ptr: u32, size: usize) {
+        // Calculate unique chunks and inner nodes in Merkle tree
+        let num_blocks = size.div_ceil(CHUNK);
+        for i in 0..num_blocks {
+            let addr = ptr.wrapping_add((i * CHUNK) as u32);
+            let block_id = addr / CHUNK as u32;
+            let leaf_index = self
+                .memory_dimensions
+                .label_to_index((address_space, block_id));
+
+            // TODO(ayush): see if insertion and finding pred/succ can be done in single binary search pass
+            if self.leaf_indices.insert(leaf_index) {
+                // TODO(ayush): no magic numbers
+                let mut offset = 2;
+
+                // Boundary chip
+                self.trace_heights[offset] += 1;
+
+                if self.continuations_enabled {
+                    // Merkle chip
+                    offset += 1;
+
+                    let height_change = calculate_merkle_node_updates(
+                        &self.leaf_indices,
+                        leaf_index,
+                        self.memory_dimensions.overall_height(),
+                    );
+                    self.trace_heights[offset] += height_change * 2;
+                }
+            }
+        }
+    }
+}
+
+impl E1E2ExecutionCtx for MeteredCtx {
+    fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: usize) {
+        debug_assert!(address_space != RV32_IMM_AS);
+
+        // Handle access adapters
+        self.update_access_adapter_heights(address_space, ptr, size);
+
+        // Handle merkle tree updates
+        // TODO(ayush): see if this can be approximated by total number of reads/writes for AS != register
+        self.update_boundary_merkle_height(address_space, ptr, size);
+    }
+}
+
+fn update_access_adapters_split(trace_heights: &mut [usize], size: usize, adapter_offset: usize) {
+    let size_bits = log2_strict_usize(size);
+    for adapter_bits in (3..=size_bits).rev() {
+        trace_heights[adapter_offset + adapter_bits] += 1 << (size_bits - adapter_bits);
+    }
+}
+
+fn update_access_adapters_merge(trace_heights: &mut [usize], size: usize, adapter_offset: usize) {
+    let size_bits = log2_strict_usize(size);
+    for adapter_bits in (3..=size_bits).rev() {
+        trace_heights[adapter_offset + adapter_bits] += 1 << (size_bits - adapter_bits);
+    }
+}
+
+fn add_memory_access_split(
+    memory_access_map: &mut BTreeMap<(u8, u32), (u8, u8)>,
+    (address_space, ptr): (u32, u32),
+    size: usize,
+    align: usize,
+) {
+    debug_assert_eq!(size % align, 0, "Size must be a multiple of alignment");
+    let num_chunks = size / align;
+    for i in 0..num_chunks {
+        let curr_ptr = ptr.wrapping_add(i as u32 * align as u32);
+        let key = (address_space as u8, curr_ptr);
+        let value = (align as u8, 0);
+        memory_access_map.insert(key, value);
+    }
+}
+
+fn add_memory_access_merge(
+    memory_access_map: &mut BTreeMap<(u8, u32), (u8, u8)>,
+    (address_space, ptr): (u32, u32),
+    size: usize,
+    align: usize,
+) {
+    debug_assert_eq!(size % align, 0, "Size must be a multiple of alignment");
+    let num_chunks = size / align;
+    for i in 0..num_chunks {
+        let curr_ptr = ptr.wrapping_add(i as u32 * align as u32);
+        let key = (address_space as u8, curr_ptr);
+        let value = (size as u8, (i * align) as u8);
+        memory_access_map.insert(key, value);
+    }
+}
+
+fn calculate_merkle_node_updates(
+    leaf_indices: &BTreeSet<u64>,
+    leaf_index: u64,
+    height: usize,
+) -> usize {
+    // First node requires height many updates
+    if leaf_indices.len() == 1 {
+        return height;
+    }
+
+    // Find predecessor and successor nodes
+    let pred = leaf_indices.range(..leaf_index).next_back().copied();
+    let succ = leaf_indices.range(leaf_index + 1..).next().copied();
+
+    let mut diff = 0;
+
+    // Add new divergences between pred and leaf_index
+    if let Some(p) = pred {
+        let new_divergence = (p ^ leaf_index).ilog2() as usize;
+        diff += new_divergence;
+    }
+
+    // Add new divergences between leaf_index and succ
+    if let Some(s) = succ {
+        let new_divergence = (leaf_index ^ s).ilog2() as usize;
+        diff += new_divergence;
+    }
+
+    // Remove old divergence between pred and succ if both existed
+    if let (Some(p), Some(s)) = (pred, succ) {
+        let old_divergence = (p ^ s).ilog2() as usize;
+        diff -= old_divergence;
+    }
+
+    diff
 }

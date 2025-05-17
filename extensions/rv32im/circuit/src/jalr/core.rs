@@ -5,8 +5,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, Result, SignedImmInstruction,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, E1E2ExecutionCtx, MeteredCtx,
+        Result, SignedImmInstruction, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -30,7 +31,6 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::adapters::{compose, Rv32JalrAdapterCols, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 
@@ -229,7 +229,7 @@ where
         let local_opcode =
             Rv32JalrOpcode::from_usize(opcode.local_opcode_idx(Rv32JalrOpcode::CLASS_OFFSET));
 
-        let mut row_slice = &mut trace[*trace_offset..*trace_offset + width];
+        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
@@ -334,15 +334,18 @@ where
 {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let Instruction { opcode, c, g, .. } = instruction;
 
         let local_opcode =
             Rv32JalrOpcode::from_usize(opcode.local_opcode_idx(Rv32JalrOpcode::CLASS_OFFSET));
 
-        let rs1 = self.adapter.read(state.memory, instruction);
+        let rs1 = self.adapter.read(state, instruction);
         let rs1 = u32::from_le_bytes(rs1);
 
         let imm = c.as_canonical_u32();
@@ -353,9 +356,21 @@ where
         let (to_pc, rd) = run_jalr(local_opcode, *state.pc, imm_extended, rs1);
         let rd = rd.map(|x| x as u8);
 
-        self.adapter.write(state.memory, instruction, &rd);
+        self.adapter.write(state, instruction, &rd);
 
         *state.pc = to_pc;
+
+        Ok(())
+    }
+
+    fn execute_e2(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        state.ctx.trace_heights[chip_index] += 1;
+        self.execute_e1(state, instruction)?;
 
         Ok(())
     }

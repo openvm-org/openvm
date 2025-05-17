@@ -5,7 +5,6 @@ use openvm_instructions::exe::SparseMemoryImage;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
-use super::online::GuestMemory;
 use crate::arch::MemoryConfig;
 
 /// (address_space, pointer)
