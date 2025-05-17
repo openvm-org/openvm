@@ -15,7 +15,6 @@ openvm-algebra-circuit.workspace = true
 openvm-algebra-transpiler.workspace = true
 openvm-ecc-transpiler.workspace = true
 openvm-ecc-circuit.workspace = true
-openvm-ecc-guest.workspace = true
 openvm-rv32im-transpiler.workspace = true
 openvm-keccak256-transpiler.workspace = true
 openvm-toolchain-tests = { path = "../../../crates/toolchain/tests" }

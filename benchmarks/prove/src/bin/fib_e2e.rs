@@ -30,6 +30,8 @@ async fn main() -> Result<()> {
         NUM_PUBLIC_VALUES,
         max_segment_length,
     ));
+    let elf = args.build_bench_program("fibonacci", &app_config.app_vm_config, None)?;
+
     let agg_config = args.agg_config();
 
     let sdk = Sdk::new();
@@ -44,7 +46,6 @@ async fn main() -> Result<()> {
         &halo2_params_reader,
         &DefaultStaticVerifierPvHandler,
     )?;
-    let elf = args.build_bench_program("fibonacci")?;
     let exe = VmExe::from_elf(
         elf,
         Transpiler::default()
