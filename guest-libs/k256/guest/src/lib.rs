@@ -35,8 +35,7 @@ impl Curve for Secp256k1 {
     /// 32-byte serialized field elements.
     type FieldBytesSize = U32;
 
-    // I don't think any arithmetic is done on Curve::Uint, so it's fine to use the U256 type
-    // instead of the OpenVM ruint impl
+    // Perf: Use the U256 type from openvm_ruint here
     type Uint = U256;
 
     /// Curve order.

@@ -1,7 +1,10 @@
 use alloy_primitives::{Bytes, B256, B512};
-use k256::ecdsa::{Error, RecoveryId, Signature, VerifyingKey};
+// Be careful not to import k256::ecdsa::{Signature, VerifyingKey}
+// because those are type aliases that their (non-zkvm) implementations
+use ecdsa::{Signature, VerifyingKey};
+use k256::ecdsa::{Error, RecoveryId};
 use openvm::io::read_vec;
-use openvm_k256::Secp256k1Point;
+use openvm_k256::{Secp256k1, Secp256k1Point};
 #[allow(unused_imports, clippy::single_component_path_imports)]
 use openvm_keccak256::keccak256;
 // export native keccak
@@ -29,7 +32,7 @@ fn ecrecover(sig: &B512, mut recid: u8, msg: &B256) -> Result<B256, Error> {
     }
     let recid = RecoveryId::from_byte(recid).expect("recovery ID is valid");
 
-    let recovered_key = VerifyingKey::recover_from_prehash(&msg[..], &sig, recid)?;
+    let recovered_key = VerifyingKey::<Secp256k1>::recover_from_prehash(&msg[..], &sig, recid)?;
     let mut hash = keccak256(
         &recovered_key
             .to_encoded_point(/* compress = */ false)

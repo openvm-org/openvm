@@ -155,7 +155,8 @@ impl Reduce<U256> for Secp256k1Scalar {
 
     #[inline]
     fn reduce_bytes(bytes: &FieldBytes) -> Self {
-        Self::reduce(U256::from_be_byte_array(*bytes))
+        Self::from_le_bytes(bytes.as_slice())
+        // Self::reduce(U256::from_be_byte_array(*bytes))
     }
 }
 
