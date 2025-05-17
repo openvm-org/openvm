@@ -209,13 +209,12 @@ where
     F: PrimeField32,
     A: 'static + for<'a> AdapterExecutorE1<F, ReadData = [F; 2], WriteData = [F; 0]>,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
         let [value, index] = self.adapter.read(state, instruction);
@@ -238,15 +237,12 @@ where
         Ok(())
     }
 
-    fn execute_e2<Mem>(
+    fn execute_e2(
         &mut self,
-        state: &mut VmStateMut<Mem, MeteredCtx>,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         _chip_index: usize,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         self.execute_e1(state, instruction)?;
 
         Ok(())

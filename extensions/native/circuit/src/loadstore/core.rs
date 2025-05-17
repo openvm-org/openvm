@@ -206,10 +206,9 @@ where
     }
 }
 
-impl<Mem, Ctx, F, A, const NUM_CELLS: usize> StepExecutorE1<Mem, Ctx, F>
+impl<Ctx, F, A, const NUM_CELLS: usize> StepExecutorE1<Ctx, F>
     for NativeLoadStoreStep<A, F, NUM_CELLS>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
     A: 'static
         + for<'a> AdapterExecutorE1<
@@ -221,7 +220,7 @@ where
 {
     fn execute_e1(
         &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
+        state: &mut VmExecutionState<Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
         let Instruction {

@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        E1Ctx, E1E2ExecutionCtx, ExecutionBridge, ExecutionError, ExecutionState, MeteredCtx,
+        E1E2ExecutionCtx, ExecutionBridge, ExecutionError, ExecutionState, MeteredCtx,
         NewVmChipWrapper, Result, StepExecutorE1, Streams, TraceStep, VmStateMut,
     },
     system::memory::{
@@ -452,13 +452,12 @@ impl<F> StepExecutorE1<F> for Rv32HintStoreStep<F>
 where
     F: PrimeField32,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
         let &Instruction {
@@ -518,15 +517,12 @@ where
         Ok(())
     }
 
-    fn execute_e2<Mem>(
+    fn execute_e2(
         &mut self,
-        state: &mut VmStateMut<Mem, MeteredCtx>,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         // TODO(ayush): remove duplication
         let &Instruction {
             opcode,

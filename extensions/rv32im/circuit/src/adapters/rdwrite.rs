@@ -265,25 +265,23 @@ where
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
     #[inline(always)]
-    fn read<Mem, Ctx>(
+    fn read<Ctx>(
         &self,
-        _state: &mut VmStateMut<Mem, Ctx>,
+        _state: &mut VmStateMut<GuestMemory, Ctx>,
         _instruction: &Instruction<F>,
     ) -> Self::ReadData
     where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
     }
 
     #[inline(always)]
-    fn write<Mem, Ctx>(
+    fn write<Ctx>(
         &self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         rd: &Self::WriteData,
     ) where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
         let Instruction { a, d, .. } = instruction;
@@ -392,26 +390,24 @@ where
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
     #[inline(always)]
-    fn read<Mem, Ctx>(
+    fn read<Ctx>(
         &self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Self::ReadData
     where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
         <Rv32RdWriteAdapterStep as AdapterExecutorE1<F>>::read(&self.inner, state, instruction)
     }
 
     #[inline(always)]
-    fn write<Mem, Ctx>(
+    fn write<Ctx>(
         &self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         rd: &Self::WriteData,
     ) where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
         let Instruction { f: enabled, .. } = instruction;

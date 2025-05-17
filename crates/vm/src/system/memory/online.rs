@@ -16,8 +16,12 @@ use crate::{arch::MemoryConfig, system::memory::MemoryImage};
 
 pub const INITIAL_TIMESTAMP: u32 = 0;
 
-/// API for guest memory conforming to OpenVM ISA
-pub trait GuestMemory {
+#[derive(Debug, Clone, derive_new::new)]
+pub struct GuestMemory {
+    pub memory: AddressMap<PAGE_SIZE>,
+}
+
+impl GuestMemory {
     /// Returns `[pointer:BLOCK_SIZE]_{address_space}`
     ///
     /// # Safety
@@ -25,25 +29,48 @@ pub trait GuestMemory {
     /// and it must be the exact type used to represent a single memory cell in
     /// address space `address_space`. For standard usage,
     /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
-    unsafe fn read<T, const BLOCK_SIZE: usize>(
+    pub unsafe fn read<T, const BLOCK_SIZE: usize>(
         &self,
-        address_space: u32,
-        pointer: u32,
+        addr_space: u32,
+        ptr: u32,
     ) -> [T; BLOCK_SIZE]
     where
-        T: Copy + Debug;
+        T: Copy + Debug,
+    {
+        debug_assert_eq!(
+            size_of::<T>(),
+            self.memory.cell_size[(addr_space - self.memory.as_offset) as usize]
+        );
+        let read = self
+            .memory
+            .paged_vecs
+            .get_unchecked((addr_space - self.memory.as_offset) as usize)
+            .get((ptr as usize) * size_of::<T>());
+        read
+    }
 
     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}`
     ///
     /// # Safety
     /// See [`GuestMemory::read`].
-    unsafe fn write<T, const BLOCK_SIZE: usize>(
+    pub unsafe fn write<T, const BLOCK_SIZE: usize>(
         &mut self,
-        address_space: u32,
-        pointer: u32,
+        addr_space: u32,
+        ptr: u32,
         values: &[T; BLOCK_SIZE],
     ) where
-        T: Copy + Debug;
+        T: Copy + Debug,
+    {
+        debug_assert_eq!(
+            size_of::<T>(),
+            self.memory.cell_size[(addr_space - self.memory.as_offset) as usize],
+            "addr_space={addr_space}"
+        );
+        self.memory
+            .paged_vecs
+            .get_unchecked_mut((addr_space - self.memory.as_offset) as usize)
+            .set((ptr as usize) * size_of::<T>(), values);
+    }
 
     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}` and returns
     /// the previous values.
@@ -51,7 +78,7 @@ pub trait GuestMemory {
     /// # Safety
     /// See [`GuestMemory::read`].
     #[inline(always)]
-    unsafe fn replace<T, const BLOCK_SIZE: usize>(
+    pub unsafe fn replace<T, const BLOCK_SIZE: usize>(
         &mut self,
         address_space: u32,
         pointer: u32,
@@ -65,6 +92,56 @@ pub trait GuestMemory {
         prev
     }
 }
+
+// /// API for guest memory conforming to OpenVM ISA
+// pub trait GuestMemory {
+//     /// Returns `[pointer:BLOCK_SIZE]_{address_space}`
+//     ///
+//     /// # Safety
+//     /// The type `T` must be stack-allocated `repr(C)` or `repr(transparent)`,
+//     /// and it must be the exact type used to represent a single memory cell in
+//     /// address space `address_space`. For standard usage,
+//     /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
+//     unsafe fn read<T, const BLOCK_SIZE: usize>(
+//         &self,
+//         address_space: u32,
+//         pointer: u32,
+//     ) -> [T; BLOCK_SIZE]
+//     where
+//         T: Copy + Debug;
+
+//     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}`
+//     ///
+//     /// # Safety
+//     /// See [`GuestMemory::read`].
+//     unsafe fn write<T, const BLOCK_SIZE: usize>(
+//         &mut self,
+//         address_space: u32,
+//         pointer: u32,
+//         values: &[T; BLOCK_SIZE],
+//     ) where
+//         T: Copy + Debug;
+
+//     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}` and returns
+//     /// the previous values.
+//     ///
+//     /// # Safety
+//     /// See [`GuestMemory::read`].
+//     #[inline(always)]
+//     unsafe fn replace<T, const BLOCK_SIZE: usize>(
+//         &mut self,
+//         address_space: u32,
+//         pointer: u32,
+//         values: &[T; BLOCK_SIZE],
+//     ) -> [T; BLOCK_SIZE]
+//     where
+//         T: Copy + Debug,
+//     {
+//         let prev = self.read(address_space, pointer);
+//         self.write(address_space, pointer, values);
+//         prev
+//     }
+// }
 
 // TO BE DELETED
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,7 +184,7 @@ pub struct TracingMemory<F> {
     /// The underlying data memory, with memory cells typed by address space: see [AddressMap].
     // TODO: make generic in GuestMemory
     #[getset(get = "pub")]
-    pub data: AddressMap<PAGE_SIZE>,
+    pub data: GuestMemory,
     /// A map of `addr_space -> (ptr / min_block_size[addr_space] -> (timestamp: u32, block_size:
     /// u32))` for the timestamp and block size of the latest access.
     pub(super) meta: Vec<PagedVec<PAGE_SIZE>>,
@@ -146,7 +223,7 @@ impl<F: PrimeField32> TracingMemory<F> {
             })
             .collect();
         Self {
-            data: AddressMap::from_mem_config(mem_config),
+            data: GuestMemory::new(AddressMap::from_mem_config(mem_config)),
             meta,
             min_block_size,
             timestamp: INITIAL_TIMESTAMP + 1,
@@ -173,7 +250,7 @@ impl<F: PrimeField32> TracingMemory<F> {
                     .div_ceil(PAGE_SIZE * self.min_block_size[i] as usize),
             );
         }
-        self.data = image;
+        self.data = GuestMemory::new(image);
         self
     }
 
@@ -375,6 +452,7 @@ impl<F: PrimeField32> TracingMemory<F> {
                 let values = (0..current_metadata.block_size as usize)
                     .map(|i| {
                         self.data
+                            .memory
                             .get_f(address.address_space, address.pointer + (i as u32))
                     })
                     .collect::<Vec<_>>();
@@ -385,7 +463,11 @@ impl<F: PrimeField32> TracingMemory<F> {
         if need_to_merge {
             // Merge
             let values = (0..BLOCK_SIZE)
-                .map(|i| self.data.get_f(address_space as u32, (pointer + i) as u32))
+                .map(|i| {
+                    self.data
+                        .memory
+                        .get_f(address_space as u32, (pointer + i) as u32)
+                })
                 .collect::<Vec<_>>();
             self.execute_merges::<true>(
                 MemoryAddress::new(address_space as u32, pointer as u32),

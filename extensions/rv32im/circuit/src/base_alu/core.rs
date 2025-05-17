@@ -6,9 +6,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, E1Ctx, E1E2ExecutionCtx,
-        MeteredCtx, MinimalInstruction, Result, StepExecutorE1, TraceStep, VmAdapterInterface,
-        VmCoreAir, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, E1E2ExecutionCtx, MeteredCtx,
+        MinimalInstruction, Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -284,13 +284,12 @@ where
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
         >,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
         let Instruction { opcode, .. } = instruction;
@@ -306,15 +305,12 @@ where
         Ok(())
     }
 
-    fn execute_e2<Mem>(
+    fn execute_e2(
         &mut self,
-        state: &mut VmStateMut<Mem, MeteredCtx>,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         state.ctx.trace_heights[chip_index] += 1;
         self.execute_e1(state, instruction)?;
 

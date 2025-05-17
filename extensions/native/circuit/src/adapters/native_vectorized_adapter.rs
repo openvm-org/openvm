@@ -214,15 +214,14 @@ where
     }
 }
 
-impl<Mem, F, const N: usize> AdapterExecutorE1<Mem, F> for NativeVectorizedAdapterChip<N>
+impl<F, const N: usize> AdapterExecutorE1<F> for NativeVectorizedAdapterChip<N>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
 {
     type ReadData = ([F; N], [F; N]);
     type WriteData = [F; N];
 
-    fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read(memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
         let Instruction { b, c, d, e, .. } = instruction;
 
         let y_val: [F; N] = unsafe { memory.read(d.as_canonical_u32(), b.as_cas_canonical_u32()) };
@@ -232,7 +231,7 @@ where
         (y_val, z_val)
     }
 
-    fn write(memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData) {
+    fn write(memory: &mut GuestMemory, instruction: &Instruction<F>, data: &Self::WriteData) {
         let Instruction { a, d, .. } = instruction;
 
         unsafe { memory.write(d.as_canonical_u32(), a.as_cas_canonical_u32(), &data) };

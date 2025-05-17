@@ -244,13 +244,12 @@ where
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
     #[inline(always)]
-    fn read<Mem, Ctx>(
+    fn read<Ctx>(
         &self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Self::ReadData
     where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
         let Instruction { b, d, .. } = instruction;
@@ -264,13 +263,12 @@ where
     }
 
     #[inline(always)]
-    fn write<Mem, Ctx>(
+    fn write<Ctx>(
         &self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
     ) where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
         let Instruction {

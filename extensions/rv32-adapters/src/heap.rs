@@ -172,26 +172,24 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRIT
     type ReadData = [[u8; READ_SIZE]; NUM_READS];
     type WriteData = [[u8; WRITE_SIZE]; 1];
 
-    fn read<Mem, Ctx>(
+    fn read<Ctx>(
         &self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Self::ReadData
     where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
         let read_data = AdapterExecutorE1::<F>::read(&self.0, state, instruction);
         read_data.map(|r| r[0])
     }
 
-    fn write<Mem, Ctx>(
+    fn write<Ctx>(
         &self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
     ) where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
         AdapterExecutorE1::<F>::write(&self.0, state, instruction, data);

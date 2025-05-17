@@ -5,7 +5,6 @@ use openvm_circuit::{
     arch::ExecutionBridge,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-
 use openvm_circuit_derive::{InsExecutorE1, InstructionExecutor};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::SharedBitwiseOperationLookupChip,
@@ -16,7 +15,7 @@ use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldVariable, SymbolicExpr,
 };
-use openvm_rv32_adapters::{Rv32VecHeapAdapterStep, Rv32VecHeapAdapterAir};
+use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{ModularAir, ModularChip, ModularStep};

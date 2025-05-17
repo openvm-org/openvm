@@ -16,8 +16,8 @@ use openvm_stark_backend::{
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{
-    E1Ctx, E1E2ExecutionCtx, ExecutionState, InsExecutorE1, InstructionExecutor, MeteredCtx,
-    Result, VmStateMut,
+    E1E2ExecutionCtx, ExecutionState, InsExecutorE1, InstructionExecutor, MeteredCtx, Result,
+    VmStateMut,
 };
 use crate::system::memory::{
     online::{GuestMemory, TracingMemory},
@@ -203,7 +203,7 @@ pub trait TraceStep<F, CTX> {
     /// being used, and all other rows in the trace will be filled with zeroes.
     ///
     /// The provided `row_slice` will have length equal to the width of the AIR.
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    fn fill_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, _row_slice: &mut [F]) {
         unreachable!("fill_trace_row is not implemented")
     }
 
@@ -211,7 +211,7 @@ pub trait TraceStep<F, CTX> {
     /// By default the trace is padded with empty (all 0) rows to make the height a power of 2.
     ///
     /// The provided `row_slice` will have length equal to the width of the AIR.
-    fn fill_dummy_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, _row_slice: &mut [F]) {
         // By default, the row is filled with zeroes
     }
     /// Returns a list of public values to publish.
@@ -390,44 +390,39 @@ where
     type ReadData;
     type WriteData;
 
-    fn read<Mem, Ctx>(
+    fn read<Ctx>(
         &self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Self::ReadData
     where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx;
 
-    fn write<Mem, Ctx>(
+    fn write<Ctx>(
         &self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
     ) where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx;
 }
 
 // TODO: Rename core/step to operator
 pub trait StepExecutorE1<F> {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx;
 
-    fn execute_e2<Mem>(
+    fn execute_e2(
         &mut self,
-        state: &mut VmStateMut<Mem, MeteredCtx>,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory;
+    ) -> Result<()>;
 }
 
 impl<F, A, S> InsExecutorE1<F> for NewVmChipWrapper<F, A, S>
@@ -435,27 +430,23 @@ where
     F: PrimeField32,
     S: StepExecutorE1<F>,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
         self.step.execute_e1(state, instruction)
     }
 
-    fn execute_e2<Mem>(
+    fn execute_e2(
         &mut self,
-        state: &mut VmStateMut<Mem, MeteredCtx>,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         self.step.execute_e2(state, instruction, chip_index)
     }
 }

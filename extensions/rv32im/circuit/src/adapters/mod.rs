@@ -56,10 +56,7 @@ pub fn decompose<F: PrimeField32>(value: u32) -> [F; RV32_REGISTER_NUM_LIMBS] {
 }
 
 #[inline(always)]
-pub fn memory_read<Mem, const N: usize>(memory: &Mem, address_space: u32, ptr: u32) -> [u8; N]
-where
-    Mem: GuestMemory,
-{
+pub fn memory_read<const N: usize>(memory: &GuestMemory, address_space: u32, ptr: u32) -> [u8; N] {
     debug_assert!(
         address_space == RV32_REGISTER_AS
             || address_space == RV32_MEMORY_AS
@@ -74,14 +71,12 @@ where
 }
 
 #[inline(always)]
-pub fn memory_write<Mem, const N: usize>(
-    memory: &mut Mem,
+pub fn memory_write<const N: usize>(
+    memory: &mut GuestMemory,
     address_space: u32,
     ptr: u32,
     data: &[u8; N],
-) where
-    Mem: GuestMemory,
-{
+) {
     debug_assert!(
         address_space == RV32_REGISTER_AS
             || address_space == RV32_MEMORY_AS
@@ -96,13 +91,12 @@ pub fn memory_write<Mem, const N: usize>(
 }
 
 #[inline(always)]
-pub fn memory_read_from_state<Mem, Ctx, const N: usize>(
-    state: &mut VmStateMut<Mem, Ctx>,
+pub fn memory_read_from_state<Ctx, const N: usize>(
+    state: &mut VmStateMut<GuestMemory, Ctx>,
     address_space: u32,
     ptr: u32,
 ) -> [u8; N]
 where
-    Mem: GuestMemory,
     Ctx: E1E2ExecutionCtx,
 {
     state.ctx.on_memory_operation(address_space, ptr, N);
@@ -111,13 +105,12 @@ where
 }
 
 #[inline(always)]
-pub fn memory_write_from_state<Mem, Ctx, const N: usize>(
-    state: &mut VmStateMut<Mem, Ctx>,
+pub fn memory_write_from_state<Ctx, const N: usize>(
+    state: &mut VmStateMut<GuestMemory, Ctx>,
     address_space: u32,
     ptr: u32,
     data: &[u8; N],
 ) where
-    Mem: GuestMemory,
     Ctx: E1E2ExecutionCtx,
 {
     state.ctx.on_memory_operation(address_space, ptr, N);
@@ -257,13 +250,18 @@ pub fn read_rv32_register<F: PrimeField32>(
 }
 
 #[inline(always)]
-pub fn new_read_rv32_register<Mem, Ctx>(
-    state: &mut VmStateMut<Mem, Ctx>,
+pub fn new_read_rv32_register(memory: &GuestMemory, address_space: u32, ptr: u32) -> u32 {
+    u32::from_le_bytes(memory_read(memory, address_space, ptr))
+}
+
+// TODO(AG): if "register", why `address_space` is not hardcoded to be 1?
+#[inline(always)]
+pub fn new_read_rv32_register_from_state<Ctx>(
+    state: &mut VmStateMut<GuestMemory, Ctx>,
     address_space: u32,
     ptr: u32,
 ) -> u32
 where
-    Mem: GuestMemory,
     Ctx: E1E2ExecutionCtx,
 {
     u32::from_le_bytes(memory_read_from_state(state, address_space, ptr))

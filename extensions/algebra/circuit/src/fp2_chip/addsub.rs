@@ -5,14 +5,12 @@ use openvm_circuit::{
     arch::ExecutionBridge,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-
 use openvm_circuit_derive::{InsExecutorE1, InstructionExecutor};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::SharedBitwiseOperationLookupChip,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     Chip, ChipUsageGetter,
 };
-
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir,
@@ -20,9 +18,8 @@ use openvm_mod_circuit_builder::{
 use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::Fp2;
-
 use super::{Fp2Air, Fp2Chip, Fp2Step};
+use crate::Fp2;
 
 pub fn fp2_addsub_expr(
     config: ExprBuilderConfig,

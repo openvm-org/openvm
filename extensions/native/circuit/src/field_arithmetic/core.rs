@@ -195,15 +195,14 @@ where
     }
 }
 
-impl<Mem, Ctx, F, A> StepExecutorE1<Mem, Ctx, F> for FieldArithmeticStep<A>
+impl<Ctx, F, A> StepExecutorE1<Ctx, F> for FieldArithmeticStep<A>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
-    A: 'static + for<'a> AdapterExecutorE1<Mem, F, ReadData = (F, F), WriteData = F>,
+    A: 'static + for<'a> AdapterExecutorE1<F, ReadData = (F, F), WriteData = F>,
 {
     fn execute_e1(
         &mut self,
-        state: &mut VmExecutionState<Mem, Ctx>,
+        state: &mut VmExecutionState<Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
         let Instruction {

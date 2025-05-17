@@ -11,7 +11,7 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{E1Ctx, E1E2ExecutionCtx, MeteredCtx, Streams};
+use super::{E1E2ExecutionCtx, MeteredCtx, Streams};
 use crate::system::{
     memory::{
         online::{GuestMemory, TracingMemory},
@@ -113,24 +113,22 @@ pub trait InstructionExecutor<F> {
 
 /// New trait for instruction execution
 pub trait InsExecutorE1<F> {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
         F: PrimeField32,
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx;
 
-    fn execute_e2<Mem>(
+    fn execute_e2(
         &mut self,
-        state: &mut VmStateMut<Mem, MeteredCtx>,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()>
     where
-        Mem: GuestMemory,
         F: PrimeField32;
 }
 
@@ -138,27 +136,25 @@ impl<F, C> InsExecutorE1<F> for RefCell<C>
 where
     C: InsExecutorE1<F>,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
         F: PrimeField32,
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
         self.borrow_mut().execute_e1(state, instruction)
     }
 
-    fn execute_e2<Mem>(
+    fn execute_e2(
         &mut self,
-        state: &mut VmStateMut<Mem, MeteredCtx>,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()>
     where
-        Mem: GuestMemory,
         F: PrimeField32,
     {
         self.borrow_mut().execute_e2(state, instruction, chip_index)
@@ -392,11 +388,11 @@ impl<T: FieldAlgebra> From<(u32, Option<T>)> for PcIncOrSet<T> {
 pub trait PhantomSubExecutor<F>: Send {
     fn phantom_execute(
         &mut self,
-        memory: &MemoryController<F>,
+        memory: &GuestMemory,
         streams: &mut Streams<F>,
         discriminant: PhantomDiscriminant,
-        a: F,
-        b: F,
+        a: u32,
+        b: u32,
         c_upper: u16,
     ) -> eyre::Result<()>;
 }

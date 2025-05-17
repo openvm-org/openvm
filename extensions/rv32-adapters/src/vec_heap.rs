@@ -26,8 +26,9 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
 use openvm_rv32im_circuit::adapters::{
-    abstract_compose, memory_read_from_state, memory_write_from_state, new_read_rv32_register,
-    tracing_read, tracing_write, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+    abstract_compose, memory_read_from_state, memory_write_from_state,
+    new_read_rv32_register_from_state, tracing_read, tracing_write, RV32_CELL_BITS,
+    RV32_REGISTER_NUM_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -463,13 +464,12 @@ impl<
     type ReadData = [[[u8; READ_SIZE]; BLOCKS_PER_READ]; NUM_READS];
     type WriteData = [[u8; WRITE_SIZE]; BLOCKS_PER_WRITE];
 
-    fn read<Mem, Ctx>(
+    fn read<Ctx>(
         &self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Self::ReadData
     where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
         let Instruction { b, c, d, e, .. } = *instruction;
@@ -482,7 +482,7 @@ impl<
         // Read register values
         let rs_vals = from_fn(|i| {
             let addr = if i == 0 { b } else { c };
-            new_read_rv32_register(state, d, addr.as_canonical_u32())
+            new_read_rv32_register_from_state(state, d, addr.as_canonical_u32())
         });
 
         // Read memory values
@@ -494,17 +494,17 @@ impl<
         })
     }
 
-    fn write<Mem, Ctx>(
+    fn write<Ctx>(
         &self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
     ) where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
         let Instruction { a, d, e, .. } = *instruction;
-        let rd_val = new_read_rv32_register(state, d.as_canonical_u32(), a.as_canonical_u32());
+        let rd_val =
+            new_read_rv32_register_from_state(state, d.as_canonical_u32(), a.as_canonical_u32());
         assert!(rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1 < (1 << self.pointer_max_bits));
 
         for (i, block) in data.iter().enumerate() {

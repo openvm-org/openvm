@@ -204,23 +204,22 @@ where
     }
 }
 
-impl<Mem, F, const READ_SIZE: usize, const WRITE_SIZE: usize> AdapterExecutorE1<Mem, F>
+impl<F, const READ_SIZE: usize, const WRITE_SIZE: usize> AdapterExecutorE1<F>
     for ConvertAdapterStep<READ_SIZE, WRITE_SIZE>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
 {
     type ReadData = [F; READ_SIZE];
     type WriteData = [F; WRITE_SIZE];
 
-    fn read(memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read(memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
         let Instruction { b, e, .. } = instruction;
 
         let read = unsafe { memory.read(e.as_canonical_u32(), b.as_canonical_u32()) };
         read
     }
 
-    fn write(memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData) {
+    fn write(memory: &mut GuestMemory, instruction: &Instruction<F>, data: &Self::WriteData) {
         let Instruction { a, d, .. } = instruction;
 
         unsafe {

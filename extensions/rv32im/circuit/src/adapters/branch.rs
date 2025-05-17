@@ -195,13 +195,12 @@ where
     type WriteData = ();
 
     #[inline(always)]
-    fn read<Mem, Ctx>(
+    fn read<Ctx>(
         &self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Self::ReadData
     where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
         let Instruction { a, b, d, e, .. } = instruction;
@@ -218,13 +217,12 @@ where
     }
 
     #[inline(always)]
-    fn write<Mem, Ctx>(
+    fn write<Ctx>(
         &self,
-        _state: &mut VmStateMut<Mem, Ctx>,
+        _state: &mut VmStateMut<GuestMemory, Ctx>,
         _instruction: &Instruction<F>,
         _data: &Self::WriteData,
     ) where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
     }

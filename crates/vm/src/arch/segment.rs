@@ -29,7 +29,7 @@ use crate::{
     arch::{instructions::*, InstructionExecutor},
     system::{
         connector::DEFAULT_SUSPEND_EXIT_CODE,
-        memory::{dimensions::MemoryDimensions, CHUNK, CHUNK_BITS},
+        memory::{dimensions::MemoryDimensions, online::GuestMemory, CHUNK},
     },
 };
 
@@ -95,9 +95,9 @@ where
     pub fn execute_from_pc(
         &mut self,
         pc: u32,
-        memory: Option<Ctrl::Mem>,
+        memory: Option<GuestMemory>,
         ctx: Ctrl::Ctx,
-    ) -> Result<ExecutionSegmentState<Ctrl::Mem, Ctrl::Ctx>, ExecutionError> {
+    ) -> Result<ExecutionSegmentState<Ctrl::Ctx>, ExecutionError> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
         let mut state = ExecutionSegmentState::new(pc, memory, ctx, 0, false);
@@ -131,7 +131,7 @@ where
     // TODO(ayush): clean this up, separate to smaller functions
     fn execute_instruction(
         &mut self,
-        state: &mut ExecutionSegmentState<Ctrl::Mem, Ctrl::Ctx>,
+        state: &mut ExecutionSegmentState<Ctrl::Ctx>,
         prev_backtrace: &mut Option<Backtrace>,
     ) -> Result<Option<u32>, ExecutionError> {
         let pc = state.pc;
@@ -205,7 +205,7 @@ where
     }
 
     /// Returns bool of whether to switch to next segment or not.
-    fn should_suspend(&mut self, state: &ExecutionSegmentState<Ctrl::Mem, Ctrl::Ctx>) -> bool {
+    fn should_suspend(&mut self, state: &ExecutionSegmentState<Ctrl::Ctx>) -> bool {
         if !self.system_config().continuation_enabled {
             return false;
         }
@@ -307,9 +307,9 @@ pub type TracegenCtx = ();
 pub type TracegenVmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, TracegenExecutionControl>;
 
 #[derive(derive_new::new)]
-pub struct ExecutionSegmentState<Mem, Ctx> {
+pub struct ExecutionSegmentState<Ctx> {
     pub pc: u32,
-    pub memory: Option<Mem>,
+    pub memory: Option<GuestMemory>,
     pub ctx: Ctx,
     // TODO(ayush): do we need both exit_code and is_terminated?
     pub exit_code: u32,
@@ -365,7 +365,6 @@ impl MeteredCtx {
                 //              read at mutually exclusive CHUNK boundaries?
                 if curr_block_size > align {
                     let curr_ptr = curr_block.wrapping_mul(align as u32);
-                    dbg!(curr_ptr);
                     add_memory_access_split(
                         &mut self.last_memory_access,
                         (address_space, curr_ptr),

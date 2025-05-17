@@ -247,14 +247,11 @@ where
     type WriteData = [F; W];
 
     #[inline(always)]
-    fn read<Mem, Ctx>(
+    fn read<Ctx>(
         &self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Self::ReadData
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Self::ReadData {
         assert!(R <= 2);
 
         let &Instruction { b, c, e, f, .. } = instruction;
@@ -280,14 +277,12 @@ where
     }
 
     #[inline(always)]
-    fn write<Mem, Ctx>(
+    fn write<Ctx>(
         &self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
-    ) where
-        Mem: GuestMemory,
-    {
+    ) {
         assert!(W <= 1);
 
         let &Instruction { a, d, .. } = instruction;

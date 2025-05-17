@@ -26,7 +26,7 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
 use openvm_rv32im_circuit::adapters::{
-    memory_read_from_state, new_read_rv32_register, tracing_read, RV32_CELL_BITS,
+    memory_read_from_state, new_read_rv32_register_from_state, tracing_read, RV32_CELL_BITS,
     RV32_REGISTER_NUM_LIMBS,
 };
 use openvm_stark_backend::{
@@ -292,13 +292,12 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterExe
     type ReadData = [[u8; READ_SIZE]; NUM_READS];
     type WriteData = ();
 
-    fn read<Mem, Ctx>(
+    fn read<Ctx>(
         &self,
-        state: &mut VmStateMut<Mem, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Self::ReadData
     where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
         let Instruction { a, b, d, e, .. } = *instruction;
@@ -311,7 +310,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterExe
         // Read register values
         let rs_vals = from_fn(|i| {
             let addr = if i == 0 { a } else { b };
-            new_read_rv32_register(state, d, addr.as_canonical_u32())
+            new_read_rv32_register_from_state(state, d, addr.as_canonical_u32())
         });
 
         // Read memory values
@@ -321,13 +320,12 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterExe
         })
     }
 
-    fn write<Mem, Ctx>(
+    fn write<Ctx>(
         &self,
-        _state: &mut VmStateMut<Mem, Ctx>,
+        _state: &mut VmStateMut<GuestMemory, Ctx>,
         _instruction: &Instruction<F>,
         _data: &Self::WriteData,
     ) where
-        Mem: GuestMemory,
         Ctx: E1E2ExecutionCtx,
     {
         // This function intentionally does nothing
