@@ -439,8 +439,7 @@ where
                 None,
             )
             .unwrap();
-            let ctrl =
-                MeteredExecutionControl::new(&widths, &interactions, chip_complex.air_names());
+            let ctrl = MeteredExecutionControl::new(&widths, &interactions);
             let mut segment = MeteredVmSegmentExecutor::<F, VC>::new(
                 chip_complex,
                 self.trace_height_constraints.clone(),
@@ -462,8 +461,8 @@ where
                 segment
                     .chip_complex
                     .memory_controller()
-                    .mem_config()
-                    .memory_dimensions(),
+                    .access_adapters
+                    .num_access_adapters(),
                 segment
                     .chip_complex
                     .memory_controller()
@@ -472,6 +471,11 @@ where
                     .iter()
                     .map(|&x| x as usize)
                     .collect(),
+                segment
+                    .chip_complex
+                    .memory_controller()
+                    .mem_config()
+                    .memory_dimensions(),
             );
             let exec_state = metrics_span("execute_time_ms", || {
                 segment.execute_from_pc(state.pc, Some(GuestMemory::new(state.memory)), ctx)

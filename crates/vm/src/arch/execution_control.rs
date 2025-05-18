@@ -7,7 +7,7 @@ use super::{
 };
 use crate::{
     arch::{ExecutionState, InsExecutorE1, InstructionExecutor},
-    system::memory::{adapter::GenericAccessAdapterChip, MemoryImage, CHUNK},
+    system::memory::{adapter::GenericAccessAdapterChip, MemoryImage},
 };
 
 // Metered execution thresholds
@@ -17,7 +17,8 @@ const MAX_TRACE_CELLS: usize = usize::MAX - 1;
 const MAX_INTERACTIONS: usize = usize::MAX - 1;
 
 /// Check segment every 100 instructions.
-const SEGMENT_CHECK_INTERVAL: usize = 100;
+// TODO(ayush): fix
+const SEGMENT_CHECK_INTERVAL: usize = usize::MAX - 1;
 
 /// Trait for execution control, determining segmentation and stopping conditions
 pub trait ExecutionControl<F, VC>
@@ -31,7 +32,7 @@ where
     /// Determines if execution should suspend
     fn should_suspend(
         &mut self,
-        state: &ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool;
 
@@ -96,7 +97,7 @@ where
 
     fn should_suspend(
         &mut self,
-        _state: &ExecutionSegmentState<Self::Ctx>,
+        _state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
         // Avoid checking segment too often.
@@ -243,7 +244,7 @@ where
 
     fn should_suspend(
         &mut self,
-        _state: &ExecutionSegmentState<Self::Ctx>,
+        _state: &mut ExecutionSegmentState<Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
         false
@@ -308,18 +309,15 @@ pub struct MeteredExecutionControl<'a> {
     pub interactions: &'a [usize],
     pub since_last_segment_check: usize,
     pub final_memory: Option<MemoryImage>,
-    // TODO(ayush): remove
-    air_names: Vec<String>,
 }
 
 impl<'a> MeteredExecutionControl<'a> {
-    pub fn new(widths: &'a [usize], interactions: &'a [usize], air_names: Vec<String>) -> Self {
+    pub fn new(widths: &'a [usize], interactions: &'a [usize]) -> Self {
         Self {
             widths,
             interactions,
             since_last_segment_check: 0,
             final_memory: None,
-            air_names,
         }
     }
 
@@ -354,7 +352,7 @@ where
 
     fn should_suspend(
         &mut self,
-        state: &ExecutionSegmentState<Self::Ctx>,
+        state: &mut ExecutionSegmentState<Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
         // Avoid checking segment too often.
@@ -364,21 +362,21 @@ where
         }
         self.since_last_segment_check = 0;
 
-        if state
-            .ctx
-            .trace_heights
+        let trace_heights = state.ctx.trace_heights_if_finalized();
+
+        if trace_heights
             .iter()
-            .any(|&height| height.next_power_of_two() > MAX_TRACE_HEIGHT)
+            .any(|height| height.next_power_of_two() > MAX_TRACE_HEIGHT)
         {
             return true;
         }
 
-        let total_cells = self.calculate_total_cells(&state.ctx.trace_heights);
+        let total_cells = self.calculate_total_cells(&trace_heights);
         if total_cells > MAX_TRACE_CELLS {
             return true;
         }
 
-        let total_interactions = self.calculate_total_interactions(&state.ctx.trace_heights);
+        let total_interactions = self.calculate_total_interactions(&trace_heights);
         if total_interactions > MAX_INTERACTIONS {
             return true;
         }
@@ -430,6 +428,7 @@ where
         state: &mut ExecutionSegmentState<Self::Ctx>,
         _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
+        state.ctx.finalize_access_adapter_heights();
         self.final_memory = state.memory.as_ref().map(|memory| memory.memory.clone());
     }
 
@@ -439,34 +438,12 @@ where
         _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         _exit_code: u32,
     ) {
-        // TODO(ayush): this should be in should_suspend
-        let indices_to_process: Vec<_> = state
-            .ctx
-            .leaf_indices
-            .iter()
-            .map(|&idx| {
-                let (addr_space, block_id) = state.ctx.memory_dimensions.index_to_label(idx);
-                (addr_space, block_id)
-            })
-            .collect();
-        for (addr_space, block_id) in indices_to_process {
-            state
-                .ctx
-                .update_access_adapter_heights(addr_space, block_id * CHUNK as u32, CHUNK);
+        state.ctx.finalize_access_adapter_heights();
+
+        let trace_heights = &state.ctx.trace_heights;
+        for (height, width) in trace_heights.iter().zip(self.widths.iter()) {
+            println!("{:<10} \t|\t{:<5}", height, width);
         }
-
-        // CHUNK-byte access adapter
-        // self.trace_heights[offset + CHUNK_BITS] += 1;
-
-        for ((name, height), width) in self
-            .air_names
-            .iter()
-            .zip(state.ctx.trace_heights.iter())
-            .zip(self.widths.iter())
-        {
-            println!("{:<10} \t|\t{:<5} \t|\t{}", height, width, name);
-        }
-
         self.final_memory = state.memory.as_ref().map(|memory| memory.memory.clone());
     }
 

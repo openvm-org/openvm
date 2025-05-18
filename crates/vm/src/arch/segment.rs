@@ -1,5 +1,20 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use super::{
+    execution_control::{
+        E1ExecutionControl, ExecutionControl, MeteredExecutionControl, TracegenExecutionControl,
+    },
+    ExecutionError, GenerationError, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
+};
+#[cfg(feature = "bench-metrics")]
+use crate::metrics::VmMetrics;
+use crate::{
+    arch::{instructions::*, InstructionExecutor},
+    system::{
+        connector::DEFAULT_SUSPEND_EXIT_CODE,
+        memory::{dimensions::MemoryDimensions, online::GuestMemory, CHUNK},
+    },
+};
 use backtrace::Backtrace;
 use openvm_instructions::{
     exe::FnBounds,
@@ -17,21 +32,7 @@ use openvm_stark_backend::{
 };
 use riscv::RV32_IMM_AS;
 
-use super::{
-    execution_control::{
-        E1ExecutionControl, ExecutionControl, MeteredExecutionControl, TracegenExecutionControl,
-    },
-    ExecutionError, GenerationError, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
-};
-#[cfg(feature = "bench-metrics")]
-use crate::metrics::VmMetrics;
-use crate::{
-    arch::{instructions::*, InstructionExecutor},
-    system::{
-        connector::DEFAULT_SUSPEND_EXIT_CODE,
-        memory::{dimensions::MemoryDimensions, online::GuestMemory, CHUNK},
-    },
-};
+const BOUNDARY_CHIP_IDX: usize = 2;
 
 pub struct VmSegmentExecutor<F, VC, Ctrl>
 where
@@ -117,7 +118,7 @@ where
                     .on_terminate(&mut state, &mut self.chip_complex, exit_code);
                 break;
             }
-            if self.should_suspend(&state) {
+            if self.should_suspend(&mut state) {
                 state.exit_code = DEFAULT_SUSPEND_EXIT_CODE;
                 self.ctrl.on_segment_end(&mut state, &mut self.chip_complex);
                 break;
@@ -205,7 +206,7 @@ where
     }
 
     /// Returns bool of whether to switch to next segment or not.
-    fn should_suspend(&mut self, state: &ExecutionSegmentState<Ctrl::Ctx>) -> bool {
+    fn should_suspend(&mut self, state: &mut ExecutionSegmentState<Ctrl::Ctx>) -> bool {
         if !self.system_config().continuation_enabled {
             return false;
         }
@@ -269,12 +270,14 @@ pub type E1VmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, E1ExecutionContro
 // E2 (metered) execution
 #[derive(Debug)]
 pub struct MeteredCtx {
-    continuations_enabled: bool,
-    pub memory_dimensions: MemoryDimensions,
-    addr_space_alignment_bytes: Vec<usize>,
-
     // Trace heights for each chip
     pub trace_heights: Vec<usize>,
+
+    continuations_enabled: bool,
+    num_access_adapters: usize,
+    addr_space_alignment_bytes: Vec<usize>,
+    pub memory_dimensions: MemoryDimensions,
+
     // Map from (addr_space, addr) -> (size, offset)
     pub last_memory_access: BTreeMap<(u8, u32), (u8, u8)>,
     // Indices of leaf nodes in the memory merkle tree
@@ -285,14 +288,16 @@ impl MeteredCtx {
     pub fn new(
         num_traces: usize,
         continuations_enabled: bool,
-        memory_dimensions: MemoryDimensions,
+        num_access_adapters: usize,
         addr_space_alignment_bytes: Vec<usize>,
+        memory_dimensions: MemoryDimensions,
     ) -> Self {
         Self {
-            continuations_enabled,
-            memory_dimensions,
-            addr_space_alignment_bytes,
             trace_heights: vec![0; num_traces],
+            continuations_enabled,
+            num_access_adapters,
+            addr_space_alignment_bytes,
+            memory_dimensions,
             last_memory_access: BTreeMap::new(),
             leaf_indices: BTreeSet::new(),
         }
@@ -326,74 +331,7 @@ impl E1E2ExecutionCtx for E1Ctx {
 }
 
 impl MeteredCtx {
-    pub fn update_access_adapter_heights(&mut self, address_space: u32, ptr: u32, size: usize) {
-        let align = self.addr_space_alignment_bytes[address_space as usize];
-
-        // Skip adapters if this is a repeated access to the same location with same size
-        let last_access = self.last_memory_access.get(&(address_space as u8, ptr));
-        if !matches!(last_access, Some(&(last_access_size, 0)) if size == last_access_size as usize)
-        {
-            // TODO(ayush): no magic numbers
-            let mut adapter_offset = 2;
-            if self.continuations_enabled {
-                adapter_offset += 1;
-            }
-
-            let mut ptr_start = ptr;
-            if let Some(&(_, last_access_offset)) = last_access {
-                // Go to the start of block
-                ptr_start = ptr.wrapping_sub(last_access_offset as u32);
-            }
-
-            // Split intersecting blocks to align bytes
-            let mut curr_block = ptr_start / align as u32;
-            let end_block = curr_block + (size / align) as u32;
-            while curr_block < end_block {
-                let curr_block_size = if let Some(&(last_access_size, _)) = self
-                    .last_memory_access
-                    .get(&(address_space as u8, curr_block.wrapping_mul(align as u32)))
-                {
-                    last_access_size as usize
-                } else {
-                    // Initial memory access only happens at CHUNK boundary
-                    let chunk_offset = curr_block % (CHUNK / align) as u32;
-                    curr_block -= chunk_offset;
-                    CHUNK
-                };
-
-                // TODO(ayush): why are we splitting in the case when we only
-                //              read at mutually exclusive CHUNK boundaries?
-                if curr_block_size > align {
-                    let curr_ptr = curr_block.wrapping_mul(align as u32);
-                    add_memory_access_split(
-                        &mut self.last_memory_access,
-                        (address_space, curr_ptr),
-                        curr_block_size,
-                        align,
-                    );
-                    update_access_adapters_split(
-                        &mut self.trace_heights,
-                        curr_block_size,
-                        adapter_offset,
-                    );
-                }
-
-                curr_block += (curr_block_size / align) as u32;
-            }
-
-            // Merge added blocks from align to size bytes
-            add_memory_access_merge(
-                &mut self.last_memory_access,
-                (address_space, ptr),
-                size,
-                align,
-            );
-            update_access_adapters_merge(&mut self.trace_heights, size, adapter_offset);
-        }
-    }
-
-    fn update_boundary_merkle_height(&mut self, address_space: u32, ptr: u32, size: usize) {
-        // Calculate unique chunks and inner nodes in Merkle tree
+    fn update_boundary_merkle_heights(&mut self, address_space: u32, ptr: u32, size: usize) {
         let num_blocks = size.div_ceil(CHUNK);
         for i in 0..num_blocks {
             let addr = ptr.wrapping_add((i * CHUNK) as u32);
@@ -404,25 +342,185 @@ impl MeteredCtx {
 
             // TODO(ayush): see if insertion and finding pred/succ can be done in single binary search pass
             if self.leaf_indices.insert(leaf_index) {
-                // TODO(ayush): no magic numbers
-                let mut offset = 2;
-
-                // Boundary chip
-                self.trace_heights[offset] += 1;
+                self.trace_heights[BOUNDARY_CHIP_IDX] += 1;
 
                 if self.continuations_enabled {
-                    // Merkle chip
-                    offset += 1;
-
                     let height_change = calculate_merkle_node_updates(
                         &self.leaf_indices,
                         leaf_index,
                         self.memory_dimensions.overall_height(),
                     );
-                    self.trace_heights[offset] += height_change * 2;
+                    self.trace_heights[BOUNDARY_CHIP_IDX + 1] += height_change * 2;
                 }
             }
         }
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn calculate_splits_and_merges(
+        &self,
+        address_space: u32,
+        ptr: u32,
+        size: usize,
+    ) -> (Vec<(u32, usize)>, Vec<(u32, usize)>) {
+        // Skip adapters if this is a repeated access to the same location with same size
+        let last_access = self.last_memory_access.get(&(address_space as u8, ptr));
+        if matches!(last_access, Some(&(last_access_size, 0)) if size == last_access_size as usize)
+        {
+            return (vec![], vec![]);
+        }
+
+        // Go to the start of block
+        let mut ptr_start = ptr;
+        if let Some(&(_, last_access_offset)) = last_access {
+            ptr_start = ptr.wrapping_sub(last_access_offset as u32);
+        }
+
+        // Split intersecting blocks to align bytes
+        let align = self.addr_space_alignment_bytes[address_space as usize];
+        let mut curr_block = ptr_start / align as u32;
+        let end_block = curr_block + (size / align) as u32;
+        let mut splits = vec![];
+        while curr_block < end_block {
+            let curr_block_size = if let Some(&(last_access_size, _)) = self
+                .last_memory_access
+                .get(&(address_space as u8, curr_block.wrapping_mul(align as u32)))
+            {
+                last_access_size as usize
+            } else {
+                // Initial memory access only happens at CHUNK boundary
+                let chunk_offset = curr_block % (CHUNK / align) as u32;
+                curr_block -= chunk_offset;
+                CHUNK
+            };
+
+            // TODO(ayush): why are we splitting in the case when we only
+            //              read at mutually exclusive CHUNK boundaries?
+            if curr_block_size > align {
+                let curr_ptr = curr_block.wrapping_mul(align as u32);
+                splits.push((curr_ptr, curr_block_size));
+            }
+
+            curr_block += (curr_block_size / align) as u32;
+        }
+        // Merge added blocks from align to size bytes
+        let merges = vec![(ptr, size)];
+
+        (splits, merges)
+    }
+
+    fn update_adapter_heights(&mut self, address_space: u32, ptr: u32, size: usize) {
+        let align = self.addr_space_alignment_bytes[address_space as usize];
+        let adapter_offset = if self.continuations_enabled {
+            BOUNDARY_CHIP_IDX + 2
+        } else {
+            BOUNDARY_CHIP_IDX + 1
+        };
+
+        let (splits, merges) = self.calculate_splits_and_merges(address_space, ptr, size);
+        for (curr_ptr, curr_size) in splits.into_iter() {
+            apply_single_adapter_heights_update(
+                &mut self.trace_heights[adapter_offset..],
+                curr_size,
+            );
+            add_memory_access_split(
+                &mut self.last_memory_access,
+                (address_space, curr_ptr),
+                curr_size,
+                align,
+            );
+        }
+        for (curr_ptr, curr_size) in merges.into_iter() {
+            apply_single_adapter_heights_update(
+                &mut self.trace_heights[adapter_offset..],
+                curr_size,
+            );
+            add_memory_access_merge(
+                &mut self.last_memory_access,
+                (address_space, curr_ptr),
+                curr_size,
+                align,
+            );
+        }
+    }
+
+    pub fn finalize_access_adapter_heights(&mut self) {
+        let indices_to_process: Vec<_> = self
+            .leaf_indices
+            .iter()
+            .map(|&idx| {
+                let (addr_space, block_id) = self.memory_dimensions.index_to_label(idx);
+                (addr_space, block_id)
+            })
+            .collect();
+        for (addr_space, block_id) in indices_to_process {
+            self.update_adapter_heights(addr_space, block_id * CHUNK as u32, CHUNK);
+        }
+    }
+
+    pub fn trace_heights_if_finalized(&mut self) -> Vec<usize> {
+        let indices_to_process = self.leaf_indices.iter().map(|&idx| {
+            let (addr_space, block_id) = self.memory_dimensions.index_to_label(idx);
+            (addr_space, block_id)
+        });
+
+        let mut memory_updates = vec![];
+        let mut trace_height_updates = vec![];
+        for (addr_space, block_id) in indices_to_process {
+            let ptr = block_id * CHUNK as u32;
+
+            let (splits, merges) = self.calculate_splits_and_merges(addr_space, ptr, CHUNK);
+
+            for (curr_ptr, curr_size) in splits {
+                apply_single_adapter_heights_update(&mut trace_height_updates, curr_size);
+                let updates = add_memory_access_split_with_return(
+                    &mut self.last_memory_access,
+                    (addr_space, curr_ptr),
+                    curr_size,
+                    self.addr_space_alignment_bytes[addr_space as usize],
+                );
+                memory_updates.extend(updates);
+            }
+            for (curr_ptr, curr_size) in merges {
+                apply_single_adapter_heights_update(&mut trace_height_updates, curr_size);
+                let updates = add_memory_access_merge_with_return(
+                    &mut self.last_memory_access,
+                    (addr_space, curr_ptr),
+                    curr_size,
+                    self.addr_space_alignment_bytes[addr_space as usize],
+                );
+                memory_updates.extend(updates);
+            }
+        }
+
+        // Restore original memory state
+        for (key, old_value) in memory_updates.into_iter().rev() {
+            match old_value {
+                Some(value) => {
+                    self.last_memory_access.insert(key, value);
+                }
+                None => {
+                    self.last_memory_access.remove(&key);
+                }
+            }
+        }
+
+        let adapter_offset = if self.continuations_enabled {
+            BOUNDARY_CHIP_IDX + 2
+        } else {
+            BOUNDARY_CHIP_IDX + 1
+        };
+        self.trace_heights
+            .iter()
+            .enumerate()
+            .map(|(i, &height)| {
+                if i >= adapter_offset && i < adapter_offset + trace_height_updates.len() {
+                    height + trace_height_updates[i - adapter_offset]
+                } else {
+                    height
+                }
+            })
+            .collect()
     }
 }
 
@@ -430,27 +528,60 @@ impl E1E2ExecutionCtx for MeteredCtx {
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: usize) {
         debug_assert!(address_space != RV32_IMM_AS);
 
-        // Handle access adapters
-        self.update_access_adapter_heights(address_space, ptr, size);
+        // Handle access adapter updates
+        self.update_adapter_heights(address_space, ptr, size);
 
         // Handle merkle tree updates
         // TODO(ayush): see if this can be approximated by total number of reads/writes for AS != register
-        self.update_boundary_merkle_height(address_space, ptr, size);
+        self.update_boundary_merkle_heights(address_space, ptr, size);
+
+        // TODO(ayush): Poseidon2PeripheryChip
     }
 }
 
-fn update_access_adapters_split(trace_heights: &mut [usize], size: usize, adapter_offset: usize) {
+fn apply_single_adapter_heights_update(trace_heights: &mut [usize], size: usize) {
     let size_bits = log2_strict_usize(size);
     for adapter_bits in (3..=size_bits).rev() {
-        trace_heights[adapter_offset + adapter_bits] += 1 << (size_bits - adapter_bits);
+        trace_heights[adapter_bits] += 1 << (size_bits - adapter_bits);
     }
 }
 
-fn update_access_adapters_merge(trace_heights: &mut [usize], size: usize, adapter_offset: usize) {
-    let size_bits = log2_strict_usize(size);
-    for adapter_bits in (3..=size_bits).rev() {
-        trace_heights[adapter_offset + adapter_bits] += 1 << (size_bits - adapter_bits);
+#[allow(clippy::type_complexity)]
+fn add_memory_access(
+    memory_access_map: &mut BTreeMap<(u8, u32), (u8, u8)>,
+    (address_space, ptr): (u32, u32),
+    size: usize,
+    align: usize,
+    is_split: bool,
+    return_old_values: bool,
+) -> Option<Vec<((u8, u32), Option<(u8, u8)>)>> {
+    debug_assert_eq!(size % align, 0, "Size must be a multiple of alignment");
+
+    let num_chunks = size / align;
+    let mut old_values = if return_old_values {
+        Some(Vec::with_capacity(num_chunks))
+    } else {
+        None
+    };
+
+    for i in 0..num_chunks {
+        let curr_ptr = ptr.wrapping_add(i as u32 * align as u32);
+        let key = (address_space as u8, curr_ptr);
+
+        let value = if is_split {
+            (align as u8, 0)
+        } else {
+            (size as u8, (i * align) as u8)
+        };
+
+        let old_value = memory_access_map.insert(key, value);
+
+        if let Some(values) = old_values.as_mut() {
+            values.push((key, old_value));
+        }
     }
+
+    old_values
 }
 
 fn add_memory_access_split(
@@ -459,14 +590,32 @@ fn add_memory_access_split(
     size: usize,
     align: usize,
 ) {
-    debug_assert_eq!(size % align, 0, "Size must be a multiple of alignment");
-    let num_chunks = size / align;
-    for i in 0..num_chunks {
-        let curr_ptr = ptr.wrapping_add(i as u32 * align as u32);
-        let key = (address_space as u8, curr_ptr);
-        let value = (align as u8, 0);
-        memory_access_map.insert(key, value);
-    }
+    add_memory_access(
+        memory_access_map,
+        (address_space, ptr),
+        size,
+        align,
+        true,
+        false,
+    );
+}
+
+#[allow(clippy::type_complexity)]
+fn add_memory_access_split_with_return(
+    memory_access_map: &mut BTreeMap<(u8, u32), (u8, u8)>,
+    (address_space, ptr): (u32, u32),
+    size: usize,
+    align: usize,
+) -> Vec<((u8, u32), Option<(u8, u8)>)> {
+    add_memory_access(
+        memory_access_map,
+        (address_space, ptr),
+        size,
+        align,
+        true,
+        true,
+    )
+    .unwrap()
 }
 
 fn add_memory_access_merge(
@@ -475,14 +624,32 @@ fn add_memory_access_merge(
     size: usize,
     align: usize,
 ) {
-    debug_assert_eq!(size % align, 0, "Size must be a multiple of alignment");
-    let num_chunks = size / align;
-    for i in 0..num_chunks {
-        let curr_ptr = ptr.wrapping_add(i as u32 * align as u32);
-        let key = (address_space as u8, curr_ptr);
-        let value = (size as u8, (i * align) as u8);
-        memory_access_map.insert(key, value);
-    }
+    add_memory_access(
+        memory_access_map,
+        (address_space, ptr),
+        size,
+        align,
+        false,
+        false,
+    );
+}
+
+#[allow(clippy::type_complexity)]
+fn add_memory_access_merge_with_return(
+    memory_access_map: &mut BTreeMap<(u8, u32), (u8, u8)>,
+    (address_space, ptr): (u32, u32),
+    size: usize,
+    align: usize,
+) -> Vec<((u8, u32), Option<(u8, u8)>)> {
+    add_memory_access(
+        memory_access_map,
+        (address_space, ptr),
+        size,
+        align,
+        false,
+        true,
+    )
+    .unwrap()
 }
 
 fn calculate_merkle_node_updates(
