@@ -27,9 +27,9 @@ enum BuildProfile {
 static AVAILABLE_PROGRAMS: &[&str] = &[
     // "fibonacci_recursive",
     // "fibonacci_iterative",
-    // "quicksort",
+    "quicksort",
     // "bubblesort",
-    "factorial_iterative_u256",
+    // "factorial_iterative_u256",
     // "revm_snailtracer",
     // "pairing",
     // "keccak256",
@@ -160,7 +160,8 @@ fn main() -> Result<()> {
             println!("Tracegen");
             println!("-------------------------------------------------------");
             executor
-                .execute(exe, vec![])
+                // .execute(exe, vec![])
+                .execute_and_generate::<BabyBearPoseidon2Config>(exe, vec![])
                 .expect("Failed to execute program");
             println!("-------------------------------------------------------");
 

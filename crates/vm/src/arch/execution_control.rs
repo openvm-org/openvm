@@ -17,7 +17,6 @@ const MAX_TRACE_CELLS: usize = usize::MAX - 1;
 const MAX_INTERACTIONS: usize = usize::MAX - 1;
 
 /// Check segment every 100 instructions.
-// TODO(ayush): fix
 const SEGMENT_CHECK_INTERVAL: usize = usize::MAX - 1;
 
 /// Trait for execution control, determining segmentation and stopping conditions
@@ -166,27 +165,24 @@ where
             println!("{:<10} \t|\t{}", height, name);
         }
 
-        // TODO(ayush): remove
-        chip_complex.finalize_memory();
-
-        println!("After finalize:");
-        for chip in chip_complex
-            .memory_controller()
-            .access_adapters
-            .chips
-            .iter()
-        {
-            let name = chip.air_name();
-            let width = chip.trace_width();
-            let height = match chip {
-                GenericAccessAdapterChip::N2(c) => c.trace.height(),
-                GenericAccessAdapterChip::N4(c) => c.trace.height(),
-                GenericAccessAdapterChip::N8(c) => c.trace.height(),
-                GenericAccessAdapterChip::N16(c) => c.trace.height(),
-                GenericAccessAdapterChip::N32(c) => c.trace.height(),
-            };
-            println!("{:<10} \t|\t{:<5} \t|\t{}", height, width, name);
-        }
+        // println!("After finalize:");
+        // for chip in chip_complex
+        //     .memory_controller()
+        //     .access_adapters
+        //     .chips
+        //     .iter()
+        // {
+        //     let name = chip.air_name();
+        //     let width = chip.trace_width();
+        //     let height = match chip {
+        //         GenericAccessAdapterChip::N2(c) => c.trace.height(),
+        //         GenericAccessAdapterChip::N4(c) => c.trace.height(),
+        //         GenericAccessAdapterChip::N8(c) => c.trace.height(),
+        //         GenericAccessAdapterChip::N16(c) => c.trace.height(),
+        //         GenericAccessAdapterChip::N32(c) => c.trace.height(),
+        //     };
+        //     println!("{:<10} \t|\t{:<5} \t|\t{}", height, width, name);
+        // }
 
         let timestamp = chip_complex.memory_controller().timestamp();
         chip_complex

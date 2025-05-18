@@ -8,6 +8,7 @@ use openvm_stark_backend::{
     keygen::types::{LinearConstraint, MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_commit::PolynomialSpace,
     p3_field::{FieldAlgebra, PrimeField32},
+    p3_util::log2_strict_usize,
     proof::Proof,
     prover::types::{CommittedTraceData, ProofInput},
     utils::metrics_span,
@@ -469,7 +470,7 @@ where
                     .memory
                     .min_block_size
                     .iter()
-                    .map(|&x| x as usize)
+                    .map(|&x| log2_strict_usize(x as usize))
                     .collect(),
                 segment
                     .chip_complex
