@@ -79,21 +79,16 @@ where
 
         let trace_heights = state.ctx.trace_heights_if_finalized();
 
-        if trace_heights
-            .iter()
-            .any(|height| height.next_power_of_two() > MAX_TRACE_HEIGHT)
-        {
-            let max_height = trace_heights
-                .iter()
-                .map(|&h| h.next_power_of_two())
-                .max()
-                .unwrap_or(0);
-            tracing::info!(
-                "Suspending execution: trace height ({}) exceeds maximum ({})",
-                max_height,
-                MAX_TRACE_HEIGHT
-            );
-            return true;
+        let max_height = trace_heights.iter().map(|&h| h.next_power_of_two()).max();
+        if let Some(height) = max_height {
+            if height > MAX_TRACE_HEIGHT {
+                tracing::info!(
+                    "Suspending execution: trace height ({}) exceeds maximum ({})",
+                    height,
+                    MAX_TRACE_HEIGHT
+                );
+                return true;
+            }
         }
 
         let total_cells = self.calculate_total_cells(&trace_heights);

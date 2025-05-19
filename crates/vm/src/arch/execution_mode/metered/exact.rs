@@ -125,8 +125,6 @@ impl MeteredCtxExact {
                 CHUNK
             };
 
-            // TODO(ayush): why are we splitting in the case when we only
-            //              read at mutually exclusive CHUNK boundaries?
             if curr_block_size > align {
                 let curr_ptr = curr_block.wrapping_mul(align as u32);
                 splits.push((curr_ptr, curr_block_size));
