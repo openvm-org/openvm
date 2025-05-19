@@ -808,7 +808,6 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
                 .downcast_mut()
                 .expect("Poseidon2 chip required for persistent memory");
             self.base.memory_controller.finalize(Some(hasher));
-            dbg!(hasher.current_trace_height());
         } else {
             self.base
                 .memory_controller

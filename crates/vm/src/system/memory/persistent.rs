@@ -208,7 +208,6 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     ) where
         H: Hasher<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
-        dbg!(final_memory.len());
         let final_touched_labels: Vec<_> = final_memory
             .par_iter()
             .map(|(&(addr_space, ptr), &ts_values)| {

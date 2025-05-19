@@ -26,7 +26,7 @@ mod columns;
 mod tests;
 
 pub struct AccessAdapterInventory<F> {
-    pub chips: Vec<GenericAccessAdapterChip<F>>,
+    chips: Vec<GenericAccessAdapterChip<F>>,
     air_names: Vec<String>,
 }
 
@@ -242,7 +242,7 @@ pub trait GenericAccessAdapterChipTrait<F> {
 #[derive(Chip, ChipUsageGetter)]
 #[enum_dispatch(GenericAccessAdapterChipTrait<F>)]
 #[chip(where = "F: PrimeField32")]
-pub enum GenericAccessAdapterChip<F> {
+enum GenericAccessAdapterChip<F> {
     N2(AccessAdapterChip<F, 2>),
     N4(AccessAdapterChip<F, 4>),
     N8(AccessAdapterChip<F, 8>),
@@ -285,7 +285,7 @@ pub struct AccessAdapterChip<F, const N: usize> {
     air: AccessAdapterAir<N>,
     range_checker: SharedVariableRangeCheckerChip,
     pub records: Vec<AccessAdapterRecord<F>>,
-    pub trace: RowMajorMatrix<F>,
+    trace: RowMajorMatrix<F>,
     overridden_height: Option<usize>,
 }
 
@@ -497,8 +497,8 @@ pub fn get_chip_index(block_size: usize) -> usize {
 
 pub struct AdapterInventoryTraceCursor<F> {
     // [AG] TODO: replace with a pre-allocated space
-    pub cursors: Vec<Cursor<Vec<F>>>,
-    pub widths: Vec<usize>,
+    cursors: Vec<Cursor<Vec<F>>>,
+    widths: Vec<usize>,
 }
 
 impl<F: PrimeField32> AdapterInventoryTraceCursor<F> {
