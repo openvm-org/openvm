@@ -140,6 +140,12 @@ impl<E: StarkFriEngine<SC> + Send + 'static> AggStarkProver<E> {
                     &actual_air_heights,
                     &self.root_prover.root_verifier_pk.air_heights,
                 ) {
+                    // Metrics must be recorded before exiting proof_span
+                    // to ensure the label has ["group", "internal.*"] information
+                    #[cfg(feature = "bench-metrics")]
+                    metrics::gauge!("total_proof_time_ms")
+                        .set(wall_timer.elapsed().as_millis() as f64);
+
                     break;
                 }
                 if wrapper_layers >= self.max_internal_wrapper_layers {
@@ -284,11 +290,13 @@ impl<E: StarkFriEngine<SC> + Send + 'static> AggStarkProver<E> {
                     collector_handle.join().expect("Collector thread panicked")
                 });
             }
-            proof_span.exit();
+            // Metrics must be recorded before exiting proof_span
+            // to ensure the label has ["group", "internal.*"] information
             #[cfg(feature = "bench-metrics")]
             metrics::gauge!("total_proof_time_ms").set(wall_timer.elapsed().as_millis() as f64);
 
             internal_node_height += 1;
+            proof_span.exit();
         }
 
         proofs.pop().unwrap()
