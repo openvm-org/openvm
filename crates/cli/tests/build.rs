@@ -7,11 +7,13 @@ use openvm_build::RUSTC_TARGET;
 fn default_build_test_args(example: &str) -> BuildArgs {
     BuildArgs {
         no_transpile: true,
-        config: PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests")
-            .join("programs")
-            .join(example)
-            .join("openvm.toml"),
+        config: Some(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests")
+                .join("programs")
+                .join(example)
+                .join("openvm.toml"),
+        ),
         ..Default::default()
     }
 }
@@ -147,6 +149,42 @@ fn test_multi_target_transpile_default() -> Result<()> {
     let palindrome_exe = examples_dir.join("palindrome.vmexe");
     assert!(fibonacci_exe.exists());
     assert!(palindrome_exe.exists());
+
+    Ok(())
+}
+
+#[test]
+fn test_output_dir_copy() -> Result<()> {
+    let temp_dir = tempfile::tempdir()?;
+    let target_dir = temp_dir.path();
+
+    let temp_dir_2 = tempfile::tempdir()?;
+    let output_dir = temp_dir_2.path();
+
+    let mut build_args = default_build_test_args("fibonacci");
+    let mut cargo_args = default_cargo_test_args("fibonacci");
+    build_args.output_dir = Some(output_dir.to_path_buf());
+    build_args.no_transpile = false;
+    cargo_args.target_dir = Some(target_dir.to_path_buf());
+
+    build(&build_args, &cargo_args)?;
+
+    // Check for executable in target_dir
+    let default_target = target_dir
+        .join("openvm")
+        .join("release")
+        .join("openvm-cli-example-test.vmexe");
+    assert!(default_target.exists());
+
+    // Check for executable in output_dir
+    let copied_target = output_dir.join("openvm-cli-example-test.vmexe");
+    assert!(copied_target.exists());
+
+    // Check that the executable is the same
+    assert_eq!(
+        std::fs::read(default_target)?,
+        std::fs::read(copied_target)?
+    );
 
     Ok(())
 }

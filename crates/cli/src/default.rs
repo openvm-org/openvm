@@ -4,7 +4,6 @@ use openvm_sdk::config::{AppConfig, SdkVmConfig, DEFAULT_APP_LOG_BLOWUP, DEFAULT
 use openvm_stark_sdk::config::FriParameters;
 
 pub const DEFAULT_MANIFEST_DIR: &str = ".";
-pub const DEFAULT_APP_CONFIG_PATH: &str = "./openvm.toml";
 
 pub const DEFAULT_APP_PK_NAME: &str = "app.pk";
 pub const DEFAULT_APP_VK_NAME: &str = "app.vk";

@@ -7,8 +7,7 @@ use openvm_sdk::{fs::read_exe_from_file, Sdk};
 
 use super::{build, BuildArgs, BuildCargoArgs};
 use crate::{
-    default::DEFAULT_APP_CONFIG_PATH,
-    global::get_single_target_name,
+    global::{get_single_target_name, manifest_path_and_dir},
     input::{read_to_stdin, Input},
     util::read_config_toml_or_default,
 };
@@ -35,11 +34,10 @@ pub struct RunArgs {
 
     #[arg(
         long,
-        default_value = DEFAULT_APP_CONFIG_PATH,
-        help = "Path to the OpenVM config .toml file that specifies the VM extensions",
+        help = "Path to the OpenVM config .toml file that specifies the VM extensions, by default will search for the file at ${manifest_dir}/openvm.toml",
         help_heading = "OpenVM Options"
     )]
-    pub config: PathBuf,
+    pub config: Option<PathBuf>,
 
     #[arg(
         long,
@@ -243,8 +241,15 @@ impl RunCmd {
             &output_dir.join(format!("{}.vmexe", target_name))
         };
 
+        let (_, manifest_dir) = manifest_path_and_dir(&self.cargo_args.manifest_path)?;
+        let app_config = read_config_toml_or_default(
+            self.run_args
+                .config
+                .to_owned()
+                .unwrap_or_else(|| manifest_dir.join("openvm.toml")),
+        )?;
         let exe = read_exe_from_file(exe_path)?;
-        let app_config = read_config_toml_or_default(&self.run_args.config)?;
+
         let sdk = Sdk::new();
         let output = sdk.execute(
             exe,

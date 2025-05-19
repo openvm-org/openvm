@@ -11,7 +11,7 @@ use openvm_sdk::{
 };
 
 use crate::{
-    default::{DEFAULT_APP_CONFIG_PATH, DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME},
+    default::{DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME},
     global::{app_pk_path, app_vk_path, manifest_path_and_dir, target_dir},
     util::read_config_toml_or_default,
 };
@@ -21,11 +21,10 @@ use crate::{
 pub struct KeygenCmd {
     #[arg(
         long,
-        default_value = DEFAULT_APP_CONFIG_PATH,
-        help = "Path to the OpenVM config .toml file that specifies the VM extensions",
+        help = "Path to the OpenVM config .toml file that specifies the VM extensions, by default will search for the file at ${manifest_dir}/openvm.toml",
         help_heading = "OpenVM Options"
     )]
-    config: PathBuf,
+    config: Option<PathBuf>,
 
     #[arg(
         long,
@@ -59,13 +58,15 @@ pub struct KeygenCargoArgs {
 
 impl KeygenCmd {
     pub fn run(&self) -> Result<()> {
-        let (manifest_path, _) = manifest_path_and_dir(&self.cargo_args.manifest_path)?;
+        let (manifest_path, manifest_dir) = manifest_path_and_dir(&self.cargo_args.manifest_path)?;
         let target_dir = target_dir(&self.cargo_args.target_dir, &manifest_path);
         let app_pk_path = app_pk_path(&target_dir);
         let app_vk_path = app_vk_path(&target_dir);
 
         keygen(
-            &self.config,
+            self.config
+                .to_owned()
+                .unwrap_or_else(|| manifest_dir.join("openvm.toml")),
             &app_pk_path,
             &app_vk_path,
             self.output_dir.as_ref(),

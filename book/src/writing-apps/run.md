@@ -25,9 +25,7 @@ Many of the options for `cargo openvm run` will be passed to `cargo openvm build
 
 - `--config <CONFIG>`
 
-  **Description**: Path to the OpenVM config `.toml` file that specifies the VM extensions. If no file is found, OpenVM will use a default configuration. Currently the CLI only supports known extensions listed in the [Using Existing Extensions](../custom-extensions/overview.md) section. To use other extensions, use the [SDK](../advanced-usage/sdk.md).
-
-  **Default**: `./openvm.toml`
+  **Description**: Path to the OpenVM config `.toml` file that specifies the VM extensions. By default will search the manifest directory for `openvm.toml`. If no file is found, OpenVM will use a default configuration. Currently the CLI only supports known extensions listed in the [Using Existing Extensions](../custom-extensions/overview.md) section. To use other extensions, use the [SDK](../advanced-usage/sdk.md).
 
 - `--output_dir <OUTPUT_DIR>`
 
@@ -39,9 +37,9 @@ Many of the options for `cargo openvm run` will be passed to `cargo openvm build
 
 - `--init-file-name <INIT_FILE_NAME>`
 
-  **Description**: Path to the generated initialization file.
+  **Description**: Name of the generated initialization file, which will be written into the manifest directory.
 
-  **Default**: `./openvm_init.rs`
+  **Default**: `openvm_init.rs`
 
 ### Package Selection
 

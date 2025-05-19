@@ -15,7 +15,6 @@ use openvm_sdk::{fs::write_exe_to_file, Sdk};
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 
 use crate::{
-    default::DEFAULT_APP_CONFIG_PATH,
     global::{manifest_path_and_dir, target_dir, target_output_dir},
     util::read_config_toml_or_default,
 };
@@ -48,11 +47,10 @@ pub struct BuildArgs {
 
     #[arg(
         long,
-        default_value = DEFAULT_APP_CONFIG_PATH,
-        help = "Path to the OpenVM config .toml file that specifies the VM extensions",
+        help = "Path to the OpenVM config .toml file that specifies the VM extensions, by default will search for the file at ${manifest_dir}/openvm.toml",
         help_heading = "OpenVM Options"
     )]
-    pub config: PathBuf,
+    pub config: Option<PathBuf>,
 
     #[arg(
         long,
@@ -74,7 +72,7 @@ impl Default for BuildArgs {
     fn default() -> Self {
         Self {
             no_transpile: bool::default(),
-            config: DEFAULT_APP_CONFIG_PATH.into(),
+            config: Option::default(),
             output_dir: Option::default(),
             init_file_name: OPENVM_DEFAULT_INIT_FILE_NAME.to_string(),
         }
@@ -369,7 +367,12 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
     }
 
     // Write to init file
-    let app_config = read_config_toml_or_default(&build_args.config)?;
+    let app_config = read_config_toml_or_default(
+        build_args
+            .config
+            .to_owned()
+            .unwrap_or_else(|| manifest_dir.join("openvm.toml")),
+    )?;
     app_config
         .app_vm_config
         .write_to_init_file(&manifest_dir, Some(&build_args.init_file_name))?;

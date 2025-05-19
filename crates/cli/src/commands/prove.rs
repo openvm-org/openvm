@@ -218,7 +218,10 @@ impl ProveCmd {
             let app_pk_path = app_pk_path(&target_dir);
             let app_vk_path = app_vk_path(&target_dir);
             keygen(
-                &run_args.config,
+                run_args
+                    .config
+                    .to_owned()
+                    .unwrap_or_else(|| manifest_path.join("openvm.toml")),
                 &app_pk_path,
                 &app_vk_path,
                 run_args.output_dir.as_ref(),
