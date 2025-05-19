@@ -156,68 +156,80 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 /// should allocate a buffer, of size possibly larger than the record, and then return mutable
 /// pointers to the record within the buffer.
 pub trait RecordArena<Layout, RecordMut> {
+    /// Allocates underlying buffer and returns a mutable reference `RecordMut`.
+    /// Note that calling this function may not call an underlying memory allocation as the record
+    /// arena may be virtual.
     fn alloc(&mut self, layout: Layout) -> RecordMut;
 }
+
+/// ZST to represent empty layout. Used when the layout can be inferred from other context (such as
+/// AIR or record types).
+pub struct EmptyLayout;
 
 /// Interface for trace generation of a single instruction.The trace is provided as a mutable
 /// buffer during both instruction execution and trace generation.
 /// It is expected that no additional memory allocation is necessary and the trace buffer
 /// is sufficient, with possible overwriting.
 pub trait TraceStep<F, CTX> {
-    fn execute(
+    type RecordLayout;
+    type RecordMut<'a>
+    where
+        Self: 'a;
+
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        // TODO(ayush): combine to a single struct
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        // TODO(ayush): move air inside step and remove width
-        width: usize,
-    ) -> Result<()>;
+        arena: &mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<Self::RecordLayout, Self::RecordMut<'buf>>,
+        Self: 'buf;
 
-    /// Populates `trace`. This function will always be called after
-    /// [`TraceStep::execute`], so the `trace` should already contain context necessary to
-    /// fill in the rest of it.
-    // TODO(ayush): come up with a better abstraction for chips that fill a dynamic number of rows
-    fn fill_trace(
-        &self,
-        mem_helper: &MemoryAuxColsFactory<F>,
-        trace: &mut [F],
-        width: usize,
-        rows_used: usize,
-    ) where
-        Self: Send + Sync,
-        F: Send + Sync,
-    {
-        trace[..rows_used * width]
-            .par_chunks_exact_mut(width)
-            .for_each(|row_slice| {
-                self.fill_trace_row(mem_helper, row_slice);
-            });
-        trace[rows_used * width..]
-            .par_chunks_exact_mut(width)
-            .for_each(|row_slice| {
-                self.fill_dummy_trace_row(mem_helper, row_slice);
-            });
-    }
+    // /// Populates `trace`. This function will always be called after
+    // /// [`TraceStep::execute`], so the `trace` should already contain context necessary to
+    // /// fill in the rest of it.
+    // // TODO(ayush): come up with a better abstraction for chips that fill a dynamic number of
+    // rows fn fill_trace(
+    //     &self,
+    //     mem_helper: &MemoryAuxColsFactory<F>,
+    //     trace: &mut [F],
+    //     width: usize,
+    //     rows_used: usize,
+    // ) where
+    //     Self: Send + Sync,
+    //     F: Send + Sync,
+    // {
+    //     trace[..rows_used * width]
+    //         .par_chunks_exact_mut(width)
+    //         .for_each(|row_slice| {
+    //             self.fill_trace_row(mem_helper, row_slice);
+    //         });
+    //     trace[rows_used * width..]
+    //         .par_chunks_exact_mut(width)
+    //         .for_each(|row_slice| {
+    //             self.fill_dummy_trace_row(mem_helper, row_slice);
+    //         });
+    // }
 
-    /// Populates `row_slice`. This function will always be called after
-    /// [`TraceStep::execute`], so the `row_slice` should already contain context necessary to
-    /// fill in the rest of the row. This function will be called for each row in the trace which is
-    /// being used, and all other rows in the trace will be filled with zeroes.
-    ///
-    /// The provided `row_slice` will have length equal to the width of the AIR.
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        unreachable!("fill_trace_row is not implemented")
-    }
+    // /// Populates `row_slice`. This function will always be called after
+    // /// [`TraceStep::execute`], so the `row_slice` should already contain context necessary to
+    // /// fill in the rest of the row. This function will be called for each row in the trace which
+    // is /// being used, and all other rows in the trace will be filled with zeroes.
+    // ///
+    // /// The provided `row_slice` will have length equal to the width of the AIR.
+    // fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    //     unreachable!("fill_trace_row is not implemented")
+    // }
 
-    /// Populates `row_slice`. This function will be called on dummy rows.
-    /// By default the trace is padded with empty (all 0) rows to make the height a power of 2.
-    ///
-    /// The provided `row_slice` will have length equal to the width of the AIR.
-    fn fill_dummy_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // By default, the row is filled with zeroes
-    }
+    // /// Populates `row_slice`. This function will be called on dummy rows.
+    // /// By default the trace is padded with empty (all 0) rows to make the height a power of 2.
+    // ///
+    // /// The provided `row_slice` will have length equal to the width of the AIR.
+    // fn fill_dummy_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    //     // By default, the row is filled with zeroes
+    // }
+
     /// Returns a list of public values to publish.
     fn generate_public_values(&self) -> Vec<F> {
         vec![]

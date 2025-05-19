@@ -6,8 +6,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, EmptyLayout, MinimalInstruction,
+        RecordArena, Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -190,6 +190,15 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluStep<A, NUM_LIMBS
     }
 }
 
+#[repr(C)]
+pub struct BaseAluCoreRecord<const NUM_LIMBS: usize> {
+    pub a: [u8; NUM_LIMBS],
+    pub b: [u8; NUM_LIMBS],
+    pub c: [u8; NUM_LIMBS],
+    // Use u8 instead of usize for better packing
+    pub local_opcode: u8,
+}
+
 impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F, CTX>
     for BaseAluStep<A, NUM_LIMBS, LIMB_BITS>
 where
@@ -200,49 +209,48 @@ where
             CTX,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-            TraceContext<'a> = (),
         >,
 {
+    /// Instructions that use one trace row per instruction have implicit layout
+    type RecordLayout = EmptyLayout;
+    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut BaseAluCoreRecord<NUM_LIMBS>);
+
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", BaseAluOpcode::from_usize(opcode - self.offset))
     }
 
-    fn execute(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
+        arena: &mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<EmptyLayout, Self::RecordMut<'buf>>,
+        Self: 'buf,
+    {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (adapter_record, core_record) = arena.alloc(EmptyLayout);
 
-        A::start(*state.pc, state.memory, adapter_row);
+        A::start(*state.pc, state.memory, adapter_record);
 
         let [rs1, rs2] = self
             .adapter
-            .read(state.memory, instruction, adapter_row)
+            .read(state.memory, instruction, adapter_record)
             .into();
 
         let rd = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
 
-        let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        core_row.a = rd.map(F::from_canonical_u8);
-        core_row.b = rs1.map(F::from_canonical_u8);
-        core_row.c = rs2.map(F::from_canonical_u8);
-        core_row.opcode_add_flag = F::from_bool(local_opcode == BaseAluOpcode::ADD);
-        core_row.opcode_sub_flag = F::from_bool(local_opcode == BaseAluOpcode::SUB);
-        core_row.opcode_xor_flag = F::from_bool(local_opcode == BaseAluOpcode::XOR);
-        core_row.opcode_or_flag = F::from_bool(local_opcode == BaseAluOpcode::OR);
-        core_row.opcode_and_flag = F::from_bool(local_opcode == BaseAluOpcode::AND);
+        core_record.a = rd;
+        core_record.b = rs1;
+        core_record.c = rs2;
+        core_record.local_opcode = local_opcode as u8;
 
         self.adapter
-            .write(state.memory, instruction, adapter_row, &[rd].into());
+            .write(state.memory, instruction, &[rd].into(), adapter_record);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -251,25 +259,30 @@ where
         Ok(())
     }
 
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+    // fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    //     let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
+    //     self.adapter.fill_trace_row(mem_helper, (), adapter_row);
 
-        let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
+    //     let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 
-        if core_row.opcode_add_flag == F::ONE || core_row.opcode_sub_flag == F::ONE {
-            for a_val in core_row.a.map(|x| x.as_canonical_u32()) {
-                self.bitwise_lookup_chip.request_xor(a_val, a_val);
-            }
-        } else {
-            let b = core_row.b.map(|x| x.as_canonical_u32());
-            let c = core_row.c.map(|x| x.as_canonical_u32());
-            for (b_val, c_val) in zip(b, c) {
-                self.bitwise_lookup_chip.request_xor(b_val, c_val);
-            }
-        }
-    }
+    // core_row.opcode_add_flag = F::from_bool(local_opcode == BaseAluOpcode::ADD);
+    // core_row.opcode_sub_flag = F::from_bool(local_opcode == BaseAluOpcode::SUB);
+    // core_row.opcode_xor_flag = F::from_bool(local_opcode == BaseAluOpcode::XOR);
+    // core_row.opcode_or_flag = F::from_bool(local_opcode == BaseAluOpcode::OR);
+    // core_row.opcode_and_flag = F::from_bool(local_opcode == BaseAluOpcode::AND);
+    //     if core_row.opcode_add_flag == F::ONE || core_row.opcode_sub_flag == F::ONE {
+    //         for a_val in core_row.a.map(|x| x.as_canonical_u32()) {
+    //             self.bitwise_lookup_chip.request_xor(a_val, a_val);
+    //         }
+    //     } else {
+    //         let b = core_row.b.map(|x| x.as_canonical_u32());
+    //         let c = core_row.c.map(|x| x.as_canonical_u32());
+    //         for (b_val, c_val) in zip(b, c) {
+    //             self.bitwise_lookup_chip.request_xor(b_val, c_val);
+    //         }
+    //     }
+    // }
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
