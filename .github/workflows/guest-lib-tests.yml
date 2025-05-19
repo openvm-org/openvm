@@ -60,15 +60,13 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Run ${{ matrix.crate.name }} guest library unit tests
-        if: hashFiles(format('guest-libs/{0}/guest', matrix.crate.path)) != ''
-        working-directory: guest-libs/${{ matrix.crate.path }}/guest
-        run: |
-          cargo nextest run --cargo-profile=fast --no-tests=pass
-
-      - name: Run ${{ matrix.crate.name }} guest library integration tests
-        if: hashFiles(format('guest-libs/{0}/tests', matrix.crate.path)) != ''
-        working-directory: guest-libs/${{ matrix.crate.path }}/tests
+      - name: Run ${{ matrix.crate.name }} guest library tests
+        if: hashFiles(format('guest-libs/{0}/', matrix.crate.path)) != ''
+        working-directory: guest-libs/${{ matrix.crate.path }}
         run: |
           rustup component add rust-src --toolchain nightly-2025-02-14
-          cargo nextest run --cargo-profile=fast --no-tests=pass
+          FEATURE_ARGS=""
+          if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
+            FEATURE_ARGS="--features=bn254,bls12_381"
+          fi
+          cargo nextest run --cargo-profile=fast $FEATURE_ARGS --no-tests=pass

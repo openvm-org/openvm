@@ -17,7 +17,11 @@ mod tests {
     #[test]
     fn test_matrix_power() -> Result<()> {
         let config = Int256Rv32Config::default();
-        let elf = build_example_program_at_path(get_programs_dir!(), "matrix_power", &config)?;
+        let elf = build_example_program_at_path(
+            get_programs_dir!("tests/programs"),
+            "matrix_power",
+            &config,
+        )?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()

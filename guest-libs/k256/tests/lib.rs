@@ -4,7 +4,7 @@ mod tests {
     use eyre::Result;
     use openvm_algebra_transpiler::ModularTranspilerExtension;
     use openvm_circuit::{arch::instructions::exe::VmExe, utils::air_test};
-    use openvm_ecc_circuit::{Rv32WeierstrassConfig, P256_CONFIG};
+    use openvm_ecc_circuit::{Rv32WeierstrassConfig, SECP256K1_CONFIG};
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -18,8 +18,9 @@ mod tests {
 
     #[test]
     fn test_add() -> Result<()> {
-        let config = Rv32WeierstrassConfig::new(vec![P256_CONFIG.clone()]);
-        let elf = build_example_program_at_path(get_programs_dir!(), "add", &config)?;
+        let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
+        let elf =
+            build_example_program_at_path(get_programs_dir!("tests/programs"), "add", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -35,8 +36,9 @@ mod tests {
 
     #[test]
     fn test_mul() -> Result<()> {
-        let config = Rv32WeierstrassConfig::new(vec![P256_CONFIG.clone()]);
-        let elf = build_example_program_at_path(get_programs_dir!(), "mul", &config)?;
+        let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
+        let elf =
+            build_example_program_at_path(get_programs_dir!("tests/programs"), "mul", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -52,9 +54,12 @@ mod tests {
 
     #[test]
     fn test_linear_combination() -> Result<()> {
-        let config = Rv32WeierstrassConfig::new(vec![P256_CONFIG.clone()]);
-        let elf =
-            build_example_program_at_path(get_programs_dir!(), "linear_combination", &config)?;
+        let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
+        let elf = build_example_program_at_path(
+            get_programs_dir!("tests/programs"),
+            "linear_combination",
+            &config,
+        )?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -138,9 +143,10 @@ mod tests {
 
     #[test]
     fn test_ecdsa() -> Result<()> {
-        let config = EcdsaConfig::new(vec![P256_CONFIG.clone()]);
+        let config = EcdsaConfig::new(vec![SECP256K1_CONFIG.clone()]);
 
-        let elf = build_example_program_at_path(get_programs_dir!(), "ecdsa", &config)?;
+        let elf =
+            build_example_program_at_path(get_programs_dir!("tests/programs"), "ecdsa", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -156,9 +162,13 @@ mod tests {
     }
 
     #[test]
-    fn test_scalar_sqrt() -> Result<()> {
-        let config = Rv32WeierstrassConfig::new(vec![P256_CONFIG.clone()]);
-        let elf = build_example_program_at_path(get_programs_dir!(), "scalar_sqrt", &config)?;
+    fn test_sjcalar_sqrt() -> Result<()> {
+        let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
+        let elf = build_example_program_at_path(
+            get_programs_dir!("tests/programs"),
+            "scalar_sqrt",
+            &config,
+        )?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()

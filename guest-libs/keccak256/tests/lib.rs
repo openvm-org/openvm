@@ -17,7 +17,8 @@ mod tests {
     #[test]
     fn test_keccak256() -> Result<()> {
         let config = Keccak256Rv32Config::default();
-        let elf = build_example_program_at_path(get_programs_dir!(), "keccak", &config)?;
+        let elf =
+            build_example_program_at_path(get_programs_dir!("tests/programs"), "keccak", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()

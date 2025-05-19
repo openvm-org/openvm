@@ -15,7 +15,7 @@ openvm-algebra-guest = { path = "../../../algebra/guest", default-features = fal
 openvm-algebra-moduli-macros = { path = "../../../algebra/moduli-macros", default-features = false }
 openvm-rv32im-guest = { path = "../../../../extensions/rv32im/guest", default-features = false }
 
-openvm-keccak256 = { path = "../../../../guest-libs/keccak256/guest" }
+openvm-keccak256 = { path = "../../../../guest-libs/keccak256/" }
 
 serde = { version = "1.0", default-features = false, features = [
     "alloc",

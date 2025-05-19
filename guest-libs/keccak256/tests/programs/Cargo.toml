@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 openvm = { path = "../../../../crates/toolchain/openvm" }
-openvm-keccak256 = { path = "../../guest" }
+openvm-keccak256 = { path = "../../" }
 
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 serde = { version = "1.0", default-features = false, features = [

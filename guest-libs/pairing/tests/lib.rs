@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-#[cfg(test)]
+#[cfg(feature = "bn254")]
 mod bn254 {
     use std::iter;
 
@@ -39,6 +39,7 @@ mod bn254 {
 
     type F = BabyBear;
 
+    #[cfg(test)]
     pub fn get_testing_config() -> Rv32PairingConfig {
         let primes = [BN254_MODULUS.clone()];
         let complex_struct_names = [BN254_COMPLEX_STRUCT_NAME.to_string()];
@@ -63,7 +64,7 @@ mod bn254 {
         let curve = PairingCurve::Bn254.curve_config();
         let config = Rv32WeierstrassConfig::new(vec![curve]);
         let elf = build_example_program_at_path_with_features(
-            get_programs_dir!(),
+            get_programs_dir!("tests/programs"),
             "bn_ec",
             ["bn254"],
             &config,
@@ -85,7 +86,7 @@ mod bn254 {
     fn test_bn254_fp12_mul() -> Result<()> {
         let config = get_testing_config();
         let elf = build_example_program_at_path_with_features(
-            get_programs_dir!(),
+            get_programs_dir!("tests/programs"),
             "fp12_mul",
             ["bn254"],
             &config,
@@ -121,7 +122,7 @@ mod bn254 {
     fn test_bn254_line_functions() -> Result<()> {
         let config = get_testing_config();
         let elf = build_example_program_at_path_with_features(
-            get_programs_dir!(),
+            get_programs_dir!("tests/programs"),
             "pairing_line",
             ["bn254"],
             &config,
@@ -179,7 +180,7 @@ mod bn254 {
     fn test_bn254_miller_step() -> Result<()> {
         let config = get_testing_config();
         let elf = build_example_program_at_path_with_features(
-            get_programs_dir!(),
+            get_programs_dir!("tests/programs"),
             "pairing_miller_step",
             ["bn254"],
             &config,
@@ -228,7 +229,7 @@ mod bn254 {
     fn test_bn254_miller_loop() -> Result<()> {
         let config = get_testing_config();
         let elf = build_example_program_at_path_with_features(
-            get_programs_dir!(),
+            get_programs_dir!("tests/programs"),
             "pairing_miller_loop",
             ["bn254"],
             &config,
@@ -281,7 +282,7 @@ mod bn254 {
     fn test_bn254_pairing_check() -> Result<()> {
         let config = get_testing_config();
         let elf = build_example_program_at_path_with_features(
-            get_programs_dir!(),
+            get_programs_dir!("tests/programs"),
             "pairing_check",
             ["bn254"],
             &config,
@@ -338,7 +339,7 @@ mod bn254 {
     fn test_bn254_pairing_check_fallback() -> Result<()> {
         let config = get_testing_config();
         let elf = build_example_program_at_path_with_features(
-            get_programs_dir!(),
+            get_programs_dir!("tests/programs"),
             "pairing_check_fallback",
             ["bn254"],
             &config,
@@ -395,7 +396,7 @@ mod bn254 {
     fn test_bn254_final_exp_hint() -> Result<()> {
         let config = get_testing_config();
         let elf = build_example_program_at_path_with_features(
-            get_programs_dir!(),
+            get_programs_dir!("tests/programs"),
             "bn_final_exp_hint",
             ["bn254"],
             &config,
@@ -446,7 +447,7 @@ mod bn254 {
     }
 }
 
-#[cfg(test)]
+#[cfg(feature = "bls12_381")]
 mod bls12_381 {
     use eyre::Result;
     use halo2curves_axiom::{
@@ -487,6 +488,7 @@ mod bls12_381 {
 
     type F = BabyBear;
 
+    #[cfg(test)]
     pub fn get_testing_config() -> Rv32PairingConfig {
         let primes = [BLS12_381_MODULUS.clone()];
         let complex_struct_names = [BLS12_381_COMPLEX_STRUCT_NAME.to_string()];
@@ -517,7 +519,7 @@ mod bls12_381 {
         };
         let config = Rv32WeierstrassConfig::new(vec![curve]);
         let elf = build_example_program_at_path_with_features(
-            get_programs_dir!(),
+            get_programs_dir!("tests/programs"),
             "bls_ec",
             ["bls12_381"],
             &config,
@@ -539,7 +541,7 @@ mod bls12_381 {
     fn test_bls12_381_fp12_mul() -> Result<()> {
         let config = get_testing_config();
         let elf = build_example_program_at_path_with_features(
-            get_programs_dir!(),
+            get_programs_dir!("tests/programs"),
             "fp12_mul",
             ["bls12_381"],
             &config,
@@ -575,7 +577,7 @@ mod bls12_381 {
     fn test_bls12_381_line_functions() -> Result<()> {
         let config = get_testing_config();
         let elf = build_example_program_at_path_with_features(
-            get_programs_dir!(),
+            get_programs_dir!("tests/programs"),
             "pairing_line",
             ["bls12_381"],
             &config,
@@ -634,7 +636,7 @@ mod bls12_381 {
     fn test_bls12_381_miller_step() -> Result<()> {
         let config = get_testing_config();
         let elf = build_example_program_at_path_with_features(
-            get_programs_dir!(),
+            get_programs_dir!("tests/programs"),
             "pairing_miller_step",
             ["bls12_381"],
             &config,
@@ -683,7 +685,7 @@ mod bls12_381 {
     fn test_bls12_381_miller_loop() -> Result<()> {
         let config = get_testing_config();
         let elf = build_example_program_at_path_with_features(
-            get_programs_dir!(),
+            get_programs_dir!("tests/programs"),
             "pairing_miller_loop",
             ["bls12_381"],
             &config,
@@ -742,7 +744,7 @@ mod bls12_381 {
     fn test_bls12_381_pairing_check() -> Result<()> {
         let config = get_testing_config();
         let elf = build_example_program_at_path_with_features(
-            get_programs_dir!(),
+            get_programs_dir!("tests/programs"),
             "pairing_check",
             ["bls12_381"],
             &config,
@@ -799,7 +801,7 @@ mod bls12_381 {
     fn test_bls12_381_pairing_check_fallback() -> Result<()> {
         let config = get_testing_config();
         let elf = build_example_program_at_path_with_features(
-            get_programs_dir!(),
+            get_programs_dir!("tests/programs"),
             "pairing_check_fallback",
             ["bls12_381"],
             &config,
@@ -855,7 +857,7 @@ mod bls12_381 {
     fn test_bls12_381_final_exp_hint() -> Result<()> {
         let config = get_testing_config();
         let elf = build_example_program_at_path_with_features(
-            get_programs_dir!(),
+            get_programs_dir!("tests/programs"),
             "bls_final_exp_hint",
             ["bls12_381"],
             &config,

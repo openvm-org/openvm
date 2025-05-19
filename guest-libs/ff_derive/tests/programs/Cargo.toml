@@ -19,7 +19,7 @@ ff = { version = "0.13.1", features = ["derive"] }
 rand = { version = "0.9.1", default-features = false }
 num-bigint = { version = "0.4.6", default-features = false }
 
-openvm-ff-derive = { path = "../../guest" }
+openvm-ff-derive = { path = "../../" }
 
 [features]
 default = []

@@ -10,8 +10,8 @@ openvm-algebra-guest = { path = "../../../../extensions/algebra/guest" }
 openvm-algebra-moduli-macros = { path = "../../../../extensions/algebra/moduli-macros/" }
 openvm-ecc-guest = { path = "../../../../extensions/ecc/guest" }
 openvm-ecc-sw-macros = { path = "../../../../extensions/ecc/sw-macros/" }
-openvm-p256 = { path = "../../guest" }
-openvm-sha2 = { path = "../../../sha2/guest" }
+openvm-p256 = { path = "../../" }
+openvm-sha2 = { path = "../../../sha2/" }
 
 elliptic-curve = { version = "0.13.8" }
 ecdsa = { version = "0.16.9" }

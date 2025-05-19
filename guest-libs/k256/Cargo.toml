@@ -26,10 +26,30 @@ k256 = { workspace = true }
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint = { workspace = true }
 
+[dev-dependencies]
+openvm-circuit = { workspace = true, features = ["test-utils", "parallel"] }
+openvm-transpiler.workspace = true
+openvm-algebra-circuit.workspace = true
+openvm-algebra-transpiler.workspace = true
+openvm-ecc-transpiler.workspace = true
+openvm-ecc-circuit.workspace = true
+openvm-sha256-circuit.workspace = true
+openvm-sha256-transpiler.workspace = true
+openvm-rv32im-circuit.workspace = true
+openvm-rv32im-transpiler.workspace = true
+openvm-toolchain-tests.workspace = true
+
+openvm-stark-backend.workspace = true
+openvm-stark-sdk.workspace = true
+
+serde.workspace = true
+eyre.workspace = true
+derive_more = { workspace = true, features = ["from"] }
+
 [features]
 default = ["ecdsa"]
 ecdsa = ["k256/ecdsa", "ecdsa-core"]
 ecdsa-core = ["k256/ecdsa-core"]
 
 [package.metadata.cargo-shear]
-ignored = ["openvm", "num-bigint", "serde"]
+ignored = ["openvm", "num-bigint", "serde", "derive_more"]

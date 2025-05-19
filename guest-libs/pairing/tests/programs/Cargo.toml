@@ -12,7 +12,7 @@ openvm-algebra-complex-macros = { path = "../../../../extensions/algebra/complex
 openvm-ecc-guest = { path = "../../../../extensions/ecc/guest" }
 openvm-ecc-sw-macros = { path = "../../../../extensions/ecc/sw-macros/" }
 openvm-pairing-guest = { path = "../../../../extensions/pairing/guest" }
-openvm-pairing = { path = "../../guest" }
+openvm-pairing = { path = "../../" }
 
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
