@@ -238,7 +238,7 @@ where
         Ok(())
     }
 
-    fn execute_e2(
+    fn execute_metered(
         &mut self,
         state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,

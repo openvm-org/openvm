@@ -149,7 +149,7 @@ fn main() -> Result<()> {
 
             let executor = VmExecutor::new(vm_config);
             executor
-                .execute_e2(exe.clone(), vec![], widths, interactions)
+                .execute_metered(exe.clone(), vec![], widths, interactions)
                 .expect("Failed to execute program");
 
             tracing::info!("Completed program: {}", program);

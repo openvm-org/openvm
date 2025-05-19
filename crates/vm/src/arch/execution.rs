@@ -125,7 +125,7 @@ pub trait InsExecutorE1<F> {
         F: PrimeField32,
         Ctx: E1E2ExecutionCtx;
 
-    fn execute_e2(
+    fn execute_metered(
         &mut self,
         state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
@@ -151,7 +151,7 @@ where
         self.borrow_mut().execute_e1(state, instruction)
     }
 
-    fn execute_e2(
+    fn execute_metered(
         &mut self,
         state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
@@ -160,7 +160,8 @@ where
     where
         F: PrimeField32,
     {
-        self.borrow_mut().execute_e2(state, instruction, chip_index)
+        self.borrow_mut()
+            .execute_metered(state, instruction, chip_index)
     }
 }
 

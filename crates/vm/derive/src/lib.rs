@@ -154,7 +154,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         self.0.execute_e1(state, instruction)
                     }
 
-                    fn execute_e2(
+                    fn execute_metered(
                         &mut self,
                         state: &mut ::openvm_circuit::arch::VmStateMut<::openvm_circuit::system::memory::online::GuestMemory, ::openvm_circuit::arch::execution_mode::metered::MeteredCtx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
@@ -163,7 +163,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     where
                         F: ::openvm_stark_backend::p3_field::PrimeField32,
                     {
-                        self.0.execute_e2(state, instruction, chip_index)
+                        self.0.execute_metered(state, instruction, chip_index)
                     }
                 }
             }
@@ -199,10 +199,10 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_e1(x, state, instruction)
                 }
             }).collect::<Vec<_>>();
-            let execute_e2_arms = variants.iter().map(|(variant_name, field)| {
+            let execute_metered_arms = variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_e2(x, state, instruction, chip_index)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_metered(x, state, instruction, chip_index)
                 }
             }).collect::<Vec<_>>();
 
@@ -222,7 +222,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         }
                     }
 
-                    fn execute_e2(
+                    fn execute_metered(
                         &mut self,
                         state: &mut ::openvm_circuit::arch::VmStateMut<::openvm_circuit::system::memory::online::GuestMemory, ::openvm_circuit::arch::execution_mode::metered::MeteredCtx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
@@ -232,7 +232,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         #first_ty_generic: ::openvm_stark_backend::p3_field::PrimeField32
                     {
                         match self {
-                            #(#execute_e2_arms,)*
+                            #(#execute_metered_arms,)*
                         }
                     }
                 }

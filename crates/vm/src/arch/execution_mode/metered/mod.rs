@@ -174,7 +174,7 @@ where
                 memory: state.memory.as_mut().unwrap(),
                 ctx: &mut state.ctx,
             };
-            executor.execute_e2(&mut vm_state, instruction, offset + i)?;
+            executor.execute_metered(&mut vm_state, instruction, offset + i)?;
         } else {
             return Err(ExecutionError::DisabledOperation {
                 pc: state.pc,

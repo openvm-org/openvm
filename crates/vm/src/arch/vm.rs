@@ -417,7 +417,7 @@ where
         }
     }
 
-    pub fn execute_e2(
+    pub fn execute_metered(
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,

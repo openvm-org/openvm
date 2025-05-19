@@ -417,7 +417,7 @@ pub trait StepExecutorE1<F> {
     where
         Ctx: E1E2ExecutionCtx;
 
-    fn execute_e2(
+    fn execute_metered(
         &mut self,
         state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
@@ -441,13 +441,13 @@ where
         self.step.execute_e1(state, instruction)
     }
 
-    fn execute_e2(
+    fn execute_metered(
         &mut self,
         state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {
-        self.step.execute_e2(state, instruction, chip_index)
+        self.step.execute_metered(state, instruction, chip_index)
     }
 }
 
