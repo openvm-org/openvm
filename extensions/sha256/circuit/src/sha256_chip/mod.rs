@@ -13,7 +13,7 @@ use openvm_instructions::{
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32im_circuit::adapters::{memory_read, memory_write, new_read_rv32_register};
+use openvm_rv32im_circuit::adapters::{memory_write, new_read_rv32_register};
 use openvm_sha256_air::{Sha256StepHelper, SHA256_BLOCK_BITS};
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -72,8 +72,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         &mut self,
         state: VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         let &Instruction {
             opcode,
             a,
@@ -93,26 +92,15 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         let src = new_read_rv32_register(state.memory, d, b.as_canonical_u32());
         let len = new_read_rv32_register(state.memory, d, c.as_canonical_u32());
 
-        // need to pad with one 1 bit, 64 bits for the message length and then pad until the length
-        // is divisible by [SHA256_BLOCK_BITS]
-        let num_blocks = ((len << 3) as usize + 1 + 64).div_ceil(SHA256_BLOCK_BITS);
-
-        // we will read [num_blocks] * [SHA256_BLOCK_CELLS] cells but only [len] cells will be used
-        debug_assert!(
-            src as usize + num_blocks * SHA256_BLOCK_CELLS <= (1 << self.pointer_max_bits)
-        );
+        debug_assert!(src + len <= (1 << self.pointer_max_bits));
         let mut hasher = Sha256::new();
 
-        for i in 0..num_blocks {
-            let num_reads = if i == num_blocks - 1 {
-                (len as usize - i * SHA256_BLOCK_CELLS) as usize
-            } else {
-                SHA256_BLOCK_CELLS
-            };
-            let read: [u8; SHA256_BLOCK_CELLS] =
-                memory_read(state.memory, e, src + (i * SHA256_BLOCK_CELLS) as u32);
-            hasher.update(&read[..num_reads]);
-        }
+        let message: Vec<u8> = state
+            .memory
+            .memory
+            .read_range_generic((e, src), len as usize);
+        hasher.update(&message);
+
         memory_write(state.memory, e, dst, hasher.finalize().as_ref());
         Ok(())
     }

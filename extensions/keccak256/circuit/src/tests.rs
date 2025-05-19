@@ -1,11 +1,17 @@
-use std::borrow::BorrowMut;
+use std::{array, borrow::BorrowMut};
 
 use hex::FromHex;
-use openvm_circuit::arch::testing::{VmChipTestBuilder, VmChipTester, BITWISE_OP_LOOKUP_BUS};
+use openvm_circuit::arch::testing::{
+    memory::gen_pointer, VmChipTestBuilder, VmChipTester, BITWISE_OP_LOOKUP_BUS,
+};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    LocalOpcode,
+};
 use openvm_keccak256_transpiler::Rv32KeccakOpcode;
 use openvm_stark_backend::{
     p3_field::FieldAlgebra, utils::disable_debug_builder, verifier::VerificationError,
@@ -18,35 +24,58 @@ use p3_keccak_air::NUM_ROUNDS;
 use rand::Rng;
 use tiny_keccak::Hasher;
 
+use crate::{KeccakVmAir, KeccakVmStep};
+
 use super::{columns::KeccakVmCols, utils::num_keccak_f, KeccakVmChip};
 
 type F = BabyBear;
+const MAX_INS_CAPACITY: usize = 4096;
+
+fn create_test_chips(
+    tester: &mut VmChipTestBuilder<F>,
+) -> (KeccakVmChip<F>, SharedBitwiseOperationLookupChip<8>) {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<8>::new(bitwise_bus);
+    let chip = KeccakVmChip::new(
+        KeccakVmAir::new(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            bitwise_bus,
+            tester.address_bits(),
+            Rv32KeccakOpcode::CLASS_OFFSET,
+        ),
+        KeccakVmStep::new(
+            bitwise_chip.clone(),
+            Rv32KeccakOpcode::CLASS_OFFSET,
+            tester.address_bits(),
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
+    );
+    (chip, bitwise_chip)
+}
+
 // io is vector of (input, expected_output, prank_output) where prank_output is Some if the trace
 // will be replaced
 #[allow(clippy::type_complexity)]
 fn build_keccak256_test(
     io: Vec<(Vec<u8>, Option<[u8; 32]>, Option<[u8; 32]>)>,
 ) -> VmChipTester<BabyBearBlake3Config> {
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<8>::new(bitwise_bus);
-
+    let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = KeccakVmChip::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        tester.memory_bridge(),
-        tester.address_bits(),
-        bitwise_chip.clone(),
-        Rv32KeccakOpcode::CLASS_OFFSET,
-        tester.offline_memory_mutex_arc(),
-    );
+    let (mut chip, bitwise_chip) = create_test_chips(&mut tester);
 
-    let mut dst = 0;
-    let src = 0;
+    let max_mem_ptr = 1 << (tester.address_bits() - 3);
+    let mut dst = rng.gen_range(0..max_mem_ptr) << 2;
+    let src = rng.gen_range(0..max_mem_ptr) << 2;
 
     for (input, expected_output, _) in &io {
-        let [a, b, c] = [0, 4, 8]; // space apart for register limbs
-        let [d, e] = [1, 2];
+        let [a, b, c] = [
+            gen_pointer(&mut rng, 4),
+            gen_pointer(&mut rng, 4),
+            gen_pointer(&mut rng, 4),
+        ]; // space apart for register limbs
+        let [d, e] = [RV32_REGISTER_AS as usize, RV32_MEMORY_AS as usize];
 
         tester.write(d, a, (dst as u32).to_le_bytes().map(F::from_canonical_u8));
         tester.write(d, b, (src as u32).to_le_bytes().map(F::from_canonical_u8));
@@ -55,9 +84,15 @@ fn build_keccak256_test(
             c,
             (input.len() as u32).to_le_bytes().map(F::from_canonical_u8),
         );
-        for (i, byte) in input.iter().enumerate() {
-            tester.write_cell(e, src + i, F::from_canonical_u8(*byte));
-        }
+
+        input.chunks(4).enumerate().for_each(|(i, chunk)| {
+            let chunk: [&u8; 4] = array::from_fn(|i| chunk.get(i).unwrap_or(&0));
+            tester.write(
+                2,
+                src as usize + i * 4,
+                chunk.map(|&x| F::from_canonical_u8(x)),
+            );
+        });
 
         tester.execute(
             &mut chip,
@@ -71,13 +106,15 @@ fn build_keccak256_test(
             ),
         );
         if let Some(output) = expected_output {
-            for (i, byte) in output.iter().enumerate() {
-                assert_eq!(tester.read_cell(e, dst + i), F::from_canonical_u8(*byte));
-            }
+            assert_eq!(
+                output.map(F::from_canonical_u8),
+                tester.read::<32>(e, dst as usize)
+            );
         }
         // shift dst to not deal with timestamps for pranking
         dst += 32;
     }
+
     let mut tester = tester.build().load(chip).load(bitwise_chip).finalize();
 
     let keccak_trace = tester.air_proof_inputs[2]
@@ -152,7 +189,7 @@ fn test_keccak256_positive_kat_vectors() {
         let output = Vec::from_hex(output).unwrap();
         io.push((input, Some(output.try_into().unwrap()), None));
     }
-
     let tester = build_keccak256_test(io);
+
     tester.simple_test().expect("Verification failed");
 }
