@@ -1,13 +1,11 @@
-use air::VerifyBatchBus;
-use alu_native_adapter::AluNativeAdapterChip;
-use branch_native_adapter::BranchNativeAdapterChip;
+use alu_native_adapter::{AluNativeAdapterAir, AluNativeAdapterStep};
+use convert_adapter::{ConvertAdapterAir, ConvertAdapterStep};
 use derive_more::derive::From;
-use loadstore_native_adapter::NativeLoadStoreAdapterChip;
 use native_vectorized_adapter::NativeVectorizedAdapterChip;
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, MemoryConfig, SystemConfig, SystemPort, VmExtension, VmInventory,
-        VmInventoryBuilder, VmInventoryError,
+        ExecutionBridge, MemoryConfig, SystemConfig, SystemPort, VmAirWrapper, VmExtension,
+        VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
@@ -21,19 +19,17 @@ use openvm_native_compiler::{
 };
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::{
-    BranchEqualCoreChip, Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor,
-    Rv32IoPeriphery, Rv32M, Rv32MExecutor, Rv32MPeriphery,
+    Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
+    Rv32MExecutor, Rv32MPeriphery,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use crate::{
-    adapters::{convert_adapter::ConvertAdapterChip, *},
-    chip::NativePoseidon2Chip,
-    phantom::*,
-    *,
-};
+use crate::{adapters::*, phantom::*, *};
+
+// TODO(ayush): this should be decided after e2 execution
+const MAX_INS_CAPACITY: usize = 1 << 22;
 
 #[derive(Clone, Debug, Serialize, Deserialize, VmConfig, derive_new::new)]
 pub struct NativeConfig {
@@ -65,14 +61,14 @@ pub struct Native;
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
 pub enum NativeExecutor<F: PrimeField32> {
-    LoadStore(NativeLoadStoreChip<F, 1>),
-    BlockLoadStore(NativeLoadStoreChip<F, 4>),
+    // LoadStore(NativeLoadStoreChip<F, 1>),
+    // BlockLoadStore(NativeLoadStoreChip<F, 4>),
     BranchEqual(NativeBranchEqChip<F>),
-    Jal(JalRangeCheckChip<F>),
+    // Jal(JalRangeCheckChip<F>),
     FieldArithmetic(FieldArithmeticChip<F>),
     FieldExtension(FieldExtensionChip<F>),
-    FriReducedOpening(FriReducedOpeningChip<F>),
-    VerifyBatch(NativePoseidon2Chip<F, 1>),
+    // FriReducedOpening(FriReducedOpeningChip<F>),
+    // VerifyBatch(NativePoseidon2Chip<F, 1>),
 }
 
 #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
@@ -94,114 +90,125 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             program_bus,
             memory_bridge,
         } = builder.system_port();
-        let offline_memory = builder.system_base().offline_memory();
 
-        let mut load_store_chip = NativeLoadStoreChip::<F, 1>::new(
-            NativeLoadStoreAdapterChip::new(
-                execution_bus,
-                program_bus,
-                memory_bridge,
-                NativeLoadStoreOpcode::CLASS_OFFSET,
+        let range_checker = builder.system_base().range_checker_chip;
+
+        // let mut load_store_chip = NativeLoadStoreChip::<F, 1>::new(
+        //     NativeLoadStoreAdapterChip::new(
+        //         execution_bus,
+        //         program_bus,
+        //         memory_bridge,
+        //         NativeLoadStoreOpcode::CLASS_OFFSET,
+        //     ),
+        //     NativeLoadStoreCoreChip::new(NativeLoadStoreOpcode::CLASS_OFFSET),
+        //     MAX_INS_CAPACITY,
+        //     builder.system_base().memory_controller.helper(),
+        // );
+        // load_store_chip.core.set_streams(builder.streams().clone());
+
+        // inventory.add_executor(
+        //     load_store_chip,
+        //     NativeLoadStoreOpcode::iter().map(|x| x.global_opcode()),
+        // )?;
+
+        // let mut block_load_store_chip = NativeLoadStoreChip::<F, BLOCK_LOAD_STORE_SIZE>::new(
+        //     NativeLoadStoreAdapterChip::new(
+        //         execution_bus,
+        //         program_bus,
+        //         memory_bridge,
+        //         NativeLoadStore4Opcode::CLASS_OFFSET,
+        //     ),
+        //     NativeLoadStoreCoreChip::new(NativeLoadStore4Opcode::CLASS_OFFSET),
+        // );
+        // block_load_store_chip
+        //     .core
+        //     .set_streams(builder.streams().clone());
+
+        // inventory.add_executor(
+        //     block_load_store_chip,
+        //     NativeLoadStore4Opcode::iter().map(|x| x.global_opcode()),
+        // )?;
+
+        // let branch_equal_chip = NativeBranchEqChip::new(
+        //     BranchNativeAdapterChip::<_>::new(execution_bus, program_bus, memory_bridge),
+        //     BranchEqualCoreChip::new(NativeBranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+        // );
+        // inventory.add_executor(
+        //     branch_equal_chip,
+        //     NativeBranchEqualOpcode::iter().map(|x| x.global_opcode()),
+        // )?;
+
+        // let jal_chip = JalRangeCheckChip::new(
+        //     ExecutionBridge::new(execution_bus, program_bus),
+        //     builder.system_base().range_checker_chip.clone(),
+        // );
+        // inventory.add_executor(
+        //     jal_chip,
+        //     [
+        //         NativeJalOpcode::JAL.global_opcode(),
+        //         NativeRangeCheckOpcode::RANGE_CHECK.global_opcode(),
+        //     ],
+        // )?;
+
+        let field_arithmetic_chip = FieldArithmeticChip::<F>::new(
+            VmAirWrapper::new(
+                AluNativeAdapterAir::new(
+                    memory_bridge(),
+                    ExecutionBridge::new(execution_bus, program_bus),
+                ),
+                FieldArithmeticCoreAir::new(range_checker.bus()),
             ),
-            NativeLoadStoreCoreChip::new(NativeLoadStoreOpcode::CLASS_OFFSET),
-            offline_memory.clone(),
-        );
-        load_store_chip.core.set_streams(builder.streams().clone());
-
-        inventory.add_executor(
-            load_store_chip,
-            NativeLoadStoreOpcode::iter().map(|x| x.global_opcode()),
-        )?;
-
-        let mut block_load_store_chip = NativeLoadStoreChip::<F, BLOCK_LOAD_STORE_SIZE>::new(
-            NativeLoadStoreAdapterChip::new(
-                execution_bus,
-                program_bus,
-                memory_bridge,
-                NativeLoadStore4Opcode::CLASS_OFFSET,
-            ),
-            NativeLoadStoreCoreChip::new(NativeLoadStore4Opcode::CLASS_OFFSET),
-            offline_memory.clone(),
-        );
-        block_load_store_chip
-            .core
-            .set_streams(builder.streams().clone());
-
-        inventory.add_executor(
-            block_load_store_chip,
-            NativeLoadStore4Opcode::iter().map(|x| x.global_opcode()),
-        )?;
-
-        let branch_equal_chip = NativeBranchEqChip::new(
-            BranchNativeAdapterChip::<_>::new(execution_bus, program_bus, memory_bridge),
-            BranchEqualCoreChip::new(NativeBranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
-            offline_memory.clone(),
-        );
-        inventory.add_executor(
-            branch_equal_chip,
-            NativeBranchEqualOpcode::iter().map(|x| x.global_opcode()),
-        )?;
-
-        let jal_chip = JalRangeCheckChip::new(
-            ExecutionBridge::new(execution_bus, program_bus),
-            offline_memory.clone(),
-            builder.system_base().range_checker_chip.clone(),
-        );
-        inventory.add_executor(
-            jal_chip,
-            [
-                NativeJalOpcode::JAL.global_opcode(),
-                NativeRangeCheckOpcode::RANGE_CHECK.global_opcode(),
-            ],
-        )?;
-
-        let field_arithmetic_chip = FieldArithmeticChip::new(
-            AluNativeAdapterChip::<F>::new(execution_bus, program_bus, memory_bridge),
-            FieldArithmeticCoreChip::new(),
-            offline_memory.clone(),
+            FieldArithmeticStep::new(AluNativeAdapterStep::new()),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
             field_arithmetic_chip,
             FieldArithmeticOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let field_extension_chip = FieldExtensionChip::new(
-            NativeVectorizedAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            FieldExtensionCoreChip::new(),
-            offline_memory.clone(),
+        let field_extension_chip = FieldExtensionChip::<F>::new(
+            VmAirWrapper::new(
+                AluNativeAdapterAir::new(
+                    memory_bridge(),
+                    ExecutionBridge::new(execution_bus, program_bus),
+                ),
+                FieldExtensionCoreAir::new(range_checker().bus()),
+            ),
+            FieldExtensionStep::new(AluNativeAdapterStep::new()),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
             field_extension_chip,
             FieldExtensionOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let fri_reduced_opening_chip = FriReducedOpeningChip::new(
-            execution_bus,
-            program_bus,
-            memory_bridge,
-            offline_memory.clone(),
-            builder.streams().clone(),
-        );
-        inventory.add_executor(
-            fri_reduced_opening_chip,
-            FriOpcode::iter().map(|x| x.global_opcode()),
-        )?;
+        // let fri_reduced_opening_chip = FriReducedOpeningChip::new(
+        //     execution_bus,
+        //     program_bus,
+        //     memory_bridge,
+        //     builder.streams().clone(),
+        // );
+        // inventory.add_executor(
+        //     fri_reduced_opening_chip,
+        //     FriOpcode::iter().map(|x| x.global_opcode()),
+        // )?;
 
-        let poseidon2_chip = NativePoseidon2Chip::new(
-            builder.system_port(),
-            offline_memory.clone(),
-            Poseidon2Config::default(),
-            VerifyBatchBus::new(builder.new_bus_idx()),
-            builder.streams().clone(),
-        );
-        inventory.add_executor(
-            poseidon2_chip,
-            [
-                VerifyBatchOpcode::VERIFY_BATCH.global_opcode(),
-                Poseidon2Opcode::PERM_POS2.global_opcode(),
-                Poseidon2Opcode::COMP_POS2.global_opcode(),
-            ],
-        )?;
+        // let poseidon2_chip = NativePoseidon2Chip::new(
+        //     builder.system_port(),
+        //     Poseidon2Config::default(),
+        //     VerifyBatchBus::new(builder.new_bus_idx()),
+        //     builder.streams().clone(),
+        // );
+        // inventory.add_executor(
+        //     poseidon2_chip,
+        //     [
+        //         VerifyBatchOpcode::VERIFY_BATCH.global_opcode(),
+        //         Poseidon2Opcode::PERM_POS2.global_opcode(),
+        //         Poseidon2Opcode::COMP_POS2.global_opcode(),
+        //     ],
+        // )?;
 
         builder.add_phantom_sub_executor(
             NativeHintInputSubEx,
@@ -236,7 +243,7 @@ pub(crate) mod phantom {
     use eyre::bail;
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
-        system::memory::MemoryController,
+        system::memory::online::GuestMemory,
     };
     use openvm_instructions::PhantomDiscriminant;
     use openvm_stark_backend::p3_field::{Field, PrimeField32};
@@ -250,11 +257,11 @@ pub(crate) mod phantom {
     impl<F: Field> PhantomSubExecutor<F> for NativeHintInputSubEx {
         fn phantom_execute(
             &mut self,
-            _: &MemoryController<F>,
+            _: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
-            _: F,
-            _: F,
+            _: u32,
+            _: u32,
             _: u16,
         ) -> eyre::Result<()> {
             let hint = match streams.input_stream.pop_front() {
@@ -275,11 +282,11 @@ pub(crate) mod phantom {
     impl<F: Field, const N: usize> PhantomSubExecutor<F> for NativeHintSliceSubEx<N> {
         fn phantom_execute(
             &mut self,
-            _: &MemoryController<F>,
+            _: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
-            _: F,
-            _: F,
+            _: u32,
+            _: u32,
             _: u16,
         ) -> eyre::Result<()> {
             let hint = match streams.input_stream.pop_front() {
@@ -298,11 +305,11 @@ pub(crate) mod phantom {
     impl<F: PrimeField32> PhantomSubExecutor<F> for NativePrintSubEx {
         fn phantom_execute(
             &mut self,
-            memory: &MemoryController<F>,
+            memory: &GuestMemory,
             _: &mut Streams<F>,
             _: PhantomDiscriminant,
-            a: F,
-            _: F,
+            a: u32,
+            _: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
             let addr_space = F::from_canonical_u16(c_upper);
@@ -315,11 +322,11 @@ pub(crate) mod phantom {
     impl<F: PrimeField32> PhantomSubExecutor<F> for NativeHintBitsSubEx {
         fn phantom_execute(
             &mut self,
-            memory: &MemoryController<F>,
+            memory: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
-            a: F,
-            b: F,
+            a: u32,
+            b: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
             let addr_space = F::from_canonical_u16(c_upper);
@@ -341,11 +348,11 @@ pub(crate) mod phantom {
     impl<F: PrimeField32> PhantomSubExecutor<F> for NativeHintLoadSubEx {
         fn phantom_execute(
             &mut self,
-            _: &MemoryController<F>,
+            _: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
-            _: F,
-            _: F,
+            _: u32,
+            _: u32,
             _: u16,
         ) -> eyre::Result<()> {
             let payload = match streams.input_stream.pop_front() {
@@ -391,13 +398,19 @@ impl<F: PrimeField32> VmExtension<F> for CastFExtension {
             program_bus,
             memory_bridge,
         } = builder.system_port();
-        let offline_memory = builder.system_base().offline_memory();
-        let range_checker = builder.system_base().range_checker_chip.clone();
+        let range_checker = builder.system_base().range_checker_chip;
 
-        let castf_chip = CastFChip::new(
-            ConvertAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            CastFCoreChip::new(range_checker.clone()),
-            offline_memory.clone(),
+        let castf_chip = CastFChip::<F>::new(
+            VmAirWrapper::new(
+                ConvertAdapterAir::new(
+                    memory_bridge,
+                    ExecutionBridge::new(execution_bus, program_bus),
+                ),
+                CastFCoreAir::new(range_checker.bus()),
+            ),
+            CastFStep::new(ConvertAdapterStep::<1, 4>::new(), range_checker),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(castf_chip, [CastfOpcode::CASTF.global_opcode()])?;
 

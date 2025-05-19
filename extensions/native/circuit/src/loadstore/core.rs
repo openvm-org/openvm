@@ -119,7 +119,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct NativeLoadStoreStep<A, F, const NUM_CELLS: usize>
+pub struct NativeLoadStoreCoreStep<A, F, const NUM_CELLS: usize>
 where
     F: Field,
 {
@@ -128,7 +128,7 @@ where
     phantom: PhantomData<A>,
 }
 
-impl<A, F, const NUM_CELLS: usize> Default for NativeLoadStoreStep<A, F, NUM_CELLS>
+impl<A, F, const NUM_CELLS: usize> Default for NativeLoadStoreCoreStep<A, F, NUM_CELLS>
 where
     F: Field,
 {
@@ -137,7 +137,7 @@ where
     }
 }
 
-impl<A, F, const NUM_CELLS: usize> NativeLoadStoreStep<A, F, NUM_CELLS>
+impl<A, F, const NUM_CELLS: usize> NativeLoadStoreCoreStep<A, F, NUM_CELLS>
 where
     F: Field,
 {
@@ -173,7 +173,8 @@ where
     }
 }
 
-impl<F, CTX, A, const NUM_CELLS: usize> TraceStep<F, CTX> for NativeLoadStoreStep<A, F, NUM_CELLS>
+impl<F, CTX, A, const NUM_CELLS: usize> TraceStep<F, CTX>
+    for NativeLoadStoreCoreStep<A, F, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static
@@ -207,7 +208,7 @@ where
 }
 
 impl<Ctx, F, A, const NUM_CELLS: usize> StepExecutorE1<Ctx, F>
-    for NativeLoadStoreStep<A, F, NUM_CELLS>
+    for NativeLoadStoreCoreStep<A, F, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static

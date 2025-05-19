@@ -128,7 +128,7 @@ where
     const WIDTH: usize = size_of::<NativeVectorizedAdapterCols<u8, N>>();
     type ReadData = [[F; N]; 2];
     type WriteData = [F; N];
-    type TraceContext<'a> = &'a BitwiseOperationLookupChip<64>;
+    type TraceContext<'a> = ();
 
     #[inline(always)]
     fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]) {
@@ -145,10 +145,10 @@ where
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
     ) -> Self::ReadData {
-        let Instruction { a, b, c, d, e, .. } = instruction;
+        let Instruction { b, c, d, e, .. } = instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), AS::Native);
-        debug_assert_eq!(e.as_canonical_u32(), AS::Native);
+        debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
+        debug_assert_eq!(e.as_canonical_u32(), AS::Native as u32);
 
         let adapter_row: &mut NativeVectorizedAdapterCols<F, N> = adapter_row.borrow_mut();
 
@@ -176,7 +176,7 @@ where
     ) {
         let Instruction { a, d, .. } = instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), AS::Native);
+        debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
 
         let adapter_row: &mut NativeVectorizedAdapterCols<F, N> = adapter_row.borrow_mut();
 
@@ -192,7 +192,7 @@ where
     fn fill_trace_row(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
-        bitwise_lookup_chip: Self::TraceContext<'_>,
+        _ctx: Self::TraceContext<'_>,
         adapter_row: &mut [F],
     ) {
         let adapter_row: &mut NativeVectorizedAdapterCols<F, N> = adapter_row.borrow_mut();
@@ -220,8 +220,8 @@ where
     fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
         let Instruction { b, c, d, e, .. } = instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), AS::Native);
-        debug_assert_eq!(e.as_canonical_u32(), AS::Native);
+        debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
+        debug_assert_eq!(e.as_canonical_u32(), AS::Native as u32);
 
         let y_val: [F; N] = memory_read(memory, b.as_canonical_u32());
         let z_val: [F; N] = memory_read(memory, c.as_canonical_u32());
@@ -238,7 +238,7 @@ where
     ) {
         let Instruction { a, d, .. } = instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), AS::Native);
+        debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
 
         memory_write(memory, a.as_canonical_u32(), data);
     }

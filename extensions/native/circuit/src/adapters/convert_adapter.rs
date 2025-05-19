@@ -15,7 +15,9 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_MEMORY_AS,
+};
 use openvm_native_compiler::conversion::AS;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -125,7 +127,7 @@ where
 {
     const WIDTH: usize = size_of::<ConvertAdapterCols<u8, READ_SIZE, WRITE_SIZE>>();
     type ReadData = [F; READ_SIZE];
-    type WriteData = [F; WRITE_SIZE];
+    type WriteData = [u32; WRITE_SIZE];
     type TraceContext<'a> = ();
 
     #[inline(always)]
@@ -146,7 +148,7 @@ where
     ) -> Self::ReadData {
         let Instruction { b, e, .. } = instruction;
 
-        debug_assert_eq!(e.as_canonical_u32(), AS::Native);
+        debug_assert_eq!(e.as_canonical_u32(), AS::Native as u32);
 
         let adapter_row: &mut ConvertAdapterCols<F, READ_SIZE, WRITE_SIZE> =
             adapter_row.borrow_mut();
@@ -169,11 +171,10 @@ where
     ) {
         let Instruction { a, d, .. } = instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), AS::Native);
-
         let adapter_row: &mut ConvertAdapterCols<F, READ_SIZE, WRITE_SIZE> =
             adapter_row.borrow_mut();
 
+        // TODO: this writes to AS 2
         tracing_write(
             memory,
             a.as_canonical_u32(),
@@ -186,7 +187,7 @@ where
     fn fill_trace_row(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
-        _trace_ctx: Self::TraceContext<'_>,
+        _ctx: Self::TraceContext<'_>,
         adapter_row: &mut [F],
     ) {
         let adapter_row: &mut ConvertAdapterCols<F, READ_SIZE, WRITE_SIZE> =
@@ -213,7 +214,7 @@ where
     fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
         let Instruction { b, e, .. } = instruction;
 
-        debug_assert_eq!(e.as_canonical_u32(), AS::Native);
+        debug_assert_eq!(e.as_canonical_u32(), AS::Native as u32);
 
         memory_read(memory, b.as_canonical_u32())
     }
@@ -227,7 +228,7 @@ where
     ) {
         let Instruction { a, d, .. } = instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), AS::Native);
+        debug_assert_eq!(d.as_canonical_u32(), RV32_MEMORY_AS);
 
         memory_write(memory, a.as_canonical_u32(), data);
     }

@@ -110,12 +110,12 @@ where
 }
 
 #[derive(derive_new::new)]
-pub struct CastFStep<A> {
+pub struct CastFCoreStep<A> {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for CastFStep<A>
+impl<F, CTX, A> TraceStep<F, CTX> for CastFCoreStep<A>
 where
     F: PrimeField32,
     A: 'static
@@ -189,7 +189,7 @@ where
     }
 }
 
-impl<F, A> StepExecutorE1<F> for CastFStep<A>
+impl<F, A> StepExecutorE1<F> for CastFCoreStep<A>
 where
     F: PrimeField32,
     A: 'static

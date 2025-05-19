@@ -147,7 +147,7 @@ where
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
     ) -> Self::ReadData {
-        let Instruction { b, c, e, f, .. } = instruction;
+        let &Instruction { b, c, e, f, .. } = instruction;
 
         let adapter_row: &mut AluNativeAdapterCols<F> = adapter_row.borrow_mut();
 
@@ -182,7 +182,7 @@ where
         tracing_write(
             memory,
             a.as_canonical_u32(),
-            &data[0],
+            &data,
             (&mut adapter_row.a_pointer, &mut adapter_row.write_aux),
         );
     }
@@ -198,13 +198,29 @@ where
 
         let mut timestamp = adapter_row.from_state.timestamp.as_canonical_u32();
 
-        mem_helper.fill_from_prev(timestamp, adapter_row.reads_aux[0].as_mut());
+        mem_helper.fill_from_prev(timestamp, &mut adapter_row.reads_aux[0].base);
         timestamp += 1;
 
-        mem_helper.fill_from_prev(timestamp, adapter_row.reads_aux[1].as_mut());
+        mem_helper.fill_from_prev(timestamp, &mut adapter_row.reads_aux[1].base);
         timestamp += 1;
 
         mem_helper.fill_from_prev(timestamp, adapter_row.write_aux.as_mut());
+
+        if adapter_row.e_as.is_zero() {
+            adapter_row.reads_aux[0].is_immediate = F::ONE;
+            adapter_row.reads_aux[0].is_zero_aux = F::ZERO;
+        } else {
+            adapter_row.reads_aux[0].is_immediate = F::ZERO;
+            adapter_row.reads_aux[1].is_zero_aux = adapter_row.e_as.inverse();
+        }
+
+        if adapter_row.f_as.is_zero() {
+            adapter_row.reads_aux[1].is_immediate = F::ONE;
+            adapter_row.reads_aux[1].is_zero_aux = F::ZERO;
+        } else {
+            adapter_row.reads_aux[1].is_immediate = F::ZERO;
+            adapter_row.reads_aux[1].is_zero_aux = adapter_row.f_as.inverse();
+        }
     }
 }
 
@@ -217,10 +233,10 @@ where
 
     #[inline(always)]
     fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
-        let Instruction { b, c, e, f, .. } = instruction;
+        let &Instruction { b, c, e, f, .. } = instruction;
 
-        let [rs1]: [F; 1] = memory_read_or_imm(memory, e.as_canonical_u32(), b);
-        let [rs2]: [F; 1] = memory_read_or_imm(memory, f.as_canonical_u32(), c);
+        let rs1 = memory_read_or_imm(memory, e.as_canonical_u32(), b);
+        let rs2 = memory_read_or_imm(memory, f.as_canonical_u32(), c);
 
         [rs1, rs2]
     }

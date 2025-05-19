@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use openvm_circuit::system::memory::{MemoryAuxColsFactory, OfflineMemory};
+use openvm_circuit::system::memory::MemoryAuxColsFactory;
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::Poseidon2Opcode::COMP_POS2;

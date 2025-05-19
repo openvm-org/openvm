@@ -1,23 +1,19 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, AdapterTraceStep,
-        InsExecutorE1, MinimalInstruction, Result, StepExecutorE1, TraceStep, VmAdapterInterface,
-        VmCoreAir, VmCoreChip, VmExecutionState, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
+        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
-    system::memory::online::{GuestMemory, TracingMemory},
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_native_compiler::{
-    conversion::AS,
-    FieldArithmeticOpcode::{self, *},
-};
+use openvm_native_compiler::FieldArithmeticOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -125,19 +121,19 @@ pub struct FieldArithmeticRecord<F> {
 }
 
 #[derive(derive_new::new)]
-pub struct FieldArithmeticStep<A> {
+pub struct FieldArithmeticCoreStep<A> {
     adapter: A,
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for FieldArithmeticStep<A>
+impl<F, CTX, A> TraceStep<F, CTX> for FieldArithmeticCoreStep<A>
 where
     F: PrimeField32,
     A: 'static
         + for<'a> AdapterTraceStep<
             F,
             CTX,
-            ReadData = Into<[[F; 1]; 2]>,
-            WriteData = From<[[F; 1]; 1]>,
+            ReadData: Into<[[F; 1]; 2]>,
+            WriteData: From<[[F; 1]; 1]>,
             TraceContext<'a> = (),
         >,
 {
@@ -152,34 +148,38 @@ where
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        row_slice: &mut [F],
+        trace: &mut [F],
+        trace_offset: &mut usize,
+        width: usize,
     ) -> Result<()> {
         let Instruction { opcode, .. } = instruction;
         let local_opcode = FieldArithmeticOpcode::from_usize(
             opcode.local_opcode_idx(FieldArithmeticOpcode::CLASS_OFFSET),
         );
 
-        let (b_val, c_val) = self.adapter.read(&mut state.memory, instruction);
+        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-        let a = FieldArithmetic::run_field_arithmetic(local_opcode, b_val, c_val).unwrap();
+        A::start(*state.pc, state.memory, adapter_row);
 
-        self.adapter.write(&mut state.memory, instruction, &a_val);
+        let (b_val, c_val) = self
+            .adapter
+            .read(&mut state.memory, instruction, adapter_row);
 
-        let FieldArithmeticRecord { opcode, a, b, c } = record;
-        let row_slice: &mut FieldArithmeticCoreCols<_> = row_slice.borrow_mut();
-        row_slice.a = a;
-        row_slice.b = b;
-        row_slice.c = c;
+        let a_val = FieldArithmetic::run_field_arithmetic(local_opcode, b_val, c_val).unwrap();
 
-        row_slice.is_add = F::from_bool(opcode == FieldArithmeticOpcode::ADD);
-        row_slice.is_sub = F::from_bool(opcode == FieldArithmeticOpcode::SUB);
-        row_slice.is_mul = F::from_bool(opcode == FieldArithmeticOpcode::MUL);
-        row_slice.is_div = F::from_bool(opcode == FieldArithmeticOpcode::DIV);
-        row_slice.divisor_inv = if opcode == FieldArithmeticOpcode::DIV {
-            c.inverse()
-        } else {
-            F::ZERO
-        };
+        let core_row: &mut FieldArithmeticCoreCols<_> = core_row.borrow_mut();
+        core_row.a = a_val;
+        core_row.b = b_val;
+        core_row.c = c_val;
+
+        core_row.is_add = F::from_bool(opcode == FieldArithmeticOpcode::ADD);
+        core_row.is_sub = F::from_bool(opcode == FieldArithmeticOpcode::SUB);
+        core_row.is_mul = F::from_bool(opcode == FieldArithmeticOpcode::MUL);
+        core_row.is_div = F::from_bool(opcode == FieldArithmeticOpcode::DIV);
+
+        self.adapter
+            .write(&mut state.memory, instruction, &a_val, adapter_row);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -187,11 +187,21 @@ where
     }
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        todo!("Implement fill_trace_row")
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
+
+        let core_row: &mut FieldArithmeticCoreCols<_> = core_row.borrow_mut();
+
+        core_row.divisor_inv = if core_row.is_div.is_zero() {
+            F::ZERO
+        } else {
+            core_row.c.inverse()
+        };
     }
 }
 
-impl<F, A> StepExecutorE1<F> for FieldArithmeticStep<A>
+impl<F, A> StepExecutorE1<F> for FieldArithmeticCoreStep<A>
 where
     F: PrimeField32,
     A: 'static + for<'a> AdapterExecutorE1<F, ReadData = (F, F), WriteData = F>,

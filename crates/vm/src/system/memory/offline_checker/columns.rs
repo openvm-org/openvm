@@ -104,9 +104,9 @@ impl<F: PrimeField32> MemoryReadAuxCols<F> {
 #[repr(C)]
 #[derive(Clone, Debug, AlignedBorrow)]
 pub struct MemoryReadOrImmediateAuxCols<T> {
-    pub(crate) base: MemoryBaseAuxCols<T>,
-    pub(crate) is_immediate: T,
-    pub(crate) is_zero_aux: T,
+    pub base: MemoryBaseAuxCols<T>,
+    pub is_immediate: T,
+    pub is_zero_aux: T,
 }
 
 impl<T, const N: usize> AsRef<MemoryReadAuxCols<T>> for MemoryWriteAuxCols<T, N> {

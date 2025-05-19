@@ -1,5 +1,5 @@
 use openvm_circuit::system::memory::{
-    offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
+    offline_checker::{MemoryReadAuxCols, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
     online::{GuestMemory, TracingMemory},
 };
 use openvm_native_compiler::conversion::AS;
@@ -10,15 +10,18 @@ pub mod alu_native_adapter;
 pub mod branch_native_adapter;
 // 1 read, 1 write, arbitrary read size, arbitrary write size, no imm support
 pub mod convert_adapter;
-pub mod loadstore_native_adapter;
+// pub mod loadstore_native_adapter;
 // 2 reads, 1 write, read size = write size = N, no imm support, read/write to address space d
 pub mod native_vectorized_adapter;
 
 #[inline(always)]
-pub fn memory_read<F, const N: usize>(memory: &GuestMemory, ptr: u32) -> [u8; N] {
+pub fn memory_read<F, const N: usize>(memory: &GuestMemory, ptr: u32) -> [F; N]
+where
+    F: PrimeField32,
+{
     // SAFETY:
     // - address space `AS::Native` will always have cell type `F` and minimum alignment of `1`
-    unsafe { memory.read::<F, N>(AS::Native, ptr) }
+    unsafe { memory.read::<F, N>(AS::Native as u32, ptr) }
 }
 
 #[inline(always)]
@@ -26,12 +29,9 @@ pub fn memory_read_or_imm<F>(memory: &GuestMemory, addr_space: u32, ptr_or_imm: 
 where
     F: PrimeField32,
 {
-    debug_assert!(
-        addr_space.as_canonical_u32() == AS::Immediate
-            || addr_space.as_canonical_u32() == AS::Native
-    );
+    debug_assert!(addr_space == AS::Immediate as u32 || addr_space == AS::Native as u32);
 
-    if addr_space == AS::Native {
+    if addr_space == AS::Native as u32 {
         let [result]: [F; 1] = memory_read(memory, ptr_or_imm.as_canonical_u32());
         result
     } else {
@@ -39,10 +39,13 @@ where
     }
 }
 #[inline(always)]
-pub fn memory_write<F, const N: usize>(memory: &mut GuestMemory, ptr: u32, data: &[u8; N]) {
+pub fn memory_write<F, const N: usize>(memory: &mut GuestMemory, ptr: u32, data: &[F; N])
+where
+    F: PrimeField32,
+{
     // SAFETY:
     // - address space `AS::Native` will always have cell type `F` and minimum alignment of `1`
-    unsafe { memory.write::<F, N>(AS::Native, ptr, data) }
+    unsafe { memory.write::<F, N>(AS::Native as u32, ptr, data) }
 }
 
 /// Atomic read operation which increments the timestamp by 1.
@@ -58,7 +61,7 @@ where
 {
     // SAFETY:
     // - address space `Native` will always have cell type `F` and minimum alignment of `1`
-    unsafe { memory.read::<F, BLOCK_SIZE, 1>(AS::Native, ptr) }
+    unsafe { memory.read::<F, BLOCK_SIZE, 1>(AS::Native as u32, ptr) }
 }
 
 #[inline(always)]
@@ -72,7 +75,7 @@ where
 {
     // SAFETY:
     // - address space `Native` will always have cell type `F` and minimum alignment of `1`
-    unsafe { memory.write::<F, BLOCK_SIZE, 1>(AS::Native, ptr, vals) }
+    unsafe { memory.write::<F, BLOCK_SIZE, 1>(AS::Native as u32, ptr, vals) }
 }
 
 /// Reads register value at `ptr` from memory and records the memory access in mutable buffer.
@@ -116,24 +119,25 @@ pub fn tracing_read_or_imm<F>(
     addr_space: u32,
     ptr_or_imm: F,
     addr_space_mut: &mut F,
-    (ptr_or_imm_mut, aux_cols): (&mut F, &mut MemoryReadAuxCols<F>),
+    (ptr_or_imm_mut, aux_cols): (&mut F, &mut MemoryReadOrImmediateAuxCols<F>),
 ) -> F
 where
     F: PrimeField32,
 {
-    debug_assert!(addr_space == AS::Immediate || addr_space == AS::Native);
+    debug_assert!(addr_space == AS::Immediate as u32 || addr_space == AS::Native as u32);
 
-    if addr_space == AS::Immediate {
+    if addr_space == AS::Immediate as u32 {
         *addr_space_mut = F::ZERO;
         *ptr_or_imm_mut = ptr_or_imm;
         memory.increment_timestamp();
         ptr_or_imm
     } else {
-        *addr_space_mut = F::from_canonical_u32(AS::Native);
-        tracing_read(
+        *addr_space_mut = F::from_canonical_u32(AS::Native as u32);
+        let data: [F; 1] = tracing_read(
             memory,
             ptr_or_imm.as_canonical_u32(),
-            (ptr_or_imm_mut, aux_cols),
-        )
+            (ptr_or_imm_mut, &mut aux_cols.base),
+        );
+        data[0]
     }
 }

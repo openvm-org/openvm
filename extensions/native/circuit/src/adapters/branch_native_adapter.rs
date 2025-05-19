@@ -146,7 +146,7 @@ where
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
     ) -> Self::ReadData {
-        let Instruction { a, b, d, e, .. } = instruction;
+        let &Instruction { a, b, d, e, .. } = instruction;
         let adapter_row: &mut BranchNativeAdapterCols<F> = adapter_row.borrow_mut();
 
         let rs1 = tracing_read_or_imm(
@@ -193,10 +193,28 @@ where
 
         let mut timestamp = adapter_row.from_state.timestamp.as_canonical_u32();
 
-        mem_helper.fill_from_prev(timestamp, adapter_row.reads_aux[0].read_aux.as_mut());
+        mem_helper.fill_from_prev(timestamp, &mut adapter_row.reads_aux[0].read_aux.base);
         timestamp += 1;
 
-        mem_helper.fill_from_prev(timestamp, adapter_row.reads_aux[1].read_aux.as_mut());
+        mem_helper.fill_from_prev(timestamp, &mut adapter_row.reads_aux[1].read_aux.base);
+
+        let read_aux0 = &mut adapter_row.reads_aux[0];
+        if read_aux0.address.address_space.is_zero() {
+            read_aux0.read_aux.is_immediate = F::ONE;
+            read_aux0.read_aux.is_zero_aux = F::ZERO;
+        } else {
+            read_aux0.read_aux.is_immediate = F::ZERO;
+            read_aux0.read_aux.is_zero_aux = read_aux0.address.address_space.inverse();
+        }
+
+        let read_aux1 = &mut adapter_row.reads_aux[1];
+        if read_aux1.address.address_space.is_zero() {
+            read_aux1.read_aux.is_immediate = F::ONE;
+            read_aux1.read_aux.is_zero_aux = F::ZERO;
+        } else {
+            read_aux1.read_aux.is_immediate = F::ZERO;
+            read_aux1.read_aux.is_zero_aux = read_aux1.address.address_space.inverse();
+        }
     }
 }
 
@@ -209,10 +227,10 @@ where
 
     #[inline(always)]
     fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
-        let Instruction { a, b, d, e, .. } = instruction;
+        let &Instruction { a, b, d, e, .. } = instruction;
 
-        let [rs1]: [F; 1] = memory_read_or_imm(memory, d.as_canonical_u32(), a);
-        let [rs2]: [F; 1] = memory_read_or_imm(memory, e.as_canonical_u32(), b);
+        let rs1 = memory_read_or_imm(memory, d.as_canonical_u32(), a);
+        let rs2 = memory_read_or_imm(memory, e.as_canonical_u32(), b);
 
         [rs1, rs2]
     }

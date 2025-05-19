@@ -9,5 +9,5 @@ pub use core::*;
 mod tests;
 
 pub type Rv32JalLuiAir = VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir>;
-pub type Rv32JalLuiStepWithAdapter = Rv32JalLuiStep<Rv32CondRdWriteAdapterStep>;
-pub type Rv32JalLuiChip<F> = NewVmChipWrapper<F, Rv32JalLuiAir, Rv32JalLuiStepWithAdapter>;
+pub type Rv32JalLuiStep = Rv32JalLuiCoreStep<Rv32CondRdWriteAdapterStep>;
+pub type Rv32JalLuiChip<F> = NewVmChipWrapper<F, Rv32JalLuiAir, Rv32JalLuiStep>;

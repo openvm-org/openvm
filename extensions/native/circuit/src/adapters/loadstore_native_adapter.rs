@@ -178,7 +178,7 @@ where
     const WIDTH: usize = std::mem::size_of::<NativeLoadStoreAdapterCols<u8, NUM_CELLS>>();
     type ReadData = (F, [F; NUM_CELLS]);
     type WriteData = [F; NUM_CELLS];
-    type TraceContext<'a> = &'a SharedVariableRangeCheckerChip;
+    type TraceContext<'a> = ();
 
     #[inline(always)]
     fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]) {

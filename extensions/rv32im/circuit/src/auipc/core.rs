@@ -192,12 +192,12 @@ where
     }
 }
 
-pub struct Rv32AuipcStep<A> {
+pub struct Rv32AuipcCoreStep<A> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl<A> Rv32AuipcStep<A> {
+impl<A> Rv32AuipcCoreStep<A> {
     pub fn new(
         adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
@@ -209,7 +209,7 @@ impl<A> Rv32AuipcStep<A> {
     }
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for Rv32AuipcStep<A>
+impl<F, CTX, A> TraceStep<F, CTX> for Rv32AuipcCoreStep<A>
 where
     F: PrimeField32,
     A: 'static
@@ -303,7 +303,7 @@ where
     }
 }
 
-impl<F, A> StepExecutorE1<F> for Rv32AuipcStep<A>
+impl<F, A> StepExecutorE1<F> for Rv32AuipcCoreStep<A>
 where
     F: PrimeField32,
     A: 'static
