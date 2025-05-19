@@ -32,7 +32,7 @@ use crate::{
         },
         hasher::poseidon2::vm_poseidon2_hasher,
         segment::TracegenVmSegmentExecutor,
-        E1VmSegmentExecutor, MeteredCtx, MeteredVmSegmentExecutor,
+        E1VmSegmentExecutor, ExecutionSegmentState, MeteredCtx, MeteredVmSegmentExecutor,
     },
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
@@ -259,11 +259,13 @@ where
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
         }
-        let state = metrics_span("execute_time_ms", || {
-            segment.execute_from_pc(from_state.pc, None, ())
+
+        let mut exec_state = ExecutionSegmentState::new(clk, from_state.pc, None, ());
+        metrics_span("execute_time_ms", || {
+            segment.execute_from_state(&mut exec_state)
         })?;
 
-        if state.is_terminated {
+        if exec_state.exit_code.is_some() {
             return Ok(VmExecutorOneSegmentResult {
                 segment,
                 next_state: None,
@@ -275,7 +277,7 @@ where
             "multiple segments require to enable continuations"
         );
         assert_eq!(
-            state.pc,
+            exec_state.pc,
             segment.chip_complex.connector_chip().boundary_states[1]
                 .unwrap()
                 .pc
@@ -290,7 +292,7 @@ where
             next_state: Some(VmExecutorNextSegmentState {
                 memory: final_memory,
                 input: streams,
-                pc: state.pc,
+                pc: exec_state.pc,
                 #[cfg(feature = "bench-metrics")]
                 metrics,
             }),
@@ -368,14 +370,16 @@ where
                 segment.metrics = state.metrics;
             }
 
-            let exec_state = metrics_span("execute_time_ms", || {
-                segment.execute_from_pc(state.pc, Some(GuestMemory::new(state.memory)), ())
+            let mut exec_state =
+                ExecutionSegmentState::new(clk, state.pc, Some(GuestMemory::new(state.memory)), ());
+            metrics_span("execute_time_ms", || {
+                segment.execute_from_state(&mut exec_state)
             })?;
 
-            if exec_state.is_terminated {
+            if let Some(exit_code) = exec_state.exit_code {
                 // Check exit code for the final segment
-                if exec_state.exit_code != ExitCode::Success as u32 {
-                    return Err(ExecutionError::FailedWithExitCode(exec_state.exit_code));
+                if exit_code != ExitCode::Success as u32 {
+                    return Err(ExecutionError::FailedWithExitCode(exit_code));
                 }
                 tracing::debug!("Execution completed in {} segments", segment_idx + 1);
                 #[cfg(feature = "bench-metrics")]
@@ -388,15 +392,13 @@ where
                 "multiple segments require to enable continuations"
             );
 
-            let final_memory = mem::take(&mut segment.ctrl.final_memory)
-                .expect("final memory should be set in continuations segment");
             let streams = segment.chip_complex.take_streams();
 
             #[cfg(feature = "bench-metrics")]
             let metrics = segment.metrics.partial_take();
 
             state = VmExecutorNextSegmentState {
-                memory: final_memory,
+                memory: exec_state.memory.unwrap().memory,
                 input: streams,
                 pc: exec_state.pc,
                 #[cfg(feature = "bench-metrics")]
@@ -453,17 +455,19 @@ where
                 segment.metrics = state.metrics;
             }
 
+            let continuations_enabled = segment
+                .chip_complex
+                .memory_controller()
+                .continuation_enabled();
+            let num_access_adapters = segment
+                .chip_complex
+                .memory_controller()
+                .access_adapters
+                .num_access_adapters();
             let ctx = MeteredCtx::new(
                 widths.len(),
-                segment
-                    .chip_complex
-                    .memory_controller()
-                    .continuation_enabled(),
-                segment
-                    .chip_complex
-                    .memory_controller()
-                    .access_adapters
-                    .num_access_adapters(),
+                continuations_enabled,
+                num_access_adapters,
                 segment
                     .chip_complex
                     .memory_controller()
@@ -478,14 +482,21 @@ where
                     .mem_config()
                     .memory_dimensions(),
             );
-            let exec_state = metrics_span("execute_time_ms", || {
-                segment.execute_from_pc(state.pc, Some(GuestMemory::new(state.memory)), ctx)
+
+            let mut exec_state = ExecutionSegmentState::new(
+                clk,
+                state.pc,
+                Some(GuestMemory::new(state.memory)),
+                ctx,
+            );
+            metrics_span("execute_time_ms", || {
+                segment.execute_from_state(&mut exec_state)
             })?;
 
-            if exec_state.is_terminated {
+            if let Some(exit_code) = exec_state.exit_code {
                 // Check exit code for the final segment
-                if exec_state.exit_code != ExitCode::Success as u32 {
-                    return Err(ExecutionError::FailedWithExitCode(exec_state.exit_code));
+                if exit_code != ExitCode::Success as u32 {
+                    return Err(ExecutionError::FailedWithExitCode(exit_code));
                 }
                 tracing::debug!("Execution completed in {} segments", segment_idx + 1);
                 #[cfg(feature = "bench-metrics")]
@@ -498,15 +509,13 @@ where
                 "multiple segments require to enable continuations"
             );
 
-            let final_memory = mem::take(&mut segment.ctrl.final_memory)
-                .expect("final memory should be set in continuations segment");
             let streams = segment.chip_complex.take_streams();
 
             #[cfg(feature = "bench-metrics")]
             let metrics = segment.metrics.partial_take();
 
             state = VmExecutorNextSegmentState {
-                memory: final_memory,
+                memory: exec_state.memory.unwrap().memory,
                 input: streams,
                 pc: exec_state.pc,
                 #[cfg(feature = "bench-metrics")]
@@ -700,8 +709,10 @@ where
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
             segment.set_override_trace_heights(overridden_heights.clone());
         }
+
+        let mut exec_state = ExecutionSegmentState::new(0, exe.pc_start, None, ());
         metrics_span("execute_time_ms", || {
-            segment.execute_from_pc(exe.pc_start, None, ())
+            segment.execute_from_state(&mut exec_state)
         })?;
         Ok(segment)
     }

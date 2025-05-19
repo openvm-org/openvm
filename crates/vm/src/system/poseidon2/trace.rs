@@ -35,6 +35,7 @@ where
             .unzip();
         inputs.extend(actual_inputs);
         multiplicities.extend(actual_multiplicities);
+        dbg!(multiplicities.iter().sum::<u32>());
         inputs.resize(height, [Val::<SC>::ZERO; PERIPHERY_POSEIDON2_WIDTH]);
         multiplicities.resize(height, 0);
 

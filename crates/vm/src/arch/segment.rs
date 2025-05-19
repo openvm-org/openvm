@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use super::{
     execution_control::{
@@ -93,39 +93,31 @@ where
     }
 
     /// Stopping is triggered by should_stop() or if VM is terminated
-    pub fn execute_from_pc(
+    pub fn execute_from_state(
         &mut self,
-        pc: u32,
-        memory: Option<GuestMemory>,
-        ctx: Ctrl::Ctx,
-    ) -> Result<ExecutionSegmentState<Ctrl::Ctx>, ExecutionError> {
+        state: &mut ExecutionSegmentState<Ctrl::Ctx>,
+    ) -> Result<(), ExecutionError> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
-        let mut state = ExecutionSegmentState::new(pc, memory, ctx, 0, false);
-
         // Call the pre-execution hook
-        self.ctrl
-            .on_segment_start(&mut state, &mut self.chip_complex);
+        self.ctrl.on_start(state, &mut self.chip_complex);
 
         loop {
             // Fetch, decode and execute single instruction
-            let terminated_exit_code = self.execute_instruction(&mut state, &mut prev_backtrace)?;
+            self.execute_instruction(state, &mut prev_backtrace)?;
 
-            if let Some(exit_code) = terminated_exit_code {
-                state.exit_code = exit_code;
-                state.is_terminated = true;
+            if let Some(exit_code) = state.exit_code {
                 self.ctrl
-                    .on_terminate(&mut state, &mut self.chip_complex, exit_code);
+                    .on_terminate(state, &mut self.chip_complex, exit_code);
                 break;
             }
-            if self.should_suspend(&mut state) {
-                state.exit_code = DEFAULT_SUSPEND_EXIT_CODE;
-                self.ctrl.on_segment_end(&mut state, &mut self.chip_complex);
+            if self.should_suspend(state) {
+                self.ctrl.on_suspend(state, &mut self.chip_complex);
                 break;
             }
         }
 
-        Ok(state)
+        Ok(())
     }
 
     /// Executes a single instruction and updates VM state
@@ -134,7 +126,7 @@ where
         &mut self,
         state: &mut ExecutionSegmentState<Ctrl::Ctx>,
         prev_backtrace: &mut Option<Backtrace>,
-    ) -> Result<Option<u32>, ExecutionError> {
+    ) -> Result<(), ExecutionError> {
         let pc = state.pc;
         let timestamp = self.chip_complex.memory_controller().timestamp();
 
@@ -147,7 +139,8 @@ where
 
         // Handle termination instruction
         if opcode == SystemOpcode::TERMINATE.global_opcode() {
-            return Ok(Some(c.as_canonical_u32()));
+            state.exit_code = Some(c.as_canonical_u32());
+            return Ok(());
         }
 
         // Extract debug info components
@@ -202,7 +195,7 @@ where
             self.update_instruction_metrics(pc, opcode, dsl_instr);
         }
 
-        Ok(None)
+        Ok(())
     }
 
     /// Returns bool of whether to switch to next segment or not.
@@ -312,14 +305,24 @@ pub type MeteredVmSegmentExecutor<'a, F, VC> =
 pub type TracegenCtx = ();
 pub type TracegenVmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, TracegenExecutionControl>;
 
-#[derive(derive_new::new)]
 pub struct ExecutionSegmentState<Ctx> {
+    pub clk: u32,
     pub pc: u32,
     pub memory: Option<GuestMemory>,
     pub ctx: Ctx,
-    // TODO(ayush): do we need both exit_code and is_terminated?
-    pub exit_code: u32,
-    pub is_terminated: bool,
+    pub exit_code: Option<u32>,
+}
+
+impl<Ctx> ExecutionSegmentState<Ctx> {
+    pub fn new(clk: u32, pc: u32, memory: Option<GuestMemory>, ctx: Ctx) -> Self {
+        Self {
+            clk,
+            pc,
+            memory,
+            ctx,
+            exit_code: None,
+        }
+    }
 }
 
 // TODO(ayush): better name
@@ -343,7 +346,10 @@ impl MeteredCtx {
 
             if let Err(insert_idx) = self.leaf_indices.binary_search(&leaf_id) {
                 self.leaf_indices.insert(insert_idx, leaf_id);
+
+                let poseidon2_idx = self.trace_heights.len() - 2;
                 self.trace_heights[BOUNDARY_CHIP_IDX] += 1;
+                self.trace_heights[poseidon2_idx] += 2;
 
                 if self.continuations_enabled {
                     let pred_id = insert_idx.checked_sub(1).map(|idx| self.leaf_indices[idx]);
@@ -356,6 +362,7 @@ impl MeteredCtx {
                         self.memory_dimensions.overall_height(),
                     );
                     self.trace_heights[BOUNDARY_CHIP_IDX + 1] += height_change * 2;
+                    self.trace_heights[poseidon2_idx] += height_change * 2;
                 }
             }
         }
@@ -549,8 +556,6 @@ impl E1E2ExecutionCtx for MeteredCtx {
         // Handle merkle tree updates
         // TODO(ayush): see if this can be approximated by total number of reads/writes for AS != register
         self.update_boundary_merkle_heights(address_space, ptr, size);
-
-        // TODO(ayush): Poseidon2PeripheryChip
     }
 }
 

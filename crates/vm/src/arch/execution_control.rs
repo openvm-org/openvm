@@ -1,13 +1,13 @@
 use openvm_instructions::instruction::Instruction;
-use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::Matrix, ChipUsageGetter};
+use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 
 use super::{
     ChipId, E1Ctx, ExecutionError, ExecutionSegmentState, MeteredCtx, TracegenCtx, VmChipComplex,
-    VmConfig, VmStateMut,
+    VmConfig, VmStateMut, CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID,
 };
 use crate::{
     arch::{ExecutionState, InsExecutorE1, InstructionExecutor},
-    system::memory::{adapter::GenericAccessAdapterChip, MemoryImage},
+    system::memory::MemoryImage,
 };
 
 // Metered execution thresholds
@@ -35,28 +35,37 @@ where
         chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool;
 
-    /// Called before segment execution begins
-    fn on_segment_start(
+    /// Called before execution begins
+    fn on_start(
         &mut self,
         state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     );
 
-    // TODO(ayush): maybe combine with on_terminate
-    /// Called after segment execution completes
-    fn on_segment_end(
+    /// Called after suspend or terminate
+    fn on_suspend_or_terminate(
         &mut self,
         state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        exit_code: Option<u32>,
     );
 
-    /// Called after program termination
+    fn on_suspend(
+        &mut self,
+        state: &mut ExecutionSegmentState<Self::Ctx>,
+        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+    ) {
+        self.on_suspend_or_terminate(state, chip_complex, None);
+    }
+
     fn on_terminate(
         &mut self,
         state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         exit_code: u32,
-    );
+    ) {
+        self.on_suspend_or_terminate(state, chip_complex, Some(exit_code));
+    }
 
     /// Execute a single instruction
     // TODO(ayush): change instruction to Instruction<u32> / PInstruction
@@ -112,7 +121,7 @@ where
         )
     }
 
-    fn on_segment_start(
+    fn on_start(
         &mut self,
         state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
@@ -123,71 +132,16 @@ where
             .begin(ExecutionState::new(state.pc, timestamp));
     }
 
-    fn on_segment_end(
+    fn on_suspend_or_terminate(
         &mut self,
         state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        exit_code: Option<u32>,
     ) {
-        let timestamp = chip_complex.memory_controller().timestamp();
-        // End the current segment with connector chip
-        chip_complex
-            .connector_chip_mut()
-            .end(ExecutionState::new(state.pc, timestamp), None);
-        self.final_memory = Some(chip_complex.base.memory_controller.memory_image().clone());
-    }
-
-    fn on_terminate(
-        &mut self,
-        state: &mut ExecutionSegmentState<Self::Ctx>,
-        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
-        exit_code: u32,
-    ) {
-        // Print adapter names, widths, and cursor positions
-        let memory = &chip_complex.memory_controller().memory;
-        let air_names = memory.access_adapter_inventory.air_names();
-        let widths = &memory.adapter_inventory_trace_cursor.widths;
-        let cursors = &memory.adapter_inventory_trace_cursor.cursors;
-        println!("Before finalize:");
-        for ((name, &width), cursor) in air_names.iter().zip(widths.iter()).zip(cursors.iter()) {
-            println!(
-                "{:<10} \t|\t{:<5} \t|\t{}",
-                cursor.position() as usize / width,
-                width,
-                name
-            );
-        }
-
-        for (name, height) in self
-            .air_names
-            .iter()
-            .zip(chip_complex.current_trace_heights())
-        {
-            println!("{:<10} \t|\t{}", height, name);
-        }
-
-        // println!("After finalize:");
-        // for chip in chip_complex
-        //     .memory_controller()
-        //     .access_adapters
-        //     .chips
-        //     .iter()
-        // {
-        //     let name = chip.air_name();
-        //     let width = chip.trace_width();
-        //     let height = match chip {
-        //         GenericAccessAdapterChip::N2(c) => c.trace.height(),
-        //         GenericAccessAdapterChip::N4(c) => c.trace.height(),
-        //         GenericAccessAdapterChip::N8(c) => c.trace.height(),
-        //         GenericAccessAdapterChip::N16(c) => c.trace.height(),
-        //         GenericAccessAdapterChip::N32(c) => c.trace.height(),
-        //     };
-        //     println!("{:<10} \t|\t{:<5} \t|\t{}", height, width, name);
-        // }
-
         let timestamp = chip_complex.memory_controller().timestamp();
         chip_complex
             .connector_chip_mut()
-            .end(ExecutionState::new(state.pc, timestamp), Some(exit_code));
+            .end(ExecutionState::new(state.pc, timestamp), exit_code);
         self.final_memory = Some(chip_complex.base.memory_controller.memory_image().clone());
     }
 
@@ -219,6 +173,7 @@ where
                 opcode,
             });
         };
+        state.clk += 1;
 
         Ok(())
     }
@@ -226,9 +181,7 @@ where
 
 /// Implementation of the ExecutionControl trait using the old segmentation strategy
 #[derive(Default)]
-pub struct E1ExecutionControl {
-    pub final_memory: Option<MemoryImage>,
-}
+pub struct E1ExecutionControl;
 
 impl<F, VC> ExecutionControl<F, VC> for E1ExecutionControl
 where
@@ -246,28 +199,19 @@ where
         false
     }
 
-    fn on_segment_start(
+    fn on_start(
         &mut self,
         _state: &mut ExecutionSegmentState<Self::Ctx>,
         _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
     }
 
-    fn on_segment_end(
+    fn on_suspend_or_terminate(
         &mut self,
-        state: &mut ExecutionSegmentState<Self::Ctx>,
+        _state: &mut ExecutionSegmentState<Self::Ctx>,
         _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        _exit_code: Option<u32>,
     ) {
-        self.final_memory = state.memory.as_ref().map(|memory| memory.memory.clone());
-    }
-
-    fn on_terminate(
-        &mut self,
-        state: &mut ExecutionSegmentState<Self::Ctx>,
-        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
-        _exit_code: u32,
-    ) {
-        self.final_memory = state.memory.as_ref().map(|memory| memory.memory.clone());
     }
 
     /// Execute a single instruction
@@ -295,6 +239,7 @@ where
                 opcode,
             });
         };
+        state.clk += 1;
 
         Ok(())
     }
@@ -304,7 +249,6 @@ pub struct MeteredExecutionControl<'a> {
     pub widths: &'a [usize],
     pub interactions: &'a [usize],
     pub since_last_segment_check: usize,
-    pub final_memory: Option<MemoryImage>,
 }
 
 impl<'a> MeteredExecutionControl<'a> {
@@ -313,7 +257,6 @@ impl<'a> MeteredExecutionControl<'a> {
             widths,
             interactions,
             since_last_segment_check: 0,
-            final_memory: None,
         }
     }
 
@@ -380,20 +323,23 @@ where
         false
     }
 
-    fn on_segment_start(
+    fn on_start(
         &mut self,
         state: &mut ExecutionSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
         // Program | Connector | Public Values | Memory ... | Executors (except Public Values) | Range Checker
+        state.ctx.trace_heights[PROGRAM_AIR_ID] = chip_complex.program_chip().true_program_length;
+        state.ctx.trace_heights[CONNECTOR_AIR_ID] = 2;
 
-        state.ctx.trace_heights[0] = chip_complex.program_chip().true_program_length;
-        state.ctx.trace_heights[1] = 2; // Connector chip
-
-        let mut offset = 2;
+        let mut offset = if chip_complex.config().has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1
+        } else {
+            PUBLIC_VALUES_AIR_ID
+        };
         offset += chip_complex.memory_controller().num_airs();
 
-        // Add heights for periphery chips with constant heights
+        // Periphery chips with constant heights
         for (i, chip_id) in chip_complex
             .inventory
             .insertion_order
@@ -402,15 +348,15 @@ where
             .enumerate()
         {
             if let &ChipId::Periphery(id) = chip_id {
-                let chip_index = offset + i;
                 if let Some(constant_height) =
                     chip_complex.inventory.periphery[id].constant_trace_height()
                 {
-                    state.ctx.trace_heights[chip_index] = constant_height;
+                    state.ctx.trace_heights[offset + i] = constant_height;
                 }
             }
         }
 
+        // Range checker chip
         if let (Some(range_checker_height), Some(last_height)) = (
             chip_complex.range_checker_chip().constant_trace_height(),
             state.ctx.trace_heights.last_mut(),
@@ -419,28 +365,13 @@ where
         }
     }
 
-    fn on_segment_end(
+    fn on_suspend_or_terminate(
         &mut self,
         state: &mut ExecutionSegmentState<Self::Ctx>,
         _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        _exit_code: Option<u32>,
     ) {
         state.ctx.finalize_access_adapter_heights();
-        self.final_memory = state.memory.as_ref().map(|memory| memory.memory.clone());
-    }
-
-    fn on_terminate(
-        &mut self,
-        state: &mut ExecutionSegmentState<Self::Ctx>,
-        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
-        _exit_code: u32,
-    ) {
-        state.ctx.finalize_access_adapter_heights();
-
-        let trace_heights = &state.ctx.trace_heights;
-        for (height, width) in trace_heights.iter().zip(self.widths.iter()) {
-            println!("{:<10} \t|\t{:<5}", height, width);
-        }
-        self.final_memory = state.memory.as_ref().map(|memory| memory.memory.clone());
     }
 
     /// Execute a single instruction
@@ -455,13 +386,12 @@ where
     {
         let &Instruction { opcode, .. } = instruction;
 
-        // Program | Connector | Public Values | Memory ... | Executors (except Public Values) | Range Checker
-        // TODO(ayush): no magic number, cache
-        let mut offset = 2;
+        let mut offset = if chip_complex.config().has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1
+        } else {
+            PUBLIC_VALUES_AIR_ID
+        };
         offset += chip_complex.memory_controller().num_airs();
-        if chip_complex.config().has_public_values_chip() {
-            offset += 1;
-        }
 
         if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode) {
             let mut vm_state = VmStateMut {
@@ -469,14 +399,14 @@ where
                 memory: state.memory.as_mut().unwrap(),
                 ctx: &mut state.ctx,
             };
-            let index = offset + i;
-            executor.execute_e2(&mut vm_state, instruction, index)?;
+            executor.execute_e2(&mut vm_state, instruction, offset + i)?;
         } else {
             return Err(ExecutionError::DisabledOperation {
                 pc: state.pc,
                 opcode,
             });
         };
+        state.clk += 1;
 
         Ok(())
     }
