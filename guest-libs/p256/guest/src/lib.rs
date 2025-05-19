@@ -13,6 +13,9 @@ mod internal;
 mod point;
 mod scalar;
 
+#[cfg(feature = "ecdsa-core")]
+pub mod ecdsa;
+
 // Needs to be public so that the `sw_init` macro can access it
 pub use internal::{
     P256Point, P256Point as AffinePoint, P256Point as ProjectivePoint, P256Scalar as Scalar,
@@ -34,8 +37,7 @@ impl Curve for P256 {
     /// 32-byte serialized field elements.
     type FieldBytesSize = U32;
 
-    // I don't think any arithmetic is done on Curve::Uint, so it's fine to use the U256 type
-    // instead of the OpenVM ruint impl
+    // Perf: Use the U256 type from openvm_ruint here
     type Uint = U256;
 
     /// Curve order.

@@ -21,6 +21,12 @@ ecdsa = { workspace = true }
 serde = { workspace = true }
 hex-literal = { workspace = true }
 ff = { workspace = true }
+p256 = { workspace = true }
+
+[features]
+default = ["ecdsa"]
+ecdsa = ["p256/ecdsa", "ecdsa-core"]
+ecdsa-core = ["p256/ecdsa-core"]
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint = { workspace = true }
