@@ -21,9 +21,15 @@ ecdsa = { workspace = true }
 serde = { workspace = true }
 hex-literal = { workspace = true }
 ff = { workspace = true }
+k256 = { workspace = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint = { workspace = true }
+
+[features]
+default = ["ecdsa"]
+ecdsa = ["k256/ecdsa", "ecdsa-core"]
+ecdsa-core = ["k256/ecdsa-core"]
 
 [package.metadata.cargo-shear]
 ignored = ["openvm", "num-bigint", "serde"]

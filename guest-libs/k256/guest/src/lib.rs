@@ -13,6 +13,9 @@ mod internal;
 mod point;
 mod scalar;
 
+#[cfg(feature = "ecdsa-core")]
+pub mod ecdsa;
+
 // Needs to be public so that the `sw_init` macro can access it
 pub use internal::{
     Secp256k1Point, Secp256k1Point as AffinePoint, Secp256k1Point as ProjectivePoint,
