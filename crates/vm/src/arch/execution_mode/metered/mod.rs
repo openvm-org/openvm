@@ -1,7 +1,8 @@
 pub mod bounded;
 pub mod exact;
 
-pub use exact::MeteredCtxExact as MeteredCtx;
+// pub use exact::MeteredCtxExact as MeteredCtx;
+pub use bounded::MeteredCtxBounded as MeteredCtx;
 
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};

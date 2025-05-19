@@ -1,6 +1,6 @@
 use super::{
-    execution_control::ExecutionControl, execution_mode::e1::E1ExecutionControl, ExecutionError,
-    GenerationError, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
+    execution_control::ExecutionControl, ExecutionError, GenerationError, SystemConfig,
+    VmChipComplex, VmComplexTraceHeights, VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;

@@ -12,6 +12,8 @@ pub struct MeteredCtxBounded {
 
     continuations_enabled: bool,
     num_access_adapters: usize,
+    // TODO(ayush): take alignment into account for access adapters
+    #[allow(dead_code)]
     as_byte_alignment_bits: Vec<usize>,
     pub memory_dimensions: MemoryDimensions,
 

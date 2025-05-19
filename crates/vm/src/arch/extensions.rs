@@ -341,6 +341,7 @@ impl<E, P> VmInventory<E, P> {
         let id = *self.instruction_lookup.get(opcode)?;
 
         self.executors.get_mut(id).map(|executor| {
+            // TODO(ayush): cache this somewhere
             let insertion_id = self
                 .insertion_order
                 .iter()
