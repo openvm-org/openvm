@@ -11,7 +11,10 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{E1E2ExecutionCtx, MeteredCtx, Streams};
+use super::{
+    execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+    Streams,
+};
 use crate::system::{
     memory::{
         online::{GuestMemory, TracingMemory},

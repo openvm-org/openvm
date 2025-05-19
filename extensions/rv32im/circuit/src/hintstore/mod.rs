@@ -5,8 +5,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        E1E2ExecutionCtx, ExecutionBridge, ExecutionError, ExecutionState, MeteredCtx,
-        NewVmChipWrapper, Result, StepExecutorE1, Streams, TraceStep, VmStateMut,
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        ExecutionBridge, ExecutionError, ExecutionState, NewVmChipWrapper, Result, StepExecutorE1,
+        Streams, TraceStep, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},

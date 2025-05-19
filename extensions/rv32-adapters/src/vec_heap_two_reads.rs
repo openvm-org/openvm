@@ -7,8 +7,8 @@ use std::{
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, E1E2ExecutionCtx, ExecutionBridge,
-        ExecutionState, VecHeapTwoReadsAdapterInterface, VmAdapterAir, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
+        ExecutionBridge, ExecutionState, VecHeapTwoReadsAdapterInterface, VmAdapterAir, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},

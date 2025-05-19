@@ -17,9 +17,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{
+        execution_mode::{e1::E1Ctx, metered::MeteredCtx, E1E2ExecutionCtx},
         AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, AdapterTraceStep,
-        BasicAdapterInterface, E1Ctx, E1E2ExecutionCtx, MeteredCtx, MinimalInstruction, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmCoreChip, VmStateMut,
+        BasicAdapterInterface, MinimalInstruction, Result, StepExecutorE1, TraceStep,
+        VmAdapterInterface, VmCoreAir, VmCoreChip, VmStateMut,
     },
     system::{
         memory::{

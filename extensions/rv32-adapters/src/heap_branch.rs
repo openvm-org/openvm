@@ -6,8 +6,8 @@ use std::{
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface,
-        E1E2ExecutionCtx, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
+        BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
         VmStateMut,
     },
     system::memory::{

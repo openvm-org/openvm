@@ -27,12 +27,13 @@ use super::{
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{
-        execution_control::{
-            E1ExecutionControl, MeteredExecutionControl, TracegenExecutionControl,
+        execution_mode::{
+            e1::E1ExecutionControl,
+            metered::{MeteredCtx, MeteredExecutionControl},
+            tracegen::TracegenExecutionControl,
         },
         hasher::poseidon2::vm_poseidon2_hasher,
-        segment::TracegenVmSegmentExecutor,
-        E1VmSegmentExecutor, ExecutionSegmentState, MeteredCtx, MeteredVmSegmentExecutor,
+        VmSegmentExecutor, VmSegmentState,
     },
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
@@ -106,17 +107,22 @@ pub struct VmExecutorResult<SC: StarkGenericConfig> {
     pub final_memory: Option<MemoryImage>,
 }
 
-pub struct VmExecutorNextSegmentState<F: PrimeField32> {
+pub struct VmState<F>
+where
+    F: PrimeField32,
+{
+    pub clk: u64,
+    pub pc: u32,
     pub memory: MemoryImage,
     pub input: Streams<F>,
-    pub pc: u32,
     #[cfg(feature = "bench-metrics")]
     pub metrics: VmMetrics,
 }
 
-impl<F: PrimeField32> VmExecutorNextSegmentState<F> {
-    pub fn new(memory: MemoryImage, input: impl Into<Streams<F>>, pc: u32) -> Self {
+impl<F: PrimeField32> VmState<F> {
+    pub fn new(clk: u64, pc: u32, memory: MemoryImage, input: impl Into<Streams<F>>) -> Self {
         Self {
+            clk,
             memory,
             input: input.into(),
             pc,
@@ -126,13 +132,14 @@ impl<F: PrimeField32> VmExecutorNextSegmentState<F> {
     }
 }
 
+type TracegenVmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, TracegenExecutionControl>;
 pub struct VmExecutorOneSegmentResult<F, VC>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
 {
     pub segment: TracegenVmSegmentExecutor<F, VC>,
-    pub next_state: Option<VmExecutorNextSegmentState<F>>,
+    pub next_state: Option<VmState<F>>,
 }
 
 impl<F, VC> VmExecutor<F, VC>
@@ -181,7 +188,6 @@ where
     ) -> Result<Vec<R>, E> {
         let mem_config = self.config.system().memory_config;
         let exe = exe.into();
-        let mut segment_results = vec![];
         let memory = AddressMap::from_sparse(
             mem_config.as_offset,
             1 << mem_config.as_height,
@@ -190,16 +196,16 @@ where
         );
 
         let pc = exe.pc_start;
-        let mut state = VmExecutorNextSegmentState::new(memory, input, pc);
+        let mut state = VmState::new(0, pc, memory, input);
 
         #[cfg(feature = "bench-metrics")]
         {
             state.metrics.fn_bounds = exe.fn_bounds.clone();
         }
 
-        let mut segment_idx = 0;
-
+        let mut segment_results = vec![];
         loop {
+            let segment_idx = segment_results.len();
             let _span = info_span!("execute_segment", segment = segment_idx).entered();
             let one_segment_result = self
                 .execute_until_segment(exe.clone(), state)
@@ -209,7 +215,6 @@ where
                 break;
             }
             state = one_segment_result.next_state.unwrap();
-            segment_idx += 1;
         }
         tracing::debug!("Number of continuation segments: {}", segment_results.len());
         #[cfg(feature = "bench-metrics")]
@@ -233,7 +238,7 @@ where
     pub fn execute_until_segment(
         &self,
         exe: impl Into<VmExe<F>>,
-        from_state: VmExecutorNextSegmentState<F>,
+        from_state: VmState<F>,
     ) -> Result<VmExecutorOneSegmentResult<F, VC>, ExecutionError> {
         let exe = exe.into();
 
@@ -260,7 +265,7 @@ where
             segment.set_override_trace_heights(overridden_heights.clone());
         }
 
-        let mut exec_state = ExecutionSegmentState::new(clk, from_state.pc, None, ());
+        let mut exec_state = VmSegmentState::new(from_state.clk, from_state.pc, None, ());
         metrics_span("execute_time_ms", || {
             segment.execute_from_state(&mut exec_state)
         })?;
@@ -282,17 +287,16 @@ where
                 .unwrap()
                 .pc
         );
-        let final_memory = mem::take(&mut segment.ctrl.final_memory)
-            .expect("final memory should be set in continuations segment");
         let streams = segment.chip_complex.take_streams();
         #[cfg(feature = "bench-metrics")]
         let metrics = segment.metrics.partial_take();
         Ok(VmExecutorOneSegmentResult {
             segment,
-            next_state: Some(VmExecutorNextSegmentState {
-                memory: final_memory,
-                input: streams,
+            next_state: Some(VmState {
+                clk: exec_state.clk,
                 pc: exec_state.pc,
+                memory: exec_state.memory.unwrap().memory,
+                input: streams,
                 #[cfg(feature = "bench-metrics")]
                 metrics,
             }),
@@ -345,7 +349,7 @@ where
         );
 
         let pc = exe.pc_start;
-        let mut state = VmExecutorNextSegmentState::new(memory, input, pc);
+        let mut state = VmState::new(0, pc, memory, input);
         let mut segment_idx = 0;
 
         loop {
@@ -358,20 +362,23 @@ where
                 None,
             )
             .unwrap();
-            let ctrl = E1ExecutionControl::default();
-            let mut segment = E1VmSegmentExecutor::<F, VC>::new(
+            let mut segment = VmSegmentExecutor::<F, VC, _>::new(
                 chip_complex,
                 self.trace_height_constraints.clone(),
                 exe.fn_bounds.clone(),
-                ctrl,
+                E1ExecutionControl,
             );
             #[cfg(feature = "bench-metrics")]
             {
                 segment.metrics = state.metrics;
             }
 
-            let mut exec_state =
-                ExecutionSegmentState::new(clk, state.pc, Some(GuestMemory::new(state.memory)), ());
+            let mut exec_state = VmSegmentState::new(
+                state.clk,
+                state.pc,
+                Some(GuestMemory::new(state.memory)),
+                (),
+            );
             metrics_span("execute_time_ms", || {
                 segment.execute_from_state(&mut exec_state)
             })?;
@@ -397,10 +404,11 @@ where
             #[cfg(feature = "bench-metrics")]
             let metrics = segment.metrics.partial_take();
 
-            state = VmExecutorNextSegmentState {
+            state = VmState {
+                clk: exec_state.clk,
+                pc: exec_state.pc,
                 memory: exec_state.memory.unwrap().memory,
                 input: streams,
-                pc: exec_state.pc,
                 #[cfg(feature = "bench-metrics")]
                 metrics,
             };
@@ -429,7 +437,7 @@ where
         );
 
         let pc = exe.pc_start;
-        let mut state = VmExecutorNextSegmentState::new(memory, input, pc);
+        let mut state = VmState::new(0, pc, memory, input);
         let mut segment_idx = 0;
 
         loop {
@@ -443,7 +451,7 @@ where
             )
             .unwrap();
             let ctrl = MeteredExecutionControl::new(&widths, &interactions);
-            let mut segment = MeteredVmSegmentExecutor::<F, VC>::new(
+            let mut segment = VmSegmentExecutor::<F, VC, _>::new(
                 chip_complex,
                 self.trace_height_constraints.clone(),
                 exe.fn_bounds.clone(),
@@ -483,8 +491,8 @@ where
                     .memory_dimensions(),
             );
 
-            let mut exec_state = ExecutionSegmentState::new(
-                clk,
+            let mut exec_state = VmSegmentState::new(
+                state.clk,
                 state.pc,
                 Some(GuestMemory::new(state.memory)),
                 ctx,
@@ -514,10 +522,11 @@ where
             #[cfg(feature = "bench-metrics")]
             let metrics = segment.metrics.partial_take();
 
-            state = VmExecutorNextSegmentState {
+            state = VmState {
+                clk: exec_state.clk,
+                pc: exec_state.pc,
                 memory: exec_state.memory.unwrap().memory,
                 input: streams,
-                pc: exec_state.pc,
                 #[cfg(feature = "bench-metrics")]
                 metrics,
             };
@@ -710,7 +719,7 @@ where
             segment.set_override_trace_heights(overridden_heights.clone());
         }
 
-        let mut exec_state = ExecutionSegmentState::new(0, exe.pc_start, None, ());
+        let mut exec_state = VmSegmentState::new(0, exe.pc_start, None, ());
         metrics_span("execute_time_ms", || {
             segment.execute_from_state(&mut exec_state)
         })?;

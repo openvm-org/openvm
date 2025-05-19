@@ -6,8 +6,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, E1E2ExecutionCtx, ExecutionBridge,
-        ExecutionState, VmAdapterAir, VmAdapterInterface, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
+        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},

@@ -1,7 +1,7 @@
 use std::ops::Mul;
 
 use openvm_circuit::{
-    arch::{E1E2ExecutionCtx, VmStateMut},
+    arch::{execution_mode::E1E2ExecutionCtx, VmStateMut},
     system::memory::{
         offline_checker::{MemoryBaseAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
         online::{GuestMemory, TracingMemory},

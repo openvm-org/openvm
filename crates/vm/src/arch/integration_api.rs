@@ -16,8 +16,8 @@ use openvm_stark_backend::{
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{
-    E1E2ExecutionCtx, ExecutionState, InsExecutorE1, InstructionExecutor, MeteredCtx, Result,
-    VmStateMut,
+    execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+    ExecutionState, InsExecutorE1, InstructionExecutor, Result, VmStateMut,
 };
 use crate::system::memory::{
     online::{GuestMemory, TracingMemory},

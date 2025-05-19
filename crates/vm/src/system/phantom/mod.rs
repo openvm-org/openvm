@@ -26,9 +26,9 @@ use serde_big_array::BigArray;
 use super::memory::{online::GuestMemory, MemoryController};
 use crate::{
     arch::{
-        E1Ctx, E1E2ExecutionCtx, ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState,
-        InsExecutorE1, InstructionExecutor, MeteredCtx, PcIncOrSet, PhantomSubExecutor, Streams,
-        VmStateMut,
+        execution_mode::{e1::E1Ctx, metered::MeteredCtx, E1E2ExecutionCtx},
+        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutorE1,
+        InstructionExecutor, PcIncOrSet, PhantomSubExecutor, Streams, VmStateMut,
     },
     system::program::ProgramBus,
 };

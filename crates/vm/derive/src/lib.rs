@@ -149,14 +149,14 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     ) -> ::openvm_circuit::arch::Result<()>
                     where
                         F: ::openvm_stark_backend::p3_field::PrimeField32,
-                        Ctx: ::openvm_circuit::arch::E1E2ExecutionCtx,
+                        Ctx: ::openvm_circuit::arch::execution_mode::E1E2ExecutionCtx,
                     {
                         self.0.execute_e1(state, instruction)
                     }
 
                     fn execute_e2(
                         &mut self,
-                        state: &mut ::openvm_circuit::arch::VmStateMut<::openvm_circuit::system::memory::online::GuestMemory, ::openvm_circuit::arch::MeteredCtx>,
+                        state: &mut ::openvm_circuit::arch::VmStateMut<::openvm_circuit::system::memory::online::GuestMemory, ::openvm_circuit::arch::execution_mode::metered::MeteredCtx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         chip_index: usize,
                     ) -> ::openvm_circuit::arch::Result<()>
@@ -215,7 +215,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     ) -> ::openvm_circuit::arch::Result<()>
                     where
                         #first_ty_generic: ::openvm_stark_backend::p3_field::PrimeField32,
-                        Ctx: ::openvm_circuit::arch::E1E2ExecutionCtx,
+                        Ctx: ::openvm_circuit::arch::execution_mode::E1E2ExecutionCtx,
                     {
                         match self {
                             #(#execute_e1_arms,)*
@@ -224,7 +224,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
 
                     fn execute_e2(
                         &mut self,
-                        state: &mut ::openvm_circuit::arch::VmStateMut<::openvm_circuit::system::memory::online::GuestMemory, openvm_circuit::arch::MeteredCtx>,
+                        state: &mut ::openvm_circuit::arch::VmStateMut<::openvm_circuit::system::memory::online::GuestMemory, ::openvm_circuit::arch::execution_mode::metered::MeteredCtx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
                         chip_index: usize,
                     ) -> ::openvm_circuit::arch::Result<()>
