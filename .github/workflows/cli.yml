@@ -56,11 +56,13 @@ jobs:
       - name: Build and run book examples
         working-directory: examples
         run: |
+          set -e
           for dir in */; do
             if [ -f "${dir}Cargo.toml" ]; then
               echo "Building ${dir%/}"
               cd "$dir"
-              cargo openvm build && cargo openvm run
+              cargo openvm build
+              cargo openvm run
               cd ..
             fi
           done
