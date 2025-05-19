@@ -43,7 +43,7 @@ pub struct RunArgs {
 
     #[arg(
         long,
-        help = "Output directory for OpenVM artifacts (excluding keys), by default will be ${target_dir}/openvm/${profile}",
+        help = "Output directory that OpenVM proving artifacts will be copied to",
         help_heading = "OpenVM Options"
     )]
     pub output_dir: Option<PathBuf>,

@@ -1,4 +1,8 @@
-use std::{env::var, fs::read, path::PathBuf};
+use std::{
+    env::var,
+    fs::{copy, create_dir_all, read},
+    path::PathBuf,
+};
 
 use clap::Parser;
 use eyre::Result;
@@ -12,7 +16,7 @@ use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 
 use crate::{
     default::DEFAULT_APP_CONFIG_PATH,
-    global::{manifest_path_and_dir, output_dir, target_dir},
+    global::{manifest_path_and_dir, target_dir, target_output_dir},
     util::read_config_toml_or_default,
 };
 
@@ -52,7 +56,7 @@ pub struct BuildArgs {
 
     #[arg(
         long,
-        help = "Output directory for OpenVM artifacts (excluding keys), by default will be ${target_dir}/openvm/${profile}",
+        help = "Output directory that OpenVM proving artifacts will be copied to",
         help_heading = "OpenVM Options"
     )]
     pub output_dir: Option<PathBuf>,
@@ -280,7 +284,7 @@ impl Default for BuildCargoArgs {
     }
 }
 
-// Returns either a) the transpilation output directory or b) the ELF output
+// Returns either a) the default transpilation output directory or b) the ELF output
 // directory if no_transpile is set to true.
 pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<PathBuf> {
     println!("[openvm] Building the package...");
@@ -419,7 +423,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
         .collect::<Vec<_>>();
 
     // Transpile and commit, storing in ${target_dir}/openvm/${profile} by default
-    let output_dir = output_dir(&build_args.output_dir, &target_dir, &cargo_args.profile);
+    let target_output_dir = target_output_dir(&target_dir, &cargo_args.profile);
 
     println!("[openvm] Transpiling the package...");
     for (elf_path, target) in izip!(&elf_paths, &elf_targets) {
@@ -433,12 +437,24 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
         } else {
             &target.name
         };
-        write_exe_to_file(exe, output_dir.join(format!("{}.vmexe", target_name)))?;
+        let file_name = format!("{}.vmexe", target_name);
+        let file_path = target_output_dir.join(&file_name);
 
-        println!(
-            "[openvm] Successfully transpiled and committed outputs to {}",
-            output_dir.display()
-        );
+        write_exe_to_file(exe, &file_path)?;
+        if let Some(output_dir) = &build_args.output_dir {
+            create_dir_all(output_dir)?;
+            copy(file_path, output_dir.join(file_name))?;
+        }
     }
-    Ok(output_dir.clone())
+
+    let final_output_dir = if let Some(output_dir) = &build_args.output_dir {
+        output_dir
+    } else {
+        &target_output_dir
+    };
+    println!(
+        "[openvm] Successfully transpiled to {}",
+        final_output_dir.display()
+    );
+    Ok(final_output_dir.clone())
 }

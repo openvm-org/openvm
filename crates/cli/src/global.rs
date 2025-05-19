@@ -15,11 +15,6 @@ use crate::{
 static MANIFEST_PATH: OnceLock<PathBuf> = OnceLock::new();
 static MANIFEST_DIR: OnceLock<PathBuf> = OnceLock::new();
 static TARGET_DIR: OnceLock<PathBuf> = OnceLock::new();
-static OUTPUT_DIR: OnceLock<PathBuf> = OnceLock::new();
-
-static APP_PK_PATH: OnceLock<PathBuf> = OnceLock::new();
-static APP_VK_PATH: OnceLock<PathBuf> = OnceLock::new();
-
 static SINGLE_TARGET_NAME: OnceLock<String> = OnceLock::new();
 
 pub(crate) fn manifest_path_and_dir(manifest_path: &Option<PathBuf>) -> Result<(PathBuf, PathBuf)> {
@@ -51,38 +46,16 @@ pub(crate) fn target_dir(target_dir: &Option<PathBuf>, manifest_path: &PathBuf) 
         .to_path_buf()
 }
 
-pub(crate) fn output_dir(
-    output_dir: &Option<PathBuf>,
-    target_dir: &Path,
-    profile: &str,
-) -> PathBuf {
-    OUTPUT_DIR
-        .get_or_init(|| {
-            output_dir
-                .clone()
-                .unwrap_or_else(|| target_dir.join("openvm").join(profile))
-        })
-        .to_path_buf()
+pub(crate) fn target_output_dir(target_dir: &Path, profile: &str) -> PathBuf {
+    target_dir.join("openvm").join(profile).to_path_buf()
 }
 
-pub(crate) fn app_pk_path(app_pk: &Option<PathBuf>, target_dir: &Path) -> PathBuf {
-    APP_PK_PATH
-        .get_or_init(|| {
-            app_pk
-                .clone()
-                .unwrap_or_else(|| target_dir.join("openvm").join(DEFAULT_APP_PK_NAME))
-        })
-        .to_path_buf()
+pub(crate) fn app_pk_path(target_dir: &Path) -> PathBuf {
+    target_dir.join("openvm").join(DEFAULT_APP_PK_NAME)
 }
 
-pub(crate) fn app_vk_path(app_vk: &Option<PathBuf>, target_dir: &Path) -> PathBuf {
-    APP_VK_PATH
-        .get_or_init(|| {
-            app_vk
-                .clone()
-                .unwrap_or_else(|| target_dir.join("openvm").join(DEFAULT_APP_VK_NAME))
-        })
-        .to_path_buf()
+pub(crate) fn app_vk_path(target_dir: &Path) -> PathBuf {
+    target_dir.join("openvm").join(DEFAULT_APP_VK_NAME)
 }
 
 pub(crate) fn get_single_target_name(cargo_args: &RunCargoArgs) -> Result<String> {

@@ -67,7 +67,11 @@ impl VerifyCmd {
             } => {
                 let (manifest_path, _) = manifest_path_and_dir(&cargo_args.manifest_path)?;
                 let target_dir = target_dir(&cargo_args.target_dir, &manifest_path);
-                let app_vk_path = app_vk_path(app_vk, &target_dir);
+                let app_vk_path = if let Some(app_vk) = app_vk {
+                    app_vk.to_path_buf()
+                } else {
+                    app_vk_path(&target_dir)
+                };
 
                 let app_vk = read_app_vk_from_file(app_vk_path)?;
                 let app_proof = read_app_proof_from_file(proof)?;

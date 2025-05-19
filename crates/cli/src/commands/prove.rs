@@ -38,19 +38,19 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            help = "Path to app proving key, if specified keygen will be skipped",
-            help_heading = "OpenVM Options"
+            default_value = DEFAULT_APP_PROOF_PATH,
+            help = "Path to app proof output",
+            help_heading = "Output"
         )]
-        app_pk: Option<PathBuf>,
+        proof: PathBuf,
 
         #[arg(
             long,
             action,
-            default_value = DEFAULT_APP_PROOF_PATH,
-            help = "Path to app proof output",
+            help = "Path to app proving key, if specified keygen will be skipped",
             help_heading = "OpenVM Options"
         )]
-        proof: PathBuf,
+        app_pk: Option<PathBuf>,
 
         #[command(flatten)]
         run_args: RunArgs,
@@ -62,19 +62,19 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            help = "Path to app proving key, if specified keygen will be skipped",
-            help_heading = "OpenVM Options"
+            default_value = DEFAULT_STARK_PROOF_PATH,
+            help = "Path to STARK proof output",
+            help_heading = "Output"
         )]
-        app_pk: Option<PathBuf>,
+        proof: PathBuf,
 
         #[arg(
             long,
             action,
-            default_value = DEFAULT_STARK_PROOF_PATH,
-            help = "Path to STARK proof output",
+            help = "Path to app proving key, if specified keygen will be skipped",
             help_heading = "OpenVM Options"
         )]
-        proof: PathBuf,
+        app_pk: Option<PathBuf>,
 
         #[command(flatten)]
         run_args: RunArgs,
@@ -90,19 +90,19 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            help = "Path to app proving key, if specified keygen will be skipped",
-            help_heading = "OpenVM Options"
+            default_value = DEFAULT_EVM_PROOF_PATH,
+            help = "Path to EVM proof output",
+            help_heading = "Output"
         )]
-        app_pk: Option<PathBuf>,
+        proof: PathBuf,
 
         #[arg(
             long,
             action,
-            default_value = DEFAULT_EVM_PROOF_PATH,
-            help = "Path to EVM proof output",
+            help = "Path to app proving key, if specified keygen will be skipped",
             help_heading = "OpenVM Options"
         )]
-        proof: PathBuf,
+        app_pk: Option<PathBuf>,
 
         #[command(flatten)]
         run_args: RunArgs,
@@ -212,11 +212,19 @@ impl ProveCmd {
         let (manifest_path, _) = manifest_path_and_dir(&cargo_args.manifest_path)?;
         let target_dir = target_dir(&cargo_args.target_dir, &manifest_path);
 
-        let app_pk_path = app_pk_path(app_pk, &target_dir);
-        if app_pk.is_none() {
-            let app_vk_path = app_vk_path(&None, &target_dir);
-            keygen(&run_args.config, &app_pk_path, &app_vk_path)?;
-        }
+        let app_pk_path = if let Some(app_pk) = app_pk {
+            app_pk.to_path_buf()
+        } else {
+            let app_pk_path = app_pk_path(&target_dir);
+            let app_vk_path = app_vk_path(&target_dir);
+            keygen(
+                &run_args.config,
+                &app_pk_path,
+                &app_vk_path,
+                run_args.output_dir.as_ref(),
+            )?;
+            app_pk_path
+        };
 
         Ok(Arc::new(read_app_pk_from_file(app_pk_path)?))
     }

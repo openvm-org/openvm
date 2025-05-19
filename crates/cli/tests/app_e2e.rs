@@ -8,8 +8,8 @@ fn test_cli_app_e2e() -> Result<()> {
     let temp_dir = tempdir()?;
     run_cmd("cargo", &["install", "--path", ".", "--force"])?;
     let exe_path = "tests/programs/fibonacci/target/openvm/release/openvm-cli-example-test.vmexe";
-    let temp_pk = temp_dir.path().join("fibonacci.pk");
-    let temp_vk = temp_dir.path().join("fibonacci.vk");
+    let temp_pk = temp_dir.path().join("app.pk");
+    let temp_vk = temp_dir.path().join("app.vk");
     let temp_proof = temp_dir.path().join("fibonacci.apppf");
 
     run_cmd(
@@ -31,10 +31,8 @@ fn test_cli_app_e2e() -> Result<()> {
             "keygen",
             "--config",
             "tests/programs/fibonacci/openvm.toml",
-            "--app-pk",
-            temp_pk.to_str().unwrap(),
-            "--app-vk",
-            temp_vk.to_str().unwrap(),
+            "--output-dir",
+            temp_dir.path().to_str().unwrap(),
         ],
     )?;
 
