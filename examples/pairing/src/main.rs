@@ -4,9 +4,9 @@ use hex_literal::hex;
 // ANCHOR: imports
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
 use openvm_ecc_guest::AffinePoint;
-use openvm_pairing_guest::{
+use openvm_pairing::{
     bls12_381::{Bls12_381, Fp, Fp2},
-    pairing::PairingCheck,
+    PairingCheck,
 };
 // ANCHOR_END: imports
 
