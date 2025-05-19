@@ -19,7 +19,7 @@ pub struct AppProver<VC, E: StarkFriEngine<SC>> {
     app_prover: VmLocalProver<SC, VC, E>,
 }
 
-impl<VC, E: StarkFriEngine<SC>> AppProver<VC, E> {
+impl<VC: 'static, E: StarkFriEngine<SC> + Send + 'static> AppProver<VC, E> {
     pub fn new(
         app_vm_pk: Arc<VmProvingKey<SC, VC>>,
         app_committed_exe: Arc<NonRootCommittedExe>,
@@ -44,9 +44,9 @@ impl<VC, E: StarkFriEngine<SC>> AppProver<VC, E> {
     /// Generates proof for every continuation segment
     pub fn generate_app_proof(&self, input: StdIn) -> ContinuationVmProof<SC>
     where
-        VC: VmConfig<F>,
-        VC::Executor: Chip<SC>,
-        VC::Periphery: Chip<SC>,
+        VC: VmConfig<F> + Send,
+        VC::Executor: Chip<SC> + Send,
+        VC::Periphery: Chip<SC> + Send,
     {
         assert!(
             self.vm_config().system().continuation_enabled,
@@ -60,18 +60,29 @@ impl<VC, E: StarkFriEngine<SC>> AppProver<VC, E> {
                 .unwrap_or(&"app_proof".to_string())
         )
         .in_scope(|| {
+            let wall_timer = std::time::Instant::now();
             #[cfg(feature = "bench-metrics")]
             metrics::counter!("fri.log_blowup")
                 .absolute(self.app_prover.pk.fri_params.log_blowup as u64);
-            ContinuationVmProver::prove(&self.app_prover, input)
+
+            let proofs = ContinuationVmProver::prove(&self.app_prover, input);
+
+            tracing::info!(
+                "app proof wall time: {:.3}s",
+                wall_timer.elapsed().as_secs_f64()
+            );
+            #[cfg(feature = "bench-metrics")]
+            metrics::gauge!("total_proof_time_ms").set(wall_timer.elapsed().as_millis() as f64);
+
+            proofs
         })
     }
 
     pub fn generate_app_proof_without_continuations(&self, input: StdIn) -> Proof<SC>
     where
-        VC: VmConfig<F>,
-        VC::Executor: Chip<SC>,
-        VC::Periphery: Chip<SC>,
+        VC: VmConfig<F> + Sync + Send,
+        VC::Executor: Chip<SC> + Send,
+        VC::Periphery: Chip<SC> + Send,
     {
         assert!(
             !self.vm_config().system().continuation_enabled,
@@ -85,10 +96,20 @@ impl<VC, E: StarkFriEngine<SC>> AppProver<VC, E> {
                 .unwrap_or(&"app_proof".to_string())
         )
         .in_scope(|| {
+            let wall_timer = std::time::Instant::now();
             #[cfg(feature = "bench-metrics")]
             metrics::counter!("fri.log_blowup")
                 .absolute(self.app_prover.pk.fri_params.log_blowup as u64);
-            SingleSegmentVmProver::prove(&self.app_prover, input)
+            let proof = SingleSegmentVmProver::prove(&self.app_prover, input);
+
+            tracing::info!(
+                "app proof wall time: {:.3}s",
+                wall_timer.elapsed().as_secs_f64()
+            );
+            #[cfg(feature = "bench-metrics")]
+            metrics::gauge!("total_proof_time_ms").set(wall_timer.elapsed().as_millis() as f64);
+
+            proof
         })
     }
 

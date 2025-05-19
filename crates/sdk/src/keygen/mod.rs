@@ -440,6 +440,7 @@ impl AggProvingKey {
             wrapper,
             profiling: halo2_config.profiling,
         };
+
         Self {
             agg_stark_pk,
             halo2_pk,
