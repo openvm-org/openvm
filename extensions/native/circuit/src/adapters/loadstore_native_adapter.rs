@@ -14,9 +14,7 @@ use openvm_circuit::{
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::var_range::{
-    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
-};
+use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::{
@@ -28,7 +26,6 @@ use openvm_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-use serde::{Deserialize, Serialize};
 
 use super::memory_read;
 
@@ -49,30 +46,6 @@ impl<T, const NUM_CELLS: usize> VmAdapterInterface<T>
     type Reads = (T, [T; NUM_CELLS]);
     type Writes = [T; NUM_CELLS];
     type ProcessedInstruction = NativeLoadStoreInstruction<T>;
-}
-
-#[repr(C)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
-pub struct NativeLoadStoreReadRecord<F: Field, const NUM_CELLS: usize> {
-    pub pointer_read: RecordId,
-    pub data_read: Option<RecordId>,
-    pub write_as: F,
-    pub write_ptr: F,
-
-    pub a: F,
-    pub b: F,
-    pub c: F,
-    pub d: F,
-    pub e: F,
-}
-
-#[repr(C)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
-pub struct NativeLoadStoreWriteRecord<F: Field, const NUM_CELLS: usize> {
-    pub from_state: ExecutionState<F>,
-    pub write_id: RecordId,
 }
 
 #[repr(C)]
@@ -332,10 +305,7 @@ where
     type ReadData = (F, [F; NUM_CELLS]);
     type WriteData = [F; NUM_CELLS];
 
-    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
-    where
-        Mem: GuestMemory,
-    {
+    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
         let Instruction {
             opcode,
             a,
@@ -374,10 +344,12 @@ where
         (read_cell, data_read)
     }
 
-    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData)
-    where
-        Mem: GuestMemory,
-    {
+    fn write(
+        &self,
+        memory: &mut GuestMemory,
+        instruction: &Instruction<F>,
+        data: &Self::WriteData,
+    ) {
         let Instruction {
             opcode,
             a,

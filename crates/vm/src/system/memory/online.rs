@@ -16,8 +16,12 @@ use crate::{arch::MemoryConfig, system::memory::MemoryImage};
 
 pub const INITIAL_TIMESTAMP: u32 = 0;
 
-/// API for guest memory conforming to OpenVM ISA
-pub trait GuestMemory {
+#[derive(Debug, Clone, derive_new::new)]
+pub struct GuestMemory {
+    pub memory: AddressMap<PAGE_SIZE>,
+}
+
+impl GuestMemory {
     /// Returns `[pointer:BLOCK_SIZE]_{address_space}`
     ///
     /// # Safety
@@ -25,25 +29,48 @@ pub trait GuestMemory {
     /// and it must be the exact type used to represent a single memory cell in
     /// address space `address_space`. For standard usage,
     /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
-    unsafe fn read<T, const BLOCK_SIZE: usize>(
+    pub unsafe fn read<T, const BLOCK_SIZE: usize>(
         &self,
-        address_space: u32,
-        pointer: u32,
+        addr_space: u32,
+        ptr: u32,
     ) -> [T; BLOCK_SIZE]
     where
-        T: Copy + Debug;
+        T: Copy + Debug,
+    {
+        debug_assert_eq!(
+            size_of::<T>(),
+            self.memory.cell_size[(addr_space - self.memory.as_offset) as usize]
+        );
+        let read = self
+            .memory
+            .paged_vecs
+            .get_unchecked((addr_space - self.memory.as_offset) as usize)
+            .get((ptr as usize) * size_of::<T>());
+        read
+    }
 
     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}`
     ///
     /// # Safety
     /// See [`GuestMemory::read`].
-    unsafe fn write<T, const BLOCK_SIZE: usize>(
+    pub unsafe fn write<T, const BLOCK_SIZE: usize>(
         &mut self,
-        address_space: u32,
-        pointer: u32,
+        addr_space: u32,
+        ptr: u32,
         values: &[T; BLOCK_SIZE],
     ) where
-        T: Copy + Debug;
+        T: Copy + Debug,
+    {
+        debug_assert_eq!(
+            size_of::<T>(),
+            self.memory.cell_size[(addr_space - self.memory.as_offset) as usize],
+            "addr_space={addr_space}"
+        );
+        self.memory
+            .paged_vecs
+            .get_unchecked_mut((addr_space - self.memory.as_offset) as usize)
+            .set((ptr as usize) * size_of::<T>(), values);
+    }
 
     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}` and returns
     /// the previous values.
@@ -51,7 +78,7 @@ pub trait GuestMemory {
     /// # Safety
     /// See [`GuestMemory::read`].
     #[inline(always)]
-    unsafe fn replace<T, const BLOCK_SIZE: usize>(
+    pub unsafe fn replace<T, const BLOCK_SIZE: usize>(
         &mut self,
         address_space: u32,
         pointer: u32,
@@ -65,6 +92,56 @@ pub trait GuestMemory {
         prev
     }
 }
+
+// /// API for guest memory conforming to OpenVM ISA
+// pub trait GuestMemory {
+//     /// Returns `[pointer:BLOCK_SIZE]_{address_space}`
+//     ///
+//     /// # Safety
+//     /// The type `T` must be stack-allocated `repr(C)` or `repr(transparent)`,
+//     /// and it must be the exact type used to represent a single memory cell in
+//     /// address space `address_space`. For standard usage,
+//     /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
+//     unsafe fn read<T, const BLOCK_SIZE: usize>(
+//         &self,
+//         address_space: u32,
+//         pointer: u32,
+//     ) -> [T; BLOCK_SIZE]
+//     where
+//         T: Copy + Debug;
+
+//     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}`
+//     ///
+//     /// # Safety
+//     /// See [`GuestMemory::read`].
+//     unsafe fn write<T, const BLOCK_SIZE: usize>(
+//         &mut self,
+//         address_space: u32,
+//         pointer: u32,
+//         values: &[T; BLOCK_SIZE],
+//     ) where
+//         T: Copy + Debug;
+
+//     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}` and returns
+//     /// the previous values.
+//     ///
+//     /// # Safety
+//     /// See [`GuestMemory::read`].
+//     #[inline(always)]
+//     unsafe fn replace<T, const BLOCK_SIZE: usize>(
+//         &mut self,
+//         address_space: u32,
+//         pointer: u32,
+//         values: &[T; BLOCK_SIZE],
+//     ) -> [T; BLOCK_SIZE]
+//     where
+//         T: Copy + Debug,
+//     {
+//         let prev = self.read(address_space, pointer);
+//         self.write(address_space, pointer, values);
+//         prev
+//     }
+// }
 
 // TO BE DELETED
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,7 +171,7 @@ pub struct AccessMetadata {
 
 impl AccessMetadata {
     /// A marker indicating that the element is a part of a larger block which starts earlier.
-    const OCCUPIED: u32 = u32::MAX;
+    pub const OCCUPIED: u32 = u32::MAX;
 }
 
 /// Online memory that stores additional information for trace generation purposes.
@@ -102,10 +179,12 @@ impl AccessMetadata {
 #[derive(Getters)]
 pub struct TracingMemory<F> {
     pub timestamp: u32,
+    /// The initial block size -- this depends on the type of boundary chip.
+    initial_block_size: usize,
     /// The underlying data memory, with memory cells typed by address space: see [AddressMap].
     // TODO: make generic in GuestMemory
     #[getset(get = "pub")]
-    pub data: AddressMap<PAGE_SIZE>,
+    pub data: GuestMemory,
     /// A map of `addr_space -> (ptr / min_block_size[addr_space] -> (timestamp: u32, block_size:
     /// u32))` for the timestamp and block size of the latest access.
     pub(super) meta: Vec<PagedVec<PAGE_SIZE>>,
@@ -122,6 +201,7 @@ impl<F: PrimeField32> TracingMemory<F> {
         mem_config: &MemoryConfig,
         range_checker: SharedVariableRangeCheckerChip,
         memory_bus: MemoryBus,
+        initial_block_size: usize,
     ) -> Self {
         assert_eq!(mem_config.as_offset, 1);
         let num_cells = 1usize << mem_config.pointer_max_bits; // max cells per address space
@@ -143,10 +223,11 @@ impl<F: PrimeField32> TracingMemory<F> {
             })
             .collect();
         Self {
-            data: AddressMap::from_mem_config(mem_config),
+            data: GuestMemory::new(AddressMap::from_mem_config(mem_config)),
             meta,
             min_block_size,
             timestamp: INITIAL_TIMESTAMP + 1,
+            initial_block_size,
             access_adapter_inventory: AccessAdapterInventory::new(
                 range_checker,
                 memory_bus,
@@ -169,7 +250,7 @@ impl<F: PrimeField32> TracingMemory<F> {
                     .div_ceil(PAGE_SIZE * self.min_block_size[i] as usize),
             );
         }
-        self.data = image;
+        self.data = GuestMemory::new(image);
         self
     }
 
@@ -186,13 +267,25 @@ impl<F: PrimeField32> TracingMemory<F> {
         );
     }
 
-    fn execute_splits<const ALIGN: usize>(
+    pub(crate) fn execute_splits<const UPDATE_META: bool>(
         &mut self,
         address: MemoryAddress<u32, u32>,
+        align: usize,
         values: &[F],
         timestamp: u32,
     ) {
-        let mut size = ALIGN;
+        if UPDATE_META {
+            for i in 0..(values.len() / align) {
+                self.set_meta_block(
+                    address.address_space as usize,
+                    address.pointer as usize + i * align,
+                    align,
+                    align,
+                    timestamp,
+                );
+            }
+        }
+        let mut size = align;
         let MemoryAddress {
             address_space,
             pointer,
@@ -203,9 +296,9 @@ impl<F: PrimeField32> TracingMemory<F> {
                 self.access_adapter_inventory.execute_split(
                     MemoryAddress {
                         address_space,
-                        pointer: pointer + (i * size) as u32,
+                        pointer: pointer + i as u32,
                     },
-                    &values[i * size..(i + 1) * size],
+                    &values[i..i + size],
                     timestamp,
                     self.adapter_inventory_trace_cursor.get_row_slice(size),
                 );
@@ -213,13 +306,23 @@ impl<F: PrimeField32> TracingMemory<F> {
         }
     }
 
-    fn execute_merges<const ALIGN: usize>(
+    pub(crate) fn execute_merges<const UPDATE_META: bool>(
         &mut self,
         address: MemoryAddress<u32, u32>,
+        align: usize,
         values: &[F],
         timestamps: &[u32],
     ) {
-        let mut size = ALIGN;
+        if UPDATE_META {
+            self.set_meta_block(
+                address.address_space as usize,
+                address.pointer as usize,
+                align,
+                values.len(),
+                *timestamps.iter().max().unwrap(),
+            );
+        }
+        let mut size = align;
         let MemoryAddress {
             address_space,
             pointer,
@@ -227,20 +330,20 @@ impl<F: PrimeField32> TracingMemory<F> {
         while size < values.len() {
             size *= 2;
             for i in (0..values.len()).step_by(size) {
-                let left_timestamp = timestamps[(i / ALIGN)..((i + size / 2) / ALIGN)]
+                let left_timestamp = timestamps[(i / align)..((i + size / 2) / align)]
                     .iter()
                     .max()
                     .unwrap();
-                let right_timestamp = timestamps[(i + size / 2 / ALIGN)..((i + size) / ALIGN)]
+                let right_timestamp = timestamps[((i + size / 2) / align)..((i + size) / align)]
                     .iter()
                     .max()
                     .unwrap();
                 self.access_adapter_inventory.execute_merge(
                     MemoryAddress {
                         address_space,
-                        pointer: pointer + (i * size) as u32,
+                        pointer: pointer + i as u32,
                     },
-                    &values[i * size..(i + 1) * size],
+                    &values[i..i + size],
                     *left_timestamp,
                     *right_timestamp,
                     self.adapter_inventory_trace_cursor.get_row_slice(size),
@@ -249,22 +352,52 @@ impl<F: PrimeField32> TracingMemory<F> {
         }
     }
 
+    /// Updates the metadata with the given block.
+    fn set_meta_block(
+        &mut self,
+        address_space: usize,
+        pointer: usize,
+        align: usize,
+        block_size: usize,
+        timestamp: u32,
+    ) {
+        let ptr = pointer / align;
+        let meta = unsafe { self.meta.get_unchecked_mut(address_space) };
+        meta.set(
+            ptr * size_of::<AccessMetadata>(),
+            &AccessMetadata {
+                timestamp,
+                block_size: block_size as u32,
+            },
+        );
+        for i in 1..(block_size / align) {
+            meta.set(
+                (ptr + i) * size_of::<AccessMetadata>(),
+                &AccessMetadata {
+                    timestamp,
+                    block_size: AccessMetadata::OCCUPIED,
+                },
+            );
+        }
+    }
+
     /// Returns the timestamp of the previous access to `[pointer:BLOCK_SIZE]_{address_space}`.
     /// If we need to split/merge/initialize something for this, we first do all the necessary
     /// actions. In the end of this process, we have this segment intact in our `meta`.
     ///
     /// Caller must ensure alignment (e.g. via `assert_alignment`) prior to calling this function.
-    fn prev_access_time<T: Copy + Debug, const BLOCK_SIZE: usize, const ALIGN: usize>(
+    fn prev_access_time<T: Copy + Debug, const BLOCK_SIZE: usize>(
         &mut self,
         address_space: usize,
         pointer: usize,
+        align: usize,
     ) -> u32 {
         let size = size_of::<T>();
-        let seg_size = ALIGN * size;
-        let num_segs = BLOCK_SIZE / ALIGN;
+        let seg_size = align * size;
+        let num_segs = BLOCK_SIZE / align;
 
-        let begin = pointer / ALIGN;
-        let end = begin + BLOCK_SIZE / ALIGN;
+        let begin = pointer / align;
+        let end = begin + BLOCK_SIZE / align;
 
         let mut prev_ts = INITIAL_TIMESTAMP;
         let mut block_timestamps = vec![INITIAL_TIMESTAMP; num_segs];
@@ -281,41 +414,64 @@ impl<F: PrimeField32> TracingMemory<F> {
                 break false;
             } else if current_metadata.block_size == 0 {
                 // Initialize
-                self.meta[address_space].set(
-                    cur_ptr * size_of::<AccessMetadata>(),
-                    &AccessMetadata {
-                        timestamp: INITIAL_TIMESTAMP,
-                        block_size: ALIGN as u32,
-                    },
-                );
+                if self.initial_block_size < align {
+                    // Only happens in volatile, so empty initial memory
+                    self.set_meta_block(
+                        address_space,
+                        cur_ptr * align,
+                        align,
+                        align,
+                        INITIAL_TIMESTAMP,
+                    );
+                    current_metadata = AccessMetadata::new(INITIAL_TIMESTAMP, align as u32);
+                } else {
+                    cur_ptr -= cur_ptr % (self.initial_block_size / align);
+                    self.set_meta_block(
+                        address_space,
+                        cur_ptr * align,
+                        align,
+                        self.initial_block_size,
+                        INITIAL_TIMESTAMP,
+                    );
+                    current_metadata =
+                        AccessMetadata::new(INITIAL_TIMESTAMP, self.initial_block_size as u32);
+                }
             }
             prev_ts = prev_ts.max(current_metadata.timestamp);
             while current_metadata.block_size == AccessMetadata::OCCUPIED {
                 cur_ptr -= 1;
-                current_metadata =
-                    self.meta[address_space].get::<AccessMetadata>(cur_ptr * seg_size);
+                current_metadata = self.meta[address_space]
+                    .get::<AccessMetadata>(cur_ptr * size_of::<AccessMetadata>());
             }
             block_timestamps[cur_ptr.saturating_sub(begin)
-                ..((cur_ptr + current_metadata.block_size as usize).min(end) - begin)]
+                ..((cur_ptr + (current_metadata.block_size as usize) / align).min(end) - begin)]
                 .fill(current_metadata.timestamp);
-            // Split
-            let address = MemoryAddress::new(address_space as u32, (cur_ptr * seg_size) as u32);
-            let values = (0..current_metadata.block_size as usize)
-                .map(|i| {
-                    self.data
-                        .get_f(address.address_space, address.pointer + (i as u32))
-                })
-                .collect::<Vec<_>>();
-            self.execute_splits::<ALIGN>(address, &values, self.timestamp);
-            cur_ptr += current_metadata.block_size as usize;
+            if current_metadata.block_size > align as u32 {
+                // Split
+                let address = MemoryAddress::new(address_space as u32, (cur_ptr * seg_size) as u32);
+                let values = (0..current_metadata.block_size as usize)
+                    .map(|i| {
+                        self.data
+                            .memory
+                            .get_f(address.address_space, address.pointer + (i as u32))
+                    })
+                    .collect::<Vec<_>>();
+                self.execute_splits::<true>(address, align, &values, current_metadata.timestamp);
+            }
+            cur_ptr += current_metadata.block_size as usize / align;
         };
         if need_to_merge {
             // Merge
             let values = (0..BLOCK_SIZE)
-                .map(|i| self.data.get_f(address_space as u32, (pointer + i) as u32))
+                .map(|i| {
+                    self.data
+                        .memory
+                        .get_f(address_space as u32, (pointer + i) as u32)
+                })
                 .collect::<Vec<_>>();
-            self.execute_merges::<ALIGN>(
+            self.execute_merges::<true>(
                 MemoryAddress::new(address_space as u32, pointer as u32),
+                align,
                 &values,
                 &block_timestamps,
             );
@@ -354,29 +510,18 @@ impl<F: PrimeField32> TracingMemory<F> {
         T: Copy + Debug,
     {
         self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
-        let values = self.data.read(address_space, pointer);
+        let t_prev =
+            self.prev_access_time::<T, BLOCK_SIZE>(address_space as usize, pointer as usize, ALIGN);
         let t_curr = self.timestamp;
         self.timestamp += 1;
-        // Handle timestamp and block size:
-        let access_idx = (pointer as usize / ALIGN) * size_of::<AccessMetadata>();
-        // TODO: this is wrong and must be replaced with normal logic
-        // let t_prev = {
-        //     // TODO: address space should be checked elsewhere
-        //     let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
-        //     let AccessMetadata {
-        //         timestamp: t_prev,
-        //         mut block_size,
-        //     } = meta.replace(access_idx, &AccessMetadata::new(t_curr, BLOCK_SIZE as u32));
-        //     // TODO: mark as touched
-        //     if block_size == 0 {
-        //         block_size = BLOCK_SIZE as u32;
-        //     }
-        //     t_prev
-        // };
-        let t_prev =
-            self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(address_space as usize, pointer as usize);
-        let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
-        meta.set(access_idx, &AccessMetadata::new(t_curr, BLOCK_SIZE as u32));
+        let values = self.data.read(address_space, pointer);
+        self.set_meta_block(
+            address_space as usize,
+            pointer as usize,
+            ALIGN,
+            BLOCK_SIZE,
+            t_curr,
+        );
 
         (t_prev, values)
     }
@@ -413,29 +558,18 @@ impl<F: PrimeField32> TracingMemory<F> {
         T: Copy + Debug,
     {
         self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
+        let t_prev =
+            self.prev_access_time::<T, BLOCK_SIZE>(address_space as usize, pointer as usize, ALIGN);
         let values_prev = self.data.replace(address_space, pointer, values);
         let t_curr = self.timestamp;
         self.timestamp += 1;
-        // Handle timestamp and block size:
-        let access_idx = (pointer as usize / ALIGN) * size_of::<AccessMetadata>();
-        // TODO: this is wrong and must be replaced with normal logic
-        // let t_prev = {
-        //     // TODO: address space should be checked elsewhere
-        //     let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
-        //     let AccessMetadata {
-        //         timestamp: t_prev,
-        //         mut block_size,
-        //     } = meta.replace(access_idx, &AccessMetadata::new(t_curr, BLOCK_SIZE as u32));
-        //     // TODO: mark as touched
-        //     if block_size == 0 {
-        //         block_size = BLOCK_SIZE as u32;
-        //     }
-        //     t_prev
-        // };
-        let t_prev =
-            self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(address_space as usize, pointer as usize);
-        let meta = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
-        meta.set(access_idx, &AccessMetadata::new(t_curr, BLOCK_SIZE as u32));
+        self.set_meta_block(
+            address_space as usize,
+            pointer as usize,
+            ALIGN,
+            BLOCK_SIZE,
+            t_curr,
+        );
 
         (t_prev, values_prev)
     }
@@ -465,7 +599,8 @@ impl<F: PrimeField32> TracingMemory<F> {
             .flat_map(move |(addr_space, (page, &align))| {
                 page.iter::<AccessMetadata>()
                     .filter_map(move |(idx, metadata)| {
-                        (metadata.block_size != 0)
+                        (metadata.block_size != 0
+                            && metadata.block_size != AccessMetadata::OCCUPIED)
                             .then_some(((addr_space as u32, idx as u32 * align), metadata))
                     })
             })

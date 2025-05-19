@@ -614,13 +614,13 @@ mod phantom {
     use eyre::bail;
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
-        system::memory::MemoryController,
+        system::memory::online::GuestMemory,
     };
     use openvm_instructions::PhantomDiscriminant;
     use openvm_stark_backend::p3_field::{Field, PrimeField32};
     use rand::{rngs::OsRng, Rng};
 
-    use crate::adapters::unsafe_read_rv32_register;
+    use crate::adapters::{memory_read, new_read_rv32_register};
 
     pub struct Rv32HintInputSubEx;
     pub struct Rv32HintRandomSubEx {
@@ -636,11 +636,11 @@ mod phantom {
     impl<F: Field> PhantomSubExecutor<F> for Rv32HintInputSubEx {
         fn phantom_execute(
             &mut self,
-            _: &MemoryController<F>,
+            _: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
-            _: F,
-            _: F,
+            _: u32,
+            _: u32,
             _: u16,
         ) -> eyre::Result<()> {
             let mut hint = match streams.input_stream.pop_front() {
@@ -667,14 +667,14 @@ mod phantom {
     impl<F: PrimeField32> PhantomSubExecutor<F> for Rv32HintRandomSubEx {
         fn phantom_execute(
             &mut self,
-            memory: &MemoryController<F>,
+            memory: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
-            a: F,
-            _: F,
+            a: u32,
+            _: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            let len = unsafe_read_rv32_register(memory, a) as usize;
+            let len = new_read_rv32_register(memory, 1, a) as usize;
             streams.hint_stream.clear();
             streams.hint_stream.extend(
                 std::iter::repeat_with(|| F::from_canonical_u8(self.rng.gen::<u8>())).take(len * 4),
@@ -686,17 +686,17 @@ mod phantom {
     impl<F: PrimeField32> PhantomSubExecutor<F> for Rv32PrintStrSubEx {
         fn phantom_execute(
             &mut self,
-            memory: &MemoryController<F>,
+            memory: &GuestMemory,
             _: &mut Streams<F>,
             _: PhantomDiscriminant,
-            a: F,
-            b: F,
+            a: u32,
+            b: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            let rd = unsafe_read_rv32_register(memory, a);
-            let rs1 = unsafe_read_rv32_register(memory, b);
+            let rd = new_read_rv32_register(memory, 1, a);
+            let rs1 = new_read_rv32_register(memory, 1, b);
             let bytes = (0..rs1)
-                .map(|i| memory.unsafe_read_cell::<u8>(F::TWO, F::from_canonical_u32(rd + i)))
+                .map(|i| memory_read::<1>(memory, 2, rd + i)[0])
                 .collect::<Vec<u8>>();
             let peeked_str = String::from_utf8(bytes)?;
             print!("{peeked_str}");

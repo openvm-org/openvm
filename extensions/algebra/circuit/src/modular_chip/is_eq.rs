@@ -7,10 +7,13 @@ use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, InsExecutorE1, MinimalInstruction, Result,
-        VmAdapterInterface, VmCoreAir, VmCoreChip, VmExecutionState,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
+        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
-    system::memory::online::GuestMemory,
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
@@ -19,21 +22,20 @@ use openvm_circuit_primitives::{
     SubAir, TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use serde::{Deserialize, Serialize};
-use serde_big_array::BigArray;
+
 // Given two numbers b and c, we want to prove that a) b == c or b != c, depending on
 // result of cmp_result and b) b, c < N for some modulus N that is passed into the AIR
 // at runtime (i.e. when chip is instantiated).
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, Debug)]
 pub struct ModularIsEqualCoreCols<T, const READ_LIMBS: usize> {
     pub is_valid: T,
     pub is_setup: T,
@@ -280,171 +282,185 @@ where
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct ModularIsEqualCoreRecord<T, const READ_LIMBS: usize> {
-    #[serde(with = "BigArray")]
-    pub b: [T; READ_LIMBS],
-    #[serde(with = "BigArray")]
-    pub c: [T; READ_LIMBS],
-    pub cmp_result: T,
-    #[serde(with = "BigArray")]
-    pub eq_marker: [T; READ_LIMBS],
-    pub b_diff_idx: usize,
-    pub c_diff_idx: usize,
-    pub is_setup: bool,
-}
-
-pub struct ModularIsEqualCoreChip<
+#[derive(derive_new::new)]
+pub struct ModularIsEqualStep<
+    A,
     const READ_LIMBS: usize,
     const WRITE_LIMBS: usize,
     const LIMB_BITS: usize,
 > {
-    pub air: ModularIsEqualCoreAir<READ_LIMBS, WRITE_LIMBS, LIMB_BITS>,
+    adapter: A,
+    pub modulus_limbs: [u8; READ_LIMBS],
+    pub offset: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 
-impl<const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
-    ModularIsEqualCoreChip<READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
-{
-    pub fn new(
-        modulus: BigUint,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
-        offset: usize,
-    ) -> Self {
-        Self {
-            air: ModularIsEqualCoreAir::new(modulus, bitwise_lookup_chip.bus(), offset),
-            bitwise_lookup_chip,
-        }
-    }
-}
-
-impl<
-        F: PrimeField32,
-        I: VmAdapterInterface<F>,
-        const READ_LIMBS: usize,
-        const WRITE_LIMBS: usize,
-        const LIMB_BITS: usize,
-    > VmCoreChip<F, I> for ModularIsEqualCoreChip<READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
+impl<F, CTX, A, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
+    TraceStep<F, CTX> for ModularIsEqualStep<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
 where
-    I::Reads: Into<[[F; READ_LIMBS]; 2]>,
-    I::Writes: From<[[F; WRITE_LIMBS]; 1]>,
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            CTX,
+            ReadData: Into<[[u8; READ_LIMBS]; 2]>,
+            WriteData: From<[u8; WRITE_LIMBS]>,
+            TraceContext<'a> = (),
+        >,
 {
-    type Record = ModularIsEqualCoreRecord<F, READ_LIMBS>;
-    type Air = ModularIsEqualCoreAir<READ_LIMBS, WRITE_LIMBS, LIMB_BITS>;
-
-    #[allow(clippy::type_complexity)]
-    fn execute_instruction(
-        &self,
+    fn execute(
+        &mut self,
+        state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        _from_pc: u32,
-        reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let data: [[F; READ_LIMBS]; 2] = reads.into();
-        let b = data[0].map(|x| x.as_canonical_u32());
-        let c = data[1].map(|y| y.as_canonical_u32());
-        let (b_cmp, b_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.air.modulus_limbs);
-        let (c_cmp, c_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.air.modulus_limbs);
-        let is_setup = instruction.opcode.local_opcode_idx(self.air.offset)
+        trace: &mut [F],
+        trace_offset: &mut usize,
+        width: usize,
+    ) -> Result<()> {
+        let Instruction { opcode, .. } = instruction;
+
+        let local_opcode =
+            Rv32ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        matches!(
+            local_opcode,
+            Rv32ModularArithmeticOpcode::IS_EQ | Rv32ModularArithmeticOpcode::SETUP_ISEQ
+        );
+
+        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
+        let (adapter_row, core_row) = row_slice.split_at_mut(A::WIDTH);
+
+        let cols: &mut ModularIsEqualCoreCols<F, READ_LIMBS> = core_row.borrow_mut();
+
+        A::start(*state.pc, state.memory, adapter_row);
+        let [b, c] = self
+            .adapter
+            .read(state.memory, instruction, adapter_row)
+            .into();
+
+        cols.b = b.map(F::from_canonical_u8);
+        cols.c = c.map(F::from_canonical_u8);
+
+        let (b_cmp, _) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.modulus_limbs);
+        let (c_cmp, _) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.modulus_limbs);
+        let is_setup = instruction.opcode.local_opcode_idx(self.offset)
             == Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize;
 
+        cols.is_setup = F::from_bool(is_setup);
+
         if !is_setup {
-            assert!(b_cmp, "{:?} >= {:?}", b, self.air.modulus_limbs);
+            assert!(b_cmp, "{:?} >= {:?}", b, self.modulus_limbs);
         }
-        assert!(c_cmp, "{:?} >= {:?}", c, self.air.modulus_limbs);
-        if !is_setup {
+        assert!(c_cmp, "{:?} >= {:?}", c, self.modulus_limbs);
+
+        let mut write_data = [0u8; WRITE_LIMBS];
+        write_data[0] = (b == c) as u8;
+        self.adapter
+            .write(state.memory, instruction, adapter_row, &write_data.into());
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        *trace_offset += width;
+
+        Ok(())
+    }
+
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, core_row) = row_slice.split_at_mut(A::WIDTH);
+        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
+        let cols: &mut ModularIsEqualCoreCols<F, READ_LIMBS> = core_row.borrow_mut();
+
+        cols.is_valid = F::ONE;
+        let sub_air = IsEqArraySubAir::<READ_LIMBS>;
+        sub_air.generate_subrow(
+            (&cols.b, &cols.c),
+            (&mut cols.eq_marker, &mut cols.cmp_result),
+        );
+        let b = cols.b.map(|x| x.as_canonical_u32() as u8);
+        let c = cols.c.map(|x| x.as_canonical_u32() as u8);
+        let (_, b_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.modulus_limbs);
+        let (_, c_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.modulus_limbs);
+
+        if cols.is_setup != F::ONE {
+            cols.b_lt_diff =
+                F::from_canonical_u8(self.modulus_limbs[b_diff_idx]) - cols.b[b_diff_idx];
             self.bitwise_lookup_chip.request_range(
-                self.air.modulus_limbs[b_diff_idx] - b[b_diff_idx] - 1,
-                self.air.modulus_limbs[c_diff_idx] - c[c_diff_idx] - 1,
+                (self.modulus_limbs[b_diff_idx] - b[b_diff_idx] - 1) as u32,
+                (self.modulus_limbs[c_diff_idx] - c[c_diff_idx] - 1) as u32,
             );
         }
-
-        let mut eq_marker = [F::ZERO; READ_LIMBS];
-        let mut cmp_result = F::ZERO;
-        self.air
-            .subair
-            .generate_subrow((&data[0], &data[1]), (&mut eq_marker, &mut cmp_result));
-
-        let mut writes = [F::ZERO; WRITE_LIMBS];
-        writes[0] = cmp_result;
-
-        let output = AdapterRuntimeContext::without_pc([writes]);
-        let record = ModularIsEqualCoreRecord {
-            is_setup,
-            b: data[0],
-            c: data[1],
-            cmp_result,
-            eq_marker,
-            b_diff_idx,
-            c_diff_idx,
-        };
-
-        Ok((output, record))
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            Rv32ModularArithmeticOpcode::from_usize(opcode - self.air.offset)
-        )
-    }
-
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let row_slice: &mut ModularIsEqualCoreCols<_, READ_LIMBS> = row_slice.borrow_mut();
-        row_slice.is_valid = F::ONE;
-        row_slice.is_setup = F::from_bool(record.is_setup);
-        row_slice.b = record.b;
-        row_slice.c = record.c;
-        row_slice.cmp_result = record.cmp_result;
-
-        row_slice.eq_marker = record.eq_marker;
-
-        if !record.is_setup {
-            row_slice.b_lt_diff = F::from_canonical_u32(self.air.modulus_limbs[record.b_diff_idx])
-                - record.b[record.b_diff_idx];
-        }
-        row_slice.c_lt_diff = F::from_canonical_u32(self.air.modulus_limbs[record.c_diff_idx])
-            - record.c[record.c_diff_idx];
-        row_slice.c_lt_mark = if record.b_diff_idx == record.c_diff_idx {
+        cols.c_lt_diff = F::from_canonical_u8(self.modulus_limbs[c_diff_idx]) - cols.c[c_diff_idx];
+        cols.c_lt_mark = if b_diff_idx == c_diff_idx {
             F::ONE
         } else {
             F::from_canonical_u8(2)
         };
-        row_slice.lt_marker = from_fn(|i| {
-            if i == record.b_diff_idx {
+        cols.lt_marker = from_fn(|i| {
+            if i == b_diff_idx {
                 F::ONE
-            } else if i == record.c_diff_idx {
-                row_slice.c_lt_mark
+            } else if i == c_diff_idx {
+                cols.c_lt_mark
             } else {
                 F::ZERO
             }
         });
     }
 
-    fn air(&self) -> &Self::Air {
-        &self.air
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            Rv32ModularArithmeticOpcode::from_usize(opcode - self.offset)
+        )
     }
 }
 
-impl<Mem, Ctx, F, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
-    InsExecutorE1<Mem, Ctx, F> for ModularIsEqualCoreChip<READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
+impl<F, A, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
+    StepExecutorE1<F> for ModularIsEqualStep<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
 where
-    Mem: GuestMemory,
     F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterExecutorE1<
+            F,
+            ReadData: Into<[[u8; READ_LIMBS]; 2]>,
+            WriteData: From<[u8; WRITE_LIMBS]>,
+        >,
 {
-    fn execute_e1(
+    fn execute_e1<Ctx>(
         &mut self,
-        _state: &mut VmExecutionState<Mem, Ctx>,
-        _instruction: &Instruction<F>,
+        state: VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
     ) -> Result<()> {
-        todo!("Implement execute_e1")
+        let Instruction { opcode, .. } = instruction;
+
+        let local_opcode =
+            Rv32ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        matches!(
+            local_opcode,
+            Rv32ModularArithmeticOpcode::IS_EQ | Rv32ModularArithmeticOpcode::SETUP_ISEQ
+        );
+
+        let [b, c] = self.adapter.read(state.memory, instruction).into();
+        let (b_cmp, _) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.modulus_limbs);
+        let (c_cmp, _) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.modulus_limbs);
+        let is_setup = instruction.opcode.local_opcode_idx(self.offset)
+            == Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize;
+
+        if !is_setup {
+            assert!(b_cmp, "{:?} >= {:?}", b, self.modulus_limbs);
+        }
+        assert!(c_cmp, "{:?} >= {:?}", c, self.modulus_limbs);
+
+        let mut write_data = [0u8; WRITE_LIMBS];
+        write_data[0] = (b == c) as u8;
+
+        self.adapter
+            .write(state.memory, instruction, &write_data.into());
+
+        Ok(())
     }
 }
 
 // Returns (cmp_result, diff_idx)
 pub(super) fn run_unsigned_less_than<const NUM_LIMBS: usize>(
-    x: &[u32; NUM_LIMBS],
-    y: &[u32; NUM_LIMBS],
+    x: &[u8; NUM_LIMBS],
+    y: &[u8; NUM_LIMBS],
 ) -> (bool, usize) {
     for i in (0..NUM_LIMBS).rev() {
         if x[i] != y[i] {

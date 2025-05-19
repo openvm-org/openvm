@@ -247,10 +247,7 @@ where
     type WriteData = [F; W];
 
     #[inline(always)]
-    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
-    where
-        Mem: GuestMemory,
-    {
+    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
         assert!(R <= 2);
 
         let &Instruction { b, c, e, f, .. } = instruction;
@@ -270,10 +267,12 @@ where
     }
 
     #[inline(always)]
-    fn write<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>, data: &Self::WriteData)
-    where
-        Mem: GuestMemory,
-    {
+    fn write(
+        &self,
+        memory: &mut GuestMemory,
+        instruction: &Instruction<F>,
+        data: &Self::WriteData,
+    ) {
         assert!(W <= 1);
 
         let &Instruction { a, d, .. } = instruction;

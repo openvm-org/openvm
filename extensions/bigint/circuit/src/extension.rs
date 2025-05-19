@@ -119,7 +119,7 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
-        // let offline_memory = builder.system_base().offline_memory();
+
         let pointer_max_bits = builder.system_config().memory_config.pointer_max_bits;
 
         let range_tuple_chip = if let Some(chip) = builder

@@ -123,6 +123,37 @@ fn rand_rv32_alu_test(opcode: BaseAluOpcode, num_ops: usize) {
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
+    // TODO(AG): make a more meaningful test for memory accesses
+    tester.write(2, 1024, [F::ONE; 4]);
+    tester.write(2, 1028, [F::ONE; 4]);
+    let sm = tester.read(2, 1024);
+    assert_eq!(sm, [F::ONE; 8]);
+
+    for _ in 0..num_ops {
+        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None, None);
+    }
+
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test_case(ADD, 100)]
+#[test_case(SUB, 100)]
+#[test_case(XOR, 100)]
+#[test_case(OR, 100)]
+#[test_case(AND, 100)]
+fn rand_rv32_alu_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+
+    let mut tester = VmChipTestBuilder::default_persistent();
+    let (mut chip, bitwise_chip) = create_test_chip(&tester);
+
+    // TODO(AG): make a more meaningful test for memory accesses
+    tester.write(2, 1024, [F::ONE; 4]);
+    tester.write(2, 1028, [F::ONE; 4]);
+    let sm = tester.read(2, 1024);
+    assert_eq!(sm, [F::ONE; 8]);
+
     for _ in 0..num_ops {
         set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None, None);
     }

@@ -128,13 +128,12 @@ impl<F> InsExecutorE1<F> for PhantomChip<F>
 where
     F: PrimeField32,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError>
     where
-        Mem: GuestMemory,
         F: PrimeField32,
     {
         let &Instruction {
@@ -156,21 +155,21 @@ where
                 })?;
             let mut streams = self.streams.get().unwrap().lock().unwrap();
             // TODO(ayush): implement phantom subexecutor for new traits
-            // sub_executor
-            //     .as_mut()
-            //     .phantom_execute(
-            //         state.memory,
-            //         &mut streams,
-            //         discriminant,
-            //         a,
-            //         b,
-            //         (c_u32 >> 16) as u16,
-            //     )
-            //     .map_err(|e| ExecutionError::Phantom {
-            //         pc: *state.pc,
-            //         discriminant,
-            //         inner: e,
-            //     })?;
+            sub_executor
+                .as_mut()
+                .phantom_execute(
+                    state.memory,
+                    &mut streams,
+                    discriminant,
+                    a.as_canonical_u32(),
+                    b.as_canonical_u32(),
+                    (c_u32 >> 16) as u16,
+                )
+                .map_err(|e| ExecutionError::Phantom {
+                    pc: *state.pc,
+                    discriminant,
+                    inner: e,
+                })?;
         }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
@@ -186,52 +185,26 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
         instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
-        let &Instruction {
-            opcode, a, b, c, ..
-        } = instruction;
-        assert_eq!(opcode, self.air.phantom_opcode);
-
-        let c_u32 = c.as_canonical_u32();
-        let discriminant = PhantomDiscriminant(c_u32 as u16);
-        // If not a system phantom sub-instruction (which is handled in
-        // ExecutionSegment), look for a phantom sub-executor to handle it.
-        if SysPhantom::from_repr(discriminant.0).is_none() {
-            let sub_executor = self
-                .phantom_executors
-                .get_mut(&discriminant)
-                .ok_or_else(|| ExecutionError::PhantomNotFound {
-                    pc: from_state.pc,
-                    discriminant,
-                })?;
-            let mut streams = self.streams.get().unwrap().lock().unwrap();
-            sub_executor
-                .as_mut()
-                .phantom_execute(
-                    memory,
-                    &mut streams,
-                    discriminant,
-                    a,
-                    b,
-                    (c_u32 >> 16) as u16,
-                )
-                .map_err(|e| ExecutionError::Phantom {
-                    pc: from_state.pc,
-                    discriminant,
-                    inner: e,
-                })?;
-        }
-
+        let mut pc = from_state.pc;
         self.rows.push(PhantomCols {
-            pc: F::from_canonical_u32(from_state.pc),
-            operands: [a, b, c],
-            timestamp: F::from_canonical_u32(from_state.timestamp),
+            pc: F::from_canonical_u32(pc),
+            operands: [instruction.a, instruction.b, instruction.c],
+            timestamp: F::from_canonical_u32(memory.memory.timestamp),
             is_valid: F::ONE,
         });
+
+        let state = VmStateMut {
+            pc: &mut pc,
+            memory: &mut memory.memory.data,
+            ctx: &mut (),
+        };
+        self.execute_e1(state, instruction)?;
         memory.increment_timestamp();
-        Ok(ExecutionState::new(
-            from_state.pc + DEFAULT_PC_STEP,
-            from_state.timestamp + 1,
-        ))
+
+        Ok(ExecutionState {
+            pc,
+            timestamp: memory.memory.timestamp,
+        })
     }
 
     fn get_opcode_name(&self, _: usize) -> String {

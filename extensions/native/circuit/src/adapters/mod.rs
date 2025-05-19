@@ -15,20 +15,16 @@ pub mod loadstore_native_adapter;
 pub mod native_vectorized_adapter;
 
 #[inline(always)]
-pub fn memory_read<F, Mem, const N: usize>(memory: &Mem, ptr: u32) -> [u8; N]
-where
-    Mem: GuestMemory,
-{
+pub fn memory_read<F, const N: usize>(memory: &GuestMemory, ptr: u32) -> [u8; N] {
     // SAFETY:
     // - address space `AS::Native` will always have cell type `F` and minimum alignment of `1`
     unsafe { memory.read::<F, N>(AS::Native, ptr) }
 }
 
 #[inline(always)]
-pub fn memory_read_or_imm<F, Mem>(memory: &Mem, addr_space: u32, ptr_or_imm: F) -> F
+pub fn memory_read_or_imm<F>(memory: &GuestMemory, addr_space: u32, ptr_or_imm: F) -> F
 where
     F: PrimeField32,
-    Mem: GuestMemory,
 {
     debug_assert!(
         addr_space.as_canonical_u32() == AS::Immediate
@@ -43,10 +39,7 @@ where
     }
 }
 #[inline(always)]
-pub fn memory_write<F, Mem, const N: usize>(memory: &mut Mem, ptr: u32, data: &[u8; N])
-where
-    Mem: GuestMemory,
-{
+pub fn memory_write<F, const N: usize>(memory: &mut GuestMemory, ptr: u32, data: &[u8; N]) {
     // SAFETY:
     // - address space `AS::Native` will always have cell type `F` and minimum alignment of `1`
     unsafe { memory.write::<F, N>(AS::Native, ptr, data) }

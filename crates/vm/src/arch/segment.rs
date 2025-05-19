@@ -29,12 +29,11 @@ use crate::{
     },
 };
 
-pub struct VmSegmentExecutor<F, VC, Mem, Ctx, Ctrl>
+pub struct VmSegmentExecutor<F, VC, Ctx, Ctrl>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
-    Mem: GuestMemory,
-    Ctrl: ExecutionControl<F, VC, Mem = Mem, Ctx = Ctx>,
+    Ctrl: ExecutionControl<F, VC, Ctx = Ctx>,
 {
     pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
     /// Execution control for determining segmentation and stopping conditions
@@ -49,29 +48,28 @@ where
     pub metrics: VmMetrics,
 }
 
-pub type E1VmSegmentExecutor<F, VC> =
-    VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, (), E1ExecutionControl>;
+pub type E1VmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, (), E1ExecutionControl>;
 
 // pub struct TracegenCtx;
 pub type TracegenCtx = ();
-pub type TracegenVmStateMut<'a> = VmStateMut<'a, AddressMap<PAGE_SIZE>, TracegenCtx>;
+pub type TracegenVmStateMut<'a> = VmStateMut<'a, GuestMemory, TracegenCtx>;
 
 pub type TracegenVmSegmentExecutor<F, VC> =
-    VmSegmentExecutor<F, VC, AddressMap<PAGE_SIZE>, TracegenCtx, TracegenExecutionControl>;
+    VmSegmentExecutor<F, VC, TracegenCtx, TracegenExecutionControl>;
 
 #[derive(derive_new::new)]
 pub struct ExecutionSegmentState {
+    pub memory: Option<GuestMemory>,
     pub pc: u32,
     pub exit_code: u32,
     pub is_terminated: bool,
 }
 
-impl<F, VC, Mem, Ctx, Ctrl> VmSegmentExecutor<F, VC, Mem, Ctx, Ctrl>
+impl<F, VC, Ctx, Ctrl> VmSegmentExecutor<F, VC, Ctx, Ctrl>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
-    Mem: GuestMemory,
-    Ctrl: ExecutionControl<F, VC, Mem = Mem, Ctx = Ctx>,
+    Ctrl: ExecutionControl<F, VC, Ctx = Ctx>,
 {
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(
@@ -122,13 +120,17 @@ where
     }
 
     /// Stopping is triggered by should_stop() or if VM is terminated
-    pub fn execute_from_pc(&mut self, pc: u32) -> Result<ExecutionSegmentState, ExecutionError> {
+    pub fn execute_from_pc(
+        &mut self,
+        pc: u32,
+        memory: Option<GuestMemory>,
+    ) -> Result<ExecutionSegmentState, ExecutionError> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
         // Call the pre-execution hook
         self.control.on_segment_start(pc, &mut self.chip_complex);
 
-        let mut state = ExecutionSegmentState::new(pc, 0, false);
+        let mut state = ExecutionSegmentState::new(memory, pc, 0, false);
         loop {
             // Fetch, decode and execute single instruction
             let terminated_exit_code = self.execute_instruction(&mut state, &mut prev_backtrace)?;
@@ -215,8 +217,9 @@ where
         *prev_backtrace = trace.cloned();
 
         // Execute the instruction using the control implementation
+        // TODO(AG): maybe avoid cloning the instruction?
         self.control
-            .execute_instruction(state, &mut self.chip_complex)?;
+            .execute_instruction(state, &instruction.clone(), &mut self.chip_complex)?;
 
         // Update metrics if enabled
         #[cfg(feature = "bench-metrics")]

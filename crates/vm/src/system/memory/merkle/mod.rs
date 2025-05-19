@@ -1,10 +1,11 @@
 use openvm_stark_backend::{interaction::PermutationCheckBus, p3_field::PrimeField32};
 use rustc_hash::FxHashSet;
 
-use super::controller::dimensions::MemoryDimensions;
+use super::{controller::dimensions::MemoryDimensions, Equipartition, MemoryImage};
 mod air;
 mod columns;
 mod trace;
+mod tree;
 
 pub use air::*;
 pub use columns::*;
@@ -77,4 +78,18 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
             self.touch_node(0, as_label, address_label);
         }
     }
+}
+
+fn memory_to_partition<F: PrimeField32, const N: usize>(
+    memory: &MemoryImage,
+) -> Equipartition<F, N> {
+    let mut memory_partition = Equipartition::new();
+    for ((address_space, pointer), value) in memory.items() {
+        let label = (address_space, pointer / N as u32);
+        let chunk = memory_partition
+            .entry(label)
+            .or_insert_with(|| [F::default(); N]);
+        chunk[(pointer % N as u32) as usize] = value;
+    }
+    memory_partition
 }

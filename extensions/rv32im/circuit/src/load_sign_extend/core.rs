@@ -314,14 +314,11 @@ where
             WriteData = [u8; NUM_CELLS],
         >,
 {
-    fn execute_e1<Mem, Ctx>(
+    fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<Mem, Ctx>,
+        state: VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Mem: GuestMemory,
-    {
+    ) -> Result<()> {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(

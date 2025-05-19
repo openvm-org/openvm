@@ -1,7 +1,6 @@
 use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
-    iter::once,
 };
 
 use itertools::izip;
@@ -194,10 +193,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterExe
     type ReadData = [[u8; READ_SIZE]; NUM_READS];
     type WriteData = ();
 
-    fn read<Mem>(&self, memory: &mut Mem, instruction: &Instruction<F>) -> Self::ReadData
-    where
-        Mem: GuestMemory,
-    {
+    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
         let Instruction { a, b, d, e, .. } = *instruction;
 
         let d = d.as_canonical_u32();
@@ -218,10 +214,12 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterExe
         })
     }
 
-    fn write<Mem>(&self, _memory: &mut Mem, _instruction: &Instruction<F>, _data: &Self::WriteData)
-    where
-        Mem: GuestMemory,
-    {
+    fn write(
+        &self,
+        _memory: &mut GuestMemory,
+        _instruction: &Instruction<F>,
+        _data: &Self::WriteData,
+    ) {
         // This function intentionally does nothing
     }
 }
@@ -263,7 +261,7 @@ where
         let rs_vals: [_; NUM_READS] = from_fn(|i| {
             let addr = if i == 0 { a } else { b };
             cols.rs_ptr[i] = addr;
-            let rs_val = tracing_read(memory, e, addr.as_canonical_u32(), &mut cols.rs_read_aux[i]);
+            let rs_val = tracing_read(memory, d, addr.as_canonical_u32(), &mut cols.rs_read_aux[i]);
             cols.rs_val[i] = rs_val.map(F::from_canonical_u8);
             u32::from_le_bytes(rs_val)
         });
@@ -287,25 +285,37 @@ where
 
     fn fill_trace_row(
         &self,
-        _mem_helper: &MemoryAuxColsFactory<F>,
+        mem_helper: &MemoryAuxColsFactory<F>,
         _ctx: (),
         adapter_row: &mut [F],
     ) {
         let cols: &mut Rv32HeapBranchAdapterCols<F, NUM_READS, READ_SIZE> =
             adapter_row.borrow_mut();
 
+        let mut timestamp = cols.from_state.timestamp.as_canonical_u32();
+        let mut timestamp_pp = || {
+            timestamp += 1;
+            timestamp - 1
+        };
+
+        cols.rs_read_aux.iter_mut().for_each(|aux| {
+            mem_helper.fill_from_prev(timestamp_pp(), aux.as_mut());
+        });
+
+        cols.heap_read_aux.iter_mut().for_each(|aux| {
+            mem_helper.fill_from_prev(timestamp_pp(), aux.as_mut());
+        });
+
         // Range checks:
-        let need_range_check: Vec<u32> = cols
-            .rs_val
-            .iter()
-            .map(|&val| val[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32())
-            .chain(once(0)) // in case NUM_READS is odd
-            .collect();
         debug_assert!(self.pointer_max_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
         let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits;
-        for pair in need_range_check.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] << limb_shift_bits, pair[1] << limb_shift_bits);
-        }
+        self.bitwise_lookup_chip.request_range(
+            cols.rs_val[0][RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits,
+            if NUM_READS > 1 {
+                cols.rs_val[1][RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32() << limb_shift_bits
+            } else {
+                0
+            },
+        );
     }
 }

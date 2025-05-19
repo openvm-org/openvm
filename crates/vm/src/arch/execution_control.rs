@@ -18,8 +18,6 @@ where
     F: PrimeField32,
     VC: VmConfig<F>,
 {
-    /// Guest memory type
-    type Mem: GuestMemory;
     /// Host context
     type Ctx;
 
@@ -58,7 +56,7 @@ where
     fn execute_instruction(
         &mut self,
         vm_state: &mut ExecutionSegmentState,
-        // instruction: &Instruction<F>,
+        instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
     where
@@ -88,7 +86,6 @@ where
     VC: VmConfig<F>,
 {
     type Ctx = TracegenCtx;
-    type Mem = AddressMap<PAGE_SIZE>;
 
     fn new(chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>) -> Self {
         Self {
@@ -156,14 +153,13 @@ where
     fn execute_instruction(
         &mut self,
         state: &mut ExecutionSegmentState,
-        // instruction: &Instruction<F>,
+        instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
     {
         let timestamp = chip_complex.memory_controller().timestamp();
-        let (instruction, _) = chip_complex.base.program_chip.get_instruction(state.pc)?;
 
         let &Instruction { opcode, .. } = instruction;
 
@@ -198,7 +194,6 @@ where
     VC::Executor: InsExecutorE1<F>,
 {
     type Ctx = ();
-    type Mem = AddressMap<PAGE_SIZE>;
 
     fn new(_chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>) -> Self {
         Self { final_memory: None }
@@ -239,21 +234,18 @@ where
     fn execute_instruction(
         &mut self,
         state: &mut ExecutionSegmentState,
-        // instruction: &Instruction<F>,
+        instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
     {
-        let (instruction, _) = chip_complex.base.program_chip.get_instruction(state.pc)?;
-
         let &Instruction { opcode, .. } = instruction;
 
         if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
-            let memory_controller = &mut chip_complex.base.memory_controller;
             let vm_state = VmStateMut {
                 pc: &mut state.pc,
-                memory: &mut memory_controller.memory.data,
+                memory: state.memory.as_mut().unwrap(),
                 ctx: &mut (),
             };
             executor.execute_e1(vm_state, instruction)?;
