@@ -9,16 +9,17 @@ use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 
 use crate::arch::{
     execution_control::ExecutionControl, ChipId, ExecutionError, InsExecutorE1, VmChipComplex,
-    VmConfig, VmSegmentState, VmStateMut, CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID,
+    VmConfig, VmSegmentState, VmStateMut, CONNECTOR_AIR_ID, DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT,
+    DEFAULT_MAX_SEGMENT_LEN, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID,
 };
 
 /// Check segment every 100 instructions.
 const SEGMENT_CHECK_INTERVAL: usize = 100;
 
 // TODO(ayush): fix these values
-const MAX_TRACE_HEIGHT: usize = usize::MAX - 1;
-const MAX_TRACE_CELLS: usize = usize::MAX - 1;
-const MAX_INTERACTIONS: usize = usize::MAX - 1;
+const MAX_TRACE_HEIGHT: usize = DEFAULT_MAX_SEGMENT_LEN;
+const MAX_TRACE_CELLS: usize = DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT;
+const MAX_INTERACTIONS: usize = DEFAULT_MAX_SEGMENT_LEN * 100;
 
 pub struct MeteredExecutionControl<'a> {
     pub widths: &'a [usize],
@@ -50,8 +51,8 @@ impl<'a> MeteredExecutionControl<'a> {
         trace_heights
             .iter()
             .zip(self.interactions)
-            // TODO(ayush): should this have next_power_of_two
-            .map(|(&height, &interactions)| height.next_power_of_two() * interactions)
+            // We add 1 for the zero messages from the padding rows
+            .map(|(&height, &interactions)| (height + 1) * interactions)
             .sum()
     }
 }
@@ -82,16 +83,36 @@ where
             .iter()
             .any(|height| height.next_power_of_two() > MAX_TRACE_HEIGHT)
         {
+            let max_height = trace_heights
+                .iter()
+                .map(|&h| h.next_power_of_two())
+                .max()
+                .unwrap_or(0);
+            tracing::info!(
+                "Suspending execution: trace height ({}) exceeds maximum ({})",
+                max_height,
+                MAX_TRACE_HEIGHT
+            );
             return true;
         }
 
         let total_cells = self.calculate_total_cells(&trace_heights);
         if total_cells > MAX_TRACE_CELLS {
+            tracing::info!(
+                "Suspending execution: total cells ({}) exceeds maximum ({})",
+                total_cells,
+                MAX_TRACE_CELLS
+            );
             return true;
         }
 
         let total_interactions = self.calculate_total_interactions(&trace_heights);
         if total_interactions > MAX_INTERACTIONS {
+            tracing::info!(
+                "Suspending execution: total interactions ({}) exceeds maximum ({})",
+                total_interactions,
+                MAX_INTERACTIONS
+            );
             return true;
         }
 
