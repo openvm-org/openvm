@@ -18,8 +18,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, AdapterTraceStep,
-        BasicAdapterInterface, MinimalInstruction, Result, StepExecutorE1, TraceStep,
-        VmAdapterInterface, VmCoreAir, VmCoreChip, VmStateMut,
+        BasicAdapterInterface, EmptyLayout, MinimalInstruction, RecordArena, Result,
+        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmCoreChip, VmStateMut,
     },
     system::{
         memory::{
@@ -153,6 +153,9 @@ where
             RecordMut<'a> = (),
         >,
 {
+    type RecordLayout = EmptyLayout;
+    type RecordMut<'a> = (); // TODO
+
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -160,41 +163,41 @@ where
         )
     }
 
-    fn execute(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
-        todo!("Implement execute function");
+        arena: &mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<Self::RecordLayout, Self::RecordMut<'buf>>,
+        Self: 'buf,
+    {
+        todo!()
     }
 
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        todo!("Implement fill_trace_row function");
+    // fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    // let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-        // let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+    // self.adapter.fill_trace_row(mem_helper, (), adapter_row);
 
-        // self.adapter.fill_trace_row(mem_helper, (), adapter_row);
+    // let core_row: &mut PublicValuesCoreColsView<_, F> = core_row.borrow_mut();
 
-        // let core_row: &mut PublicValuesCoreColsView<_, F> = core_row.borrow_mut();
+    // // TODO(ayush): add this check
+    // // debug_assert_eq!(core_row.width(), BaseAir::<F>::width(&self.air));
 
-        // // TODO(ayush): add this check
-        // // debug_assert_eq!(core_row.width(), BaseAir::<F>::width(&self.air));
+    // core_row.is_valid = F::ONE;
+    // core_row.value = record.value;
+    // core_row.index = record.index;
 
-        // core_row.is_valid = F::ONE;
-        // core_row.value = record.value;
-        // core_row.index = record.index;
+    // let idx: usize = record.index.as_canonical_u32() as usize;
 
-        // let idx: usize = record.index.as_canonical_u32() as usize;
+    // let pt = self.air.encoder.get_flag_pt(idx);
 
-        // let pt = self.air.encoder.get_flag_pt(idx);
-
-        // for (i, var) in core_row.custom_pv_vars.iter_mut().enumerate() {
-        //     *var = F::from_canonical_u32(pt[i]);
-        // }
-    }
+    // for (i, var) in core_row.custom_pv_vars.iter_mut().enumerate() {
+    //     *var = F::from_canonical_u32(pt[i]);
+    // }
+    // }
 
     fn generate_public_values(&self) -> Vec<F> {
         self.get_custom_public_values()

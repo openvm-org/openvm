@@ -1,4 +1,4 @@
-use std::{array::from_fn, borrow::Borrow, marker::PhantomData, sync::Arc};
+use std::{any::type_name, array::from_fn, borrow::Borrow, marker::PhantomData, sync::Arc};
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -14,6 +14,7 @@ use openvm_stark_backend::{
     AirRef, Chip, ChipUsageGetter,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use zerocopy::FromBytes;
 
 use super::{ExecutionState, InsExecutorE1, InstructionExecutor, Result, VmStateMut};
 use crate::system::memory::{
@@ -239,14 +240,48 @@ pub trait TraceStep<F, CTX> {
     fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
+/// [RowMajorMatrix]-backed [RecordArena].
+pub struct MatrixRecordArena<F> {
+    // TODO[jpw]: owned or &'a mut ?
+    pub trace_buffer: Vec<F>,
+    // TODO(ayush): width should be a constant?
+    width: usize,
+    trace_offset: usize,
+}
+
+impl<F> MatrixRecordArena<F> {
+    pub fn new(trace_buffer: Vec<F>, width: usize, trace_offset: usize) -> Self {
+        assert!(
+            align_of::<F>() >= align_of::<u32>(),
+            "type {} should have at least alignment of u32",
+            type_name::<F>()
+        );
+        Self {
+            trace_buffer,
+            width,
+            trace_offset,
+        }
+    }
+}
+
+impl<'a, F, AdapterRecord, CoreRecord> RecordArena<EmptyLayout, (&'a AdapterRecord, &'a CoreRecord)>
+    for MatrixRecordArena<F>
+where
+    AdapterRecord: FromBytes,
+    CoreRecord: FromBytes,
+{
+    fn alloc(&mut self, _: EmptyLayout) -> (&'a AdapterRecord, &'a CoreRecord) {
+        let start_offset = self.trace_offset;
+        self.trace_offset += self.width;
+        let row_slice = &mut self.trace_buffer[self.trace_offset..self.trace_offset + width];
+    }
+}
+
 // TODO(ayush): rename to ChipWithExecutionContext or something
 pub struct NewVmChipWrapper<F, AIR, STEP> {
     pub air: AIR,
     pub step: STEP,
-    pub trace_buffer: Vec<F>,
-    // TODO(ayush): width should be a constant?
-    width: usize,
-    buffer_idx: usize,
+    pub arena: MatrixRecordArena<F>,
     mem_helper: SharedMemoryHelper<F>,
 }
 
@@ -259,12 +294,11 @@ where
         assert!(height == 0 || height.is_power_of_two());
         let width = air.width();
         let trace_buffer = F::zero_vec(height * width);
+        let arena = MatrixRecordArena::new(trace_buffer, width, 0);
         Self {
             air,
             step,
-            trace_buffer,
-            width,
-            buffer_idx: 0,
+            arena,
             mem_helper,
         }
     }
@@ -275,6 +309,7 @@ where
     F: PrimeField32,
     STEP: TraceStep<F, ()> // TODO: CTX?
         + StepExecutorE1<F>,
+    for<'buf> MatrixRecordArena<F>: RecordArena<STEP::RecordLayout, STEP::RecordMut<'buf>>,
 {
     fn execute(
         &mut self,
@@ -288,13 +323,7 @@ where
             memory: &mut memory.memory,
             ctx: &mut (),
         };
-        self.step.execute(
-            state,
-            instruction,
-            &mut self.trace_buffer,
-            &mut self.buffer_idx,
-            self.width,
-        )?;
+        self.step.execute(state, instruction, &mut self.arena)?;
 
         Ok(ExecutionState {
             pc,
@@ -323,17 +352,19 @@ where
     }
 
     fn generate_air_proof_input(mut self) -> AirProofInput<SC> {
-        assert_eq!(self.buffer_idx % self.width, 0);
+        assert_eq!(self.arena.buffer_idx % self.arena.width, 0);
         let rows_used = self.current_trace_height();
         let height = next_power_of_two_or_zero(rows_used);
+        let mut arena = self.arena;
         // This should be automatic since trace_buffer's height is a power of two:
-        assert!(height.checked_mul(self.width).unwrap() <= self.trace_buffer.len());
-        self.trace_buffer.truncate(height * self.width);
+        assert!(height.checked_mul(arena.width).unwrap() <= arena.trace_buffer.len());
+        arena.trace_buffer.truncate(height * arena.width);
         let mem_helper = self.mem_helper.as_borrowed();
-        self.step
-            .fill_trace(&mem_helper, &mut self.trace_buffer, self.width, rows_used);
+        todo!("fill trace");
+        // self.step
+        //     .fill_trace(&mem_helper, &mut arena.trace_buffer, arena.width, rows_used);
         drop(self.mem_helper);
-        let trace = RowMajorMatrix::new(self.trace_buffer, self.width);
+        let trace = RowMajorMatrix::new(arena.trace_buffer, arena.width);
         // self.inner.finalize(&mut trace, num_records);
 
         AirProofInput::simple(trace, self.step.generate_public_values())
@@ -348,10 +379,10 @@ where
         get_air_name(&self.air)
     }
     fn current_trace_height(&self) -> usize {
-        self.buffer_idx / self.width
+        self.arena.buffer_idx / self.arena.width
     }
     fn trace_width(&self) -> usize {
-        self.width
+        self.arena.width
     }
 }
 

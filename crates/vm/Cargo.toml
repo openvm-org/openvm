@@ -35,6 +35,7 @@ eyre.workspace = true
 derivative.workspace = true
 static_assertions.workspace = true
 getset.workspace = true
+zerocopy.workspace = true
 
 [dev-dependencies]
 test-log.workspace = true
