@@ -21,7 +21,10 @@ use crate::util::read_default_agg_pk;
 use crate::{
     commands::build,
     default::*,
-    global::{app_pk_path, app_vk_path, get_single_target_name, manifest_path_and_dir, target_dir},
+    global::{
+        get_app_pk_path, get_app_vk_path, get_manifest_path_and_dir, get_single_target_name,
+        get_target_dir,
+    },
     input::read_to_stdin,
 };
 
@@ -125,8 +128,9 @@ impl ProveCmd {
                 cargo_args,
             } => {
                 let sdk = Sdk::new();
-                let app_pk = Self::get_app_pk(app_pk, run_args, cargo_args)?;
-                let committed_exe = Self::get_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
+                let app_pk = Self::load_or_generate_app_pk(app_pk, run_args, cargo_args)?;
+                let committed_exe =
+                    Self::load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
 
                 let app_proof =
                     sdk.generate_app_proof(app_pk, committed_exe, read_to_stdin(&run_args.input)?)?;
@@ -140,8 +144,9 @@ impl ProveCmd {
                 agg_tree_config,
             } => {
                 let sdk = Sdk::new().with_agg_tree_config(*agg_tree_config);
-                let app_pk = Self::get_app_pk(app_pk, run_args, cargo_args)?;
-                let committed_exe = Self::get_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
+                let app_pk = Self::load_or_generate_app_pk(app_pk, run_args, cargo_args)?;
+                let committed_exe =
+                    Self::load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
 
                 let commits = AppExecutionCommit::compute(
                     &app_pk.app_vm_pk.vm_config,
@@ -174,8 +179,9 @@ impl ProveCmd {
                 use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 
                 let sdk = Sdk::new().with_agg_tree_config(*agg_tree_config);
-                let app_pk = Self::get_app_pk(app_pk, run_args, cargo_args)?;
-                let committed_exe = Self::get_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
+                let app_pk = Self::load_or_generate_app_pk(app_pk, run_args, cargo_args)?;
+                let committed_exe =
+                    Self::load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
 
                 let commits = AppExecutionCommit::compute(
                     &app_pk.app_vm_pk.vm_config,
@@ -204,19 +210,19 @@ impl ProveCmd {
         Ok(())
     }
 
-    fn get_app_pk(
+    fn load_or_generate_app_pk(
         app_pk: &Option<PathBuf>,
         run_args: &RunArgs,
         cargo_args: &RunCargoArgs,
     ) -> Result<Arc<AppProvingKey<SdkVmConfig>>> {
-        let (manifest_path, _) = manifest_path_and_dir(&cargo_args.manifest_path)?;
-        let target_dir = target_dir(&cargo_args.target_dir, &manifest_path);
+        let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
+        let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
 
         let app_pk_path = if let Some(app_pk) = app_pk {
             app_pk.to_path_buf()
         } else {
-            let app_pk_path = app_pk_path(&target_dir);
-            let app_vk_path = app_vk_path(&target_dir);
+            let app_pk_path = get_app_pk_path(&target_dir);
+            let app_vk_path = get_app_vk_path(&target_dir);
             keygen(
                 run_args
                     .config
@@ -232,7 +238,7 @@ impl ProveCmd {
         Ok(Arc::new(read_app_pk_from_file(app_pk_path)?))
     }
 
-    fn get_commit_exe(
+    fn load_or_build_and_commit_exe(
         sdk: &Sdk,
         run_args: &RunArgs,
         cargo_args: &RunCargoArgs,

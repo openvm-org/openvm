@@ -49,7 +49,7 @@ As with `cargo build`, default package selection depends on the working director
 
 - `--exclude <PACKAGES>`
 
-  **Description**: Excludes the specified packages. Must be used in conjuction with `--workspace`. This flag may be specified multiple times or as a comma-separated list.
+  **Description**: Excludes the specified packages. Must be used in conjunction with `--workspace`. This flag may be specified multiple times or as a comma-separated list.
 
 ### Target Selection
 

@@ -70,7 +70,7 @@ jobs:
         run: |
           export RUST_BACKTRACE=1
           cargo build
-          cargo run --bin cargo-openvm -- openvm keygen --config ./example/app_config.toml --app-pk app.pk --app-vk app.vk
+          cargo run --bin cargo-openvm -- openvm keygen --config ./example/app_config.toml --output-dir .
 
       - name: Run CLI tests
         working-directory: crates/cli

@@ -7,7 +7,7 @@ use openvm_sdk::{fs::read_exe_from_file, Sdk};
 
 use super::{build, BuildArgs, BuildCargoArgs};
 use crate::{
-    global::{get_single_target_name, manifest_path_and_dir},
+    global::{get_manifest_path_and_dir, get_single_target_name},
     input::{read_to_stdin, Input},
     util::read_config_toml_or_default,
 };
@@ -241,7 +241,7 @@ impl RunCmd {
             &output_dir.join(format!("{}.vmexe", target_name))
         };
 
-        let (_, manifest_dir) = manifest_path_and_dir(&self.cargo_args.manifest_path)?;
+        let (_, manifest_dir) = get_manifest_path_and_dir(&self.cargo_args.manifest_path)?;
         let app_config = read_config_toml_or_default(
             self.run_args
                 .config

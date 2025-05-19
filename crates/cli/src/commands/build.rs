@@ -15,7 +15,7 @@ use openvm_sdk::{fs::write_exe_to_file, Sdk};
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 
 use crate::{
-    global::{manifest_path_and_dir, target_dir, target_output_dir},
+    global::{get_manifest_path_and_dir, get_target_dir, get_target_output_dir},
     util::read_config_toml_or_default,
 };
 
@@ -71,9 +71,9 @@ pub struct BuildArgs {
 impl Default for BuildArgs {
     fn default() -> Self {
         Self {
-            no_transpile: bool::default(),
-            config: Option::default(),
-            output_dir: Option::default(),
+            no_transpile: false,
+            config: None,
+            output_dir: None,
             init_file_name: OPENVM_DEFAULT_INIT_FILE_NAME.to_string(),
         }
     }
@@ -256,28 +256,28 @@ pub struct BuildCargoArgs {
 impl Default for BuildCargoArgs {
     fn default() -> Self {
         Self {
-            package: Vec::default(),
-            workspace: bool::default(),
-            exclude: Vec::default(),
-            lib: bool::default(),
-            bin: Vec::default(),
-            bins: bool::default(),
-            example: Vec::default(),
-            examples: bool::default(),
-            all_targets: bool::default(),
-            features: Vec::default(),
-            all_features: bool::default(),
-            no_default_features: bool::default(),
+            package: vec![],
+            workspace: false,
+            exclude: vec![],
+            lib: false,
+            bin: vec![],
+            bins: false,
+            example: vec![],
+            examples: false,
+            all_targets: false,
+            features: vec![],
+            all_features: false,
+            no_default_features: false,
             profile: "release".to_string(),
-            target_dir: Option::default(),
-            verbose: bool::default(),
-            quiet: bool::default(),
+            target_dir: None,
+            verbose: false,
+            quiet: false,
             color: "always".to_string(),
-            manifest_path: Option::default(),
-            ignore_rust_version: bool::default(),
-            locked: bool::default(),
-            offline: bool::default(),
-            frozen: bool::default(),
+            manifest_path: None,
+            ignore_rust_version: false,
+            locked: false,
+            offline: false,
+            frozen: false,
         }
     }
 }
@@ -288,8 +288,8 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
     println!("[openvm] Building the package...");
 
     // Find manifest_path, manifest_dir, and target_dir
-    let (manifest_path, manifest_dir) = manifest_path_and_dir(&cargo_args.manifest_path)?;
-    let target_dir = target_dir(&cargo_args.target_dir, &manifest_path);
+    let (manifest_path, manifest_dir) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
+    let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
 
     // Set guest options using build arguments; use found manifest directory for consistency
     let mut guest_options = GuestOptions::default()
@@ -347,7 +347,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
     }
 
     // Build (allowing passed options to decide what gets built)
-    let raw_target_dir = match build_generic(&guest_options) {
+    let elf_target_dir = match build_generic(&guest_options) {
         Ok(raw_target_dir) => raw_target_dir,
         Err(None) => {
             return Err(eyre::eyre!("Failed to build guest"));
@@ -363,7 +363,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
         if build_args.output_dir.is_some() {
             println!("[openvm] WARNING: Output directory set but transpilation skipped");
         }
-        return Ok(raw_target_dir);
+        return Ok(elf_target_dir);
     }
 
     // Write to init file
@@ -417,16 +417,16 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
         .iter()
         .map(|target| {
             if target.is_example() {
-                raw_target_dir.join("examples")
+                elf_target_dir.join("examples")
             } else {
-                raw_target_dir.clone()
+                elf_target_dir.clone()
             }
             .join(&target.name)
         })
         .collect::<Vec<_>>();
 
-    // Transpile and commit, storing in ${target_dir}/openvm/${profile} by default
-    let target_output_dir = target_output_dir(&target_dir, &cargo_args.profile);
+    // Transpile, storing in ${target_dir}/openvm/${profile} by default
+    let target_output_dir = get_target_output_dir(&target_dir, &cargo_args.profile);
 
     println!("[openvm] Transpiling the package...");
     for (elf_path, target) in izip!(&elf_paths, &elf_targets) {

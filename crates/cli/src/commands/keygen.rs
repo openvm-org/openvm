@@ -12,7 +12,7 @@ use openvm_sdk::{
 
 use crate::{
     default::{DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME},
-    global::{app_pk_path, app_vk_path, manifest_path_and_dir, target_dir},
+    global::{get_app_pk_path, get_app_vk_path, get_manifest_path_and_dir, get_target_dir},
     util::read_config_toml_or_default,
 };
 
@@ -58,10 +58,11 @@ pub struct KeygenCargoArgs {
 
 impl KeygenCmd {
     pub fn run(&self) -> Result<()> {
-        let (manifest_path, manifest_dir) = manifest_path_and_dir(&self.cargo_args.manifest_path)?;
-        let target_dir = target_dir(&self.cargo_args.target_dir, &manifest_path);
-        let app_pk_path = app_pk_path(&target_dir);
-        let app_vk_path = app_vk_path(&target_dir);
+        let (manifest_path, manifest_dir) =
+            get_manifest_path_and_dir(&self.cargo_args.manifest_path)?;
+        let target_dir = get_target_dir(&self.cargo_args.target_dir, &manifest_path);
+        let app_pk_path = get_app_pk_path(&target_dir);
+        let app_vk_path = get_app_vk_path(&target_dir);
 
         keygen(
             self.config

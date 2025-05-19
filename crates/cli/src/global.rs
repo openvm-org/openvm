@@ -4,7 +4,7 @@ use std::{
 };
 
 use eyre::Result;
-use openvm_build::{get_target_dir, get_workspace_packages};
+use openvm_build::get_workspace_packages;
 
 use crate::{
     commands::RunCargoArgs,
@@ -17,7 +17,9 @@ static MANIFEST_DIR: OnceLock<PathBuf> = OnceLock::new();
 static TARGET_DIR: OnceLock<PathBuf> = OnceLock::new();
 static SINGLE_TARGET_NAME: OnceLock<String> = OnceLock::new();
 
-pub(crate) fn manifest_path_and_dir(manifest_path: &Option<PathBuf>) -> Result<(PathBuf, PathBuf)> {
+pub(crate) fn get_manifest_path_and_dir(
+    manifest_path: &Option<PathBuf>,
+) -> Result<(PathBuf, PathBuf)> {
     let manifest_dir = if MANIFEST_DIR.get().is_some() {
         MANIFEST_DIR.get().unwrap().clone()
     } else if let Some(manifest_path) = &manifest_path {
@@ -36,25 +38,25 @@ pub(crate) fn manifest_path_and_dir(manifest_path: &Option<PathBuf>) -> Result<(
     Ok((manifest_path.clone(), manifest_dir))
 }
 
-pub(crate) fn target_dir(target_dir: &Option<PathBuf>, manifest_path: &PathBuf) -> PathBuf {
+pub(crate) fn get_target_dir(target_dir: &Option<PathBuf>, manifest_path: &PathBuf) -> PathBuf {
     TARGET_DIR
         .get_or_init(|| {
             target_dir
                 .clone()
-                .unwrap_or_else(|| get_target_dir(manifest_path))
+                .unwrap_or_else(|| openvm_build::get_target_dir(manifest_path))
         })
         .to_path_buf()
 }
 
-pub(crate) fn target_output_dir(target_dir: &Path, profile: &str) -> PathBuf {
+pub(crate) fn get_target_output_dir(target_dir: &Path, profile: &str) -> PathBuf {
     target_dir.join("openvm").join(profile).to_path_buf()
 }
 
-pub(crate) fn app_pk_path(target_dir: &Path) -> PathBuf {
+pub(crate) fn get_app_pk_path(target_dir: &Path) -> PathBuf {
     target_dir.join("openvm").join(DEFAULT_APP_PK_NAME)
 }
 
-pub(crate) fn app_vk_path(target_dir: &Path) -> PathBuf {
+pub(crate) fn get_app_vk_path(target_dir: &Path) -> PathBuf {
     target_dir.join("openvm").join(DEFAULT_APP_VK_NAME)
 }
 
@@ -68,7 +70,7 @@ pub(crate) fn get_single_target_name(cargo_args: &RunCargoArgs) -> Result<String
                 "`cargo openvm run` can run at most one executable, but multiple were specified"
             ));
         } else if num_targets == 0 {
-            let (_, manifest_dir) = manifest_path_and_dir(&cargo_args.manifest_path)?;
+            let (_, manifest_dir) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
 
             let packages = get_workspace_packages(&manifest_dir)
                 .into_iter()
