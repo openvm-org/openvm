@@ -18,8 +18,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, AdapterTraceStep,
-        BasicAdapterInterface, EmptyLayout, MinimalInstruction, RecordArena, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmCoreChip, VmStateMut,
+        BasicAdapterInterface, EmptyLayout, MatrixRecordArena, MinimalInstruction, RecordArena,
+        Result, RowMajorMatrixArena, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir,
+        VmCoreChip, VmStateMut,
     },
     system::{
         memory::{
@@ -235,6 +236,32 @@ where
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
+    }
+}
+
+pub struct PublicValuesRecordArena<F> {
+    inner: MatrixRecordArena<F>,
+}
+
+impl<F: PrimeField32> RecordArena<EmptyLayout, ()> for PublicValuesRecordArena<F> {
+    fn alloc(&mut self, layout: EmptyLayout) -> () {
+        todo!()
+    }
+}
+
+impl<F: Field> RowMajorMatrixArena for PublicValuesRecordArena<F> {
+    fn with_capacity(height: usize, width: usize) -> Self {
+        Self {
+            inner: MatrixRecordArena::with_capacity(height, width),
+        }
+    }
+
+    fn width(&self) -> usize {
+        self.inner.width()
+    }
+
+    fn trace_offset(&self) -> usize {
+        self.inner.trace_offset()
     }
 }
 
