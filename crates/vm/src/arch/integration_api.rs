@@ -343,48 +343,49 @@ where
     }
 }
 
-// TODO[jpw]: switch read,write to store into abstract buffer, then fill_trace_row using buffer
 /// A helper trait for expressing generic state accesses within the implementation of
 /// [TraceStep]. Note that this is only a helper trait when the same interface of state access
 /// is reused or shared by multiple implementations. It is not required to implement this trait if
 /// it is easier to implement the [TraceStep] trait directly without this trait.
 pub trait AdapterTraceStep<F, CTX> {
-    /// Adapter row width
-    const WIDTH: usize;
     type ReadData;
     type WriteData;
-    /// The minimal amount of information needed to generate the sub-row of the trace matrix.
-    /// This type has a lifetime so other context, such as references to other chips, can be
-    /// provided.
-    type TraceContext<'a>
+    type RecordMut<'a>
     where
         Self: 'a;
 
-    fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]);
+    // /// The minimal amount of information needed to generate the sub-row of the trace matrix.
+    // /// This type has a lifetime so other context, such as references to other chips, can be
+    // /// provided.
+    // type TraceContext<'a>
+    // where
+    //     Self: 'a;
+
+    fn start(pc: u32, memory: &TracingMemory<F>, record: Self::RecordMut<'_>);
 
     fn read(
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        adapter_row: &mut [F],
+        record: Self::RecordMut<'_>,
     ) -> Self::ReadData;
 
     fn write(
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        adapter_row: &mut [F],
         data: &Self::WriteData,
+        record: Self::RecordMut<'_>,
     );
 
-    // Note[jpw]: should we reuse TraceSubRowGenerator trait instead?
-    /// Post-execution filling of rest of adapter row.
-    fn fill_trace_row(
-        &self,
-        mem_helper: &MemoryAuxColsFactory<F>,
-        ctx: Self::TraceContext<'_>,
-        adapter_row: &mut [F],
-    );
+    // // Note[jpw]: should we reuse TraceSubRowGenerator trait instead?
+    // /// Post-execution filling of rest of adapter row.
+    // fn fill_trace_row(
+    //     &self,
+    //     mem_helper: &MemoryAuxColsFactory<F>,
+    //     ctx: Self::TraceContext<'_>,
+    //     adapter_row: &mut [F],
+    // );
 }
 
 pub trait AdapterExecutorE1<F>

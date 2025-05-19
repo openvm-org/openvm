@@ -150,7 +150,7 @@ where
             CTX,
             ReadData = [[F; 1]; 2],
             WriteData = [[F; 1]; 0],
-            TraceContext<'a> = (),
+            RecordMut<'a> = (),
         >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {

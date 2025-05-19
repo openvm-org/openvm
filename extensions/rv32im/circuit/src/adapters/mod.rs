@@ -1,7 +1,9 @@
 use std::ops::Mul;
 
 use openvm_circuit::system::memory::{
-    offline_checker::{MemoryBaseAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
+    offline_checker::{
+        MemoryBaseAuxCols, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+    },
     online::{GuestMemory, TracingMemory},
     tree::public_values::PUBLIC_VALUES_AS,
     MemoryController, RecordId,
@@ -135,13 +137,13 @@ pub fn tracing_read<F, const N: usize>(
     memory: &mut TracingMemory<F>,
     address_space: u32,
     ptr: u32,
-    prev_timestamp: &mut u32,
+    record: &mut MemoryReadAuxRecord,
 ) -> [u8; N]
 where
     F: PrimeField32,
 {
     let (t_prev, data) = timed_read(memory, address_space, ptr);
-    *prev_timestamp = t_prev;
+    *record.prev_timestamp = t_prev;
     data
 }
 
@@ -153,14 +155,13 @@ pub fn tracing_write<F, const N: usize>(
     address_space: u32,
     ptr: u32,
     data: &[u8; N],
-    prev_timestamp: &mut u32,
-    prev_data: &mut [u8; N],
+    record: &mut MemoryWriteAuxRecord<[u8; N]>,
 ) where
     F: PrimeField32,
 {
     let (t_prev, data_prev) = timed_write(memory, address_space, ptr, data);
-    *prev_timestamp = t_prev;
-    *prev_data = data_prev;
+    *record.prev_timestamp = t_prev;
+    *record.prev_data = data_prev;
 }
 
 // TODO(ayush): this is bad but not sure how to avoid
@@ -182,12 +183,12 @@ pub fn tracing_write_with_base_aux<F, const N: usize>(
 pub fn tracing_read_imm<F>(
     memory: &mut TracingMemory<F>,
     imm: u32,
-    imm_mut: &mut F,
+    imm_mut: &mut u32,
 ) -> [u8; RV32_REGISTER_NUM_LIMBS]
 where
     F: PrimeField32,
 {
-    *imm_mut = F::from_canonical_u32(imm);
+    *imm_mut = imm;
     debug_assert_eq!(imm >> 24, 0); // highest byte should be zero to prevent overflow
 
     memory.increment_timestamp();

@@ -195,16 +195,13 @@ impl<F, CTX, const R: usize, const W: usize> AdapterTraceStep<F, CTX> for Native
 where
     F: PrimeField32,
 {
-    const WIDTH: usize = size_of::<NativeAdapterCols<u8, R, W>>();
     type ReadData = [[F; 1]; R];
     type WriteData = [[F; 1]; W];
-    type TraceContext<'a> = ();
+    type RecordMut<'a> = (); // TODO
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]) {
-        let adapter_row: &mut NativeAdapterCols<F, R, W> = adapter_row.borrow_mut();
-        adapter_row.from_state.pc = F::from_canonical_u32(pc);
-        adapter_row.from_state.timestamp = F::from_canonical_u32(memory.timestamp);
+    fn start(pc: u32, memory: &TracingMemory<F>, record: ()) {
+        todo!()
     }
 
     #[inline(always)]
@@ -212,7 +209,7 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        adapter_row: &mut [F],
+        record: (),
     ) -> Self::ReadData {
         todo!("Implement read operation");
     }
@@ -222,20 +219,10 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        adapter_row: &mut [F],
         data: &Self::WriteData,
+        record: (),
     ) {
         todo!("Implement write operation");
-    }
-
-    #[inline(always)]
-    fn fill_trace_row(
-        &self,
-        mem_helper: &MemoryAuxColsFactory<F>,
-        bitwise_lookup_chip: Self::TraceContext<'_>,
-        adapter_row: &mut [F],
-    ) {
-        todo!("Implement fill_trace_row operation");
     }
 }
 
