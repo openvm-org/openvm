@@ -1,6 +1,9 @@
 mod build;
 pub use build::*;
 
+mod commit;
+pub use commit::*;
+
 mod keygen;
 pub use keygen::*;
 
