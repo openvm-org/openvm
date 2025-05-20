@@ -200,7 +200,7 @@ where
     type RecordMut<'a> = (); // TODO
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: ()) {
+    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut ()) {
         todo!()
     }
 
@@ -209,7 +209,7 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        record: (),
+        record: &mut (),
     ) -> Self::ReadData {
         todo!("Implement read operation");
     }
@@ -220,7 +220,7 @@ where
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
-        record: (),
+        record: &mut (),
     ) {
         todo!("Implement write operation");
     }

@@ -156,11 +156,11 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 /// Given some minimum metadata of type `Layout` that specifies the record size, the `RecordArena`
 /// should allocate a buffer, of size possibly larger than the record, and then return mutable
 /// pointers to the record within the buffer.
-pub trait RecordArena<Layout, RecordMut> {
+pub trait RecordArena<'a, Layout, RecordMut> {
     /// Allocates underlying buffer and returns a mutable reference `RecordMut`.
     /// Note that calling this function may not call an underlying memory allocation as the record
     /// arena may be virtual.
-    fn alloc(&mut self, layout: Layout) -> RecordMut;
+    fn alloc(&'a mut self, layout: Layout) -> RecordMut;
 }
 
 /// ZST to represent empty layout. Used when the layout can be inferred from other context (such as
@@ -173,19 +173,16 @@ pub struct EmptyLayout;
 /// is sufficient, with possible overwriting.
 pub trait TraceStep<F, CTX> {
     type RecordLayout;
-    type RecordMut<'a>
-    where
-        Self: 'a;
+    type RecordMut<'a>;
 
     fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        arena: &mut RA,
+        arena: &'buf mut RA,
     ) -> Result<()>
     where
-        RA: RecordArena<Self::RecordLayout, Self::RecordMut<'buf>>,
-        Self: 'buf;
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>;
 
     // /// Populates `trace`. This function will always be called after
     // /// [`TraceStep::execute`], so the `trace` should already contain context necessary to
@@ -326,7 +323,7 @@ where
     F: PrimeField32,
     STEP: TraceStep<F, ()> // TODO: CTX?
         + StepExecutorE1<F>,
-    for<'buf> RA: RecordArena<STEP::RecordLayout, STEP::RecordMut<'buf>>,
+    for<'buf> RA: RecordArena<'buf, STEP::RecordLayout, STEP::RecordMut<'buf>>,
 {
     fn execute(
         &mut self,
@@ -412,6 +409,9 @@ where
 pub trait AdapterTraceStep<F, CTX> {
     type ReadData;
     type WriteData;
+    // @dev This can either be a &mut _ directory or a struct with &mut _ fields.
+    // The latter is helpful if we want to directly write certain values in place into a trace
+    // matrix.
     type RecordMut<'a>
     where
         Self: 'a;
@@ -423,13 +423,13 @@ pub trait AdapterTraceStep<F, CTX> {
     // where
     //     Self: 'a;
 
-    fn start(pc: u32, memory: &TracingMemory<F>, record: Self::RecordMut<'_>);
+    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>);
 
     fn read(
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        record: Self::RecordMut<'_>,
+        record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData;
 
     fn write(
@@ -437,7 +437,7 @@ pub trait AdapterTraceStep<F, CTX> {
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
-        record: Self::RecordMut<'_>,
+        record: &mut Self::RecordMut<'_>,
     );
 
     // // Note[jpw]: should we reuse TraceSubRowGenerator trait instead?

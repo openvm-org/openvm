@@ -1,4 +1,4 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 
 use openvm_circuit::{
     arch::{
@@ -8,10 +8,9 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteAuxRecord,
         },
         online::{GuestMemory, TracingMemory},
-        MemoryAddress, MemoryAuxColsFactory,
+        MemoryAddress,
     },
 };
 use openvm_circuit_primitives::{
@@ -29,9 +28,11 @@ use openvm_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 use super::{
-    tracing_read, tracing_read_imm, tracing_write, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+    tracing_read, tracing_read_imm, tracing_write, Rv32WordWriteAuxRecord, RV32_CELL_BITS,
+    RV32_REGISTER_NUM_LIMBS,
 };
 use crate::adapters::{memory_read, memory_write};
 
@@ -171,6 +172,7 @@ pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize> {
 
 // Intermediate type that should not be copied or cloned and should be directly written to
 #[repr(C)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable)]
 pub struct Rv32BaseAluAdapterRecord {
     pub from_pc: u32,
     pub from_timestamp: u32,
@@ -180,12 +182,13 @@ pub struct Rv32BaseAluAdapterRecord {
     pub rs1_ptr: u8,
     /// 1 if rs2 was a read, 0 if an immediate
     pub rs2_as: u8,
+    pub _padding: u8,
 
     /// Pointer if rs2 was a read, immediate value otherwise
     pub rs2: u32,
 
     pub reads_aux: [MemoryReadAuxRecord; 2],
-    pub writes_aux: MemoryWriteAuxRecord<[u8; RV32_REGISTER_NUM_LIMBS]>,
+    pub writes_aux: Rv32WordWriteAuxRecord,
 }
 
 impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
@@ -196,17 +199,18 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     type RecordMut<'a> = &'a mut Rv32BaseAluAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Rv32BaseAluAdapterRecord) {
+    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut &mut Rv32BaseAluAdapterRecord) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
 
+    // @dev cannot get rid of double &mut due to trait
     #[inline(always)]
     fn read(
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        record: &mut Rv32BaseAluAdapterRecord,
+        record: &mut &mut Rv32BaseAluAdapterRecord,
     ) -> Self::ReadData {
         let &Instruction { b, c, d, e, .. } = instruction;
 
@@ -220,7 +224,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
             memory,
             RV32_REGISTER_AS,
             record.rs1_ptr as u32,
-            &mut record.reads_aux[0],
+            &mut record.reads_aux[0].prev_timestamp,
         );
 
         let rs2 = if e.as_canonical_u32() == RV32_REGISTER_AS {
@@ -231,7 +235,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
                 memory,
                 RV32_REGISTER_AS,
                 record.rs2,
-                &mut record.reads_aux[1],
+                &mut record.reads_aux[1].prev_timestamp,
             )
         } else {
             record.rs2_as = RV32_IMM_AS as u8;
@@ -248,7 +252,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
-        record: &mut Rv32BaseAluAdapterRecord,
+        record: &mut &mut Rv32BaseAluAdapterRecord,
     ) {
         let &Instruction { a, d, .. } = instruction;
 
@@ -260,7 +264,8 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
             RV32_REGISTER_AS,
             record.rd_ptr as u32,
             &data[0],
-            &mut record.writes_aux,
+            &mut record.writes_aux.prev_timestamp,
+            &mut record.writes_aux.prev_data,
         );
     }
 

@@ -171,7 +171,7 @@ where
         arena: &mut RA,
     ) -> Result<()>
     where
-        RA: RecordArena<Self::RecordLayout, Self::RecordMut<'buf>>,
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
         Self: 'buf,
     {
         todo!()
@@ -243,8 +243,8 @@ pub struct PublicValuesRecordArena<F> {
     inner: MatrixRecordArena<F>,
 }
 
-impl<F: PrimeField32> RecordArena<EmptyLayout, ()> for PublicValuesRecordArena<F> {
-    fn alloc(&mut self, layout: EmptyLayout) -> () {
+impl<'a, F: PrimeField32> RecordArena<'a, EmptyLayout, ()> for PublicValuesRecordArena<F> {
+    fn alloc(&'a mut self, layout: EmptyLayout) -> () {
         todo!()
     }
 }
