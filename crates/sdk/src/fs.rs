@@ -3,7 +3,7 @@ use std::{
     path::Path,
 };
 
-use eyre::Result;
+use eyre::{Report, Result};
 use openvm_circuit::arch::{instructions::exe::VmExe, ContinuationVmProof, VmConfig};
 use openvm_continuations::verifier::root::types::RootVmVerifierInput;
 use openvm_native_recursion::halo2::wrapper::EvmVerifierByteCode;
@@ -22,104 +22,124 @@ pub const EVM_HALO2_VERIFIER_PARENT_NAME: &str = "Halo2Verifier.sol";
 pub const EVM_HALO2_VERIFIER_BASE_NAME: &str = "OpenVmHalo2Verifier.sol";
 pub const EVM_VERIFIER_ARTIFACT_FILENAME: &str = "verifier.bytecode.json";
 
+fn read_error<P: AsRef<Path>>(class: &str, path: P, error: Report) -> Report {
+    eyre::eyre!(
+        "Reading {} from file {} failed with the following error:\n    {}",
+        class,
+        path.as_ref().display(),
+        error,
+    )
+}
+
+fn write_error<P: AsRef<Path>>(class: &str, path: P, error: Report) -> Report {
+    eyre::eyre!(
+        "Writing {} to file {} failed with the following error:\n    {}",
+        class,
+        path.as_ref().display(),
+        error,
+    )
+}
+
 pub fn read_exe_from_file<P: AsRef<Path>>(path: P) -> Result<VmExe<F>> {
-    read_from_file_bitcode(path)
+    read_from_file_bitcode(&path).map_err(|e| read_error("vmexe", path, e))
 }
 
 pub fn write_exe_to_file<P: AsRef<Path>>(exe: VmExe<F>, path: P) -> Result<()> {
-    write_to_file_bitcode(path, exe)
+    write_to_file_bitcode(&path, exe).map_err(|e| write_error("vmexe", path, e))
 }
 
 pub fn read_app_pk_from_file<VC: VmConfig<F>, P: AsRef<Path>>(
     path: P,
 ) -> Result<AppProvingKey<VC>> {
-    read_from_file_bitcode(path)
+    read_from_file_bitcode(&path).map_err(|e| read_error("app proving key", path, e))
 }
 
 pub fn write_app_pk_to_file<VC: VmConfig<F>, P: AsRef<Path>>(
     app_pk: AppProvingKey<VC>,
     path: P,
 ) -> Result<()> {
-    write_to_file_bitcode(path, app_pk)
+    write_to_file_bitcode(&path, app_pk).map_err(|e| write_error("app proving key", path, e))
 }
 
 pub fn read_app_vk_from_file<P: AsRef<Path>>(path: P) -> Result<AppVerifyingKey> {
-    read_from_file_bitcode(path)
+    read_from_file_bitcode(&path).map_err(|e| read_error("app verifying key", path, e))
 }
 
 pub fn write_app_vk_to_file<P: AsRef<Path>>(app_vk: AppVerifyingKey, path: P) -> Result<()> {
-    write_to_file_bitcode(path, app_vk)
+    write_to_file_bitcode(&path, app_vk).map_err(|e| write_error("app verifying key", path, e))
 }
 
 pub fn read_app_proof_from_file<P: AsRef<Path>>(path: P) -> Result<ContinuationVmProof<SC>> {
-    decode_from_file(path)
+    decode_from_file(&path).map_err(|e| read_error("app proof", path, e))
 }
 
 pub fn write_app_proof_to_file<P: AsRef<Path>>(
     proof: ContinuationVmProof<SC>,
     path: P,
 ) -> Result<()> {
-    encode_to_file(path, proof)
+    encode_to_file(&path, proof).map_err(|e| write_error("app proof", path, e))
 }
 
 pub fn read_root_verifier_input_from_file<P: AsRef<Path>>(
     path: P,
 ) -> Result<RootVmVerifierInput<SC>> {
-    decode_from_file(path)
+    decode_from_file(&path).map_err(|e| read_error("root verifier input", path, e))
 }
 
 pub fn write_root_verifier_input_to_file<P: AsRef<Path>>(
     input: RootVmVerifierInput<SC>,
     path: P,
 ) -> Result<()> {
-    encode_to_file(path, input)
+    encode_to_file(&path, input).map_err(|e| write_error("root verifier input", path, e))
 }
 
 pub fn read_agg_stark_pk_from_file<P: AsRef<Path>>(path: P) -> Result<AggStarkProvingKey> {
-    read_from_file_bitcode(path)
-}
-pub fn read_agg_halo2_pk_from_file<P: AsRef<Path>>(path: P) -> Result<Halo2ProvingKey> {
-    read_from_file_bitcode(path)
-}
-
-pub fn write_agg_halo2_pk_to_file<P: AsRef<Path>>(pk: &Halo2ProvingKey, path: P) -> Result<()> {
-    write_to_file_bitcode(path, pk)
+    read_from_file_bitcode(&path).map_err(|e| read_error("STARK proving key", path, e))
 }
 
 pub fn write_agg_stark_pk_to_file<P: AsRef<Path>>(pk: &AggStarkProvingKey, path: P) -> Result<()> {
-    write_to_file_bitcode(path, pk)
+    write_to_file_bitcode(&path, pk).map_err(|e| write_error("STARK proving key", path, e))
+}
+
+pub fn read_agg_halo2_pk_from_file<P: AsRef<Path>>(path: P) -> Result<Halo2ProvingKey> {
+    read_from_file_bitcode(&path).map_err(|e| read_error("Halo2 proving key", path, e))
+}
+
+pub fn write_agg_halo2_pk_to_file<P: AsRef<Path>>(pk: &Halo2ProvingKey, path: P) -> Result<()> {
+    write_to_file_bitcode(&path, pk).map_err(|e| write_error("Halo2 proving key", path, e))
 }
 
 pub fn read_evm_proof_from_file<P: AsRef<Path>>(path: P) -> Result<EvmProof> {
-    read_from_file_json(path)
+    read_from_file_json(&path).map_err(|e| read_error("EVM proof", path, e))
 }
 
 pub fn write_evm_proof_to_file<P: AsRef<Path>>(proof: EvmProof, path: P) -> Result<()> {
-    write_to_file_json(path, proof)
+    write_to_file_json(&path, proof).map_err(|e| write_error("EVM proof", path, e))
 }
 
 pub fn read_app_exe_commit_from_file<P: AsRef<Path>>(path: P) -> Result<AppExecutionCommit> {
-    read_from_file_json(path)
+    read_from_file_json(&path).map_err(|e| read_error("app execution commit", path, e))
 }
 
 pub fn write_app_exe_commit_to_file<P: AsRef<Path>>(
     commit: AppExecutionCommit,
     path: P,
 ) -> Result<()> {
-    write_to_file_json(path, commit)
+    write_to_file_json(&path, commit).map_err(|e| write_error("app execution commit", path, e))
 }
 
 pub fn read_app_exe_bn254_commit_from_file<P: AsRef<Path>>(
     path: P,
 ) -> Result<AppExecutionBn254Commit> {
-    read_from_file_json(path)
+    read_from_file_json(&path).map_err(|e| read_error("app execution bn254 commit", path, e))
 }
 
 pub fn write_app_exe_bn254_commit_to_file<P: AsRef<Path>>(
     commit: AppExecutionBn254Commit,
     path: P,
 ) -> Result<()> {
-    write_to_file_json(path, commit)
+    write_to_file_json(&path, commit)
+        .map_err(|e| write_error("app execution bn254 commit", path, e))
 }
 
 pub fn read_evm_halo2_verifier_from_folder<P: AsRef<Path>>(folder: P) -> Result<EvmHalo2Verifier> {
