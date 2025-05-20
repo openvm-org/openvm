@@ -1,4 +1,4 @@
-use std::borrow::BorrowMut;
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, VmChipTestBuilder},
@@ -23,10 +23,10 @@ use super::{
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
-fn create_test_chip(tester: &VmChipTestBuilder<F>) -> (CastFChip<F>,) {
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> CastFChip<F> {
     CastFChip::<F>::new(
         VmAirWrapper::new(
-            ConvertAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
+            ConvertAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
             CastFCoreAir::new(tester.range_checker().bus()),
         ),
         CastFStep::new(
@@ -57,7 +57,7 @@ fn prepare_castf_rand_write_execute(
 
     let operand1_f = F::from_canonical_u32(y);
 
-    tester.write_cell(as_y, address_y, operand1_f);
+    tester.memory.write(as_y, address_y, [operand1_f]);
     let x = CastF::solve(operand1);
 
     tester.execute(
@@ -68,7 +68,7 @@ fn prepare_castf_rand_write_execute(
         ),
     );
     assert_eq!(
-        x.map(F::from_canonical_u32),
+        x.map(F::from_canonical_u8),
         tester.read::<4>(as_x, address_x)
     );
 }

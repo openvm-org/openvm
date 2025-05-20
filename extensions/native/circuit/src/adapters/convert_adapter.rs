@@ -19,15 +19,14 @@ use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_MEMORY_AS,
 };
 use openvm_native_compiler::conversion::AS;
+use openvm_rv32im_circuit::adapters::{memory_write, tracing_write};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
-use crate::adapters::{memory_write, tracing_write};
-
-use super::{memory_read, tracing_read};
+use crate::adapters::{memory_read_native, tracing_read_native};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -127,7 +126,7 @@ where
 {
     const WIDTH: usize = size_of::<ConvertAdapterCols<u8, READ_SIZE, WRITE_SIZE>>();
     type ReadData = [F; READ_SIZE];
-    type WriteData = [u32; WRITE_SIZE];
+    type WriteData = [u8; WRITE_SIZE];
     type TraceContext<'a> = ();
 
     #[inline(always)]
@@ -153,10 +152,13 @@ where
         let adapter_row: &mut ConvertAdapterCols<F, READ_SIZE, WRITE_SIZE> =
             adapter_row.borrow_mut();
 
-        let read = tracing_read(
+        let read = tracing_read_native(
             memory,
             b.as_canonical_u32(),
-            (&mut adapter_row.b_pointer, &mut adapter_row.reads_aux[0]),
+            (
+                &mut adapter_row.b_pointer,
+                adapter_row.reads_aux[0].as_mut(),
+            ),
         );
         read
     }
@@ -169,17 +171,20 @@ where
         adapter_row: &mut [F],
         data: &Self::WriteData,
     ) {
-        let Instruction { a, d, .. } = instruction;
+        let &Instruction { a, d, .. } = instruction;
+
+        debug_assert_eq!(d.as_canonical_u32(), RV32_MEMORY_AS);
 
         let adapter_row: &mut ConvertAdapterCols<F, READ_SIZE, WRITE_SIZE> =
             adapter_row.borrow_mut();
 
-        // TODO: this writes to AS 2
+        adapter_row.a_pointer = a;
         tracing_write(
             memory,
+            RV32_MEMORY_AS,
             a.as_canonical_u32(),
             data,
-            (&mut adapter_row.a_pointer, &mut adapter_row.writes_aux[0]),
+            &mut adapter_row.writes_aux[0],
         );
     }
 
@@ -208,7 +213,7 @@ where
     F: PrimeField32,
 {
     type ReadData = [F; READ_SIZE];
-    type WriteData = [F; WRITE_SIZE];
+    type WriteData = [u8; WRITE_SIZE];
 
     #[inline(always)]
     fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
@@ -216,7 +221,7 @@ where
 
         debug_assert_eq!(e.as_canonical_u32(), AS::Native as u32);
 
-        memory_read(memory, b.as_canonical_u32())
+        memory_read_native(memory, b.as_canonical_u32())
     }
 
     #[inline(always)]
@@ -230,6 +235,6 @@ where
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_MEMORY_AS);
 
-        memory_write(memory, a.as_canonical_u32(), data);
+        memory_write(memory, RV32_MEMORY_AS, a.as_canonical_u32(), data);
     }
 }

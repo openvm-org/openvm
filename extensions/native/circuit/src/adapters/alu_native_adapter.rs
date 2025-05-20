@@ -23,7 +23,10 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
-use crate::adapters::{memory_read_or_imm, memory_write, tracing_read_or_imm, tracing_write};
+use crate::adapters::{
+    memory_read_or_imm_native, memory_write_native, tracing_read_or_imm_native,
+    tracing_write_native,
+};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -151,14 +154,14 @@ where
 
         let adapter_row: &mut AluNativeAdapterCols<F> = adapter_row.borrow_mut();
 
-        let rs1 = tracing_read_or_imm(
+        let rs1 = tracing_read_or_imm_native(
             memory,
             e.as_canonical_u32(),
             b,
             &mut adapter_row.e_as,
             (&mut adapter_row.b_pointer, &mut adapter_row.reads_aux[0]),
         );
-        let rs2 = tracing_read_or_imm(
+        let rs2 = tracing_read_or_imm_native(
             memory,
             f.as_canonical_u32(),
             c,
@@ -179,10 +182,10 @@ where
         let Instruction { a, .. } = instruction;
 
         let adapter_row: &mut AluNativeAdapterCols<F> = adapter_row.borrow_mut();
-        tracing_write(
+        tracing_write_native(
             memory,
             a.as_canonical_u32(),
-            &data,
+            data,
             (&mut adapter_row.a_pointer, &mut adapter_row.write_aux),
         );
     }
@@ -211,7 +214,7 @@ where
             adapter_row.reads_aux[0].is_zero_aux = F::ZERO;
         } else {
             adapter_row.reads_aux[0].is_immediate = F::ZERO;
-            adapter_row.reads_aux[1].is_zero_aux = adapter_row.e_as.inverse();
+            adapter_row.reads_aux[0].is_zero_aux = adapter_row.e_as.inverse();
         }
 
         if adapter_row.f_as.is_zero() {
@@ -235,8 +238,8 @@ where
     fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
         let &Instruction { b, c, e, f, .. } = instruction;
 
-        let rs1 = memory_read_or_imm(memory, e.as_canonical_u32(), b);
-        let rs2 = memory_read_or_imm(memory, f.as_canonical_u32(), c);
+        let rs1 = memory_read_or_imm_native(memory, e.as_canonical_u32(), b);
+        let rs2 = memory_read_or_imm_native(memory, f.as_canonical_u32(), c);
 
         [rs1, rs2]
     }
@@ -250,6 +253,6 @@ where
     ) {
         let Instruction { a, .. } = instruction;
 
-        memory_write(memory, a.as_canonical_u32(), data);
+        memory_write_native(memory, a.as_canonical_u32(), data);
     }
 }

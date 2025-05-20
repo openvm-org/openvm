@@ -1,5 +1,5 @@
 use openvm_circuit::system::memory::{
-    offline_checker::{MemoryReadAuxCols, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
+    offline_checker::{MemoryBaseAuxCols, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
     online::{GuestMemory, TracingMemory},
 };
 use openvm_native_compiler::conversion::AS;
@@ -15,7 +15,7 @@ pub mod convert_adapter;
 pub mod native_vectorized_adapter;
 
 #[inline(always)]
-pub fn memory_read<F, const N: usize>(memory: &GuestMemory, ptr: u32) -> [F; N]
+pub fn memory_read_native<F, const N: usize>(memory: &GuestMemory, ptr: u32) -> [F; N]
 where
     F: PrimeField32,
 {
@@ -25,21 +25,21 @@ where
 }
 
 #[inline(always)]
-pub fn memory_read_or_imm<F>(memory: &GuestMemory, addr_space: u32, ptr_or_imm: F) -> F
+pub fn memory_read_or_imm_native<F>(memory: &GuestMemory, addr_space: u32, ptr_or_imm: F) -> F
 where
     F: PrimeField32,
 {
     debug_assert!(addr_space == AS::Immediate as u32 || addr_space == AS::Native as u32);
 
     if addr_space == AS::Native as u32 {
-        let [result]: [F; 1] = memory_read(memory, ptr_or_imm.as_canonical_u32());
+        let [result]: [F; 1] = memory_read_native(memory, ptr_or_imm.as_canonical_u32());
         result
     } else {
         ptr_or_imm
     }
 }
 #[inline(always)]
-pub fn memory_write<F, const N: usize>(memory: &mut GuestMemory, ptr: u32, data: &[F; N])
+pub fn memory_write_native<F, const N: usize>(memory: &mut GuestMemory, ptr: u32, data: &[F; N])
 where
     F: PrimeField32,
 {
@@ -52,7 +52,7 @@ where
 /// Returns `(t_prev, [ptr:BLOCK_SIZE]_4)` where `t_prev` is the timestamp of the last memory
 /// access.
 #[inline(always)]
-pub fn timed_read<F, const BLOCK_SIZE: usize>(
+fn timed_read<F, const BLOCK_SIZE: usize>(
     memory: &mut TracingMemory<F>,
     ptr: u32,
 ) -> (u32, [F; BLOCK_SIZE])
@@ -65,7 +65,7 @@ where
 }
 
 #[inline(always)]
-pub fn timed_write<F, const BLOCK_SIZE: usize>(
+fn timed_write<F, const BLOCK_SIZE: usize>(
     memory: &mut TracingMemory<F>,
     ptr: u32,
     vals: &[F; BLOCK_SIZE],
@@ -81,10 +81,10 @@ where
 /// Reads register value at `ptr` from memory and records the memory access in mutable buffer.
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
 #[inline(always)]
-pub fn tracing_read<F, const BLOCK_SIZE: usize>(
+pub fn tracing_read_native<F, const BLOCK_SIZE: usize>(
     memory: &mut TracingMemory<F>,
     ptr: u32,
-    (ptr_mut, aux_cols): (&mut F, &mut MemoryReadAuxCols<F>),
+    (ptr_mut, aux_cols): (&mut F, &mut MemoryBaseAuxCols<F>),
 ) -> [F; BLOCK_SIZE]
 where
     F: PrimeField32,
@@ -98,7 +98,7 @@ where
 /// Writes `ptr, vals` into memory and records the memory access in mutable buffer.
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
 #[inline(always)]
-pub fn tracing_write<F, const BLOCK_SIZE: usize>(
+pub fn tracing_write_native<F, const BLOCK_SIZE: usize>(
     memory: &mut TracingMemory<F>,
     ptr: u32,
     vals: &[F; BLOCK_SIZE],
@@ -114,7 +114,7 @@ pub fn tracing_write<F, const BLOCK_SIZE: usize>(
 /// Reads value at `_ptr` from memory and records the memory access in mutable buffer.
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
 #[inline(always)]
-pub fn tracing_read_or_imm<F>(
+pub fn tracing_read_or_imm_native<F>(
     memory: &mut TracingMemory<F>,
     addr_space: u32,
     ptr_or_imm: F,
@@ -133,7 +133,7 @@ where
         ptr_or_imm
     } else {
         *addr_space_mut = F::from_canonical_u32(AS::Native as u32);
-        let data: [F; 1] = tracing_read(
+        let data: [F; 1] = tracing_read_native(
             memory,
             ptr_or_imm.as_canonical_u32(),
             (ptr_or_imm_mut, &mut aux_cols.base),

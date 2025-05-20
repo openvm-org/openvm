@@ -1,7 +1,7 @@
 use alu_native_adapter::{AluNativeAdapterAir, AluNativeAdapterStep};
 use convert_adapter::{ConvertAdapterAir, ConvertAdapterStep};
 use derive_more::derive::From;
-use native_vectorized_adapter::NativeVectorizedAdapterChip;
+use native_vectorized_adapter::{NativeVectorizedAdapterAir, NativeVectorizedAdapterStep};
 use openvm_circuit::{
     arch::{
         ExecutionBridge, MemoryConfig, SystemConfig, SystemPort, VmAirWrapper, VmExtension,
@@ -9,7 +9,7 @@ use openvm_circuit::{
     },
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_native_compiler::{
@@ -59,7 +59,7 @@ impl NativeConfig {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Native;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutorE1, From, AnyEnum)]
 pub enum NativeExecutor<F: PrimeField32> {
     // LoadStore(NativeLoadStoreChip<F, 1>),
     // BlockLoadStore(NativeLoadStoreChip<F, 4>),
@@ -91,7 +91,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             memory_bridge,
         } = builder.system_port();
 
-        let range_checker = builder.system_base().range_checker_chip;
+        let range_checker = &builder.system_base().range_checker_chip;
 
         // let mut load_store_chip = NativeLoadStoreChip::<F, 1>::new(
         //     NativeLoadStoreAdapterChip::new(
@@ -153,10 +153,10 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         let field_arithmetic_chip = FieldArithmeticChip::<F>::new(
             VmAirWrapper::new(
                 AluNativeAdapterAir::new(
-                    memory_bridge(),
                     ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
                 ),
-                FieldArithmeticCoreAir::new(range_checker.bus()),
+                FieldArithmeticCoreAir::new(),
             ),
             FieldArithmeticStep::new(AluNativeAdapterStep::new()),
             MAX_INS_CAPACITY,
@@ -169,13 +169,13 @@ impl<F: PrimeField32> VmExtension<F> for Native {
 
         let field_extension_chip = FieldExtensionChip::<F>::new(
             VmAirWrapper::new(
-                AluNativeAdapterAir::new(
-                    memory_bridge(),
+                NativeVectorizedAdapterAir::new(
                     ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
                 ),
-                FieldExtensionCoreAir::new(range_checker().bus()),
+                FieldExtensionCoreAir::new(),
             ),
-            FieldExtensionStep::new(AluNativeAdapterStep::new()),
+            FieldExtensionStep::new(NativeVectorizedAdapterStep::new()),
             MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
@@ -220,15 +220,15 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             PhantomDiscriminant(NativePhantom::HintFelt as u16),
         )?;
 
-        builder.add_phantom_sub_executor(
-            NativeHintBitsSubEx,
-            PhantomDiscriminant(NativePhantom::HintBits as u16),
-        )?;
+        // builder.add_phantom_sub_executor(
+        //     NativeHintBitsSubEx,
+        //     PhantomDiscriminant(NativePhantom::HintBits as u16),
+        // )?;
 
-        builder.add_phantom_sub_executor(
-            NativePrintSubEx,
-            PhantomDiscriminant(NativePhantom::Print as u16),
-        )?;
+        // builder.add_phantom_sub_executor(
+        //     NativePrintSubEx,
+        //     PhantomDiscriminant(NativePhantom::Print as u16),
+        // )?;
 
         builder.add_phantom_sub_executor(
             NativeHintLoadSubEx,
@@ -302,48 +302,47 @@ pub(crate) mod phantom {
         }
     }
 
-    impl<F: PrimeField32> PhantomSubExecutor<F> for NativePrintSubEx {
-        fn phantom_execute(
-            &mut self,
-            memory: &GuestMemory,
-            _: &mut Streams<F>,
-            _: PhantomDiscriminant,
-            a: u32,
-            _: u32,
-            c_upper: u16,
-        ) -> eyre::Result<()> {
-            let addr_space = F::from_canonical_u16(c_upper);
-            let value = memory.unsafe_read_cell::<F>(addr_space, a);
-            println!("{}", value);
-            Ok(())
-        }
-    }
+    // impl<F: PrimeField32> PhantomSubExecutor<F> for NativePrintSubEx {
+    //     fn phantom_execute(
+    //         &mut self,
+    //         memory: &GuestMemory,
+    //         _: &mut Streams<F>,
+    //         _: PhantomDiscriminant,
+    //         a: u32,
+    //         _: u32,
+    //         c_upper: u16,
+    //     ) -> eyre::Result<()> {
+    //         let addr_space = F::from_canonical_u16(c_upper);
+    //         let value = memory.unsafe_read_cell::<F>(addr_space, a);
+    //         println!("{}", value);
+    //         Ok(())
+    //     }
+    // }
 
-    impl<F: PrimeField32> PhantomSubExecutor<F> for NativeHintBitsSubEx {
-        fn phantom_execute(
-            &mut self,
-            memory: &GuestMemory,
-            streams: &mut Streams<F>,
-            _: PhantomDiscriminant,
-            a: u32,
-            b: u32,
-            c_upper: u16,
-        ) -> eyre::Result<()> {
-            let addr_space = F::from_canonical_u16(c_upper);
-            let val = memory.unsafe_read_cell::<F>(addr_space, a);
-            let mut val = val.as_canonical_u32();
+    // impl<F: PrimeField32> PhantomSubExecutor<F> for NativeHintBitsSubEx {
+    //     fn phantom_execute(
+    //         &mut self,
+    //         memory: &GuestMemory,
+    //         streams: &mut Streams<F>,
+    //         _: PhantomDiscriminant,
+    //         a: u32,
+    //         len: u32,
+    //         c_upper: u16,
+    //     ) -> eyre::Result<()> {
+    //         let addr_space = F::from_canonical_u16(c_upper);
+    //         let val = memory.unsafe_read_cell::<F>(addr_space, a);
+    //         let mut val = val.as_canonical_u32();
 
-            let len = b.as_canonical_u32();
-            assert!(streams.hint_stream.is_empty());
-            for _ in 0..len {
-                streams
-                    .hint_stream
-                    .push_back(F::from_canonical_u32(val & 1));
-                val >>= 1;
-            }
-            Ok(())
-        }
-    }
+    //         assert!(streams.hint_stream.is_empty());
+    //         for _ in 0..len {
+    //             streams
+    //                 .hint_stream
+    //                 .push_back(F::from_canonical_u32(val & 1));
+    //             val >>= 1;
+    //         }
+    //         Ok(())
+    //     }
+    // }
 
     impl<F: PrimeField32> PhantomSubExecutor<F> for NativeHintLoadSubEx {
         fn phantom_execute(
@@ -374,7 +373,7 @@ pub(crate) mod phantom {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct CastFExtension;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutorE1, From, AnyEnum)]
 pub enum CastFExtensionExecutor<F: PrimeField32> {
     CastF(CastFChip<F>),
 }
@@ -398,17 +397,17 @@ impl<F: PrimeField32> VmExtension<F> for CastFExtension {
             program_bus,
             memory_bridge,
         } = builder.system_port();
-        let range_checker = builder.system_base().range_checker_chip;
+        let range_checker = &builder.system_base().range_checker_chip;
 
         let castf_chip = CastFChip::<F>::new(
             VmAirWrapper::new(
                 ConvertAdapterAir::new(
-                    memory_bridge,
                     ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
                 ),
                 CastFCoreAir::new(range_checker.bus()),
             ),
-            CastFStep::new(ConvertAdapterStep::<1, 4>::new(), range_checker),
+            CastFStep::new(ConvertAdapterStep::<1, 4>::new(), range_checker.clone()),
             MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );

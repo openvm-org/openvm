@@ -21,7 +21,7 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
-use crate::adapters::{memory_read_or_imm, tracing_read_or_imm};
+use crate::adapters::{memory_read_or_imm_native, tracing_read_or_imm_native};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -149,7 +149,7 @@ where
         let &Instruction { a, b, d, e, .. } = instruction;
         let adapter_row: &mut BranchNativeAdapterCols<F> = adapter_row.borrow_mut();
 
-        let rs1 = tracing_read_or_imm(
+        let rs1 = tracing_read_or_imm_native(
             memory,
             d.as_canonical_u32(),
             a,
@@ -159,7 +159,7 @@ where
                 &mut adapter_row.reads_aux[0].read_aux,
             ),
         );
-        let rs2 = tracing_read_or_imm(
+        let rs2 = tracing_read_or_imm_native(
             memory,
             e.as_canonical_u32(),
             b,
@@ -229,8 +229,8 @@ where
     fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
         let &Instruction { a, b, d, e, .. } = instruction;
 
-        let rs1 = memory_read_or_imm(memory, d.as_canonical_u32(), a);
-        let rs2 = memory_read_or_imm(memory, e.as_canonical_u32(), b);
+        let rs1 = memory_read_or_imm_native(memory, d.as_canonical_u32(), a);
+        let rs2 = memory_read_or_imm_native(memory, e.as_canonical_u32(), b);
 
         [rs1, rs2]
     }

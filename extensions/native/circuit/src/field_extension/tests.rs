@@ -19,20 +19,22 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 use strum::EnumCount;
 
-use crate::adapters::alu_native_adapter::{AluNativeAdapterAir, AluNativeAdapterStep};
+use crate::adapters::native_vectorized_adapter::{
+    NativeVectorizedAdapterAir, NativeVectorizedAdapterStep,
+};
 
 use super::{FieldExtension, FieldExtensionChip, FieldExtensionCoreAir, FieldExtensionCoreStep};
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
-fn create_test_chip(tester: &VmChipTestBuilder<F>) -> (FieldExtensionChip<F>,) {
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FieldExtensionChip<F> {
     FieldExtensionChip::<F>::new(
         VmAirWrapper::new(
-            AluNativeAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
-            FieldExtensionCoreAir::new(tester.range_checker().bus()),
+            NativeVectorizedAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+            FieldExtensionCoreAir::new(),
         ),
-        FieldExtensionCoreStep::new(AluNativeAdapterStep::new()),
+        FieldExtensionCoreStep::new(NativeVectorizedAdapterStep::new()),
         MAX_INS_CAPACITY,
         tester.memory_helper(),
     )

@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
@@ -37,7 +37,7 @@ pub struct CastFCoreCols<T> {
     pub is_valid: T,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(derive_new::new, Copy, Clone, Debug)]
 pub struct CastFCoreAir {
     pub bus: VariableRangeCheckerBus, /* to communicate with the range checker that checks that
                                        * all limbs are < 2^LIMB_BITS */
@@ -123,7 +123,7 @@ where
             F,
             CTX,
             ReadData = [F; 1],
-            WriteData = [F; RV32_REGISTER_NUM_LIMBS],
+            WriteData = [u8; RV32_REGISTER_NUM_LIMBS],
             TraceContext<'a> = (),
         >,
 {
@@ -157,7 +157,7 @@ where
 
         let core_row: &mut CastFCoreCols<F> = core_row.borrow_mut();
         core_row.in_val = y;
-        core_row.out_val = x.map(F::from_canonical_u32);
+        core_row.out_val = x.map(F::from_canonical_u8);
         core_row.is_valid = F::ONE;
 
         self.adapter
@@ -180,9 +180,11 @@ where
         if core_row.is_valid == F::ONE {
             for (i, limb) in core_row.out_val.iter().enumerate() {
                 if i == 3 {
-                    self.range_checker_chip.add_count(*limb, FINAL_LIMB_BITS);
+                    self.range_checker_chip
+                        .add_count(limb.as_canonical_u32(), FINAL_LIMB_BITS);
                 } else {
-                    self.range_checker_chip.add_count(*limb, LIMB_BITS);
+                    self.range_checker_chip
+                        .add_count(limb.as_canonical_u32(), LIMB_BITS);
                 }
             }
         }
@@ -193,16 +195,14 @@ impl<F, A> StepExecutorE1<F> for CastFCoreStep<A>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterExecutorE1<F, ReadData = [F; 1], WriteData = [F; RV32_REGISTER_NUM_LIMBS]>,
+        + for<'a> AdapterExecutorE1<F, ReadData = [F; 1], WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
 {
     fn execute_e1<Ctx>(
         &mut self,
         state: VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
-        let Instruction {
-            opcode, a, b, d, e, ..
-        } = instruction;
+        let Instruction { opcode, .. } = instruction;
 
         assert_eq!(
             opcode.local_opcode_idx(CastfOpcode::CLASS_OFFSET),
@@ -212,7 +212,6 @@ where
         let [y] = self.adapter.read(state.memory, instruction);
 
         let x = CastF::solve(y.as_canonical_u32());
-        let x = x.map(F::from_canonical_u32);
 
         self.adapter.write(state.memory, instruction, &x);
 
@@ -224,10 +223,10 @@ where
 
 pub struct CastF;
 impl CastF {
-    pub(super) fn solve(y: u32) -> [u32; RV32_REGISTER_NUM_LIMBS] {
-        let mut x = [0; 4];
+    pub(super) fn solve(y: u32) -> [u8; RV32_REGISTER_NUM_LIMBS] {
+        let mut x = [0u8; RV32_REGISTER_NUM_LIMBS];
         for (i, limb) in x.iter_mut().enumerate() {
-            *limb = (y >> (8 * i)) & 0xFF;
+            *limb = ((y >> (8 * i)) & 0xFF) as u8;
         }
         x
     }

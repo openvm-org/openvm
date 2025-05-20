@@ -14,7 +14,6 @@ use openvm_circuit::{
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_native_compiler::conversion::AS;
@@ -24,7 +23,7 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
-use super::{memory_read, memory_write, tracing_read, tracing_write};
+use super::{memory_read_native, memory_write_native, tracing_read_native, tracing_write_native};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -119,9 +118,9 @@ impl<AB: InteractionBuilder, const N: usize> VmAdapterAir<AB> for NativeVectoriz
 }
 
 #[derive(derive_new::new)]
-pub struct NativeVectorizedAdapterChip<const N: usize>;
+pub struct NativeVectorizedAdapterStep<const N: usize>;
 
-impl<F, CTX, const N: usize> AdapterTraceStep<F, CTX> for NativeVectorizedAdapterChip<N>
+impl<F, CTX, const N: usize> AdapterTraceStep<F, CTX> for NativeVectorizedAdapterStep<N>
 where
     F: PrimeField32,
 {
@@ -152,15 +151,21 @@ where
 
         let adapter_row: &mut NativeVectorizedAdapterCols<F, N> = adapter_row.borrow_mut();
 
-        let y_val = tracing_read(
+        let y_val = tracing_read_native(
             memory,
             b.as_canonical_u32(),
-            (&mut adapter_row.b_pointer, &mut adapter_row.reads_aux[0]),
+            (
+                &mut adapter_row.b_pointer,
+                adapter_row.reads_aux[0].as_mut(),
+            ),
         );
-        let z_val = tracing_read(
+        let z_val = tracing_read_native(
             memory,
             c.as_canonical_u32(),
-            (&mut adapter_row.c_pointer, &mut adapter_row.reads_aux[1]),
+            (
+                &mut adapter_row.c_pointer,
+                adapter_row.reads_aux[1].as_mut(),
+            ),
         );
 
         [y_val, z_val]
@@ -180,11 +185,11 @@ where
 
         let adapter_row: &mut NativeVectorizedAdapterCols<F, N> = adapter_row.borrow_mut();
 
-        tracing_write(
+        tracing_write_native(
             memory,
             a.as_canonical_u32(),
             data,
-            (&mut adapter_row.c_pointer, &mut adapter_row.writes_aux[0]),
+            (&mut adapter_row.a_pointer, &mut adapter_row.writes_aux[0]),
         );
     }
 
@@ -199,17 +204,17 @@ where
 
         let mut timestamp = adapter_row.from_state.timestamp.as_canonical_u32();
 
-        mem_helper.fill_read_aux(timestamp, &mut adapter_row.reads_aux[0]);
+        mem_helper.fill_from_prev(timestamp, adapter_row.reads_aux[0].as_mut());
         timestamp += 1;
 
-        mem_helper.fill_read_aux(timestamp, &mut adapter_row.reads_aux[1]);
+        mem_helper.fill_from_prev(timestamp, adapter_row.reads_aux[1].as_mut());
         timestamp += 1;
 
-        mem_helper.fill_write_aux(timestamp, &mut adapter_row.writes_aux[0]);
+        mem_helper.fill_from_prev(timestamp, adapter_row.writes_aux[0].as_mut());
     }
 }
 
-impl<F, const N: usize> AdapterExecutorE1<F> for NativeVectorizedAdapterChip<N>
+impl<F, const N: usize> AdapterExecutorE1<F> for NativeVectorizedAdapterStep<N>
 where
     F: PrimeField32,
 {
@@ -223,8 +228,8 @@ where
         debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
         debug_assert_eq!(e.as_canonical_u32(), AS::Native as u32);
 
-        let y_val: [F; N] = memory_read(memory, b.as_canonical_u32());
-        let z_val: [F; N] = memory_read(memory, c.as_canonical_u32());
+        let y_val: [F; N] = memory_read_native(memory, b.as_canonical_u32());
+        let z_val: [F; N] = memory_read_native(memory, c.as_canonical_u32());
 
         [y_val, z_val]
     }
@@ -240,6 +245,6 @@ where
 
         debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
 
-        memory_write(memory, a.as_canonical_u32(), data);
+        memory_write_native(memory, a.as_canonical_u32(), data);
     }
 }

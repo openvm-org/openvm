@@ -8,6 +8,7 @@ use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::FieldArithmeticOpcode;
 use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_matrix::Matrix,
     utils::disable_debug_builder,
     verifier::VerificationError,
     Chip,
@@ -30,11 +31,11 @@ use crate::adapters::alu_native_adapter::{
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
-fn create_test_chip(tester: &VmChipTestBuilder<F>) -> (FieldArithmeticChip<F>,) {
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FieldArithmeticChip<F> {
     FieldArithmeticChip::<F>::new(
         VmAirWrapper::new(
-            AluNativeAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
-            FieldArithmeticCoreAir::new(tester.range_checker().bus()),
+            AluNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+            FieldArithmeticCoreAir::new(),
         ),
         FieldArithmeticStep::new(AluNativeAdapterStep::new()),
         MAX_INS_CAPACITY,
@@ -87,10 +88,10 @@ fn new_field_arithmetic_air_test() {
         );
 
         if as1 != 0 {
-            tester.write_cell(as1, address1, operand1);
+            tester.write(as1, address1, [operand1]);
         }
         if as2 != 0 {
-            tester.write_cell(as2, address2, operand2);
+            tester.write(as2, address2, [operand2]);
         }
         tester.execute(
             &mut chip,
@@ -99,7 +100,7 @@ fn new_field_arithmetic_air_test() {
                 [result_address, address1, address2, result_as, as1, as2],
             ),
         );
-        assert_eq!(result, tester.read_cell(result_as, result_address));
+        assert_eq!(result, tester.read::<1>(result_as, result_address)[0]);
     }
 
     let mut tester = tester.build().load(chip).finalize();
@@ -136,8 +137,8 @@ fn new_field_arithmetic_air_test() {
 fn new_field_arithmetic_air_zero_div_zero() {
     let mut tester = VmChipTestBuilder::default();
     let mut chip = create_test_chip(&tester);
-    tester.write_cell(4, 6, BabyBear::from_canonical_u32(111));
-    tester.write_cell(4, 7, BabyBear::from_canonical_u32(222));
+    tester.write(4, 6, [BabyBear::from_canonical_u32(111)]);
+    tester.write(4, 7, [BabyBear::from_canonical_u32(222)]);
 
     tester.execute(
         &mut chip,
@@ -172,7 +173,7 @@ fn new_field_arithmetic_air_zero_div_zero() {
 fn new_field_arithmetic_air_test_panic() {
     let mut tester = VmChipTestBuilder::default();
     let mut chip = create_test_chip(&tester);
-    tester.write_cell(4, 0, BabyBear::ZERO);
+    tester.write(4, 0, [BabyBear::ZERO]);
     // should panic
     tester.execute(
         &mut chip,

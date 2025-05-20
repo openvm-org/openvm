@@ -44,7 +44,7 @@ pub struct FieldExtensionCoreCols<T> {
     pub divisor_inv: [T; EXT_DEG],
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(derive_new::new, Copy, Clone, Debug)]
 pub struct FieldExtensionCoreAir {}
 
 impl<F: Field> BaseAir<F> for FieldExtensionCoreAir {
@@ -159,8 +159,8 @@ where
         + for<'a> AdapterTraceStep<
             F,
             CTX,
-            ReadData: Into<[[F; EXT_DEG]; 2]>,
-            WriteData: From<[[F; EXT_DEG]; 1]>,
+            ReadData = [[F; EXT_DEG]; 2],
+            WriteData = [F; EXT_DEG],
             TraceContext<'a> = (),
         >,
 {
@@ -179,41 +179,35 @@ where
         trace_offset: &mut usize,
         width: usize,
     ) -> Result<()> {
-        let Instruction { opcode, .. } = instruction;
-        let local_opcode_idx = opcode.local_opcode_idx(FieldExtensionOpcode::CLASS_OFFSET);
+        let &Instruction { opcode, .. } = instruction;
+        let local_opcode = FieldExtensionOpcode::from_usize(
+            opcode.local_opcode_idx(FieldExtensionOpcode::CLASS_OFFSET),
+        );
 
         let row_slice = &mut trace[*trace_offset..*trace_offset + width];
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
 
-        let (y, z) = self
-            .adapter
-            .read(&mut state.memory, instruction, adapter_row);
+        let [y, z] = self.adapter.read(state.memory, instruction, adapter_row);
 
-        let x = FieldExtension::solve(FieldExtensionOpcode::from_usize(local_opcode_idx), y, z)
-            .unwrap();
-
-        let record = Self::Record {
-            opcode: FieldExtensionOpcode::from_usize(local_opcode_idx),
-            x,
-            y,
-            z,
-        };
+        let x = FieldExtension::solve(local_opcode, y, z).unwrap();
 
         let core_row: &mut FieldExtensionCoreCols<_> = core_row.borrow_mut();
         core_row.x = x;
         core_row.y = y;
         core_row.z = z;
-        core_row.is_add = F::from_bool(opcode == FieldExtensionOpcode::FE4ADD);
-        core_row.is_sub = F::from_bool(opcode == FieldExtensionOpcode::FE4SUB);
-        core_row.is_mul = F::from_bool(opcode == FieldExtensionOpcode::BBE4MUL);
-        core_row.is_div = F::from_bool(opcode == FieldExtensionOpcode::BBE4DIV);
+        core_row.is_add = F::from_bool(local_opcode == FieldExtensionOpcode::FE4ADD);
+        core_row.is_sub = F::from_bool(local_opcode == FieldExtensionOpcode::FE4SUB);
+        core_row.is_mul = F::from_bool(local_opcode == FieldExtensionOpcode::BBE4MUL);
+        core_row.is_div = F::from_bool(local_opcode == FieldExtensionOpcode::BBE4DIV);
 
         self.adapter
-            .write(&mut state.memory, instruction, &x, adapter_row);
+            .write(state.memory, instruction, adapter_row, &x);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        *trace_offset += width;
 
         Ok(())
     }
@@ -225,10 +219,10 @@ where
 
         let core_row: &mut FieldExtensionCoreCols<_> = core_row.borrow_mut();
 
-        core_row.divisor_inv = if core_row.is_div.is_zero() {
-            [F::ZERO; EXT_DEG]
-        } else {
+        core_row.divisor_inv = if core_row.is_div.is_one() {
             FieldExtension::invert(core_row.z)
+        } else {
+            [F::ZERO; EXT_DEG]
         };
     }
 }
@@ -237,30 +231,18 @@ impl<F, A> StepExecutorE1<F> for FieldExtensionCoreStep<A>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterExecutorE1<
-            F,
-            ReadData = ([F; EXT_DEG], [F; EXT_DEG]),
-            WriteData = [F; EXT_DEG],
-        >,
+        + for<'a> AdapterExecutorE1<F, ReadData = [[F; EXT_DEG]; 2], WriteData = [F; EXT_DEG]>,
 {
     fn execute_e1<Ctx>(
         &mut self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
-        let Instruction {
-            opcode,
-            a,
-            b,
-            c,
-            d,
-            e,
-            ..
-        } = instruction;
+        let Instruction { opcode, .. } = instruction;
 
         let local_opcode_idx = opcode.local_opcode_idx(FieldExtensionOpcode::CLASS_OFFSET);
 
-        let (y_val, z_val) = self.adapter.read(&mut state.memory, instruction);
+        let [y_val, z_val] = self.adapter.read(state.memory, instruction);
 
         let x_val = FieldExtension::solve(
             FieldExtensionOpcode::from_usize(local_opcode_idx),
@@ -269,7 +251,7 @@ where
         )
         .unwrap();
 
-        self.adapter.write(&mut state.memory, instruction, &x_val);
+        self.adapter.write(state.memory, instruction, &x_val);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
