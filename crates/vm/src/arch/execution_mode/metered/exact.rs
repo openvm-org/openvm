@@ -144,12 +144,25 @@ impl MeteredCtxExact {
         addr_space: u32,
         ptr: u32,
         size: usize,
-        trace_heights: &mut [usize],
+        trace_heights: &mut Option<&mut [usize]>,
         memory_updates: &mut Option<Vec<((u8, u32), Option<(u8, u8)>)>>,
     ) {
+        let adapter_offset = if self.continuations_enabled {
+            PUBLIC_VALUES_AIR_ID + 2
+        } else {
+            PUBLIC_VALUES_AIR_ID + 1
+        };
+
         let (splits, merges) = self.calculate_splits_and_merges(addr_space, ptr, size);
         for (curr_ptr, curr_size) in splits {
-            apply_single_adapter_heights_update(trace_heights, curr_size);
+            if let Some(trace_heights) = trace_heights {
+                apply_single_adapter_heights_update(trace_heights, curr_size);
+            } else {
+                apply_single_adapter_heights_update(
+                    &mut self.trace_heights[adapter_offset..],
+                    curr_size,
+                );
+            }
             let updates = add_memory_access_split_with_return(
                 &mut self.last_memory_access,
                 (addr_space, curr_ptr),
@@ -161,7 +174,14 @@ impl MeteredCtxExact {
             }
         }
         for (curr_ptr, curr_size) in merges {
-            apply_single_adapter_heights_update(trace_heights, curr_size);
+            if let Some(trace_heights) = trace_heights {
+                apply_single_adapter_heights_update(trace_heights, curr_size);
+            } else {
+                apply_single_adapter_heights_update(
+                    &mut self.trace_heights[adapter_offset..],
+                    curr_size,
+                );
+            }
             let updates = add_memory_access_merge_with_return(
                 &mut self.last_memory_access,
                 (addr_space, curr_ptr),
@@ -175,23 +195,7 @@ impl MeteredCtxExact {
     }
 
     fn update_adapter_heights(&mut self, addr_space: u32, ptr: u32, size: usize) {
-        let adapter_offset = if self.continuations_enabled {
-            PUBLIC_VALUES_AIR_ID + 2
-        } else {
-            PUBLIC_VALUES_AIR_ID + 1
-        };
-
-        let mut access_adapter_updates = vec![0; self.num_access_adapters];
-        self.apply_adapter_updates(
-            addr_space,
-            ptr,
-            size,
-            &mut access_adapter_updates,
-            &mut None,
-        );
-        for (i, height) in access_adapter_updates.iter().enumerate() {
-            self.trace_heights[adapter_offset + i] += height;
-        }
+        self.apply_adapter_updates(addr_space, ptr, size, &mut None, &mut None);
     }
 
     pub fn finalize_access_adapter_heights(&mut self) {
@@ -226,7 +230,7 @@ impl MeteredCtxExact {
                 addr_space,
                 ptr,
                 CHUNK,
-                &mut access_adapter_updates,
+                &mut Some(&mut access_adapter_updates),
                 &mut memory_updates,
             );
         }
