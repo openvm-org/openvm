@@ -21,6 +21,7 @@ derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
 eyre.workspace = true
+zerocopy = { workspace = true, features = ["derive"] }
 
 # for div_rem:
 num-bigint.workspace = true

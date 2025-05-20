@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, sync::Mutex};
+use std::sync::Mutex;
 
 use openvm_circuit_primitives::{encoder::Encoder, SubAir};
 use openvm_instructions::{
@@ -11,21 +11,19 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, AirBuilderWithPublicValues, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
     rap::BaseAirWithPublicValues,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, AdapterTraceStep,
-        BasicAdapterInterface, MinimalInstruction, Result, StepExecutorE1, TraceStep,
-        VmAdapterInterface, VmCoreAir, VmCoreChip, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface, EmptyLayout,
+        MatrixRecordArena, MinimalInstruction, RecordArena, Result, RowMajorMatrixArena,
+        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::{
-        memory::{
-            online::{GuestMemory, TracingMemory},
-            MemoryAuxColsFactory,
-        },
+        memory::online::{GuestMemory, TracingMemory},
         public_values::columns::PublicValuesCoreColsView,
     },
 };
@@ -150,9 +148,12 @@ where
             CTX,
             ReadData = [[F; 1]; 2],
             WriteData = [[F; 1]; 0],
-            TraceContext<'a> = (),
+            RecordMut<'a> = (),
         >,
 {
+    type RecordLayout = EmptyLayout;
+    type RecordMut<'a> = (); // TODO
+
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -160,47 +161,68 @@ where
         )
     }
 
-    fn execute(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
-        todo!("Implement execute function");
+        arena: &mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+        Self: 'buf,
+    {
+        todo!()
     }
 
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        todo!("Implement fill_trace_row function");
+    // fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    // let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-        // let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+    // self.adapter.fill_trace_row(mem_helper, (), adapter_row);
 
-        // self.adapter.fill_trace_row(mem_helper, (), adapter_row);
+    // let core_row: &mut PublicValuesCoreColsView<_, F> = core_row.borrow_mut();
 
-        // let core_row: &mut PublicValuesCoreColsView<_, F> = core_row.borrow_mut();
+    // // TODO(ayush): add this check
+    // // debug_assert_eq!(core_row.width(), BaseAir::<F>::width(&self.air));
 
-        // // TODO(ayush): add this check
-        // // debug_assert_eq!(core_row.width(), BaseAir::<F>::width(&self.air));
+    // core_row.is_valid = F::ONE;
+    // core_row.value = record.value;
+    // core_row.index = record.index;
 
-        // core_row.is_valid = F::ONE;
-        // core_row.value = record.value;
-        // core_row.index = record.index;
+    // let idx: usize = record.index.as_canonical_u32() as usize;
 
-        // let idx: usize = record.index.as_canonical_u32() as usize;
+    // let pt = self.air.encoder.get_flag_pt(idx);
 
-        // let pt = self.air.encoder.get_flag_pt(idx);
-
-        // for (i, var) in core_row.custom_pv_vars.iter_mut().enumerate() {
-        //     *var = F::from_canonical_u32(pt[i]);
-        // }
-    }
+    // for (i, var) in core_row.custom_pv_vars.iter_mut().enumerate() {
+    //     *var = F::from_canonical_u32(pt[i]);
+    // }
+    // }
 
     fn generate_public_values(&self) -> Vec<F> {
         self.get_custom_public_values()
             .into_iter()
             .map(|x| x.unwrap_or(F::ZERO))
             .collect()
+    }
+}
+
+impl<F, CTX, A> TraceFiller<F, CTX> for PublicValuesStep<A, F>
+where
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            CTX,
+            ReadData = [[F; 1]; 2],
+            WriteData = [[F; 1]; 0],
+            RecordMut<'a> = (),
+        >,
+{
+    fn fill_trace_row(
+        &self,
+        mem_helper: &crate::system::memory::MemoryAuxColsFactory<F>,
+        row_slice: &mut [F],
+    ) {
+        todo!()
     }
 }
 
@@ -232,6 +254,36 @@ where
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
+    }
+}
+
+pub struct PublicValuesRecordArena<F> {
+    inner: MatrixRecordArena<F>,
+}
+
+impl<'a, F: PrimeField32> RecordArena<'a, EmptyLayout, ()> for PublicValuesRecordArena<F> {
+    fn alloc(&'a mut self, layout: EmptyLayout) -> () {
+        todo!()
+    }
+}
+
+impl<F: Field> RowMajorMatrixArena<F> for PublicValuesRecordArena<F> {
+    fn with_capacity(height: usize, width: usize) -> Self {
+        Self {
+            inner: MatrixRecordArena::with_capacity(height, width),
+        }
+    }
+
+    fn width(&self) -> usize {
+        self.inner.width()
+    }
+
+    fn trace_offset(&self) -> usize {
+        self.inner.trace_offset()
+    }
+
+    fn into_matrix(self) -> RowMajorMatrix<F> {
+        self.inner.into_matrix()
     }
 }
 
