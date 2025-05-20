@@ -12,14 +12,17 @@ use openvm_sdk::{
         write_app_proof_to_file,
     },
     keygen::AppProvingKey,
-    NonRootCommittedExe, Sdk, StdIn,
+    NonRootCommittedExe, Sdk,
 };
 
+use super::{RunArgs, RunCargoArgs};
 #[cfg(feature = "evm-prove")]
 use crate::util::read_default_agg_pk;
 use crate::{
+    commands::build,
     default::*,
-    input::{read_to_stdin, Input},
+    input::read_to_stdin,
+    util::{get_app_pk_path, get_manifest_path_and_dir, get_single_target_name, get_target_dir},
 };
 
 #[derive(Parser)]
@@ -32,47 +35,80 @@ pub struct ProveCmd {
 #[derive(Parser)]
 enum ProveSubCommand {
     App {
-        #[arg(long, action, help = "Path to app proving key", default_value = DEFAULT_APP_PK_PATH)]
-        app_pk: PathBuf,
+        #[arg(
+            long,
+            action,
+            default_value = DEFAULT_APP_PROOF_PATH,
+            help = "Path to app proof output",
+            help_heading = "Output"
+        )]
+        proof: PathBuf,
 
-        #[arg(long, action, help = "Path to OpenVM executable", default_value = DEFAULT_APP_EXE_PATH)]
-        exe: PathBuf,
+        #[arg(
+            long,
+            action,
+            help = "Path to app proving key, by default will be ${target_dir}/openvm/app.pk",
+            help_heading = "OpenVM Options"
+        )]
+        app_pk: Option<PathBuf>,
 
-        #[arg(long, value_parser, help = "Input to OpenVM program")]
-        input: Option<Input>,
+        #[command(flatten)]
+        run_args: RunArgs,
 
-        #[arg(long, action, help = "Path to output proof", default_value = DEFAULT_APP_PROOF_PATH)]
-        output: PathBuf,
+        #[command(flatten)]
+        cargo_args: RunCargoArgs,
     },
     Stark {
-        #[arg(long, action, help = "Path to app proving key", default_value = DEFAULT_APP_PK_PATH)]
-        app_pk: PathBuf,
+        #[arg(
+            long,
+            action,
+            default_value = DEFAULT_STARK_PROOF_PATH,
+            help = "Path to STARK proof output",
+            help_heading = "Output"
+        )]
+        proof: PathBuf,
 
-        #[arg(long, action, help = "Path to OpenVM executable", default_value = DEFAULT_APP_EXE_PATH)]
-        exe: PathBuf,
+        #[arg(
+            long,
+            action,
+            help = "Path to app proving key, by default will be ${target_dir}/openvm/app.pk",
+            help_heading = "OpenVM Options"
+        )]
+        app_pk: Option<PathBuf>,
 
-        #[arg(long, value_parser, help = "Input to OpenVM program")]
-        input: Option<Input>,
+        #[command(flatten)]
+        run_args: RunArgs,
 
-        #[arg(long, action, help = "Path to output proof", default_value = DEFAULT_APP_PROOF_PATH)]
-        output: PathBuf,
+        #[command(flatten)]
+        cargo_args: RunCargoArgs,
 
         #[command(flatten)]
         agg_tree_config: AggregationTreeConfig,
     },
     #[cfg(feature = "evm-prove")]
     Evm {
-        #[arg(long, action, help = "Path to app proving key", default_value = DEFAULT_APP_PK_PATH)]
-        app_pk: PathBuf,
+        #[arg(
+            long,
+            action,
+            default_value = DEFAULT_EVM_PROOF_PATH,
+            help = "Path to EVM proof output",
+            help_heading = "Output"
+        )]
+        proof: PathBuf,
 
-        #[arg(long, action, help = "Path to OpenVM executable", default_value = DEFAULT_APP_EXE_PATH)]
-        exe: PathBuf,
+        #[arg(
+            long,
+            action,
+            help = "Path to app proving key, by default will be ${target_dir}/openvm/app.pk",
+            help_heading = "OpenVM Options"
+        )]
+        app_pk: Option<PathBuf>,
 
-        #[arg(long, value_parser, help = "Input to OpenVM program")]
-        input: Option<Input>,
+        #[command(flatten)]
+        run_args: RunArgs,
 
-        #[arg(long, action, help = "Path to output proof", default_value = DEFAULT_EVM_PROOF_PATH)]
-        output: PathBuf,
+        #[command(flatten)]
+        cargo_args: RunCargoArgs,
 
         #[command(flatten)]
         agg_tree_config: AggregationTreeConfig,
@@ -81,30 +117,34 @@ enum ProveSubCommand {
 
 impl ProveCmd {
     pub fn run(&self) -> Result<()> {
-        let sdk = Sdk::new();
         match &self.command {
             ProveSubCommand::App {
                 app_pk,
-                exe,
-                input,
-                output,
+                proof,
+                run_args,
+                cargo_args,
             } => {
-                let (app_pk, committed_exe, input) =
-                    Self::prepare_execution(&sdk, app_pk, exe, input)?;
-                let app_proof = sdk.generate_app_proof(app_pk, committed_exe, input)?;
-                write_app_proof_to_file(app_proof, output)?;
+                let sdk = Sdk::new();
+                let app_pk = Self::load_app_pk(app_pk, cargo_args)?;
+                let committed_exe =
+                    Self::load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
+
+                let app_proof =
+                    sdk.generate_app_proof(app_pk, committed_exe, read_to_stdin(&run_args.input)?)?;
+                write_app_proof_to_file(app_proof, proof)?;
             }
             ProveSubCommand::Stark {
                 app_pk,
-                exe,
-                input,
-                output,
+                proof,
+                run_args,
+                cargo_args,
                 agg_tree_config,
             } => {
-                let mut sdk = sdk;
-                sdk.set_agg_tree_config(*agg_tree_config);
-                let (app_pk, committed_exe, input) =
-                    Self::prepare_execution(&sdk, app_pk, exe, input)?;
+                let sdk = Sdk::new().with_agg_tree_config(*agg_tree_config);
+                let app_pk = Self::load_app_pk(app_pk, cargo_args)?;
+                let committed_exe =
+                    Self::load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
+
                 let commits = AppExecutionCommit::compute(
                     &app_pk.app_vm_pk.vm_config,
                     &committed_exe,
@@ -112,28 +152,34 @@ impl ProveCmd {
                 );
                 println!("exe commit: {:?}", commits.exe_commit);
                 println!("vm commit: {:?}", commits.vm_commit);
+
                 let agg_stark_pk = read_agg_stark_pk_from_file(default_agg_stark_pk_path()).map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
                 })?;
-                let stark_proof =
-                    sdk.generate_e2e_stark_proof(app_pk, committed_exe, agg_stark_pk, input)?;
-                encode_to_file(output, stark_proof)?;
+                let stark_proof = sdk.generate_e2e_stark_proof(
+                    app_pk,
+                    committed_exe,
+                    agg_stark_pk,
+                    read_to_stdin(&run_args.input)?,
+                )?;
+
+                encode_to_file(proof, stark_proof)?;
             }
             #[cfg(feature = "evm-prove")]
             ProveSubCommand::Evm {
                 app_pk,
-                exe,
-                input,
-                output,
+                proof,
+                run_args,
+                cargo_args,
                 agg_tree_config,
             } => {
                 use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 
-                let mut sdk = sdk;
-                sdk.set_agg_tree_config(*agg_tree_config);
-                let params_reader = CacheHalo2ParamsReader::new(default_params_dir());
-                let (app_pk, committed_exe, input) =
-                    Self::prepare_execution(&sdk, app_pk, exe, input)?;
+                let sdk = Sdk::new().with_agg_tree_config(*agg_tree_config);
+                let app_pk = Self::load_app_pk(app_pk, cargo_args)?;
+                let committed_exe =
+                    Self::load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
+
                 let commits = AppExecutionCommit::compute(
                     &app_pk.app_vm_pk.vm_config,
                     &committed_exe,
@@ -146,29 +192,56 @@ impl ProveCmd {
                 let agg_pk = read_default_agg_pk().map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
                 })?;
-                let evm_proof =
-                    sdk.generate_evm_proof(&params_reader, app_pk, committed_exe, agg_pk, input)?;
-                write_evm_proof_to_file(evm_proof, output)?;
+                let params_reader = CacheHalo2ParamsReader::new(default_params_dir());
+                let evm_proof = sdk.generate_evm_proof(
+                    &params_reader,
+                    app_pk,
+                    committed_exe,
+                    agg_pk,
+                    read_to_stdin(&run_args.input)?,
+                )?;
+
+                write_evm_proof_to_file(evm_proof, proof)?;
             }
         }
         Ok(())
     }
 
-    fn prepare_execution(
-        sdk: &Sdk,
-        app_pk: &PathBuf,
-        exe: &PathBuf,
-        input: &Option<Input>,
-    ) -> Result<(
-        Arc<AppProvingKey<SdkVmConfig>>,
-        Arc<NonRootCommittedExe>,
-        StdIn,
-    )> {
-        let app_pk: Arc<AppProvingKey<SdkVmConfig>> = Arc::new(read_app_pk_from_file(app_pk)?);
-        let app_exe = read_exe_from_file(exe)?;
-        let committed_exe = sdk.commit_app_exe(app_pk.app_fri_params(), app_exe)?;
+    fn load_app_pk(
+        app_pk: &Option<PathBuf>,
+        cargo_args: &RunCargoArgs,
+    ) -> Result<Arc<AppProvingKey<SdkVmConfig>>> {
+        let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
+        let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
 
-        let input = read_to_stdin(input)?;
-        Ok((app_pk, committed_exe, input))
+        let app_pk_path = if let Some(app_pk) = app_pk {
+            app_pk.to_path_buf()
+        } else {
+            get_app_pk_path(&target_dir)
+        };
+
+        Ok(Arc::new(read_app_pk_from_file(app_pk_path)?))
+    }
+
+    fn load_or_build_and_commit_exe(
+        sdk: &Sdk,
+        run_args: &RunArgs,
+        cargo_args: &RunCargoArgs,
+        app_pk: &Arc<AppProvingKey<SdkVmConfig>>,
+    ) -> Result<Arc<NonRootCommittedExe>> {
+        let exe_path = if let Some(exe) = &run_args.exe {
+            exe
+        } else {
+            // Build and get the executable name
+            let target_name = get_single_target_name(cargo_args)?;
+            let build_args = run_args.clone().into();
+            let cargo_args = cargo_args.clone().into();
+            let output_dir = build(&build_args, &cargo_args)?;
+            &output_dir.join(format!("{}.vmexe", target_name))
+        };
+
+        let app_exe = read_exe_from_file(exe_path)?;
+        let committed_exe = sdk.commit_app_exe(app_pk.app_fri_params(), app_exe)?;
+        Ok(committed_exe)
     }
 }

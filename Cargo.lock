@@ -1287,10 +1287,10 @@ version = "1.2.0"
 dependencies = [
  "aws-config",
  "aws-sdk-s3",
- "bitcode",
  "clap",
  "eyre",
  "hex",
+ "itertools 0.14.0",
  "openvm-build",
  "openvm-circuit",
  "openvm-native-recursion",

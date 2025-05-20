@@ -49,9 +49,9 @@ jobs:
         working-directory: examples/ecc
         run: |
           cargo openvm build
-          mv openvm/app.vmexe app1.vmexe
+          mv target/openvm/release/ecc-example.vmexe app1.vmexe
           cargo openvm build
-          cmp app1.vmexe openvm/app.vmexe || (echo "Build is not deterministic!" && exit 1)
+          cmp app1.vmexe target/openvm/release/ecc-example.vmexe || (echo "Build is not deterministic!" && exit 1)
 
       - name: Build and run book examples
         working-directory: examples
@@ -72,7 +72,7 @@ jobs:
         run: |
           export RUST_BACKTRACE=1
           cargo build
-          cargo run --bin cargo-openvm -- openvm keygen --config ./example/app_config.toml --output app.pk --vk-output app.vk
+          cargo run --bin cargo-openvm -- openvm keygen --config ./example/app_config.toml --output-dir .
 
       - name: Run CLI tests
         working-directory: crates/cli
