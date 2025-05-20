@@ -2,13 +2,14 @@ use std::{
     array,
     borrow::{Borrow, BorrowMut},
     iter::zip,
+    ptr::slice_from_raw_parts,
 };
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, EmptyLayout, MatrixRecordArena,
-        MinimalInstruction, RecordArena, Result, RowMajorMatrixArena, StepExecutorE1, TraceStep,
-        VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, EmptyLayout,
+        MatrixRecordArena, MinimalInstruction, RecordArena, Result, RowMajorMatrixArena,
+        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -18,6 +19,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
+    TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -28,6 +30,7 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
     rap::BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
@@ -262,31 +265,56 @@ where
 
         Ok(())
     }
+}
 
-    // fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-    //     let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F, CTX>
+    for BaseAluStep<A, NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+    A: 'static + for<'a> AdapterTraceFiller<F>,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-    //     self.adapter.fill_trace_row(mem_helper, (), adapter_row);
+        let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
+        // SAFETY: the following is highly unsafe. We are going to cast `core_row` to a record
+        // buffer, and then do an _overlapping_ write to the `core_row` as a row of field elements.
+        // This requires:
+        // - Cols and Record structs should be repr(C) and we write in reverse order (to ensure
+        //   non-overlapping)
+        // - Do not overwrite any reference in `record` before it has already been used or moved
+        // - alignment of `F` must be >= alignment of Record (zerocopy will panic otherwise)
+        unsafe {
+            let ptr = core_row as *mut _ as *mut u8;
+            let record_buffer =
+                &*slice_from_raw_parts(ptr, size_of::<BaseAluCoreRecord<NUM_LIMBS>>());
+            let (record, _) = BaseAluCoreRecord::ref_from_prefix(record_buffer).unwrap();
 
-    //     let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
+            // PERF: needless conversion
+            let local_opcode = BaseAluOpcode::from_usize(record.local_opcode as usize);
+            core_row.opcode_and_flag = F::from_bool(local_opcode == BaseAluOpcode::AND);
+            core_row.opcode_or_flag = F::from_bool(local_opcode == BaseAluOpcode::OR);
+            core_row.opcode_xor_flag = F::from_bool(local_opcode == BaseAluOpcode::XOR);
+            core_row.opcode_sub_flag = F::from_bool(local_opcode == BaseAluOpcode::SUB);
+            core_row.opcode_add_flag = F::from_bool(local_opcode == BaseAluOpcode::ADD);
 
-    // core_row.opcode_add_flag = F::from_bool(local_opcode == BaseAluOpcode::ADD);
-    // core_row.opcode_sub_flag = F::from_bool(local_opcode == BaseAluOpcode::SUB);
-    // core_row.opcode_xor_flag = F::from_bool(local_opcode == BaseAluOpcode::XOR);
-    // core_row.opcode_or_flag = F::from_bool(local_opcode == BaseAluOpcode::OR);
-    // core_row.opcode_and_flag = F::from_bool(local_opcode == BaseAluOpcode::AND);
-    //     if core_row.opcode_add_flag == F::ONE || core_row.opcode_sub_flag == F::ONE {
-    //         for a_val in core_row.a.map(|x| x.as_canonical_u32()) {
-    //             self.bitwise_lookup_chip.request_xor(a_val, a_val);
-    //         }
-    //     } else {
-    //         let b = core_row.b.map(|x| x.as_canonical_u32());
-    //         let c = core_row.c.map(|x| x.as_canonical_u32());
-    //         for (b_val, c_val) in zip(b, c) {
-    //             self.bitwise_lookup_chip.request_xor(b_val, c_val);
-    //         }
-    //     }
-    // }
+            if local_opcode == BaseAluOpcode::ADD || local_opcode == BaseAluOpcode::SUB {
+                for a_val in record.a {
+                    self.bitwise_lookup_chip
+                        .request_xor(a_val as u32, a_val as u32);
+                }
+            } else {
+                for (b_val, c_val) in zip(record.b, record.c) {
+                    self.bitwise_lookup_chip
+                        .request_xor(b_val as u32, c_val as u32);
+                }
+            }
+            core_row.c = record.c.map(F::from_canonical_u8);
+            core_row.b = record.b.map(F::from_canonical_u8);
+            core_row.a = record.a.map(F::from_canonical_u8);
+        }
+    }
 }
 
 pub struct Rv32BaseAluRecordArena<F> {
@@ -306,7 +334,7 @@ impl<'a, F: PrimeField32>
 {
     fn alloc(
         &'a mut self,
-        layout: EmptyLayout,
+        _: EmptyLayout,
     ) -> (
         &'a mut Rv32BaseAluAdapterRecord,
         &'a mut BaseAluCoreRecord<RV32_REGISTER_NUM_LIMBS>,
@@ -318,20 +346,16 @@ impl<'a, F: PrimeField32>
             buffer.split_at_mut(size_of::<Rv32BaseAluAdapterCols<F>>());
         // PERF: we could skip these unwraps if the RecordArena guarantees the size and alignment
         // properties
-        let adapter_record = Rv32BaseAluAdapterRecord::mut_from_bytes(
-            &mut adapter_buffer[..size_of::<Rv32BaseAluAdapterRecord>()],
-        )
-        .unwrap();
-        let core_record = BaseAluCoreRecord::mut_from_bytes(
-            &mut core_buffer[..size_of::<BaseAluCoreRecord<RV32_REGISTER_NUM_LIMBS>>()],
-        )
-        .unwrap();
+        let (adapter_record, _) =
+            Rv32BaseAluAdapterRecord::mut_from_prefix(adapter_buffer).unwrap();
+        let (core_record, _) = BaseAluCoreRecord::mut_from_prefix(core_buffer).unwrap();
 
         (adapter_record, core_record)
     }
 }
 
-impl<F: Field> RowMajorMatrixArena for Rv32BaseAluRecordArena<F> {
+// TODO: make a macro
+impl<F: Field> RowMajorMatrixArena<F> for Rv32BaseAluRecordArena<F> {
     fn with_capacity(height: usize, width: usize) -> Self {
         Self {
             inner: MatrixRecordArena::with_capacity(height, width),
@@ -344,6 +368,10 @@ impl<F: Field> RowMajorMatrixArena for Rv32BaseAluRecordArena<F> {
 
     fn trace_offset(&self) -> usize {
         self.inner.trace_offset()
+    }
+
+    fn into_matrix(self) -> RowMajorMatrix<F> {
+        self.inner.into_matrix()
     }
 }
 

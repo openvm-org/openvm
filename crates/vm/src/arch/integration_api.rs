@@ -143,7 +143,7 @@ pub trait RowMajorMatrixArena<F> {
 }
 
 // TODO[jpw]: revisit if this trait makes sense
-pub trait TraceFiller<F, CTX>: TraceStep<F, CTX> {
+pub trait TraceFiller<F, CTX> {
     /// Populates `trace`. This function will always be called after
     /// [`TraceStep::execute`], so the `trace` should already contain the records necessary to fill
     /// in the rest of it.
@@ -176,7 +176,7 @@ pub trait TraceFiller<F, CTX>: TraceStep<F, CTX> {
     /// being used, and all other rows in the trace will be filled with zeroes.
     ///
     /// The provided `row_slice` will have length equal to the width of the AIR.
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    fn fill_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, _row_slice: &mut [F]) {
         unreachable!("fill_trace_row is not implemented")
     }
 
@@ -184,7 +184,7 @@ pub trait TraceFiller<F, CTX>: TraceStep<F, CTX> {
     /// By default the trace is padded with empty (all 0) rows to make the height a power of 2.
     ///
     /// The provided `row_slice` will have length equal to the width of the AIR.
-    fn fill_dummy_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, _row_slice: &mut [F]) {
         // By default, the row is filled with zeroes
     }
 }
@@ -315,7 +315,7 @@ where
         Arc::new(self.air.clone())
     }
 
-    fn generate_air_proof_input(mut self) -> AirProofInput<SC> {
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
         let width = self.arena.width();
         assert_eq!(self.arena.trace_offset() % width, 0);
         let rows_used = self.arena.trace_offset() / width;
@@ -385,15 +385,16 @@ pub trait AdapterTraceStep<F, CTX> {
         data: &Self::WriteData,
         record: &mut Self::RecordMut<'_>,
     );
+}
 
-    // // Note[jpw]: should we reuse TraceSubRowGenerator trait instead?
-    // /// Post-execution filling of rest of adapter row.
-    // fn fill_trace_row(
-    //     &self,
-    //     mem_helper: &MemoryAuxColsFactory<F>,
-    //     ctx: Self::TraceContext<'_>,
-    //     adapter_row: &mut [F],
-    // );
+// NOTE[jpw]: cannot re-use `TraceSubRowGenerator` trait because we need associated constant
+// `WIDTH`.
+pub trait AdapterTraceFiller<F> {
+    /// Adapter sub-air column width
+    const WIDTH: usize;
+
+    /// Post-execution filling of rest of adapter row.
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]);
 }
 
 pub trait AdapterExecutorE1<F>
