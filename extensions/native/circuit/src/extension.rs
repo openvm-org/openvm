@@ -2,6 +2,7 @@ use alu_native_adapter::{AluNativeAdapterAir, AluNativeAdapterStep};
 use branch_native_adapter::{BranchNativeAdapterAir, BranchNativeAdapterStep};
 use convert_adapter::{ConvertAdapterAir, ConvertAdapterStep};
 use derive_more::derive::From;
+use fri::{FriReducedOpeningAir, FriReducedOpeningChip, FriReducedOpeningStep};
 use jal::{JalRangeCheckAir, JalRangeCheckChip, JalRangeCheckStep};
 use loadstore_native_adapter::{NativeLoadStoreAdapterAir, NativeLoadStoreAdapterStep};
 use native_vectorized_adapter::{NativeVectorizedAdapterAir, NativeVectorizedAdapterStep};
@@ -70,7 +71,7 @@ pub enum NativeExecutor<F: PrimeField32> {
     Jal(JalRangeCheckChip<F>),
     FieldArithmetic(FieldArithmeticChip<F>),
     FieldExtension(FieldExtensionChip<F>),
-    // FriReducedOpening(FriReducedOpeningChip<F>),
+    FriReducedOpening(FriReducedOpeningChip<F>),
     // VerifyBatch(NativePoseidon2Chip<F, 1>),
 }
 
@@ -213,16 +214,20 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             FieldExtensionOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        // let fri_reduced_opening_chip = FriReducedOpeningChip::new(
-        //     execution_bus,
-        //     program_bus,
-        //     memory_bridge,
-        //     builder.streams().clone(),
-        // );
-        // inventory.add_executor(
-        //     fri_reduced_opening_chip,
-        //     FriOpcode::iter().map(|x| x.global_opcode()),
-        // )?;
+        let fri_reduced_opening_chip = FriReducedOpeningChip::<F>::new(
+            FriReducedOpeningAir::new(
+                ExecutionBridge::new(execution_bus, program_bus),
+                memory_bridge,
+            ),
+            FriReducedOpeningStep::new(builder.streams().clone()),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
+        );
+
+        inventory.add_executor(
+            fri_reduced_opening_chip,
+            FriOpcode::iter().map(|x| x.global_opcode()),
+        )?;
 
         // let poseidon2_chip = NativePoseidon2Chip::new(
         //     builder.system_port(),

@@ -79,10 +79,7 @@ pub struct MemoryReadAuxCols<T> {
 }
 
 impl<F: PrimeField32> MemoryReadAuxCols<F> {
-    pub(in crate::system::memory) fn new(
-        prev_timestamp: u32,
-        timestamp_lt_aux: LessThanAuxCols<F, AUX_LEN>,
-    ) -> Self {
+    pub fn new(prev_timestamp: u32, timestamp_lt_aux: LessThanAuxCols<F, AUX_LEN>) -> Self {
         Self {
             base: MemoryBaseAuxCols {
                 prev_timestamp: F::from_canonical_u32(prev_timestamp),
