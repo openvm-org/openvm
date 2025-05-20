@@ -355,7 +355,7 @@ where
 pub trait AdapterTraceStep<F, CTX> {
     type ReadData;
     type WriteData;
-    // @dev This can either be a &mut _ directory or a struct with &mut _ fields.
+    // @dev This can either be a &mut _ type or a struct with &mut _ fields.
     // The latter is helpful if we want to directly write certain values in place into a trace
     // matrix.
     type RecordMut<'a>
