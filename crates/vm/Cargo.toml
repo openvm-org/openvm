@@ -35,6 +35,7 @@ eyre.workspace = true
 derivative.workspace = true
 static_assertions.workspace = true
 getset.workspace = true
+memmap2 = "0.9.5"
 
 [dev-dependencies]
 test-log.workspace = true
