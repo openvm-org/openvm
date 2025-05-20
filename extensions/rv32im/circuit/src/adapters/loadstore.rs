@@ -657,7 +657,7 @@ where
         );
 
         let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
-            memory_read_from_state(state, RV32_REGISTER_AS, b.as_canonical_u32());
+            memory_read(state.memory, RV32_REGISTER_AS, b.as_canonical_u32());
         let rs1_val = u32::from_le_bytes(rs1_bytes);
 
         let imm = c.as_canonical_u32();
