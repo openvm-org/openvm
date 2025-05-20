@@ -387,7 +387,7 @@ pub trait AdapterTraceStep<F, CTX> {
     );
 }
 
-// NOTE[jpw]: cannot re-use `TraceSubRowGenerator` trait because we need associated constant
+// NOTE[jpw]: cannot reuse `TraceSubRowGenerator` trait because we need associated constant
 // `WIDTH`.
 pub trait AdapterTraceFiller<F> {
     /// Adapter sub-air column width
