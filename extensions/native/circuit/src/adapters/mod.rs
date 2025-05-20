@@ -84,13 +84,12 @@ where
 pub fn tracing_read_native<F, const BLOCK_SIZE: usize>(
     memory: &mut TracingMemory<F>,
     ptr: u32,
-    (ptr_mut, aux_cols): (&mut F, &mut MemoryBaseAuxCols<F>),
+    aux_cols: &mut MemoryBaseAuxCols<F>,
 ) -> [F; BLOCK_SIZE]
 where
     F: PrimeField32,
 {
     let (t_prev, data) = timed_read(memory, ptr);
-    *ptr_mut = F::from_canonical_u32(ptr);
     aux_cols.set_prev(F::from_canonical_u32(t_prev));
     data
 }
@@ -102,12 +101,11 @@ pub fn tracing_write_native<F, const BLOCK_SIZE: usize>(
     memory: &mut TracingMemory<F>,
     ptr: u32,
     vals: &[F; BLOCK_SIZE],
-    (ptr_mut, aux_cols): (&mut F, &mut MemoryWriteAuxCols<F, BLOCK_SIZE>),
+    aux_cols: &mut MemoryWriteAuxCols<F, BLOCK_SIZE>,
 ) where
     F: PrimeField32,
 {
     let (t_prev, data_prev) = timed_write(memory, ptr, vals);
-    *ptr_mut = F::from_canonical_u32(ptr);
     aux_cols.set_prev(F::from_canonical_u32(t_prev), data_prev);
 }
 

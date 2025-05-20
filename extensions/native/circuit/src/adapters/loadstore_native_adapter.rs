@@ -9,12 +9,11 @@ use openvm_circuit::{
         VmAdapterAir, VmAdapterInterface,
     },
     system::memory::{
-        offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::{
@@ -27,7 +26,9 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
-use super::memory_read;
+use crate::adapters::{memory_write_native, tracing_read_native};
+
+use super::memory_read_native;
 
 pub struct NativeLoadStoreInstruction<T> {
     pub is_valid: T,
@@ -195,7 +196,7 @@ where
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
     ) -> Self::ReadData {
-        let Instruction {
+        let &Instruction {
             opcode,
             a,
             b,
@@ -205,23 +206,28 @@ where
             ..
         } = instruction;
 
+        debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
+
         let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let adapter_row: &mut NativeLoadStoreAdapterCols<F, NUM_CELLS> = adapter_row.borrow_mut();
-
-        adapter_row.a = *a;
-        adapter_row.b = *b;
-        adapter_row.c = *c;
-
-        let native_as = AS::Native as u32;
+        adapter_row.a = a;
+        adapter_row.b = b;
+        adapter_row.c = c;
 
         // Read the pointer value from memory
-        let read_cell = memory_read::<F, 1>(memory, d.as_canonical_u32(), c.as_canonical_u32())[0];
+        let [read_cell] = tracing_read_native::<F, 1>(
+            memory,
+            c.as_canonical_u32(),
+            &mut adapter_row.pointer_read_aux_cols,
+        );
 
         let (data_read_as, data_write_as) = match local_opcode {
             LOADW => (e.as_canonical_u32(), d.as_canonical_u32()),
             STOREW | HINT_STOREW => (d.as_canonical_u32(), e.as_canonical_u32()),
         };
+
+        debug_assert_eq!(data_read_as, AS::Native as u32);
 
         let (data_read_ptr, data_write_ptr) = match local_opcode {
             LOADW => ((read_cell + b).as_canonical_u32(), a.as_canonical_u32()),
@@ -233,7 +239,11 @@ where
         // Read data based on opcode
         let data_read: [F; NUM_CELLS] = match local_opcode {
             HINT_STOREW => [F::ZERO; NUM_CELLS],
-            LOADW | STOREW => memory_read::<F, NUM_CELLS>(memory, data_read_as, data_read_ptr),
+            LOADW | STOREW => tracing_read_native::<F, NUM_CELLS>(
+                memory,
+                data_read_ptr,
+                &mut adapter_row.data_read_aux_cols,
+            ),
         };
 
         (read_cell, data_read)
@@ -257,16 +267,20 @@ where
             ..
         } = instruction;
 
+        debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
+
         let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let adapter_row: &mut NativeLoadStoreAdapterCols<F, NUM_CELLS> = adapter_row.borrow_mut();
 
-        let read_cell = memory_read::<F, 1>(memory, d.as_canonical_u32(), c.as_canonical_u32())[0];
+        let [read_cell] = memory_read_native::<F, 1>(memory, c.as_canonical_u32());
 
         let (_, data_write_as) = match local_opcode {
             LOADW => (e.as_canonical_u32(), d.as_canonical_u32()),
             STOREW | HINT_STOREW => (d.as_canonical_u32(), e.as_canonical_u32()),
         };
+
+        debug_assert_eq!(data_write_as, AS::Native as u32);
 
         let data_write_ptr = match local_opcode {
             LOADW => a.as_canonical_u32(),
@@ -274,14 +288,14 @@ where
         };
 
         // Write data to memory
-        memory_write(memory, data_write_as, data_write_ptr, data);
+        memory_write_native(memory, data_write_ptr, data);
     }
 
     #[inline(always)]
     fn fill_trace_row(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
-        range_checker: &SharedVariableRangeCheckerChip,
+        _ctx: Self::TraceContext<'_>,
         adapter_row: &mut [F],
     ) {
         let adapter_row: &mut NativeLoadStoreAdapterCols<F, NUM_CELLS> = adapter_row.borrow_mut();
@@ -316,20 +330,18 @@ where
             ..
         } = instruction;
 
+        debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
+
         let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let read_as = d;
-        let read_ptr = c;
-        let [read_cell]: [F; 1] = memory_read(
-            memory,
-            read_as.as_canonical_u32(),
-            read_ptr.as_canonical_u32(),
-        );
+        let [read_cell]: [F; 1] = memory_read_native(memory, c.as_canonical_u32());
 
         let data_read_as = match local_opcode {
             LOADW => e.as_canonical_u32(),
             STOREW | HINT_STOREW => d.as_canonical_u32(),
         };
+
+        debug_assert_eq!(data_read_as, AS::Native as u32);
 
         let data_read_ptr = match local_opcode {
             LOADW => (read_cell + b).as_canonical_u32(),
@@ -338,7 +350,7 @@ where
 
         let data_read: [F; NUM_CELLS] = match local_opcode {
             HINT_STOREW => [F::ZERO; NUM_CELLS],
-            LOADW | STOREW => memory_read(memory, data_read_as, data_read_ptr),
+            LOADW | STOREW => memory_read_native(memory, data_read_ptr),
         };
 
         (read_cell, data_read)
@@ -364,18 +376,20 @@ where
 
         let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let [read_cell]: [F; 1] = memory_read(memory, c.as_canonical_u32());
+        let [read_cell]: [F; 1] = memory_read_native(memory, c.as_canonical_u32());
 
         let data_write_as = match local_opcode {
             LOADW => d.as_canonical_u32(),
             STOREW | HINT_STOREW => e.as_canonical_u32(),
         };
 
+        debug_assert_eq!(data_write_as, AS::Native as u32);
+
         let data_write_ptr = match local_opcode {
             LOADW => a.as_canonical_u32(),
             STOREW | HINT_STOREW => (read_cell + b).as_canonical_u32(),
         };
 
-        memory_write(memory, data_write_as, data_write_ptr, data);
+        memory_write_native(memory, data_write_ptr, data);
     }
 }
