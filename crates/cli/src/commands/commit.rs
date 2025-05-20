@@ -4,7 +4,6 @@ use std::{
 };
 
 use clap::Parser;
-
 use eyre::Result;
 use openvm_circuit::arch::OPENVM_DEFAULT_INIT_FILE_NAME;
 use openvm_sdk::{
@@ -13,14 +12,13 @@ use openvm_sdk::{
     Sdk,
 };
 
+use super::{RunArgs, RunCargoArgs};
 use crate::{
     commands::{load_app_pk, load_or_build_and_commit_exe},
     util::{
         get_manifest_path_and_dir, get_single_target_name, get_target_dir, get_target_output_dir,
     },
 };
-
-use super::{RunArgs, RunCargoArgs};
 
 #[derive(Parser)]
 #[command(name = "commit", about = "View the commit of an OpenVM executable")]
