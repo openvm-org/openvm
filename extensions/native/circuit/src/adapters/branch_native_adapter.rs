@@ -1,5 +1,7 @@
-use std::borrow::{Borrow, BorrowMut};
-use std::mem::size_of;
+use std::{
+    borrow::{Borrow, BorrowMut},
+    mem::size_of,
+};
 
 use openvm_circuit::arch::execution_mode::E1E2ExecutionCtx;
 use openvm_circuit::arch::VmStateMut;

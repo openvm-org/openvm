@@ -19,11 +19,10 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 use strum::EnumCount;
 
+use super::{FieldExtension, FieldExtensionChip, FieldExtensionCoreAir, FieldExtensionCoreStep};
 use crate::adapters::native_vectorized_adapter::{
     NativeVectorizedAdapterAir, NativeVectorizedAdapterStep,
 };
-
-use super::{FieldExtension, FieldExtensionChip, FieldExtensionCoreAir, FieldExtensionCoreStep};
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;

@@ -1,3 +1,5 @@
+use std::result::Result;
+
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
@@ -15,7 +17,6 @@ use openvm_rv32im_circuit::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
-use std::result::Result;
 use strum::IntoEnumIterator;
 
 use crate::*;

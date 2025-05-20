@@ -39,7 +39,6 @@ type F = BabyBear;
 
 fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32LoadStoreChip<F> {
     let range_checker_chip = tester.range_checker();
-    
 
     Rv32LoadStoreChip::<F>::new(
         VmAirWrapper::new(
