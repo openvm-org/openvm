@@ -67,7 +67,7 @@ pub(crate) fn get_manifest_path_and_dir(
                 "manifest_path must be a path to a Cargo.toml file"
             ));
         }
-        manifest_path.canonicalize()?
+        manifest_path.parent().unwrap().canonicalize()?
     } else {
         find_manifest_dir(PathBuf::from("."))?
     };
