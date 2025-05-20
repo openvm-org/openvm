@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, sync::Mutex};
+use std::sync::Mutex;
 
 use openvm_circuit_primitives::{encoder::Encoder, SubAir};
 use openvm_instructions::{
@@ -11,22 +11,19 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, AirBuilderWithPublicValues, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
     rap::BaseAirWithPublicValues,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, AdapterTraceStep,
-        BasicAdapterInterface, EmptyLayout, MatrixRecordArena, MinimalInstruction, RecordArena,
-        Result, RowMajorMatrixArena, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir,
-        VmCoreChip, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface, EmptyLayout,
+        MatrixRecordArena, MinimalInstruction, RecordArena, Result, RowMajorMatrixArena,
+        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::{
-        memory::{
-            online::{GuestMemory, TracingMemory},
-            MemoryAuxColsFactory,
-        },
+        memory::online::{GuestMemory, TracingMemory},
         public_values::columns::PublicValuesCoreColsView,
     },
 };
@@ -208,6 +205,27 @@ where
     }
 }
 
+impl<F, CTX, A> TraceFiller<F, CTX> for PublicValuesStep<A, F>
+where
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            CTX,
+            ReadData = [[F; 1]; 2],
+            WriteData = [[F; 1]; 0],
+            RecordMut<'a> = (),
+        >,
+{
+    fn fill_trace_row(
+        &self,
+        mem_helper: &crate::system::memory::MemoryAuxColsFactory<F>,
+        row_slice: &mut [F],
+    ) {
+        todo!()
+    }
+}
+
 impl<F, A> StepExecutorE1<F> for PublicValuesStep<A, F>
 where
     F: PrimeField32,
@@ -249,7 +267,7 @@ impl<'a, F: PrimeField32> RecordArena<'a, EmptyLayout, ()> for PublicValuesRecor
     }
 }
 
-impl<F: Field> RowMajorMatrixArena for PublicValuesRecordArena<F> {
+impl<F: Field> RowMajorMatrixArena<F> for PublicValuesRecordArena<F> {
     fn with_capacity(height: usize, width: usize) -> Self {
         Self {
             inner: MatrixRecordArena::with_capacity(height, width),
@@ -262,6 +280,10 @@ impl<F: Field> RowMajorMatrixArena for PublicValuesRecordArena<F> {
 
     fn trace_offset(&self) -> usize {
         self.inner.trace_offset()
+    }
+
+    fn into_matrix(self) -> RowMajorMatrix<F> {
+        self.inner.into_matrix()
     }
 }
 
