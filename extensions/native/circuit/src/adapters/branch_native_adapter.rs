@@ -149,25 +149,21 @@ where
         let &Instruction { a, b, d, e, .. } = instruction;
         let adapter_row: &mut BranchNativeAdapterCols<F> = adapter_row.borrow_mut();
 
+        adapter_row.reads_aux[0].address.pointer = a;
         let rs1 = tracing_read_or_imm_native(
             memory,
             d.as_canonical_u32(),
             a,
             &mut adapter_row.reads_aux[0].address.address_space,
-            (
-                &mut adapter_row.reads_aux[0].address.pointer,
-                &mut adapter_row.reads_aux[0].read_aux,
-            ),
+            &mut adapter_row.reads_aux[0].read_aux,
         );
+        adapter_row.reads_aux[1].address.pointer = b;
         let rs2 = tracing_read_or_imm_native(
             memory,
             e.as_canonical_u32(),
             b,
             &mut adapter_row.reads_aux[1].address.address_space,
-            (
-                &mut adapter_row.reads_aux[1].address.pointer,
-                &mut adapter_row.reads_aux[1].read_aux,
-            ),
+            &mut adapter_row.reads_aux[1].read_aux,
         );
         [rs1, rs2]
     }

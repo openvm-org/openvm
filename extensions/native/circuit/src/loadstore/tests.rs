@@ -1,17 +1,19 @@
 use std::sync::{Arc, Mutex};
 
-use openvm_circuit::arch::{testing::VmChipTestBuilder, Streams};
+use openvm_circuit::arch::{testing::VmChipTestBuilder, Streams, VmAirWrapper};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::NativeLoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{
-    super::adapters::loadstore_native_adapter::NativeLoadStoreAdapterChip, NativeLoadStoreChip,
-    NativeLoadStoreCoreChip,
+use crate::adapters::loadstore_native_adapter::{
+    NativeLoadStoreAdapterAir, NativeLoadStoreAdapterStep,
 };
 
+use super::{NativeLoadStoreChip, NativeLoadStoreCoreAir, NativeLoadStoreCoreStep};
+
+const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
 #[derive(Debug)]
@@ -28,20 +30,22 @@ struct TestData {
     is_hint: bool,
 }
 
-fn setup() -> (StdRng, VmChipTestBuilder<F>, NativeLoadStoreChip<F, 1>) {
-    let rng = create_seeded_rng();
-    let tester = VmChipTestBuilder::default();
-
-    let adapter = NativeLoadStoreAdapterChip::<F, 1>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        tester.memory_bridge(),
-        NativeLoadStoreOpcode::CLASS_OFFSET,
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> NativeLoadStoreChip<F, 1> {
+    let mut chip = NativeLoadStoreChip::<F, 1>::new(
+        VmAirWrapper::new(
+            NativeLoadStoreAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
+            NativeLoadStoreCoreAir::new(NativeLoadStoreOpcode::CLASS_OFFSET),
+        ),
+        NativeLoadStoreCoreStep::new(
+            NativeLoadStoreAdapterStep::new(NativeLoadStoreOpcode::CLASS_OFFSET),
+            NativeLoadStoreOpcode::CLASS_OFFSET,
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
     );
-    let mut inner = NativeLoadStoreCoreChip::new(NativeLoadStoreOpcode::CLASS_OFFSET);
-    inner.set_streams(Arc::new(Mutex::new(Streams::default())));
-    let chip = NativeLoadStoreChip::<F, 1>::new(adapter, inner, tester.offline_memory_mutex_arc());
-    (rng, tester, chip)
+    chip.step
+        .set_streams(Arc::new(Mutex::new(Streams::default())));
+    chip
 }
 
 fn gen_test_data(rng: &mut StdRng, opcode: NativeLoadStoreOpcode) -> TestData {
@@ -102,7 +106,7 @@ fn set_values(
     }
     if data.is_hint {
         for _ in 0..data.e.as_canonical_u32() {
-            chip.core
+            chip.step
                 .streams
                 .get()
                 .unwrap()
@@ -164,7 +168,11 @@ fn set_and_execute(
 #[test]
 fn rand_native_loadstore_test() {
     setup_tracing();
-    let (mut rng, mut tester, mut chip) = setup();
+
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let mut chip = create_test_chip(&tester);
+
     for _ in 0..20 {
         set_and_execute(&mut tester, &mut chip, &mut rng, STOREW);
         set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW);

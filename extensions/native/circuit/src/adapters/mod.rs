@@ -117,7 +117,7 @@ pub fn tracing_read_or_imm_native<F>(
     addr_space: u32,
     ptr_or_imm: F,
     addr_space_mut: &mut F,
-    (ptr_or_imm_mut, aux_cols): (&mut F, &mut MemoryReadOrImmediateAuxCols<F>),
+    aux_cols: &mut MemoryReadOrImmediateAuxCols<F>,
 ) -> F
 where
     F: PrimeField32,
@@ -126,16 +126,12 @@ where
 
     if addr_space == AS::Immediate as u32 {
         *addr_space_mut = F::ZERO;
-        *ptr_or_imm_mut = ptr_or_imm;
         memory.increment_timestamp();
         ptr_or_imm
     } else {
         *addr_space_mut = F::from_canonical_u32(AS::Native as u32);
-        let data: [F; 1] = tracing_read_native(
-            memory,
-            ptr_or_imm.as_canonical_u32(),
-            (ptr_or_imm_mut, &mut aux_cols.base),
-        );
+        let data: [F; 1] =
+            tracing_read_native(memory, ptr_or_imm.as_canonical_u32(), &mut aux_cols.base);
         data[0]
     }
 }

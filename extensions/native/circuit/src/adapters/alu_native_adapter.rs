@@ -154,19 +154,21 @@ where
 
         let adapter_row: &mut AluNativeAdapterCols<F> = adapter_row.borrow_mut();
 
+        adapter_row.b_pointer = b;
         let rs1 = tracing_read_or_imm_native(
             memory,
             e.as_canonical_u32(),
             b,
             &mut adapter_row.e_as,
-            (&mut adapter_row.b_pointer, &mut adapter_row.reads_aux[0]),
+            &mut adapter_row.reads_aux[0],
         );
+        adapter_row.c_pointer = c;
         let rs2 = tracing_read_or_imm_native(
             memory,
             f.as_canonical_u32(),
             c,
             &mut adapter_row.f_as,
-            (&mut adapter_row.c_pointer, &mut adapter_row.reads_aux[1]),
+            &mut adapter_row.reads_aux[1],
         );
         [rs1, rs2]
     }
@@ -179,14 +181,15 @@ where
         adapter_row: &mut [F],
         data: &Self::WriteData,
     ) {
-        let Instruction { a, .. } = instruction;
+        let &Instruction { a, .. } = instruction;
 
         let adapter_row: &mut AluNativeAdapterCols<F> = adapter_row.borrow_mut();
+        adapter_row.a_pointer = a;
         tracing_write_native(
             memory,
             a.as_canonical_u32(),
             data,
-            (&mut adapter_row.a_pointer, &mut adapter_row.write_aux),
+            &mut adapter_row.write_aux,
         );
     }
 

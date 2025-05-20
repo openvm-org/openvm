@@ -145,20 +145,18 @@ where
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
     ) -> Self::ReadData {
-        let Instruction { b, e, .. } = instruction;
+        let &Instruction { b, e, .. } = instruction;
 
         debug_assert_eq!(e.as_canonical_u32(), AS::Native as u32);
 
         let adapter_row: &mut ConvertAdapterCols<F, READ_SIZE, WRITE_SIZE> =
             adapter_row.borrow_mut();
 
+        adapter_row.b_pointer = b;
         let read = tracing_read_native(
             memory,
             b.as_canonical_u32(),
-            (
-                &mut adapter_row.b_pointer,
-                adapter_row.reads_aux[0].as_mut(),
-            ),
+            adapter_row.reads_aux[0].as_mut(),
         );
         read
     }

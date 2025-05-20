@@ -1,10 +1,9 @@
-use core::BranchEqualStep;
-
 use alu_native_adapter::{AluNativeAdapterAir, AluNativeAdapterStep};
 use branch_native_adapter::{BranchNativeAdapterAir, BranchNativeAdapterStep};
 use convert_adapter::{ConvertAdapterAir, ConvertAdapterStep};
 use derive_more::derive::From;
 use jal::{JalRangeCheckAir, JalRangeCheckChip, JalRangeCheckStep};
+use loadstore_native_adapter::{NativeLoadStoreAdapterAir, NativeLoadStoreAdapterStep};
 use native_vectorized_adapter::{NativeVectorizedAdapterAir, NativeVectorizedAdapterStep};
 use openvm_circuit::{
     arch::{
@@ -98,36 +97,44 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         let range_checker = &builder.system_base().range_checker_chip;
 
         let mut load_store_chip = NativeLoadStoreChip::<F, 1>::new(
-            NativeLoadStoreAdapterChip::new(
-                execution_bus,
-                program_bus,
-                memory_bridge,
+            VmAirWrapper::new(
+                NativeLoadStoreAdapterAir::new(
+                    memory_bridge,
+                    ExecutionBridge::new(execution_bus, program_bus),
+                ),
+                NativeLoadStoreCoreAir::new(NativeLoadStoreOpcode::CLASS_OFFSET),
+            ),
+            NativeLoadStoreCoreStep::new(
+                NativeLoadStoreAdapterStep::new(NativeLoadStoreOpcode::CLASS_OFFSET),
                 NativeLoadStoreOpcode::CLASS_OFFSET,
             ),
-            NativeLoadStoreCoreChip::new(NativeLoadStoreOpcode::CLASS_OFFSET),
             MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
-        load_store_chip.core.set_streams(builder.streams().clone());
-
+        load_store_chip.step.set_streams(builder.streams().clone());
         inventory.add_executor(
             load_store_chip,
             NativeLoadStoreOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
         let mut block_load_store_chip = NativeLoadStoreChip::<F, BLOCK_LOAD_STORE_SIZE>::new(
-            NativeLoadStoreAdapterChip::new(
-                execution_bus,
-                program_bus,
-                memory_bridge,
+            VmAirWrapper::new(
+                NativeLoadStoreAdapterAir::new(
+                    memory_bridge,
+                    ExecutionBridge::new(execution_bus, program_bus),
+                ),
+                NativeLoadStoreCoreAir::new(NativeLoadStore4Opcode::CLASS_OFFSET),
+            ),
+            NativeLoadStoreCoreStep::new(
+                NativeLoadStoreAdapterStep::new(NativeLoadStore4Opcode::CLASS_OFFSET),
                 NativeLoadStore4Opcode::CLASS_OFFSET,
             ),
-            NativeLoadStoreCoreChip::new(NativeLoadStore4Opcode::CLASS_OFFSET),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
         );
         block_load_store_chip
-            .core
+            .step
             .set_streams(builder.streams().clone());
-
         inventory.add_executor(
             block_load_store_chip,
             NativeLoadStore4Opcode::iter().map(|x| x.global_opcode()),
@@ -141,7 +148,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 ),
                 BranchEqualCoreAir::new(NativeBranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
             ),
-            BranchEqualStep::new(
+            NativeBranchEqStep::new(
                 BranchNativeAdapterStep::new(),
                 NativeBranchEqualOpcode::CLASS_OFFSET,
                 DEFAULT_PC_STEP,

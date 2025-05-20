@@ -194,6 +194,7 @@ where
         row.state.pc = F::from_canonical_u32(*state.pc);
         row.state.timestamp = F::from_canonical_u32(state.memory.timestamp);
 
+        row.a_pointer = a;
         row.b = b;
 
         if opcode == NativeJalOpcode::JAL.global_opcode() {
@@ -206,7 +207,7 @@ where
                 &[F::from_canonical_u32(
                     state.pc.wrapping_add(DEFAULT_PC_STEP),
                 )],
-                (&mut row.a_pointer, &mut row.writes_aux),
+                &mut row.writes_aux,
             );
             // TODO(ayush): can this addition be done in u32 instead of F
             *state.pc = (F::from_canonical_u32(*state.pc) + b).as_canonical_u32();
@@ -219,7 +220,7 @@ where
                 state.memory,
                 a.as_canonical_u32(),
                 &[a_val],
-                (&mut row.a_pointer, &mut row.writes_aux),
+                &mut row.writes_aux,
             );
 
             // TODO(ayush): should this debug stuff be removed?

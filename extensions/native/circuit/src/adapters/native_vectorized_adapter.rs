@@ -144,28 +144,24 @@ where
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
     ) -> Self::ReadData {
-        let Instruction { b, c, d, e, .. } = instruction;
+        let &Instruction { b, c, d, e, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
         debug_assert_eq!(e.as_canonical_u32(), AS::Native as u32);
 
         let adapter_row: &mut NativeVectorizedAdapterCols<F, N> = adapter_row.borrow_mut();
 
+        adapter_row.b_pointer = b;
         let y_val = tracing_read_native(
             memory,
             b.as_canonical_u32(),
-            (
-                &mut adapter_row.b_pointer,
-                adapter_row.reads_aux[0].as_mut(),
-            ),
+            adapter_row.reads_aux[0].as_mut(),
         );
+        adapter_row.c_pointer = c;
         let z_val = tracing_read_native(
             memory,
             c.as_canonical_u32(),
-            (
-                &mut adapter_row.c_pointer,
-                adapter_row.reads_aux[1].as_mut(),
-            ),
+            adapter_row.reads_aux[1].as_mut(),
         );
 
         [y_val, z_val]
@@ -179,17 +175,18 @@ where
         adapter_row: &mut [F],
         data: &Self::WriteData,
     ) {
-        let Instruction { a, d, .. } = instruction;
+        let &Instruction { a, d, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
 
         let adapter_row: &mut NativeVectorizedAdapterCols<F, N> = adapter_row.borrow_mut();
 
+        adapter_row.a_pointer = a;
         tracing_write_native(
             memory,
             a.as_canonical_u32(),
             data,
-            (&mut adapter_row.a_pointer, &mut adapter_row.writes_aux[0]),
+            &mut adapter_row.writes_aux[0],
         );
     }
 

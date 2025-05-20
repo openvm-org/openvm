@@ -180,6 +180,7 @@ where
         width: usize,
     ) -> Result<()> {
         let &Instruction { opcode, .. } = instruction;
+
         let local_opcode = FieldExtensionOpcode::from_usize(
             opcode.local_opcode_idx(FieldExtensionOpcode::CLASS_OFFSET),
         );
@@ -213,7 +214,6 @@ where
     }
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        dbg!("here1");
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         self.adapter.fill_trace_row(mem_helper, (), adapter_row);
