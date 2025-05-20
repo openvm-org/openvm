@@ -58,9 +58,7 @@ pub fn find_manifest_dir(mut current_dir: PathBuf) -> Result<PathBuf> {
     Ok(current_dir)
 }
 
-pub(crate) fn get_manifest_path_and_dir(
-    manifest_path: &Option<PathBuf>,
-) -> Result<(PathBuf, PathBuf)> {
+pub fn get_manifest_path_and_dir(manifest_path: &Option<PathBuf>) -> Result<(PathBuf, PathBuf)> {
     let manifest_dir = if let Some(manifest_path) = &manifest_path {
         if !manifest_path.ends_with("Cargo.toml") {
             return Err(eyre::eyre!(
@@ -75,21 +73,21 @@ pub(crate) fn get_manifest_path_and_dir(
     Ok((manifest_path.clone(), manifest_dir))
 }
 
-pub(crate) fn get_target_dir(target_dir: &Option<PathBuf>, manifest_path: &PathBuf) -> PathBuf {
+pub fn get_target_dir(target_dir: &Option<PathBuf>, manifest_path: &PathBuf) -> PathBuf {
     target_dir
         .clone()
         .unwrap_or_else(|| openvm_build::get_target_dir(manifest_path))
 }
 
-pub(crate) fn get_target_output_dir(target_dir: &Path, profile: &str) -> PathBuf {
+pub fn get_target_output_dir(target_dir: &Path, profile: &str) -> PathBuf {
     target_dir.join("openvm").join(profile).to_path_buf()
 }
 
-pub(crate) fn get_app_pk_path(target_dir: &Path) -> PathBuf {
+pub fn get_app_pk_path(target_dir: &Path) -> PathBuf {
     target_dir.join("openvm").join(DEFAULT_APP_PK_NAME)
 }
 
-pub(crate) fn get_app_vk_path(target_dir: &Path) -> PathBuf {
+pub fn get_app_vk_path(target_dir: &Path) -> PathBuf {
     target_dir.join("openvm").join(DEFAULT_APP_VK_NAME)
 }
 
@@ -97,7 +95,7 @@ pub(crate) fn get_app_vk_path(target_dir: &Path) -> PathBuf {
 // run. If a specific binary or example is specified it will return that, else it
 // will search the workspace/package for binary targets. If there is a single
 // binary that will be returned, else an error will be raised.
-pub(crate) fn get_single_target_name(cargo_args: &RunCargoArgs) -> Result<String> {
+pub fn get_single_target_name(cargo_args: &RunCargoArgs) -> Result<String> {
     let num_targets = cargo_args.bin.len() + cargo_args.example.len();
     let single_target_name = if num_targets > 1 {
         return Err(eyre::eyre!(

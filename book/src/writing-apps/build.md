@@ -13,7 +13,9 @@ Right now we use `riscv32im-risc0-zkvm-elf` target which is available in the [Ru
 
 The following flags are available for the `cargo openvm build` command. You can run `cargo openvm build --help` for this list within the command line.
 
-Generally, outputs will always be built to the **target directory**, which will either be determined by the manifest path or explicitly set using the `--target-dir` option. OpenVM-specific artifacts will be placed in `${target_dir}/openvm/`, but if `--output-dir` is specified they will be copied to `${output-dir}/` as well.
+Generally, outputs will always be built to the **target directory**, which will either be determined by the manifest path or explicitly set using the `--target-dir` option. By default Cargo sets this to be `<workspace_or_package_root>/target/`. 
+
+OpenVM-specific artifacts will be placed in `${target_dir}/openvm/`, but if `--output-dir` is specified they will be copied to `${output-dir}/` as well.
 
 ### OpenVM Options
 
@@ -143,6 +145,6 @@ The following options enable or disable conditional compilation features defined
 
   **Description**: Prevents Cargo from accessing the network for any reason.
 
-- `--ignore-rust-version`
+- `--frozen`
 
-  **Description**: Ignores rust-version specification in packages.
+  **Description**: Equivalent to specifying both `--locked` and `--offline`.
