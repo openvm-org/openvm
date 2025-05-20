@@ -24,12 +24,11 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
+use super::tracing_write_native;
 use crate::adapters::{
     memory_read_or_imm_native_from_state, memory_write_native_from_state,
     tracing_read_or_imm_native,
 };
-
-use super::tracing_write_native;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
