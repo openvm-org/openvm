@@ -619,11 +619,9 @@ where
 
         // For stores, we need the previous memory content to preserve unchanged bytes
         let prev_data: [u8; RV32_REGISTER_NUM_LIMBS] = match local_opcode {
-            STOREW | STOREH | STOREB => {
-                memory_read_from_state(state, e.as_canonical_u32(), ptr_val)
-            }
+            STOREW | STOREH | STOREB => memory_read(state.memory, e.as_canonical_u32(), ptr_val),
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                memory_read_from_state(state, RV32_REGISTER_AS, a.as_canonical_u32())
+                memory_read(state.memory, RV32_REGISTER_AS, a.as_canonical_u32())
             }
         };
 
