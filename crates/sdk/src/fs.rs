@@ -11,7 +11,6 @@ use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
     codec::{Decode, Encode},
-    commit::{AppExecutionBn254Commit, AppExecutionCommit},
     keygen::{AggStarkProvingKey, AppProvingKey, AppVerifyingKey, Halo2ProvingKey},
     types::{EvmHalo2Verifier, EvmProof},
     F, OPENVM_VERSION, SC,
@@ -117,31 +116,6 @@ pub fn write_evm_proof_to_file<P: AsRef<Path>>(proof: EvmProof, path: P) -> Resu
     write_to_file_json(&path, proof).map_err(|e| write_error("EVM proof", path, e))
 }
 
-pub fn read_app_exe_commit_from_file<P: AsRef<Path>>(path: P) -> Result<AppExecutionCommit> {
-    read_from_file_json(&path).map_err(|e| read_error("app execution commit", path, e))
-}
-
-pub fn write_app_exe_commit_to_file<P: AsRef<Path>>(
-    commit: AppExecutionCommit,
-    path: P,
-) -> Result<()> {
-    write_to_file_json(&path, commit).map_err(|e| write_error("app execution commit", path, e))
-}
-
-pub fn read_app_exe_bn254_commit_from_file<P: AsRef<Path>>(
-    path: P,
-) -> Result<AppExecutionBn254Commit> {
-    read_from_file_json(&path).map_err(|e| read_error("app execution bn254 commit", path, e))
-}
-
-pub fn write_app_exe_bn254_commit_to_file<P: AsRef<Path>>(
-    commit: AppExecutionBn254Commit,
-    path: P,
-) -> Result<()> {
-    write_to_file_json(&path, commit)
-        .map_err(|e| write_error("app execution bn254 commit", path, e))
-}
-
 pub fn read_evm_halo2_verifier_from_folder<P: AsRef<Path>>(folder: P) -> Result<EvmHalo2Verifier> {
     let folder = folder
         .as_ref()
@@ -238,12 +212,12 @@ pub(crate) fn write_to_file_bitcode<T: Serialize, P: AsRef<Path>>(path: P, data:
     Ok(())
 }
 
-pub(crate) fn read_from_file_json<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> Result<T> {
+pub fn read_from_file_json<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> Result<T> {
     let ret: T = serde_json::from_reader(File::open(path)?)?;
     Ok(ret)
 }
 
-pub(crate) fn write_to_file_json<T: Serialize, P: AsRef<Path>>(path: P, data: T) -> Result<()> {
+pub fn write_to_file_json<T: Serialize, P: AsRef<Path>>(path: P, data: T) -> Result<()> {
     if let Some(parent) = path.as_ref().parent() {
         create_dir_all(parent)?;
     }
