@@ -6,6 +6,7 @@ use std::{
 use clap::Parser;
 
 use eyre::Result;
+use openvm_circuit::arch::OPENVM_DEFAULT_INIT_FILE_NAME;
 use openvm_sdk::{
     commit::AppExecutionCommit,
     fs::{write_app_exe_bn254_commit_to_file, write_app_exe_commit_to_file},
@@ -30,10 +31,37 @@ pub struct CommitCmd {
         help = "Path to app proving key, by default will be ${target_dir}/openvm/app.pk",
         help_heading = "OpenVM Options"
     )]
-    app_pk: Option<PathBuf>,
+    pub app_pk: Option<PathBuf>,
 
-    #[command(flatten)]
-    run_args: RunArgs,
+    #[arg(
+        long,
+        action,
+        help = "Path to OpenVM executable, if specified build will be skipped",
+        help_heading = "OpenVM Options"
+    )]
+    pub exe: Option<PathBuf>,
+
+    #[arg(
+        long,
+        help = "Path to the OpenVM config .toml file that specifies the VM extensions, by default will search for the file at ${manifest_dir}/openvm.toml",
+        help_heading = "OpenVM Options"
+    )]
+    pub config: Option<PathBuf>,
+
+    #[arg(
+        long,
+        help = "Output directory that OpenVM proving artifacts will be copied to",
+        help_heading = "OpenVM Options"
+    )]
+    pub output_dir: Option<PathBuf>,
+
+    #[arg(
+        long,
+        default_value = OPENVM_DEFAULT_INIT_FILE_NAME,
+        help = "Name of the init file",
+        help_heading = "OpenVM Options"
+    )]
+    pub init_file_name: String,
 
     #[command(flatten)]
     cargo_args: RunCargoArgs,
@@ -43,8 +71,16 @@ impl CommitCmd {
     pub fn run(&self) -> Result<()> {
         let sdk = Sdk::new();
         let app_pk = load_app_pk(&self.app_pk, &self.cargo_args)?;
+
+        let run_args = RunArgs {
+            exe: self.exe.clone(),
+            config: self.config.clone(),
+            output_dir: self.output_dir.clone(),
+            init_file_name: self.init_file_name.clone(),
+            input: None,
+        };
         let committed_exe =
-            load_or_build_and_commit_exe(&sdk, &self.run_args, &self.cargo_args, &app_pk)?;
+            load_or_build_and_commit_exe(&sdk, &run_args, &self.cargo_args, &app_pk)?;
 
         let commits = AppExecutionCommit::compute(
             &app_pk.app_vm_pk.vm_config,
@@ -69,7 +105,7 @@ impl CommitCmd {
 
         write_app_exe_commit_to_file(commits, &commit_path)?;
         write_app_exe_bn254_commit_to_file(bn254_commits, &bn254_path)?;
-        if let Some(output_dir) = &self.run_args.output_dir {
+        if let Some(output_dir) = &self.output_dir {
             create_dir_all(output_dir)?;
             copy(commit_path, output_dir.join(commit_name))?;
             copy(bn254_path, output_dir.join(bn254_name))?;
