@@ -87,11 +87,7 @@ impl MeteredCtxBounded {
             PUBLIC_VALUES_AIR_ID + 1
         };
 
-        let mut access_adapter_updates = vec![0; self.num_access_adapters];
-        apply_adapter_updates_batch(size, num, &mut access_adapter_updates);
-        for (i, height) in access_adapter_updates.iter().enumerate() {
-            self.trace_heights[adapter_offset + i] += height;
-        }
+        apply_adapter_updates_batch(size, num, &mut self.trace_heights[adapter_offset..]);
     }
 
     fn update_adapter_heights(&mut self, size: usize) {
