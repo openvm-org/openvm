@@ -66,7 +66,8 @@ pub fn get_workspace_packages(manifest_dir: impl AsRef<Path>) -> Vec<Package> {
     get_workspace_member_packages(manifest_meta)
 }
 
-/// Returns a single package if the manifest path matches exactly, otherwise returns all workspace packages.
+/// Returns a single package if the manifest path matches exactly, otherwise returns all
+/// workspace packages.
 pub fn get_in_scope_packages(manifest_dir: impl AsRef<Path>) -> Vec<Package> {
     let manifest_path = manifest_dir
         .as_ref()
