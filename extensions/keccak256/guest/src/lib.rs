@@ -1,7 +1,9 @@
 #![no_std]
 
 #[cfg(target_os = "zkvm")]
-use core::mem::MaybeUninit;
+extern crate alloc as alloc_zkvm;
+#[cfg(target_os = "zkvm")]
+use {alloc_zkvm::vec::Vec, core::hint::black_box, core::mem::MaybeUninit};
 
 /// This is custom-0 defined in RISC-V spec document
 pub const OPCODE: u8 = 0x0b;
@@ -41,14 +43,44 @@ pub fn keccak256(input: &[u8]) -> [u8; 32] {
 #[inline(always)]
 #[no_mangle]
 extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
-    openvm_platform::custom_insn_r!(
-        opcode = OPCODE,
-        funct3 = KECCAK256_FUNCT3,
-        funct7 = KECCAK256_FUNCT7,
-        rd = In output,
-        rs1 = In bytes,
-        rs2 = In len
-    );
+    let input = if bytes as usize % 4 != 0 {
+        openvm::io::println("Copying input to aligned memory");
+        let mut aligned_buff: Vec<u8> = alloc_zkvm::vec::Vec::with_capacity(len);
+        // let mut aligned_buff = [0u8; 1000];
+        unsafe {
+            core::ptr::copy_nonoverlapping::<u8>(bytes, aligned_buff.as_mut_ptr() as *mut u8, len);
+        }
+        black_box(aligned_buff.as_ptr() as *const u8)
+    } else {
+        bytes
+    };
+
+    if output as usize % 4 != 0 {
+        openvm::io::println("Copying output to aligned memory");
+        let mut aligned_out = MaybeUninit::<[u8; 32]>::uninit();
+
+        openvm_platform::custom_insn_r!(
+            opcode = OPCODE,
+            funct3 = KECCAK256_FUNCT3,
+            funct7 = KECCAK256_FUNCT7,
+            rd = In aligned_out.as_mut_ptr() as *mut u8,
+            rs1 = In input,
+            rs2 = In len
+        );
+        unsafe {
+            aligned_out.assume_init();
+            core::ptr::copy_nonoverlapping::<u8>(aligned_out.as_ptr() as *const u8, output, 32);
+        }
+    } else {
+        openvm_platform::custom_insn_r!(
+            opcode = OPCODE,
+            funct3 = KECCAK256_FUNCT3,
+            funct7 = KECCAK256_FUNCT7,
+            rd = In output,
+            rs1 = In input,
+            rs2 = In len
+        );
+    };
 }
 
 /// Sets `output` to the keccak256 hash of `input`.

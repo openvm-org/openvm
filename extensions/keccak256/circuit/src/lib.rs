@@ -173,6 +173,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
                 src as u32, dst as u32, remaining_len as u32
             );
         }
+        println!("src: {}, dst: {}, len: {}", src, dst, len);
         for block_idx in 0..num_blocks {
             if block_idx != 0 {
                 memory.increment_timestamp_by(KECCAK_REGISTER_READS as u32);
