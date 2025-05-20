@@ -91,13 +91,13 @@ For the guest program to build successfully, all used moduli must be declared in
 
 ```toml
 [app_vm_config.modular]
-supported_modulus = ["115792089237316195423570985008687907853269984665640564039457584007908834671663"]
+supported_moduli = ["115792089237316195423570985008687907853269984665640564039457584007908834671663"]
 
 [app_vm_config.fp2]
 supported_modulus = [["Bn254Fp2", "115792089237316195423570985008687907853269984665640564039457584007908834671663"]]
 ```
 
-The `supported_modulus` parameter is a list of moduli that the guest program will use. They must be provided in decimal format in the `.toml` file.
+The `supported_moduli` parameter is a list of moduli that the guest program will use. They must be provided in decimal format in the `.toml` file.
 The order of moduli in `[app_vm_config.modular]` must match the order in the `moduli_init!` macro.
 Similarly, the order of moduli in `[app_vm_config.fp2]` must match the order in the `complex_init!` macro.
 Also, each modulus in `[app_vm_config.fp2]` must be paired with the name of the corresponding struct in `complex_declare!`.
@@ -128,7 +128,7 @@ Here is the full `openvm.toml` to accompany the above example:
 [app_vm_config.rv32m]
 [app_vm_config.io]
 [app_vm_config.modular]
-supported_modulus = ["998244353","1000000007"]
+supported_moduli = ["998244353","1000000007"]
 
 [app_vm_config.fp2]
 supported_modulus = [["Complex1", "998244353"], ["Complex2", "1000000007"]]
