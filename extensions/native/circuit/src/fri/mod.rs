@@ -5,7 +5,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use itertools::{zip_eq, Itertools};
+use itertools::zip_eq;
 use openvm_circuit::{
     arch::{
         ExecutionBridge, ExecutionState, NewVmChipWrapper, Result, StepExecutorE1, Streams,
@@ -588,6 +588,8 @@ where
         let hint_id_ptr = f.as_canonical_u32();
         let is_init_ptr = g.as_canonical_u32();
 
+        let timestamp_start = state.memory.timestamp();
+
         // TODO(ayush): there should be a way to avoid this
         let mut alpha_aux = MemoryReadAuxCols::new(0, LessThanAuxCols::new([F::ZERO; AUX_LEN]));
         let alpha = tracing_read_native(state.memory, alpha_ptr, alpha_aux.as_mut());
@@ -601,10 +603,9 @@ where
         let mut b_ptr_aux = MemoryReadAuxCols::new(0, LessThanAuxCols::new([F::ZERO; AUX_LEN]));
         let [b_ptr]: [F; 1] = tracing_read_native(state.memory, b_ptr_ptr, b_ptr_aux.as_mut());
 
-        let mut is_init_ptr_aux =
-            MemoryReadAuxCols::new(0, LessThanAuxCols::new([F::ZERO; AUX_LEN]));
+        let mut is_init_aux = MemoryReadAuxCols::new(0, LessThanAuxCols::new([F::ZERO; AUX_LEN]));
         let [is_init_read]: [F; 1] =
-            tracing_read_native(state.memory, is_init_ptr, is_init_ptr_aux.as_mut());
+            tracing_read_native(state.memory, is_init_ptr, is_init_aux.as_mut());
         let is_init = is_init_read.as_canonical_u32();
 
         let [hint_id_f]: [F; 1] = memory_read_native(state.memory.data(), hint_id_ptr);
@@ -627,6 +628,7 @@ where
         };
 
         let mut as_and_bs = Vec::with_capacity(length);
+        #[allow(clippy::needless_range_loop)]
         for i in 0..length {
             // First read goes to last row
             let start = *trace_offset + (length - i - 1) * OVERALL_WIDTH;
@@ -654,7 +656,7 @@ where
                 general: GeneralCols {
                     is_workload_row: F::ONE,
                     is_ins_row: F::ZERO,
-                    timestamp: F::from_canonical_u32(state.memory.timestamp)
+                    timestamp: F::from_canonical_u32(timestamp_start)
                         + F::from_canonical_usize((length - i) * 2),
                 },
                 a_or_is_first: a,
@@ -685,7 +687,7 @@ where
                     general: GeneralCols {
                         is_workload_row: F::ZERO,
                         is_ins_row: F::ONE,
-                        timestamp: F::from_canonical_u32(state.memory.timestamp),
+                        timestamp: F::from_canonical_u32(timestamp_start),
                     },
                     a_or_is_first: F::ONE,
                     data: DataCols {
@@ -713,17 +715,24 @@ where
             cols.general = GeneralCols {
                 is_workload_row: F::ZERO,
                 is_ins_row: F::ONE,
-                timestamp: F::from_canonical_u32(state.memory.timestamp),
+                timestamp: F::from_canonical_u32(timestamp_start),
             };
             cols.is_first = F::ZERO;
             cols.length_ptr = c;
+            cols.length_aux = length_aux;
             cols.alpha_ptr = d;
+            cols.alpha_aux = alpha_aux;
             cols.result_ptr = e;
             cols.hint_id_ptr = f;
             cols.is_init_ptr = g;
+            cols.is_init_aux = is_init_aux;
             cols.write_a_x_is_first = F::ZERO;
 
             tracing_write_native(state.memory, result_ptr, &result, &mut cols.result_aux);
+
+            // TODO(ayush): this is a bad hack to make length available to fill_trace_row
+            cols.result_aux.base.timestamp_lt_aux.lower_decomp[0] =
+                F::from_canonical_u32(length as u32);
         }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
@@ -735,49 +744,41 @@ where
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (is_workload_row, is_ins_row) = {
-            let general_row: &GeneralCols<F> = row_slice[..GENERAL_WIDTH].borrow();
-            (
-                general_row.is_workload_row.is_one(),
-                general_row.is_ins_row.is_one(),
-            )
+            let cols: &GeneralCols<F> = row_slice[..GENERAL_WIDTH].borrow();
+            (cols.is_workload_row.is_one(), cols.is_ins_row.is_one())
         };
 
         if is_workload_row {
-            let workload_row: &mut WorkloadCols<F> = row_slice[..WL_WIDTH].borrow_mut();
+            let cols: &mut WorkloadCols<F> = row_slice[..WL_WIDTH].borrow_mut();
 
-            let mut timestamp = workload_row.prefix.general.timestamp.as_canonical_u32();
-
-            mem_helper.fill_from_prev(timestamp, workload_row.a_aux.as_mut());
-            timestamp += 1;
-
-            mem_helper.fill_from_prev(timestamp, workload_row.b_aux.as_mut());
+            let timestamp = cols.prefix.general.timestamp.as_canonical_u32();
+            mem_helper.fill_from_prev(timestamp + 3, cols.a_aux.as_mut());
+            mem_helper.fill_from_prev(timestamp + 4, cols.b_aux.as_mut());
         }
 
         if is_ins_row {
             let is_ins_1_row = row_slice[GENERAL_WIDTH].is_one();
 
             if is_ins_1_row {
-                let ins1_row: &mut Instruction1Cols<F> = row_slice[..INS_1_WIDTH].borrow_mut();
-                let mut timestamp = ins1_row.prefix.general.timestamp.as_canonical_u32();
+                let cols: &mut Instruction1Cols<F> = row_slice[..INS_1_WIDTH].borrow_mut();
+                let timestamp = cols.prefix.general.timestamp.as_canonical_u32();
 
-                mem_helper.fill_from_prev(timestamp, ins1_row.a_ptr_aux.as_mut());
-                timestamp += 1;
-
-                mem_helper.fill_from_prev(timestamp, ins1_row.b_ptr_aux.as_mut());
+                mem_helper.fill_from_prev(timestamp + 2, cols.a_ptr_aux.as_mut());
+                mem_helper.fill_from_prev(timestamp + 3, cols.b_ptr_aux.as_mut());
             } else {
-                let ins2_row: &mut Instruction2Cols<F> = row_slice[..INS_2_WIDTH].borrow_mut();
-                let mut timestamp = ins2_row.general.timestamp.as_canonical_u32();
+                let cols: &mut Instruction2Cols<F> = row_slice[..INS_2_WIDTH].borrow_mut();
+                let timestamp = cols.general.timestamp.as_canonical_u32();
 
-                mem_helper.fill_from_prev(timestamp, ins2_row.length_aux.as_mut());
-                timestamp += 1;
+                mem_helper.fill_from_prev(timestamp, cols.alpha_aux.as_mut());
+                mem_helper.fill_from_prev(timestamp + 1, cols.length_aux.as_mut());
+                mem_helper.fill_from_prev(timestamp + 4, cols.is_init_aux.as_mut());
 
-                mem_helper.fill_from_prev(timestamp, ins2_row.alpha_aux.as_mut());
-                timestamp += 1;
-
-                mem_helper.fill_from_prev(timestamp, ins2_row.result_aux.as_mut());
-                timestamp += 1;
-
-                mem_helper.fill_from_prev(timestamp, ins2_row.is_init_aux.as_mut());
+                // TODO(ayush): this is bad
+                let length = cols.result_aux.get_base().timestamp_lt_aux.lower_decomp[0];
+                mem_helper.fill_from_prev(
+                    timestamp + 5 + 2 * length.as_canonical_u32(),
+                    cols.result_aux.as_mut(),
+                );
             }
         }
     }
@@ -832,6 +833,7 @@ where
         };
 
         let mut as_and_bs = Vec::with_capacity(length);
+        #[allow(clippy::needless_range_loop)]
         for i in 0..length {
             let a_ptr_i = (a_ptr + F::from_canonical_usize(i)).as_canonical_u32();
             let [a]: [F; 1] = if is_init == 0 {

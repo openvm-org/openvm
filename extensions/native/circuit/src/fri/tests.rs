@@ -98,10 +98,10 @@ fn fri_mat_opening_air_test() {
 
         let address_space = 4usize;
 
-        /*tracing::debug!(
-            "{opcode:?} d = {}, e = {}, f = {}, result_addr = {}, addr1 = {}, addr2 = {}, z = {}, x = {}, y = {}",
-            result_as, as1, as2, result_pointer, address1, address2, result, operand1, operand2,
-        );*/
+        // tracing::debug!(
+        //     "{opcode:?} d = {}, e = {}, f = {}, result_addr = {}, addr1 = {}, addr2 = {}, z = {}, x = {}, y = {}",
+        //     result_as, as1, as2, result_pointer, address1, address2, result, operand1, operand2,
+        // );
 
         tester.write(address_space, alpha_pointer, alpha);
         tester.write(
@@ -163,31 +163,31 @@ fn fri_mat_opening_air_test() {
     let mut tester = tester.build().load(chip).finalize();
     tester.simple_test().expect("Verification failed");
 
-    // disable_debug_builder();
-    // // negative test pranking each value
-    // for height in 0..num_ops {
-    //     // TODO: better way to modify existing traces in tester
-    //     let trace = tester.air_proof_inputs[2]
-    //         .1
-    //         .raw
-    //         .common_main
-    //         .as_mut()
-    //         .unwrap();
-    //     let old_trace = trace.clone();
-    //     for width in 0..OVERALL_WIDTH
-    //     /* num operands */
-    //     {
-    //         let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
-    //         trace.row_mut(height)[width] = prank_value;
-    //     }
+    disable_debug_builder();
+    // negative test pranking each value
+    for height in 0..num_ops {
+        // TODO: better way to modify existing traces in tester
+        let trace = tester.air_proof_inputs[2]
+            .1
+            .raw
+            .common_main
+            .as_mut()
+            .unwrap();
+        let old_trace = trace.clone();
+        for width in 0..OVERALL_WIDTH
+        /* num operands */
+        {
+            let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
+            trace.row_mut(height)[width] = prank_value;
+        }
 
-    //     // Run a test after pranking each row
-    //     assert_eq!(
-    //         tester.simple_test().err(),
-    //         Some(VerificationError::OodEvaluationMismatch),
-    //         "Expected constraint to fail"
-    //     );
+        // Run a test after pranking each row
+        assert_eq!(
+            tester.simple_test().err(),
+            Some(VerificationError::OodEvaluationMismatch),
+            "Expected constraint to fail"
+        );
 
-    //     tester.air_proof_inputs[2].1.raw.common_main = Some(old_trace);
-    // }
+        tester.air_proof_inputs[2].1.raw.common_main = Some(old_trace);
+    }
 }

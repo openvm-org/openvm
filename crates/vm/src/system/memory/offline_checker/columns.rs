@@ -18,7 +18,7 @@ pub struct MemoryBaseAuxCols<T> {
     /// The previous timestamps in which the cells were accessed.
     pub(in crate::system::memory) prev_timestamp: T,
     /// The auxiliary columns to perform the less than check.
-    pub(in crate::system::memory) timestamp_lt_aux: LessThanAuxCols<T, AUX_LEN>,
+    pub timestamp_lt_aux: LessThanAuxCols<T, AUX_LEN>,
 }
 
 impl<F: PrimeField32> MemoryBaseAuxCols<F> {
@@ -30,7 +30,7 @@ impl<F: PrimeField32> MemoryBaseAuxCols<F> {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryWriteAuxCols<T, const N: usize> {
-    pub(in crate::system::memory) base: MemoryBaseAuxCols<T>,
+    pub base: MemoryBaseAuxCols<T>,
     pub(in crate::system::memory) prev_data: [T; N],
 }
 
