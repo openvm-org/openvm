@@ -134,7 +134,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
         
         if src % 4 != 0 || dst % 4 != 0 {
             println!(
-                "Keccak256 input/output is not 4-byte aligned input ptr: {}, output ptr: {}, len: {}.",
+                "Sha256 input/output is not 4-byte aligned input ptr: {}, output ptr: {}, len: {}.",
                 src as u32, dst as u32, len as u32
             );
         }
