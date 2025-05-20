@@ -1,8 +1,10 @@
 #![no_std]
 
+#[cfg(any(feature = "bn254", feature = "bls12_381"))]
 mod operations;
 
 #[allow(unused_imports)]
+#[cfg(any(feature = "bn254", feature = "bls12_381"))]
 pub(crate) use operations::*;
 
 /// Types for BLS12-381 curve with intrinsic functions.
