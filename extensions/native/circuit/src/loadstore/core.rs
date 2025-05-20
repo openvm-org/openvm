@@ -6,9 +6,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        instructions::LocalOpcode, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
-        ExecutionError, Result, StepExecutorE1, Streams, TraceStep, VmAdapterInterface, VmCoreAir,
-        VmStateMut,
+        execution_mode::E1E2ExecutionCtx, instructions::LocalOpcode, AdapterAirContext,
+        AdapterExecutorE1, AdapterTraceStep, ExecutionError, Result, StepExecutorE1, Streams,
+        TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -230,15 +230,18 @@ where
 {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<usize>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let Instruction { opcode, .. } = instruction;
 
         // Get the local opcode for this instruction
         let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let (_, data_read) = self.adapter.read(state.memory, instruction);
+        let (_, data_read) = self.adapter.read(state, instruction);
 
         let data = if local_opcode == NativeLoadStoreOpcode::HINT_STOREW {
             let mut streams = self.streams.get().unwrap().lock().unwrap();
@@ -250,10 +253,10 @@ where
             data_read
         };
 
-        self.adapter.write(state.memory, instruction, &data);
+        self.adapter.write(state, instruction, &data);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
-        Ok(())
+        Ok(1)
     }
 }

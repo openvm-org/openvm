@@ -1,7 +1,10 @@
 use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
-    arch::{AdapterExecutorE1, AdapterTraceStep, Result, StepExecutorE1, TraceStep, VmStateMut},
+    arch::{
+        execution_mode::E1E2ExecutionCtx, AdapterExecutorE1, AdapterTraceStep, Result,
+        StepExecutorE1, TraceStep, VmStateMut,
+    },
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
@@ -108,15 +111,18 @@ where
 {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<usize>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let &Instruction { opcode, c: imm, .. } = instruction;
 
         let branch_eq_opcode =
             NativeBranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let [rs1, rs2] = self.adapter.read(state.memory, instruction).into();
+        let [rs1, rs2] = self.adapter.read(state, instruction).into();
 
         // TODO(ayush): probably don't need the other values
         let (cmp_result, _, _) = run_eq::<F>(branch_eq_opcode, rs1, rs2);
@@ -129,7 +135,7 @@ where
             *state.pc = state.pc.wrapping_add(self.pc_step);
         }
 
-        Ok(())
+        Ok(1)
     }
 }
 

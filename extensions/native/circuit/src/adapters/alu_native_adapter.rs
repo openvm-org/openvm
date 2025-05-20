@@ -5,8 +5,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface,
-        ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
+        BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
+        VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
@@ -24,9 +25,11 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    memory_read_or_imm_native, memory_write_native, tracing_read_or_imm_native,
-    tracing_write_native,
+    memory_read_or_imm_native_from_state, memory_write_native_from_state,
+    tracing_read_or_imm_native,
 };
+
+use super::tracing_write_native;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -238,24 +241,33 @@ where
     type WriteData = [F; 1];
 
     #[inline(always)]
-    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read<Ctx>(
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let &Instruction { b, c, e, f, .. } = instruction;
 
-        let rs1 = memory_read_or_imm_native(memory, e.as_canonical_u32(), b);
-        let rs2 = memory_read_or_imm_native(memory, f.as_canonical_u32(), c);
+        let rs1 = memory_read_or_imm_native_from_state(state, e.as_canonical_u32(), b);
+        let rs2 = memory_read_or_imm_native_from_state(state, f.as_canonical_u32(), c);
 
         [rs1, rs2]
     }
 
     #[inline(always)]
-    fn write(
+    fn write<Ctx>(
         &self,
-        memory: &mut GuestMemory,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
-    ) {
-        let Instruction { a, .. } = instruction;
+    ) where
+        Ctx: E1E2ExecutionCtx,
+    {
+        let &Instruction { a, .. } = instruction;
 
-        memory_write_native(memory, a.as_canonical_u32(), data);
+        memory_write_native_from_state(state, a.as_canonical_u32(), data);
     }
 }

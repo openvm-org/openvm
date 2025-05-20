@@ -3,8 +3,9 @@ use std::borrow::{Borrow, BorrowMut};
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
+        MinimalInstruction, Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -208,23 +209,26 @@ where
 {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<usize>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = FieldArithmeticOpcode::from_usize(
             opcode.local_opcode_idx(FieldArithmeticOpcode::CLASS_OFFSET),
         );
 
-        let [b_val, c_val] = self.adapter.read(state.memory, instruction);
+        let [b_val, c_val] = self.adapter.read(state, instruction);
         let a_val = FieldArithmetic::run_field_arithmetic(local_opcode, b_val, c_val).unwrap();
 
-        self.adapter.write(state.memory, instruction, &[a_val]);
+        self.adapter.write(state, instruction, &[a_val]);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
-        Ok(())
+        Ok(1)
     }
 }
 

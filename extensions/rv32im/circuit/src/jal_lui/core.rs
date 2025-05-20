@@ -2,7 +2,7 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::E1E2ExecutionCtx,
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, ImmInstruction, Result,
         StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
@@ -259,7 +259,7 @@ where
         &mut self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
+    ) -> Result<usize>
     where
         Ctx: E1E2ExecutionCtx,
     {
@@ -287,19 +287,7 @@ where
 
         *state.pc = to_pc;
 
-        Ok(())
-    }
-
-    fn execute_metered(
-        &mut self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        state.ctx.trace_heights[chip_index] += 1;
-        self.execute_e1(state, instruction)?;
-
-        Ok(())
+        Ok(1)
     }
 }
 

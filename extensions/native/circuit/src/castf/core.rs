@@ -2,8 +2,9 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
+        MinimalInstruction, Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -199,9 +200,12 @@ where
 {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<usize>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let Instruction { opcode, .. } = instruction;
 
         assert_eq!(
@@ -209,15 +213,15 @@ where
             CastfOpcode::CASTF as usize
         );
 
-        let [y] = self.adapter.read(state.memory, instruction);
+        let [y] = self.adapter.read(state, instruction);
 
         let x = CastF::solve(y.as_canonical_u32());
 
-        self.adapter.write(state.memory, instruction, &x);
+        self.adapter.write(state, instruction, &x);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
-        Ok(())
+        Ok(1)
     }
 }
 

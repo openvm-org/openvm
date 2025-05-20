@@ -5,8 +5,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface,
-        ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
+        BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
+        VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -23,7 +24,10 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
-use super::{memory_read_native, memory_write_native, tracing_read_native, tracing_write_native};
+use super::{
+    memory_read_native_from_state, memory_write_native_from_state, tracing_read_native,
+    tracing_write_native,
+};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -219,29 +223,38 @@ where
     type WriteData = [F; N];
 
     #[inline(always)]
-    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read<Ctx>(
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let Instruction { b, c, d, e, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
         debug_assert_eq!(e.as_canonical_u32(), AS::Native as u32);
 
-        let y_val: [F; N] = memory_read_native(memory, b.as_canonical_u32());
-        let z_val: [F; N] = memory_read_native(memory, c.as_canonical_u32());
+        let y_val: [F; N] = memory_read_native_from_state(state, b.as_canonical_u32());
+        let z_val: [F; N] = memory_read_native_from_state(state, c.as_canonical_u32());
 
         [y_val, z_val]
     }
 
     #[inline(always)]
-    fn write(
+    fn write<Ctx>(
         &self,
-        memory: &mut GuestMemory,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
-    ) {
+    ) where
+        Ctx: E1E2ExecutionCtx,
+    {
         let Instruction { a, d, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
 
-        memory_write_native(memory, a.as_canonical_u32(), data);
+        memory_write_native_from_state(state, a.as_canonical_u32(), data);
     }
 }

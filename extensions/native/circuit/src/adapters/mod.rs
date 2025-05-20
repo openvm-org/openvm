@@ -1,6 +1,9 @@
-use openvm_circuit::system::memory::{
-    offline_checker::{MemoryBaseAuxCols, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
-    online::{GuestMemory, TracingMemory},
+use openvm_circuit::{
+    arch::{execution_mode::E1E2ExecutionCtx, VmStateMut},
+    system::memory::{
+        offline_checker::{MemoryBaseAuxCols, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
+        online::{GuestMemory, TracingMemory},
+    },
 };
 use openvm_native_compiler::conversion::AS;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -48,6 +51,62 @@ where
     unsafe { memory.write::<F, N>(AS::Native as u32, ptr, data) }
 }
 
+#[inline(always)]
+pub fn memory_read_native_from_state<Ctx, F, const N: usize>(
+    state: &mut VmStateMut<GuestMemory, Ctx>,
+    ptr: u32,
+) -> [F; N]
+where
+    F: PrimeField32,
+    Ctx: E1E2ExecutionCtx,
+{
+    state
+        .ctx
+        .on_memory_operation(AS::Native as u32, ptr, N * std::mem::size_of::<F>());
+
+    memory_read_native(state.memory, ptr)
+}
+
+#[inline(always)]
+pub fn memory_read_or_imm_native_from_state<Ctx, F>(
+    state: &mut VmStateMut<GuestMemory, Ctx>,
+    addr_space: u32,
+    ptr_or_imm: F,
+) -> F
+where
+    F: PrimeField32,
+    Ctx: E1E2ExecutionCtx,
+{
+    debug_assert!(addr_space == AS::Immediate as u32 || addr_space == AS::Native as u32);
+
+    if addr_space == AS::Native as u32 {
+        state.ctx.on_memory_operation(
+            addr_space,
+            ptr_or_imm.as_canonical_u32(),
+            std::mem::size_of::<F>(),
+        );
+        let [result]: [F; 1] = memory_read_native(state.memory, ptr_or_imm.as_canonical_u32());
+        result
+    } else {
+        ptr_or_imm
+    }
+}
+
+#[inline(always)]
+pub fn memory_write_native_from_state<Ctx, F, const N: usize>(
+    state: &mut VmStateMut<GuestMemory, Ctx>,
+    ptr: u32,
+    data: &[F; N],
+) where
+    F: PrimeField32,
+    Ctx: E1E2ExecutionCtx,
+{
+    state
+        .ctx
+        .on_memory_operation(AS::Native as u32, ptr, N * std::mem::size_of::<F>());
+
+    memory_write_native(state.memory, ptr, data)
+}
 /// Atomic read operation which increments the timestamp by 1.
 /// Returns `(t_prev, [ptr:BLOCK_SIZE]_4)` where `t_prev` is the timestamp of the last memory
 /// access.

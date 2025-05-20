@@ -5,8 +5,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, ExecutionError, ExecutionState, NewVmChipWrapper, PcIncOrSet, Result,
-        StepExecutorE1, TraceStep, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, ExecutionBridge, ExecutionError, ExecutionState,
+        NewVmChipWrapper, PcIncOrSet, Result, StepExecutorE1, TraceStep, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryWriteAuxCols},
@@ -276,9 +276,12 @@ where
 {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<usize>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let &Instruction { opcode, a, b, .. } = instruction;
 
         debug_assert!(
@@ -321,7 +324,7 @@ where
             *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         }
 
-        Ok(())
+        Ok(1)
     }
 }
 

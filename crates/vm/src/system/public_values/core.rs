@@ -214,7 +214,7 @@ where
         &mut self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
+    ) -> Result<usize>
     where
         Ctx: E1E2ExecutionCtx,
     {
@@ -235,7 +235,7 @@ where
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
-        Ok(())
+        Ok(0)
     }
 
     fn execute_metered(

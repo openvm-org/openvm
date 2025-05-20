@@ -8,8 +8,8 @@ use std::{
 use itertools::zip_eq;
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, ExecutionState, NewVmChipWrapper, Result, StepExecutorE1, Streams,
-        TraceStep, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, ExecutionBridge, ExecutionState, NewVmChipWrapper,
+        Result, StepExecutorE1, Streams, TraceStep, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols, AUX_LEN},
@@ -790,9 +790,12 @@ where
 {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<usize>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let &Instruction {
             a,
             b,
@@ -865,7 +868,7 @@ where
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
-        Ok(())
+        Ok(length + 2)
     }
 }
 

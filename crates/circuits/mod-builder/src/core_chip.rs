@@ -3,9 +3,9 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, DynAdapterInterface, DynArray,
-        MinimalInstruction, Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir,
-        VmStateMut,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
+        DynAdapterInterface, DynArray, MinimalInstruction, Result, StepExecutorE1, TraceStep,
+        VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -308,16 +308,18 @@ where
 {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
-        let data: DynArray<_> = self.adapter.read(state.memory, instruction).into();
+    ) -> Result<usize>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+        let data: DynArray<_> = self.adapter.read(state, instruction).into();
 
         let writes = run_field_expression(self, &data, instruction).0;
-        self.adapter
-            .write(state.memory, instruction, &writes.into());
+        self.adapter.write(state, instruction, &writes.into());
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        Ok(())
+        Ok(1)
     }
 }
 

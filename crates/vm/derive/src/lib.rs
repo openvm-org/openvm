@@ -146,7 +146,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         &mut self,
                         state: &mut ::openvm_circuit::arch::VmStateMut<::openvm_circuit::system::memory::online::GuestMemory, Ctx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
-                    ) -> ::openvm_circuit::arch::Result<()>
+                    ) -> ::openvm_circuit::arch::Result<usize>
                     where
                         F: ::openvm_stark_backend::p3_field::PrimeField32,
                         Ctx: ::openvm_circuit::arch::execution_mode::E1E2ExecutionCtx,
@@ -212,7 +212,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         &mut self,
                         state: &mut ::openvm_circuit::arch::VmStateMut<::openvm_circuit::system::memory::online::GuestMemory, Ctx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
-                    ) -> ::openvm_circuit::arch::Result<()>
+                    ) -> ::openvm_circuit::arch::Result<usize>
                     where
                         #first_ty_generic: ::openvm_stark_backend::p3_field::PrimeField32,
                         Ctx: ::openvm_circuit::arch::execution_mode::E1E2ExecutionCtx,

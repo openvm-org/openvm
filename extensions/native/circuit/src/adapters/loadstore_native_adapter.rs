@@ -5,8 +5,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, ExecutionBridge, ExecutionState,
-        VmAdapterAir, VmAdapterInterface,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
+        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -26,9 +26,10 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
-use crate::adapters::{memory_write_native, tracing_read_native, tracing_write_native};
-
-use super::memory_read_native;
+use crate::adapters::{
+    memory_read_native, memory_read_native_from_state, memory_write_native_from_state,
+    tracing_read_native, tracing_write_native,
+};
 
 pub struct NativeLoadStoreInstruction<T> {
     pub is_valid: T,
@@ -327,7 +328,14 @@ where
     type ReadData = (F, [F; NUM_CELLS]);
     type WriteData = [F; NUM_CELLS];
 
-    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read<Ctx>(
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let &Instruction {
             opcode,
             a,
@@ -342,7 +350,7 @@ where
 
         let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let [read_cell]: [F; 1] = memory_read_native(memory, c.as_canonical_u32());
+        let [read_cell]: [F; 1] = memory_read_native_from_state(state, c.as_canonical_u32());
 
         let data_read_as = match local_opcode {
             LOADW => e.as_canonical_u32(),
@@ -358,18 +366,20 @@ where
 
         let data_read: [F; NUM_CELLS] = match local_opcode {
             HINT_STOREW => [F::ZERO; NUM_CELLS],
-            LOADW | STOREW => memory_read_native(memory, data_read_ptr),
+            LOADW | STOREW => memory_read_native_from_state(state, data_read_ptr),
         };
 
         (read_cell, data_read)
     }
 
-    fn write(
+    fn write<Ctx>(
         &self,
-        memory: &mut GuestMemory,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
-    ) {
+    ) where
+        Ctx: E1E2ExecutionCtx,
+    {
         let &Instruction {
             opcode,
             a,
@@ -384,7 +394,7 @@ where
 
         let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let [read_cell]: [F; 1] = memory_read_native(memory, c.as_canonical_u32());
+        let [read_cell]: [F; 1] = memory_read_native(state.memory, c.as_canonical_u32());
 
         let data_write_as = match local_opcode {
             LOADW => d.as_canonical_u32(),
@@ -398,6 +408,6 @@ where
             STOREW | HINT_STOREW => (read_cell + b).as_canonical_u32(),
         };
 
-        memory_write_native(memory, data_write_ptr, data);
+        memory_write_native_from_state(state, data_write_ptr, data);
     }
 }

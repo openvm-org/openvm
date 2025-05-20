@@ -133,7 +133,7 @@ where
         &mut self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError>
+    ) -> Result<usize, ExecutionError>
     where
         F: PrimeField32,
         Ctx: E1E2ExecutionCtx,
@@ -176,21 +176,7 @@ where
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
-        Ok(())
-    }
-
-    fn execute_metered(
-        &mut self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        _chip_index: usize,
-    ) -> Result<(), ExecutionError>
-    where
-        F: PrimeField32,
-    {
-        self.execute_e1(state, instruction)?;
-
-        Ok(())
+        Ok(0)
     }
 }
 

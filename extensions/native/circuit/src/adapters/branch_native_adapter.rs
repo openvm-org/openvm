@@ -1,6 +1,8 @@
 use std::borrow::{Borrow, BorrowMut};
 use std::mem::size_of;
 
+use openvm_circuit::arch::execution_mode::E1E2ExecutionCtx;
+use openvm_circuit::arch::VmStateMut;
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface,
@@ -21,7 +23,7 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
-use crate::adapters::{memory_read_or_imm_native, tracing_read_or_imm_native};
+use crate::adapters::{memory_read_or_imm_native_from_state, tracing_read_or_imm_native};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -222,19 +224,26 @@ where
     type WriteData = ();
 
     #[inline(always)]
-    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read<Ctx>(
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let &Instruction { a, b, d, e, .. } = instruction;
 
-        let rs1 = memory_read_or_imm_native(memory, d.as_canonical_u32(), a);
-        let rs2 = memory_read_or_imm_native(memory, e.as_canonical_u32(), b);
+        let rs1 = memory_read_or_imm_native_from_state(state, d.as_canonical_u32(), a);
+        let rs2 = memory_read_or_imm_native_from_state(state, e.as_canonical_u32(), b);
 
         [rs1, rs2]
     }
 
     #[inline(always)]
-    fn write(
+    fn write<Ctx>(
         &self,
-        _memory: &mut GuestMemory,
+        _state: &mut VmStateMut<GuestMemory, Ctx>,
         _instruction: &Instruction<F>,
         _data: &Self::WriteData,
     ) {

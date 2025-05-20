@@ -4,6 +4,7 @@
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
 use openvm_stark_backend::p3_field::PrimeField32;
 
+use p3_keccak_air::NUM_ROUNDS;
 use tiny_keccak::{Hasher, Keccak};
 
 pub mod air;
@@ -19,7 +20,10 @@ mod tests;
 
 pub use air::KeccakVmAir;
 use openvm_circuit::{
-    arch::{ExecutionBridge, NewVmChipWrapper, Result, StepExecutorE1, VmStateMut},
+    arch::{
+        execution_mode::E1E2ExecutionCtx, ExecutionBridge, NewVmChipWrapper, Result,
+        StepExecutorE1, VmStateMut,
+    },
     system::memory::online::GuestMemory,
 };
 use openvm_instructions::{
@@ -28,7 +32,11 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_keccak256_transpiler::Rv32KeccakOpcode;
-use openvm_rv32im_circuit::adapters::{memory_write, new_read_rv32_register};
+use openvm_rv32im_circuit::adapters::{
+    memory_write, memory_write_from_state, new_read_rv32_register,
+    new_read_rv32_register_from_state,
+};
+use utils::num_keccak_f;
 
 // ==== Constants for register/memory adapter ====
 /// Register reads to get dst, src, len
@@ -87,9 +95,12 @@ impl KeccakVmStep {
 impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<usize>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let &Instruction {
             opcode,
             a,
@@ -105,12 +116,13 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
         debug_assert_eq!(d, RV32_REGISTER_AS);
         debug_assert_eq!(e, RV32_MEMORY_AS);
 
-        let dst = new_read_rv32_register(state.memory, d, a.as_canonical_u32());
-        let src = new_read_rv32_register(state.memory, d, b.as_canonical_u32());
-        let len = new_read_rv32_register(state.memory, d, c.as_canonical_u32());
+        let dst = new_read_rv32_register_from_state(state, d, a.as_canonical_u32());
+        let src = new_read_rv32_register_from_state(state, d, b.as_canonical_u32());
+        let len = new_read_rv32_register_from_state(state, d, c.as_canonical_u32());
 
         let mut hasher = Keccak::v256();
 
+        // TODO(ayush): this bypasses state and doesn't trigger e2 on_memory_operation callback
         let message: Vec<u8> = state
             .memory
             .memory
@@ -119,7 +131,9 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
 
         let mut output = [0u8; 32];
         hasher.finalize(&mut output);
-        memory_write(state.memory, e, dst, &output);
-        Ok(())
+        memory_write_from_state(state, e, dst, &output);
+
+        let num_blocks = num_keccak_f(len as usize);
+        Ok(num_blocks * NUM_ROUNDS)
     }
 }
