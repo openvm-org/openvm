@@ -1,12 +1,16 @@
 use clap::{Parser, ValueEnum};
 use eyre::Result;
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
-use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
-use openvm_rv32im_circuit::Rv32ImConfig;
+use openvm_bigint_circuit::Int256Rv32Config;
+use openvm_bigint_transpiler::Int256TranspilerExtension;
+use openvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmExecutor};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_stark_sdk::{bench::run_with_metric_collection, p3_baby_bear::BabyBear};
+use openvm_stark_sdk::{
+    bench::run_with_metric_collection, config::baby_bear_poseidon2::default_engine,
+    p3_baby_bear::BabyBear,
+};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -22,13 +26,14 @@ static AVAILABLE_PROGRAMS: &[&str] = &[
     "fibonacci_iterative",
     "quicksort",
     "bubblesort",
+    "factorial_iterative_u256",
+    "revm_snailtracer",
     // "pairing",
     // "keccak256",
     // "keccak256_iter",
     // "sha256",
     // "sha256_iter",
     // "revm_transfer",
-    // "revm_snailtracer",
 ];
 
 #[derive(Parser)]
@@ -113,19 +118,40 @@ fn main() -> Result<()> {
             // let config_path = program_dir.join(DEFAULT_APP_CONFIG_PATH);
             // let vm_config = read_config_toml_or_default(&config_path)?.app_vm_config;
             // let transpiler = vm_config.transpiler;
-            let vm_config = Rv32ImConfig::default();
+            let vm_config = Int256Rv32Config::default();
 
             let transpiler = Transpiler::<BabyBear>::default()
                 .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension);
+                .with_extension(Int256TranspilerExtension);
 
             let exe = VmExe::from_elf(elf, transpiler)?;
 
+            let (widths, interactions): (Vec<usize>, Vec<usize>) = {
+                let vm = VirtualMachine::new(default_engine(), vm_config.clone());
+                let pk = vm.keygen();
+                let vk = pk.get_vk();
+                vk.inner
+                    .per_air
+                    .iter()
+                    .map(|vk| {
+                        // TODO(ayush): figure out which width to use
+                        // let total_width = vk.params.width.preprocessed.unwrap_or(0)
+                        //     + vk.params.width.cached_mains.iter().sum::<usize>()
+                        //     + vk.params.width.common_main
+                        //     + vk.params.width.after_challenge.iter().sum::<usize>();
+                        let total_width = vk.params.width.main_widths().iter().sum::<usize>();
+                        (total_width, vk.symbolic_constraints.interactions.len())
+                    })
+                    .unzip()
+            };
+
             let executor = VmExecutor::new(vm_config);
             executor
-                .execute_e1(exe, vec![])
+                .execute_metered(exe.clone(), vec![], widths, interactions)
                 .expect("Failed to execute program");
+
             tracing::info!("Completed program: {}", program);
         }
         tracing::info!("All programs executed successfully");

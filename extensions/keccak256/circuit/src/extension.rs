@@ -5,7 +5,7 @@ use openvm_circuit::{
     },
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::*;
@@ -15,9 +15,13 @@ use openvm_rv32im_circuit::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
+use std::result::Result;
 use strum::IntoEnumIterator;
 
 use crate::*;
+
+// TODO: this should be decided after e2 execution
+const MAX_INS_CAPACITY: usize = 1 << 22;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Keccak256Rv32Config {
@@ -48,7 +52,7 @@ impl Default for Keccak256Rv32Config {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Keccak256;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, InsExecutorE1)]
 pub enum Keccak256Executor<F: PrimeField32> {
     Keccak256(KeccakVmChip<F>),
 }
@@ -68,11 +72,8 @@ impl<F: PrimeField32> VmExtension<F> for Keccak256 {
         builder: &mut VmInventoryBuilder<F>,
     ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
         let mut inventory = VmInventory::new();
-        let SystemPort {
-            execution_bus,
-            program_bus,
-            memory_bridge,
-        } = builder.system_port();
+        let pointer_max_bits = builder.system_config().memory_config.pointer_max_bits;
+
         let bitwise_lu_chip = if let Some(&chip) = builder
             .find_chip::<SharedBitwiseOperationLookupChip<8>>()
             .first()
@@ -84,16 +85,27 @@ impl<F: PrimeField32> VmExtension<F> for Keccak256 {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
-        let address_bits = builder.system_config().memory_config.pointer_max_bits;
 
-        let keccak_chip = KeccakVmChip::new(
+        let SystemPort {
             execution_bus,
             program_bus,
             memory_bridge,
-            address_bits,
-            bitwise_lu_chip,
-            Rv32KeccakOpcode::CLASS_OFFSET,
-            offline_memory,
+        } = builder.system_port();
+        let keccak_chip = KeccakVmChip::new(
+            KeccakVmAir::new(
+                ExecutionBridge::new(execution_bus, program_bus),
+                memory_bridge,
+                bitwise_lu_chip.bus(),
+                pointer_max_bits,
+                Rv32KeccakOpcode::CLASS_OFFSET,
+            ),
+            KeccakVmStep::new(
+                bitwise_lu_chip.clone(),
+                Rv32KeccakOpcode::CLASS_OFFSET,
+                pointer_max_bits,
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
             keccak_chip,

@@ -4,6 +4,7 @@ mod config;
 mod execution;
 /// Module for controlling VM execution flow, including segmentation and instruction execution
 pub mod execution_control;
+pub mod execution_mode;
 /// Traits and builders to compose collections of chips into a virtual machine.
 mod extensions;
 /// Traits and wrappers to facilitate VM chip integration

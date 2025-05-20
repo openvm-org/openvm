@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{
+        execution_mode::{e1::E1Ctx, metered::MeteredCtx, E1E2ExecutionCtx},
         AdapterAirContext, AdapterExecutorE1, AdapterRuntimeContext, AdapterTraceStep,
         BasicAdapterInterface, MinimalInstruction, Result, StepExecutorE1, TraceStep,
         VmAdapterInterface, VmCoreAir, VmCoreChip, VmStateMut,
@@ -211,10 +212,13 @@ where
 {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
-        let [value, index] = self.adapter.read(state.memory, instruction);
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+        let [value, index] = self.adapter.read(state, instruction);
 
         let idx: usize = index.as_canonical_u32() as usize;
         {
@@ -230,6 +234,17 @@ where
         }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+
+    fn execute_metered(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        _chip_index: usize,
+    ) -> Result<()> {
+        self.execute_e1(state, instruction)?;
 
         Ok(())
     }

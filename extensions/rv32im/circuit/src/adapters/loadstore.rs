@@ -6,8 +6,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, ExecutionBridge, ExecutionState,
-        VmAdapterAir, VmAdapterInterface,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
+        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -35,7 +35,8 @@ use openvm_stark_backend::{
 
 use super::RV32_REGISTER_NUM_LIMBS;
 use crate::adapters::{
-    memory_read, memory_write, tracing_read, tracing_write_with_base_aux, RV32_CELL_BITS,
+    memory_read, memory_read_from_state, memory_write_from_state, tracing_read,
+    tracing_write_with_base_aux, RV32_CELL_BITS,
 };
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
@@ -563,7 +564,14 @@ where
     );
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
-    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read<Ctx>(
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let Instruction {
             opcode,
             a,
@@ -583,7 +591,7 @@ where
         );
 
         let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
-            memory_read(memory, d.as_canonical_u32(), b.as_canonical_u32());
+            memory_read_from_state(state, d.as_canonical_u32(), b.as_canonical_u32());
         let rs1_val = u32::from_le_bytes(rs1_bytes);
 
         let imm = c.as_canonical_u32();
@@ -602,28 +610,32 @@ where
 
         let read_data: [u8; RV32_REGISTER_NUM_LIMBS] = match local_opcode {
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                memory_read(memory, e.as_canonical_u32(), ptr_val)
+                memory_read_from_state(state, e.as_canonical_u32(), ptr_val)
             }
-            STOREW | STOREH | STOREB => memory_read(memory, RV32_REGISTER_AS, a.as_canonical_u32()),
+            STOREW | STOREH | STOREB => {
+                memory_read_from_state(state, RV32_REGISTER_AS, a.as_canonical_u32())
+            }
         };
 
         // For stores, we need the previous memory content to preserve unchanged bytes
         let prev_data: [u8; RV32_REGISTER_NUM_LIMBS] = match local_opcode {
-            STOREW | STOREH | STOREB => memory_read(memory, e.as_canonical_u32(), ptr_val),
+            STOREW | STOREH | STOREB => memory_read(state.memory, e.as_canonical_u32(), ptr_val),
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                memory_read(memory, RV32_REGISTER_AS, a.as_canonical_u32())
+                memory_read(state.memory, RV32_REGISTER_AS, a.as_canonical_u32())
             }
         };
 
         ((prev_data, read_data), shift_amount)
     }
 
-    fn write(
+    fn write<Ctx>(
         &self,
-        memory: &mut GuestMemory,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
-    ) {
+    ) where
+        Ctx: E1E2ExecutionCtx,
+    {
         // TODO(ayush): remove duplication with read
         let &Instruction {
             opcode,
@@ -645,7 +657,7 @@ where
         );
 
         let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
-            memory_read(memory, RV32_REGISTER_AS, b.as_canonical_u32());
+            memory_read(state.memory, RV32_REGISTER_AS, b.as_canonical_u32());
         let rs1_val = u32::from_le_bytes(rs1_bytes);
 
         let imm = c.as_canonical_u32();
@@ -669,10 +681,10 @@ where
             match local_opcode {
                 STOREW | STOREH | STOREB => {
                     let ptr = mem_ptr_limbs[0] + mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
-                    memory_write(memory, e.as_canonical_u32(), ptr & 0xfffffffc, data);
+                    memory_write_from_state(state, e.as_canonical_u32(), ptr & 0xfffffffc, data);
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                    memory_write(memory, RV32_REGISTER_AS, a.as_canonical_u32(), data);
+                    memory_write_from_state(state, RV32_REGISTER_AS, a.as_canonical_u32(), data);
                 }
             }
         }

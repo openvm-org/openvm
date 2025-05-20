@@ -82,7 +82,8 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
     where
         F: PrimeField32,
     {
-        self.chips[index].set_trace(RowMajorMatrix::new(trace, width));
+        let trace = RowMajorMatrix::new(trace, width);
+        self.chips[index].set_trace(trace);
     }
 
     #[cfg(test)]

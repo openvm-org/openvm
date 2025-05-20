@@ -44,6 +44,8 @@ pub mod dimensions;
 pub mod interface;
 
 pub const CHUNK: usize = 8;
+pub const CHUNK_BITS: usize = CHUNK.ilog2() as usize;
+
 /// The offset of the Merkle AIR in AIRs of MemoryController.
 pub const MERKLE_AIR_OFFSET: usize = 1;
 /// The offset of the boundary AIR in AIRs of MemoryController.
@@ -572,11 +574,8 @@ impl<F: PrimeField32> MemoryController<F> {
 
         for i in 0..self.access_adapters.num_access_adapters() {
             let width = self.memory.adapter_inventory_trace_cursor.width(i);
-            self.access_adapters.set_trace(
-                i,
-                self.memory.adapter_inventory_trace_cursor.extract_trace(i),
-                width,
-            );
+            let trace = self.memory.adapter_inventory_trace_cursor.extract_trace(i);
+            self.access_adapters.set_trace(i, trace, width);
         }
 
         final_memory

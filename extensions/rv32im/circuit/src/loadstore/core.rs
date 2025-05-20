@@ -2,6 +2,7 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, Result, StepExecutorE1, TraceStep,
         VmAdapterInterface, VmCoreAir, VmStateMut,
     },
@@ -380,15 +381,18 @@ where
 {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let Instruction { opcode, .. } = instruction;
 
         // Get the local opcode for this instruction
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let ((prev_data, read_data), shift_amount) = self.adapter.read(state.memory, instruction);
+        let ((prev_data, read_data), shift_amount) = self.adapter.read(state, instruction);
         let prev_data = prev_data.map(F::from_canonical_u8);
         let read_data = read_data.map(F::from_canonical_u8);
 
@@ -396,9 +400,21 @@ where
         let write_data = run_write_data(local_opcode, read_data, prev_data, shift_amount);
         let write_data = write_data.map(|x| x.as_canonical_u32() as u8);
 
-        self.adapter.write(state.memory, instruction, &write_data);
+        self.adapter.write(state, instruction, &write_data);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+
+    fn execute_metered(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        state.ctx.trace_heights[chip_index] += 1;
+        self.execute_e1(state, instruction)?;
 
         Ok(())
     }

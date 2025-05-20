@@ -1,3 +1,13 @@
+use super::{
+    execution_control::ExecutionControl, ExecutionError, GenerationError, SystemConfig,
+    VmChipComplex, VmComplexTraceHeights, VmConfig,
+};
+#[cfg(feature = "bench-metrics")]
+use crate::metrics::VmMetrics;
+use crate::{
+    arch::{instructions::*, InstructionExecutor},
+    system::memory::online::GuestMemory,
+};
 use backtrace::Backtrace;
 use openvm_instructions::{
     exe::FnBounds,
@@ -12,32 +22,36 @@ use openvm_stark_backend::{
     utils::metrics_span,
     Chip,
 };
-use program::Program;
 
-use super::{
-    execution_control::{E1ExecutionControl, ExecutionControl, TracegenExecutionControl},
-    ExecutionError, GenerationError, Streams, SystemConfig, VmChipComplex, VmComplexTraceHeights,
-    VmConfig, VmStateMut,
-};
-#[cfg(feature = "bench-metrics")]
-use crate::metrics::VmMetrics;
-use crate::{
-    arch::{instructions::*, InstructionExecutor},
-    system::{
-        connector::DEFAULT_SUSPEND_EXIT_CODE,
-        memory::{online::GuestMemory, paged_vec::PAGE_SIZE, AddressMap, MemoryImage},
-    },
-};
+pub struct VmSegmentState<Ctx> {
+    pub clk: u64,
+    pub pc: u32,
+    pub memory: Option<GuestMemory>,
+    pub exit_code: Option<u32>,
+    pub ctx: Ctx,
+}
 
-pub struct VmSegmentExecutor<F, VC, Ctx, Ctrl>
+impl<Ctx> VmSegmentState<Ctx> {
+    pub fn new(clk: u64, pc: u32, memory: Option<GuestMemory>, ctx: Ctx) -> Self {
+        Self {
+            clk,
+            pc,
+            memory,
+            ctx,
+            exit_code: None,
+        }
+    }
+}
+
+pub struct VmSegmentExecutor<F, VC, Ctrl>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
-    Ctrl: ExecutionControl<F, VC, Ctx = Ctx>,
+    Ctrl: ExecutionControl<F, VC>,
 {
     pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
     /// Execution control for determining segmentation and stopping conditions
-    pub control: Ctrl,
+    pub ctrl: Ctrl,
 
     pub trace_height_constraints: Vec<LinearConstraint>,
 
@@ -48,56 +62,24 @@ where
     pub metrics: VmMetrics,
 }
 
-pub type E1VmSegmentExecutor<F, VC> = VmSegmentExecutor<F, VC, (), E1ExecutionControl>;
-
-// pub struct TracegenCtx;
-pub type TracegenCtx = ();
-pub type TracegenVmStateMut<'a> = VmStateMut<'a, GuestMemory, TracegenCtx>;
-
-pub type TracegenVmSegmentExecutor<F, VC> =
-    VmSegmentExecutor<F, VC, TracegenCtx, TracegenExecutionControl>;
-
-#[derive(derive_new::new)]
-pub struct ExecutionSegmentState {
-    pub memory: Option<GuestMemory>,
-    pub pc: u32,
-    pub exit_code: u32,
-    pub is_terminated: bool,
-}
-
-impl<F, VC, Ctx, Ctrl> VmSegmentExecutor<F, VC, Ctx, Ctrl>
+impl<F, VC, Ctrl> VmSegmentExecutor<F, VC, Ctrl>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
-    Ctrl: ExecutionControl<F, VC, Ctx = Ctx>,
+    Ctrl: ExecutionControl<F, VC>,
 {
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(
-        config: &VC,
-        program: Program<F>,
-        init_streams: Streams<F>,
-        initial_memory: Option<MemoryImage>,
+        chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
         trace_height_constraints: Vec<LinearConstraint>,
         #[allow(unused_variables)] fn_bounds: FnBounds,
+        ctrl: Ctrl,
     ) -> Self {
-        let mut chip_complex = config.create_chip_complex().unwrap();
-        chip_complex.set_streams(init_streams);
-        let program = if !config.system().profiling {
-            program.strip_debug_infos()
-        } else {
-            program
-        };
-        chip_complex.set_program(program);
-
-        if let Some(initial_memory) = initial_memory {
-            chip_complex.set_initial_memory(initial_memory);
-        }
         let air_names = chip_complex.air_names();
-        let control = Ctrl::new(&chip_complex);
 
         Self {
             chip_complex,
-            control,
+            ctrl,
             air_names,
             trace_height_constraints,
             #[cfg(feature = "bench-metrics")]
@@ -120,46 +102,40 @@ where
     }
 
     /// Stopping is triggered by should_stop() or if VM is terminated
-    pub fn execute_from_pc(
+    pub fn execute_from_state(
         &mut self,
-        pc: u32,
-        memory: Option<GuestMemory>,
-    ) -> Result<ExecutionSegmentState, ExecutionError> {
+        state: &mut VmSegmentState<Ctrl::Ctx>,
+    ) -> Result<(), ExecutionError> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
         // Call the pre-execution hook
-        self.control.on_segment_start(pc, &mut self.chip_complex);
+        self.ctrl.on_start(state, &mut self.chip_complex);
 
-        let mut state = ExecutionSegmentState::new(memory, pc, 0, false);
         loop {
             // Fetch, decode and execute single instruction
-            let terminated_exit_code = self.execute_instruction(&mut state, &mut prev_backtrace)?;
+            self.execute_instruction(state, &mut prev_backtrace)?;
 
-            if let Some(exit_code) = terminated_exit_code {
-                state.is_terminated = true;
-                state.exit_code = exit_code;
-                self.control
-                    .on_terminate(state.pc, &mut self.chip_complex, exit_code);
+            if let Some(exit_code) = state.exit_code {
+                self.ctrl
+                    .on_terminate(state, &mut self.chip_complex, exit_code);
                 break;
             }
-            if self.should_stop() {
-                state.exit_code = DEFAULT_SUSPEND_EXIT_CODE;
-                self.control
-                    .on_segment_end(state.pc, &mut self.chip_complex);
+            if self.should_suspend(state) {
+                self.ctrl.on_suspend(state, &mut self.chip_complex);
                 break;
             }
         }
 
-        Ok(state)
+        Ok(())
     }
 
     /// Executes a single instruction and updates VM state
     // TODO(ayush): clean this up, separate to smaller functions
     fn execute_instruction(
         &mut self,
-        state: &mut ExecutionSegmentState,
+        state: &mut VmSegmentState<Ctrl::Ctx>,
         prev_backtrace: &mut Option<Backtrace>,
-    ) -> Result<Option<u32>, ExecutionError> {
+    ) -> Result<(), ExecutionError> {
         let pc = state.pc;
         let timestamp = self.chip_complex.memory_controller().timestamp();
 
@@ -172,7 +148,8 @@ where
 
         // Handle termination instruction
         if opcode == SystemOpcode::TERMINATE.global_opcode() {
-            return Ok(Some(c.as_canonical_u32()));
+            state.exit_code = Some(c.as_canonical_u32());
+            return Ok(());
         }
 
         // Extract debug info components
@@ -218,7 +195,7 @@ where
 
         // Execute the instruction using the control implementation
         // TODO(AG): maybe avoid cloning the instruction?
-        self.control
+        self.ctrl
             .execute_instruction(state, &instruction.clone(), &mut self.chip_complex)?;
 
         // Update metrics if enabled
@@ -227,20 +204,20 @@ where
             self.update_instruction_metrics(pc, opcode, dsl_instr);
         }
 
-        Ok(None)
+        Ok(())
     }
 
     /// Returns bool of whether to switch to next segment or not.
-    fn should_stop(&mut self) -> bool {
+    fn should_suspend(&mut self, state: &mut VmSegmentState<Ctrl::Ctx>) -> bool {
         if !self.system_config().continuation_enabled {
             return false;
         }
 
         // Check with the execution control policy
-        self.control.should_stop(&self.chip_complex)
+        self.ctrl.should_suspend(state, &self.chip_complex)
     }
 
-    // TODO(ayush): not sure what to do of these
+    // TODO(ayush): this is not relevant for e1/e2 execution
     /// Generate ProofInput to prove the segment. Should be called after ::execute
     pub fn generate_proof_input<SC: StarkGenericConfig>(
         #[allow(unused_mut)] mut self,

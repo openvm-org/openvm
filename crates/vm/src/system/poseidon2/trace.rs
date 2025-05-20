@@ -8,7 +8,6 @@ use openvm_stark_backend::{
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
-    rap::get_air_name,
     AirRef, Chip, ChipUsageGetter,
 };
 
@@ -63,7 +62,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> ChipUsageGetter
     for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
 {
     fn air_name(&self) -> String {
-        get_air_name(&self.air)
+        format!("Poseidon2PeripheryAir<F, {}>", SBOX_REGISTERS)
     }
 
     fn current_trace_height(&self) -> usize {

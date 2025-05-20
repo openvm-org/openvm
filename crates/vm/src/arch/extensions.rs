@@ -211,7 +211,7 @@ pub struct VmInventory<E, P> {
     pub periphery: Vec<P>,
     /// Order of insertion. The reverse of this will be the order the chips are destroyed
     /// to generate trace.
-    insertion_order: Vec<ChipId>,
+    pub insertion_order: Vec<ChipId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -335,6 +335,25 @@ impl<E, P> VmInventory<E, P> {
     pub fn get_mut_executor(&mut self, opcode: &VmOpcode) -> Option<&mut E> {
         let id = self.instruction_lookup.get(opcode)?;
         self.executors.get_mut(*id)
+    }
+
+    pub fn get_mut_executor_with_index(&mut self, opcode: &VmOpcode) -> Option<(&mut E, usize)> {
+        let id = *self.instruction_lookup.get(opcode)?;
+
+        self.executors.get_mut(id).map(|executor| {
+            // TODO(ayush): cache this somewhere
+            let insertion_id = self
+                .insertion_order
+                .iter()
+                .rev()
+                .position(|chip_id| match chip_id {
+                    ChipId::Executor(exec_id) => *exec_id == id,
+                    _ => false,
+                })
+                .unwrap();
+
+            (executor, insertion_id)
+        })
     }
 
     pub fn executors(&self) -> &[E] {
@@ -788,11 +807,11 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
                 .as_any_kind_mut()
                 .downcast_mut()
                 .expect("Poseidon2 chip required for persistent memory");
-            self.base.memory_controller.finalize(Some(hasher))
+            self.base.memory_controller.finalize(Some(hasher));
         } else {
             self.base
                 .memory_controller
-                .finalize(None::<&mut Poseidon2PeripheryChip<F>>)
+                .finalize(None::<&mut Poseidon2PeripheryChip<F>>);
         };
     }
 
@@ -821,7 +840,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     }
 
     // we always need to special case it because we need to fix the air id.
-    fn public_values_chip_idx(&self) -> Option<ExecutorId> {
+    pub(crate) fn public_values_chip_idx(&self) -> Option<ExecutorId> {
         self.config
             .has_public_values_chip()
             .then_some(Self::PV_EXECUTOR_IDX)

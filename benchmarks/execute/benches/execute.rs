@@ -1,10 +1,8 @@
-use std::path::PathBuf;
-
-use divan;
 use eyre::Result;
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
+use openvm_bigint_circuit::Int256Rv32Config;
+use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
-use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
@@ -16,13 +14,14 @@ static AVAILABLE_PROGRAMS: &[&str] = &[
     "fibonacci_iterative",
     "quicksort",
     "bubblesort",
+    "factorial_iterative_u256",
+    "revm_snailtracer",
     // "pairing",
     // "keccak256",
     // "keccak256_iter",
     // "sha256",
     // "sha256_iter",
     // "revm_transfer",
-    // "revm_snailtracer",
 ];
 
 fn main() {
@@ -35,12 +34,13 @@ fn run_program(program: &str) -> Result<()> {
     let elf_path = get_elf_path(&program_dir);
     let elf = read_elf_file(&elf_path)?;
 
-    let vm_config = Rv32ImConfig::default();
+    let vm_config = Int256Rv32Config::default();
 
     let transpiler = Transpiler::<BabyBear>::default()
         .with_extension(Rv32ITranspilerExtension)
         .with_extension(Rv32IoTranspilerExtension)
-        .with_extension(Rv32MTranspilerExtension);
+        .with_extension(Rv32MTranspilerExtension)
+        .with_extension(Int256TranspilerExtension);
 
     let exe = VmExe::from_elf(elf, transpiler)?;
 

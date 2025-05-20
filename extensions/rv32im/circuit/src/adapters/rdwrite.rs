@@ -2,8 +2,9 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface,
-        ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
+        BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
+        VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryWriteAuxCols},
@@ -23,7 +24,7 @@ use openvm_stark_backend::{
 };
 
 use super::RV32_REGISTER_NUM_LIMBS;
-use crate::adapters::{memory_write, tracing_write};
+use crate::adapters::{memory_write_from_state, tracing_write};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
@@ -264,15 +265,30 @@ where
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
     #[inline(always)]
-    fn read(&self, _memory: &mut GuestMemory, _instruction: &Instruction<F>) -> Self::ReadData {}
+    fn read<Ctx>(
+        &self,
+        _state: &mut VmStateMut<GuestMemory, Ctx>,
+        _instruction: &Instruction<F>,
+    ) -> Self::ReadData
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+    }
 
     #[inline(always)]
-    fn write(&self, memory: &mut GuestMemory, instruction: &Instruction<F>, rd: &Self::WriteData) {
+    fn write<Ctx>(
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+        rd: &Self::WriteData,
+    ) where
+        Ctx: E1E2ExecutionCtx,
+    {
         let Instruction { a, d, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        memory_write(memory, RV32_REGISTER_AS, a.as_canonical_u32(), rd);
+        memory_write_from_state(state, RV32_REGISTER_AS, a.as_canonical_u32(), rd);
     }
 }
 
@@ -374,18 +390,32 @@ where
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
 
     #[inline(always)]
-    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
-        <Rv32RdWriteAdapterStep as AdapterExecutorE1<F>>::read(&self.inner, memory, instruction)
+    fn read<Ctx>(
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+        <Rv32RdWriteAdapterStep as AdapterExecutorE1<F>>::read(&self.inner, state, instruction)
     }
 
     #[inline(always)]
-    fn write(&self, memory: &mut GuestMemory, instruction: &Instruction<F>, rd: &Self::WriteData) {
+    fn write<Ctx>(
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+        rd: &Self::WriteData,
+    ) where
+        Ctx: E1E2ExecutionCtx,
+    {
         let Instruction { f: enabled, .. } = instruction;
 
         if *enabled != F::ZERO {
             <Rv32RdWriteAdapterStep as AdapterExecutorE1<F>>::write(
                 &self.inner,
-                memory,
+                state,
                 instruction,
                 rd,
             )

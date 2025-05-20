@@ -40,8 +40,6 @@ const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_IMM: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
 
 fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32BranchEqualChip<F> {
-    
-
     Rv32BranchEqualChip::<F>::new(
         VmAirWrapper::new(
             Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),

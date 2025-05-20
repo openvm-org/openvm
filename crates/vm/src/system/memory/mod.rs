@@ -1,6 +1,6 @@
 use openvm_circuit_primitives_derive::AlignedBorrow;
 
-mod adapter;
+pub mod adapter;
 mod controller;
 pub mod merkle;
 pub mod offline_checker;

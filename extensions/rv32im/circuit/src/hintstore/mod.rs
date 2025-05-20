@@ -5,14 +5,15 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, ExecutionError, ExecutionState, NewVmChipWrapper, Result, StepExecutorE1, Streams, TraceStep,
-        VmStateMut,
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        ExecutionBridge, ExecutionError, ExecutionState, NewVmChipWrapper, Result, StepExecutorE1,
+        Streams, TraceStep, VmStateMut,
     },
     system::memory::{
-            offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            online::{GuestMemory, TracingMemory},
-            MemoryAddress, MemoryAuxColsFactory, RecordId,
-        },
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        online::{GuestMemory, TracingMemory},
+        MemoryAddress, MemoryAuxColsFactory, RecordId,
+    },
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
@@ -38,9 +39,7 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::adapters::{
-    decompose, memory_read, memory_write, tracing_read, tracing_write,
-};
+use crate::adapters::{decompose, memory_read, memory_write, tracing_read, tracing_write};
 
 #[cfg(test)]
 mod tests;
@@ -456,9 +455,12 @@ where
 {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let &Instruction {
             opcode,
             a: num_words_ptr,
@@ -512,6 +514,38 @@ where
         }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+
+    fn execute_metered(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        // TODO(ayush): remove duplication
+        let &Instruction {
+            opcode,
+            a: num_words_ptr,
+            ..
+        } = instruction;
+
+        let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+
+        let num_words = if local_opcode == HINT_STOREW {
+            1
+        } else {
+            let num_words_limbs = memory_read(
+                state.memory,
+                RV32_REGISTER_AS,
+                num_words_ptr.as_canonical_u32(),
+            );
+            u32::from_le_bytes(num_words_limbs)
+        };
+
+        state.ctx.trace_heights[chip_index] += num_words as usize;
+        self.execute_e1(state, instruction)?;
 
         Ok(())
     }
