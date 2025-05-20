@@ -28,10 +28,10 @@ use crate::{
 
 #[derive(Parser)]
 #[command(
-    name = "evm-proving-setup",
+    name = "setup",
     about = "Set up for generating EVM proofs. ATTENTION: this requires large amounts of computation and memory. "
 )]
-pub struct EvmProvingSetupCmd {
+pub struct SetupCmd {
     #[arg(
         long,
         default_value = "false",
@@ -46,7 +46,7 @@ pub struct EvmProvingSetupCmd {
     pub force_agg_keygen: bool,
 }
 
-impl EvmProvingSetupCmd {
+impl SetupCmd {
     pub async fn run(&self) -> Result<()> {
         let default_agg_stark_pk_path = default_agg_stark_pk_path();
         let default_params_dir = default_params_dir();

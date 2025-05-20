@@ -5,13 +5,12 @@ use openvm_stark_sdk::config::FriParameters;
 
 pub const DEFAULT_MANIFEST_DIR: &str = ".";
 
-pub const DEFAULT_APP_CONFIG_PATH: &str = "./openvm.toml";
-pub const DEFAULT_APP_EXE_PATH: &str = "./openvm/app.vmexe";
-pub const DEFAULT_COMMITTED_APP_EXE_PATH: &str = "./openvm/committed_app_exe.bc";
-pub const DEFAULT_APP_PK_PATH: &str = "./openvm/app.pk";
-pub const DEFAULT_APP_VK_PATH: &str = "./openvm/app.vk";
-pub const DEFAULT_APP_PROOF_PATH: &str = "./openvm/app.proof";
-pub const DEFAULT_EVM_PROOF_PATH: &str = "./openvm/evm.proof";
+pub const DEFAULT_APP_PK_NAME: &str = "app.pk";
+pub const DEFAULT_APP_VK_NAME: &str = "app.vk";
+
+pub const DEFAULT_APP_PROOF_PATH: &str = "./app.proof";
+pub const DEFAULT_STARK_PROOF_PATH: &str = "./stark.proof";
+pub const DEFAULT_EVM_PROOF_PATH: &str = "./evm.proof";
 
 pub fn default_agg_stark_pk_path() -> String {
     env::var("HOME").unwrap() + "/.openvm/agg_stark.pk"

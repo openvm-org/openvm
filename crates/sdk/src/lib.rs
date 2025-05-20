@@ -119,12 +119,13 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         Self::default()
     }
 
-    pub fn agg_tree_config(&self) -> &AggregationTreeConfig {
-        &self.agg_tree_config
+    pub fn with_agg_tree_config(mut self, agg_tree_config: AggregationTreeConfig) -> Self {
+        self.agg_tree_config = agg_tree_config;
+        self
     }
 
-    pub fn set_agg_tree_config(&mut self, agg_tree_config: AggregationTreeConfig) {
-        self.agg_tree_config = agg_tree_config;
+    pub fn agg_tree_config(&self) -> &AggregationTreeConfig {
+        &self.agg_tree_config
     }
 
     pub fn build<P: AsRef<Path>>(

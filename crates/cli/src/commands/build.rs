@@ -1,23 +1,21 @@
 use std::{
     env::var,
-    fs::{create_dir_all, read, write},
+    fs::{copy, create_dir_all, read},
     path::PathBuf,
-    sync::Arc,
 };
 
 use clap::Parser;
 use eyre::Result;
+use itertools::izip;
 use openvm_build::{
-    build_generic, get_package, get_target_dir, get_workspace_packages, get_workspace_root,
-    GuestOptions,
+    build_generic, get_package, get_workspace_packages, get_workspace_root, GuestOptions,
 };
 use openvm_circuit::arch::{InitFileGenerator, OPENVM_DEFAULT_INIT_FILE_NAME};
-use openvm_sdk::{commit::commit_app_exe, fs::write_exe_to_file, Sdk};
+use openvm_sdk::{fs::write_exe_to_file, Sdk};
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 
-use crate::{
-    default::{DEFAULT_APP_CONFIG_PATH, DEFAULT_APP_EXE_PATH, DEFAULT_COMMITTED_APP_EXE_PATH},
-    util::{find_manifest_dir, read_config_toml_or_default},
+use crate::util::{
+    get_manifest_path_and_dir, get_target_dir, get_target_output_dir, read_config_toml_or_default,
 };
 
 #[derive(Parser)]
@@ -41,7 +39,6 @@ impl BuildCmd {
 pub struct BuildArgs {
     #[arg(
         long,
-        default_value = "false",
         help = "Skips transpilation into exe when set",
         help_heading = "OpenVM Options"
     )]
@@ -49,27 +46,17 @@ pub struct BuildArgs {
 
     #[arg(
         long,
-        default_value = DEFAULT_APP_CONFIG_PATH,
-        help = "Path to the OpenVM config .toml file that specifies the VM extensions",
+        help = "Path to the OpenVM config .toml file that specifies the VM extensions, by default will search for the file at ${manifest_dir}/openvm.toml",
         help_heading = "OpenVM Options"
     )]
-    pub config: PathBuf,
+    pub config: Option<PathBuf>,
 
     #[arg(
         long,
-        default_value = DEFAULT_APP_EXE_PATH,
-        help = "Output path for the transpiled program",
+        help = "Output directory that OpenVM proving artifacts will be copied to",
         help_heading = "OpenVM Options"
     )]
-    pub exe_output: PathBuf,
-
-    #[arg(
-        long,
-        default_value = DEFAULT_COMMITTED_APP_EXE_PATH,
-        help = "Output path for the committed program",
-        help_heading = "OpenVM Options"
-    )]
-    pub committed_exe_output: PathBuf,
+    pub output_dir: Option<PathBuf>,
 
     #[arg(
         long,
@@ -78,6 +65,17 @@ pub struct BuildArgs {
         help_heading = "OpenVM Options"
     )]
     pub init_file_name: String,
+}
+
+impl Default for BuildArgs {
+    fn default() -> Self {
+        Self {
+            no_transpile: false,
+            config: None,
+            output_dir: None,
+            init_file_name: OPENVM_DEFAULT_INIT_FILE_NAME.to_string(),
+        }
+    }
 }
 
 #[derive(Clone, Parser)]
@@ -254,30 +252,43 @@ pub struct BuildCargoArgs {
     pub frozen: bool,
 }
 
-// Returns the paths to the ELF file for each built executable target.
-pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Vec<PathBuf>> {
+impl Default for BuildCargoArgs {
+    fn default() -> Self {
+        Self {
+            package: vec![],
+            workspace: false,
+            exclude: vec![],
+            lib: false,
+            bin: vec![],
+            bins: false,
+            example: vec![],
+            examples: false,
+            all_targets: false,
+            features: vec![],
+            all_features: false,
+            no_default_features: false,
+            profile: "release".to_string(),
+            target_dir: None,
+            verbose: false,
+            quiet: false,
+            color: "always".to_string(),
+            manifest_path: None,
+            ignore_rust_version: false,
+            locked: false,
+            offline: false,
+            frozen: false,
+        }
+    }
+}
+
+// Returns either a) the default transpilation output directory or b) the ELF output
+// directory if no_transpile is set to true.
+pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<PathBuf> {
     println!("[openvm] Building the package...");
 
-    // Find manifest directory using either manifest_path or find_manifest_dir
-    let manifest_dir = if let Some(manifest_path) = &cargo_args.manifest_path {
-        if !manifest_path.ends_with("Cargo.toml") {
-            return Err(eyre::eyre!(
-                "manifest_path must be a path to a Cargo.toml file"
-            ));
-        }
-        manifest_path.parent().unwrap().to_path_buf()
-    } else {
-        find_manifest_dir(PathBuf::from("."))?
-    };
-    let manifest_path = manifest_dir.join("Cargo.toml");
-    println!("[openvm] Manifest directory: {}", manifest_dir.display());
-
-    // Get target path
-    let target_path = if let Some(target_path) = &cargo_args.target_dir {
-        target_path.to_path_buf()
-    } else {
-        get_target_dir(&manifest_path)
-    };
+    // Find manifest_path, manifest_dir, and target_dir
+    let (manifest_path, manifest_dir) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
+    let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
 
     // Set guest options using build arguments; use found manifest directory for consistency
     let mut guest_options = GuestOptions::default()
@@ -285,7 +296,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Vec<
         .with_profile(cargo_args.profile.clone())
         .with_rustc_flags(var("RUSTFLAGS").unwrap_or_default().split_whitespace());
 
-    guest_options.target_dir = Some(target_path);
+    guest_options.target_dir = Some(target_dir.clone());
     guest_options
         .options
         .push(format!("--color={}", cargo_args.color));
@@ -335,8 +346,8 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Vec<
     }
 
     // Build (allowing passed options to decide what gets built)
-    let target_dir = match build_generic(&guest_options) {
-        Ok(target_dir) => target_dir,
+    let elf_target_dir = match build_generic(&guest_options) {
+        Ok(raw_target_dir) => raw_target_dir,
         Err(None) => {
             return Err(eyre::eyre!("Failed to build guest"));
         }
@@ -344,9 +355,23 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Vec<
             return Err(eyre::eyre!("Failed to build guest: code = {}", code));
         }
     };
+    println!("[openvm] Successfully built the packages");
+
+    // If transpilation is skipped, return the raw target directory
+    if build_args.no_transpile {
+        if build_args.output_dir.is_some() {
+            println!("[openvm] WARNING: Output directory set but transpilation skipped");
+        }
+        return Ok(elf_target_dir);
+    }
 
     // Write to init file
-    let app_config = read_config_toml_or_default(&build_args.config)?;
+    let app_config = read_config_toml_or_default(
+        build_args
+            .config
+            .to_owned()
+            .unwrap_or_else(|| manifest_dir.join("openvm.toml")),
+    )?;
     app_config
         .app_vm_config
         .write_to_init_file(&manifest_dir, Some(&build_args.init_file_name))?;
@@ -366,73 +391,72 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Vec<
     };
 
     // Find elf paths of all targets for all built packages
-    let elf_paths: Vec<PathBuf> = packages
+    let elf_targets = packages
         .iter()
-        .flat_map(|pkg| {
-            pkg.targets
-                .iter()
-                .filter(move |target| {
-                    // We only build bin and example targets (note they are mutually exclusive
-                    // types). If no target selection flags are set, then all bin targets are
-                    // built by default.
-                    if target.is_example() {
-                        return all_examples || cargo_args.example.contains(&target.name);
-                    } else if target.is_bin() {
-                        return all_bins
-                            || cargo_args.bin.contains(&target.name)
-                            || (!cargo_args.examples
-                                && !cargo_args.lib
-                                && cargo_args.bin.is_empty()
-                                && cargo_args.example.is_empty());
-                    }
-                    false
-                })
-                .map(|target| {
-                    if target.is_example() {
-                        target_dir.join("examples")
-                    } else {
-                        target_dir.clone()
-                    }
-                    .join(&target.name)
-                })
-                .collect::<Vec<_>>()
+        .flat_map(|pkg| pkg.targets.iter())
+        .filter(|target| {
+            // We only build bin and example targets (note they are mutually exclusive
+            // types). If no target selection flags are set, then all bin targets are
+            // built by default.
+            if target.is_example() {
+                all_examples || cargo_args.example.contains(&target.name)
+            } else if target.is_bin() {
+                all_bins
+                    || cargo_args.bin.contains(&target.name)
+                    || (!cargo_args.examples
+                        && !cargo_args.lib
+                        && cargo_args.bin.is_empty()
+                        && cargo_args.example.is_empty())
+            } else {
+                false
+            }
+        })
+        .collect::<Vec<_>>();
+    let elf_paths = elf_targets
+        .iter()
+        .map(|target| {
+            if target.is_example() {
+                elf_target_dir.join("examples")
+            } else {
+                elf_target_dir.clone()
+            }
+            .join(&target.name)
         })
         .collect::<Vec<_>>();
 
-    // Transpile and commit, storing in target_dir/openvm/${profile} by default
-    // TODO[stephen]: actually implement target_dir change
-    if !build_args.no_transpile {
-        for elf_path in &elf_paths {
-            println!("[openvm] Transpiling the package...");
-            let output_path = &build_args.exe_output;
-            let transpiler = app_config.app_vm_config.transpiler();
+    // Transpile, storing in ${target_dir}/openvm/${profile} by default
+    let target_output_dir = get_target_output_dir(&target_dir, &cargo_args.profile);
 
-            let data = read(elf_path.clone())?;
-            let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-            let exe = Sdk::new().transpile(elf, transpiler)?;
-            let committed_exe = commit_app_exe(app_config.app_fri_params.fri_params, exe.clone());
-            write_exe_to_file(exe, output_path)?;
+    println!("[openvm] Transpiling the package...");
+    for (elf_path, target) in izip!(&elf_paths, &elf_targets) {
+        let transpiler = app_config.app_vm_config.transpiler();
+        let data = read(elf_path.clone())?;
+        let elf = Elf::decode(&data, MEM_SIZE as u32)?;
+        let exe = Sdk::new().transpile(elf, transpiler)?;
 
-            if let Some(parent) = build_args.committed_exe_output.parent() {
-                create_dir_all(parent)?;
-            }
-            let committed_exe = match Arc::try_unwrap(committed_exe) {
-                Ok(exe) => exe,
-                Err(_) => return Err(eyre::eyre!("Failed to unwrap committed_exe Arc")),
-            };
-            write(
-                &build_args.committed_exe_output,
-                bitcode::serialize(&committed_exe)?,
-            )?;
+        let target_name = if target.is_example() {
+            &format!("examples/{}", target.name)
+        } else {
+            &target.name
+        };
+        let file_name = format!("{}.vmexe", target_name);
+        let file_path = target_output_dir.join(&file_name);
 
-            println!(
-                "[openvm] Successfully transpiled to {}",
-                output_path.display()
-            );
+        write_exe_to_file(exe, &file_path)?;
+        if let Some(output_dir) = &build_args.output_dir {
+            create_dir_all(output_dir)?;
+            copy(file_path, output_dir.join(file_name))?;
         }
     }
 
-    // Return elf paths of all targets for all built packages
-    println!("[openvm] Successfully built the packages");
-    Ok(elf_paths)
+    let final_output_dir = if let Some(output_dir) = &build_args.output_dir {
+        output_dir
+    } else {
+        &target_output_dir
+    };
+    println!(
+        "[openvm] Successfully transpiled to {}",
+        final_output_dir.display()
+    );
+    Ok(final_output_dir.clone())
 }
