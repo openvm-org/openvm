@@ -167,6 +167,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
         let mut hasher = Keccak::v256();
         let mut src = src as usize;
 
+        if src % 4 != 0 || dst % 4 != 0 {
+            println!(
+                "Keccak256 input/output is not 4-byte aligned input ptr: {}, output ptr: {}, len: {}.",
+                src as u32, dst as u32, remaining_len as u32
+            );
+        }
         for block_idx in 0..num_blocks {
             if block_idx != 0 {
                 memory.increment_timestamp_by(KECCAK_REGISTER_READS as u32);

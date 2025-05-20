@@ -131,6 +131,13 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
             assert!(src < (1 << self.air.ptr_max_bits));
             assert!(len < (1 << self.air.ptr_max_bits));
         }
+        
+        if src % 4 != 0 || dst % 4 != 0 {
+            println!(
+                "Keccak256 input/output is not 4-byte aligned input ptr: {}, output ptr: {}, len: {}.",
+                src as u32, dst as u32, len as u32
+            );
+        }
 
         // need to pad with one 1 bit, 64 bits for the message length and then pad until the length
         // is divisible by [SHA256_BLOCK_BITS]
