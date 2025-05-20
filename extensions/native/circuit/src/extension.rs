@@ -1,4 +1,7 @@
+use core::BranchEqualStep;
+
 use alu_native_adapter::{AluNativeAdapterAir, AluNativeAdapterStep};
+use branch_native_adapter::{BranchNativeAdapterAir, BranchNativeAdapterStep};
 use convert_adapter::{ConvertAdapterAir, ConvertAdapterStep};
 use derive_more::derive::From;
 use jal::{JalRangeCheckAir, JalRangeCheckChip, JalRangeCheckStep};
@@ -20,8 +23,8 @@ use openvm_native_compiler::{
 };
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::{
-    Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
-    Rv32MExecutor, Rv32MPeriphery,
+    BranchEqualCoreAir, Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor,
+    Rv32IoPeriphery, Rv32M, Rv32MExecutor, Rv32MPeriphery,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
@@ -62,8 +65,8 @@ pub struct Native;
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutorE1, From, AnyEnum)]
 pub enum NativeExecutor<F: PrimeField32> {
-    // LoadStore(NativeLoadStoreChip<F, 1>),
-    // BlockLoadStore(NativeLoadStoreChip<F, 4>),
+    LoadStore(NativeLoadStoreChip<F, 1>),
+    BlockLoadStore(NativeLoadStoreChip<F, 4>),
     BranchEqual(NativeBranchEqChip<F>),
     Jal(JalRangeCheckChip<F>),
     FieldArithmetic(FieldArithmeticChip<F>),
@@ -94,50 +97,62 @@ impl<F: PrimeField32> VmExtension<F> for Native {
 
         let range_checker = &builder.system_base().range_checker_chip;
 
-        // let mut load_store_chip = NativeLoadStoreChip::<F, 1>::new(
-        //     NativeLoadStoreAdapterChip::new(
-        //         execution_bus,
-        //         program_bus,
-        //         memory_bridge,
-        //         NativeLoadStoreOpcode::CLASS_OFFSET,
-        //     ),
-        //     NativeLoadStoreCoreChip::new(NativeLoadStoreOpcode::CLASS_OFFSET),
-        //     MAX_INS_CAPACITY,
-        //     builder.system_base().memory_controller.helper(),
-        // );
-        // load_store_chip.core.set_streams(builder.streams().clone());
+        let mut load_store_chip = NativeLoadStoreChip::<F, 1>::new(
+            NativeLoadStoreAdapterChip::new(
+                execution_bus,
+                program_bus,
+                memory_bridge,
+                NativeLoadStoreOpcode::CLASS_OFFSET,
+            ),
+            NativeLoadStoreCoreChip::new(NativeLoadStoreOpcode::CLASS_OFFSET),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
+        );
+        load_store_chip.core.set_streams(builder.streams().clone());
 
-        // inventory.add_executor(
-        //     load_store_chip,
-        //     NativeLoadStoreOpcode::iter().map(|x| x.global_opcode()),
-        // )?;
+        inventory.add_executor(
+            load_store_chip,
+            NativeLoadStoreOpcode::iter().map(|x| x.global_opcode()),
+        )?;
 
-        // let mut block_load_store_chip = NativeLoadStoreChip::<F, BLOCK_LOAD_STORE_SIZE>::new(
-        //     NativeLoadStoreAdapterChip::new(
-        //         execution_bus,
-        //         program_bus,
-        //         memory_bridge,
-        //         NativeLoadStore4Opcode::CLASS_OFFSET,
-        //     ),
-        //     NativeLoadStoreCoreChip::new(NativeLoadStore4Opcode::CLASS_OFFSET),
-        // );
-        // block_load_store_chip
-        //     .core
-        //     .set_streams(builder.streams().clone());
+        let mut block_load_store_chip = NativeLoadStoreChip::<F, BLOCK_LOAD_STORE_SIZE>::new(
+            NativeLoadStoreAdapterChip::new(
+                execution_bus,
+                program_bus,
+                memory_bridge,
+                NativeLoadStore4Opcode::CLASS_OFFSET,
+            ),
+            NativeLoadStoreCoreChip::new(NativeLoadStore4Opcode::CLASS_OFFSET),
+        );
+        block_load_store_chip
+            .core
+            .set_streams(builder.streams().clone());
 
-        // inventory.add_executor(
-        //     block_load_store_chip,
-        //     NativeLoadStore4Opcode::iter().map(|x| x.global_opcode()),
-        // )?;
+        inventory.add_executor(
+            block_load_store_chip,
+            NativeLoadStore4Opcode::iter().map(|x| x.global_opcode()),
+        )?;
 
-        // let branch_equal_chip = NativeBranchEqChip::new(
-        //     BranchNativeAdapterChip::<_>::new(execution_bus, program_bus, memory_bridge),
-        //     BranchEqualCoreChip::new(NativeBranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
-        // );
-        // inventory.add_executor(
-        //     branch_equal_chip,
-        //     NativeBranchEqualOpcode::iter().map(|x| x.global_opcode()),
-        // )?;
+        let branch_equal_chip = NativeBranchEqChip::new(
+            NativeBranchEqAir::new(
+                BranchNativeAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
+                ),
+                BranchEqualCoreAir::new(NativeBranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+            ),
+            BranchEqualStep::new(
+                BranchNativeAdapterStep::new(),
+                NativeBranchEqualOpcode::CLASS_OFFSET,
+                DEFAULT_PC_STEP,
+            ),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
+        );
+        inventory.add_executor(
+            branch_equal_chip,
+            NativeBranchEqualOpcode::iter().map(|x| x.global_opcode()),
+        )?;
 
         let jal_chip = JalRangeCheckChip::<F>::new(
             JalRangeCheckAir::new(

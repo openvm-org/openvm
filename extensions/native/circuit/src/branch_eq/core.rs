@@ -13,13 +13,13 @@ use openvm_rv32im_circuit::BranchEqualCoreCols;
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-pub struct BranchEqualStep<A> {
+pub struct NativeBranchEqualStep<A> {
     adapter: A,
     pub offset: usize,
     pub pc_step: u32,
 }
 
-impl<A> BranchEqualStep<A> {
+impl<A> NativeBranchEqualStep<A> {
     pub fn new(adapter: A, offset: usize, pc_step: u32) -> Self {
         Self {
             adapter,
@@ -29,7 +29,7 @@ impl<A> BranchEqualStep<A> {
     }
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for BranchEqualStep<A>
+impl<F, CTX, A> TraceStep<F, CTX> for NativeBranchEqualStep<A>
 where
     F: PrimeField32,
     A: 'static
@@ -101,7 +101,7 @@ where
     }
 }
 
-impl<F, A> StepExecutorE1<F> for BranchEqualStep<A>
+impl<F, A> StepExecutorE1<F> for NativeBranchEqualStep<A>
 where
     F: PrimeField32,
     A: 'static + for<'a> AdapterExecutorE1<F, ReadData: Into<[F; 2]>, WriteData = ()>,
