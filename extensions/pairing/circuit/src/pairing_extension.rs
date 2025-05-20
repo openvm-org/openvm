@@ -94,7 +94,7 @@ pub(crate) mod phantom {
     use eyre::bail;
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
-        system::memory::MemoryController,
+        system::memory::{online::GuestMemory, MemoryController},
     };
     use openvm_ecc_guest::{algebra::field::FieldExtension, halo2curves::ff, AffinePoint};
     use openvm_instructions::{
@@ -116,16 +116,17 @@ pub(crate) mod phantom {
     impl<F: PrimeField32> PhantomSubExecutor<F> for PairingHintSubEx {
         fn phantom_execute(
             &mut self,
-            memory: &MemoryController<F>,
+            memory: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
-            a: F,
-            b: F,
+            a: u32,
+            b: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
-            let rs1 = unsafe_read_rv32_register(memory, a);
-            let rs2 = unsafe_read_rv32_register(memory, b);
-            hint_pairing(memory, &mut streams.hint_stream, rs1, rs2, c_upper)
+            todo!()
+            // let rs1 = unsafe_read_rv32_register(memory, a);
+            // let rs2 = unsafe_read_rv32_register(memory, b);
+            // hint_pairing(memory, &mut streams.hint_stream, rs1, rs2, c_upper)
         }
     }
 
