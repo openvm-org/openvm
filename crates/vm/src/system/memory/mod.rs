@@ -2,6 +2,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 
 pub mod adapter;
 mod controller;
+pub mod memmap;
 pub mod merkle;
 pub mod offline_checker;
 pub mod online;
@@ -14,6 +15,7 @@ pub mod tree;
 mod volatile;
 
 pub use controller::*;
+pub use memmap;
 pub use online::INITIAL_TIMESTAMP;
 pub use paged_vec::*;
 
