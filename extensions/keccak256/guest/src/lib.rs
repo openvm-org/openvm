@@ -44,7 +44,6 @@ pub fn keccak256(input: &[u8]) -> [u8; 32] {
 #[no_mangle]
 extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
     let input = if bytes as usize % 4 != 0 {
-        openvm::io::println("Copying input to aligned memory");
         let mut aligned_buff: Vec<u8> = alloc_zkvm::vec::Vec::with_capacity(len);
         // let mut aligned_buff = [0u8; 1000];
         unsafe {
@@ -56,7 +55,6 @@ extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
     };
 
     if output as usize % 4 != 0 {
-        openvm::io::println("Copying output to aligned memory");
         let mut aligned_out = MaybeUninit::<[u8; 32]>::uninit();
 
         openvm_platform::custom_insn_r!(
