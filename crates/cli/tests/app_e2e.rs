@@ -177,7 +177,16 @@ fn test_cli_init_build() -> Result<()> {
     let manifest_path = temp_path.join("Cargo.toml");
     run_cmd("cargo", &["install", "--path", ".", "--force"])?;
 
-    run_cmd("cargo", &["openvm", "init", temp_path.to_str().unwrap()])?;
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "init",
+            temp_path.to_str().unwrap(),
+            "--name",
+            "--cli-package",
+        ],
+    )?;
 
     run_cmd(
         "cargo",
