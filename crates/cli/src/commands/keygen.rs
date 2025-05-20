@@ -12,8 +12,10 @@ use openvm_sdk::{
 
 use crate::{
     default::{DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME},
-    global::{get_app_pk_path, get_app_vk_path, get_manifest_path_and_dir, get_target_dir},
-    util::read_config_toml_or_default,
+    util::{
+        get_app_pk_path, get_app_vk_path, get_manifest_path_and_dir, get_target_dir,
+        read_config_toml_or_default,
+    },
 };
 
 #[derive(Parser)]

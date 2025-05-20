@@ -7,9 +7,8 @@ use openvm_sdk::{fs::read_exe_from_file, Sdk};
 
 use super::{build, BuildArgs, BuildCargoArgs};
 use crate::{
-    global::{get_manifest_path_and_dir, get_single_target_name},
     input::{read_to_stdin, Input},
-    util::read_config_toml_or_default,
+    util::{get_manifest_path_and_dir, get_single_target_name, read_config_toml_or_default},
 };
 
 #[derive(Parser)]

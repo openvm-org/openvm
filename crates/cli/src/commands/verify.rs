@@ -10,7 +10,7 @@ use openvm_sdk::{
 use super::KeygenCargoArgs;
 use crate::{
     default::*,
-    global::{get_app_vk_path, get_manifest_path_and_dir, get_target_dir},
+    util::{get_app_vk_path, get_manifest_path_and_dir, get_target_dir},
 };
 
 #[derive(Parser)]
@@ -65,11 +65,11 @@ impl VerifyCmd {
                 proof,
                 cargo_args,
             } => {
-                let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
-                let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
                 let app_vk_path = if let Some(app_vk) = app_vk {
                     app_vk.to_path_buf()
                 } else {
+                    let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
+                    let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
                     get_app_vk_path(&target_dir)
                 };
 

@@ -15,17 +15,14 @@ use openvm_sdk::{
     NonRootCommittedExe, Sdk,
 };
 
-use super::{keygen, RunArgs, RunCargoArgs};
+use super::{RunArgs, RunCargoArgs};
 #[cfg(feature = "evm-prove")]
 use crate::util::read_default_agg_pk;
 use crate::{
     commands::build,
     default::*,
-    global::{
-        get_app_pk_path, get_app_vk_path, get_manifest_path_and_dir, get_single_target_name,
-        get_target_dir,
-    },
     input::read_to_stdin,
+    util::{get_app_pk_path, get_manifest_path_and_dir, get_single_target_name, get_target_dir},
 };
 
 #[derive(Parser)]
@@ -50,7 +47,7 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            help = "Path to app proving key, if specified keygen will be skipped",
+            help = "Path to app proving key, by default will be ${target_dir}/openvm/app.pk",
             help_heading = "OpenVM Options"
         )]
         app_pk: Option<PathBuf>,
@@ -74,7 +71,7 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            help = "Path to app proving key, if specified keygen will be skipped",
+            help = "Path to app proving key, by default will be ${target_dir}/openvm/app.pk",
             help_heading = "OpenVM Options"
         )]
         app_pk: Option<PathBuf>,
@@ -102,7 +99,7 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            help = "Path to app proving key, if specified keygen will be skipped",
+            help = "Path to app proving key, by default will be ${target_dir}/openvm/app.pk",
             help_heading = "OpenVM Options"
         )]
         app_pk: Option<PathBuf>,
@@ -128,7 +125,7 @@ impl ProveCmd {
                 cargo_args,
             } => {
                 let sdk = Sdk::new();
-                let app_pk = Self::load_or_generate_app_pk(app_pk, run_args, cargo_args)?;
+                let app_pk = Self::load_app_pk(app_pk, cargo_args)?;
                 let committed_exe =
                     Self::load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
 
@@ -144,7 +141,7 @@ impl ProveCmd {
                 agg_tree_config,
             } => {
                 let sdk = Sdk::new().with_agg_tree_config(*agg_tree_config);
-                let app_pk = Self::load_or_generate_app_pk(app_pk, run_args, cargo_args)?;
+                let app_pk = Self::load_app_pk(app_pk, cargo_args)?;
                 let committed_exe =
                     Self::load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
 
@@ -179,7 +176,7 @@ impl ProveCmd {
                 use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 
                 let sdk = Sdk::new().with_agg_tree_config(*agg_tree_config);
-                let app_pk = Self::load_or_generate_app_pk(app_pk, run_args, cargo_args)?;
+                let app_pk = Self::load_app_pk(app_pk, cargo_args)?;
                 let committed_exe =
                     Self::load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
 
@@ -210,9 +207,8 @@ impl ProveCmd {
         Ok(())
     }
 
-    fn load_or_generate_app_pk(
+    fn load_app_pk(
         app_pk: &Option<PathBuf>,
-        run_args: &RunArgs,
         cargo_args: &RunCargoArgs,
     ) -> Result<Arc<AppProvingKey<SdkVmConfig>>> {
         let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
@@ -221,18 +217,7 @@ impl ProveCmd {
         let app_pk_path = if let Some(app_pk) = app_pk {
             app_pk.to_path_buf()
         } else {
-            let app_pk_path = get_app_pk_path(&target_dir);
-            let app_vk_path = get_app_vk_path(&target_dir);
-            keygen(
-                run_args
-                    .config
-                    .to_owned()
-                    .unwrap_or_else(|| manifest_path.join("openvm.toml")),
-                &app_pk_path,
-                &app_vk_path,
-                run_args.output_dir.as_ref(),
-            )?;
-            app_pk_path
+            get_app_pk_path(&target_dir)
         };
 
         Ok(Arc::new(read_app_pk_from_file(app_pk_path)?))

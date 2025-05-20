@@ -139,6 +139,15 @@ fn test_cli_app_e2e_simplified() -> Result<()> {
         "cargo",
         &[
             "openvm",
+            "keygen",
+            "--manifest-path",
+            "tests/programs/multi/Cargo.toml",
+        ],
+    )?;
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
             "prove",
             "app",
             "--manifest-path",

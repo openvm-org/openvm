@@ -36,22 +36,19 @@ If you are providing input for a struct of type `T` that will be deserialized by
 
 ## Generating a Proof
 
-To generate a proof, you can run: first need to generate a proving and verifying key:
+To generate a proof, you first need to generate a proving and verifying key:
 
+```bash
+cargo openvm keygen
+```
+
+If you are using custom VM extensions, this will depend on the `openvm.toml` file which encodes the VM extension configuration; see the [custom extensions](../custom-extensions/overview.md) docs for more information about `openvm.toml`. After generating the keys, you can generate a proof by running:
 
 ```bash
 cargo openvm prove app --input <path_to_input | hex_string>
 ```
 
 Again, if your program doesn't require inputs, you can omit the `--input` flag.
-
-This will automatically generate a verifying and proving key. If you are using custom VM extensions, these will depend on the `openvm.toml` file which encodes the VM extension configuration; see the [custom extensions](../custom-extensions/overview.md) docs for more information about `openvm.toml`.
-
-Alternatively, if you'd like to manually generate proving and verifying keys you may use:
-
-```bash
-cargo openvm keygen
-```
 
 For more information on the `keygen` and `prove` commands, see the [prove](./prove.md) doc.
 

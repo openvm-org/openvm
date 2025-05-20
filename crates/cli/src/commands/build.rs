@@ -14,9 +14,8 @@ use openvm_circuit::arch::{InitFileGenerator, OPENVM_DEFAULT_INIT_FILE_NAME};
 use openvm_sdk::{fs::write_exe_to_file, Sdk};
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 
-use crate::{
-    global::{get_manifest_path_and_dir, get_target_dir, get_target_output_dir},
-    util::read_config_toml_or_default,
+use crate::util::{
+    get_manifest_path_and_dir, get_target_dir, get_target_output_dir, read_config_toml_or_default,
 };
 
 #[derive(Parser)]
