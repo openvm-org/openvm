@@ -5,7 +5,7 @@ mod castf;
 mod field_arithmetic;
 mod field_extension;
 // mod fri;
-// mod jal;
+mod jal;
 // mod loadstore;
 // mod poseidon2;
 

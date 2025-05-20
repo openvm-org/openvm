@@ -1,6 +1,7 @@
 use alu_native_adapter::{AluNativeAdapterAir, AluNativeAdapterStep};
 use convert_adapter::{ConvertAdapterAir, ConvertAdapterStep};
 use derive_more::derive::From;
+use jal::{JalRangeCheckAir, JalRangeCheckChip, JalRangeCheckStep};
 use native_vectorized_adapter::{NativeVectorizedAdapterAir, NativeVectorizedAdapterStep};
 use openvm_circuit::{
     arch::{
@@ -64,7 +65,7 @@ pub enum NativeExecutor<F: PrimeField32> {
     // LoadStore(NativeLoadStoreChip<F, 1>),
     // BlockLoadStore(NativeLoadStoreChip<F, 4>),
     BranchEqual(NativeBranchEqChip<F>),
-    // Jal(JalRangeCheckChip<F>),
+    Jal(JalRangeCheckChip<F>),
     FieldArithmetic(FieldArithmeticChip<F>),
     FieldExtension(FieldExtensionChip<F>),
     // FriReducedOpening(FriReducedOpeningChip<F>),
@@ -138,17 +139,23 @@ impl<F: PrimeField32> VmExtension<F> for Native {
         //     NativeBranchEqualOpcode::iter().map(|x| x.global_opcode()),
         // )?;
 
-        // let jal_chip = JalRangeCheckChip::new(
-        //     ExecutionBridge::new(execution_bus, program_bus),
-        //     builder.system_base().range_checker_chip.clone(),
-        // );
-        // inventory.add_executor(
-        //     jal_chip,
-        //     [
-        //         NativeJalOpcode::JAL.global_opcode(),
-        //         NativeRangeCheckOpcode::RANGE_CHECK.global_opcode(),
-        //     ],
-        // )?;
+        let jal_chip = JalRangeCheckChip::<F>::new(
+            JalRangeCheckAir::new(
+                ExecutionBridge::new(execution_bus, program_bus),
+                memory_bridge,
+                range_checker.bus(),
+            ),
+            JalRangeCheckStep::new(range_checker.clone()),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
+        );
+        inventory.add_executor(
+            jal_chip,
+            [
+                NativeJalOpcode::JAL.global_opcode(),
+                NativeRangeCheckOpcode::RANGE_CHECK.global_opcode(),
+            ],
+        )?;
 
         let field_arithmetic_chip = FieldArithmeticChip::<F>::new(
             VmAirWrapper::new(
