@@ -21,8 +21,8 @@ mod tests;
 pub use air::KeccakVmAir;
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, ExecutionBridge, NewVmChipWrapper, Result,
-        StepExecutorE1, VmStateMut,
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        ExecutionBridge, NewVmChipWrapper, Result, StepExecutorE1, VmStateMut,
     },
     system::memory::online::GuestMemory,
 };
@@ -97,7 +97,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
         &mut self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<usize>
+    ) -> Result<()>
     where
         Ctx: E1E2ExecutionCtx,
     {
@@ -122,7 +122,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
 
         let mut hasher = Keccak::v256();
 
-        // TODO(ayush): this bypasses state and doesn't trigger e2 on_memory_operation callback
+        // TODO(ayush): this bypasses state and doesn't trigger on_memory_operation callback for e2
         let message: Vec<u8> = state
             .memory
             .memory
@@ -133,7 +133,32 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
         hasher.finalize(&mut output);
         memory_write_from_state(state, e, dst, &output);
 
+        Ok(())
+    }
+
+    fn execute_metered(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        let &Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
+        } = instruction;
+
+        let len =
+            new_read_rv32_register_from_state(state, d.as_canonical_u32(), c.as_canonical_u32());
         let num_blocks = num_keccak_f(len as usize);
-        Ok(num_blocks * NUM_ROUNDS)
+
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += (num_blocks * NUM_ROUNDS) as u32;
+
+        Ok(())
     }
 }

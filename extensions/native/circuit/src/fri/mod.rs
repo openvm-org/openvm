@@ -8,8 +8,9 @@ use std::{
 use itertools::zip_eq;
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, ExecutionBridge, ExecutionState, NewVmChipWrapper,
-        Result, StepExecutorE1, Streams, TraceStep, VmStateMut,
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        ExecutionBridge, ExecutionState, NewVmChipWrapper, Result, StepExecutorE1, Streams,
+        TraceStep, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols, AUX_LEN},
@@ -792,7 +793,7 @@ where
         &mut self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<usize>
+    ) -> Result<()>
     where
         Ctx: E1E2ExecutionCtx,
     {
@@ -868,7 +869,33 @@ where
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
-        Ok(length + 2)
+        Ok(())
+    }
+
+    fn execute_metered(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        let &Instruction {
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
+            ..
+        } = instruction;
+
+        let length_ptr = c.as_canonical_u32();
+        let [length]: [F; 1] = memory_read_native(state.memory, length_ptr);
+
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += length.as_canonical_u32() + 2;
+
+        Ok(())
     }
 }
 

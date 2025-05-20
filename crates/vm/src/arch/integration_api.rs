@@ -413,7 +413,7 @@ pub trait StepExecutorE1<F> {
         &mut self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<usize>
+    ) -> Result<()>
     where
         Ctx: E1E2ExecutionCtx;
 
@@ -422,12 +422,7 @@ pub trait StepExecutorE1<F> {
         state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
-    ) -> Result<()> {
-        let num_rows = self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += num_rows;
-
-        Ok(())
-    }
+    ) -> Result<()>;
 }
 
 impl<F, A, S> InsExecutorE1<F> for NewVmChipWrapper<F, A, S>
@@ -439,11 +434,23 @@ where
         &mut self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<usize>
+    ) -> Result<()>
     where
         Ctx: E1E2ExecutionCtx,
     {
         self.step.execute_e1(state, instruction)
+    }
+
+    fn execute_metered(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()>
+    where
+        F: PrimeField32,
+    {
+        self.step.execute_metered(state, instruction, chip_index)
     }
 }
 

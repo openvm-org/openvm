@@ -120,7 +120,7 @@ pub trait InsExecutorE1<F> {
         &mut self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<usize>
+    ) -> Result<()>
     where
         F: PrimeField32,
         Ctx: E1E2ExecutionCtx;
@@ -132,13 +132,7 @@ pub trait InsExecutorE1<F> {
         chip_index: usize,
     ) -> Result<()>
     where
-        F: PrimeField32,
-    {
-        let num_rows = self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += num_rows;
-
-        Ok(())
-    }
+        F: PrimeField32;
 }
 
 impl<F, C> InsExecutorE1<F> for RefCell<C>
@@ -149,7 +143,7 @@ where
         &mut self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<usize>
+    ) -> Result<()>
     where
         F: PrimeField32,
         Ctx: E1E2ExecutionCtx,

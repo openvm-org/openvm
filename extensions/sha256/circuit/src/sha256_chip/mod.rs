@@ -3,7 +3,8 @@
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, NewVmChipWrapper, Result, StepExecutorE1, VmStateMut,
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        NewVmChipWrapper, Result, StepExecutorE1, VmStateMut,
     },
     system::memory::online::GuestMemory,
 };
@@ -77,7 +78,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         &mut self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<usize>
+    ) -> Result<()>
     where
         Ctx: E1E2ExecutionCtx,
     {
@@ -103,7 +104,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         debug_assert!(src + len <= (1 << self.pointer_max_bits));
         let mut hasher = Sha256::new();
 
-        // TODO(ayush): this bypasses state and doesn't trigger e2 on_memory_operation callback
+        // TODO(ayush): this bypasses state and doesn't trigger on_memory_operation callback for e2
         let message: Vec<u8> = state
             .memory
             .memory
@@ -113,7 +114,32 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         memory_write_from_state(state, e, dst, hasher.finalize().as_ref());
 
         let num_blocks = ((len << 3) as usize + 1 + 64).div_ceil(SHA256_BLOCK_BITS);
-        Ok(num_blocks * SHA256_ROWS_PER_BLOCK)
+        Ok(())
+    }
+
+    fn execute_metered(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        let &Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
+        } = instruction;
+
+        let len = new_read_rv32_register(state.memory, d.as_canonical_u32(), c.as_canonical_u32());
+        let num_blocks = ((len << 3) as usize + 1 + 64).div_ceil(SHA256_BLOCK_BITS);
+
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += (num_blocks * SHA256_ROWS_PER_BLOCK) as u32;
+
+        Ok(())
     }
 }
 

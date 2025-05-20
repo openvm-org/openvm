@@ -107,7 +107,7 @@ pub fn memory_read_from_state<Ctx, const N: usize>(
 where
     Ctx: E1E2ExecutionCtx,
 {
-    state.ctx.on_memory_operation(address_space, ptr, N);
+    state.ctx.on_memory_operation(address_space, ptr, N as u32);
 
     memory_read(state.memory, address_space, ptr)
 }
@@ -121,7 +121,7 @@ pub fn memory_write_from_state<Ctx, const N: usize>(
 ) where
     Ctx: E1E2ExecutionCtx,
 {
-    state.ctx.on_memory_operation(address_space, ptr, N);
+    state.ctx.on_memory_operation(address_space, ptr, N as u32);
 
     memory_write(state.memory, address_space, ptr, data)
 }

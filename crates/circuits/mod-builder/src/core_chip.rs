@@ -3,9 +3,10 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
-        DynAdapterInterface, DynArray, MinimalInstruction, Result, StepExecutorE1, TraceStep,
-        VmAdapterInterface, VmCoreAir, VmStateMut,
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, DynAdapterInterface, DynArray,
+        MinimalInstruction, Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -310,7 +311,7 @@ where
         &mut self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<usize>
+    ) -> Result<()>
     where
         Ctx: E1E2ExecutionCtx,
     {
@@ -319,7 +320,19 @@ where
         let writes = run_field_expression(self, &data, instruction).0;
         self.adapter.write(state, instruction, &writes.into());
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        Ok(1)
+        Ok(())
+    }
+
+    fn execute_metered(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += 1;
+
+        Ok(())
     }
 }
 

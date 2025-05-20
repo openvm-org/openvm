@@ -62,7 +62,7 @@ where
 {
     state
         .ctx
-        .on_memory_operation(AS::Native as u32, ptr, N * std::mem::size_of::<F>());
+        .on_memory_operation(AS::Native as u32, ptr, N as u32);
 
     memory_read_native(state.memory, ptr)
 }
@@ -80,12 +80,7 @@ where
     debug_assert!(addr_space == AS::Immediate as u32 || addr_space == AS::Native as u32);
 
     if addr_space == AS::Native as u32 {
-        state.ctx.on_memory_operation(
-            addr_space,
-            ptr_or_imm.as_canonical_u32(),
-            std::mem::size_of::<F>(),
-        );
-        let [result]: [F; 1] = memory_read_native(state.memory, ptr_or_imm.as_canonical_u32());
+        let [result]: [F; 1] = memory_read_native_from_state(state, ptr_or_imm.as_canonical_u32());
         result
     } else {
         ptr_or_imm
@@ -103,7 +98,7 @@ pub fn memory_write_native_from_state<Ctx, F, const N: usize>(
 {
     state
         .ctx
-        .on_memory_operation(AS::Native as u32, ptr, N * std::mem::size_of::<F>());
+        .on_memory_operation(AS::Native as u32, ptr, N as u32);
 
     memory_write_native(state.memory, ptr, data)
 }

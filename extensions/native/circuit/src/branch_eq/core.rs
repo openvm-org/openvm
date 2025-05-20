@@ -2,8 +2,8 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, AdapterExecutorE1, AdapterTraceStep, Result,
-        StepExecutorE1, TraceStep, VmStateMut,
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        AdapterExecutorE1, AdapterTraceStep, Result, StepExecutorE1, TraceStep, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -113,7 +113,7 @@ where
         &mut self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<usize>
+    ) -> Result<()>
     where
         Ctx: E1E2ExecutionCtx,
     {
@@ -135,7 +135,19 @@ where
             *state.pc = state.pc.wrapping_add(self.pc_step);
         }
 
-        Ok(1)
+        Ok(())
+    }
+
+    fn execute_metered(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += 1;
+
+        Ok(())
     }
 }
 
