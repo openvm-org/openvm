@@ -19,7 +19,7 @@ mod tests {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    // use openvm_sdk::config::SdkVmConfig;
+    use openvm_sdk::config::SdkVmConfig;
     use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::{openvm_stark_backend, p3_baby_bear::BabyBear};
     use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
@@ -245,35 +245,35 @@ mod tests {
         test_decompress_invalid_specific_test("test_curvepoint1mod4_impossible")
     }
 
-    // #[test]
-    // fn test_ecdsa() -> Result<()> {
-    //     let elf =
-    //         build_example_program_at_path_with_features(get_programs_dir!(), "ecdsa", ["k256"])?;
-    //     let config = SdkVmConfig::builder()
-    //         .system(SystemConfig::default().with_continuations().into())
-    //         .rv32i(Default::default())
-    //         .rv32m(Default::default())
-    //         .io(Default::default())
-    //         .modular(ModularExtension::new(vec![
-    //             SECP256K1_CONFIG.modulus.clone(),
-    //             SECP256K1_CONFIG.scalar.clone(),
-    //         ]))
-    //         .keccak(Default::default())
-    //         .ecc(WeierstrassExtension::new(vec![SECP256K1_CONFIG.clone()]))
-    //         .build();
-    //     let openvm_exe = VmExe::from_elf(
-    //         elf,
-    //         Transpiler::<F>::default()
-    //             .with_extension(Rv32ITranspilerExtension)
-    //             .with_extension(Rv32MTranspilerExtension)
-    //             .with_extension(Rv32IoTranspilerExtension)
-    //             .with_extension(Keccak256TranspilerExtension)
-    //             .with_extension(EccTranspilerExtension)
-    //             .with_extension(ModularTranspilerExtension),
-    //     )?;
-    //     air_test(config, openvm_exe);
-    //     Ok(())
-    // }
+    #[test]
+    fn test_ecdsa() -> Result<()> {
+        let elf =
+            build_example_program_at_path_with_features(get_programs_dir!(), "ecdsa", ["k256"])?;
+        let config = SdkVmConfig::builder()
+            .system(SystemConfig::default().with_continuations().into())
+            .rv32i(Default::default())
+            .rv32m(Default::default())
+            .io(Default::default())
+            .modular(ModularExtension::new(vec![
+                SECP256K1_CONFIG.modulus.clone(),
+                SECP256K1_CONFIG.scalar.clone(),
+            ]))
+            .keccak(Default::default())
+            .ecc(WeierstrassExtension::new(vec![SECP256K1_CONFIG.clone()]))
+            .build();
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(Keccak256TranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?;
+        air_test(config, openvm_exe);
+        Ok(())
+    }
 
     #[test]
     #[should_panic]
