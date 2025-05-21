@@ -101,7 +101,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             vec![],
             range_checker,
             "EcDouble",
-            false,
+            true,
         );
         Self(WeierstrassChip::new(air, step, height, mem_helper))
     }

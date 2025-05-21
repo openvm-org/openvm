@@ -4994,7 +4994,6 @@ dependencies = [
  "openvm-ecc-transpiler",
  "openvm-keccak256-transpiler",
  "openvm-rv32im-transpiler",
- "openvm-sdk",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
