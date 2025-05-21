@@ -16,14 +16,14 @@ use openvm_sdk::{
 };
 
 use super::{RunArgs, RunCargoArgs};
-#[cfg(feature = "evm-prove")]
-use crate::util::read_default_agg_pk;
 use crate::{
     commands::build,
-    default::*,
+    default::default_agg_stark_pk_path,
     input::read_to_stdin,
     util::{get_app_pk_path, get_manifest_path_and_dir, get_single_target_name, get_target_dir},
 };
+#[cfg(feature = "evm-prove")]
+use crate::{default::default_params_dir, util::read_default_agg_pk};
 
 #[derive(Parser)]
 #[command(name = "prove", about = "Generate a program proof")]

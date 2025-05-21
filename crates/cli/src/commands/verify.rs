@@ -8,10 +8,9 @@ use openvm_sdk::{
 };
 
 use super::KeygenCargoArgs;
-use crate::{
-    default::*,
-    util::{get_app_vk_path, get_files_with_ext, get_manifest_path_and_dir, get_target_dir},
-};
+#[cfg(feature = "evm-verify")]
+use crate::default::default_evm_halo2_verifier_path;
+use crate::util::{get_app_vk_path, get_files_with_ext, get_manifest_path_and_dir, get_target_dir};
 
 #[derive(Parser)]
 #[command(name = "verify", about = "Verify a proof")]
@@ -78,7 +77,7 @@ impl VerifyCmd {
                     let files = get_files_with_ext(Path::new("."), "app.proof")?;
                     if files.len() > 1 {
                         return Err(eyre::eyre!("multiple .app.proof files found, please specify the path using option --proof"));
-                    } else if files.len() == 0 {
+                    } else if files.is_empty() {
                         return Err(eyre::eyre!("no .app.proof file found, please specify the path using option --proof"));
                     }
                     files[0].clone()
@@ -107,7 +106,7 @@ impl VerifyCmd {
                     let files = get_files_with_ext(Path::new("."), "evm.proof")?;
                     if files.len() > 1 {
                         return Err(eyre::eyre!("multiple .evm.proof files found, please specify the path using option --proof"));
-                    } else if files.len() == 0 {
+                    } else if files.is_empty() {
                         return Err(eyre::eyre!("no .evm.proof file found, please specify the path using option --proof"));
                     }
                     files[0].clone()
