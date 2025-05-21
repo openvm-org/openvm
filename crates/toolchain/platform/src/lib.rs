@@ -12,6 +12,9 @@ mod getrandom;
 pub mod heap;
 #[cfg(all(feature = "export-libm", target_os = "zkvm"))]
 mod libm_extern;
+#[cfg(target_os = "zkvm")]
+pub mod alloc;
+
 pub mod memory;
 pub mod print;
 #[cfg(feature = "rust-runtime")]
