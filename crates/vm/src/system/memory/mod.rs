@@ -15,7 +15,6 @@ pub mod tree;
 mod volatile;
 
 pub use controller::*;
-pub use memmap;
 pub use online::INITIAL_TIMESTAMP;
 pub use paged_vec::*;
 
