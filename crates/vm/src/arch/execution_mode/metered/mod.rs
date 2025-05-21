@@ -232,6 +232,11 @@ where
     ) {
         state.ctx.finalize_access_adapter_heights();
 
+        tracing::info!(
+            "Segment {:2} | clk {:9} | terminated",
+            self.segments.len(),
+            state.clk,
+        );
         // Add the last segment
         let clk_start = self
             .segments

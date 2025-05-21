@@ -38,17 +38,17 @@ use serde::{Deserialize, Serialize};
 // const DEFAULT_APP_CONFIG_PATH: &str = "./openvm.toml";
 
 static AVAILABLE_PROGRAMS: &[&str] = &[
-    // "fibonacci_recursive",
-    // "fibonacci_iterative",
+    "fibonacci_recursive",
+    "fibonacci_iterative",
     "quicksort",
-    // "bubblesort",
-    // "factorial_iterative_u256",
-    // "revm_snailtracer",
-    // "keccak256",
-    // "keccak256_iter",
-    // "sha256",
-    // "sha256_iter",
-    // "revm_transfer",
+    "bubblesort",
+    "factorial_iterative_u256",
+    "revm_snailtracer",
+    "keccak256",
+    "keccak256_iter",
+    "sha256",
+    "sha256_iter",
+    "revm_transfer",
     // "pairing",
 ];
 
