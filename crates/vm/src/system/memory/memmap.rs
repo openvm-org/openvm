@@ -1,4 +1,4 @@
-use std::{fmt::Debug, marker::PhantomData};
+use std::fmt::Debug;
 
 use itertools::{zip_eq, Itertools};
 use openvm_instructions::exe::SparseMemoryImage;
@@ -69,22 +69,25 @@ pub type Address = (u32, u32);
 //     }
 // }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct AddressMap {
     pub mem: Vec<MmapMut>,
     pub cell_size: Vec<usize>,
     pub as_offset: u32,
 }
 
-const PAGE_SIZE: usize = 4096;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AddressMapSerializeHelper {
+    compressed: Vec<Vec<(usize, Vec<u8>)>>,
+    lengths: Vec<usize>,
+    cell_size: Vec<usize>,
+    as_offset: u32,
+}
 
-impl Serialize for AddressMap {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        assert!(self.mem.len() % PAGE_SIZE == 0);
-        let vecs = self
+impl AddressMapSerializeHelper {
+    fn from(map: &AddressMap) -> Self {
+        assert!(map.mem.len() % PAGE_SIZE == 0);
+        let compressed = map
             .mem
             .iter()
             .map(|space_mem| {
@@ -94,31 +97,73 @@ impl Serialize for AddressMap {
                     .into_iter()
                     .enumerate()
                     .map(|(i, chunk)| {
-                        if chunk.all(|&x| x == 0) {
+                        let cv = chunk.cloned().collect::<Vec<_>>();
+                        if cv.iter().all(|x| x == &0) {
                             None
                         } else {
-                            Some((i, chunk.collect::<Vec<_>>()))
+                            Some((i, cv))
                         }
                     })
                     .flatten()
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
-        let mut seq = serializer.serialize_seq(Some(vecs.len()))?;
-        for vec in vecs {
-            seq.serialize_element(&vec)?;
+        let lengths = map.mem.iter().map(|m| m.len()).collect::<Vec<_>>();
+        Self {
+            compressed,
+            lengths,
+            cell_size: map.cell_size.clone(),
+            as_offset: map.as_offset,
         }
-        seq.end()
+    }
+
+    fn to(&self) -> AddressMap {
+        let mut mem = self
+            .lengths
+            .iter()
+            .map(|l| MmapMut::map_anon(*l).unwrap())
+            .collect::<Vec<_>>();
+        for (space_compr, space_mem) in self.compressed.iter().zip(mem.iter_mut()) {
+            for (i, chunk) in space_compr.iter() {
+                space_mem[i * PAGE_SIZE..(i + 1) * PAGE_SIZE].copy_from_slice(&chunk);
+            }
+        }
+        AddressMap {
+            mem,
+            cell_size: self.cell_size.clone(),
+            as_offset: self.as_offset,
+        }
     }
 }
 
-impl<const PAGE_SIZE: usize> Default for AddressMap<PAGE_SIZE> {
+const PAGE_SIZE: usize = 4096;
+
+impl Serialize for AddressMap {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        AddressMapSerializeHelper::from(self).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for AddressMap {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let helper = AddressMapSerializeHelper::deserialize(deserializer)?;
+        Ok(helper.to())
+    }
+}
+
+impl Default for AddressMap {
     fn default() -> Self {
         unimplemented!()
     }
 }
 
-impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
+impl AddressMap {
     pub fn new(as_offset: u32, as_cnt: usize, mem_size: usize) -> Self {
         // TMP: hardcoding for now
         let mut cell_size = vec![1, 1, 1];
@@ -141,31 +186,37 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
         )
     }
     pub fn items<F: PrimeField32>(&self) -> impl Iterator<Item = (Address, F)> + '_ {
-        // zip_eq(&self.mem, &self.cell_size).enumerate().flat_map(
-        //     move |(as_idx, (space_mem, &cell_size))| {
-        //         // TODO: better way to handle address space conversions to F
-        //         if cell_size == 1 {
-        //             space_mem
-        //                 .iter::<u8>()
-        //                 .map(move |(ptr_idx, x)| {
-        //                     (
-        //                         (as_idx as u32 + self.as_offset, ptr_idx as u32),
-        //                         F::from_canonical_u8(x),
-        //                     )
-        //                 })
-        //                 .collect_vec()
-        //         } else {
-        //             // TEMP
-        //             assert_eq!(cell_size, 4);
-        //             space_mem
-        //                 .iter::<F>()
-        //                 .map(move |(ptr_idx, x)| {
-        //                     ((as_idx as u32 + self.as_offset, ptr_idx as u32), x)
-        //                 })
-        //                 .collect_vec()
-        //         }
-        //     },
-        // )
+        zip_eq(&self.mem, &self.cell_size).enumerate().flat_map(
+            move |(as_idx, (space_mem, &cell_size))| {
+                // TODO: better way to handle address space conversions to F
+                if cell_size == 1 {
+                    space_mem
+                        .iter()
+                        .enumerate()
+                        .map(move |(ptr_idx, x)| {
+                            (
+                                (as_idx as u32 + self.as_offset, ptr_idx as u32),
+                                F::from_canonical_u8(*x),
+                            )
+                        })
+                        .collect_vec()
+                } else {
+                    // TEMP
+                    assert_eq!(cell_size, 4);
+                    space_mem
+                        .iter()
+                        .chunks(4)
+                        .into_iter()
+                        .enumerate()
+                        .map(move |(ptr_idx, chunk)| {
+                            ((as_idx as u32 + self.as_offset, ptr_idx as u32), unsafe {
+                                std::mem::transmute_copy(&chunk)
+                            })
+                        })
+                        .collect_vec()
+                }
+            },
+        )
     }
 
     pub fn get_f<F: PrimeField32>(&self, addr_space: u32, ptr: u32) -> F {
