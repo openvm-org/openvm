@@ -40,8 +40,7 @@ If `--exe` is not provided, the command will call `build` before generating a pr
 
 If your program doesn't require inputs, you can (and should) omit the `--input` flag.
 
-If `--proof` is not provided then the command will write the proof to `./[app | stark | evm].proof` by default.
-
+If `--proof` is not provided then the command will write the proof to `./${bin_name}.[app | stark | evm].proof` by default, where `bin_name` is the file stem of the executable run.
 
 The `app` subcommand generates an application-level proof, the `stark` command generates an aggregated root-level proof, while the `evm` command generates an end-to-end EVM proof. For more information on aggregation, see [this specification](https://github.com/openvm-org/openvm/blob/bf8df90b13f4e80bb76dbb71f255a12154c84838/docs/specs/continuations.md).
 

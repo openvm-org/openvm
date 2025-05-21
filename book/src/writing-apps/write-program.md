@@ -2,16 +2,17 @@
 
 ## Writing a guest program
 
-See the example [fibonacci program](https://github.com/openvm-org/openvm-example-fibonacci).
+To initialize an OpenVM guest program package, you can use the following CLI command:
 
-The guest program should be a `no_std` Rust crate. As long as it is `no_std`, you can import any other
-`no_std` crates and write Rust as you normally would. Import the `openvm` library crate to use `openvm` intrinsic functions (for example `openvm::io::*`).
+```bash
+cargo openvm init
+```
 
-More examples of guest programs can be found in the [benchmarks/guest](https://github.com/openvm-org/openvm/tree/main/benchmarks/guest) directory.
+For a guest program example, see this [fibonacci program](https://github.com/openvm-org/openvm-example-fibonacci). More examples can be found in the [benchmarks/guest](https://github.com/openvm-org/openvm/tree/main/benchmarks/guest) directory.
 
 ## Handling I/O
 
-The program can take input from stdin, with some functions provided by `openvm::io`.
+The program can take input from stdin, with some functions provided by `openvm::io`. Make sure to import the `openvm` library crate to use `openvm` intrinsic functions.
 
 `openvm::io::read` takes from stdin and deserializes it into a generic type `T`, so one should specify the type when calling it:
 

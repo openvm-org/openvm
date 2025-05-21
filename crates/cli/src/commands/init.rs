@@ -113,10 +113,10 @@ impl InitCmd {
             .path
             .clone()
             .unwrap_or(PathBuf::from(".").canonicalize()?);
+        args.push(path.to_str().unwrap());
 
         let mut cmd = Command::new("cargo");
         cmd.args(&args);
-        cmd.current_dir(&path);
 
         let status = cmd.status()?;
         if !status.success() {
