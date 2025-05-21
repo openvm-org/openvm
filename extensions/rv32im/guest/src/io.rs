@@ -55,6 +55,18 @@ pub fn hint_random(len: usize) {
     );
 }
 
+/// Hint the VM to load values with key = [ptr: len] into input streams.
+#[inline(always)]
+pub fn hint_load_by_key(ptr: *const u8, len: u32) {
+    openvm_custom_insn::custom_insn_i!(
+        opcode = SYSTEM_OPCODE,
+        funct3 = PHANTOM_FUNCT3,
+        rd = In ptr,
+        rs1 = In len,
+        imm = Const PhantomImm::HintLoadByKey as u16,
+    );
+}
+
 /// Store rs1 to [[rd] + imm]_3.
 #[macro_export]
 macro_rules! reveal {
@@ -65,6 +77,21 @@ macro_rules! reveal {
             rd = In $rd,
             rs1 = In $rs1,
             imm = Const $imm
+        )
+    };
+}
+
+/// Store rs1 to [[rd]]_4.
+#[macro_export]
+macro_rules! store_to_native {
+    ($rd:ident, $rs1:ident) => {
+        openvm_custom_insn::custom_insn_r!(
+            opcode = openvm_rv32im_guest::SYSTEM_OPCODE,
+            funct3 = openvm_rv32im_guest::NATIVE_STOREW_FUNCT3,
+            funct7 = openvm_rv32im_guest::NATIVE_STOREW_FUNCT7,
+            rd = In $rd,
+            rs1 = In $rs1,
+            rs2 = In $rs1,
         )
     };
 }

@@ -10,9 +10,7 @@ cargo openvm verify app
     --proof <path_to_proof>
 ```
 
-If you omit `--app_vk` and/or `--proof`, the command will search for those files at `./openvm/app.vk` and `./openvm/app.proof` respectively.
-
-Once again, if you omitted `--output` and `--vk_output` in the `keygen` and `prove` commands, you can omit `--app_vk` and `--proof` in the `verify` command.
+Options `--manifest-path`, `--target-dir` are also available to `verify`. If you omit `--app_vk` and/or `--proof`, the command will search for those files at `${target_dir}/openvm/app.vk` and `./app.proof` respectively.
 
 ## EVM Level
 

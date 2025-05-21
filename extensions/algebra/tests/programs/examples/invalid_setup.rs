@@ -18,5 +18,7 @@ openvm_algebra_moduli_macros::moduli_init! {
 
 pub fn main() {
     // this should cause a debug assertion to fail
-    setup_all_moduli();
+    let x = Mod1::from_u32(1);
+    let y = Mod1::from_u32(1);
+    let _z = x + y;
 }

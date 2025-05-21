@@ -21,7 +21,7 @@ use crate::{
 };
 
 pub mod types;
-mod vars;
+pub mod vars;
 
 /// Config to generate internal VM verifier program.
 pub struct InternalVmVerifierConfig {

@@ -9,135 +9,142 @@ The command `cargo openvm build` compiles the program on host to an executable f
 It first compiles the program normally on your _host_ platform with RISC-V and then transpiles it to a different target. See here for some explanation of [cross-compilation](https://rust-lang.github.io/rustup/cross-compilation.html).
 Right now we use `riscv32im-risc0-zkvm-elf` target which is available in the [Rust toolchain](https://doc.rust-lang.org/rustc/platform-support/riscv32im-risc0-zkvm-elf.html), but we will contribute an OpenVM target to Rust in the future.
 
-## Build flags
+## Build Flags
 
-The following flags are available for the `cargo openvm build` command:
+The following flags are available for the `cargo openvm build` command. You can run `cargo openvm build --help` for this list within the command line.
 
-- `--manifest-dir <MANIFEST_DIR>`
+Generally, outputs will always be built to the **target directory**, which will either be determined by the manifest path or explicitly set using the `--target-dir` option. By default Cargo sets this to be `<workspace_or_package_root>/target/`. 
 
-  **Description**: Specifies the directory containing the `Cargo.toml` file for the guest code.
+OpenVM-specific artifacts will be placed in `${target_dir}/openvm/`, but if `--output-dir` is specified they will be copied to `${output-dir}/` as well.
 
-  **Default**: The current directory (`.`).
-
-  **Usage Example**: If your `Cargo.toml` is located in `my_project/`, you can run:
-
-  ```bash
-  cargo openvm build --manifest-dir my_project
-  ```
-
-  This ensures the build command is executed in that directory.
-
-- `--target-dir <TARGET_DIR>`
-
-  **Description**: Specifies the directory where the guest binary will be built. If not specified, the default target directory is used.
-
-  **Default**: The `target` directory in the package root directory.
-
-  **Usage Example**: To build the guest binary in the `my_target` directory:
-
-  ```bash
-  cargo openvm build --target-dir my_target
-  ```
-
-- `--features <FEATURES>`
-
-  **Description**: Passes a list of feature flags to the Cargo build process. These flags enable or disable conditional compilation features defined in your `Cargo.toml`.
-
-  **Usage Example**: To enable the `my_feature` feature:
-
-  ```bash
-  cargo openvm build --features my_feature
-  ```
-
-- `--bin <NAME>`
-
-  **Description**: Restricts the build to the binary target with the given name, similar to `cargo build --bin <NAME>`. If your project has multiple target types (binaries, libraries, examples, etc.), using `--bin <NAME>` narrows down the build to the binary target with the given name.
-
-  **Usage Example**:
-
-  ```bash
-  cargo openvm build --bin my_bin
-  ```
-
-- `--example <NAME>`
-
-  **Description**: Restricts the build to the example target with the given name, similar to `cargo build --example <NAME>`. Projects often include code samples or demos under the examples directory, and this flag focuses on compiling a specific example.
-
-  **Usage Example**:
-
-  ```bash
-  cargo openvm build --example my_example
-  ```
+### OpenVM Options
 
 - `--no-transpile`
 
-  **Description**: After building the guest code, doesn't transpile the target ELF into an OpenVM-compatible executable (by default it does).
-
-  **Usage Example**:
-
-  ```bash
-  cargo openvm build --no-transpile
-  ```
+  **Description**: Skips transpilation into an OpenVM-compatible `.vmexe` executable when set.
 
 - `--config <CONFIG>`
 
-  **Description**: Specifies the path to a .toml configuration file that defines which VM extensions to use.
+  **Description**: Path to the OpenVM config `.toml` file that specifies the VM extensions. By default will search the manifest directory for `openvm.toml`. If no file is found, OpenVM will use a default configuration. Currently the CLI only supports known extensions listed in the [Using Existing Extensions](../custom-extensions/overview.md) section. To use other extensions, use the [SDK](../advanced-usage/sdk.md).
 
-  **Default**: `./openvm.toml` if `--config` flag is not provided.
+- `--output_dir <OUTPUT_DIR>`
 
-  **Usage Example**:
+  **Description**: Output directory for OpenVM artifacts to be copied to. Keys will be placed in `${output-dir}/`, while all other artifacts will be in `${output-dir}/${profile}`.
 
-  ```bash
-  cargo openvm build --config path/to/openvm.toml
-  ```
+- `--init-file-name <INIT_FILE_NAME>`
 
-  This allows you to customize the extensions. Currently the CLI only supports known extensions listed in the [Using Existing Extensions](../custom-extensions/overview.md) section. To use other extensions, use the [SDK](../advanced-usage/sdk.md).
+  **Description**: Name of the generated initialization file, which will be written into the manifest directory.
 
-- `--exe-output <EXE_OUTPUT>`
+  **Default**: `openvm_init.rs`
 
-  **Description**: Sets the output path for the transpiled program.
+### Package Selection
 
-  **Default**: `./openvm/app.vmexe` if `--exe-output` flag is not provided.
+As with `cargo build`, default package selection depends on the working directory. If the working directory is a subdirectory of a specific package, then only that package will be built. Else, all packages in the workspace will be built by default.
 
-  **Usage Example**: To specify a custom output filename:
+- `--package <PACKAGES>`
 
-  ```bash
-  cargo openvm build --exe-output ./output/custom_name.vmexe
-  ```
+  **Description**: Builds only the specified packages. This flag may be specified multiple times or as a comma-separated list.
 
-- `--profile <PROFILE>`
+- `--workspace`
 
-  **Description**: Determines the build profile used by Cargo. Common profiles are dev (faster builds, less optimization) and release (slower builds, more optimization).
+  **Description**: Builds all members of the workspace (alias `--all`).
 
-  **Default**: release
+- `--exclude <PACKAGES>`
 
-  **Usage Example**:
+  **Description**: Excludes the specified packages. Must be used in conjunction with `--workspace`. This flag may be specified multiple times or as a comma-separated list.
 
-  ```bash
-  cargo openvm build --profile dev
-  ```
+### Target Selection
 
-- `--help`
+By default all package libraries and binaries will be built. To build samples or demos under the `examples` directory, use either the `--example` or `--examples` option.
 
-  **Description**: Prints a help message describing the available options and their usage.
+- `--lib`
 
-  **Usage Example**:
+  **Description**: Builds the package's library.
 
-  ```bash
-  cargo openvm build --help
-  ```
+- `--bin <BIN>`
 
-## Running a Program
+  **Description**: Builds the specified binary. This flag may be specified multiple times or as a comma-separated list.
 
-After building and transpiling a program, you can execute it using the `run` command. The `run` command has the following arguments:
+- `--bins`
 
-```bash
-cargo openvm run
-    --exe <path_to_transpiled_program>
-    --config <path_to_app_config>
-    --input <path_to_input>
-```
+  **Description**: Builds all binary targets.
 
-If `--exe` and/or `--config` are not provided, the command will search for these files in `./openvm/app.vmexe` and `./openvm.toml` respectively. If `./openvm.toml` is not present, a default configuration will be used.
+- `--example <EXAMPLE>`
 
-If your program doesn't require inputs, you can (and should) omit the `--input` flag.
+  **Description**: Builds the specified example. This flag may be specified multiple times or as a comma-separated list.
+
+- `--examples`
+
+  **Description**: Builds all example targets.
+
+- `--all-targets`
+
+  **Description**: Builds all package targets. Equivalent to specifying `--lib` `--bins` `--examples`.
+
+### Feature Selection
+
+The following options enable or disable conditional compilation features defined in your `Cargo.toml`.
+
+- `-F`, `--features <FEATURES>`
+
+  **Description**: Space or comma separated list of features to activate. Features of workspace members may be enabled with `package-name/feature-name` syntax. This flag may also be specified multiple times.
+
+- `--all-features`
+
+  **Description**: Activates all available features of all selected packages.
+
+- `--no-default-features`
+
+  **Description**: Do not activate the `default` feature of the selected packages.
+
+### Compilation Options
+
+- `--profile <NAME>`
+
+  **Description**: Builds with the given profile. Common profiles are `dev` (faster builds, less optimization) and `release` (slower builds, more optimization). For more information on profiles, see [Cargo's reference page](https://doc.rust-lang.org/cargo/reference/profiles.html).
+
+  **Default**: `release`
+
+### Output Options
+
+- `--target_dir <TARGET_DIR>`
+
+  **Description**: Directory for all generated artifacts and intermediate files. Defaults to directory `target/` at the root of the workspace.
+
+### Display Options
+
+- `-v`, `--verbose`
+
+  **Description**: Use verbose output.
+
+- `-q`, `--quiet`
+
+  **Description**: Do not print Cargo log messages.
+
+- `--color <WHEN>`
+
+  **Description**: Controls when colored output is used.
+
+  **Default**: `always`
+
+### Manifest Options
+
+- `--manifest-path <PATH>`
+
+  **Description**: Path to the guest code Cargo.toml file. By default, `build` searches for the file in the current or any parent directory. The `build` command will be executed in that directory.
+
+- `--ignore-rust-version`
+
+  **Description**: Ignores rust-version specification in packages.
+
+- `--locked`
+
+  **Description**: Asserts the same dependencies and versions are used as when the existing Cargo.lock file was originally generated.
+
+- `--offline`
+
+  **Description**: Prevents Cargo from accessing the network for any reason.
+
+- `--frozen`
+
+  **Description**: Equivalent to specifying both `--locked` and `--offline`.

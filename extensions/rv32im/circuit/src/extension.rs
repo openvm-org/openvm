@@ -1,7 +1,8 @@
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        SystemConfig, SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+        InitFileGenerator, SystemConfig, SystemPort, VmExtension, VmInventory, VmInventoryBuilder,
+        VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
@@ -34,6 +35,9 @@ pub struct Rv32IConfig {
     pub io: Rv32Io,
 }
 
+// Default implementation uses no init file
+impl InitFileGenerator for Rv32IConfig {}
+
 /// Config for a VM with base extension, IO extension, and multiplication extension
 #[derive(Clone, Debug, Default, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Rv32ImConfig {
@@ -42,6 +46,9 @@ pub struct Rv32ImConfig {
     #[extension]
     pub mul: Rv32M,
 }
+
+// Default implementation uses no init file
+impl InitFileGenerator for Rv32ImConfig {}
 
 impl Default for Rv32IConfig {
     fn default() -> Self {
@@ -352,6 +359,10 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             phantom::Rv32PrintStrSubEx,
             PhantomDiscriminant(Rv32Phantom::PrintStr as u16),
         )?;
+        builder.add_phantom_sub_executor(
+            phantom::Rv32HintLoadByKeySubEx,
+            PhantomDiscriminant(Rv32Phantom::HintLoadByKey as u16),
+        )?;
 
         Ok(inventory)
     }
@@ -504,6 +515,7 @@ mod phantom {
         }
     }
     pub struct Rv32PrintStrSubEx;
+    pub struct Rv32HintLoadByKeySubEx;
 
     impl<F: Field> PhantomSubExecutor<F> for Rv32HintInputSubEx {
         fn phantom_execute(
@@ -578,5 +590,60 @@ mod phantom {
             print!("{peeked_str}");
             Ok(())
         }
+    }
+
+    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv32HintLoadByKeySubEx {
+        fn phantom_execute(
+            &mut self,
+            memory: &MemoryController<F>,
+            streams: &mut Streams<F>,
+            _: PhantomDiscriminant,
+            a: F,
+            b: F,
+            _: u16,
+        ) -> eyre::Result<()> {
+            let ptr = unsafe_read_rv32_register(memory, a);
+            let len = unsafe_read_rv32_register(memory, b);
+            let key: Vec<u8> = (0..len)
+                .map(|i| {
+                    memory
+                        .unsafe_read_cell(F::TWO, F::from_canonical_u32(ptr + i))
+                        .as_canonical_u32() as u8
+                })
+                .collect();
+            if let Some(val) = streams.kv_store.get(&key) {
+                let to_push = hint_load_by_key_decode::<F>(val);
+                for input in to_push.into_iter().rev() {
+                    streams.input_stream.push_front(input);
+                }
+            } else {
+                bail!("Rv32HintLoadByKey: key not found");
+            }
+            Ok(())
+        }
+    }
+
+    pub fn hint_load_by_key_decode<F: PrimeField32>(value: &[u8]) -> Vec<Vec<F>> {
+        let mut offset = 0;
+        let len = extract_u32(value, offset) as usize;
+        offset += 4;
+        let mut ret = Vec::with_capacity(len);
+        for _ in 0..len {
+            let v_len = extract_u32(value, offset) as usize;
+            offset += 4;
+            let v = (0..v_len)
+                .map(|_| {
+                    let ret = F::from_canonical_u32(extract_u32(value, offset));
+                    offset += 4;
+                    ret
+                })
+                .collect();
+            ret.push(v);
+        }
+        ret
+    }
+
+    fn extract_u32(value: &[u8], offset: usize) -> u32 {
+        u32::from_le_bytes(value[offset..offset + 4].try_into().unwrap())
     }
 }

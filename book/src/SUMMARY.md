@@ -12,6 +12,7 @@
 - [Overview](./writing-apps/overview.md)
 - [Writing a Program](./writing-apps/write-program.md)
 - [Compiling](./writing-apps/build.md)
+- [Running a Program](./writing-apps/run.md)
 - [Generating Proofs](./writing-apps/prove.md)
 - [Verifying Proofs](./writing-apps/verify.md)
 - [Solidity SDK](./writing-apps/solidity.md)

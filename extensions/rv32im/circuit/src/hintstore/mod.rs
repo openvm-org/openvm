@@ -313,7 +313,10 @@ impl<F: PrimeField32> Rv32HintStoreChip<F> {
         }
     }
     pub fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
-        self.streams.set(streams).unwrap();
+        self.streams
+            .set(streams)
+            .map_err(|_| "streams have already been set.")
+            .unwrap();
     }
 }
 

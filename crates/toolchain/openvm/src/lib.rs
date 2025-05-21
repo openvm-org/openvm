@@ -18,6 +18,8 @@ use openvm_platform::rust_rt;
 #[cfg(target_os = "zkvm")]
 pub use openvm_rv32im_guest::*;
 
+#[cfg(target_os = "zkvm")]
+mod getrandom;
 pub mod io;
 #[cfg(all(feature = "std", target_os = "zkvm"))]
 pub mod pal_abi;
@@ -161,4 +163,15 @@ fn panic_impl(panic_info: &core::panic::PanicInfo) -> ! {
     let _ = write!(writer, "{}\n", panic_info);
     openvm_platform::rust_rt::terminate::<1>();
     unreachable!()
+}
+
+// Includes the openvm_init.rs file generated at build time
+#[macro_export]
+macro_rules! init {
+    () => {
+        include!(concat!(env!("CARGO_MANIFEST_DIR"), "/openvm_init.rs"));
+    };
+    ($name:expr) => {
+        include!(concat!(env!("CARGO_MANIFEST_DIR"), concat!("/", $name)));
+    };
 }

@@ -3,6 +3,8 @@ use core::array;
 
 use openvm_bigint_guest::U256;
 
+openvm::entry!(main);
+
 const N: usize = 16;
 type Matrix = [[U256; N]; N];
 

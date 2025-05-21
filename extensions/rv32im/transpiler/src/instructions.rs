@@ -279,4 +279,6 @@ pub enum Rv32Phantom {
     PrintStr,
     /// Prepare given amount of random numbers for hinting.
     HintRandom,
+    /// Hint the VM to load values from the stream KV store into input streams.
+    HintLoadByKey,
 }

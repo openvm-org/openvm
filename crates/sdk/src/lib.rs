@@ -12,15 +12,18 @@ use openvm_build::{
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, verify_segments,
-        ContinuationVmProof, ExecutionError, VerifiedExecutionPayload, VmConfig, VmExecutor,
-        VmVerificationError,
+        ContinuationVmProof, ExecutionError, InitFileGenerator, VerifiedExecutionPayload, VmConfig,
+        VmExecutor, VmVerificationError,
     },
     system::{
         memory::{tree::public_values::extract_public_values, CHUNK},
         program::trace::VmCommittedExe,
     },
 };
-use openvm_continuations::verifier::root::types::RootVmVerifierInput;
+use openvm_continuations::verifier::{
+    internal::types::VmStarkProof,
+    root::{types::RootVmVerifierInput, RootVmVerifierConfig},
+};
 pub use openvm_continuations::{
     static_verifier::{DefaultStaticVerifierPvHandler, StaticVerifierPvHandler},
     RootSC, C, F, SC,
@@ -42,7 +45,7 @@ use openvm_transpiler::{
 use snark_verifier_sdk::{evm::gen_evm_verifier_sol_code, halo2::aggregation::AggregationCircuit};
 
 use crate::{
-    config::AggConfig,
+    config::{AggConfig, SdkVmConfig},
     keygen::{AggProvingKey, AggStarkProvingKey},
     prover::{AppProver, StarkProver},
 };
@@ -57,6 +60,8 @@ pub mod prover;
 
 mod stdin;
 pub use stdin::*;
+
+use crate::{config::AggStarkConfig, keygen::asm::program_to_asm};
 
 pub mod fs;
 pub mod types;
@@ -114,20 +119,24 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         Self::default()
     }
 
-    pub fn agg_tree_config(&self) -> &AggregationTreeConfig {
-        &self.agg_tree_config
+    pub fn with_agg_tree_config(mut self, agg_tree_config: AggregationTreeConfig) -> Self {
+        self.agg_tree_config = agg_tree_config;
+        self
     }
 
-    pub fn set_agg_tree_config(&mut self, agg_tree_config: AggregationTreeConfig) {
-        self.agg_tree_config = agg_tree_config;
+    pub fn agg_tree_config(&self) -> &AggregationTreeConfig {
+        &self.agg_tree_config
     }
 
     pub fn build<P: AsRef<Path>>(
         &self,
         guest_opts: GuestOptions,
+        vm_config: &SdkVmConfig,
         pkg_dir: P,
         target_filter: &Option<TargetFilter>,
+        init_file_name: Option<&str>, // If None, we use "openvm-init.rs"
     ) -> Result<Elf> {
+        vm_config.write_to_init_file(pkg_dir.as_ref(), init_file_name)?;
         let pkg = get_package(pkg_dir.as_ref());
         let target_dir = match build_guest_package(&pkg, &guest_opts, None, target_filter) {
             Ok(target_dir) => target_dir,
@@ -256,6 +265,29 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         Ok(agg_pk)
     }
 
+    pub fn agg_stark_keygen(&self, config: AggStarkConfig) -> Result<AggStarkProvingKey> {
+        let agg_pk = AggStarkProvingKey::keygen(config);
+        Ok(agg_pk)
+    }
+
+    pub fn generate_root_verifier_asm(&self, agg_stark_pk: &AggStarkProvingKey) -> String {
+        let kernel_asm = RootVmVerifierConfig {
+            leaf_fri_params: agg_stark_pk.leaf_vm_pk.fri_params,
+            internal_fri_params: agg_stark_pk.internal_vm_pk.fri_params,
+            num_user_public_values: agg_stark_pk.num_user_public_values(),
+            internal_vm_verifier_commit: agg_stark_pk
+                .internal_committed_exe
+                .get_program_commit()
+                .into(),
+            compiler_options: Default::default(),
+        }
+        .build_kernel_asm(
+            &agg_stark_pk.leaf_vm_pk.vm_pk.get_vk(),
+            &agg_stark_pk.internal_vm_pk.vm_pk.get_vk(),
+        );
+        program_to_asm(kernel_asm)
+    }
+
     pub fn generate_root_verifier_input<VC: VmConfig<F>>(
         &self,
         app_pk: Arc<AppProvingKey<VC>>,
@@ -270,6 +302,23 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         let stark_prover =
             StarkProver::<VC, E>::new(app_pk, app_exe, agg_stark_pk, self.agg_tree_config);
         let proof = stark_prover.generate_root_verifier_input(inputs);
+        Ok(proof)
+    }
+
+    pub fn generate_e2e_stark_proof<VC: VmConfig<F>>(
+        &self,
+        app_pk: Arc<AppProvingKey<VC>>,
+        app_exe: Arc<NonRootCommittedExe>,
+        agg_stark_pk: AggStarkProvingKey,
+        inputs: StdIn,
+    ) -> Result<VmStarkProof<SC>>
+    where
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
+    {
+        let stark_prover =
+            StarkProver::<VC, E>::new(app_pk, app_exe, agg_stark_pk, self.agg_tree_config);
+        let proof = stark_prover.generate_e2e_stark_proof(inputs);
         Ok(proof)
     }
 

@@ -15,7 +15,7 @@ pub const MEMORY_BITS: usize = 29;
 pub const MEMORY_TOP: u32 = (1 << MEMORY_BITS) - 4;
 
 // The memory location for the start of the heap.
-pub(crate) const HEAP_START_ADDRESS: i32 = 1 << 24;
+pub const HEAP_START_ADDRESS: i32 = 1 << 24;
 
 /// The heap pointer address.
 pub(crate) const HEAP_PTR: i32 = HEAP_START_ADDRESS - 4;

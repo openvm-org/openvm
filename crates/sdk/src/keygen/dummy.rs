@@ -208,14 +208,12 @@ fn dummy_app_committed_exe(fri_params: FriParameters) -> Arc<NonRootCommittedExe
 }
 
 fn dummy_app_program() -> Program<F> {
-    let mut ret = Program::from_instructions(&[Instruction::from_isize(
+    Program::from_instructions(&[Instruction::from_isize(
         TERMINATE.global_opcode(),
         0,
         0,
         0,
         0,
         0,
-    )]);
-    ret.max_num_public_values = 0;
-    ret
+    )])
 }

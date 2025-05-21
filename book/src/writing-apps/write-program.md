@@ -122,3 +122,11 @@ This tells Rust to use the custom `main` handler when the environment is `no_std
 ## Building and running
 
 See the [overview](./overview.md) on how to build and run the program.
+
+## Using crates that depend on `getrandom`
+
+OpenVM is compatible with [getrandom](https://crates.io/crates/getrandom) `v0.3`. The `cargo openvm` CLI will always compile with the [custom](https://docs.rs/getrandom/latest/getrandom/#opt-in-backends) `getrandom` backend.
+
+By default the `openvm` crate has a default feature `"getrandom-unsupported"` which exports a `__getrandom_v03_custom` function that always returns `Err(Error::UNSUPPORTED)`. This is enabled by default to allow compilation of guest programs that pull in dependencies which require `getrandom` but where the executed code does not actually use `getrandom` functions.
+
+To override the default behavior and provide a custom implementation, turn off the `"getrandom-unsupported"` feature in the `openvm` crate and supply your own `__getrandom_v03_custom` function as specified in the [getrandom docs](https://docs.rs/getrandom/latest/getrandom/#custom-backend).

@@ -21,3 +21,11 @@ num-bigint.workspace = true
 num-traits.workspace = true
 
 [dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+p3-baby-bear.workspace = true
+bitcode.workspace = true
+rand.workspace = true
+
+[[bench]]
+name = "program_serde"
+harness = false

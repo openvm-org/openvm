@@ -1,4 +1,7 @@
-use std::collections::VecDeque;
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::Arc,
+};
 
 use openvm_circuit::arch::Streams;
 use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -9,6 +12,7 @@ use crate::F;
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct StdIn {
     pub buffer: VecDeque<Vec<F>>,
+    pub kv_store: HashMap<Vec<u8>, Vec<u8>>,
 }
 
 impl StdIn {
@@ -36,6 +40,9 @@ impl StdIn {
     pub fn write_field(&mut self, data: &[F]) {
         self.buffer.push_back(data.to_vec());
     }
+    pub fn add_key_value(&mut self, key: Vec<u8>, value: Vec<u8>) {
+        self.kv_store.insert(key, value);
+    }
 }
 
 impl From<StdIn> for Streams<F> {
@@ -44,7 +51,9 @@ impl From<StdIn> for Streams<F> {
         while let Some(input) = std_in.read() {
             data.push(input);
         }
-        Streams::new(data)
+        let mut ret = Streams::new(data);
+        ret.kv_store = Arc::new(std_in.kv_store);
+        ret
     }
 }
 

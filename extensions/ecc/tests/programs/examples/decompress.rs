@@ -22,15 +22,6 @@ openvm_algebra_moduli_macros::moduli_declare! {
     Fp1mod4 { modulus = "0xffffffffffffffffffffffffffffffff000000000000000000000001" },
 }
 
-openvm_algebra_moduli_macros::moduli_init! {
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141",
-    "115792089237316195423570985008687907853269984665640564039457584007913129639501",
-    "1000000007",
-    "0xffffffffffffffffffffffffffffffff000000000000000000000001",
-    "0xffffffffffffffffffffffffffff16a2e0b8f03e13dd29455c5c2a3d",
-}
-
 const CURVE_B_5MOD8: Fp5mod8 = Fp5mod8::from_const_u8(3);
 
 impl Field for Fp5mod8 {
@@ -82,19 +73,10 @@ openvm_ecc_sw_macros::sw_declare! {
     },
 }
 
-openvm_ecc_sw_macros::sw_init! {
-    Secp256k1Point,
-    CurvePoint5mod8,
-    CurvePoint1mod4,
-}
+openvm::init!("openvm_init_decompress.rs");
 
 // test decompression under an honest host
 pub fn main() {
-    setup_0();
-    setup_2();
-    setup_4();
-    setup_all_curves();
-
     let bytes = read_vec();
     let x = Secp256k1Coord::from_le_bytes(&bytes[..32]);
     let y = Secp256k1Coord::from_le_bytes(&bytes[32..64]);

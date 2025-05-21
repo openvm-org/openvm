@@ -1,4 +1,4 @@
-use cargo_openvm::{default::DEFAULT_APP_CONFIG_PATH, util::read_config_toml_or_default};
+use cargo_openvm::util::read_config_toml_or_default;
 use clap::{Parser, ValueEnum};
 use eyre::Result;
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
@@ -106,7 +106,7 @@ fn main() -> Result<()> {
             let elf_path = get_elf_path(&program_dir);
             let elf = read_elf_file(&elf_path)?;
 
-            let config_path = program_dir.join(DEFAULT_APP_CONFIG_PATH);
+            let config_path = program_dir.join("openvm.toml");
             let vm_config = read_config_toml_or_default(&config_path)?.app_vm_config;
 
             let exe = VmExe::from_elf(elf, vm_config.transpiler())?;

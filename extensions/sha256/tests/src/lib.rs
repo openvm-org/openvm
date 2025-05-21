@@ -16,7 +16,8 @@ mod tests {
 
     #[test]
     fn test_sha256() -> Result<()> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "sha")?;
+        let config = Sha256Rv32Config::default();
+        let elf = build_example_program_at_path(get_programs_dir!(), "sha", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -25,7 +26,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(Sha256TranspilerExtension),
         )?;
-        air_test(Sha256Rv32Config::default(), openvm_exe);
+        air_test(config, openvm_exe);
         Ok(())
     }
 }

@@ -1,8 +1,14 @@
 mod build;
 pub use build::*;
 
+mod commit;
+pub use commit::*;
+
 mod keygen;
 pub use keygen::*;
+
+mod init;
+pub use init::*;
 
 mod prove;
 pub use prove::*;
