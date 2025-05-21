@@ -68,9 +68,9 @@ extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
     // SAFETY: assuming safety assumptions of the inputs, we handle all cases where `bytes` or
     // `output` are not aligned to 4 bytes.
     unsafe {
-        if bytes as usize % 4 != 0 {
+        if bytes as usize % MIN_ALIGN != 0 {
             let aligned_buff = AlignedBuf::new(bytes, len);
-            if output as usize % 4 != 0 {
+            if output as usize % MIN_ALIGN != 0 {
                 let aligned_out = AlignedBuf::uninit(32);
                 __native_keccak256(aligned_buff.ptr, len, aligned_out.ptr);
                 core::ptr::copy_nonoverlapping(aligned_out.ptr as *const u8, output, 32);
@@ -78,7 +78,7 @@ extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
                 __native_keccak256(aligned_buff.ptr, len, output);
             }
         } else {
-            if output as usize % 4 != 0 {
+            if output as usize % MIN_ALIGN != 0 {
                 let aligned_out = AlignedBuf::uninit(32);
                 __native_keccak256(bytes, len, aligned_out.ptr);
                 core::ptr::copy_nonoverlapping(aligned_out.ptr as *const u8, output, 32);
@@ -109,6 +109,8 @@ mod zkvm {
 
     use super::*;
 
+    pub const MIN_ALIGN: usize = 4;
+
     /// Bytes aligned to 4 bytes.
     pub struct AlignedBuf {
         pub ptr: *mut u8,
@@ -118,7 +120,7 @@ mod zkvm {
     impl AlignedBuf {
         /// Allocate a new buffer whose start address is aligned to 4 bytes.
         pub fn uninit(len: usize) -> Self {
-            let layout = Layout::from_size_align(len, 4).unwrap();
+            let layout = Layout::from_size_align(len, MIN_ALIGN).unwrap();
             if layout.size() == 0 {
                 return Self {
                     ptr: NonNull::<u32>::dangling().as_ptr() as *mut u8,
