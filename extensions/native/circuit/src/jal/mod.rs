@@ -1,39 +1,37 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     ops::Deref,
-    sync::{Arc, Mutex},
 };
 
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionError, ExecutionState, InstructionExecutor, PcIncOrSet},
+    arch::{
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        ExecutionBridge, ExecutionError, ExecutionState, NewVmChipWrapper, PcIncOrSet, Result,
+        StepExecutorE1, TraceStep, VmStateMut,
+    },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryWriteAuxCols},
-        MemoryAddress, MemoryAuxColsFactory, MemoryController, OfflineMemory, RecordId,
+        online::{GuestMemory, TracingMemory},
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::{
-    utils::next_power_of_two_or_zero,
-    var_range::{
-        SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
-    },
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, NativeJalOpcode, NativeRangeCheckOpcode};
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
-    p3_maybe_rayon::prelude::*,
-    prover::types::AirProofInput,
+    p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter,
 };
-use serde::{Deserialize, Serialize};
 use static_assertions::const_assert_eq;
 use AS::Native;
+
+use crate::adapters::{memory_read_native, memory_write_native, tracing_write_native};
 
 #[cfg(test)]
 mod tests;
@@ -57,7 +55,7 @@ struct JalRangeCheckCols<T> {
 const OVERALL_WIDTH: usize = JalRangeCheckCols::<u8>::width();
 const_assert_eq!(OVERALL_WIDTH, 12);
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, derive_new::new)]
 pub struct JalRangeCheckAir {
     execution_bridge: ExecutionBridge,
     memory_bridge: MemoryBridge,
@@ -136,121 +134,30 @@ where
     }
 }
 
-impl JalRangeCheckAir {
-    fn new(
-        execution_bridge: ExecutionBridge,
-        memory_bridge: MemoryBridge,
-        range_bus: VariableRangeCheckerBus,
-    ) -> Self {
-        Self {
-            execution_bridge,
-            memory_bridge,
-            range_bus,
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Serialize, Deserialize)]
-pub struct JalRangeCheckRecord {
-    pub state: ExecutionState<u32>,
-    pub a_rw: RecordId,
-    pub b: u32,
-    pub c: u8,
-    pub is_jal: bool,
-}
-
 /// Chip for JAL and RANGE_CHECK. These opcodes are logically irrelevant. Putting these opcodes into
 /// the same chip is just to save columns.
-pub struct JalRangeCheckChip<F> {
-    air: JalRangeCheckAir,
-    pub records: Vec<JalRangeCheckRecord>,
-    offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+pub struct JalRangeCheckStep {
     range_checker_chip: SharedVariableRangeCheckerChip,
     /// If true, ignore execution errors.
     debug: bool,
 }
 
-impl<F: PrimeField32> JalRangeCheckChip<F> {
-    pub fn new(
-        execution_bridge: ExecutionBridge,
-        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
-        range_checker_chip: SharedVariableRangeCheckerChip,
-    ) -> Self {
-        let memory_bridge = offline_memory.lock().unwrap().memory_bridge();
-        let air = JalRangeCheckAir::new(execution_bridge, memory_bridge, range_checker_chip.bus());
+impl JalRangeCheckStep {
+    pub fn new(range_checker_chip: SharedVariableRangeCheckerChip) -> Self {
         Self {
-            air,
-            records: vec![],
-            offline_memory,
             range_checker_chip,
             debug: false,
         }
     }
-    pub fn with_debug(mut self) -> Self {
+    pub fn set_debug(&mut self) {
         self.debug = true;
-        self
     }
 }
 
-impl<F: PrimeField32> InstructionExecutor<F> for JalRangeCheckChip<F> {
-    fn execute(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>, ExecutionError> {
-        if instruction.opcode == NativeJalOpcode::JAL.global_opcode() {
-            let (record_id, _) = memory.write(
-                F::from_canonical_u32(AS::Native as u32),
-                instruction.a,
-                &[F::from_canonical_u32(from_state.pc + DEFAULT_PC_STEP)],
-            );
-            let b = instruction.b.as_canonical_u32();
-            self.records.push(JalRangeCheckRecord {
-                state: from_state,
-                a_rw: record_id,
-                b,
-                c: 0,
-                is_jal: true,
-            });
-            return Ok(ExecutionState {
-                pc: (F::from_canonical_u32(from_state.pc) + instruction.b).as_canonical_u32(),
-                timestamp: memory.timestamp(),
-            });
-        } else if instruction.opcode == NativeRangeCheckOpcode::RANGE_CHECK.global_opcode() {
-            let d = F::from_canonical_u32(AS::Native as u32);
-            // This is a read, but we make the record have prev_data
-            let a_val = memory.unsafe_read_cell::<F>(d, instruction.a);
-            let (record_id, _) = memory.write(d, instruction.a, &[a_val]);
-            let a_val = a_val.as_canonical_u32();
-            let b = instruction.b.as_canonical_u32();
-            let c = instruction.c.as_canonical_u32();
-            debug_assert!(!self.debug || b <= 16);
-            debug_assert!(!self.debug || c <= 14);
-            let x = a_val & ((1 << 16) - 1);
-            if !self.debug && x >= 1 << b {
-                return Err(ExecutionError::Fail { pc: from_state.pc });
-            }
-            let y = a_val >> 16;
-            if !self.debug && y >= 1 << c {
-                return Err(ExecutionError::Fail { pc: from_state.pc });
-            }
-            self.records.push(JalRangeCheckRecord {
-                state: from_state,
-                a_rw: record_id,
-                b,
-                c: c as u8,
-                is_jal: false,
-            });
-            return Ok(ExecutionState {
-                pc: from_state.pc + DEFAULT_PC_STEP,
-                timestamp: memory.timestamp(),
-            });
-        }
-        panic!("Unknown opcode {}", instruction.opcode);
-    }
-
+impl<F, CTX> TraceStep<F, CTX> for JalRangeCheckStep
+where
+    F: PrimeField32,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         let jal_opcode = NativeJalOpcode::JAL.global_opcode().as_usize();
         let range_check_opcode = NativeRangeCheckOpcode::RANGE_CHECK
@@ -264,79 +171,174 @@ impl<F: PrimeField32> InstructionExecutor<F> for JalRangeCheckChip<F> {
         }
         panic!("Unknown opcode {}", opcode);
     }
+
+    fn execute(
+        &mut self,
+        state: VmStateMut<TracingMemory<F>, CTX>,
+        instruction: &Instruction<F>,
+        trace: &mut [F],
+        trace_offset: &mut usize,
+        width: usize,
+    ) -> Result<()> {
+        let &Instruction {
+            opcode, a, b, c, ..
+        } = instruction;
+
+        debug_assert!(
+            opcode == NativeJalOpcode::JAL.global_opcode()
+                || opcode == NativeRangeCheckOpcode::RANGE_CHECK.global_opcode()
+        );
+
+        let row: &mut JalRangeCheckCols<F> =
+            trace[*trace_offset..*trace_offset + width].borrow_mut();
+
+        row.state.pc = F::from_canonical_u32(*state.pc);
+        row.state.timestamp = F::from_canonical_u32(state.memory.timestamp);
+
+        row.a_pointer = a;
+        row.b = b;
+
+        if opcode == NativeJalOpcode::JAL.global_opcode() {
+            row.is_jal = F::ONE;
+            row.c = F::ZERO;
+
+            tracing_write_native(
+                state.memory,
+                a.as_canonical_u32(),
+                &[F::from_canonical_u32(
+                    state.pc.wrapping_add(DEFAULT_PC_STEP),
+                )],
+                &mut row.writes_aux,
+            );
+            // TODO(ayush): can this addition be done in u32 instead of F
+            *state.pc = (F::from_canonical_u32(*state.pc) + b).as_canonical_u32();
+        } else if opcode == NativeRangeCheckOpcode::RANGE_CHECK.global_opcode() {
+            row.is_jal = F::ZERO;
+            row.c = c;
+
+            let [a_val]: [F; 1] = memory_read_native(state.memory.data(), a.as_canonical_u32());
+            tracing_write_native(
+                state.memory,
+                a.as_canonical_u32(),
+                &[a_val],
+                &mut row.writes_aux,
+            );
+
+            // TODO(ayush): should this debug stuff be removed?
+            let a_val = a_val.as_canonical_u32();
+            let b = b.as_canonical_u32();
+            let c = c.as_canonical_u32();
+
+            debug_assert!(!self.debug || b <= 16);
+            debug_assert!(!self.debug || c <= 14);
+
+            let x = a_val & ((1 << 16) - 1);
+            if !self.debug && x >= 1 << b {
+                return Err(ExecutionError::Fail { pc: *state.pc });
+            }
+            let y = a_val >> 16;
+            if !self.debug && y >= 1 << c {
+                return Err(ExecutionError::Fail { pc: *state.pc });
+            }
+
+            *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        }
+
+        *trace_offset += width;
+
+        Ok(())
+    }
+
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let row: &mut JalRangeCheckCols<_> = row_slice.borrow_mut();
+
+        let timestamp = row.state.timestamp.as_canonical_u32();
+        mem_helper.fill_from_prev(timestamp, row.writes_aux.as_mut());
+
+        row.is_range_check = F::ONE - row.is_jal;
+
+        if row.is_range_check.is_one() {
+            let a_val = row.writes_aux.prev_data()[0];
+            let a_val_u32 = a_val.as_canonical_u32();
+            let y = a_val_u32 >> 16;
+            let x = a_val_u32 & ((1 << 16) - 1);
+            self.range_checker_chip
+                .add_count(x, row.b.as_canonical_u32() as usize);
+            self.range_checker_chip
+                .add_count(y, row.c.as_canonical_u32() as usize);
+            row.y = F::from_canonical_u32(y);
+        }
+    }
 }
 
-impl<F: Field> ChipUsageGetter for JalRangeCheckChip<F> {
-    fn air_name(&self) -> String {
-        "JalRangeCheck".to_string()
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.records.len()
-    }
-
-    fn trace_width(&self) -> usize {
-        OVERALL_WIDTH
-    }
-}
-
-impl<SC: StarkGenericConfig> Chip<SC> for JalRangeCheckChip<Val<SC>>
+impl<F> StepExecutorE1<F> for JalRangeCheckStep
 where
-    Val<SC>: PrimeField32,
+    F: PrimeField32,
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air)
+    fn execute_e1<Ctx>(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+        let &Instruction { opcode, a, b, .. } = instruction;
+
+        debug_assert!(
+            opcode == NativeJalOpcode::JAL.global_opcode()
+                || opcode == NativeRangeCheckOpcode::RANGE_CHECK.global_opcode()
+        );
+
+        if opcode == NativeJalOpcode::JAL.global_opcode() {
+            memory_write_native(
+                state.memory,
+                a.as_canonical_u32(),
+                &[F::from_canonical_u32(
+                    state.pc.wrapping_add(DEFAULT_PC_STEP),
+                )],
+            );
+            // TODO(ayush): can this addition be done in u32 instead of F
+            *state.pc = (F::from_canonical_u32(*state.pc) + b).as_canonical_u32();
+        } else if opcode == NativeRangeCheckOpcode::RANGE_CHECK.global_opcode() {
+            // TODO(ayush): should this not call memory callback?
+            let [a_val]: [F; 1] = memory_read_native(state.memory, a.as_canonical_u32());
+
+            memory_write_native(state.memory, a.as_canonical_u32(), &[a_val]);
+
+            let a_val = a_val.as_canonical_u32();
+            let b = instruction.b.as_canonical_u32();
+            let c = instruction.c.as_canonical_u32();
+
+            debug_assert!(!self.debug || b <= 16);
+            debug_assert!(!self.debug || c <= 14);
+
+            let x = a_val & ((1 << 16) - 1);
+            if !self.debug && x >= 1 << b {
+                return Err(ExecutionError::Fail { pc: *state.pc });
+            }
+            let y = a_val >> 16;
+            if !self.debug && y >= 1 << c {
+                return Err(ExecutionError::Fail { pc: *state.pc });
+            }
+
+            *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        }
+
+        Ok(())
     }
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let height = next_power_of_two_or_zero(self.records.len());
-        let mut flat_trace = Val::<SC>::zero_vec(OVERALL_WIDTH * height);
-        let memory = self.offline_memory.lock().unwrap();
-        let aux_cols_factory = memory.aux_cols_factory();
 
-        self.records
-            .into_par_iter()
-            .zip(flat_trace.par_chunks_mut(OVERALL_WIDTH))
-            .for_each(|(record, slice)| {
-                record_to_row(
-                    record,
-                    &aux_cols_factory,
-                    self.range_checker_chip.as_ref(),
-                    slice,
-                    &memory,
-                );
-            });
+    fn execute_metered(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += 1;
 
-        let matrix = RowMajorMatrix::new(flat_trace, OVERALL_WIDTH);
-        AirProofInput::simple_no_pis(matrix)
+        Ok(())
     }
 }
 
-fn record_to_row<F: PrimeField32>(
-    record: JalRangeCheckRecord,
-    aux_cols_factory: &MemoryAuxColsFactory<F>,
-    range_checker_chip: &VariableRangeCheckerChip,
-    slice: &mut [F],
-    memory: &OfflineMemory<F>,
-) {
-    let a_record = memory.record_by_id(record.a_rw);
-    let col: &mut JalRangeCheckCols<_> = slice.borrow_mut();
-    col.is_jal = F::from_bool(record.is_jal);
-    col.is_range_check = F::from_bool(!record.is_jal);
-    col.a_pointer = a_record.pointer;
-    col.state = ExecutionState {
-        pc: F::from_canonical_u32(record.state.pc),
-        timestamp: F::from_canonical_u32(record.state.timestamp),
-    };
-    aux_cols_factory.generate_write_aux(a_record, &mut col.writes_aux);
-    col.b = F::from_canonical_u32(record.b);
-    if !record.is_jal {
-        let a_val = a_record.data_at(0);
-        let a_val_u32 = a_val.as_canonical_u32();
-        let y = a_val_u32 >> 16;
-        let x = a_val_u32 & ((1 << 16) - 1);
-        range_checker_chip.add_count(x, record.b as usize);
-        range_checker_chip.add_count(y, record.c as usize);
-        col.c = F::from_canonical_u32(record.c as u32);
-        col.y = F::from_canonical_u32(y);
-    }
-}
+pub type JalRangeCheckChip<F> = NewVmChipWrapper<F, JalRangeCheckAir, JalRangeCheckStep>;

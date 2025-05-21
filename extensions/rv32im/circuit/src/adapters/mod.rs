@@ -56,6 +56,14 @@ pub fn decompose<F: PrimeField32>(value: u32) -> [F; RV32_REGISTER_NUM_LIMBS] {
 }
 
 #[inline(always)]
+pub fn imm_to_bytes(imm: u32) -> [u8; RV32_REGISTER_NUM_LIMBS] {
+    debug_assert_eq!(imm >> 24, 0);
+    let mut imm_le = imm.to_le_bytes();
+    imm_le[3] = imm_le[2];
+    imm_le
+}
+
+#[inline(always)]
 pub fn memory_read<const N: usize>(memory: &GuestMemory, address_space: u32, ptr: u32) -> [u8; N] {
     debug_assert!(
         address_space == RV32_REGISTER_AS
@@ -99,7 +107,7 @@ pub fn memory_read_from_state<Ctx, const N: usize>(
 where
     Ctx: E1E2ExecutionCtx,
 {
-    state.ctx.on_memory_operation(address_space, ptr, N);
+    state.ctx.on_memory_operation(address_space, ptr, N as u32);
 
     memory_read(state.memory, address_space, ptr)
 }
@@ -113,7 +121,7 @@ pub fn memory_write_from_state<Ctx, const N: usize>(
 ) where
     Ctx: E1E2ExecutionCtx,
 {
-    state.ctx.on_memory_operation(address_space, ptr, N);
+    state.ctx.on_memory_operation(address_space, ptr, N as u32);
 
     memory_write(state.memory, address_space, ptr, data)
 }
@@ -177,6 +185,20 @@ where
     data
 }
 
+#[inline(always)]
+pub fn tracing_read_imm<F>(
+    memory: &mut TracingMemory<F>,
+    imm: u32,
+    imm_mut: &mut F,
+) -> [u8; RV32_REGISTER_NUM_LIMBS]
+where
+    F: PrimeField32,
+{
+    *imm_mut = F::from_canonical_u32(imm);
+    memory.increment_timestamp();
+    imm_to_bytes(imm)
+}
+
 /// Writes `reg_ptr, reg_val` into memory and records the memory access in mutable buffer.
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
 #[inline(always)]
@@ -211,27 +233,6 @@ pub fn tracing_write_with_base_aux<F, const N: usize>(
 {
     let (t_prev, _) = timed_write(memory, address_space, ptr, data);
     base_aux_cols.set_prev(F::from_canonical_u32(t_prev));
-}
-
-#[inline(always)]
-pub fn tracing_read_imm<F>(
-    memory: &mut TracingMemory<F>,
-    imm: u32,
-    imm_mut: &mut F,
-) -> [u8; RV32_REGISTER_NUM_LIMBS]
-where
-    F: PrimeField32,
-{
-    *imm_mut = F::from_canonical_u32(imm);
-    debug_assert_eq!(imm >> 24, 0); // highest byte should be zero to prevent overflow
-
-    memory.increment_timestamp();
-
-    let mut imm_le = imm.to_le_bytes();
-    // Important: we set the highest byte equal to the second highest byte, using the assumption
-    // that imm is at most 24 bits
-    imm_le[3] = imm_le[2];
-    imm_le
 }
 
 // TODO: delete

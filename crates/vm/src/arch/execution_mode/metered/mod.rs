@@ -16,7 +16,7 @@ use crate::arch::{
 const SEGMENT_CHECK_INTERVAL: usize = 100;
 
 // TODO(ayush): fix these values
-const MAX_TRACE_HEIGHT: usize = DEFAULT_MAX_SEGMENT_LEN;
+const MAX_TRACE_HEIGHT: u32 = DEFAULT_MAX_SEGMENT_LEN as u32;
 const MAX_TRACE_CELLS: usize = DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT;
 const MAX_INTERACTIONS: usize = DEFAULT_MAX_SEGMENT_LEN * 100;
 
@@ -37,21 +37,21 @@ impl<'a> MeteredExecutionControl<'a> {
 
     /// Calculate the total cells used based on trace heights and widths
     // TODO(ayush): account for preprocessed and permutation columns
-    fn calculate_total_cells(&self, trace_heights: &[usize]) -> usize {
+    fn calculate_total_cells(&self, trace_heights: &[u32]) -> usize {
         trace_heights
             .iter()
             .zip(self.widths)
-            .map(|(&height, &width)| height.next_power_of_two() * width)
+            .map(|(&height, &width)| height.next_power_of_two() as usize * width)
             .sum()
     }
 
     /// Calculate the total interactions based on trace heights and interaction counts
-    fn calculate_total_interactions(&self, trace_heights: &[usize]) -> usize {
+    fn calculate_total_interactions(&self, trace_heights: &[u32]) -> usize {
         trace_heights
             .iter()
             .zip(self.interactions)
             // We add 1 for the zero messages from the padding rows
-            .map(|(&height, &interactions)| (height + 1) * interactions)
+            .map(|(&height, &interactions)| (height + 1) as usize * interactions)
             .sum()
     }
 }
@@ -120,7 +120,8 @@ where
     ) {
         // Program | Connector | Public Values | Memory ... | Executors (except Public Values) |
         // Range Checker
-        state.ctx.trace_heights[PROGRAM_AIR_ID] = chip_complex.program_chip().true_program_length;
+        state.ctx.trace_heights[PROGRAM_AIR_ID] =
+            chip_complex.program_chip().true_program_length as u32;
         state.ctx.trace_heights[CONNECTOR_AIR_ID] = 2;
 
         let mut offset = if chip_complex.config().has_public_values_chip() {
@@ -142,7 +143,7 @@ where
                 if let Some(constant_height) =
                     chip_complex.inventory.periphery[id].constant_trace_height()
                 {
-                    state.ctx.trace_heights[offset + i] = constant_height;
+                    state.ctx.trace_heights[offset + i] = constant_height as u32;
                 }
             }
         }
@@ -152,7 +153,7 @@ where
             chip_complex.range_checker_chip().constant_trace_height(),
             state.ctx.trace_heights.last_mut(),
         ) {
-            *last_height = range_checker_height;
+            *last_height = range_checker_height as u32;
         }
     }
 

@@ -1,6 +1,6 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit::arch::{testing::VmChipTestBuilder, ExecutionBridge};
+use openvm_circuit::arch::testing::VmChipTestBuilder;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
@@ -16,8 +16,25 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use crate::{jal::JalRangeCheckCols, JalRangeCheckChip};
+use crate::jal::{JalRangeCheckChip, JalRangeCheckCols};
+
+use super::{JalRangeCheckAir, JalRangeCheckStep};
+
+const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
+
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> JalRangeCheckChip<F> {
+    JalRangeCheckChip::<F>::new(
+        JalRangeCheckAir::new(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            tester.range_checker().bus(),
+        ),
+        JalRangeCheckStep::new(tester.range_checker().clone()),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
+    )
+}
 
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
@@ -61,7 +78,7 @@ fn set_and_execute_range_check(
     for RangeCheckTestCase { val, x_bit, y_bit } in test_cases {
         let d = 4usize;
 
-        tester.write_cell(d, a, F::from_canonical_u32(val));
+        tester.write(d, a, [F::from_canonical_u32(val)]);
         tester.execute_with_pc(
             chip,
             &Instruction::from_usize(
@@ -73,19 +90,12 @@ fn set_and_execute_range_check(
     }
 }
 
-fn setup() -> (StdRng, VmChipTestBuilder<F>, JalRangeCheckChip<F>) {
-    let rng = create_seeded_rng();
-    let tester = VmChipTestBuilder::default();
-    let execution_bridge = ExecutionBridge::new(tester.execution_bus(), tester.program_bus());
-    let offline_memory = tester.offline_memory_mutex_arc();
-    let range_checker = tester.range_checker();
-    let chip = JalRangeCheckChip::<F>::new(execution_bridge, offline_memory, range_checker);
-    (rng, tester, chip)
-}
-
 #[test]
 fn rand_jal_test() {
-    let (mut rng, mut tester, mut chip) = setup();
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let mut chip = create_test_chip(&tester);
+
     let num_tests: usize = 100;
     for _ in 0..num_tests {
         set_and_execute(&mut tester, &mut chip, &mut rng, None, None);
@@ -97,7 +107,10 @@ fn rand_jal_test() {
 
 #[test]
 fn rand_range_check_test() {
-    let (mut rng, mut tester, mut chip) = setup();
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let mut chip = create_test_chip(&tester);
+
     let f = |x: u32, y: u32| RangeCheckTestCase {
         val: x + y * (1 << 16),
         x_bit: 32 - x.leading_zeros(),
@@ -129,8 +142,11 @@ fn rand_range_check_test() {
 #[test]
 fn negative_range_check_test() {
     {
-        let (mut rng, mut tester, chip) = setup();
-        let mut chip = chip.with_debug();
+        let mut rng = create_seeded_rng();
+        let mut tester = VmChipTestBuilder::default();
+        let mut chip = create_test_chip(&tester);
+        chip.step.set_debug();
+
         set_and_execute_range_check(
             &mut tester,
             &mut chip,
@@ -147,8 +163,11 @@ fn negative_range_check_test() {
         assert!(result.is_err());
     }
     {
-        let (mut rng, mut tester, chip) = setup();
-        let mut chip = chip.with_debug();
+        let mut rng = create_seeded_rng();
+        let mut tester = VmChipTestBuilder::default();
+        let mut chip = create_test_chip(&tester);
+        chip.step.set_debug();
+
         set_and_execute_range_check(
             &mut tester,
             &mut chip,
@@ -168,7 +187,10 @@ fn negative_range_check_test() {
 
 #[test]
 fn negative_jal_test() {
-    let (mut rng, mut tester, mut chip) = setup();
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let mut chip = create_test_chip(&tester);
+
     set_and_execute(&mut tester, &mut chip, &mut rng, None, None);
 
     let tester = tester.build();

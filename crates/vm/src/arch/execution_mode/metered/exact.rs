@@ -10,11 +10,11 @@ use crate::{
 // TODO(ayush): can segmentation also be triggered by timestamp overflow? should that be tracked?
 #[derive(Debug)]
 pub struct MeteredCtxExact {
-    pub trace_heights: Vec<usize>,
+    pub trace_heights: Vec<u32>,
 
     continuations_enabled: bool,
-    num_access_adapters: usize,
-    as_byte_alignment_bits: Vec<usize>,
+    num_access_adapters: u8,
+    as_byte_alignment_bits: Vec<u8>,
     pub memory_dimensions: MemoryDimensions,
 
     // Map from (addr_space, addr) -> (size, offset)
@@ -27,8 +27,8 @@ impl MeteredCtxExact {
     pub fn new(
         num_traces: usize,
         continuations_enabled: bool,
-        num_access_adapters: usize,
-        as_byte_alignment_bits: Vec<usize>,
+        num_access_adapters: u8,
+        as_byte_alignment_bits: Vec<u8>,
         memory_dimensions: MemoryDimensions,
     ) -> Self {
         Self {
@@ -44,7 +44,7 @@ impl MeteredCtxExact {
 }
 
 impl MeteredCtxExact {
-    fn update_boundary_merkle_heights(&mut self, address_space: u32, ptr: u32, size: usize) {
+    fn update_boundary_merkle_heights(&mut self, address_space: u32, ptr: u32, size: u32) {
         let boundary_idx = if self.continuations_enabled {
             PUBLIC_VALUES_AIR_ID
         } else {
@@ -52,9 +52,9 @@ impl MeteredCtxExact {
         };
         let poseidon2_idx = self.trace_heights.len() - 2;
 
-        let num_blocks = (size + CHUNK - 1) >> CHUNK_BITS;
+        let num_blocks = (size + CHUNK as u32 - 1) >> CHUNK_BITS;
         for i in 0..num_blocks {
-            let addr = ptr.wrapping_add((i * CHUNK) as u32);
+            let addr = ptr.wrapping_add(i * CHUNK as u32);
             let block_id = addr >> CHUNK_BITS;
             let leaf_id = self
                 .memory_dimensions
@@ -72,10 +72,10 @@ impl MeteredCtxExact {
                     let succ_id = (insert_idx < self.leaf_indices.len() - 1)
                         .then(|| self.leaf_indices[insert_idx + 1]);
                     let height_change = calculate_merkle_node_updates(
+                        leaf_id,
                         pred_id,
                         succ_id,
-                        leaf_id,
-                        self.memory_dimensions.overall_height(),
+                        self.memory_dimensions.overall_height() as u32,
                     );
                     self.trace_heights[boundary_idx + 1] += height_change * 2;
                     self.trace_heights[poseidon2_idx] += height_change * 2;
@@ -89,12 +89,11 @@ impl MeteredCtxExact {
         &self,
         address_space: u32,
         ptr: u32,
-        size: usize,
-    ) -> (Vec<(u32, usize)>, Vec<(u32, usize)>) {
+        size: u32,
+    ) -> (Vec<(u32, u32)>, Vec<(u32, u32)>) {
         // Skip adapters if this is a repeated access to the same location with same size
         let last_access = self.last_memory_access.get(&(address_space as u8, ptr));
-        if matches!(last_access, Some(&(last_access_size, 0)) if size == last_access_size as usize)
-        {
+        if matches!(last_access, Some(&(last_access_size, 0)) if size == last_access_size as u32) {
             return (vec![], vec![]);
         }
 
@@ -104,33 +103,33 @@ impl MeteredCtxExact {
             ptr_start = ptr.wrapping_sub(last_access_offset as u32);
         }
 
-        let align_bits = self.as_byte_alignment_bits[address_space as usize];
+        let align_bits = self.as_byte_alignment_bits[address_space as usize] as usize;
         let align = 1 << align_bits;
 
         // Split intersecting blocks to align bytes
         let mut curr_block = ptr_start >> align_bits;
-        let end_block = curr_block + (size as u32 >> align_bits);
+        let end_block = curr_block + (size >> align_bits);
         let mut splits = vec![];
         while curr_block < end_block {
             let curr_block_size = if let Some(&(last_access_size, _)) = self
                 .last_memory_access
                 .get(&(address_space as u8, curr_block.wrapping_mul(align as u32)))
             {
-                last_access_size as usize
+                last_access_size as u32
             } else {
                 // Initial memory access only happens at CHUNK boundary
                 let chunk_ratio = 1 << (CHUNK_BITS - align_bits);
                 let chunk_offset = curr_block & (chunk_ratio - 1);
                 curr_block -= chunk_offset;
-                CHUNK
+                CHUNK as u32
             };
 
-            if curr_block_size > align {
+            if curr_block_size > align as u32 {
                 let curr_ptr = curr_block.wrapping_mul(align as u32);
                 splits.push((curr_ptr, curr_block_size));
             }
 
-            curr_block += (curr_block_size >> align_bits) as u32;
+            curr_block += curr_block_size >> align_bits;
         }
         // Merge added blocks from align to size bytes
         let merges = vec![(ptr, size)];
@@ -143,8 +142,8 @@ impl MeteredCtxExact {
         &mut self,
         addr_space: u32,
         ptr: u32,
-        size: usize,
-        trace_heights: &mut Option<&mut [usize]>,
+        size: u32,
+        trace_heights: &mut Option<&mut [u32]>,
         memory_updates: &mut Option<Vec<((u8, u32), Option<(u8, u8)>)>>,
     ) {
         let adapter_offset = if self.continuations_enabled {
@@ -194,7 +193,7 @@ impl MeteredCtxExact {
         }
     }
 
-    fn update_adapter_heights(&mut self, addr_space: u32, ptr: u32, size: usize) {
+    fn update_adapter_heights(&mut self, addr_space: u32, ptr: u32, size: u32) {
         self.apply_adapter_updates(addr_space, ptr, size, &mut None, &mut None);
     }
 
@@ -208,11 +207,11 @@ impl MeteredCtxExact {
             })
             .collect();
         for (addr_space, block_id) in indices_to_process {
-            self.update_adapter_heights(addr_space, block_id * CHUNK as u32, CHUNK);
+            self.update_adapter_heights(addr_space, block_id * CHUNK as u32, CHUNK as u32);
         }
     }
 
-    pub fn trace_heights_if_finalized(&mut self) -> Vec<usize> {
+    pub fn trace_heights_if_finalized(&mut self) -> Vec<u32> {
         let indices_to_process: Vec<_> = self
             .leaf_indices
             .iter()
@@ -222,14 +221,14 @@ impl MeteredCtxExact {
             })
             .collect();
 
-        let mut access_adapter_updates = vec![0; self.num_access_adapters];
+        let mut access_adapter_updates = vec![0; self.num_access_adapters as usize];
         let mut memory_updates = Some(vec![]);
         for (addr_space, block_id) in indices_to_process {
             let ptr = block_id * CHUNK as u32;
             self.apply_adapter_updates(
                 addr_space,
                 ptr,
-                CHUNK,
+                CHUNK as u32,
                 &mut Some(&mut access_adapter_updates),
                 &mut memory_updates,
             );
@@ -267,7 +266,7 @@ impl MeteredCtxExact {
 }
 
 impl E1E2ExecutionCtx for MeteredCtxExact {
-    fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: usize) {
+    fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32) {
         debug_assert!(
             address_space != RV32_IMM_AS,
             "address space must not be immediate"
@@ -284,10 +283,10 @@ impl E1E2ExecutionCtx for MeteredCtxExact {
     }
 }
 
-fn apply_single_adapter_heights_update(trace_heights: &mut [usize], size: usize) {
-    let size_bits = size.ilog2() as usize;
+fn apply_single_adapter_heights_update(trace_heights: &mut [u32], size: u32) {
+    let size_bits = size.ilog2() as u32;
     for adapter_bits in (3..=size_bits).rev() {
-        trace_heights[adapter_bits - 1] += 1 << (size_bits - adapter_bits);
+        trace_heights[adapter_bits as usize - 1] += 1 << (size_bits - adapter_bits);
     }
 }
 
@@ -295,28 +294,28 @@ fn apply_single_adapter_heights_update(trace_heights: &mut [usize], size: usize)
 fn add_memory_access(
     memory_access_map: &mut BTreeMap<(u8, u32), (u8, u8)>,
     (address_space, ptr): (u32, u32),
-    size: usize,
-    align_bits: usize,
+    size: u32,
+    align_bits: u8,
     is_split: bool,
 ) -> Vec<((u8, u32), Option<(u8, u8)>)> {
     let align = 1 << align_bits;
     debug_assert_eq!(
-        size & (align - 1),
+        size & (align as u32 - 1),
         0,
         "Size must be a multiple of alignment"
     );
 
     let num_chunks = size >> align_bits;
-    let mut old_values = Vec::with_capacity(num_chunks);
+    let mut old_values = Vec::with_capacity(num_chunks as usize);
 
     for i in 0..num_chunks {
-        let curr_ptr = ptr.wrapping_add(i as u32 * align as u32);
+        let curr_ptr = ptr.wrapping_add(i * align as u32);
         let key = (address_space as u8, curr_ptr);
 
         let value = if is_split {
             (align as u8, 0)
         } else {
-            (size as u8, (i * align) as u8)
+            (size as u8, (i * align as u32) as u8)
         };
 
         let old_value = memory_access_map.insert(key, value);
@@ -330,8 +329,8 @@ fn add_memory_access(
 fn add_memory_access_split_with_return(
     memory_access_map: &mut BTreeMap<(u8, u32), (u8, u8)>,
     (address_space, ptr): (u32, u32),
-    size: usize,
-    align_bits: usize,
+    size: u32,
+    align_bits: u8,
 ) -> Vec<((u8, u32), Option<(u8, u8)>)> {
     add_memory_access(
         memory_access_map,
@@ -346,8 +345,8 @@ fn add_memory_access_split_with_return(
 fn add_memory_access_merge_with_return(
     memory_access_map: &mut BTreeMap<(u8, u32), (u8, u8)>,
     (address_space, ptr): (u32, u32),
-    size: usize,
-    align_bits: usize,
+    size: u32,
+    align_bits: u8,
 ) -> Vec<((u8, u32), Option<(u8, u8)>)> {
     add_memory_access(
         memory_access_map,
@@ -359,11 +358,11 @@ fn add_memory_access_merge_with_return(
 }
 
 fn calculate_merkle_node_updates(
+    leaf_id: u64,
     pred_id: Option<u64>,
     succ_id: Option<u64>,
-    leaf_id: u64,
-    height: usize,
-) -> usize {
+    height: u32,
+) -> u32 {
     // First node requires height many updates
     if pred_id.is_none() && succ_id.is_none() {
         return height;
@@ -374,19 +373,19 @@ fn calculate_merkle_node_updates(
 
     // Add new divergences between pred and leaf_index
     if let Some(p) = pred_id {
-        let new_divergence = (p ^ leaf_id).ilog2() as usize;
+        let new_divergence = (p ^ leaf_id).ilog2();
         diff += new_divergence;
     }
 
     // Add new divergences between leaf_index and succ
     if let Some(s) = succ_id {
-        let new_divergence = (leaf_id ^ s).ilog2() as usize;
+        let new_divergence = (leaf_id ^ s).ilog2();
         diff += new_divergence;
     }
 
     // Remove old divergence between pred and succ if both existed
     if let (Some(p), Some(s)) = (pred_id, succ_id) {
-        let old_divergence = (p ^ s).ilog2() as usize;
+        let old_divergence = (p ^ s).ilog2();
         diff -= old_divergence;
     }
 

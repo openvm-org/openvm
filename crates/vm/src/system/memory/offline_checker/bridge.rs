@@ -21,7 +21,7 @@ use crate::system::memory::{
 /// be decomposed into) for the `AssertLtSubAir` in the `MemoryOfflineChecker`.
 /// Warning: This requires that (clk_max_bits + decomp - 1) / decomp = AUX_LEN
 ///         in MemoryOfflineChecker (or whenever AssertLtSubAir is used)
-pub(crate) const AUX_LEN: usize = 2;
+pub const AUX_LEN: usize = 2;
 
 /// The [MemoryBridge] is used within AIR evaluation functions to constrain logical memory
 /// operations (read/write). It adds all necessary constraints and interactions.

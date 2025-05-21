@@ -145,12 +145,12 @@ where
     }
 }
 
-pub struct Rv32JalLuiStep<A> {
+pub struct Rv32JalLuiCoreStep<A> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl<A> Rv32JalLuiStep<A> {
+impl<A> Rv32JalLuiCoreStep<A> {
     pub fn new(
         adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
@@ -162,7 +162,7 @@ impl<A> Rv32JalLuiStep<A> {
     }
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for Rv32JalLuiStep<A>
+impl<F, CTX, A> TraceStep<F, CTX> for Rv32JalLuiCoreStep<A>
 where
     F: PrimeField32,
     A: 'static
@@ -249,7 +249,7 @@ where
     }
 }
 
-impl<F, A> StepExecutorE1<F> for Rv32JalLuiStep<A>
+impl<F, A> StepExecutorE1<F> for Rv32JalLuiCoreStep<A>
 where
     F: PrimeField32,
     A: 'static
@@ -296,8 +296,8 @@ where
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {
-        state.ctx.trace_heights[chip_index] += 1;
         self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += 1;
 
         Ok(())
     }

@@ -31,7 +31,7 @@ use openvm_stark_backend::{
 use super::{
     tracing_read, tracing_read_imm, tracing_write, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
-use crate::adapters::{memory_read_from_state, memory_write_from_state};
+use crate::adapters::{imm_to_bytes, memory_read_from_state, memory_write_from_state};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -309,11 +309,7 @@ where
                 memory_read_from_state(state, RV32_REGISTER_AS, c.as_canonical_u32());
             rs2
         } else {
-            let imm = c.as_canonical_u32();
-            debug_assert_eq!(imm >> 24, 0);
-            let mut imm_le = imm.to_le_bytes();
-            imm_le[3] = imm_le[2];
-            imm_le
+            imm_to_bytes(c.as_canonical_u32())
         };
 
         [rs1, rs2]

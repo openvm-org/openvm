@@ -118,13 +118,13 @@ pub struct PublicValuesRecord<F> {
 
 /// ATTENTION: If a specific public value is not provided, a default 0 will be used when generating
 /// the proof but in the perspective of constraints, it could be any value.
-pub struct PublicValuesStep<A, F> {
+pub struct PublicValuesCoreStep<A, F> {
     adapter: A,
     // Mutex is to make the struct Sync. But it actually won't be accessed by multiple threads.
     pub(crate) custom_pvs: Mutex<Vec<Option<F>>>,
 }
 
-impl<A, F> PublicValuesStep<A, F>
+impl<A, F> PublicValuesCoreStep<A, F>
 where
     F: PrimeField32,
 {
@@ -142,7 +142,7 @@ where
     }
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for PublicValuesStep<A, F>
+impl<F, CTX, A> TraceStep<F, CTX> for PublicValuesCoreStep<A, F>
 where
     F: PrimeField32,
     A: 'static
@@ -205,7 +205,7 @@ where
     }
 }
 
-impl<F, A> StepExecutorE1<F> for PublicValuesStep<A, F>
+impl<F, A> StepExecutorE1<F> for PublicValuesCoreStep<A, F>
 where
     F: PrimeField32,
     A: 'static + for<'a> AdapterExecutorE1<F, ReadData = [F; 2], WriteData = [F; 0]>,

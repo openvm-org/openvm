@@ -39,7 +39,10 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::adapters::{decompose, memory_read, memory_write, tracing_read, tracing_write};
+use crate::adapters::{
+    decompose, memory_read, memory_read_from_state, memory_write, memory_write_from_state,
+    tracing_read, tracing_write,
+};
 
 #[cfg(test)]
 mod tests;
@@ -475,22 +478,16 @@ where
 
         let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let mem_ptr_limbs = memory_read(
-            state.memory,
-            RV32_REGISTER_AS,
-            mem_ptr_ptr.as_canonical_u32(),
-        );
+        let mem_ptr_limbs =
+            memory_read_from_state(state, RV32_REGISTER_AS, mem_ptr_ptr.as_canonical_u32());
         let mem_ptr = u32::from_le_bytes(mem_ptr_limbs);
         debug_assert!(mem_ptr <= (1 << self.pointer_max_bits));
 
         let num_words = if local_opcode == HINT_STOREW {
             1
         } else {
-            let num_words_limbs = memory_read(
-                state.memory,
-                RV32_REGISTER_AS,
-                num_words_ptr.as_canonical_u32(),
-            );
+            let num_words_limbs =
+                memory_read_from_state(state, RV32_REGISTER_AS, num_words_ptr.as_canonical_u32());
             u32::from_le_bytes(num_words_limbs)
         };
         debug_assert_ne!(num_words, 0);
@@ -505,8 +502,8 @@ where
             let data: [u8; RV32_REGISTER_NUM_LIMBS] = std::array::from_fn(|_| {
                 streams.hint_stream.pop_front().unwrap().as_canonical_u32() as u8
             });
-            memory_write(
-                state.memory,
+            memory_write_from_state(
+                state,
                 RV32_MEMORY_AS,
                 mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index),
                 &data,
@@ -524,12 +521,17 @@ where
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {
-        // TODO(ayush): remove duplication
         let &Instruction {
             opcode,
             a: num_words_ptr,
+            b: mem_ptr_ptr,
+            d,
+            e,
             ..
         } = instruction;
+
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
         let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
@@ -544,8 +546,8 @@ where
             u32::from_le_bytes(num_words_limbs)
         };
 
-        state.ctx.trace_heights[chip_index] += num_words as usize;
         self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += num_words;
 
         Ok(())
     }

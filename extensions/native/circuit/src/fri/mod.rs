@@ -5,38 +5,36 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use itertools::{zip_eq, Itertools};
+use itertools::zip_eq;
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor, Streams,
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        ExecutionBridge, ExecutionState, NewVmChipWrapper, Result, StepExecutorE1, Streams,
+        TraceStep, VmStateMut,
     },
-    system::{
-        memory::{
-            offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, OfflineMemory, RecordId,
-        },
-        program::ProgramBus,
+    system::memory::{
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols, AUX_LEN},
+        online::{GuestMemory, TracingMemory},
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
+use openvm_circuit_primitives::is_less_than::LessThanAuxCols;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, FriOpcode::FRI_REDUCED_OPENING};
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
-    p3_maybe_rayon::prelude::*,
-    prover::types::AirProofInput,
+    p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter,
 };
-use serde::{Deserialize, Serialize};
 use static_assertions::const_assert_eq;
 
 use crate::{
+    adapters::{
+        memory_read_native, memory_write_native, tracing_read_native, tracing_write_native,
+    },
     field_extension::{FieldExtension, EXT_DEG},
     utils::const_max,
 };
@@ -219,8 +217,8 @@ const INSTRUCTION_READS: usize = 5;
 /// it starts with a Workload row (T1) and ends with either a Disabled or Instruction2 row (T7).
 /// The other transition constraints then ensure the proper state transitions from Workload to
 /// Instruction2.
-#[derive(Copy, Clone, Debug)]
-struct FriReducedOpeningAir {
+#[derive(Copy, Clone, Debug, derive_new::new)]
+pub struct FriReducedOpeningAir {
     execution_bridge: ExecutionBridge,
     memory_bridge: MemoryBridge,
 }
@@ -544,94 +542,83 @@ fn elem_to_ext<F: Field>(elem: F) -> [F; EXT_DEG] {
     ret
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
-pub struct FriReducedOpeningRecord<F: Field> {
-    pub pc: F,
-    pub start_timestamp: F,
-    pub instruction: Instruction<F>,
-    pub alpha_read: RecordId,
-    pub length_read: RecordId,
-    pub a_ptr_read: RecordId,
-    pub is_init_read: RecordId,
-    pub b_ptr_read: RecordId,
-    pub a_rws: Vec<RecordId>,
-    pub b_reads: Vec<RecordId>,
-    pub result_write: RecordId,
-}
-
-impl<F: Field> FriReducedOpeningRecord<F> {
-    pub fn get_height(&self) -> usize {
-        // 2 for instruction rows
-        self.a_rws.len() + 2
-    }
-}
-
-pub struct FriReducedOpeningChip<F: Field> {
-    air: FriReducedOpeningAir,
-    pub records: Vec<FriReducedOpeningRecord<F>>,
+pub struct FriReducedOpeningStep<F: Field> {
     pub height: usize,
-    offline_memory: Arc<Mutex<OfflineMemory<F>>>,
     streams: Arc<Mutex<Streams<F>>>,
 }
-impl<F: PrimeField32> FriReducedOpeningChip<F> {
-    pub fn new(
-        execution_bus: ExecutionBus,
-        program_bus: ProgramBus,
-        memory_bridge: MemoryBridge,
-        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
-        streams: Arc<Mutex<Streams<F>>>,
-    ) -> Self {
-        let air = FriReducedOpeningAir {
-            execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-            memory_bridge,
-        };
-        Self {
-            records: vec![],
-            air,
-            height: 0,
-            offline_memory,
-            streams,
-        }
+
+impl<F: PrimeField32> FriReducedOpeningStep<F> {
+    pub fn new(streams: Arc<Mutex<Streams<F>>>) -> Self {
+        Self { height: 0, streams }
     }
 }
-impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
+
+impl<F, CTX> TraceStep<F, CTX> for FriReducedOpeningStep<F>
+where
+    F: PrimeField32,
+{
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        assert_eq!(opcode, FRI_REDUCED_OPENING.global_opcode().as_usize());
+        String::from("FRI_REDUCED_OPENING")
+    }
+
     fn execute(
         &mut self,
-        memory: &mut MemoryController<F>,
+        state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>, ExecutionError> {
+        trace: &mut [F],
+        trace_offset: &mut usize,
+        _width: usize,
+    ) -> Result<()> {
         let &Instruction {
-            a: a_ptr_ptr,
-            b: b_ptr_ptr,
-            c: length_ptr,
-            d: alpha_ptr,
-            e: result_ptr,
-            f: hint_id_ptr,
-            g: is_init_ptr,
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
             ..
         } = instruction;
 
-        let addr_space = F::from_canonical_u32(AS::Native as u32);
-        let alpha_read = memory.read(addr_space, alpha_ptr);
-        let length_read = memory.read_cell(addr_space, length_ptr);
-        let a_ptr_read = memory.read_cell(addr_space, a_ptr_ptr);
-        let b_ptr_read = memory.read_cell(addr_space, b_ptr_ptr);
-        let is_init_read = memory.read_cell(addr_space, is_init_ptr);
-        let is_init = is_init_read.1.as_canonical_u32();
+        let a_ptr_ptr = a.as_canonical_u32();
+        let b_ptr_ptr = b.as_canonical_u32();
+        let length_ptr = c.as_canonical_u32();
+        let alpha_ptr = d.as_canonical_u32();
+        let result_ptr = e.as_canonical_u32();
+        let hint_id_ptr = f.as_canonical_u32();
+        let is_init_ptr = g.as_canonical_u32();
 
-        let hint_id_f = memory.unsafe_read_cell::<F>(addr_space, hint_id_ptr);
+        let timestamp_start = state.memory.timestamp();
+
+        // TODO(ayush): there should be a way to avoid this
+        let mut alpha_aux = MemoryReadAuxCols::new(0, LessThanAuxCols::new([F::ZERO; AUX_LEN]));
+        let alpha = tracing_read_native(state.memory, alpha_ptr, alpha_aux.as_mut());
+
+        let mut length_aux = MemoryReadAuxCols::new(0, LessThanAuxCols::new([F::ZERO; AUX_LEN]));
+        let [length]: [F; 1] = tracing_read_native(state.memory, length_ptr, length_aux.as_mut());
+
+        let mut a_ptr_aux = MemoryReadAuxCols::new(0, LessThanAuxCols::new([F::ZERO; AUX_LEN]));
+        let [a_ptr]: [F; 1] = tracing_read_native(state.memory, a_ptr_ptr, a_ptr_aux.as_mut());
+
+        let mut b_ptr_aux = MemoryReadAuxCols::new(0, LessThanAuxCols::new([F::ZERO; AUX_LEN]));
+        let [b_ptr]: [F; 1] = tracing_read_native(state.memory, b_ptr_ptr, b_ptr_aux.as_mut());
+
+        let mut is_init_aux = MemoryReadAuxCols::new(0, LessThanAuxCols::new([F::ZERO; AUX_LEN]));
+        let [is_init_read]: [F; 1] =
+            tracing_read_native(state.memory, is_init_ptr, is_init_aux.as_mut());
+        let is_init = is_init_read.as_canonical_u32();
+
+        let [hint_id_f]: [F; 1] = memory_read_native(state.memory.data(), hint_id_ptr);
         let hint_id = hint_id_f.as_canonical_u32() as usize;
 
-        let alpha = alpha_read.1;
-        let length = length_read.1.as_canonical_u32() as usize;
-        let a_ptr = a_ptr_read.1;
-        let b_ptr = b_ptr_read.1;
+        let length = length.as_canonical_u32() as usize;
 
-        let mut a_rws = Vec::with_capacity(length);
-        let mut b_reads = Vec::with_capacity(length);
-        let mut result = [F::ZERO; EXT_DEG];
+        let write_a = F::ONE - is_init_read;
+
+        // TODO(ayush): why do we need this?should this be incremented only in tracegen execute?
+        // 2 for instruction rows
+        self.height += length + 2;
 
         let data = if is_init == 0 {
             let mut streams = self.streams.lock().unwrap();
@@ -640,122 +627,38 @@ impl<F: PrimeField32> InstructionExecutor<F> for FriReducedOpeningChip<F> {
         } else {
             vec![]
         };
+
+        let mut as_and_bs = Vec::with_capacity(length);
         #[allow(clippy::needless_range_loop)]
         for i in 0..length {
-            let a_rw = if is_init == 0 {
-                let (record_id, _) =
-                    memory.write_cell(addr_space, a_ptr + F::from_canonical_usize(i), data[i]);
-                (record_id, data[i])
+            // First read goes to last row
+            let start = *trace_offset + (length - i - 1) * OVERALL_WIDTH;
+            let cols: &mut WorkloadCols<F> = trace[start..start + WL_WIDTH].borrow_mut();
+
+            let a_ptr_i = (a_ptr + F::from_canonical_usize(i)).as_canonical_u32();
+            let [a]: [F; 1] = if is_init == 0 {
+                tracing_write_native(state.memory, a_ptr_i, &[data[i]], &mut cols.a_aux);
+                [data[i]]
             } else {
-                memory.read_cell(addr_space, a_ptr + F::from_canonical_usize(i))
+                tracing_read_native(state.memory, a_ptr_i, cols.a_aux.as_mut())
             };
-            let b_read =
-                memory.read::<F, EXT_DEG>(addr_space, b_ptr + F::from_canonical_usize(EXT_DEG * i));
-            a_rws.push(a_rw);
-            b_reads.push(b_read);
+            let b_ptr_i = (b_ptr + F::from_canonical_usize(EXT_DEG * i)).as_canonical_u32();
+            let b = tracing_read_native::<F, EXT_DEG>(state.memory, b_ptr_i, cols.b_aux.as_mut());
+
+            as_and_bs.push((a, b));
         }
 
-        for (a_rw, b_read) in a_rws.iter().rev().zip_eq(b_reads.iter().rev()) {
-            let a = a_rw.1;
-            let b = b_read.1;
-            // result = result * alpha + (b - a)
-            result = FieldExtension::add(
-                FieldExtension::multiply(result, alpha),
-                FieldExtension::subtract(b, elem_to_ext(a)),
-            );
-        }
+        let mut result = [F::ZERO; EXT_DEG];
+        for (i, (a, b)) in as_and_bs.into_iter().rev().enumerate() {
+            let start = *trace_offset + i * OVERALL_WIDTH;
+            let cols: &mut WorkloadCols<F> = trace[start..start + WL_WIDTH].borrow_mut();
 
-        let (result_write, _) = memory.write(addr_space, result_ptr, &result);
-
-        let record = FriReducedOpeningRecord {
-            pc: F::from_canonical_u32(from_state.pc),
-            start_timestamp: F::from_canonical_u32(from_state.timestamp),
-            instruction: instruction.clone(),
-            alpha_read: alpha_read.0,
-            length_read: length_read.0,
-            a_ptr_read: a_ptr_read.0,
-            is_init_read: is_init_read.0,
-            b_ptr_read: b_ptr_read.0,
-            a_rws: a_rws.into_iter().map(|r| r.0).collect(),
-            b_reads: b_reads.into_iter().map(|r| r.0).collect(),
-            result_write,
-        };
-        self.height += record.get_height();
-        self.records.push(record);
-
-        Ok(ExecutionState {
-            pc: from_state.pc + DEFAULT_PC_STEP,
-            timestamp: memory.timestamp(),
-        })
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        assert_eq!(opcode, FRI_REDUCED_OPENING.global_opcode().as_usize());
-        String::from("FRI_REDUCED_OPENING")
-    }
-}
-
-fn record_to_rows<F: PrimeField32>(
-    record: FriReducedOpeningRecord<F>,
-    aux_cols_factory: &MemoryAuxColsFactory<F>,
-    slice: &mut [F],
-    memory: &OfflineMemory<F>,
-) {
-    let Instruction {
-        a: a_ptr_ptr,
-        b: b_ptr_ptr,
-        c: length_ptr,
-        d: alpha_ptr,
-        e: result_ptr,
-        f: hint_id_ptr,
-        g: is_init_ptr,
-        ..
-    } = record.instruction;
-
-    let length_read = memory.record_by_id(record.length_read);
-    let alpha_read = memory.record_by_id(record.alpha_read);
-    let a_ptr_read = memory.record_by_id(record.a_ptr_read);
-    let b_ptr_read = memory.record_by_id(record.b_ptr_read);
-    let is_init_read = memory.record_by_id(record.is_init_read);
-    let is_init = is_init_read.data_at(0);
-    let write_a = F::ONE - is_init;
-
-    let length = length_read.data_at(0).as_canonical_u32() as usize;
-    let alpha: [F; EXT_DEG] = alpha_read.data_slice().try_into().unwrap();
-    let a_ptr = a_ptr_read.data_at(0);
-    let b_ptr = b_ptr_read.data_at(0);
-
-    let mut result = [F::ZERO; EXT_DEG];
-
-    let alpha_aux = aux_cols_factory.make_read_aux_cols(alpha_read);
-    let length_aux = aux_cols_factory.make_read_aux_cols(length_read);
-    let a_ptr_aux = aux_cols_factory.make_read_aux_cols(a_ptr_read);
-    let b_ptr_aux = aux_cols_factory.make_read_aux_cols(b_ptr_read);
-    let is_init_aux = aux_cols_factory.make_read_aux_cols(is_init_read);
-
-    let result_aux = aux_cols_factory.make_write_aux_cols(memory.record_by_id(record.result_write));
-
-    // WorkloadCols
-    for (i, (&a_record_id, &b_record_id)) in record
-        .a_rws
-        .iter()
-        .rev()
-        .zip_eq(record.b_reads.iter().rev())
-        .enumerate()
-    {
-        let a_rw = memory.record_by_id(a_record_id);
-        let b_read = memory.record_by_id(b_record_id);
-        let a = a_rw.data_at(0);
-        let b: [F; EXT_DEG] = b_read.data_slice().try_into().unwrap();
-
-        let start = i * OVERALL_WIDTH;
-        let cols: &mut WorkloadCols<F> = slice[start..start + WL_WIDTH].borrow_mut();
-        *cols = WorkloadCols {
-            prefix: PrefixCols {
+            cols.prefix = PrefixCols {
                 general: GeneralCols {
                     is_workload_row: F::ONE,
                     is_ins_row: F::ZERO,
-                    timestamp: record.start_timestamp + F::from_canonical_usize((length - i) * 2),
+                    timestamp: F::from_canonical_u32(timestamp_start)
+                        + F::from_canonical_usize((length - i) * 2),
                 },
                 a_or_is_first: a,
                 data: DataCols {
@@ -766,133 +669,235 @@ fn record_to_rows<F: PrimeField32>(
                     result,
                     alpha,
                 },
-            },
-            // Generate write aux columns no matter `a` is read or written. When `a` is written,
-            // `prev_data` is not constrained.
-            a_aux: if a_rw.prev_data_slice().is_some() {
-                aux_cols_factory.make_write_aux_cols(a_rw)
-            } else {
-                let read_aux = aux_cols_factory.make_read_aux_cols(a_rw);
-                MemoryWriteAuxCols::from_base(read_aux.get_base(), [F::ZERO])
-            },
-            b,
-            b_aux: aux_cols_factory.make_read_aux_cols(b_read),
-        };
-        // result = result * alpha + (b - a)
-        result = FieldExtension::add(
-            FieldExtension::multiply(result, alpha),
-            FieldExtension::subtract(b, elem_to_ext(a)),
-        );
-    }
-    // Instruction1Cols
-    {
-        let start = length * OVERALL_WIDTH;
-        let cols: &mut Instruction1Cols<F> = slice[start..start + INS_1_WIDTH].borrow_mut();
-        *cols = Instruction1Cols {
-            prefix: PrefixCols {
-                general: GeneralCols {
-                    is_workload_row: F::ZERO,
-                    is_ins_row: F::ONE,
-                    timestamp: record.start_timestamp,
+            };
+            cols.b = b;
+
+            // result = result * alpha + (b - a)
+            result = FieldExtension::add(
+                FieldExtension::multiply(result, alpha),
+                FieldExtension::subtract(b, elem_to_ext(a)),
+            );
+        }
+
+        // Instruction1Cols
+        {
+            let start = *trace_offset + length * OVERALL_WIDTH;
+            let cols: &mut Instruction1Cols<F> = trace[start..start + INS_1_WIDTH].borrow_mut();
+            *cols = Instruction1Cols {
+                prefix: PrefixCols {
+                    general: GeneralCols {
+                        is_workload_row: F::ZERO,
+                        is_ins_row: F::ONE,
+                        timestamp: F::from_canonical_u32(timestamp_start),
+                    },
+                    a_or_is_first: F::ONE,
+                    data: DataCols {
+                        a_ptr,
+                        write_a,
+                        b_ptr,
+                        idx: F::from_canonical_usize(length),
+                        result,
+                        alpha,
+                    },
                 },
-                a_or_is_first: F::ONE,
-                data: DataCols {
-                    a_ptr,
-                    write_a,
-                    b_ptr,
-                    idx: F::from_canonical_usize(length),
-                    result,
-                    alpha,
-                },
-            },
-            pc: record.pc,
-            a_ptr_ptr,
-            a_ptr_aux,
-            b_ptr_ptr,
-            b_ptr_aux,
-            write_a_x_is_first: write_a,
-        };
-    }
-    // Instruction2Cols
-    {
-        let start = (length + 1) * OVERALL_WIDTH;
-        let cols: &mut Instruction2Cols<F> = slice[start..start + INS_2_WIDTH].borrow_mut();
-        *cols = Instruction2Cols {
-            general: GeneralCols {
+                pc: F::from_canonical_u32(*state.pc),
+                a_ptr_ptr: a,
+                a_ptr_aux,
+                b_ptr_ptr: b,
+                b_ptr_aux,
+                write_a_x_is_first: write_a,
+            };
+        }
+
+        // Instruction2Cols
+        {
+            let start = *trace_offset + (length + 1) * OVERALL_WIDTH;
+            let cols: &mut Instruction2Cols<F> = trace[start..start + INS_2_WIDTH].borrow_mut();
+            cols.general = GeneralCols {
                 is_workload_row: F::ZERO,
                 is_ins_row: F::ONE,
-                timestamp: record.start_timestamp,
-            },
-            is_first: F::ZERO,
-            length_ptr,
-            length_aux,
-            alpha_ptr,
-            alpha_aux,
-            result_ptr,
-            result_aux,
-            hint_id_ptr,
-            is_init_ptr,
-            is_init_aux,
-            write_a_x_is_first: F::ZERO,
+                timestamp: F::from_canonical_u32(timestamp_start),
+            };
+            cols.is_first = F::ZERO;
+            cols.length_ptr = c;
+            cols.length_aux = length_aux;
+            cols.alpha_ptr = d;
+            cols.alpha_aux = alpha_aux;
+            cols.result_ptr = e;
+            cols.hint_id_ptr = f;
+            cols.is_init_ptr = g;
+            cols.is_init_aux = is_init_aux;
+            cols.write_a_x_is_first = F::ZERO;
+
+            tracing_write_native(state.memory, result_ptr, &result, &mut cols.result_aux);
+
+            // TODO(ayush): this is a bad hack to make length available to fill_trace_row
+            cols.result_aux.base.timestamp_lt_aux.lower_decomp[0] =
+                F::from_canonical_u32(length as u32);
+        }
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        *trace_offset += (length + 2) * OVERALL_WIDTH;
+
+        Ok(())
+    }
+
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (is_workload_row, is_ins_row) = {
+            let cols: &GeneralCols<F> = row_slice[..GENERAL_WIDTH].borrow();
+            (cols.is_workload_row.is_one(), cols.is_ins_row.is_one())
         };
+
+        if is_workload_row {
+            let cols: &mut WorkloadCols<F> = row_slice[..WL_WIDTH].borrow_mut();
+
+            let timestamp = cols.prefix.general.timestamp.as_canonical_u32();
+            mem_helper.fill_from_prev(timestamp + 3, cols.a_aux.as_mut());
+            mem_helper.fill_from_prev(timestamp + 4, cols.b_aux.as_mut());
+        }
+
+        if is_ins_row {
+            let is_ins_1_row = row_slice[GENERAL_WIDTH].is_one();
+
+            if is_ins_1_row {
+                let cols: &mut Instruction1Cols<F> = row_slice[..INS_1_WIDTH].borrow_mut();
+                let timestamp = cols.prefix.general.timestamp.as_canonical_u32();
+
+                mem_helper.fill_from_prev(timestamp + 2, cols.a_ptr_aux.as_mut());
+                mem_helper.fill_from_prev(timestamp + 3, cols.b_ptr_aux.as_mut());
+            } else {
+                let cols: &mut Instruction2Cols<F> = row_slice[..INS_2_WIDTH].borrow_mut();
+                let timestamp = cols.general.timestamp.as_canonical_u32();
+
+                mem_helper.fill_from_prev(timestamp, cols.alpha_aux.as_mut());
+                mem_helper.fill_from_prev(timestamp + 1, cols.length_aux.as_mut());
+                mem_helper.fill_from_prev(timestamp + 4, cols.is_init_aux.as_mut());
+
+                // TODO(ayush): this is bad
+                let length = cols.result_aux.get_base().timestamp_lt_aux.lower_decomp[0];
+                mem_helper.fill_from_prev(
+                    timestamp + 5 + 2 * length.as_canonical_u32(),
+                    cols.result_aux.as_mut(),
+                );
+            }
+        }
     }
 }
 
-impl<F: Field> ChipUsageGetter for FriReducedOpeningChip<F> {
-    fn air_name(&self) -> String {
-        "FriReducedOpeningAir".to_string()
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.height
-    }
-
-    fn trace_width(&self) -> usize {
-        OVERALL_WIDTH
-    }
-}
-
-impl<SC: StarkGenericConfig> Chip<SC> for FriReducedOpeningChip<Val<SC>>
+impl<F> StepExecutorE1<F> for FriReducedOpeningStep<F>
 where
-    Val<SC>: PrimeField32,
+    F: PrimeField32,
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air)
-    }
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let height = next_power_of_two_or_zero(self.height);
-        let mut flat_trace = Val::<SC>::zero_vec(OVERALL_WIDTH * height);
-        let chunked_trace = {
-            let sizes: Vec<_> = self
-                .records
-                .par_iter()
-                .map(|record| OVERALL_WIDTH * record.get_height())
-                .collect();
-            variable_chunks_mut(&mut flat_trace, &sizes)
+    fn execute_e1<Ctx>(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+        let &Instruction {
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
+            ..
+        } = instruction;
+
+        let a_ptr_ptr = a.as_canonical_u32();
+        let b_ptr_ptr = b.as_canonical_u32();
+        let length_ptr = c.as_canonical_u32();
+        let alpha_ptr = d.as_canonical_u32();
+        let result_ptr = e.as_canonical_u32();
+        let hint_id_ptr = f.as_canonical_u32();
+        let is_init_ptr = g.as_canonical_u32();
+
+        let alpha = memory_read_native(state.memory, alpha_ptr);
+        let [length]: [F; 1] = memory_read_native(state.memory, length_ptr);
+        let [a_ptr]: [F; 1] = memory_read_native(state.memory, a_ptr_ptr);
+        let [b_ptr]: [F; 1] = memory_read_native(state.memory, b_ptr_ptr);
+        let [is_init_read]: [F; 1] = memory_read_native(state.memory, is_init_ptr);
+        let is_init = is_init_read.as_canonical_u32();
+
+        let [hint_id_f]: [F; 1] = memory_read_native(state.memory, hint_id_ptr);
+        let hint_id = hint_id_f.as_canonical_u32() as usize;
+
+        let length = length.as_canonical_u32() as usize;
+
+        let data = if is_init == 0 {
+            let mut streams = self.streams.lock().unwrap();
+            let hint_steam = &mut streams.hint_space[hint_id];
+            hint_steam.drain(0..length).collect()
+        } else {
+            vec![]
         };
 
-        let memory = self.offline_memory.lock().unwrap();
-        let aux_cols_factory = memory.aux_cols_factory();
+        let mut as_and_bs = Vec::with_capacity(length);
+        #[allow(clippy::needless_range_loop)]
+        for i in 0..length {
+            let a_ptr_i = (a_ptr + F::from_canonical_usize(i)).as_canonical_u32();
+            let [a]: [F; 1] = if is_init == 0 {
+                memory_write_native(state.memory, a_ptr_i, &[data[i]]);
+                [data[i]]
+            } else {
+                memory_read_native(state.memory, a_ptr_i)
+            };
+            let b_ptr_i = (b_ptr + F::from_canonical_usize(EXT_DEG * i)).as_canonical_u32();
+            let b = memory_read_native::<F, EXT_DEG>(state.memory, b_ptr_i);
 
-        self.records
-            .into_par_iter()
-            .zip_eq(chunked_trace.into_par_iter())
-            .for_each(|(record, slice)| {
-                record_to_rows(record, &aux_cols_factory, slice, &memory);
-            });
+            as_and_bs.push((a, b));
+        }
 
-        let matrix = RowMajorMatrix::new(flat_trace, OVERALL_WIDTH);
-        AirProofInput::simple_no_pis(matrix)
+        let mut result = [F::ZERO; EXT_DEG];
+        for (a, b) in as_and_bs.into_iter().rev() {
+            // result = result * alpha + (b - a)
+            result = FieldExtension::add(
+                FieldExtension::multiply(result, alpha),
+                FieldExtension::subtract(b, elem_to_ext(a)),
+            );
+        }
+
+        // TODO(ayush): why do we need this?should this be incremented only in tracegen execute?
+        // 2 for instruction rows
+        self.height += length + 2;
+
+        memory_write_native(state.memory, result_ptr, &result);
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+
+    fn execute_metered(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        let &Instruction {
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
+            ..
+        } = instruction;
+
+        let length_ptr = c.as_canonical_u32();
+        let [length]: [F; 1] = memory_read_native(state.memory, length_ptr);
+
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += length.as_canonical_u32() + 2;
+
+        Ok(())
     }
 }
 
-fn variable_chunks_mut<'a, T>(mut slice: &'a mut [T], sizes: &[usize]) -> Vec<&'a mut [T]> {
-    let mut result = Vec::with_capacity(sizes.len());
-    for &size in sizes {
-        // split_at_mut guarantees disjoint slices
-        let (left, right) = slice.split_at_mut(size);
-        result.push(left);
-        slice = right; // move forward for the next chunk
-    }
-    result
-}
+pub type FriReducedOpeningChip<F> =
+    NewVmChipWrapper<F, FriReducedOpeningAir, FriReducedOpeningStep<F>>;

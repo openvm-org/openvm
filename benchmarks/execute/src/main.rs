@@ -1,39 +1,49 @@
 use clap::{Parser, ValueEnum};
 use eyre::Result;
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
-use openvm_bigint_circuit::Int256Rv32Config;
+use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery, Int256Rv32Config};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
-use openvm_circuit::arch::{instructions::exe::VmExe, VirtualMachine, VmExecutor};
+use openvm_circuit::{
+    arch::{instructions::exe::VmExe, SystemConfig, VirtualMachine, VmExecutor},
+    derive::VmConfig,
+};
+use openvm_keccak256_circuit::{
+    Keccak256, Keccak256Executor, Keccak256Periphery, Keccak256Rv32Config,
+};
+use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
+use openvm_rv32im_circuit::{
+    Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
+    Rv32MExecutor, Rv32MPeriphery,
+};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
+use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
+use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_sdk::{
-    bench::run_with_metric_collection, config::baby_bear_poseidon2::default_engine,
+    bench::run_with_metric_collection,
+    config::baby_bear_poseidon2::default_engine,
+    openvm_stark_backend::{self, p3_field::PrimeField32},
     p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
-
-#[derive(Debug, Clone, ValueEnum)]
-enum BuildProfile {
-    Debug,
-    Release,
-}
+use serde::{Deserialize, Serialize};
 
 // const DEFAULT_APP_CONFIG_PATH: &str = "./openvm.toml";
 
 static AVAILABLE_PROGRAMS: &[&str] = &[
-    "fibonacci_recursive",
-    "fibonacci_iterative",
-    "quicksort",
-    "bubblesort",
-    "factorial_iterative_u256",
-    "revm_snailtracer",
-    // "pairing",
-    // "keccak256",
+    // "fibonacci_recursive",
+    // "fibonacci_iterative",
+    // "quicksort",
+    // "bubblesort",
+    // "factorial_iterative_u256",
+    // "revm_snailtracer",
+    "keccak256",
     // "keccak256_iter",
     // "sha256",
     // "sha256_iter",
     // "revm_transfer",
+    // "pairing",
 ];
 
 #[derive(Parser)]
@@ -58,6 +68,39 @@ struct Cli {
     /// Verbose output
     #[arg(short, long)]
     verbose: bool,
+}
+
+#[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
+pub struct ExecuteConfig {
+    #[system]
+    pub system: SystemConfig,
+    #[extension]
+    pub rv32i: Rv32I,
+    #[extension]
+    pub rv32m: Rv32M,
+    #[extension]
+    pub io: Rv32Io,
+    #[extension]
+    pub bigint: Int256,
+    #[extension]
+    pub keccak: Keccak256,
+    #[extension]
+    pub sha256: Sha256,
+}
+
+impl Default for ExecuteConfig {
+    // TODO(ayush): this should be auto-derived as vmconfig should have a with_continuations method
+    fn default() -> Self {
+        Self {
+            system: SystemConfig::default().with_continuations(),
+            rv32i: Rv32I::default(),
+            rv32m: Rv32M::default(),
+            io: Rv32Io::default(),
+            bigint: Int256::default(),
+            keccak: Keccak256::default(),
+            sha256: Sha256::default(),
+        }
+    }
 }
 
 fn main() -> Result<()> {
@@ -118,13 +161,15 @@ fn main() -> Result<()> {
             // let config_path = program_dir.join(DEFAULT_APP_CONFIG_PATH);
             // let vm_config = read_config_toml_or_default(&config_path)?.app_vm_config;
             // let transpiler = vm_config.transpiler;
-            let vm_config = Int256Rv32Config::default();
+            let vm_config = ExecuteConfig::default();
 
             let transpiler = Transpiler::<BabyBear>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(Int256TranspilerExtension);
+                .with_extension(Int256TranspilerExtension)
+                .with_extension(Keccak256TranspilerExtension)
+                .with_extension(Sha256TranspilerExtension);
 
             let exe = VmExe::from_elf(elf, transpiler)?;
 
@@ -149,7 +194,8 @@ fn main() -> Result<()> {
 
             let executor = VmExecutor::new(vm_config);
             executor
-                .execute_metered(exe.clone(), vec![], widths, interactions)
+                .execute_e1(exe.clone(), vec![])
+                // .execute_metered(exe.clone(), vec![], widths, interactions)
                 .expect("Failed to execute program");
 
             tracing::info!("Completed program: {}", program);

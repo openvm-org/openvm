@@ -53,7 +53,7 @@ use crate::{
         poseidon2::Poseidon2PeripheryChip,
         program::{ProgramBus, ProgramChip},
         public_values::{
-            core::{PublicValuesCoreAir, PublicValuesStep},
+            core::{PublicValuesCoreAir, PublicValuesCoreStep},
             PublicValuesChip,
         },
     },
@@ -604,7 +604,7 @@ impl<F: PrimeField32> SystemComplex<F> {
                         config.max_constraint_degree as u32 - 1,
                     ),
                 ),
-                PublicValuesStep::new(NativeAdapterStep::new(), config.num_public_values),
+                PublicValuesCoreStep::new(NativeAdapterStep::new(), config.num_public_values),
                 MAX_INS_CAPACITY,
                 memory_controller.helper(),
             );

@@ -28,7 +28,7 @@ use serde_big_array::BigArray;
 
 use super::memory::{online::TracingMemory, MemoryAuxColsFactory};
 use crate::{
-    arch::{AdapterExecutorE1, AdapterTraceStep, VmStateMut},
+    arch::{execution_mode::E1E2ExecutionCtx, AdapterExecutorE1, AdapterTraceStep, VmStateMut},
     system::memory::{online::GuestMemory, RecordId},
 };
 
@@ -251,7 +251,10 @@ where
         &self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Self::ReadData {
+    ) -> Self::ReadData
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         assert!(R <= 2);
 
         let &Instruction { b, c, e, f, .. } = instruction;
@@ -282,7 +285,9 @@ where
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
-    ) {
+    ) where
+        Ctx: E1E2ExecutionCtx,
+    {
         assert!(W <= 1);
 
         let &Instruction { a, d, .. } = instruction;

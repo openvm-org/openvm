@@ -9,7 +9,7 @@ use crate::arch::{
 pub type E1Ctx = ();
 
 impl E1E2ExecutionCtx for E1Ctx {
-    fn on_memory_operation(&mut self, _address_space: u32, _ptr: u32, _size: usize) {}
+    fn on_memory_operation(&mut self, _address_space: u32, _ptr: u32, _size: u32) {}
 }
 
 /// Implementation of the ExecutionControl trait using the old segmentation strategy

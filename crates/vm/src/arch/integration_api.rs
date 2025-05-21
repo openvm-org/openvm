@@ -446,7 +446,10 @@ where
         state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        F: PrimeField32,
+    {
         self.step.execute_metered(state, instruction, chip_index)
     }
 }

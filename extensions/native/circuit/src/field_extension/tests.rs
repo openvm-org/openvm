@@ -3,7 +3,10 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, VmChipTestBuilder},
+    VmAirWrapper,
+};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::FieldExtensionOpcode;
 use openvm_stark_backend::{
@@ -16,25 +19,33 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 use strum::EnumCount;
 
-use super::{
-    super::adapters::native_vectorized_adapter::NativeVectorizedAdapterChip, FieldExtension,
-    FieldExtensionChip, FieldExtensionCoreChip,
+use crate::adapters::native_vectorized_adapter::{
+    NativeVectorizedAdapterAir, NativeVectorizedAdapterStep,
 };
+
+use super::{FieldExtension, FieldExtensionChip, FieldExtensionCoreAir, FieldExtensionCoreStep};
+
+const MAX_INS_CAPACITY: usize = 128;
+type F = BabyBear;
+
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FieldExtensionChip<F> {
+    FieldExtensionChip::<F>::new(
+        VmAirWrapper::new(
+            NativeVectorizedAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+            FieldExtensionCoreAir::new(),
+        ),
+        FieldExtensionCoreStep::new(NativeVectorizedAdapterStep::new()),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
+    )
+}
 
 #[test]
 fn new_field_extension_air_test() {
     type F = BabyBear;
 
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = FieldExtensionChip::new(
-        NativeVectorizedAdapterChip::new(
-            tester.execution_bus(),
-            tester.program_bus(),
-            tester.memory_bridge(),
-        ),
-        FieldExtensionCoreChip::new(),
-        tester.offline_memory_mutex_arc(),
-    );
+    let mut chip = create_test_chip(&tester);
     let trace_width = chip.trace_width();
 
     let mut rng = create_seeded_rng();

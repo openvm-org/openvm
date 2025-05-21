@@ -8,13 +8,13 @@ use crate::{
 // TODO(ayush): can segmentation also be triggered by timestamp overflow? should that be tracked?
 #[derive(Debug)]
 pub struct MeteredCtxBounded {
-    pub trace_heights: Vec<usize>,
+    pub trace_heights: Vec<u32>,
 
     continuations_enabled: bool,
-    num_access_adapters: usize,
+    num_access_adapters: u8,
     // TODO(ayush): take alignment into account for access adapters
     #[allow(dead_code)]
-    as_byte_alignment_bits: Vec<usize>,
+    as_byte_alignment_bits: Vec<u8>,
     pub memory_dimensions: MemoryDimensions,
 
     // Indices of leaf nodes in the memory merkle tree
@@ -25,8 +25,8 @@ impl MeteredCtxBounded {
     pub fn new(
         num_traces: usize,
         continuations_enabled: bool,
-        num_access_adapters: usize,
-        as_byte_alignment_bits: Vec<usize>,
+        num_access_adapters: u8,
+        as_byte_alignment_bits: Vec<u8>,
         memory_dimensions: MemoryDimensions,
     ) -> Self {
         Self {
@@ -41,7 +41,7 @@ impl MeteredCtxBounded {
 }
 
 impl MeteredCtxBounded {
-    fn update_boundary_merkle_heights(&mut self, address_space: u32, ptr: u32, size: usize) {
+    fn update_boundary_merkle_heights(&mut self, address_space: u32, ptr: u32, size: u32) {
         let boundary_idx = if self.continuations_enabled {
             PUBLIC_VALUES_AIR_ID
         } else {
@@ -49,9 +49,9 @@ impl MeteredCtxBounded {
         };
         let poseidon2_idx = self.trace_heights.len() - 2;
 
-        let num_blocks = (size + CHUNK - 1) >> CHUNK_BITS;
+        let num_blocks = (size + CHUNK as u32 - 1) >> CHUNK_BITS;
         for i in 0..num_blocks {
-            let addr = ptr.wrapping_add((i * CHUNK) as u32);
+            let addr = ptr.wrapping_add(i * CHUNK as u32);
             let block_id = addr >> CHUNK_BITS;
             let leaf_id = self
                 .memory_dimensions
@@ -68,10 +68,10 @@ impl MeteredCtxBounded {
                     let succ_id = (insert_idx < self.leaf_indices.len() - 1)
                         .then(|| self.leaf_indices[insert_idx + 1]);
                     let height_change = calculate_merkle_node_updates(
+                        leaf_id,
                         pred_id,
                         succ_id,
-                        leaf_id,
-                        self.memory_dimensions.overall_height(),
+                        self.memory_dimensions.overall_height() as u32,
                     );
                     self.trace_heights[boundary_idx + 1] += height_change * 2;
                     self.trace_heights[poseidon2_idx] += height_change * 2;
@@ -80,7 +80,7 @@ impl MeteredCtxBounded {
         }
     }
 
-    fn update_adapter_heights_batch(&mut self, size: usize, num: usize) {
+    fn update_adapter_heights_batch(&mut self, size: u32, num: u32) {
         let adapter_offset = if self.continuations_enabled {
             PUBLIC_VALUES_AIR_ID + 2
         } else {
@@ -90,18 +90,18 @@ impl MeteredCtxBounded {
         apply_adapter_updates_batch(size, num, &mut self.trace_heights[adapter_offset..]);
     }
 
-    fn update_adapter_heights(&mut self, size: usize) {
+    fn update_adapter_heights(&mut self, size: u32) {
         self.update_adapter_heights_batch(size, 1);
     }
 
     pub fn finalize_access_adapter_heights(&mut self) {
-        self.update_adapter_heights_batch(CHUNK, self.leaf_indices.len());
+        self.update_adapter_heights_batch(CHUNK as u32, self.leaf_indices.len() as u32);
     }
 
-    pub fn trace_heights_if_finalized(&mut self) -> Vec<usize> {
-        let num_leaves = self.leaf_indices.len();
-        let mut access_adapter_updates = vec![0; self.num_access_adapters];
-        apply_adapter_updates_batch(CHUNK, num_leaves, &mut access_adapter_updates);
+    pub fn trace_heights_if_finalized(&mut self) -> Vec<u32> {
+        let num_leaves = self.leaf_indices.len() as u32;
+        let mut access_adapter_updates = vec![0; self.num_access_adapters as usize];
+        apply_adapter_updates_batch(CHUNK as u32, num_leaves, &mut access_adapter_updates);
 
         let adapter_offset = if self.continuations_enabled {
             PUBLIC_VALUES_AIR_ID + 2
@@ -123,7 +123,7 @@ impl MeteredCtxBounded {
 }
 
 impl E1E2ExecutionCtx for MeteredCtxBounded {
-    fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: usize) {
+    fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32) {
         debug_assert!(
             address_space != RV32_IMM_AS,
             "address space must not be immediate"
@@ -140,19 +140,19 @@ impl E1E2ExecutionCtx for MeteredCtxBounded {
     }
 }
 
-fn apply_adapter_updates_batch(size: usize, num: usize, trace_heights: &mut [usize]) {
-    let size_bits = size.ilog2() as usize;
+fn apply_adapter_updates_batch(size: u32, num: u32, trace_heights: &mut [u32]) {
+    let size_bits = size.ilog2();
     for adapter_bits in (3..=size_bits).rev() {
-        trace_heights[adapter_bits - 1] += num << (size_bits - adapter_bits + 1);
+        trace_heights[adapter_bits as usize - 1] += num << (size_bits - adapter_bits + 1);
     }
 }
 
 fn calculate_merkle_node_updates(
+    leaf_id: u64,
     pred_id: Option<u64>,
     succ_id: Option<u64>,
-    leaf_id: u64,
-    height: usize,
-) -> usize {
+    height: u32,
+) -> u32 {
     // First node requires height many updates
     if pred_id.is_none() && succ_id.is_none() {
         return height;
@@ -163,19 +163,19 @@ fn calculate_merkle_node_updates(
 
     // Add new divergences between pred and leaf_index
     if let Some(p) = pred_id {
-        let new_divergence = (p ^ leaf_id).ilog2() as usize;
+        let new_divergence = (p ^ leaf_id).ilog2();
         diff += new_divergence;
     }
 
     // Add new divergences between leaf_index and succ
     if let Some(s) = succ_id {
-        let new_divergence = (leaf_id ^ s).ilog2() as usize;
+        let new_divergence = (leaf_id ^ s).ilog2();
         diff += new_divergence;
     }
 
     // Remove old divergence between pred and succ if both existed
     if let (Some(p), Some(s)) = (pred_id, succ_id) {
-        let old_divergence = (p ^ s).ilog2() as usize;
+        let old_divergence = (p ^ s).ilog2();
         diff -= old_divergence;
     }
 

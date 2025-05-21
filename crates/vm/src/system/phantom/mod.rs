@@ -184,10 +184,7 @@ where
         state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         _chip_index: usize,
-    ) -> Result<(), ExecutionError>
-    where
-        F: PrimeField32,
-    {
+    ) -> Result<(), ExecutionError> {
         self.execute_e1(state, instruction)?;
 
         Ok(())
