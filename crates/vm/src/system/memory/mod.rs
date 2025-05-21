@@ -15,8 +15,9 @@ pub mod tree;
 mod volatile;
 
 pub use controller::*;
+// pub use paged_vec::*;
+pub use memmap::*;
 pub use online::INITIAL_TIMESTAMP;
-pub use paged_vec::*;
 
 #[derive(PartialEq, Copy, Clone, Debug, Eq)]
 pub enum OpType {
