@@ -6,7 +6,7 @@ use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
     arch::{
         execution_mode::metered::Segment, instructions::exe::VmExe, SystemConfig, VirtualMachine,
-        VmExecutor,
+        VmExecutor, VmExecutorResult,
     },
     derive::VmConfig,
 };
@@ -25,7 +25,10 @@ use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_sdk::{
     bench::run_with_metric_collection,
-    config::{baby_bear_blake3::BabyBearBlake3Config, baby_bear_poseidon2::default_engine},
+    config::{
+        baby_bear_blake3::BabyBearBlake3Config,
+        baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
+    },
     openvm_stark_backend::{
         self,
         p3_field::{FieldExtensionAlgebra, PrimeField32},
@@ -179,9 +182,9 @@ fn main() -> Result<()> {
 
             let exe = VmExe::from_elf(elf, transpiler)?;
 
+            let vm = VirtualMachine::new(default_engine(), vm_config.clone());
+            let pk = vm.keygen();
             let (widths, interactions): (Vec<usize>, Vec<usize>) = {
-                let vm = VirtualMachine::new(default_engine(), vm_config.clone());
-                let pk = vm.keygen();
                 let vk = pk.get_vk();
                 vk.inner
                     .per_air
@@ -211,11 +214,17 @@ fn main() -> Result<()> {
                 let state = executor.execute_e1(exe.clone(), vec![], Some(clk_start))?;
                 assert!(state.clk == clk_start);
                 // E3/tracegen from clk_start for num_cycles beginning with state
-                let result = executor.execute_and_generate_segment::<BabyBearBlake3Config>(
+                let mut result = executor.execute_and_generate_segment::<BabyBearPoseidon2Config>(
                     exe.clone(),
                     state,
                     num_cycles,
                 )?;
+                // let proof_input = result.per_segment.pop().unwrap();
+                // let proof = tracing::info_span!("prove_single")
+                //     .in_scope(|| vm.prove_single(&pk, proof_input));
+
+                // let proof_bytes = bitcode::serialize(&proof)?;
+                // tracing::info!("Proof size: {} bytes", proof_bytes.len());
             }
 
             tracing::info!("Completed program: {}", program);

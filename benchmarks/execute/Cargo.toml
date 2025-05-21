@@ -23,6 +23,7 @@ openvm-keccak256-transpiler.workspace = true
 openvm-sha256-circuit.workspace = true
 openvm-sha256-transpiler.workspace = true
 
+# bitcode.workspace = true
 clap = { version = "4.5.9", features = ["derive", "env"] }
 eyre.workspace = true
 tracing.workspace = true
