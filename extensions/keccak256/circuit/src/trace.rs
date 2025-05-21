@@ -171,6 +171,10 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
         Self: Send + Sync,
         F: Send + Sync,
     {
+        if rows_used == 0 {
+            return;
+        }
+
         let num_blocks = rows_used.div_ceil(NUM_ROUNDS);
         let mut states = Vec::with_capacity(num_blocks);
         let mut state = [0u64; 25];

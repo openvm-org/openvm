@@ -1,6 +1,7 @@
 mod normal;
 mod segmentation;
 
-pub use segmentation::TracegenExecutionControlWithSemgentation as TracegenExecutionControl;
+pub use normal::TracegenExecutionControl;
+pub use segmentation::TracegenExecutionControlWithSegmentation;
 
 pub type TracegenCtx = ();

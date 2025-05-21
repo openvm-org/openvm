@@ -15,7 +15,7 @@ use super::TracegenCtx;
 const SEGMENT_CHECK_INTERVAL: usize = 100;
 
 /// Implementation of the ExecutionControl trait using the old segmentation strategy
-pub struct TracegenExecutionControlWithSemgentation {
+pub struct TracegenExecutionControlWithSegmentation {
     // Constant
     air_names: Vec<String>,
     // State
@@ -23,7 +23,7 @@ pub struct TracegenExecutionControlWithSemgentation {
     pub final_memory: Option<MemoryImage>,
 }
 
-impl TracegenExecutionControlWithSemgentation {
+impl TracegenExecutionControlWithSegmentation {
     pub fn new(air_names: Vec<String>) -> Self {
         Self {
             since_last_segment_check: 0,
@@ -33,7 +33,7 @@ impl TracegenExecutionControlWithSemgentation {
     }
 }
 
-impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControlWithSemgentation
+impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControlWithSegmentation
 where
     F: PrimeField32,
     VC: VmConfig<F>,

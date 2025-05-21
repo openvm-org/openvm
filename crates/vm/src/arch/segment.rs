@@ -113,9 +113,6 @@ where
         self.ctrl.on_start(state, &mut self.chip_complex);
 
         loop {
-            // Fetch, decode and execute single instruction
-            self.execute_instruction(state, &mut prev_backtrace)?;
-
             if let Some(exit_code) = state.exit_code {
                 self.ctrl
                     .on_terminate(state, &mut self.chip_complex, exit_code);
@@ -125,6 +122,9 @@ where
                 self.ctrl.on_suspend(state, &mut self.chip_complex);
                 break;
             }
+
+            // Fetch, decode and execute single instruction
+            self.execute_instruction(state, &mut prev_backtrace)?;
         }
 
         Ok(())

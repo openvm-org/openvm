@@ -13,7 +13,7 @@ impl E1E2ExecutionCtx for E1Ctx {
 }
 
 /// Implementation of the ExecutionControl trait using the old segmentation strategy
-#[derive(Default)]
+#[derive(Default, derive_new::new)]
 pub struct E1ExecutionControl {
     pub clk_end: Option<u64>,
 }
