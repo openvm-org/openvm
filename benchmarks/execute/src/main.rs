@@ -210,7 +210,7 @@ fn main() -> Result<()> {
                 // E1 till clk_start
                 let state = executor.execute_e1(exe.clone(), vec![], Some(clk_start))?;
                 assert!(state.clk == clk_start);
-                // E3/tracegen from clk_start to clk_end beginning with state
+                // E3/tracegen from clk_start for num_cycles beginning with state
                 let result = executor.execute_and_generate_segment::<BabyBearBlake3Config>(
                     exe.clone(),
                     state,
