@@ -9,23 +9,20 @@ use crate::{
     system::memory::MemoryImage,
 };
 
-/// Check segment every 100 instructions.
-const SEGMENT_CHECK_INTERVAL: usize = 100;
-
 pub type TracegenCtx = ();
 
 /// Implementation of the ExecutionControl trait using the old segmentation strategy
 pub struct TracegenExecutionControl {
-    pub since_last_segment_check: usize,
-    air_names: Vec<String>,
+    // State
+    pub clk_end: u64,
+    // TODO(ayush): do we need this if only executing one segment?
     pub final_memory: Option<MemoryImage>,
 }
 
 impl TracegenExecutionControl {
-    pub fn new(air_names: Vec<String>) -> Self {
+    pub fn new(clk_end: u64) -> Self {
         Self {
-            since_last_segment_check: 0,
-            air_names,
+            clk_end,
             final_memory: None,
         }
     }
@@ -40,20 +37,10 @@ where
 
     fn should_suspend(
         &mut self,
-        _state: &mut VmSegmentState<Self::Ctx>,
-        chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
+        state: &mut VmSegmentState<Self::Ctx>,
+        _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
-        // Avoid checking segment too often.
-        if self.since_last_segment_check != SEGMENT_CHECK_INTERVAL {
-            self.since_last_segment_check += 1;
-            return false;
-        }
-        self.since_last_segment_check = 0;
-        chip_complex.config().segmentation_strategy.should_segment(
-            &self.air_names,
-            &chip_complex.dynamic_trace_heights().collect::<Vec<_>>(),
-            &chip_complex.current_trace_cells(),
-        )
+        state.clk >= self.clk_end
     }
 
     fn on_start(

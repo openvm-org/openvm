@@ -23,7 +23,10 @@ use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_sdk::{
     bench::run_with_metric_collection,
     config::baby_bear_poseidon2::default_engine,
-    openvm_stark_backend::{self, p3_field::PrimeField32},
+    openvm_stark_backend::{
+        self,
+        p3_field::{FieldExtensionAlgebra, PrimeField32},
+    },
     p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -38,8 +41,8 @@ static AVAILABLE_PROGRAMS: &[&str] = &[
     // "bubblesort",
     // "factorial_iterative_u256",
     // "revm_snailtracer",
-    "keccak256",
-    // "keccak256_iter",
+    // "keccak256",
+    "keccak256_iter",
     // "sha256",
     // "sha256_iter",
     // "revm_transfer",
@@ -181,21 +184,21 @@ fn main() -> Result<()> {
                     .per_air
                     .iter()
                     .map(|vk| {
-                        // TODO(ayush): figure out which width to use
-                        // let total_width = vk.params.width.preprocessed.unwrap_or(0)
-                        //     + vk.params.width.cached_mains.iter().sum::<usize>()
-                        //     + vk.params.width.common_main
-                        //     + vk.params.width.after_challenge.iter().sum::<usize>();
-                        let total_width = vk.params.width.main_widths().iter().sum::<usize>();
+                        let total_width = vk.params.width.preprocessed.unwrap_or(0)
+                            + vk.params.width.cached_mains.iter().sum::<usize>()
+                            + vk.params.width.common_main
+                            // TODO(ayush): no magic value 4. should come from stark config
+                            + vk.params.width.after_challenge.iter().sum::<usize>() * 4;
                         (total_width, vk.symbolic_constraints.interactions.len())
                     })
                     .unzip()
             };
 
             let executor = VmExecutor::new(vm_config);
-            executor
-                .execute_e1(exe.clone(), vec![])
-                // .execute_metered(exe.clone(), vec![], widths, interactions)
+            let segments = executor
+                // .execute_e1(exe.clone(), vec![])
+                .execute_metered(exe.clone(), vec![], widths, interactions)
+                // .execute(exe.clone(), vec![])
                 .expect("Failed to execute program");
 
             tracing::info!("Completed program: {}", program);
