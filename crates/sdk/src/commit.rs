@@ -35,6 +35,14 @@ pub struct AppExecutionCommit {
     pub exe_commit: [u32; DIGEST_SIZE],
 }
 
+/// `AppExecutionBn254Commit` is `AppExecutionCommit` with Bn254Fr fields instead of
+/// [u32; DIGEST_SIZE] ones. For serialization/deserialization purposes.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AppExecutionBn254Commit {
+    pub vm_commit: Bn254Fr,
+    pub exe_commit: Bn254Fr,
+}
+
 impl AppExecutionCommit {
     /// Users should use this function to compute `AppExecutionCommit` and check it against the
     /// final proof.
@@ -51,6 +59,13 @@ impl AppExecutionCommit {
         Self {
             vm_commit: vm_commit.map(|x| x.as_canonical_u32()),
             exe_commit: exe_commit.map(|x| x.as_canonical_u32()),
+        }
+    }
+
+    pub fn to_bn254_commit(&self) -> AppExecutionBn254Commit {
+        AppExecutionBn254Commit {
+            vm_commit: self.vm_commit_to_bn254(),
+            exe_commit: self.exe_commit_to_bn254(),
         }
     }
 

@@ -49,3 +49,15 @@ The `app` subcommand generates an application-level proof, the `stark` command g
 > In order to run the `evm` subcommand, you must have previously called the costly `cargo openvm setup`, which requires very large amounts of computation and memory (~200 GB).
 
 See [EVM Proof Format](./verify.md#evm-proof-json-format) for details on the output format for `cargo openvm prove evm`.
+
+## Commit Hashes
+
+To see the commit hash for an executable, you may run:
+
+```bash
+cargo openvm commit
+    --app-pk <path_to_app_pk>
+    --exe <path_to_transpiled_program>
+```
+
+The `commit` command has all the auxiliary options that `prove` does, and outputs Bn254 commits for both your executable and VM. Commits are written to `${target_dir}/openvm/` (and `--output-dir` if specified).
