@@ -1,25 +1,22 @@
 extern crate alloc;
-use {core::mem::MaybeUninit};
 
 use alloc::alloc::{alloc, dealloc, handle_alloc_error, Layout};
 use core::ptr::NonNull;
 
-// Register, Memory, and IO address spaces require 4-byte alignment
-pub const MIN_ALIGN: usize = 4;
-
-/// Bytes aligned to 4 bytes.
+/// Bytes allocated according to the given Layout
 pub struct AlignedBuf {
     pub ptr: *mut u8,
     pub layout: Layout,
 }
 
 impl AlignedBuf {
-    /// Allocate a new buffer whose start address is aligned to 4 bytes.
-    pub fn uninit(len: usize) -> Self {
-        let layout = Layout::from_size_align(len, MIN_ALIGN).unwrap();
+    /// Allocate a new buffer whose start address is aligned to `align` bytes.
+    /// *NOTE* if `len` is zero then a creates new `NonNull` that is dangling and 16-byte aligned.
+    pub fn uninit(len: usize, align: usize) -> Self {
+        let layout = Layout::from_size_align(len, align).unwrap();
         if layout.size() == 0 {
             return Self {
-                ptr: NonNull::<u32>::dangling().as_ptr() as *mut u8,
+                ptr: NonNull::<u128>::dangling().as_ptr() as *mut u8,
                 layout,
             };
         }
@@ -31,7 +28,7 @@ impl AlignedBuf {
         AlignedBuf { ptr, layout }
     }
 
-    /// Allocate a new buffer whose start address is aligned to 4 bytes
+    /// Allocate a new buffer whose start address is aligned to `align` bytes
     /// and copy the given data into it.
     ///
     /// # Safety
@@ -39,8 +36,8 @@ impl AlignedBuf {
     /// - `len` should not be zero
     ///
     /// See [alloc]. In particular `data` should not be empty.
-    pub unsafe fn new(bytes: *const u8, len: usize) -> Self {
-        let buf = Self::uninit(len);
+    pub unsafe fn new(bytes: *const u8, len: usize, align: usize) -> Self {
+        let buf = Self::uninit(len, align);
         // SAFETY:
         // - src and dst are not null
         // - src and dst are allocated for size
