@@ -60,4 +60,4 @@ cargo openvm commit
     --exe <path_to_transpiled_program>
 ```
 
-The `commit` command has all the auxiliary options that `prove` does, and outputs both u32 and Bn254 commits for both your executable and VM. Commits are written to  `${target_dir}/openvm/` (and `--output-dir` if specified).
+The `commit` command has all the auxiliary options that `prove` does, and outputs Bn254 commits for both your executable and VM. Commits are written to `${target_dir}/openvm/` (and `--output-dir` if specified).

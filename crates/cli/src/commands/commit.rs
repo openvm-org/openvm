@@ -96,9 +96,7 @@ impl CommitCmd {
         let commit_name = format!("{}.commit.json", &target_name);
         let commit_path = target_output_dir.join(&commit_name);
 
-        write_to_file_json(&commit_path, commits).map_err(|e| {
-            eyre::eyre!("Failed to write commit to {}: {}", commit_path.display(), e)
-        })?;
+        write_to_file_json(&commit_path, commits)?;
         if let Some(output_dir) = &self.output_dir {
             create_dir_all(output_dir)?;
             copy(commit_path, output_dir.join(commit_name))?;
