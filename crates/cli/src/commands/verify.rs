@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::Parser;
 use eyre::Result;
@@ -10,7 +10,7 @@ use openvm_sdk::{
 use super::KeygenCargoArgs;
 use crate::{
     default::*,
-    util::{get_app_vk_path, get_manifest_path_and_dir, get_target_dir},
+    util::{get_app_vk_path, get_files_with_ext, get_manifest_path_and_dir, get_target_dir},
 };
 
 #[derive(Parser)]
@@ -34,11 +34,10 @@ enum VerifySubCommand {
         #[arg(
             long,
             action,
-            default_value = DEFAULT_APP_PROOF_PATH,
-            help = "Path to app proof",
+            help = "Path to app proof, by default will search the working directory for a file with extension .app.proof",
             help_heading = "OpenVM Options"
         )]
-        proof: PathBuf,
+        proof: Option<PathBuf>,
 
         #[command(flatten)]
         cargo_args: KeygenCargoArgs,
@@ -48,11 +47,10 @@ enum VerifySubCommand {
         #[arg(
             long,
             action,
-            default_value = DEFAULT_EVM_PROOF_PATH,
-            help = "Path to EVM proof",
+            help = "Path to EVM proof, by default will search the working directory for a file with extension .evm.proof",
             help_heading = "OpenVM Options"
         )]
-        proof: PathBuf,
+        proof: Option<PathBuf>,
     },
 }
 
@@ -72,9 +70,18 @@ impl VerifyCmd {
                     let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
                     get_app_vk_path(&target_dir)
                 };
-
                 let app_vk = read_app_vk_from_file(app_vk_path)?;
-                let app_proof = read_app_proof_from_file(proof)?;
+
+                let proof_path = if let Some(proof) = proof {
+                    proof.clone()
+                } else {
+                    let files = get_files_with_ext(Path::new("."), "app.proof")?;
+                    if files.len() > 1 {
+                        return Err(eyre::eyre!("multiple .app.proof files found, please specify the path using option --proof"));
+                    }
+                    files[0].clone()
+                };
+                let app_proof = read_app_proof_from_file(proof_path)?;
                 sdk.verify_app_proof(&app_vk, &app_proof)?;
             }
             #[cfg(feature = "evm-verify")]
@@ -91,7 +98,17 @@ impl VerifyCmd {
                         e
                     )
                         })?;
-                let evm_proof = read_evm_proof_from_file(proof)?;
+
+                let proof_path = if let Some(proof) = proof {
+                    proof.clone()
+                } else {
+                    let files = get_files_with_ext(Path::new("."), "evm.proof")?;
+                    if files.len() > 1 {
+                        return Err(eyre::eyre!("multiple .evm.proof files found, please specify the path using option --proof"));
+                    }
+                    files[0].clone()
+                };
+                let evm_proof = read_evm_proof_from_file(proof_path)?;
                 sdk.verify_evm_halo2_proof(&evm_verifier, evm_proof)?;
             }
         }

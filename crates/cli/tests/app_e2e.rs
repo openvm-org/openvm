@@ -10,7 +10,7 @@ fn test_cli_app_e2e() -> Result<()> {
     let exe_path = "tests/programs/fibonacci/target/openvm/release/openvm-cli-example-test.vmexe";
     let temp_pk = temp_dir.path().join("app.pk");
     let temp_vk = temp_dir.path().join("app.vk");
-    let temp_proof = temp_dir.path().join("fibonacci.apppf");
+    let temp_proof = temp_dir.path().join("fibonacci.app.proof");
 
     run_cmd(
         "cargo",
