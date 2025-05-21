@@ -22,6 +22,7 @@ pub struct VmCli {
 #[allow(clippy::large_enum_variant)]
 pub enum VmCliCommands {
     Build(BuildCmd),
+    Commit(CommitCmd),
     Keygen(KeygenCmd),
     Prove(ProveCmd),
     Run(RunCmd),
@@ -37,6 +38,7 @@ async fn main() -> Result<()> {
     setup_tracing_with_log_level(Level::WARN);
     match command {
         VmCliCommands::Build(cmd) => cmd.run(),
+        VmCliCommands::Commit(cmd) => cmd.run(),
         VmCliCommands::Run(cmd) => cmd.run(),
         VmCliCommands::Keygen(cmd) => cmd.run(),
         VmCliCommands::Prove(cmd) => cmd.run(),

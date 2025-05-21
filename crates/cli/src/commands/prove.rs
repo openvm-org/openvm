@@ -125,9 +125,9 @@ impl ProveCmd {
                 cargo_args,
             } => {
                 let sdk = Sdk::new();
-                let app_pk = Self::load_app_pk(app_pk, cargo_args)?;
+                let app_pk = load_app_pk(app_pk, cargo_args)?;
                 let committed_exe =
-                    Self::load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
+                    load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
 
                 let app_proof =
                     sdk.generate_app_proof(app_pk, committed_exe, read_to_stdin(&run_args.input)?)?;
@@ -141,9 +141,9 @@ impl ProveCmd {
                 agg_tree_config,
             } => {
                 let sdk = Sdk::new().with_agg_tree_config(*agg_tree_config);
-                let app_pk = Self::load_app_pk(app_pk, cargo_args)?;
+                let app_pk = load_app_pk(app_pk, cargo_args)?;
                 let committed_exe =
-                    Self::load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
+                    load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
 
                 let commits = AppExecutionCommit::compute(
                     &app_pk.app_vm_pk.vm_config,
@@ -176,9 +176,9 @@ impl ProveCmd {
                 use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 
                 let sdk = Sdk::new().with_agg_tree_config(*agg_tree_config);
-                let app_pk = Self::load_app_pk(app_pk, cargo_args)?;
+                let app_pk = load_app_pk(app_pk, cargo_args)?;
                 let committed_exe =
-                    Self::load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
+                    load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
 
                 let commits = AppExecutionCommit::compute(
                     &app_pk.app_vm_pk.vm_config,
@@ -206,42 +206,42 @@ impl ProveCmd {
         }
         Ok(())
     }
+}
 
-    fn load_app_pk(
-        app_pk: &Option<PathBuf>,
-        cargo_args: &RunCargoArgs,
-    ) -> Result<Arc<AppProvingKey<SdkVmConfig>>> {
-        let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
-        let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
+pub(crate) fn load_app_pk(
+    app_pk: &Option<PathBuf>,
+    cargo_args: &RunCargoArgs,
+) -> Result<Arc<AppProvingKey<SdkVmConfig>>> {
+    let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
+    let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
 
-        let app_pk_path = if let Some(app_pk) = app_pk {
-            app_pk.to_path_buf()
-        } else {
-            get_app_pk_path(&target_dir)
-        };
+    let app_pk_path = if let Some(app_pk) = app_pk {
+        app_pk.to_path_buf()
+    } else {
+        get_app_pk_path(&target_dir)
+    };
 
-        Ok(Arc::new(read_app_pk_from_file(app_pk_path)?))
-    }
+    Ok(Arc::new(read_app_pk_from_file(app_pk_path)?))
+}
 
-    fn load_or_build_and_commit_exe(
-        sdk: &Sdk,
-        run_args: &RunArgs,
-        cargo_args: &RunCargoArgs,
-        app_pk: &Arc<AppProvingKey<SdkVmConfig>>,
-    ) -> Result<Arc<NonRootCommittedExe>> {
-        let exe_path = if let Some(exe) = &run_args.exe {
-            exe
-        } else {
-            // Build and get the executable name
-            let target_name = get_single_target_name(cargo_args)?;
-            let build_args = run_args.clone().into();
-            let cargo_args = cargo_args.clone().into();
-            let output_dir = build(&build_args, &cargo_args)?;
-            &output_dir.join(format!("{}.vmexe", target_name))
-        };
+pub(crate) fn load_or_build_and_commit_exe(
+    sdk: &Sdk,
+    run_args: &RunArgs,
+    cargo_args: &RunCargoArgs,
+    app_pk: &Arc<AppProvingKey<SdkVmConfig>>,
+) -> Result<Arc<NonRootCommittedExe>> {
+    let exe_path = if let Some(exe) = &run_args.exe {
+        exe
+    } else {
+        // Build and get the executable name
+        let target_name = get_single_target_name(cargo_args)?;
+        let build_args = run_args.clone().into();
+        let cargo_args = cargo_args.clone().into();
+        let output_dir = build(&build_args, &cargo_args)?;
+        &output_dir.join(format!("{}.vmexe", target_name))
+    };
 
-        let app_exe = read_exe_from_file(exe_path)?;
-        let committed_exe = sdk.commit_app_exe(app_pk.app_fri_params(), app_exe)?;
-        Ok(committed_exe)
-    }
+    let app_exe = read_exe_from_file(exe_path)?;
+    let committed_exe = sdk.commit_app_exe(app_pk.app_fri_params(), app_exe)?;
+    Ok(committed_exe)
 }
