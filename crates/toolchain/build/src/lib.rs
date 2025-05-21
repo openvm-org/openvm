@@ -12,7 +12,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use cargo_metadata::{MetadataCommand, Package};
+use cargo_metadata::{Metadata, MetadataCommand, Package};
 use openvm_platform::memory;
 
 pub use self::config::GuestOptions;
@@ -30,25 +30,14 @@ const ALLOWED_CARGO_ENVS: &[&str] = &["CARGO_HOME"];
 /// Returns the given cargo Package from the metadata in the Cargo.toml manifest
 /// within the provided `manifest_dir`.
 pub fn get_package(manifest_dir: impl AsRef<Path>) -> Package {
-    let manifest_path = fs::canonicalize(manifest_dir.as_ref().join("Cargo.toml")).unwrap();
-    let manifest_meta = MetadataCommand::new()
-        .manifest_path(&manifest_path)
-        .no_deps()
-        .exec()
-        .unwrap_or_else(|e| {
-            panic!(
-                "cargo metadata command failed for manifest path: {}: {e:?}",
-                manifest_path.display()
-            )
-        });
-    let mut matching: Vec<Package> = manifest_meta
-        .packages
-        .into_iter()
-        .filter(|pkg| {
-            let std_path: &Path = pkg.manifest_path.as_ref();
-            std_path == manifest_path
-        })
-        .collect();
+    let manifest_path = manifest_dir
+        .as_ref()
+        .join("Cargo.toml")
+        .canonicalize()
+        .unwrap();
+    let manifest_meta = get_metadata(&manifest_path);
+    let matching = find_matching_packages(&manifest_meta, &manifest_path);
+
     if matching.is_empty() {
         eprintln!(
             "ERROR: No package found in {}",
@@ -63,14 +52,46 @@ pub fn get_package(manifest_dir: impl AsRef<Path>) -> Package {
         );
         std::process::exit(-1);
     }
-    matching.pop().unwrap()
+    matching.into_iter().next().unwrap()
 }
 
 /// Returns all packages from the Cargo.toml manifest at the given `manifest_dir`.
 pub fn get_workspace_packages(manifest_dir: impl AsRef<Path>) -> Vec<Package> {
-    let manifest_path = fs::canonicalize(manifest_dir.as_ref().join("Cargo.toml")).unwrap();
-    let manifest_meta = MetadataCommand::new()
-        .manifest_path(&manifest_path)
+    let manifest_path = manifest_dir
+        .as_ref()
+        .join("Cargo.toml")
+        .canonicalize()
+        .unwrap();
+    let manifest_meta = get_metadata(&manifest_path);
+    get_workspace_member_packages(manifest_meta)
+}
+
+/// Returns a single package if the manifest path matches exactly, otherwise returns all
+/// workspace packages.
+pub fn get_in_scope_packages(manifest_dir: impl AsRef<Path>) -> Vec<Package> {
+    let manifest_path = manifest_dir
+        .as_ref()
+        .join("Cargo.toml")
+        .canonicalize()
+        .unwrap();
+    let manifest_meta = get_metadata(&manifest_path);
+
+    // Check if any package has this exact manifest path
+    let matching = find_matching_packages(&manifest_meta, &manifest_path);
+
+    // If we found a package with this exact manifest path, return it
+    if !matching.is_empty() {
+        return matching;
+    }
+
+    // Otherwise return all workspace members
+    get_workspace_member_packages(manifest_meta)
+}
+
+/// Helper function to get cargo metadata for a manifest path
+fn get_metadata(manifest_path: &Path) -> Metadata {
+    MetadataCommand::new()
+        .manifest_path(manifest_path)
         .no_deps()
         .exec()
         .unwrap_or_else(|e| {
@@ -78,13 +99,29 @@ pub fn get_workspace_packages(manifest_dir: impl AsRef<Path>) -> Vec<Package> {
                 "cargo metadata command failed for manifest path: {}: {e:?}",
                 manifest_path.display()
             )
-        });
-    let packages: Vec<Package> = manifest_meta
+        })
+}
+
+/// Helper function to get workspace members
+fn get_workspace_member_packages(manifest_meta: Metadata) -> Vec<Package> {
+    manifest_meta
         .packages
         .into_iter()
-        .filter(|pkg: &Package| manifest_meta.workspace_members.contains(&pkg.id))
-        .collect();
-    packages
+        .filter(|pkg| manifest_meta.workspace_members.contains(&pkg.id))
+        .collect()
+}
+
+/// Helper function to find packages matching a manifest path
+fn find_matching_packages(manifest_meta: &Metadata, manifest_path: &Path) -> Vec<Package> {
+    manifest_meta
+        .packages
+        .iter()
+        .filter(|pkg| {
+            let std_path: &Path = pkg.manifest_path.as_ref();
+            std_path == manifest_path
+        })
+        .cloned()
+        .collect()
 }
 
 /// Determines and returns the build target directory from the Cargo manifest at

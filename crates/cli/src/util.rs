@@ -4,7 +4,7 @@ use std::{
 };
 
 use eyre::Result;
-use openvm_build::get_workspace_packages;
+use openvm_build::{get_in_scope_packages, get_workspace_packages};
 use openvm_sdk::{
     config::{AppConfig, SdkVmConfig},
     fs::{read_agg_halo2_pk_from_file, read_agg_stark_pk_from_file},
@@ -104,16 +104,20 @@ pub fn get_single_target_name(cargo_args: &RunCargoArgs) -> Result<String> {
     } else if num_targets == 0 {
         let (_, manifest_dir) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
 
-        let packages = get_workspace_packages(&manifest_dir)
-            .into_iter()
-            .filter(|pkg| {
-                if let Some(package) = &cargo_args.package {
-                    pkg.name == *package
-                } else {
-                    true
-                }
-            })
-            .collect::<Vec<_>>();
+        let packages = if cargo_args.package.is_some() {
+            get_workspace_packages(&manifest_dir)
+        } else {
+            get_in_scope_packages(&manifest_dir)
+        }
+        .into_iter()
+        .filter(|pkg| {
+            if let Some(package) = &cargo_args.package {
+                pkg.name == *package
+            } else {
+                true
+            }
+        })
+        .collect::<Vec<_>>();
 
         let binaries = packages
             .iter()
