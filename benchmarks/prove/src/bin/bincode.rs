@@ -13,7 +13,8 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
 
-    let elf = args.build_bench_program("bincode")?;
+    let config = Rv32ImConfig::default();
+    let elf = args.build_bench_program("bincode", &config, None)?;
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
@@ -24,6 +25,6 @@ fn main() -> Result<()> {
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let file_data = include_bytes!("../../../guest/bincode/minecraft_savedata.bin");
         let stdin = StdIn::from_bytes(file_data);
-        args.bench_from_exe("bincode", Rv32ImConfig::default(), exe, stdin)
+        args.bench_from_exe("bincode", config, exe, stdin)
     })
 }

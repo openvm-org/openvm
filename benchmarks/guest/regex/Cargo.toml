@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 openvm = { path = "../../../crates/toolchain/openvm", features = ["std"] }
-openvm-keccak256-guest = { path = "../../../extensions/keccak256/guest" }
+openvm-keccak256 = { path = "../../../guest-libs/keccak256/" }
 regex = { version = "1.11.1", default-features = false }
 
 [features]

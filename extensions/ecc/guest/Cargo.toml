@@ -25,7 +25,6 @@ once_cell = { workspace = true, features = ["race", "alloc"] }
 
 # Used for `halo2curves` feature
 halo2curves-axiom = { workspace = true, optional = true }
-# halo2curves = { version = "0.7.0", optional = true }
 group = "0.13.0"
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
@@ -41,4 +40,4 @@ p256 = ["dep:p256"]
 halo2curves = ["dep:halo2curves-axiom", "openvm-algebra-guest/halo2curves"]
 
 [package.metadata.cargo-shear]
-ignored = ["openvm", "openvm-custom-insn", "openvm-rv32im-guest"]
+ignored = ["openvm", "openvm-custom-insn", "openvm-rv32im-guest", "halo2curves-axiom"]

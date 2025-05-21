@@ -24,7 +24,6 @@ use openvm_transpiler::FromElf;
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
 
-    let elf = args.build_bench_program("kitchen-sink")?;
     let bn_config = PairingCurve::Bn254.curve_config();
     let bls_config = PairingCurve::Bls12_381.curve_config();
     let vm_config = SdkVmConfig::builder()
@@ -69,6 +68,7 @@ fn main() -> Result<()> {
             PairingCurve::Bls12_381,
         ]))
         .build();
+    let elf = args.build_bench_program("kitchen-sink", &vm_config, None)?;
     let exe = VmExe::from_elf(elf, vm_config.transpiler())?;
 
     let sdk = Sdk::new();

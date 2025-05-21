@@ -1,27 +1,19 @@
-use alloy_primitives::{keccak256, Bytes, B256, B512};
+use alloy_primitives::{Bytes, B256, B512};
+// Be careful not to import k256::ecdsa::{Signature, VerifyingKey}
+// because those are type aliases that their (non-zkvm) implementations
 use k256::{
-    ecdsa::{Error, RecoveryId, Signature},
-    Secp256k1,
+    ecdsa::{Error, RecoveryId, Signature, VerifyingKey},
+    Secp256k1Point,
 };
 use openvm::io::read_vec;
-#[allow(unused_imports)]
-use openvm_ecc_guest::{
-    algebra::IntMod, ecdsa::VerifyingKey, k256::Secp256k1Point, weierstrass::WeierstrassPoint,
-};
 #[allow(unused_imports, clippy::single_component_path_imports)]
-use openvm_keccak256_guest;
+use openvm_keccak256::keccak256;
 // export native keccak
 use revm_precompile::{
     utilities::right_pad, Error as PrecompileError, PrecompileOutput, PrecompileResult,
 };
 
-openvm_algebra_guest::moduli_macros::moduli_init! {
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
-}
-openvm_ecc_guest::sw_macros::sw_init! {
-    Secp256k1Point,
-}
+openvm::init!();
 
 pub fn main() {
     let expected_address = read_vec();
@@ -32,8 +24,7 @@ pub fn main() {
     }
 }
 
-// OpenVM version of ecrecover precompile.
-pub fn ecrecover(sig: &B512, mut recid: u8, msg: &B256) -> Result<B256, Error> {
+fn ecrecover(sig: &B512, mut recid: u8, msg: &B256) -> Result<B256, Error> {
     // parse signature
     let mut sig = Signature::from_slice(sig.as_slice())?;
     if let Some(sig_normalized) = sig.normalize_s() {
@@ -42,15 +33,13 @@ pub fn ecrecover(sig: &B512, mut recid: u8, msg: &B256) -> Result<B256, Error> {
     }
     let recid = RecoveryId::from_byte(recid).expect("recovery ID is valid");
 
-    // annoying: Signature::to_bytes copies from slice
-    let recovered_key =
-        VerifyingKey::<Secp256k1>::recover_from_prehash_noverify(&msg[..], &sig.to_bytes(), recid)?;
-    let public_key = recovered_key.as_affine();
-    let mut encoded = [0u8; 64];
-    encoded[..32].copy_from_slice(&public_key.x().to_be_bytes());
-    encoded[32..].copy_from_slice(&public_key.y().to_be_bytes());
-    // hash it
-    let mut hash = keccak256(encoded);
+    let recovered_key = VerifyingKey::recover_from_prehash(&msg[..], &sig, recid)?;
+    let mut hash = keccak256(
+        &recovered_key
+            .to_encoded_point(/* compress = */ false)
+            .as_bytes()[1..],
+    );
+
     // truncate to 20 bytes
     hash[..12].fill(0);
     Ok(B256::from(hash))

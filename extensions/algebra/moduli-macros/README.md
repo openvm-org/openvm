@@ -114,6 +114,14 @@ mod algebra_impl_0 {
         }
         // ...
     }
+
+    impl Field for Mod1e18 {
+        // ...
+    }
+
+    impl Sqrt for Mod1e18 {
+        // ...
+    }
 }
 ```
 
@@ -156,7 +164,7 @@ pub mod openvm_intrinsics_meta_do_not_type_this_by_yourself {
 
 The setup operation (e.g., `moduli_setup_extern_func_de0b6b3a7640003`) consists of reading the value `OPENVM_SERIALIZED_MODULUS_2` from memory and constraining that the read value is equal to the modulus the chip has been configured with. For each used modulus, the Rust bindings for the non-setup intrinsic instructions will automatically call the corresponding setup instruction on first use of any of its intrinsics.
 
-5. It follows from the above that the `moduli_declare!` invocations may be in multiple places in various compilation units, but all the `declare!`d moduli must be specified at least once in `moduli_init!` so that there will be no linker errors due to missing function implementations. Correspondingly, the `moduli_init!` macro should only be called once in the entire program (in the guest crate as the topmost compilation unit). Finally, the order of the moduli in `moduli_init!` has nothing to do with the `moduli_declare!` invocations, but it **must match** the order of the moduli in the chip configuration -- more specifically, in the modular extension parameters (the order of numbers in `ModularExtension::supported_modulus`, which is usually defined with the whole `app_vm_config` in the `openvm.toml` file).
+5. It follows from the above that the `moduli_declare!` invocations may be in multiple places in various compilation units, but all the `declare!`d moduli must be specified at least once in `moduli_init!` so that there will be no linker errors due to missing function implementations. Correspondingly, the `moduli_init!` macro should only be called once in the entire program (in the guest crate as the topmost compilation unit). Finally, the order of the moduli in `moduli_init!` has nothing to do with the `moduli_declare!` invocations, but it **must match** the order of the moduli in the chip configuration -- more specifically, in the modular extension parameters (the order of numbers in `ModularExtension::supported_moduli`, which is usually defined with the whole `app_vm_config` in the `openvm.toml` file).
 
 6. For convenience, running `cargo openvm build` will automatically generate an appropriate call to `moduli_declare!` based on the order of the moduli in `openvm.toml`.
 More specifically, `cargo openvm build` will read `openvm.toml`, then generate a file named `openvm_init.rs` in the project's manifest directory (where `Cargo.toml` is located) containing a call to `moduli_declare!`.

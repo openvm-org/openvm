@@ -11,7 +11,7 @@ use openvm_ecc_guest::{
     Group,
 };
 
-openvm::init!("openvm_init_ec_two_curves.rs");
+openvm::init!("openvm_init_ec_two_curves_k256_p256.rs");
 
 openvm::entry!(main);
 

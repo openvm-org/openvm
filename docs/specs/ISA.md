@@ -614,9 +614,7 @@ the same format that is congruent modulo `N` to the respective operation applied
 
 For each instruction, the operand `d` is fixed to be `1` and `e` is fixed to be `2`.
 Each instruction performs block accesses with block size `4` in address space `1` and block size `N::BLOCK_SIZE` in
-address space `2`, where `N::NUM_LIMBS` is divisible by `N::BLOCK_SIZE`. Recall that `N::BLOCK_SIZE` must be a power of
-
-2.
+address space `2`, where `N::NUM_LIMBS` is divisible by `N::BLOCK_SIZE`. Recall that `N::BLOCK_SIZE` must be a power of 2.
 
 | Name                      | Operands    | Description                                                                                                                                                                                                |
 | ------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -637,6 +635,16 @@ format with each limb having `LIMB_BITS` bits.
 | ----------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | ISEQMOD_RV32\<N\>       | `a,b,c,1,2` | `[a:4]_1 = [r32{0}(b): N::NUM_LIMBS]_2 == [r32{0}(c): N::NUM_LIMBS]_2 (mod N) ? 1 : 0`. Enforces that `[r32{0}(b): N::NUM_LIMBS]_2, [r32{0}(c): N::NUM_LIMBS]_2` are less than `N` and then sets the register value of `[a:4]_1` to `1` or `0` depending on whether the two big integers are equal. |
 | SETUP_ISEQMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(b): N::NUM_LIMBS]_2 == N)` in the chip that handles modular equality. For the sake of implementation convenience it also writes something (can be anything) into register value of `[a:4]_1`                                                                                        |
+
+#### Phantom Sub-Instructions
+
+
+| Name           | Discriminant | Operands      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| -------------- | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| HintNonQr\<N\>  | 0x50         | `_,_,c_upper` | Use `c_upper` to determine the index of the modulus from the list of supported moduli. Reset the hint stream to equal a quadratic nonresidue modulo `N`. |
+| HintSqrt\<N\>   | 0x51         | `a,_,c_upper` | Use `c_upper` to determine the index of the modulus from the list of supported moduli. Read from memory `x = [r32{0}(a): N::NUM_LIMBS]_2`.  If `x` is a quadratic residue modulo `N`, reset the hint stream to `[1u8, 0u8, 0u8, 0u8]` followed by a square root of `x`.  If `x` is not a quadratic residue, reset the hint stream to `[0u8; 4]` followed by a square root of `x * non_qr`, where `non_qr` is the quadratic nonresidue returned by `HintNonQr<N>`. |
+
+#
 
 #### Complex Extension Field
 
@@ -698,15 +706,6 @@ r32_ec_point(a) -> EcPoint {
 | SETUP_EC_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)`   |
 | EC_DOUBLE\<C\>       | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                                     |
 | SETUP_EC_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::MODULUS)` |
-
-#### Phantom Sub-Instructions
-
-The elliptic curve extension defines the following phantom sub-instructions.
-
-| Name           | Discriminant | Operands      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| -------------- | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| HintDecompress | 0x40         | `a,b,c_upper` | Uses `c_upper = C::IDX` to determine the index of the curve `C`, from the list of enabled curves. Read from memory `x = [r32{0}(a): C::COORD_SIZE]_2` for an element in the coordinate field of `C`. Let `rec_id = [r32{0}(b)]_2` be a byte in memory for the recovery id, where the lowest bit is 1 if and only if the `y` coordinate of the corresponding point is odd. If there exists a unique `y` such that `(x, y)` is a point on `C` and `y` has the same parity as `rec_id`, then the sub-instruction resets the hint stream to `[1, 0, 0, 0]` followed by `y: [_; C::COORD_SIZE]`. Otherwise, it resets the hint stream to `[0, 0, 0, 0]` followed by `sqrt: [_; C::COORD_SIZE]` where `sqrt * sqrt == (x^3 + ax + b) * non_qr` (`non_qr` is a quadratic nonresidue of `C::Fp`). |
-| HintNonQr      | 0x41         | `_,_,c_upper` | Reset the hint stream to equal `non_qr: [_; C::COORD_SIZE]` where `non_qr` is a quadratic nonresidue of `C::Fp`. |
 
 ### Pairing Extension
 

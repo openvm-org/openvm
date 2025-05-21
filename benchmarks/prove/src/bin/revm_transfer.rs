@@ -13,7 +13,8 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
-    let elf = args.build_bench_program("revm_transfer")?;
+    let config = Keccak256Rv32Config::default();
+    let elf = args.build_bench_program("revm_transfer", &config, None)?;
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<BabyBear>::default()
@@ -23,11 +24,6 @@ fn main() -> Result<()> {
             .with_extension(Keccak256TranspilerExtension),
     )?;
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        args.bench_from_exe(
-            "revm_100_transfers",
-            Keccak256Rv32Config::default(),
-            exe,
-            StdIn::default(),
-        )
+        args.bench_from_exe("revm_100_transfers", config, exe, StdIn::default())
     })
 }

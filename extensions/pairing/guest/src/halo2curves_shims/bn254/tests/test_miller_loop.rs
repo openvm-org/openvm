@@ -2,8 +2,11 @@ use alloc::vec::Vec;
 
 use halo2curves_axiom::bn256::G2Prepared;
 
-use super::{assert_miller_results_eq, generate_test_points_bn254};
-use crate::{halo2curves_shims::bn254::Bn254, pairing::MultiMillerLoop};
+use super::generate_test_points_bn254;
+use crate::{
+    halo2curves_shims::bn254::{test_utils::assert_miller_results_eq, Bn254},
+    pairing::MultiMillerLoop,
+};
 
 #[allow(non_snake_case)]
 fn run_miller_loop_test(rand_seeds: &[u64]) {

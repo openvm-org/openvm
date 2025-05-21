@@ -9,7 +9,6 @@ repository.workspace = true
 
 [dependencies]
 openvm = { workspace = true }
-openvm-platform = { workspace = true }
 serde = { workspace = true }
 itertools = { workspace = true, features = ["use_alloc"] }
 rand.workspace = true
@@ -18,14 +17,10 @@ hex-literal = { workspace = true }
 openvm-algebra-guest = { workspace = true }
 openvm-algebra-moduli-macros = { workspace = true }
 openvm-ecc-guest = { workspace = true }
-openvm-ecc-sw-macros = { workspace = true }
-openvm-algebra-complex-macros = { workspace = true }
 openvm-custom-insn = { workspace = true }
-openvm-rv32im-guest = { workspace = true }
 
 # Used for `halo2curves` feature
 halo2curves-axiom = { workspace = true, optional = true }
-group = "0.13.0"
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint.workspace = true
@@ -45,4 +40,4 @@ bn254 = []
 bls12_381 = []
 
 [package.metadata.cargo-shear]
-ignored = ["openvm", "openvm-custom-insn"]
+ignored = ["openvm", "openvm-custom-insn", "serde" ]

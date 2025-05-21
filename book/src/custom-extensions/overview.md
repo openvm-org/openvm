@@ -48,10 +48,10 @@ range_tuple_checker_sizes = [256, 8192]
 range_tuple_checker_sizes = [256, 8192]
 
 [app_vm_config.modular]
-supported_modulus = ["<modulus_1>", "<modulus_2>", ...]
+supported_moduli = ["<modulus_1>", "<modulus_2>", ...]
 
 [app_vm_config.fp2]
-supported_modulus = ["<modulus_1>", "<modulus_2>", ...]
+supported_moduli = ["<modulus_1>", "<modulus_2>", ...]
 
 [app_vm_config.pairing]
 supported_curves = ["Bls12_381", "Bn254"]

@@ -8,6 +8,9 @@ edition = "2021"
 openvm = { path = "../../../crates/toolchain/openvm", features = ["std"] }
 openvm-algebra-guest = { path = "../../../extensions/algebra/guest", default-features = false }
 openvm-ecc-guest = { path = "../../../extensions/ecc/guest", default-features = false }
+openvm-pairing = { path = "../../../guest-libs/pairing/", default-features = false, features = [
+    "bn254",
+] }
 openvm-pairing-guest = { path = "../../../extensions/pairing/guest", default-features = false, features = [
     "bn254",
 ] }
