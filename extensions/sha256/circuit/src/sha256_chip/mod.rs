@@ -104,11 +104,13 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         debug_assert!(src + len <= (1 << self.pointer_max_bits));
         let mut hasher = Sha256::new();
 
-        // TODO(ayush): avoid read_range_generic panic on reading multiple pages
-        let message: Vec<u8> = state
-            .memory
-            .memory
-            .read_range_generic((e, src), len as usize);
+        // TODO(ayush): read in a single call
+        let mut message = Vec::with_capacity(len as usize);
+        for offset in (0..len as usize).step_by(SHA256_READ_SIZE) {
+            let read = memory_read_from_state::<_, SHA256_READ_SIZE>(state, e, src + offset as u32);
+            let copy_len = std::cmp::min(SHA256_READ_SIZE, (len as usize) - offset);
+            message.extend_from_slice(&read[..copy_len]);
+        }
         hasher.update(&message);
 
         let output = hasher.finalize();
@@ -144,21 +146,18 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         debug_assert_eq!(e, RV32_MEMORY_AS);
 
         let dst = new_read_rv32_register_from_state(state, d, a.as_canonical_u32());
-        let mut src = new_read_rv32_register_from_state(state, d, b.as_canonical_u32());
-        let mut remaining_len = new_read_rv32_register_from_state(state, d, c.as_canonical_u32());
+        let src = new_read_rv32_register_from_state(state, d, b.as_canonical_u32());
+        let len = new_read_rv32_register_from_state(state, d, c.as_canonical_u32());
 
-        debug_assert!(src + remaining_len <= (1 << self.pointer_max_bits));
+        debug_assert!(src + len <= (1 << self.pointer_max_bits));
 
-        let num_blocks = ((remaining_len << 3) as usize + 1 + 64).div_ceil(SHA256_BLOCK_BITS);
+        let num_blocks = ((len << 3) as usize + 1 + 64).div_ceil(SHA256_BLOCK_BITS);
 
-        let mut message = Vec::with_capacity(remaining_len as usize);
-        while remaining_len > 0 {
-            let read = memory_read_from_state::<_, SHA256_READ_SIZE>(state, e, src as u32);
-            let copy_len = std::cmp::min(SHA256_READ_SIZE, remaining_len as usize);
+        let mut message = Vec::with_capacity(len as usize);
+        for offset in (0..len as usize).step_by(SHA256_READ_SIZE) {
+            let read = memory_read_from_state::<_, SHA256_READ_SIZE>(state, e, src + offset as u32);
+            let copy_len = std::cmp::min(SHA256_READ_SIZE, (len as usize) - offset);
             message.extend_from_slice(&read[..copy_len]);
-
-            src += SHA256_READ_SIZE as u32;
-            remaining_len = remaining_len.saturating_sub(SHA256_READ_SIZE as u32);
         }
 
         let mut hasher = Sha256::new();

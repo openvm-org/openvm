@@ -123,11 +123,13 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
 
         let mut hasher = Keccak::v256();
 
-        // TODO(ayush): avoid read_range_generic panic on reading multiple pages
-        let message: Vec<u8> = state
-            .memory
-            .memory
-            .read_range_generic((e, src), len as usize);
+        // TODO(ayush): read in a single call
+        let mut message = Vec::with_capacity(len as usize);
+        for offset in (0..len as usize).step_by(KECCAK_WORD_SIZE) {
+            let read = memory_read_from_state::<_, KECCAK_WORD_SIZE>(state, e, src + offset as u32);
+            let copy_len = std::cmp::min(KECCAK_WORD_SIZE, (len as usize) - offset);
+            message.extend_from_slice(&read[..copy_len]);
+        }
         hasher.update(&message);
 
         let mut output = [0u8; 32];
@@ -162,19 +164,16 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
         debug_assert_eq!(e, RV32_MEMORY_AS);
 
         let dst = new_read_rv32_register_from_state(state, d, a.as_canonical_u32());
-        let mut src = new_read_rv32_register_from_state(state, d, b.as_canonical_u32());
-        let mut remaining_len = new_read_rv32_register_from_state(state, d, c.as_canonical_u32());
+        let src = new_read_rv32_register_from_state(state, d, b.as_canonical_u32());
+        let len = new_read_rv32_register_from_state(state, d, c.as_canonical_u32());
 
-        let num_blocks = num_keccak_f(remaining_len as usize);
+        let num_blocks = num_keccak_f(len as usize);
 
-        let mut message = Vec::with_capacity(remaining_len as usize);
-        while remaining_len > 0 {
-            let read = memory_read_from_state::<_, KECCAK_WORD_SIZE>(state, e, src as u32);
-            let copy_len = std::cmp::min(KECCAK_WORD_SIZE, remaining_len as usize);
+        let mut message = Vec::with_capacity(len as usize);
+        for offset in (0..len as usize).step_by(KECCAK_WORD_SIZE) {
+            let read = memory_read_from_state::<_, KECCAK_WORD_SIZE>(state, e, src + offset as u32);
+            let copy_len = std::cmp::min(KECCAK_WORD_SIZE, (len as usize) - offset);
             message.extend_from_slice(&read[..copy_len]);
-
-            src += KECCAK_WORD_SIZE as u32;
-            remaining_len = remaining_len.saturating_sub(KECCAK_WORD_SIZE as u32);
         }
 
         let mut hasher = Keccak::v256();
