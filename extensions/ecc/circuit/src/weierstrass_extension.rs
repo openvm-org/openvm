@@ -261,59 +261,59 @@ pub(crate) mod phantom {
     impl<F: PrimeField32> PhantomSubExecutor<F> for DecompressHintSubEx {
         fn phantom_execute(
             &mut self,
-            memory: &GuestMemory<F>,
+            memory: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
-            a: F,
-            b: F,
+            a: u32,
+            b: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
-            todo!()
-            // let c_idx = c_upper as usize;
-            // if c_idx >= self.supported_curves.len() {
-            //     bail!(
-            //         "Curve index {c_idx} out of range: {} supported curves",
-            //         self.supported_curves.len()
-            //     );
-            // }
-            // let curve = &self.supported_curves[c_idx];
-            // let rs1 = unsafe_read_rv32_register(memory, a);
-            // let num_limbs: usize = if curve.modulus.bits().div_ceil(8) <= 32 {
-            //     32
-            // } else if curve.modulus.bits().div_ceil(8) <= 48 {
-            //     48
-            // } else {
-            //     bail!("Modulus too large")
-            // };
-            // let mut x_limbs: Vec<u8> = Vec::with_capacity(num_limbs);
-            // for i in 0..num_limbs {
-            //     let limb = memory.unsafe_read_cell::<u8>(
-            //         F::from_canonical_u32(RV32_MEMORY_AS),
-            //         F::from_canonical_u32(rs1 + i as u32),
-            //     );
-            //     x_limbs.push(limb);
-            // }
-            // let x = BigUint::from_bytes_le(&x_limbs);
-            // let rs2 = unsafe_read_rv32_register(memory, b);
-            // let rec_id = memory.unsafe_read_cell::<u8>(
-            //     F::from_canonical_u32(RV32_MEMORY_AS),
-            //     F::from_canonical_u32(rs2),
-            // );
-            // let hint = self.decompress_point(x, rec_id & 1 == 1, c_idx);
-            // let hint_bytes = once(F::from_bool(hint.possible))
-            //     .chain(repeat(F::ZERO))
-            //     .take(4)
-            //     .chain(
-            //         hint.sqrt
-            //             .to_bytes_le()
-            //             .into_iter()
-            //             .map(F::from_canonical_u8)
-            //             .chain(repeat(F::ZERO))
-            //             .take(num_limbs),
-            //     )
-            //     .collect();
-            // streams.hint_stream = hint_bytes;
-            // Ok(())
+            /*let c_idx = c_upper as usize;
+            if c_idx >= self.supported_curves.len() {
+                bail!(
+                    "Curve index {c_idx} out of range: {} supported curves",
+                    self.supported_curves.len()
+                );
+            }
+            let curve = &self.supported_curves[c_idx];
+            let rs1 = unsafe_read_rv32_register(memory, a);
+            let num_limbs: usize = if curve.modulus.bits().div_ceil(8) <= 32 {
+                32
+            } else if curve.modulus.bits().div_ceil(8) <= 48 {
+                48
+            } else {
+                bail!("Modulus too large")
+            };
+            let mut x_limbs: Vec<u8> = Vec::with_capacity(num_limbs);
+            for i in 0..num_limbs {
+                let limb = memory.unsafe_read_cell::<u8>(
+                    F::from_canonical_u32(RV32_MEMORY_AS),
+                    F::from_canonical_u32(rs1 + i as u32),
+                );
+                x_limbs.push(limb);
+            }
+            let x = BigUint::from_bytes_le(&x_limbs);
+            let rs2 = unsafe_read_rv32_register(memory, b);
+            let rec_id = memory.unsafe_read_cell::<u8>(
+                F::from_canonical_u32(RV32_MEMORY_AS),
+                F::from_canonical_u32(rs2),
+            );
+            let hint = self.decompress_point(x, rec_id & 1 == 1, c_idx);
+            let hint_bytes = once(F::from_bool(hint.possible))
+                .chain(repeat(F::ZERO))
+                .take(4)
+                .chain(
+                    hint.sqrt
+                        .to_bytes_le()
+                        .into_iter()
+                        .map(F::from_canonical_u8)
+                        .chain(repeat(F::ZERO))
+                        .take(num_limbs),
+                )
+                .collect();
+            streams.hint_stream = hint_bytes;
+            */
+            Ok(())
         }
     }
 
@@ -444,11 +444,11 @@ pub(crate) mod phantom {
     impl<F: PrimeField32> PhantomSubExecutor<F> for NonQrHintSubEx {
         fn phantom_execute(
             &mut self,
-            _: &GuestMemory<F>,
+            _: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
-            _: F,
-            _: F,
+            _: u32,
+            _: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
             let c_idx = c_upper as usize;
