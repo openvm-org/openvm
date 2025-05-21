@@ -184,7 +184,7 @@ fn test_cli_init_build() -> Result<()> {
             "init",
             temp_path.to_str().unwrap(),
             "--name",
-            "--cli-package",
+            "cli-package",
         ],
     )?;
 
