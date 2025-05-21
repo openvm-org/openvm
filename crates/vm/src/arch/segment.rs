@@ -126,7 +126,6 @@ where
             // Fetch, decode and execute single instruction
             self.execute_instruction(state, &mut prev_backtrace)?;
         }
-
         Ok(())
     }
 
