@@ -1,9 +1,9 @@
 #![no_std]
 
 #[cfg(target_os = "zkvm")]
-extern crate alloc as alloc_zkvm;
+extern crate alloc;
 #[cfg(target_os = "zkvm")]
-use {alloc_zkvm::vec::Vec, core::hint::black_box, core::mem::MaybeUninit};
+use {alloc::vec::Vec, core::mem::MaybeUninit};
 
 /// This is custom-0 defined in RISC-V spec document
 pub const OPCODE: u8 = 0x0b;
@@ -27,57 +27,66 @@ pub fn keccak256(input: &[u8]) -> [u8; 32] {
     }
 }
 
-/// Native hook for keccak256 for use with `alloy-primitives` "native-keccak" feature.
-///
 /// # Safety
 ///
 /// The VM accepts the preimage by pointer and length, and writes the
 /// 32-byte hash.
 /// - `bytes` must point to an input buffer at least `len` long.
 /// - `output` must point to a buffer that is at least 32-bytes long.
+/// - `bytes` and `output` must be 4-byte aligned.
 ///
 /// [`keccak256`]: https://en.wikipedia.org/wiki/SHA-3
 /// [`sha3`]: https://docs.rs/sha3/latest/sha3/
 /// [`tiny_keccak`]: https://docs.rs/tiny-keccak/latest/tiny_keccak/
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
+fn __native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
+    openvm_platform::custom_insn_r!(
+        opcode = OPCODE,
+        funct3 = KECCAK256_FUNCT3,
+        funct7 = KECCAK256_FUNCT7,
+        rd = In output,
+        rs1 = In bytes,
+        rs2 = In len
+    );
+}
+
+/// Native hook for keccak256 for use with `alloy-primitives` "native-keccak" feature.
+#[cfg(target_os = "zkvm")]
+#[inline(always)]
 #[no_mangle]
 extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
-    let input = if bytes as usize % 4 != 0 {
-        let mut aligned_buff: Vec<u8> = alloc_zkvm::vec::Vec::with_capacity(len);
-        // let mut aligned_buff = [0u8; 1000];
+    if bytes as usize % 4 != 0 {
+        // Note: the bump allocator we use by default has minimum alignment of 4 bytes.
+        let mut aligned_buff: Vec<u8> = alloc::vec::Vec::with_capacity(len);
         unsafe {
             core::ptr::copy_nonoverlapping::<u8>(bytes, aligned_buff.as_mut_ptr() as *mut u8, len);
         }
-        black_box(aligned_buff.as_ptr() as *const u8)
-    } else {
-        bytes
-    };
-
-    if output as usize % 4 != 0 {
-        let mut aligned_out = MaybeUninit::<[u8; 32]>::uninit();
-
-        openvm_platform::custom_insn_r!(
-            opcode = OPCODE,
-            funct3 = KECCAK256_FUNCT3,
-            funct7 = KECCAK256_FUNCT7,
-            rd = In aligned_out.as_mut_ptr() as *mut u8,
-            rs1 = In input,
-            rs2 = In len
-        );
-        unsafe {
-            aligned_out.assume_init();
-            core::ptr::copy_nonoverlapping::<u8>(aligned_out.as_ptr() as *const u8, output, 32);
+        if output as usize % 4 != 0 {
+            let mut aligned_out = MaybeUninit::<[u8; 32]>::uninit();
+            __native_keccak256(
+                aligned_buff.as_ptr(),
+                len,
+                aligned_out.as_mut_ptr() as *mut u8,
+            );
+            unsafe {
+                aligned_out.assume_init();
+                core::ptr::copy_nonoverlapping::<u8>(aligned_out.as_ptr() as *const u8, output, 32);
+            }
+        } else {
+            __native_keccak256(aligned_buff.as_ptr(), len, output);
         }
     } else {
-        openvm_platform::custom_insn_r!(
-            opcode = OPCODE,
-            funct3 = KECCAK256_FUNCT3,
-            funct7 = KECCAK256_FUNCT7,
-            rd = In output,
-            rs1 = In input,
-            rs2 = In len
-        );
+        if output as usize % 4 != 0 {
+            let mut aligned_out = MaybeUninit::<[u8; 32]>::uninit();
+            __native_keccak256(bytes, len, aligned_out.as_mut_ptr() as *mut u8);
+            unsafe {
+                aligned_out.assume_init();
+                core::ptr::copy_nonoverlapping::<u8>(aligned_out.as_ptr() as *const u8, output, 32);
+            }
+        } else {
+            __native_keccak256(bytes, len, output);
+        }
     };
 }
 
