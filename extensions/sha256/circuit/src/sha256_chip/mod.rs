@@ -2,7 +2,9 @@
 //! variable length inputs read from VM memory.
 
 use openvm_circuit::{
-    arch::{NewVmChipWrapper, Result, StepExecutorE1, VmStateMut},
+    arch::{
+        execution_mode::metered::MeteredCtx, NewVmChipWrapper, Result, StepExecutorE1, VmStateMut,
+    },
     system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives::{
@@ -70,7 +72,7 @@ impl Sha256VmStep {
 impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
         let &Instruction {
@@ -103,6 +105,15 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
 
         memory_write(state.memory, e, dst, hasher.finalize().as_ref());
         Ok(())
+    }
+
+    fn execute_metered(
+        &mut self,
+        _state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        _instruction: &Instruction<F>,
+        _chip_index: usize,
+    ) -> Result<()> {
+        todo!()
     }
 }
 

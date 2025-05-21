@@ -127,9 +127,9 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
 
     fn execute_metered(
         &mut self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
+        _state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        _instruction: &Instruction<F>,
+        _chip_index: usize,
     ) -> Result<()> {
         todo!()
     }
