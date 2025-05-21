@@ -24,9 +24,8 @@ use p3_keccak_air::NUM_ROUNDS;
 use rand::Rng;
 use tiny_keccak::Hasher;
 
-use crate::{KeccakVmAir, KeccakVmStep};
-
 use super::{columns::KeccakVmCols, utils::num_keccak_f, KeccakVmChip};
+use crate::{KeccakVmAir, KeccakVmStep};
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 4096;

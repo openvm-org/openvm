@@ -278,7 +278,8 @@ impl E1E2ExecutionCtx for MeteredCtxExact {
         self.update_adapter_heights(address_space, ptr, size);
 
         // Handle merkle tree updates
-        // TODO(ayush): see if this can be approximated by total number of reads/writes for AS != register
+        // TODO(ayush): see if this can be approximated by total number of reads/writes for AS !=
+        // register
         self.update_boundary_merkle_heights(address_space, ptr, size);
     }
 }
