@@ -237,7 +237,7 @@ pub(crate) mod phantom {
     use num_traits::{FromPrimitive, One};
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
-        system::memory::MemoryController,
+        system::memory::{online::GuestMemory, MemoryController},
     };
     use openvm_ecc_guest::weierstrass::DecompressionHint;
     use openvm_instructions::{riscv::RV32_MEMORY_AS, PhantomDiscriminant};
@@ -261,14 +261,14 @@ pub(crate) mod phantom {
     impl<F: PrimeField32> PhantomSubExecutor<F> for DecompressHintSubEx {
         fn phantom_execute(
             &mut self,
-            memory: &MemoryController<F>,
+            memory: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
-            a: F,
-            b: F,
+            a: u32,
+            b: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
-            let c_idx = c_upper as usize;
+            /*let c_idx = c_upper as usize;
             if c_idx >= self.supported_curves.len() {
                 bail!(
                     "Curve index {c_idx} out of range: {} supported curves",
@@ -312,6 +312,7 @@ pub(crate) mod phantom {
                 )
                 .collect();
             streams.hint_stream = hint_bytes;
+            */
             Ok(())
         }
     }
@@ -443,11 +444,11 @@ pub(crate) mod phantom {
     impl<F: PrimeField32> PhantomSubExecutor<F> for NonQrHintSubEx {
         fn phantom_execute(
             &mut self,
-            _: &MemoryController<F>,
+            _: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
-            _: F,
-            _: F,
+            _: u32,
+            _: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
             let c_idx = c_upper as usize;

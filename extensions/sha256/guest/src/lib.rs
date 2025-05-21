@@ -36,7 +36,8 @@ extern "C" fn zkvm_sha256_impl(bytes: *const u8, len: usize, output: *mut u8) {
     const MIN_ALIGN: usize = 4;
     // The preferred alignment for the input buffer, since the input is read in chunks of 16 bytes
     const INPUT_ALIGN: usize = 16;
-    // The preferred alignment for the output buffer, since the output is written in chunks of 32 bytes
+    // The preferred alignment for the output buffer, since the output is written in chunks of 32
+    // bytes
     const OUTPUT_ALIGN: usize = 32;
     unsafe {
         if bytes as usize % MIN_ALIGN != 0 {

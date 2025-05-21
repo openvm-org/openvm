@@ -7,6 +7,7 @@ use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::{
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
         StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
@@ -424,9 +425,12 @@ where
 {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode =
@@ -436,7 +440,7 @@ where
             Rv32ModularArithmeticOpcode::IS_EQ | Rv32ModularArithmeticOpcode::SETUP_ISEQ
         );
 
-        let [b, c] = self.adapter.read(state.memory, instruction).into();
+        let [b, c] = self.adapter.read(state, instruction).into();
         let (b_cmp, _) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.modulus_limbs);
         let (c_cmp, _) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.modulus_limbs);
         let is_setup = instruction.opcode.local_opcode_idx(self.offset)
@@ -450,10 +454,18 @@ where
         let mut write_data = [0u8; WRITE_LIMBS];
         write_data[0] = (b == c) as u8;
 
-        self.adapter
-            .write(state.memory, instruction, &write_data.into());
+        self.adapter.write(state, instruction, &write_data.into());
 
         Ok(())
+    }
+
+    fn execute_metered(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        todo!()
     }
 }
 
