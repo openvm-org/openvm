@@ -344,7 +344,7 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-        clk_end: Option<u64>,
+        num_cycles: Option<u64>,
     ) -> Result<VmState<F>, ExecutionError>
     where
         VC::Executor: InsExecutorE1<F>,
@@ -373,7 +373,7 @@ where
             chip_complex,
             self.trace_height_constraints.clone(),
             exe.fn_bounds.clone(),
-            E1ExecutionControl::new(clk_end),
+            E1ExecutionControl::new(num_cycles),
         );
         #[cfg(feature = "bench-metrics")]
         {
@@ -390,7 +390,7 @@ where
             segment.execute_from_state(&mut exec_state)
         })?;
 
-        if let Some(end_cycle) = clk_end {
+        if let Some(end_cycle) = num_cycles {
             assert_eq!(exec_state.clk, end_cycle);
         } else {
             match exec_state.exit_code {
@@ -527,7 +527,7 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         state: VmState<F>,
-        clk_end: u64,
+        num_cycles: u64,
     ) -> Result<VmExecutorResult<SC>, GenerationError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
@@ -544,7 +544,7 @@ where
             Some(state.memory),
         )
         .unwrap();
-        let ctrl = TracegenExecutionControl::new(clk_end);
+        let ctrl = TracegenExecutionControl::new(state.clk + num_cycles);
         let mut segment = VmSegmentExecutor::<_, VC, _>::new(
             chip_complex,
             self.trace_height_constraints.clone(),

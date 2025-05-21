@@ -39,8 +39,8 @@ use serde::{Deserialize, Serialize};
 
 static AVAILABLE_PROGRAMS: &[&str] = &[
     // "fibonacci_recursive",
-    "fibonacci_iterative",
-    // "quicksort",
+    // "fibonacci_iterative",
+    "quicksort",
     // "bubblesort",
     // "factorial_iterative_u256",
     // "revm_snailtracer",
@@ -202,16 +202,19 @@ fn main() -> Result<()> {
             // E2 to find segment points
             let segments = executor.execute_metered(exe.clone(), vec![], widths, interactions)?;
             for Segment {
-                clk_start, clk_end, ..
+                clk_start,
+                num_cycles,
+                ..
             } in segments
             {
                 // E1 till clk_start
                 let state = executor.execute_e1(exe.clone(), vec![], Some(clk_start))?;
+                assert!(state.clk == clk_start);
                 // E3/tracegen from clk_start to clk_end beginning with state
                 let result = executor.execute_and_generate_segment::<BabyBearBlake3Config>(
                     exe.clone(),
                     state,
-                    clk_end,
+                    num_cycles,
                 )?;
             }
 

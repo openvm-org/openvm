@@ -24,7 +24,7 @@ const MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 #[derive(derive_new::new, Debug)]
 pub struct Segment {
     pub clk_start: u64,
-    pub clk_end: u64,
+    pub num_cycles: u64,
     pub trace_heights: Vec<u32>,
 }
 
@@ -77,7 +77,7 @@ impl<'a> MeteredExecutionControl<'a> {
                 tracing::info!(
                     "Segment {:2} | clk {:9} | chip {} ({}) height ({:8}) > max ({:8})",
                     self.segments.len(),
-                    state.clk,
+                    self.clk_last_segment_check,
                     i,
                     self.air_names[i],
                     padded_height,
@@ -92,7 +92,7 @@ impl<'a> MeteredExecutionControl<'a> {
             tracing::info!(
                 "Segment {:2} | clk {:9} | total cells ({:10}) > max ({:10})",
                 self.segments.len(),
-                state.clk,
+                self.clk_last_segment_check,
                 total_cells,
                 MAX_TRACE_CELLS
             );
@@ -104,7 +104,7 @@ impl<'a> MeteredExecutionControl<'a> {
             tracing::info!(
                 "Segment {:2} | clk {:9} | total interactions ({:11}) > max ({:11})",
                 self.segments.len(),
-                state.clk,
+                self.clk_last_segment_check,
                 total_interactions,
                 MAX_INTERACTIONS
             );
@@ -181,9 +181,13 @@ impl<'a> MeteredExecutionControl<'a> {
         }
 
         if self.should_segment(state) {
+            let clk_start = self
+                .segments
+                .last()
+                .map_or(0, |s| s.clk_start + s.num_cycles);
             let segment = Segment {
-                clk_start: self.segments.last().map_or(0, |s| s.clk_end + 1),
-                clk_end: self.clk_last_segment_check,
+                clk_start,
+                num_cycles: self.clk_last_segment_check - clk_start,
                 // TODO(ayush): this is trace heights after overflow so an overestimate
                 trace_heights: state.ctx.trace_heights.clone(),
             };
@@ -227,6 +231,19 @@ where
         _exit_code: Option<u32>,
     ) {
         state.ctx.finalize_access_adapter_heights();
+
+        // Add the last segment
+        let clk_start = self
+            .segments
+            .last()
+            .map_or(0, |s| s.clk_start + s.num_cycles);
+        let segment = Segment {
+            clk_start,
+            num_cycles: state.clk - clk_start,
+            // TODO(ayush): this is trace heights after overflow so an overestimate
+            trace_heights: state.ctx.trace_heights.clone(),
+        };
+        self.segments.push(segment);
     }
 
     /// Execute a single instruction
