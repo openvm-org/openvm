@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 use getset::Getters;
 use itertools::{izip, zip_eq};
+use memmap2::MmapMut;
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
@@ -10,7 +11,7 @@ use super::{
     adapter::AccessAdapterInventory,
     offline_checker::MemoryBus,
     paged_vec::{AddressMap, PAGE_SIZE},
-    Address, MemoryAddress, PagedVec,
+    Address, MemoryAddress, MmapMutExt,
 };
 use crate::{arch::MemoryConfig, system::memory::MemoryImage};
 
@@ -187,7 +188,7 @@ pub struct TracingMemory<F> {
     pub data: GuestMemory,
     /// A map of `addr_space -> (ptr / min_block_size[addr_space] -> (timestamp: u32, block_size:
     /// u32))` for the timestamp and block size of the latest access.
-    pub(super) meta: Vec<PagedVec<PAGE_SIZE>>,
+    pub(super) meta: Vec<MmapMut>,
     /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
     /// all memory accesses in `addr_space` must be aligned to this block size.
     pub min_block_size: Vec<u32>,
@@ -213,12 +214,13 @@ impl<F: PrimeField32> TracingMemory<F> {
         let meta = min_block_size
             .iter()
             .map(|&min_block_size| {
-                PagedVec::new(
+                MmapMut::map_anon(
                     num_cells
                         .checked_mul(size_of::<AccessMetadata>())
                         .unwrap()
                         .div_ceil(PAGE_SIZE * min_block_size as usize),
                 )
+                .unwrap()
             })
             .collect();
         Self {
@@ -241,12 +243,13 @@ impl<F: PrimeField32> TracingMemory<F> {
         for (i, (paged_vec, cell_size)) in izip!(&image.paged_vecs, &image.cell_size).enumerate() {
             let num_cells = paged_vec.bytes_capacity() / cell_size;
 
-            self.meta[i] = PagedVec::new(
+            self.meta[i] = MmapMut::map_anon(
                 num_cells
                     .checked_mul(size_of::<AccessMetadata>())
                     .unwrap()
                     .div_ceil(PAGE_SIZE * self.min_block_size[i] as usize),
-            );
+            )
+            .unwrap();
         }
         self.data = GuestMemory::new(image);
         self

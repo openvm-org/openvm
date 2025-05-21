@@ -1,12 +1,12 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, mem::MaybeUninit, ptr::copy_nonoverlapping};
 
 use itertools::{zip_eq, Itertools};
+use memmap2::MmapMut;
 use openvm_instructions::exe::SparseMemoryImage;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
 use crate::arch::MemoryConfig;
-use memmap2::MmapMut;
 
 /// (address_space, pointer)
 pub type Address = (u32, u32);
@@ -68,6 +68,74 @@ pub type Address = (u32, u32);
 //         unimplemented!()
 //     }
 // }
+
+pub trait MmapMutExt {
+    fn get<BLOCK: Copy>(&self, from: usize) -> BLOCK;
+    fn set<BLOCK: Copy>(&mut self, start: usize, values: &BLOCK);
+    fn replace<BLOCK: Copy>(&mut self, from: usize, values: &BLOCK) -> BLOCK;
+}
+
+impl MmapMutExt for MmapMut {
+    /// # Panics
+    /// If `from..from + size_of<BLOCK>()` is out of bounds.
+    #[inline(always)]
+    fn get<BLOCK: Copy>(&self, from: usize) -> BLOCK {
+        // Create an uninitialized array of MaybeUninit<BLOCK>
+        let mut result: MaybeUninit<BLOCK> = MaybeUninit::uninit();
+        unsafe {
+            copy_nonoverlapping(
+                self.as_ptr().add(from),
+                result.as_mut_ptr() as *mut u8,
+                size_of::<BLOCK>(),
+            );
+        }
+        // SAFETY:
+        // - All elements have been initialized (zero-initialized if page didn't exist).
+        // - `result` is aligned to `BLOCK`
+        unsafe { result.assume_init() }
+    }
+
+    /// # Panics
+    /// If `start..start + size_of<BLOCK>()` is out of bounds.
+    // @dev: `values` is passed by reference since the data is copied into memory. Even though the
+    // compiler probably optimizes it, we use reference to avoid any unnecessary copy of `values`
+    // onto the stack in the function call.
+    #[inline(always)]
+    fn set<BLOCK: Copy>(&mut self, start: usize, values: &BLOCK) {
+        unsafe {
+            copy_nonoverlapping(
+                values as *const _ as *const u8,
+                self.as_mut_ptr().add(start),
+                size_of::<BLOCK>(),
+            );
+        }
+    }
+
+    /// memcpy of new `values` into pages, memcpy of old existing values into new returned value.
+    /// # Panics
+    /// If `from..from + size_of<BLOCK>()` is out of bounds.
+    #[inline(always)]
+    fn replace<BLOCK: Copy>(&mut self, from: usize, values: &BLOCK) -> BLOCK {
+        // Create an uninitialized array of MaybeUninit<BLOCK>
+        let mut result: MaybeUninit<BLOCK> = MaybeUninit::uninit();
+        unsafe {
+            copy_nonoverlapping(
+                values as *const _ as *const u8,
+                self.as_mut_ptr().add(from),
+                size_of::<BLOCK>(),
+            );
+            copy_nonoverlapping(
+                self.as_ptr().add(from),
+                result.as_mut_ptr() as *mut u8,
+                size_of::<BLOCK>(),
+            );
+        }
+        // SAFETY:
+        // - All elements have been initialized (zero-initialized if page didn't exist).
+        // - `result` is aligned to `BLOCK`
+        unsafe { result.assume_init() }
+    }
+}
 
 #[derive(Debug)]
 pub struct AddressMap {
