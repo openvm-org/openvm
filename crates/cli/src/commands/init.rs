@@ -123,13 +123,12 @@ impl InitCmd {
             return Err(eyre::eyre!("cargo init failed with status: {}", status));
         }
 
-        // Add openvm dependency to Cargo.toml
-        add_openvm_dependency(&path)?;
-
-        // Write template main.rs or lib.rs
+        // Add openvm dependency to Cargo.toml, then write template main.rs or lib.rs
         if self.lib {
+            add_openvm_dependency(&path, &[])?;
             write_template_file("lib.rs", &path.join("src"))?;
         } else {
+            add_openvm_dependency(&path, &["std"])?;
             write_template_file("main.rs", &path.join("src"))?;
         }
 
@@ -140,15 +139,20 @@ impl InitCmd {
     }
 }
 
-fn add_openvm_dependency(path: &Path) -> Result<()> {
+fn add_openvm_dependency(path: &Path, features: &[&str]) -> Result<()> {
     let cargo_toml_path = path.join("Cargo.toml");
     let cargo_toml_content = read_to_string(&cargo_toml_path)?;
     let mut doc = cargo_toml_content.parse::<DocumentMut>()?;
     let mut openvm_table = toml_edit::InlineTable::new();
+    let mut openvm_features = toml_edit::Array::new();
+    for feature in features {
+        openvm_features.push(Value::from(feature.to_string()));
+    }
     openvm_table.insert(
         "git",
         Value::from("https://github.com/openvm-org/openvm.git"),
     );
+    openvm_table.insert("features", Value::Array(openvm_features));
     doc["dependencies"]["openvm"] = Item::Value(toml_edit::Value::InlineTable(openvm_table));
     write(cargo_toml_path, doc.to_string())?;
     Ok(())
