@@ -78,6 +78,8 @@ impl VerifyCmd {
                     let files = get_files_with_ext(Path::new("."), "app.proof")?;
                     if files.len() > 1 {
                         return Err(eyre::eyre!("multiple .app.proof files found, please specify the path using option --proof"));
+                    } else if files.len() == 0 {
+                        return Err(eyre::eyre!("no .app.proof file found, please specify the path using option --proof"));
                     }
                     files[0].clone()
                 };
@@ -105,6 +107,8 @@ impl VerifyCmd {
                     let files = get_files_with_ext(Path::new("."), "evm.proof")?;
                     if files.len() > 1 {
                         return Err(eyre::eyre!("multiple .evm.proof files found, please specify the path using option --proof"));
+                    } else if files.len() == 0 {
+                        return Err(eyre::eyre!("no .evm.proof file found, please specify the path using option --proof"));
                     }
                     files[0].clone()
                 };
