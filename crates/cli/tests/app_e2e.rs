@@ -169,6 +169,40 @@ fn test_cli_app_e2e_simplified() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_cli_init_build() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let temp_path = temp_dir.path();
+    let config_path = temp_path.join("openvm.toml");
+    let manifest_path = temp_path.join("Cargo.toml");
+    run_cmd("cargo", &["install", "--path", ".", "--force"])?;
+
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "init",
+            temp_path.to_str().unwrap(),
+            "--name",
+            "cli-package",
+        ],
+    )?;
+
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "build",
+            "--config",
+            config_path.to_str().unwrap(),
+            "--manifest-path",
+            manifest_path.to_str().unwrap(),
+        ],
+    )?;
+
+    Ok(())
+}
+
 fn run_cmd(program: &str, args: &[&str]) -> Result<()> {
     let package_dir = env::current_dir()?;
     let prefix = "[test cli e2e]";
