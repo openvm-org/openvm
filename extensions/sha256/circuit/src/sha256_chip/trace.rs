@@ -7,7 +7,6 @@ use openvm_circuit::{
     arch::{Result, TraceStep, VmStateMut},
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
-
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,

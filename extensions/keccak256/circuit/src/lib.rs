@@ -3,7 +3,6 @@
 
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
 use openvm_stark_backend::p3_field::PrimeField32;
-
 use tiny_keccak::{Hasher, Keccak};
 
 pub mod air;
@@ -19,7 +18,10 @@ mod tests;
 
 pub use air::KeccakVmAir;
 use openvm_circuit::{
-    arch::{ExecutionBridge, NewVmChipWrapper, Result, StepExecutorE1, VmStateMut},
+    arch::{
+        execution_mode::metered::MeteredCtx, ExecutionBridge, NewVmChipWrapper, Result,
+        StepExecutorE1, VmStateMut,
+    },
     system::memory::online::GuestMemory,
 };
 use openvm_instructions::{
@@ -87,7 +89,7 @@ impl KeccakVmStep {
 impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
     fn execute_e1<Ctx>(
         &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
         let &Instruction {
@@ -121,5 +123,14 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
         hasher.finalize(&mut output);
         memory_write(state.memory, e, dst, &output);
         Ok(())
+    }
+
+    fn execute_metered(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        todo!()
     }
 }

@@ -20,12 +20,11 @@ use p3_keccak_air::{
 };
 use tiny_keccak::{keccakf, Hasher, Keccak};
 
-use crate::{columns::NUM_KECCAK_VM_COLS, utils::num_keccak_f, KeccakVmStep, KECCAK_WORD_SIZE};
-
 use super::{
     columns::KeccakVmCols, KECCAK_ABSORB_READS, KECCAK_DIGEST_WRITES, KECCAK_RATE_BYTES,
     KECCAK_REGISTER_READS, NUM_ABSORB_ROUNDS,
 };
+use crate::{columns::NUM_KECCAK_VM_COLS, utils::num_keccak_f, KeccakVmStep, KECCAK_WORD_SIZE};
 
 impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
     fn execute(

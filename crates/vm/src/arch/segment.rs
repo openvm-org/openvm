@@ -1,13 +1,3 @@
-use super::{
-    execution_control::ExecutionControl, ExecutionError, GenerationError, SystemConfig,
-    VmChipComplex, VmComplexTraceHeights, VmConfig,
-};
-#[cfg(feature = "bench-metrics")]
-use crate::metrics::VmMetrics;
-use crate::{
-    arch::{instructions::*, InstructionExecutor},
-    system::memory::online::GuestMemory,
-};
 use backtrace::Backtrace;
 use openvm_instructions::{
     exe::FnBounds,
@@ -21,6 +11,17 @@ use openvm_stark_backend::{
     prover::types::{CommittedTraceData, ProofInput},
     utils::metrics_span,
     Chip,
+};
+
+use super::{
+    execution_control::ExecutionControl, ExecutionError, GenerationError, SystemConfig,
+    VmChipComplex, VmComplexTraceHeights, VmConfig,
+};
+#[cfg(feature = "bench-metrics")]
+use crate::metrics::VmMetrics;
+use crate::{
+    arch::{instructions::*, InstructionExecutor},
+    system::memory::online::GuestMemory,
 };
 
 pub struct VmSegmentState<Ctx> {

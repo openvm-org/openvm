@@ -3,7 +3,6 @@ pub mod exact;
 
 // pub use exact::MeteredCtxExact as MeteredCtx;
 pub use bounded::MeteredCtxBounded as MeteredCtx;
-
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 
@@ -119,7 +118,8 @@ where
         state: &mut VmSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
-        // Program | Connector | Public Values | Memory ... | Executors (except Public Values) | Range Checker
+        // Program | Connector | Public Values | Memory ... | Executors (except Public Values) |
+        // Range Checker
         state.ctx.trace_heights[PROGRAM_AIR_ID] = chip_complex.program_chip().true_program_length;
         state.ctx.trace_heights[CONNECTOR_AIR_ID] = 2;
 
