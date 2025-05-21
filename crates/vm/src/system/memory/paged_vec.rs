@@ -47,7 +47,12 @@ impl<const PAGE_SIZE: usize> PagedVec<PAGE_SIZE> {
                     std::slice::from_raw_parts_mut(dst, len).fill(0u8);
                 }
             } else {
-                debug_assert_eq!(start_page + 1, end_page);
+                debug_assert_eq!(
+                    start_page + 1,
+                    end_page,
+                    "Range spans more than two pages: {:?}",
+                    (start_page, end_page, start, len)
+                );
                 let offset = start % PAGE_SIZE;
                 let first_part = PAGE_SIZE - offset;
                 if let Some(page) = self.pages[start_page].as_ref() {

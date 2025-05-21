@@ -123,6 +123,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
 
         let mut hasher = Keccak::v256();
 
+        // TODO(ayush): avoid read_range_generic panic on reading multiple pages
         let message: Vec<u8> = state
             .memory
             .memory

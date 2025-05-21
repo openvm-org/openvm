@@ -290,12 +290,15 @@ where
         let streams = segment.chip_complex.take_streams();
         #[cfg(feature = "bench-metrics")]
         let metrics = segment.metrics.partial_take();
+
+        // TODO(ayush): this can probably be avoided
+        let memory = segment.ctrl.final_memory.as_ref().unwrap().clone();
         Ok(VmExecutorOneSegmentResult {
             segment,
             next_state: Some(VmState {
                 clk: exec_state.clk,
                 pc: exec_state.pc,
-                memory: exec_state.memory.unwrap().memory,
+                memory,
                 input: streams,
                 #[cfg(feature = "bench-metrics")]
                 metrics,

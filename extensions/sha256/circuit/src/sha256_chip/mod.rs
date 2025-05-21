@@ -104,7 +104,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         debug_assert!(src + len <= (1 << self.pointer_max_bits));
         let mut hasher = Sha256::new();
 
-        // TODO(ayush): this bypasses state and doesn't trigger on_memory_operation callback for e2
+        // TODO(ayush): avoid read_range_generic panic on reading multiple pages
         let message: Vec<u8> = state
             .memory
             .memory
