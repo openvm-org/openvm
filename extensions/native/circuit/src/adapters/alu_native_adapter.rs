@@ -212,8 +212,6 @@ where
         mem_helper.fill_from_prev(timestamp, &mut adapter_row.reads_aux[1].base);
         timestamp += 1;
 
-        mem_helper.fill_from_prev(timestamp, adapter_row.write_aux.as_mut());
-
         if adapter_row.e_as.is_zero() {
             adapter_row.reads_aux[0].is_immediate = F::ONE;
             adapter_row.reads_aux[0].is_zero_aux = F::ZERO;
@@ -229,6 +227,8 @@ where
             adapter_row.reads_aux[1].is_immediate = F::ZERO;
             adapter_row.reads_aux[1].is_zero_aux = adapter_row.f_as.inverse();
         }
+
+        mem_helper.fill_from_prev(timestamp, adapter_row.write_aux.as_mut());
     }
 }
 

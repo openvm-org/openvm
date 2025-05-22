@@ -336,47 +336,47 @@ pub(crate) mod phantom {
         }
     }
 
-    // impl<F: PrimeField32> PhantomSubExecutor<F> for NativePrintSubEx {
-    //     fn phantom_execute(
-    //         &mut self,
-    //         memory: &GuestMemory,
-    //         _: &mut Streams<F>,
-    //         _: PhantomDiscriminant,
-    //         a: u32,
-    //         _: u32,
-    //         c_upper: u16,
-    //     ) -> eyre::Result<()> {
-    //         let addr_space = F::from_canonical_u16(c_upper);
-    //         let value = memory.unsafe_read_cell::<F>(addr_space, a);
-    //         println!("{}", value);
-    //         Ok(())
-    //     }
-    // }
+    impl<F: PrimeField32> PhantomSubExecutor<F> for NativePrintSubEx {
+        fn phantom_execute(
+            &mut self,
+            memory: &GuestMemory,
+            _: &mut Streams<F>,
+            _: PhantomDiscriminant,
+            a: u32,
+            _: u32,
+            c_upper: u16,
+        ) -> eyre::Result<()> {
+            let addr_space = F::from_canonical_u16(c_upper);
+            let value = memory.unsafe_read_cell::<F>(addr_space, a);
+            println!("{}", value);
+            Ok(())
+        }
+    }
 
-    // impl<F: PrimeField32> PhantomSubExecutor<F> for NativeHintBitsSubEx {
-    //     fn phantom_execute(
-    //         &mut self,
-    //         memory: &GuestMemory,
-    //         streams: &mut Streams<F>,
-    //         _: PhantomDiscriminant,
-    //         a: u32,
-    //         len: u32,
-    //         c_upper: u16,
-    //     ) -> eyre::Result<()> {
-    //         let addr_space = F::from_canonical_u16(c_upper);
-    //         let val = memory.unsafe_read_cell::<F>(addr_space, a);
-    //         let mut val = val.as_canonical_u32();
+    impl<F: PrimeField32> PhantomSubExecutor<F> for NativeHintBitsSubEx {
+        fn phantom_execute(
+            &mut self,
+            memory: &GuestMemory,
+            streams: &mut Streams<F>,
+            _: PhantomDiscriminant,
+            a: u32,
+            len: u32,
+            c_upper: u16,
+        ) -> eyre::Result<()> {
+            let addr_space = F::from_canonical_u16(c_upper);
+            let val = memory.unsafe_read_cell::<F>(addr_space, a);
+            let mut val = val.as_canonical_u32();
 
-    //         assert!(streams.hint_stream.is_empty());
-    //         for _ in 0..len {
-    //             streams
-    //                 .hint_stream
-    //                 .push_back(F::from_canonical_u32(val & 1));
-    //             val >>= 1;
-    //         }
-    //         Ok(())
-    //     }
-    // }
+            assert!(streams.hint_stream.is_empty());
+            for _ in 0..len {
+                streams
+                    .hint_stream
+                    .push_back(F::from_canonical_u32(val & 1));
+                val >>= 1;
+            }
+            Ok(())
+        }
+    }
 
     impl<F: PrimeField32> PhantomSubExecutor<F> for NativeHintLoadSubEx {
         fn phantom_execute(

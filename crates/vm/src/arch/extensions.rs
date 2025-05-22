@@ -604,7 +604,11 @@ impl<F: PrimeField32> SystemComplex<F> {
                         config.max_constraint_degree as u32 - 1,
                     ),
                 ),
-                PublicValuesCoreStep::new(NativeAdapterStep::new(), config.num_public_values),
+                PublicValuesCoreStep::new(
+                    NativeAdapterStep::new(),
+                    config.num_public_values,
+                    config.max_constraint_degree as u32 - 1,
+                ),
                 MAX_INS_CAPACITY,
                 memory_controller.helper(),
             );
