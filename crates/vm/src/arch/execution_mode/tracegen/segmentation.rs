@@ -65,7 +65,7 @@ where
     ) {
         chip_complex
             .connector_chip_mut()
-            .begin(ExecutionState::new(state.pc, INITIAL_TIMESTAMP));
+            .begin(ExecutionState::new(state.pc, INITIAL_TIMESTAMP + 1));
     }
 
     fn on_suspend_or_terminate(
