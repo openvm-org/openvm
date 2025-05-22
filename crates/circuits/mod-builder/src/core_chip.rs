@@ -328,9 +328,9 @@ where
 
     fn execute_metered(
         &mut self,
-        _state: &mut VmStateMut<GuestMemory, MeteredCtx>,
-        _instruction: &Instruction<F>,
-        _chip_index: usize,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
     ) -> Result<()> {
         self.execute_e1(state, instruction)?;
         state.ctx.trace_heights[chip_index] += 1;
