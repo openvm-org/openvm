@@ -6,7 +6,7 @@ use crate::{
         execution_control::ExecutionControl, ExecutionError, ExecutionState, InstructionExecutor,
         VmChipComplex, VmConfig, VmSegmentState,
     },
-    system::memory::MemoryImage,
+    system::memory::{MemoryImage, INITIAL_TIMESTAMP},
 };
 
 pub type TracegenCtx = ();
@@ -48,10 +48,9 @@ where
         state: &mut VmSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
-        let timestamp = chip_complex.memory_controller().timestamp();
         chip_complex
             .connector_chip_mut()
-            .begin(ExecutionState::new(state.pc, timestamp));
+            .begin(ExecutionState::new(state.pc, INITIAL_TIMESTAMP));
     }
 
     fn on_suspend_or_terminate(
