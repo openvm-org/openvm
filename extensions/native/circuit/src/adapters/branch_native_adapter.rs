@@ -3,8 +3,6 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::arch::execution_mode::E1E2ExecutionCtx;
-use openvm_circuit::arch::VmStateMut;
 use openvm_circuit::{
     arch::{
         execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
