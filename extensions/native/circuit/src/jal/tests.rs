@@ -16,9 +16,8 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use crate::jal::{JalRangeCheckChip, JalRangeCheckCols};
-
 use super::{JalRangeCheckAir, JalRangeCheckStep};
+use crate::jal::{JalRangeCheckChip, JalRangeCheckCols};
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;

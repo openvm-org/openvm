@@ -3,7 +3,6 @@
 
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
 use openvm_stark_backend::p3_field::PrimeField32;
-
 use p3_keccak_air::NUM_ROUNDS;
 use tiny_keccak::{Hasher, Keccak};
 

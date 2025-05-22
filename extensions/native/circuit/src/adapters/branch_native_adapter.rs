@@ -1,12 +1,13 @@
-use std::borrow::{Borrow, BorrowMut};
-use std::mem::size_of;
+use std::{
+    borrow::{Borrow, BorrowMut},
+    mem::size_of,
+};
 
-use openvm_circuit::arch::execution_mode::E1E2ExecutionCtx;
-use openvm_circuit::arch::VmStateMut;
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface,
-        ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
+        BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
+        VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols},
