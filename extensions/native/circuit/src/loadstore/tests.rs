@@ -7,11 +7,10 @@ use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
+use super::{NativeLoadStoreChip, NativeLoadStoreCoreAir, NativeLoadStoreCoreStep};
 use crate::adapters::loadstore_native_adapter::{
     NativeLoadStoreAdapterAir, NativeLoadStoreAdapterStep,
 };
-
-use super::{NativeLoadStoreChip, NativeLoadStoreCoreAir, NativeLoadStoreCoreStep};
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;

@@ -15,12 +15,11 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 
-use crate::fri::OVERALL_WIDTH;
-
 use super::{
     super::field_extension::FieldExtension, elem_to_ext, FriReducedOpeningAir,
     FriReducedOpeningChip, FriReducedOpeningStep, EXT_DEG,
 };
+use crate::fri::OVERALL_WIDTH;
 
 const MAX_INS_CAPACITY: usize = 1024;
 type F = BabyBear;
@@ -99,9 +98,9 @@ fn fri_mat_opening_air_test() {
         let address_space = 4usize;
 
         // tracing::debug!(
-        //     "{opcode:?} d = {}, e = {}, f = {}, result_addr = {}, addr1 = {}, addr2 = {}, z = {}, x = {}, y = {}",
-        //     result_as, as1, as2, result_pointer, address1, address2, result, operand1, operand2,
-        // );
+        //     "{opcode:?} d = {}, e = {}, f = {}, result_addr = {}, addr1 = {}, addr2 = {}, z = {},
+        // x = {}, y = {}",     result_as, as1, as2, result_pointer, address1, address2,
+        // result, operand1, operand2, );
 
         tester.write(address_space, alpha_pointer, alpha);
         tester.write(

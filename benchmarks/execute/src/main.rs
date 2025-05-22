@@ -201,31 +201,35 @@ fn main() -> Result<()> {
             };
 
             let executor = VmExecutor::new(vm_config);
+            executor
+                .execute_e1(exe.clone(), vec![], None)
+                // .execute_metered(exe.clone(), vec![], widths, interactions)
+                .expect("Failed to execute program");
 
-            // E2 to find segment points
-            let segments = executor.execute_metered(exe.clone(), vec![], widths, interactions)?;
-            for Segment {
-                clk_start,
-                num_cycles,
-                ..
-            } in segments
-            {
-                // E1 till clk_start
-                let state = executor.execute_e1(exe.clone(), vec![], Some(clk_start))?;
-                assert!(state.clk == clk_start);
-                // E3/tracegen from clk_start for num_cycles beginning with state
-                let mut result = executor.execute_and_generate_segment::<BabyBearPoseidon2Config>(
-                    exe.clone(),
-                    state,
-                    num_cycles,
-                )?;
-                // let proof_input = result.per_segment.pop().unwrap();
-                // let proof = tracing::info_span!("prove_single")
-                //     .in_scope(|| vm.prove_single(&pk, proof_input));
+            // // E2 to find segment points
+            // let segments = executor.execute_metered(exe.clone(), vec![], widths, interactions)?;
+            // for Segment {
+            //     clk_start,
+            //     num_cycles,
+            //     ..
+            // } in segments
+            // {
+            //     // E1 till clk_start
+            //     let state = executor.execute_e1(exe.clone(), vec![], Some(clk_start))?;
+            //     assert!(state.clk == clk_start);
+            //     // E3/tracegen from clk_start for num_cycles beginning with state
+            //     let mut result = executor.execute_and_generate_segment::<BabyBearPoseidon2Config>(
+            //         exe.clone(),
+            //         state,
+            //         num_cycles,
+            //     )?;
+            //     // let proof_input = result.per_segment.pop().unwrap();
+            //     // let proof = tracing::info_span!("prove_single")
+            //     //     .in_scope(|| vm.prove_single(&pk, proof_input));
 
-                // let proof_bytes = bitcode::serialize(&proof)?;
-                // tracing::info!("Proof size: {} bytes", proof_bytes.len());
-            }
+            //     // let proof_bytes = bitcode::serialize(&proof)?;
+            //     // tracing::info!("Proof size: {} bytes", proof_bytes.len());
+            // }
 
             tracing::info!("Completed program: {}", program);
         }

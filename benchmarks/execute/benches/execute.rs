@@ -98,7 +98,7 @@ fn run_program(program: &str) -> Result<()> {
 
     let executor = VmExecutor::new(vm_config);
     executor
-        .execute_e1(exe, vec![])
+        .execute_e1(exe, vec![], None)
         .expect("Failed to execute program");
 
     Ok(())

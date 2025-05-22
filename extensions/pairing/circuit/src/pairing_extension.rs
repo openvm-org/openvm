@@ -94,7 +94,7 @@ pub(crate) mod phantom {
     use eyre::bail;
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
-        system::memory::MemoryController,
+        system::memory::online::GuestMemory,
     };
     use openvm_ecc_guest::{algebra::field::FieldExtension, halo2curves::ff, AffinePoint};
     use openvm_instructions::{
@@ -106,7 +106,7 @@ pub(crate) mod phantom {
         bn254::BN254_NUM_LIMBS,
         pairing::{FinalExp, MultiMillerLoop},
     };
-    use openvm_rv32im_circuit::adapters::unsafe_read_rv32_register;
+    use openvm_rv32im_circuit::adapters::{memory_read, new_read_rv32_register};
     use openvm_stark_backend::p3_field::PrimeField32;
 
     use super::PairingCurve;
@@ -116,43 +116,40 @@ pub(crate) mod phantom {
     impl<F: PrimeField32> PhantomSubExecutor<F> for PairingHintSubEx {
         fn phantom_execute(
             &mut self,
-            memory: &MemoryController<F>,
+            memory: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
-            a: F,
-            b: F,
+            a: u32,
+            b: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
-            let rs1 = unsafe_read_rv32_register(memory, a);
-            let rs2 = unsafe_read_rv32_register(memory, b);
+            let rs1 = new_read_rv32_register(memory, 1, a);
+            let rs2 = new_read_rv32_register(memory, 1, b);
             hint_pairing(memory, &mut streams.hint_stream, rs1, rs2, c_upper)
         }
     }
 
     fn hint_pairing<F: PrimeField32>(
-        memory: &MemoryController<F>,
+        memory: &GuestMemory,
         hint_stream: &mut VecDeque<F>,
         rs1: u32,
         rs2: u32,
         c_upper: u16,
     ) -> eyre::Result<()> {
-        let p_ptr = u32::from_le_bytes(memory.unsafe_read::<u8, 4>(
-            F::from_canonical_u32(RV32_MEMORY_AS),
-            F::from_canonical_u32(rs1),
-        ));
+        let p_ptr = u32::from_le_bytes(memory_read(memory, RV32_MEMORY_AS, rs1));
         // len in bytes
-        let p_len = u32::from_le_bytes(memory.unsafe_read::<u8, 4>(
-            F::from_canonical_u32(RV32_MEMORY_AS),
-            F::from_canonical_u32(rs1 + RV32_REGISTER_NUM_LIMBS as u32),
+        let p_len = u32::from_le_bytes(memory_read(
+            memory,
+            RV32_MEMORY_AS,
+            rs1 + RV32_REGISTER_NUM_LIMBS as u32,
         ));
-        let q_ptr = u32::from_le_bytes(memory.unsafe_read::<u8, 4>(
-            F::from_canonical_u32(RV32_MEMORY_AS),
-            F::from_canonical_u32(rs2),
-        ));
+
+        let q_ptr = u32::from_le_bytes(memory_read(memory, RV32_MEMORY_AS, rs2));
         // len in bytes
-        let q_len = u32::from_le_bytes(memory.unsafe_read::<u8, 4>(
-            F::from_canonical_u32(RV32_MEMORY_AS),
-            F::from_canonical_u32(rs2 + RV32_REGISTER_NUM_LIMBS as u32),
+        let q_len = u32::from_le_bytes(memory_read(
+            memory,
+            RV32_MEMORY_AS,
+            rs2 + RV32_REGISTER_NUM_LIMBS as u32,
         ));
 
         match PairingCurve::from_repr(c_upper as usize) {
@@ -248,19 +245,17 @@ pub(crate) mod phantom {
     }
 
     fn read_fp<const N: usize, F: PrimeField32, Fp: ff::PrimeField>(
-        memory: &MemoryController<F>,
+        memory: &GuestMemory,
         ptr: u32,
     ) -> eyre::Result<Fp>
     where
         Fp::Repr: From<[u8; N]>,
     {
-        let mut repr = [0u8; N];
-        for (i, byte) in repr.iter_mut().enumerate() {
-            *byte = memory.unsafe_read_cell::<u8>(
-                F::from_canonical_u32(RV32_MEMORY_AS),
-                F::from_canonical_u32(ptr + i as u32),
-            );
-        }
+        let repr: [u8; N] = memory
+            .memory
+            .read_range_generic((RV32_MEMORY_AS, ptr), N)
+            .try_into()
+            .unwrap();
         Fp::from_repr(repr.into())
             .into_option()
             .ok_or(eyre::eyre!("bad ff::PrimeField repr"))
