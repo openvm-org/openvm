@@ -22,7 +22,7 @@ use strum::EnumCount;
 use crate::fp2_chip::{Fp2AddSubChip, Fp2MulDivChip};
 
 // TODO: this should be decided after e2 execution
-const MAX_INS_CAPACITY: usize = 1 << 22;
+const MAX_INS_CAPACITY: usize = 1 << 16;
 
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
