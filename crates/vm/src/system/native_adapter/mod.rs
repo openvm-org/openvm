@@ -198,7 +198,7 @@ where
             );
         }
         if R >= 2 {
-            cols.reads_aux[0].address.pointer = b;
+            cols.reads_aux[1].address.pointer = c;
             reads[1][0] = tracing_read_or_imm_native(
                 memory,
                 e.as_canonical_u32(),
