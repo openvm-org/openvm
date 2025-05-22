@@ -39,7 +39,7 @@ save columns, `RANGE_CHECK` is put into the existing `JalChip`.
 **Context:** https://github.com/openvm-org/openvm/blob/336f1a475e5aa3513c4c5a266399f4128c119bba/extensions/native/compiler/src/conversion/mod.rs#L274
 
 **Description:** 
-ASM compiler compiles `Assert*` DSL instructions into a conditional jump + a ASM instruction `Trap`, which only results a phantom instruction. The expolit can generate a valid execution trace which ignores all assertions in the program.
+ASM compiler compiles `Assert*` DSL instructions into a conditional jump + a ASM instruction `Trap`, which only results a phantom instruction. The exploit can generate a valid execution trace which ignores all assertions in the program.
 
 **Proof of concept:** N/A
 
