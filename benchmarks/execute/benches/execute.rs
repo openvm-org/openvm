@@ -1,30 +1,28 @@
 use eyre::Result;
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
-use openvm_bigint_circuit::Int256;
+use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
     arch::{instructions::exe::VmExe, SystemConfig, VmExecutor},
     derive::VmConfig,
 };
-use openvm_keccak256_circuit::Keccak256;
+use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
-use openvm_rv32im_circuit::{Rv32I, Rv32Io, Rv32M};
+use openvm_rv32im_circuit::{
+    Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
+    Rv32MExecutor, Rv32MPeriphery,
+};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sha256_circuit::Sha256;
+use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::{
+    openvm_stark_backend::{self, p3_field::PrimeField32},
+    p3_baby_bear::BabyBear,
+};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
-
-use openvm_bigint_circuit::{Int256Executor, Int256Periphery};
-use openvm_keccak256_circuit::{Keccak256Executor, Keccak256Periphery};
-use openvm_rv32im_circuit::{
-    Rv32IExecutor, Rv32IPeriphery, Rv32IoExecutor, Rv32IoPeriphery, Rv32MExecutor, Rv32MPeriphery,
-};
-use openvm_sha256_circuit::{Sha256Executor, Sha256Periphery};
-use openvm_stark_sdk::openvm_stark_backend::{self, p3_field::PrimeField32};
 
 static AVAILABLE_PROGRAMS: &[&str] = &[
     "fibonacci_recursive",
