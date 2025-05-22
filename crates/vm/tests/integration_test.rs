@@ -7,10 +7,12 @@ use std::{
 
 use openvm_circuit::{
     arch::{
+        create_and_initialize_chip_complex,
+        execution_mode::tracegen::TracegenExecutionControlWithSegmentation,
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         ChipId, MemoryConfig, SingleSegmentVmExecutor, SystemConfig, SystemTraceHeights,
-        TracegenVmExecutionState, TracegenVmSegmentExecutor, VirtualMachine, VmComplexTraceHeights,
-        VmConfig, VmInventoryTraceHeights,
+        VirtualMachine, VmComplexTraceHeights, VmConfig, VmInventoryTraceHeights,
+        VmSegmentExecutor, VmSegmentState,
     },
     system::{
         memory::{MemoryTraceHeights, VolatileMemoryTraceHeights, CHUNK},
@@ -713,19 +715,24 @@ fn test_hint_load_1() {
 
     let program = Program::from_instructions(&instructions);
 
-    let mut segment = TracegenVmSegmentExecutor::new(
+    let chip_complex = create_and_initialize_chip_complex(
         &test_native_config(),
         program,
         vec![vec![F::ONE, F::TWO]].into(),
         None,
+    )
+    .unwrap();
+    let ctrl = TracegenExecutionControlWithSegmentation::new(chip_complex.air_names());
+    let mut segment = VmSegmentExecutor::<F, NativeConfig, _>::new(
+        chip_complex,
         vec![],
         Default::default(),
+        ctrl,
     );
-    let mut vm_state = TracegenVmExecutionState::from_pc_and_memory_controller(
-        0,
-        segment.chip_complex.memory_controller(),
-    );
-    segment.execute_from_state(&mut vm_state).unwrap();
+
+    let mut exec_state = VmSegmentState::new(0, 0, None, ());
+    segment.execute_from_state(&mut exec_state).unwrap();
+
     let streams = segment.chip_complex.take_streams();
     assert!(streams.input_stream.is_empty());
     assert_eq!(streams.hint_stream, VecDeque::from(vec![F::ZERO]));
@@ -754,26 +761,33 @@ fn test_hint_load_2() {
 
     let program = Program::from_instructions(&instructions);
 
-    let mut segment = TracegenVmSegmentExecutor::new(
+    let chip_complex = create_and_initialize_chip_complex(
         &test_native_config(),
         program,
         vec![vec![F::ONE, F::TWO], vec![F::TWO, F::ONE]].into(),
         None,
+    )
+    .unwrap();
+    let ctrl = TracegenExecutionControlWithSegmentation::new(chip_complex.air_names());
+    let mut segment = VmSegmentExecutor::<F, NativeConfig, _>::new(
+        chip_complex,
         vec![],
         Default::default(),
+        ctrl,
     );
-    let mut vm_state = TracegenVmExecutionState::from_pc_and_memory_controller(
-        0,
-        segment.chip_complex.memory_controller(),
-    );
-    segment.execute_from_state(&mut vm_state).unwrap();
-    assert_eq!(
+
+    let mut exec_state = VmSegmentState::new(0, 0, None, ());
+    segment.execute_from_state(&mut exec_state).unwrap();
+
+    let [read] = unsafe {
         segment
             .chip_complex
             .memory_controller()
-            .unsafe_read_cell::<F>(F::from_canonical_usize(4), F::from_canonical_usize(32)),
-        F::ZERO
-    );
+            .memory
+            .data
+            .read::<F, 1>(4, 32)
+    };
+    assert_eq!(read, F::ZERO);
     let streams = segment.chip_complex.take_streams();
     assert!(streams.input_stream.is_empty());
     assert_eq!(streams.hint_stream, VecDeque::from(vec![F::ONE]));

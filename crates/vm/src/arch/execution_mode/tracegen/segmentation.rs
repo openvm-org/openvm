@@ -14,6 +14,7 @@ use super::TracegenCtx;
 /// Check segment every 100 instructions.
 const SEGMENT_CHECK_INTERVAL: usize = 100;
 
+// TODO(ayush): fix this name since it's a mouthful
 /// Implementation of the ExecutionControl trait using the old segmentation strategy
 pub struct TracegenExecutionControlWithSegmentation {
     // Constant

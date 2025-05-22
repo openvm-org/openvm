@@ -124,9 +124,9 @@ impl<F: PrimeField32> VmState<F> {
     pub fn new(clk: u64, pc: u32, memory: MemoryImage, input: impl Into<Streams<F>>) -> Self {
         Self {
             clk,
+            pc,
             memory,
             input: input.into(),
-            pc,
             #[cfg(feature = "bench-metrics")]
             metrics: VmMetrics::default(),
         }

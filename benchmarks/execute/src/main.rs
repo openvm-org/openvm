@@ -1,18 +1,13 @@
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
-use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery, Int256Rv32Config};
+use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
-    arch::{
-        execution_mode::metered::Segment, instructions::exe::VmExe, SystemConfig, VirtualMachine,
-        VmExecutor, VmExecutorResult,
-    },
+    arch::{instructions::exe::VmExe, SystemConfig, VmExecutor},
     derive::VmConfig,
 };
-use openvm_keccak256_circuit::{
-    Keccak256, Keccak256Executor, Keccak256Periphery, Keccak256Rv32Config,
-};
+use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
@@ -25,14 +20,7 @@ use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_sdk::{
     bench::run_with_metric_collection,
-    config::{
-        baby_bear_blake3::BabyBearBlake3Config,
-        baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
-    },
-    openvm_stark_backend::{
-        self,
-        p3_field::{FieldExtensionAlgebra, PrimeField32},
-    },
+    openvm_stark_backend::{self, p3_field::PrimeField32},
     p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -182,30 +170,30 @@ fn main() -> Result<()> {
 
             let exe = VmExe::from_elf(elf, transpiler)?;
 
-            let vm = VirtualMachine::new(default_engine(), vm_config.clone());
-            let pk = vm.keygen();
-            let (widths, interactions): (Vec<usize>, Vec<usize>) = {
-                let vk = pk.get_vk();
-                vk.inner
-                    .per_air
-                    .iter()
-                    .map(|vk| {
-                        let total_width = vk.params.width.preprocessed.unwrap_or(0)
-                            + vk.params.width.cached_mains.iter().sum::<usize>()
-                            + vk.params.width.common_main
-                            // TODO(ayush): no magic value 4. should come from stark config
-                            + vk.params.width.after_challenge.iter().sum::<usize>() * 4;
-                        (total_width, vk.symbolic_constraints.interactions.len())
-                    })
-                    .unzip()
-            };
-
             let executor = VmExecutor::new(vm_config);
             executor
                 .execute_e1(exe.clone(), vec![], None)
                 // .execute(exe.clone(), vec![])
                 // .execute_metered(exe.clone(), vec![], widths, interactions)
                 .expect("Failed to execute program");
+
+            // let vm = VirtualMachine::new(default_engine(), vm_config.clone());
+            // let pk = vm.keygen();
+            // let (widths, interactions): (Vec<usize>, Vec<usize>) = {
+            //     let vk = pk.get_vk();
+            //     vk.inner
+            //         .per_air
+            //         .iter()
+            //         .map(|vk| {
+            //             let total_width = vk.params.width.preprocessed.unwrap_or(0)
+            //                 + vk.params.width.cached_mains.iter().sum::<usize>()
+            //                 + vk.params.width.common_main
+            //                 // TODO(ayush): no magic value 4. should come from stark config
+            //                 + vk.params.width.after_challenge.iter().sum::<usize>() * 4;
+            //             (total_width, vk.symbolic_constraints.interactions.len())
+            //         })
+            //         .unzip()
+            // };
 
             // // E2 to find segment points
             // let segments = executor.execute_metered(exe.clone(), vec![], widths, interactions)?;

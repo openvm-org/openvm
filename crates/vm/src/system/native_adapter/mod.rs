@@ -182,7 +182,7 @@ where
     ) -> Self::ReadData {
         assert!(R <= 2);
 
-        let &Instruction { b, e, .. } = instruction;
+        let &Instruction { b, e, f, c, .. } = instruction;
 
         let cols: &mut NativeAdapterCols<_, R, W> = adapter_row.borrow_mut();
 
@@ -201,8 +201,8 @@ where
             cols.reads_aux[1].address.pointer = c;
             reads[1][0] = tracing_read_or_imm_native(
                 memory,
-                e.as_canonical_u32(),
-                b,
+                f.as_canonical_u32(),
+                c,
                 &mut cols.reads_aux[1].address.address_space,
                 &mut cols.reads_aux[1].read_aux,
             );

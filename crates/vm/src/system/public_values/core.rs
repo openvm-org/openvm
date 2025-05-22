@@ -173,6 +173,8 @@ where
         let row_slice = &mut trace[*trace_offset..*trace_offset + width];
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
+        A::start(*state.pc, state.memory, adapter_row);
+
         let [[value], [index]] = self.adapter.read(state.memory, instruction, adapter_row);
         {
             let idx: usize = index.as_canonical_u32() as usize;
@@ -190,7 +192,6 @@ where
         let cols = PublicValuesCoreColsView::<_, &mut F>::borrow_mut(core_row);
         debug_assert_eq!(cols.width(), width - A::WIDTH);
 
-        *cols.is_valid = F::ONE;
         *cols.value = value;
         *cols.index = index;
 
@@ -206,6 +207,8 @@ where
         self.adapter.fill_trace_row(mem_helper, (), adapter_row);
 
         let cols = PublicValuesCoreColsView::<_, &mut F>::borrow_mut(core_row);
+
+        *cols.is_valid = F::ONE;
 
         let idx: usize = cols.index.as_canonical_u32() as usize;
         let pt = self.encoder.get_flag_pt(idx);

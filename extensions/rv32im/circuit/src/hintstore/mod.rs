@@ -40,8 +40,8 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 
 use crate::adapters::{
-    decompose, memory_read, memory_read_from_state, memory_write, memory_write_from_state,
-    tracing_read, tracing_write,
+    decompose, memory_read, memory_read_from_state, memory_write_from_state, tracing_read,
+    tracing_write,
 };
 
 #[cfg(test)]
@@ -524,14 +524,8 @@ where
         let &Instruction {
             opcode,
             a: num_words_ptr,
-            b: mem_ptr_ptr,
-            d,
-            e,
             ..
         } = instruction;
-
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
         let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
