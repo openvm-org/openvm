@@ -289,6 +289,9 @@ where
     // We will be setting is_valid = 0. That forces all flags be 0 (otherwise setup will be -1).
     // We generate a dummy row with all flags set to 0, then we set is_valid = 0.
     fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, row: &mut [F]) {
+        if !self.should_finalize {
+            return;
+        }
         let inputs: Vec<BigUint> = vec![BigUint::zero(); self.num_inputs()];
         let flags: Vec<bool> = vec![false; self.num_flags()];
         let core_row = &mut row[A::WIDTH..];

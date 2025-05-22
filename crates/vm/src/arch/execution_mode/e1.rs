@@ -13,8 +13,10 @@ impl E1E2ExecutionCtx for E1Ctx {
 }
 
 /// Implementation of the ExecutionControl trait using the old segmentation strategy
-#[derive(Default)]
-pub struct E1ExecutionControl;
+#[derive(Default, derive_new::new)]
+pub struct E1ExecutionControl {
+    pub clk_end: Option<u64>,
+}
 
 impl<F, VC> ExecutionControl<F, VC> for E1ExecutionControl
 where
@@ -26,10 +28,14 @@ where
 
     fn should_suspend(
         &mut self,
-        _state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
-        false
+        if let Some(clk_end) = self.clk_end {
+            state.clk >= clk_end
+        } else {
+            false
+        }
     }
 
     fn on_start(

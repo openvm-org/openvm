@@ -5,6 +5,7 @@ pub mod exact;
 pub use bounded::MeteredCtxBounded as MeteredCtx;
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
+use p3_baby_bear::BabyBear;
 
 use crate::arch::{
     execution_control::ExecutionControl, ChipId, ExecutionError, InsExecutorE1, VmChipComplex,
@@ -13,30 +14,43 @@ use crate::arch::{
 };
 
 /// Check segment every 100 instructions.
-const SEGMENT_CHECK_INTERVAL: usize = 100;
+const SEGMENT_CHECK_INTERVAL: u64 = 100;
 
 // TODO(ayush): fix these values
 const MAX_TRACE_HEIGHT: u32 = DEFAULT_MAX_SEGMENT_LEN as u32;
 const MAX_TRACE_CELLS: usize = DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT;
-const MAX_INTERACTIONS: usize = DEFAULT_MAX_SEGMENT_LEN * 100;
+const MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
+
+#[derive(derive_new::new, Debug)]
+pub struct Segment {
+    pub clk_start: u64,
+    pub num_cycles: u64,
+    pub trace_heights: Vec<u32>,
+}
 
 pub struct MeteredExecutionControl<'a> {
+    // Constants
+    air_names: &'a [String],
     pub widths: &'a [usize],
     pub interactions: &'a [usize],
-    pub since_last_segment_check: usize,
+    // State
+    // TODO(ayush): should probably be in metered ctx
+    pub clk_last_segment_check: u64,
+    pub segments: Vec<Segment>,
 }
 
 impl<'a> MeteredExecutionControl<'a> {
-    pub fn new(widths: &'a [usize], interactions: &'a [usize]) -> Self {
+    pub fn new(air_names: &'a [String], widths: &'a [usize], interactions: &'a [usize]) -> Self {
         Self {
+            air_names,
             widths,
             interactions,
-            since_last_segment_check: 0,
+            clk_last_segment_check: 0,
+            segments: vec![],
         }
     }
 
     /// Calculate the total cells used based on trace heights and widths
-    // TODO(ayush): account for preprocessed and permutation columns
     fn calculate_total_cells(&self, trace_heights: &[u32]) -> usize {
         trace_heights
             .iter()
@@ -54,36 +68,19 @@ impl<'a> MeteredExecutionControl<'a> {
             .map(|(&height, &interactions)| (height + 1) as usize * interactions)
             .sum()
     }
-}
 
-impl<F, VC> ExecutionControl<F, VC> for MeteredExecutionControl<'_>
-where
-    F: PrimeField32,
-    VC: VmConfig<F>,
-    VC::Executor: InsExecutorE1<F>,
-{
-    type Ctx = MeteredCtx;
-
-    fn should_suspend(
-        &mut self,
-        state: &mut VmSegmentState<Self::Ctx>,
-        _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
-    ) -> bool {
-        // Avoid checking segment too often.
-        if self.since_last_segment_check != SEGMENT_CHECK_INTERVAL {
-            self.since_last_segment_check += 1;
-            return false;
-        }
-        self.since_last_segment_check = 0;
-
+    fn should_segment(&mut self, state: &mut VmSegmentState<MeteredCtx>) -> bool {
         let trace_heights = state.ctx.trace_heights_if_finalized();
-
-        let max_height = trace_heights.iter().map(|&h| h.next_power_of_two()).max();
-        if let Some(height) = max_height {
-            if height > MAX_TRACE_HEIGHT {
+        for (i, &height) in trace_heights.iter().enumerate() {
+            let padded_height = height.next_power_of_two();
+            if padded_height > MAX_TRACE_HEIGHT {
                 tracing::info!(
-                    "Suspending execution: trace height ({}) exceeds maximum ({})",
-                    height,
+                    "Segment {:2} | clk {:9} | chip {} ({}) height ({:8}) > max ({:8})",
+                    self.segments.len(),
+                    self.clk_last_segment_check,
+                    i,
+                    self.air_names[i],
+                    padded_height,
                     MAX_TRACE_HEIGHT
                 );
                 return true;
@@ -93,7 +90,9 @@ where
         let total_cells = self.calculate_total_cells(&trace_heights);
         if total_cells > MAX_TRACE_CELLS {
             tracing::info!(
-                "Suspending execution: total cells ({}) exceeds maximum ({})",
+                "Segment {:2} | clk {:9} | total cells ({:10}) > max ({:10})",
+                self.segments.len(),
+                self.clk_last_segment_check,
                 total_cells,
                 MAX_TRACE_CELLS
             );
@@ -103,7 +102,9 @@ where
         let total_interactions = self.calculate_total_interactions(&trace_heights);
         if total_interactions > MAX_INTERACTIONS {
             tracing::info!(
-                "Suspending execution: total interactions ({}) exceeds maximum ({})",
+                "Segment {:2} | clk {:9} | total interactions ({:11}) > max ({:11})",
+                self.segments.len(),
+                self.clk_last_segment_check,
                 total_interactions,
                 MAX_INTERACTIONS
             );
@@ -113,11 +114,20 @@ where
         false
     }
 
-    fn on_start(
+    fn reset_segment<F, VC>(
         &mut self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<MeteredCtx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
-    ) {
+    ) where
+        F: PrimeField32,
+        VC: VmConfig<F>,
+    {
+        state.ctx.leaf_indices.clear();
+
+        // TODO(ayush): only reset trace heights for chips that are not constant height instead
+        // of refilling again
+        state.ctx.trace_heights.fill(0);
+
         // Program | Connector | Public Values | Memory ... | Executors (except Public Values) |
         // Range Checker
         state.ctx.trace_heights[PROGRAM_AIR_ID] =
@@ -157,6 +167,63 @@ where
         }
     }
 
+    fn check_segment_limits<F, VC>(
+        &mut self,
+        state: &mut VmSegmentState<MeteredCtx>,
+        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+    ) where
+        F: PrimeField32,
+        VC: VmConfig<F>,
+    {
+        // Avoid checking segment too often.
+        if state.clk < self.clk_last_segment_check + SEGMENT_CHECK_INTERVAL {
+            return;
+        }
+
+        if self.should_segment(state) {
+            let clk_start = self
+                .segments
+                .last()
+                .map_or(0, |s| s.clk_start + s.num_cycles);
+            let segment = Segment {
+                clk_start,
+                num_cycles: self.clk_last_segment_check - clk_start,
+                // TODO(ayush): this is trace heights after overflow so an overestimate
+                trace_heights: state.ctx.trace_heights.clone(),
+            };
+            self.segments.push(segment);
+
+            self.reset_segment::<F, VC>(state, chip_complex);
+        }
+
+        self.clk_last_segment_check = state.clk;
+    }
+}
+
+impl<F, VC> ExecutionControl<F, VC> for MeteredExecutionControl<'_>
+where
+    F: PrimeField32,
+    VC: VmConfig<F>,
+    VC::Executor: InsExecutorE1<F>,
+{
+    type Ctx = MeteredCtx;
+
+    fn should_suspend(
+        &mut self,
+        _state: &mut VmSegmentState<Self::Ctx>,
+        _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
+    ) -> bool {
+        false
+    }
+
+    fn on_start(
+        &mut self,
+        state: &mut VmSegmentState<Self::Ctx>,
+        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+    ) {
+        self.reset_segment::<F, VC>(state, chip_complex);
+    }
+
     fn on_suspend_or_terminate(
         &mut self,
         state: &mut VmSegmentState<Self::Ctx>,
@@ -164,6 +231,24 @@ where
         _exit_code: Option<u32>,
     ) {
         state.ctx.finalize_access_adapter_heights();
+
+        tracing::info!(
+            "Segment {:2} | clk {:9} | terminated",
+            self.segments.len(),
+            state.clk,
+        );
+        // Add the last segment
+        let clk_start = self
+            .segments
+            .last()
+            .map_or(0, |s| s.clk_start + s.num_cycles);
+        let segment = Segment {
+            clk_start,
+            num_cycles: state.clk - clk_start,
+            // TODO(ayush): this is trace heights after overflow so an overestimate
+            trace_heights: state.ctx.trace_heights.clone(),
+        };
+        self.segments.push(segment);
     }
 
     /// Execute a single instruction
@@ -176,6 +261,9 @@ where
     where
         F: PrimeField32,
     {
+        // Check if segmentation needs to happen
+        self.check_segment_limits::<F, VC>(state, chip_complex);
+
         let &Instruction { opcode, .. } = instruction;
 
         let mut offset = if chip_complex.config().has_public_values_chip() {

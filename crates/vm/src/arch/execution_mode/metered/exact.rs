@@ -284,7 +284,7 @@ impl E1E2ExecutionCtx for MeteredCtxExact {
 }
 
 fn apply_single_adapter_heights_update(trace_heights: &mut [u32], size: u32) {
-    let size_bits = size.ilog2() as u32;
+    let size_bits = size.ilog2();
     for adapter_bits in (3..=size_bits).rev() {
         trace_heights[adapter_bits as usize - 1] += 1 << (size_bits - adapter_bits);
     }

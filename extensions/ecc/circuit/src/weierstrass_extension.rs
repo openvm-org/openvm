@@ -184,7 +184,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                 );
 
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcAddNeRv32_32(add_ne_chip),
+                    WeierstrassExtensionExecutor::EcAddNeRv32_48(add_ne_chip),
                     ec_add_ne_opcodes
                         .clone()
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
@@ -202,7 +202,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     MAX_INS_CAPACITY,
                 );
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcDoubleRv32_32(double_chip),
+                    WeierstrassExtensionExecutor::EcDoubleRv32_48(double_chip),
                     ec_double_opcodes
                         .clone()
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
@@ -237,11 +237,14 @@ pub(crate) mod phantom {
     use num_traits::{FromPrimitive, One};
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
-        system::memory::{online::GuestMemory, MemoryController},
+        system::memory::online::GuestMemory,
     };
     use openvm_ecc_guest::weierstrass::DecompressionHint;
-    use openvm_instructions::{riscv::RV32_MEMORY_AS, PhantomDiscriminant};
-    use openvm_rv32im_circuit::adapters::unsafe_read_rv32_register;
+    use openvm_instructions::{
+        riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+        PhantomDiscriminant,
+    };
+    use openvm_rv32im_circuit::adapters::new_read_rv32_register;
     use openvm_stark_backend::p3_field::PrimeField32;
     use rand::{rngs::StdRng, SeedableRng};
 
@@ -268,52 +271,46 @@ pub(crate) mod phantom {
             b: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
-            todo!()
-            // let c_idx = c_upper as usize;
-            // if c_idx >= self.supported_curves.len() {
-            //     bail!(
-            //         "Curve index {c_idx} out of range: {} supported curves",
-            //         self.supported_curves.len()
-            //     );
-            // }
-            // let curve = &self.supported_curves[c_idx];
-            // let rs1 = unsafe_read_rv32_register(memory, a);
-            // let num_limbs: usize = if curve.modulus.bits().div_ceil(8) <= 32 {
-            //     32
-            // } else if curve.modulus.bits().div_ceil(8) <= 48 {
-            //     48
-            // } else {
-            //     bail!("Modulus too large")
-            // };
-            // let mut x_limbs: Vec<u8> = Vec::with_capacity(num_limbs);
-            // for i in 0..num_limbs {
-            //     let limb = memory.unsafe_read_cell::<u8>(
-            //         F::from_canonical_u32(RV32_MEMORY_AS),
-            //         F::from_canonical_u32(rs1 + i as u32),
-            //     );
-            //     x_limbs.push(limb);
-            // }
-            // let x = BigUint::from_bytes_le(&x_limbs);
-            // let rs2 = unsafe_read_rv32_register(memory, b);
-            // let rec_id = memory.unsafe_read_cell::<u8>(
-            //     F::from_canonical_u32(RV32_MEMORY_AS),
-            //     F::from_canonical_u32(rs2),
-            // );
-            // let hint = self.decompress_point(x, rec_id & 1 == 1, c_idx);
-            // let hint_bytes = once(F::from_bool(hint.possible))
-            //     .chain(repeat(F::ZERO))
-            //     .take(4)
-            //     .chain(
-            //         hint.sqrt
-            //             .to_bytes_le()
-            //             .into_iter()
-            //             .map(F::from_canonical_u8)
-            //             .chain(repeat(F::ZERO))
-            //             .take(num_limbs),
-            //     )
-            //     .collect();
-            // streams.hint_stream = hint_bytes;
-            // Ok(())
+            let c_idx = c_upper as usize;
+            if c_idx >= self.supported_curves.len() {
+                bail!(
+                    "Curve index {c_idx} out of range: {} supported curves",
+                    self.supported_curves.len()
+                );
+            }
+            let curve = &self.supported_curves[c_idx];
+            let rs1 = new_read_rv32_register(memory, RV32_REGISTER_AS, a);
+            let num_limbs: usize = if curve.modulus.bits().div_ceil(8) <= 32 {
+                32
+            } else if curve.modulus.bits().div_ceil(8) <= 48 {
+                48
+            } else {
+                bail!("Modulus too large")
+            };
+            let x_limbs: Vec<u8> = memory
+                .memory
+                .read_range_generic((RV32_MEMORY_AS, rs1), num_limbs);
+            let x = BigUint::from_bytes_le(&x_limbs);
+            let rs2 = new_read_rv32_register(memory, RV32_REGISTER_AS, b);
+            let rec_id = memory
+                .memory
+                .read_range_generic::<u8>((RV32_MEMORY_AS, rs2), 1)[0];
+            let hint = self.decompress_point(x, rec_id & 1 == 1, c_idx);
+            let hint_bytes = once(F::from_bool(hint.possible))
+                .chain(repeat(F::ZERO))
+                .take(4)
+                .chain(
+                    hint.sqrt
+                        .to_bytes_le()
+                        .into_iter()
+                        .map(F::from_canonical_u8)
+                        .chain(repeat(F::ZERO))
+                        .take(num_limbs),
+                )
+                .collect();
+            streams.hint_stream = hint_bytes;
+
+            Ok(())
         }
     }
 

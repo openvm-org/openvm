@@ -188,6 +188,10 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
         Self: Send + Sync,
         F: Send + Sync,
     {
+        if rows_used == 0 {
+            return;
+        }
+
         let mem_ptr_shift: u32 =
             1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits);
 

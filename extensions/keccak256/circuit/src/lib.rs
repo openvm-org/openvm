@@ -27,13 +27,13 @@ use openvm_circuit::{
 };
 use openvm_instructions::{
     instruction::Instruction,
+    program::DEFAULT_PC_STEP,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
 use openvm_keccak256_transpiler::Rv32KeccakOpcode;
 use openvm_rv32im_circuit::adapters::{
-    memory_write, memory_write_from_state, new_read_rv32_register,
-    new_read_rv32_register_from_state,
+    memory_read_from_state, memory_write_from_state, new_read_rv32_register_from_state,
 };
 use utils::num_keccak_f;
 
@@ -111,6 +111,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
         } = instruction;
         let d = d.as_canonical_u32();
         let e = e.as_canonical_u32();
+
         debug_assert_eq!(opcode, Rv32KeccakOpcode::KECCAK256.global_opcode());
         debug_assert_eq!(d, RV32_REGISTER_AS);
         debug_assert_eq!(e, RV32_MEMORY_AS);
@@ -121,16 +122,20 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
 
         let mut hasher = Keccak::v256();
 
-        // TODO(ayush): this bypasses state and doesn't trigger on_memory_operation callback for e2
-        let message: Vec<u8> = state
-            .memory
-            .memory
-            .read_range_generic((e, src), len as usize);
+        // TODO(ayush): read in a single call
+        let mut message = Vec::with_capacity(len as usize);
+        for offset in (0..len as usize).step_by(KECCAK_WORD_SIZE) {
+            let read = memory_read_from_state::<_, KECCAK_WORD_SIZE>(state, e, src + offset as u32);
+            let copy_len = std::cmp::min(KECCAK_WORD_SIZE, (len as usize) - offset);
+            message.extend_from_slice(&read[..copy_len]);
+        }
         hasher.update(&message);
 
         let mut output = [0u8; 32];
         hasher.finalize(&mut output);
         memory_write_from_state(state, e, dst, &output);
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }
@@ -150,12 +155,43 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
             e,
             ..
         } = instruction;
+        let d = d.as_canonical_u32();
+        let e = e.as_canonical_u32();
 
-        let len =
-            new_read_rv32_register_from_state(state, d.as_canonical_u32(), c.as_canonical_u32());
+        debug_assert_eq!(opcode, Rv32KeccakOpcode::KECCAK256.global_opcode());
+        debug_assert_eq!(d, RV32_REGISTER_AS);
+        debug_assert_eq!(e, RV32_MEMORY_AS);
+
+        let dst = new_read_rv32_register_from_state(state, d, a.as_canonical_u32());
+        let src = new_read_rv32_register_from_state(state, d, b.as_canonical_u32());
+        let len = new_read_rv32_register_from_state(state, d, c.as_canonical_u32());
+
         let num_blocks = num_keccak_f(len as usize);
 
-        self.execute_e1(state, instruction)?;
+        let mut message = Vec::with_capacity(len as usize);
+        for offset in (0..len as usize).step_by(KECCAK_WORD_SIZE) {
+            let read = memory_read_from_state::<_, KECCAK_WORD_SIZE>(state, e, src + offset as u32);
+            let copy_len = std::cmp::min(KECCAK_WORD_SIZE, (len as usize) - offset);
+            message.extend_from_slice(&read[..copy_len]);
+        }
+
+        let mut hasher = Keccak::v256();
+        hasher.update(&message);
+
+        let mut output = [0u8; 32];
+        hasher.finalize(&mut output);
+
+        for (i, word) in output.chunks_exact(KECCAK_WORD_SIZE).enumerate() {
+            memory_write_from_state::<_, KECCAK_WORD_SIZE>(
+                state,
+                e,
+                dst + (i * KECCAK_WORD_SIZE) as u32,
+                word.try_into().unwrap(),
+            );
+        }
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
         state.ctx.trace_heights[chip_index] += (num_blocks * NUM_ROUNDS) as u32;
 
         Ok(())

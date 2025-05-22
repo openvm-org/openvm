@@ -1,27 +1,28 @@
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::p3_field::PrimeField32;
 
+use super::TracegenCtx;
 use crate::{
     arch::{
         execution_control::ExecutionControl, ExecutionError, ExecutionState, InstructionExecutor,
         VmChipComplex, VmConfig, VmSegmentState,
     },
-    system::memory::MemoryImage,
+    system::memory::{MemoryImage, INITIAL_TIMESTAMP},
 };
 
 /// Check segment every 100 instructions.
 const SEGMENT_CHECK_INTERVAL: usize = 100;
 
-pub type TracegenCtx = ();
-
 /// Implementation of the ExecutionControl trait using the old segmentation strategy
-pub struct TracegenExecutionControl {
-    pub since_last_segment_check: usize,
+pub struct TracegenExecutionControlWithSegmentation {
+    // Constant
     air_names: Vec<String>,
+    // State
+    pub since_last_segment_check: usize,
     pub final_memory: Option<MemoryImage>,
 }
 
-impl TracegenExecutionControl {
+impl TracegenExecutionControlWithSegmentation {
     pub fn new(air_names: Vec<String>) -> Self {
         Self {
             since_last_segment_check: 0,
@@ -31,7 +32,7 @@ impl TracegenExecutionControl {
     }
 }
 
-impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControl
+impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControlWithSegmentation
 where
     F: PrimeField32,
     VC: VmConfig<F>,
@@ -61,10 +62,9 @@ where
         state: &mut VmSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
-        let timestamp = chip_complex.memory_controller().timestamp();
         chip_complex
             .connector_chip_mut()
-            .begin(ExecutionState::new(state.pc, timestamp));
+            .begin(ExecutionState::new(state.pc, INITIAL_TIMESTAMP + 1));
     }
 
     fn on_suspend_or_terminate(

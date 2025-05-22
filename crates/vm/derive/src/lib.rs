@@ -148,7 +148,6 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                     ) -> ::openvm_circuit::arch::Result<()>
                     where
-                        F: ::openvm_stark_backend::p3_field::PrimeField32,
                         Ctx: ::openvm_circuit::arch::execution_mode::E1E2ExecutionCtx,
                     {
                         self.0.execute_e1(state, instruction)
@@ -160,9 +159,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         chip_index: usize,
                     ) -> ::openvm_circuit::arch::Result<()>
-                    where
-                        F: ::openvm_stark_backend::p3_field::PrimeField32,
-                    {
+                    where {
                         self.0.execute_metered(state, instruction, chip_index)
                     }
                 }
@@ -214,7 +211,6 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
                     ) -> ::openvm_circuit::arch::Result<()>
                     where
-                        #first_ty_generic: ::openvm_stark_backend::p3_field::PrimeField32,
                         Ctx: ::openvm_circuit::arch::execution_mode::E1E2ExecutionCtx,
                     {
                         match self {
@@ -227,10 +223,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         state: &mut ::openvm_circuit::arch::VmStateMut<::openvm_circuit::system::memory::online::GuestMemory, ::openvm_circuit::arch::execution_mode::metered::MeteredCtx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
                         chip_index: usize,
-                    ) -> ::openvm_circuit::arch::Result<()>
-                    where
-                        #first_ty_generic: ::openvm_stark_backend::p3_field::PrimeField32
-                    {
+                    ) -> ::openvm_circuit::arch::Result<()> {
                         match self {
                             #(#execute_metered_arms,)*
                         }
