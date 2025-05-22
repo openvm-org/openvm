@@ -184,7 +184,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                 );
 
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcAddNeRv32_32(add_ne_chip),
+                    WeierstrassExtensionExecutor::EcAddNeRv32_48(add_ne_chip),
                     ec_add_ne_opcodes
                         .clone()
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
@@ -202,7 +202,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     MAX_INS_CAPACITY,
                 );
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcDoubleRv32_32(double_chip),
+                    WeierstrassExtensionExecutor::EcDoubleRv32_48(double_chip),
                     ec_double_opcodes
                         .clone()
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
