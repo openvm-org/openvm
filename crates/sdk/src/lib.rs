@@ -1,4 +1,4 @@
-use std::{fs::read, marker::PhantomData, path::Path, sync::Arc};
+use std::{borrow::Borrow, fs::read, marker::PhantomData, path::Path, sync::Arc};
 
 #[cfg(feature = "evm-verify")]
 use alloy_sol_types::sol;
@@ -11,16 +11,19 @@ use openvm_build::{
 };
 use openvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, verify_segments,
-        ContinuationVmProof, ExecutionError, InitFileGenerator, VerifiedExecutionPayload, VmConfig,
-        VmExecutor, VmVerificationError,
+        hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
+        instructions::exe::VmExe,
+        verify_segments, ContinuationVmProof, ExecutionError, InitFileGenerator,
+        VerifiedExecutionPayload, VmConfig, VmExecutor, PROGRAM_CACHED_TRACE_INDEX,
+        PUBLIC_VALUES_AIR_ID,
     },
     system::{
         memory::{tree::public_values::extract_public_values, CHUNK},
-        program::trace::VmCommittedExe,
+        program::trace::{compute_exe_commit, VmCommittedExe},
     },
 };
 use openvm_continuations::verifier::{
+    common::types::VmVerifierPvs,
     internal::types::VmStarkProof,
     root::{types::RootVmVerifierInput, RootVmVerifierConfig},
 };
@@ -33,7 +36,7 @@ use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
-    openvm_stark_backend::{verifier::VerificationError, Chip},
+    openvm_stark_backend::Chip,
 };
 use openvm_transpiler::{
     elf::Elf,
@@ -228,7 +231,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         &self,
         app_vk: &AppVerifyingKey,
         proof: &ContinuationVmProof<SC>,
-    ) -> Result<VerifiedContinuationVmPayload, VmVerificationError> {
+    ) -> Result<VerifiedContinuationVmPayload> {
         let engine = E::new(app_vk.fri_params);
         let VerifiedExecutionPayload {
             exe_commit,
@@ -250,9 +253,10 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         &self,
         app_vk: &AppVerifyingKey,
         proof: &Proof<SC>,
-    ) -> Result<(), VerificationError> {
+    ) -> Result<()> {
         let e = E::new(app_vk.fri_params);
-        e.verify(&app_vk.app_vm_vk, proof)
+        e.verify(&app_vk.app_vm_vk, proof)?;
+        Ok(())
     }
 
     pub fn agg_keygen(
@@ -320,6 +324,51 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
             StarkProver::<VC, E>::new(app_pk, app_exe, agg_stark_pk, self.agg_tree_config);
         let proof = stark_prover.generate_e2e_stark_proof(inputs);
         Ok(proof)
+    }
+
+    pub fn verify_e2e_stark_proof(
+        &self,
+        agg_stark_pk: AggStarkProvingKey,
+        proof: &VmStarkProof<SC>,
+    ) -> Result<[F; CHUNK]> {
+        let program_commit =
+            proof.proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref();
+        let internal_commit: &[_; CHUNK] = &agg_stark_pk
+            .internal_committed_exe
+            .get_program_commit()
+            .into();
+
+        let vm_pk = if program_commit == internal_commit {
+            &agg_stark_pk.internal_vm_pk
+        } else {
+            &agg_stark_pk.leaf_vm_pk
+        };
+        let e = E::new(vm_pk.fri_params);
+        e.verify(&vm_pk.vm_pk.get_vk(), &proof.proof)?;
+
+        let public_values_air_proof_data = proof
+            .proof
+            .per_air
+            .iter()
+            .find(|p| p.air_id == PUBLIC_VALUES_AIR_ID)
+            .unwrap();
+        let pvs: &VmVerifierPvs<_> =
+            public_values_air_proof_data.public_values[..VmVerifierPvs::<u8>::width()].borrow();
+
+        let hasher = vm_poseidon2_hasher();
+        let public_values_root = hasher.merkle_root(&proof.user_public_values);
+        if public_values_root != pvs.public_values_commit {
+            return Err(eyre::eyre!(
+                "Invalid public values root: expected {:?}, got {:?}",
+                pvs.public_values_commit,
+                public_values_root
+            ));
+        }
+
+        let start_pc = pvs.connector.initial_pc;
+        let initial_memory_root = &pvs.memory.initial_root;
+        let exe_commit = compute_exe_commit(&hasher, program_commit, initial_memory_root, start_pc);
+        Ok(exe_commit)
     }
 
     #[cfg(feature = "evm-prove")]
