@@ -166,7 +166,7 @@ impl AggregateMetrics {
         for (group_name, metrics) in &self.by_group {
             let stats = metrics.get(PROOF_TIME_LABEL);
             let execute_stats = metrics.get(EXECUTE_TIME_LABEL);
-            if stats.is_none() || execute_stats.is_none() {
+            if stats.is_none() {
                 continue;
             }
             let stats = stats.unwrap();
