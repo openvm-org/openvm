@@ -22,7 +22,7 @@ use strum::IntoEnumIterator;
 use crate::*;
 
 // TODO: this should be decided after e2 execution
-const MAX_INS_CAPACITY: usize = 600000;
+const MAX_INS_CAPACITY: usize = 1 << 19;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Keccak256Rv32Config {
