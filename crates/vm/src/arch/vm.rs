@@ -569,12 +569,14 @@ where
                 .pc
         );
 
+        // TODO(ayush): avoid cloning
+        let final_memory = segment.ctrl.final_memory.clone();
         let proof_input = tracing::info_span!("generate_proof_input")
             .in_scope(|| segment.generate_proof_input(None))?;
 
         Ok(VmExecutorResult {
             per_segment: vec![proof_input],
-            final_memory: None,
+            final_memory,
         })
     }
 
