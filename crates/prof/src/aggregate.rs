@@ -170,7 +170,6 @@ impl AggregateMetrics {
                 continue;
             }
             let stats = stats.unwrap();
-            let execute_stats = execute_stats.unwrap();
             let mut sum = stats.sum;
             let mut max = stats.max;
             // convert ms to s
@@ -198,6 +197,7 @@ impl AggregateMetrics {
                     && group_name != "halo2_wrapper"
                     && !group_name.starts_with("internal")
                 {
+                    let execute_stats = execute_stats.unwrap();
                     total_par_proof_time.val +=
                         (execute_stats.sum.val - execute_stats.max.val) / 1000.0;
                     *total_par_proof_time.diff.as_mut().unwrap() +=
