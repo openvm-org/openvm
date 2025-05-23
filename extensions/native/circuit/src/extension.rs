@@ -239,6 +239,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             Poseidon2Config::default(),
             VerifyBatchBus::new(builder.new_bus_idx()),
             builder.streams().clone(),
+            // TODO: this may use too much memory.
             MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
