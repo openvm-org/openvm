@@ -190,7 +190,8 @@ impl AggregateMetrics {
                 *total_par_proof_time.diff.as_mut().unwrap() += max.diff.unwrap_or(0.0);
 
                 // Account for the fact that execution is serial
-                // Add total execution time for the app proofs, and subtract the max segment execution time
+                // Add total execution time for the app proofs, and subtract the max segment
+                // execution time
                 if group_name != "leaf"
                     && group_name != "root"
                     && group_name != "halo2_outer"
