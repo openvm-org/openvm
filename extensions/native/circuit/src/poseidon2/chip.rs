@@ -143,7 +143,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
             if instruction.opcode == PERM_POS2.global_opcode() {
                 tracing_write_native(
                     state.memory,
-                    output_pointer_u32,
+                    output_pointer_u32 + CHUNK as u32,
                     &std::array::from_fn(|i| output[i + CHUNK]),
                     &mut simple_cols.write_data_2,
                 );
