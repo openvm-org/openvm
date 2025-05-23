@@ -71,7 +71,7 @@ impl<'a> MeteredExecutionControl<'a> {
 
     fn should_segment(&mut self, state: &mut VmSegmentState<MeteredCtx>) -> bool {
         let trace_heights = state.ctx.trace_heights_if_finalized();
-        let num_traces = trace_heights.len();
+        let max_trace_cells = MAX_TRACE_CELLS_PER_CHIP * trace_heights.len();
         for (i, &height) in trace_heights.iter().enumerate() {
             let padded_height = height.next_power_of_two();
             if padded_height > MAX_TRACE_HEIGHT {
@@ -88,7 +88,6 @@ impl<'a> MeteredExecutionControl<'a> {
             }
         }
 
-        let max_trace_cells = MAX_TRACE_CELLS_PER_CHIP * num_traces;
         let total_cells = self.calculate_total_cells(&trace_heights);
         if total_cells > max_trace_cells {
             tracing::info!(
