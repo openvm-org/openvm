@@ -30,6 +30,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
+use crate::poseidon2::air::VerifyBatchBus;
+use crate::poseidon2::{new_native_poseidon2_chip, NativePoseidon2Chip};
 use crate::{adapters::*, phantom::*, *};
 
 // TODO(ayush): this should be decided after e2 execution
@@ -72,7 +74,7 @@ pub enum NativeExecutor<F: PrimeField32> {
     FieldArithmetic(FieldArithmeticChip<F>),
     FieldExtension(FieldExtensionChip<F>),
     FriReducedOpening(FriReducedOpeningChip<F>),
-    // VerifyBatch(NativePoseidon2Chip<F, 1>),
+    VerifyBatch(NativePoseidon2Chip<F, 1>),
 }
 
 #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
@@ -229,20 +231,22 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             FriOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        // let poseidon2_chip = NativePoseidon2Chip::new(
-        //     builder.system_port(),
-        //     Poseidon2Config::default(),
-        //     VerifyBatchBus::new(builder.new_bus_idx()),
-        //     builder.streams().clone(),
-        // );
-        // inventory.add_executor(
-        //     poseidon2_chip,
-        //     [
-        //         VerifyBatchOpcode::VERIFY_BATCH.global_opcode(),
-        //         Poseidon2Opcode::PERM_POS2.global_opcode(),
-        //         Poseidon2Opcode::COMP_POS2.global_opcode(),
-        //     ],
-        // )?;
+        let poseidon2_chip = new_native_poseidon2_chip(
+            builder.system_port(),
+            Poseidon2Config::default(),
+            VerifyBatchBus::new(builder.new_bus_idx()),
+            builder.streams().clone(),
+            MAX_INS_CAPACITY,
+            builder.system_base().memory_controller.helper(),
+        );
+        inventory.add_executor(
+            poseidon2_chip,
+            [
+                VerifyBatchOpcode::VERIFY_BATCH.global_opcode(),
+                Poseidon2Opcode::PERM_POS2.global_opcode(),
+                Poseidon2Opcode::COMP_POS2.global_opcode(),
+            ],
+        )?;
 
         builder.add_phantom_sub_executor(
             NativeHintInputSubEx,
@@ -254,15 +258,15 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             PhantomDiscriminant(NativePhantom::HintFelt as u16),
         )?;
 
-        // builder.add_phantom_sub_executor(
-        //     NativeHintBitsSubEx,
-        //     PhantomDiscriminant(NativePhantom::HintBits as u16),
-        // )?;
+        builder.add_phantom_sub_executor(
+            NativeHintBitsSubEx,
+            PhantomDiscriminant(NativePhantom::HintBits as u16),
+        )?;
 
-        // builder.add_phantom_sub_executor(
-        //     NativePrintSubEx,
-        //     PhantomDiscriminant(NativePhantom::Print as u16),
-        // )?;
+        builder.add_phantom_sub_executor(
+            NativePrintSubEx,
+            PhantomDiscriminant(NativePhantom::Print as u16),
+        )?;
 
         builder.add_phantom_sub_executor(
             NativeHintLoadSubEx,
@@ -336,47 +340,45 @@ pub(crate) mod phantom {
         }
     }
 
-    // impl<F: PrimeField32> PhantomSubExecutor<F> for NativePrintSubEx {
-    //     fn phantom_execute(
-    //         &mut self,
-    //         memory: &GuestMemory,
-    //         _: &mut Streams<F>,
-    //         _: PhantomDiscriminant,
-    //         a: u32,
-    //         _: u32,
-    //         c_upper: u16,
-    //     ) -> eyre::Result<()> {
-    //         let addr_space = F::from_canonical_u16(c_upper);
-    //         let value = memory.unsafe_read_cell::<F>(addr_space, a);
-    //         println!("{}", value);
-    //         Ok(())
-    //     }
-    // }
+    impl<F: PrimeField32> PhantomSubExecutor<F> for NativePrintSubEx {
+        fn phantom_execute(
+            &mut self,
+            memory: &GuestMemory,
+            _: &mut Streams<F>,
+            _: PhantomDiscriminant,
+            a: u32,
+            _: u32,
+            c_upper: u16,
+        ) -> eyre::Result<()> {
+            let [value] = unsafe { memory.read::<F, 1>(c_upper as u32, a) };
+            println!("{}", value);
+            Ok(())
+        }
+    }
 
-    // impl<F: PrimeField32> PhantomSubExecutor<F> for NativeHintBitsSubEx {
-    //     fn phantom_execute(
-    //         &mut self,
-    //         memory: &GuestMemory,
-    //         streams: &mut Streams<F>,
-    //         _: PhantomDiscriminant,
-    //         a: u32,
-    //         len: u32,
-    //         c_upper: u16,
-    //     ) -> eyre::Result<()> {
-    //         let addr_space = F::from_canonical_u16(c_upper);
-    //         let val = memory.unsafe_read_cell::<F>(addr_space, a);
-    //         let mut val = val.as_canonical_u32();
+    impl<F: PrimeField32> PhantomSubExecutor<F> for NativeHintBitsSubEx {
+        fn phantom_execute(
+            &mut self,
+            memory: &GuestMemory,
+            streams: &mut Streams<F>,
+            _: PhantomDiscriminant,
+            a: u32,
+            len: u32,
+            c_upper: u16,
+        ) -> eyre::Result<()> {
+            let [val] = unsafe { memory.read::<F, 1>(c_upper as u32, a) };
+            let mut val = val.as_canonical_u32();
 
-    //         assert!(streams.hint_stream.is_empty());
-    //         for _ in 0..len {
-    //             streams
-    //                 .hint_stream
-    //                 .push_back(F::from_canonical_u32(val & 1));
-    //             val >>= 1;
-    //         }
-    //         Ok(())
-    //     }
-    // }
+            assert!(streams.hint_stream.is_empty());
+            for _ in 0..len {
+                streams
+                    .hint_stream
+                    .push_back(F::from_canonical_u32(val & 1));
+                val >>= 1;
+            }
+            Ok(())
+        }
+    }
 
     impl<F: PrimeField32> PhantomSubExecutor<F> for NativeHintLoadSubEx {
         fn phantom_execute(
