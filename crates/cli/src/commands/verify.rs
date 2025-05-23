@@ -3,14 +3,20 @@ use std::path::{Path, PathBuf};
 use clap::Parser;
 use eyre::Result;
 use openvm_sdk::{
-    fs::{read_app_proof_from_file, read_app_vk_from_file},
+    fs::{
+        decode_from_file, read_agg_stark_pk_from_file, read_app_proof_from_file,
+        read_app_vk_from_file,
+    },
     Sdk,
 };
 
 use super::KeygenCargoArgs;
 #[cfg(feature = "evm-verify")]
 use crate::default::default_evm_halo2_verifier_path;
-use crate::util::{get_app_vk_path, get_files_with_ext, get_manifest_path_and_dir, get_target_dir};
+use crate::{
+    default::default_agg_stark_pk_path,
+    util::{get_app_vk_path, get_files_with_ext, get_manifest_path_and_dir, get_target_dir},
+};
 
 #[derive(Parser)]
 #[command(name = "verify", about = "Verify a proof")]
@@ -40,6 +46,15 @@ enum VerifySubCommand {
 
         #[command(flatten)]
         cargo_args: KeygenCargoArgs,
+    },
+    Stark {
+        #[arg(
+            long,
+            action,
+            help = "Path to STARK proof, by default will search the working directory for a file with extension .stark.proof",
+            help_heading = "OpenVM Options"
+        )]
+        proof: Option<PathBuf>,
     },
     #[cfg(feature = "evm-verify")]
     Evm {
@@ -84,6 +99,28 @@ impl VerifyCmd {
                 };
                 let app_proof = read_app_proof_from_file(proof_path)?;
                 sdk.verify_app_proof(&app_vk, &app_proof)?;
+            }
+            VerifySubCommand::Stark { proof } => {
+                let agg_stark_pk = read_agg_stark_pk_from_file(default_agg_stark_pk_path())
+                    .map_err(|e| {
+                        eyre::eyre!(
+                        "Failed to read aggregation STARK proving key: {}\nPlease run 'cargo openvm setup' first",
+                        e
+                    )
+                    })?;
+                let proof_path = if let Some(proof) = proof {
+                    proof.clone()
+                } else {
+                    let files = get_files_with_ext(Path::new("."), "stark.proof")?;
+                    if files.len() > 1 {
+                        return Err(eyre::eyre!("multiple .stark.proof files found, please specify the path using option --proof"));
+                    } else if files.is_empty() {
+                        return Err(eyre::eyre!("no .stark.proof file found, please specify the path using option --proof"));
+                    }
+                    files[0].clone()
+                };
+                let stark_proof = decode_from_file(proof_path)?;
+                sdk.verify_e2e_stark_proof(agg_stark_pk, &stark_proof)?;
             }
             #[cfg(feature = "evm-verify")]
             VerifySubCommand::Evm { proof } => {
