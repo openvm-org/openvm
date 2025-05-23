@@ -878,16 +878,7 @@ where
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {
-        let &Instruction {
-            a,
-            b,
-            c,
-            d,
-            e,
-            f,
-            g,
-            ..
-        } = instruction;
+        let &Instruction { c, .. } = instruction;
 
         let length_ptr = c.as_canonical_u32();
         let [length]: [F; 1] = memory_read_native(state.memory, length_ptr);

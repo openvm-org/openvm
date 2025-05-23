@@ -124,9 +124,9 @@ impl<F: PrimeField32> VmState<F> {
     pub fn new(clk: u64, pc: u32, memory: MemoryImage, input: impl Into<Streams<F>>) -> Self {
         Self {
             clk,
+            pc,
             memory,
             input: input.into(),
-            pc,
             #[cfg(feature = "bench-metrics")]
             metrics: VmMetrics::default(),
         }
@@ -569,12 +569,14 @@ where
                 .pc
         );
 
+        // TODO(ayush): avoid cloning
+        let final_memory = segment.ctrl.final_memory.clone();
         let proof_input = tracing::info_span!("generate_proof_input")
             .in_scope(|| segment.generate_proof_input(None))?;
 
         Ok(VmExecutorResult {
             per_segment: vec![proof_input],
-            final_memory: None,
+            final_memory,
         })
     }
 

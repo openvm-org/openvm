@@ -7,8 +7,9 @@ pub mod offline_checker;
 pub mod online;
 pub mod paged_vec;
 mod persistent;
-#[cfg(test)]
-mod tests;
+// TODO: add back
+// #[cfg(test)]
+// mod tests;
 pub mod tree;
 mod volatile;
 

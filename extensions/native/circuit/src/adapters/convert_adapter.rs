@@ -20,14 +20,14 @@ use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_MEMORY_AS,
 };
 use openvm_native_compiler::conversion::AS;
-use openvm_rv32im_circuit::adapters::{memory_write, memory_write_from_state, tracing_write};
+use openvm_rv32im_circuit::adapters::{memory_write_from_state, tracing_write};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
-use crate::adapters::{memory_read_native, memory_read_native_from_state, tracing_read_native};
+use crate::adapters::{memory_read_native_from_state, tracing_read_native};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]

@@ -592,7 +592,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             assert_eq!(inventory.executors().len(), Self::PV_EXECUTOR_IDX);
 
             // TODO(ayush): this should be decided after e2 execution
-            const MAX_INS_CAPACITY: usize = 0;
+            const MAX_INS_CAPACITY: usize = 1 << 22;
             let chip = PublicValuesChip::new(
                 VmAirWrapper::new(
                     NativeAdapterAir::new(
@@ -604,7 +604,11 @@ impl<F: PrimeField32> SystemComplex<F> {
                         config.max_constraint_degree as u32 - 1,
                     ),
                 ),
-                PublicValuesCoreStep::new(NativeAdapterStep::new(), config.num_public_values),
+                PublicValuesCoreStep::new(
+                    NativeAdapterStep::new(),
+                    config.num_public_values,
+                    config.max_constraint_degree as u32 - 1,
+                ),
                 MAX_INS_CAPACITY,
                 memory_controller.helper(),
             );
@@ -869,7 +873,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     }
 
     /// Return air names of all chips in order.
-    pub(crate) fn air_names(&self) -> Vec<String>
+    pub fn air_names(&self) -> Vec<String>
     where
         E: ChipUsageGetter,
         P: ChipUsageGetter,
