@@ -207,7 +207,8 @@ fn main() -> Result<()> {
             //     let state = executor.execute_e1(exe.clone(), vec![], Some(clk_start))?;
             //     assert!(state.clk == clk_start);
             //     // E3/tracegen from clk_start for num_cycles beginning with state
-            //     let mut result = executor.execute_and_generate_segment::<BabyBearPoseidon2Config>(
+            //     let mut result =
+            // executor.execute_and_generate_segment::<BabyBearPoseidon2Config>(
             //         exe.clone(),
             //         state,
             //         num_cycles,

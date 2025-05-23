@@ -1,6 +1,7 @@
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::p3_field::PrimeField32;
 
+use super::TracegenCtx;
 use crate::{
     arch::{
         execution_control::ExecutionControl, ExecutionError, ExecutionState, InstructionExecutor,
@@ -8,8 +9,6 @@ use crate::{
     },
     system::memory::{MemoryImage, INITIAL_TIMESTAMP},
 };
-
-use super::TracegenCtx;
 
 /// Check segment every 100 instructions.
 const SEGMENT_CHECK_INTERVAL: usize = 100;

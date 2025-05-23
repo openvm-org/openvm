@@ -1,21 +1,17 @@
-use std::borrow::{Borrow, BorrowMut};
-use std::sync::{Arc, Mutex};
-
-use crate::poseidon2::columns::InsideRowSpecificCols;
-use crate::{
-    adapters::{
-        memory_read_native, memory_write_native, tracing_read_native, tracing_write_native,
-    },
-    poseidon2::{
-        columns::{NativePoseidon2Cols, SimplePoseidonSpecificCols, TopLevelSpecificCols},
-        CHUNK,
-    },
+use std::{
+    borrow::{Borrow, BorrowMut},
+    sync::{Arc, Mutex},
 };
-use openvm_circuit::arch::execution_mode::metered::MeteredCtx;
-use openvm_circuit::system::memory::MemoryAuxColsFactory;
+
 use openvm_circuit::{
-    arch::{execution_mode::E1E2ExecutionCtx, StepExecutorE1, Streams, TraceStep, VmStateMut},
-    system::memory::online::{GuestMemory, TracingMemory},
+    arch::{
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        StepExecutorE1, Streams, TraceStep, VmStateMut,
+    },
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::{
@@ -24,10 +20,23 @@ use openvm_native_compiler::{
     VerifyBatchOpcode::VERIFY_BATCH,
 };
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
-use openvm_stark_backend::p3_air::BaseAir;
 use openvm_stark_backend::{
+    p3_air::BaseAir,
     p3_field::{Field, PrimeField32},
     p3_maybe_rayon::prelude::{ParallelIterator, ParallelSlice},
+};
+
+use crate::{
+    adapters::{
+        memory_read_native, memory_write_native, tracing_read_native, tracing_write_native,
+    },
+    poseidon2::{
+        columns::{
+            InsideRowSpecificCols, NativePoseidon2Cols, SimplePoseidonSpecificCols,
+            TopLevelSpecificCols,
+        },
+        CHUNK,
+    },
 };
 
 pub struct NativePoseidon2Step<F: Field, const SBOX_REGISTERS: usize> {

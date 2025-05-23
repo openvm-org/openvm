@@ -33,8 +33,10 @@ use openvm_stark_sdk::{
 use rand::{rngs::StdRng, Rng};
 
 use super::air::VerifyBatchBus;
-use crate::poseidon2::new_native_poseidon2_chip;
-use crate::{poseidon2::CHUNK, NativeConfig};
+use crate::{
+    poseidon2::{new_native_poseidon2_chip, CHUNK},
+    NativeConfig,
+};
 
 const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus::new(7);
 const MAX_INS_CAPACITY: usize = 1 << 15;

@@ -1,11 +1,17 @@
-use crate::poseidon2::air::{NativePoseidon2Air, VerifyBatchBus};
-use crate::poseidon2::chip::NativePoseidon2Step;
-use openvm_circuit::arch::{ExecutionBridge, NewVmChipWrapper, Streams, SystemPort};
-use openvm_circuit::system::memory::SharedMemoryHelper;
+use std::sync::{Arc, Mutex};
+
+use openvm_circuit::{
+    arch::{ExecutionBridge, NewVmChipWrapper, Streams, SystemPort},
+    system::memory::SharedMemoryHelper,
+};
 use openvm_native_compiler::conversion::AS;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::p3_field::PrimeField32;
-use std::sync::{Arc, Mutex};
+
+use crate::poseidon2::{
+    air::{NativePoseidon2Air, VerifyBatchBus},
+    chip::NativePoseidon2Step,
+};
 
 pub mod air;
 pub mod chip;
