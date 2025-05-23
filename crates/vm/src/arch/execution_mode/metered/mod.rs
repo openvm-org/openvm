@@ -264,8 +264,6 @@ where
         // Check if segmentation needs to happen
         self.check_segment_limits::<F, VC>(state, chip_complex);
 
-        let &Instruction { opcode, .. } = instruction;
-
         let mut offset = if chip_complex.config().has_public_values_chip() {
             PUBLIC_VALUES_AIR_ID + 1
         } else {
@@ -273,6 +271,7 @@ where
         };
         offset += chip_complex.memory_controller().num_airs();
 
+        let &Instruction { opcode, .. } = instruction;
         if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode) {
             let mut vm_state = VmStateMut {
                 pc: &mut state.pc,
