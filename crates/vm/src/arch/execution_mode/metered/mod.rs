@@ -18,7 +18,7 @@ const SEGMENT_CHECK_INTERVAL: u64 = 100;
 
 // TODO(ayush): fix these values
 const MAX_TRACE_HEIGHT: u32 = DEFAULT_MAX_SEGMENT_LEN as u32;
-const MAX_TRACE_CELLS: usize = DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT;
+const MAX_TRACE_CELLS_PER_CHIP: usize = DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT;
 const MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 
 #[derive(derive_new::new, Debug)]
@@ -71,6 +71,7 @@ impl<'a> MeteredExecutionControl<'a> {
 
     fn should_segment(&mut self, state: &mut VmSegmentState<MeteredCtx>) -> bool {
         let trace_heights = state.ctx.trace_heights_if_finalized();
+        let max_trace_cells = MAX_TRACE_CELLS_PER_CHIP * trace_heights.len();
         for (i, &height) in trace_heights.iter().enumerate() {
             let padded_height = height.next_power_of_two();
             if padded_height > MAX_TRACE_HEIGHT {
@@ -88,13 +89,13 @@ impl<'a> MeteredExecutionControl<'a> {
         }
 
         let total_cells = self.calculate_total_cells(&trace_heights);
-        if total_cells > MAX_TRACE_CELLS {
+        if total_cells > max_trace_cells {
             tracing::info!(
                 "Segment {:2} | clk {:9} | total cells ({:10}) > max ({:10})",
                 self.segments.len(),
                 self.clk_last_segment_check,
                 total_cells,
-                MAX_TRACE_CELLS
+                max_trace_cells
             );
             return true;
         }
@@ -264,8 +265,6 @@ where
         // Check if segmentation needs to happen
         self.check_segment_limits::<F, VC>(state, chip_complex);
 
-        let &Instruction { opcode, .. } = instruction;
-
         let mut offset = if chip_complex.config().has_public_values_chip() {
             PUBLIC_VALUES_AIR_ID + 1
         } else {
@@ -273,6 +272,7 @@ where
         };
         offset += chip_complex.memory_controller().num_airs();
 
+        let &Instruction { opcode, .. } = instruction;
         if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode) {
             let mut vm_state = VmStateMut {
                 pc: &mut state.pc,

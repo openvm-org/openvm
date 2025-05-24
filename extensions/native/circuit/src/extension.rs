@@ -30,9 +30,12 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use crate::poseidon2::air::VerifyBatchBus;
-use crate::poseidon2::{new_native_poseidon2_chip, NativePoseidon2Chip};
-use crate::{adapters::*, phantom::*, *};
+use crate::{
+    adapters::*,
+    phantom::*,
+    poseidon2::{air::VerifyBatchBus, new_native_poseidon2_chip, NativePoseidon2Chip},
+    *,
+};
 
 // TODO(ayush): this should be decided after e2 execution
 const MAX_INS_CAPACITY: usize = 1 << 22;
@@ -236,6 +239,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             Poseidon2Config::default(),
             VerifyBatchBus::new(builder.new_bus_idx()),
             builder.streams().clone(),
+            // TODO: this may use too much memory.
             MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );

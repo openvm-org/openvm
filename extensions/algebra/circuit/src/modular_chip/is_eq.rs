@@ -456,6 +456,8 @@ where
 
         self.adapter.write(state, instruction, &write_data.into());
 
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
         Ok(())
     }
 

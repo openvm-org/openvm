@@ -304,6 +304,18 @@ impl<F: PrimeField32> MemoryController<F> {
         if self.timestamp() > INITIAL_TIMESTAMP + 1 {
             panic!("Cannot set initial memory after first timestamp");
         }
+        if memory.is_empty() {
+            return;
+        }
+
+        match &mut self.interface_chip {
+            MemoryInterface::Volatile { .. } => {
+                panic!("Cannot set initial memory for volatile memory");
+            }
+            MemoryInterface::Persistent { initial_memory, .. } => {
+                *initial_memory = memory.clone();
+            }
+        }
 
         self.memory = TracingMemory::new(
             &self.mem_config,
@@ -311,19 +323,7 @@ impl<F: PrimeField32> MemoryController<F> {
             self.memory_bus,
             CHUNK,
         )
-        .with_image(memory.clone(), self.mem_config.access_capacity);
-
-        match &mut self.interface_chip {
-            MemoryInterface::Volatile { .. } => {
-                assert!(
-                    memory.is_empty(),
-                    "Cannot set initial memory for volatile memory"
-                );
-            }
-            MemoryInterface::Persistent { initial_memory, .. } => {
-                *initial_memory = memory;
-            }
-        }
+        .with_image(memory, self.mem_config.access_capacity);
     }
 
     pub fn memory_bridge(&self) -> MemoryBridge {
