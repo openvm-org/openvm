@@ -180,8 +180,8 @@ pub type Signature = ecdsa::Signature<P256>;
 
 impl VerifyPrimitive<P256> for P256Point {
     fn verify_prehashed(&self, z: &FieldBytes, sig: &Signature) -> Result<(), ecdsa::Error> {
-        type PublicKey = openvm_ecc_guest::ecdsa::PublicKey<P256>;
-        type VerifyingKey = openvm_ecc_guest::ecdsa::VerifyingKey<P256>;
+        type PublicKey = openvm_ecc_guest::ecdsa::OpenVMPublicKey<P256>;
+        type VerifyingKey = openvm_ecc_guest::ecdsa::OpenVMVerifyingKey<P256>;
 
         let vk = VerifyingKey::new(PublicKey::new(*self));
         vk.verify_prehashed(z.as_slice(), sig.to_bytes().as_slice())
@@ -217,7 +217,7 @@ impl FromEncodedPoint<P256> for P256Point {
     ///
     /// `None` value if `encoded_point` is not on the secp256k1 curve.
     fn from_encoded_point(encoded_point: &EncodedPoint) -> CtOption<Self> {
-        match openvm_ecc_guest::ecdsa::VerifyingKey::<P256>::from_sec1_bytes(
+        match openvm_ecc_guest::ecdsa::OpenVMVerifyingKey::<P256>::from_sec1_bytes(
             encoded_point.as_bytes(),
         ) {
             Ok(verifying_key) => CtOption::new(*verifying_key.as_affine(), 1.into()),

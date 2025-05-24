@@ -3,13 +3,16 @@
 
 extern crate alloc;
 
-use ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
+use ecdsa::signature::hazmat::PrehashVerifier;
 use elliptic_curve::{sec1::FromEncodedPoint, CurveArithmetic};
 use hex_literal::hex;
 // clippy thinks this is unused, but it's used in the init! macro
 #[allow(unused)]
 use openvm_p256::P256Point;
-use openvm_p256::{EncodedPoint, P256};
+use openvm_p256::{
+    ecdsa::{Signature, VerifyingKey},
+    EncodedPoint, P256,
+};
 
 openvm::init!("openvm_init_ecdsa.rs");
 
@@ -19,7 +22,7 @@ fn main() {
     // The following test vector adapted from the FIPS 186-4 ECDSA test vectors
     // (P-256, SHA-384, from `SigGen.txt` in `186-4ecdsatestvectors.zip`)
     // <https://csrc.nist.gov/projects/cryptographic-algorithm-validation-program/digital-signatures>
-    let verifier: VerifyingKey<P256> = VerifyingKey::from_affine(
+    let verifier = VerifyingKey::from_affine(
         <P256 as CurveArithmetic>::AffinePoint::from_encoded_point(
             &EncodedPoint::from_affine_coordinates(
                 &hex!("e0e7b99bc62d8dd67883e39ed9fa0657789c5ff556cc1fd8dd1e2a55e9e3f243").into(),

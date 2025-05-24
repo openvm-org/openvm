@@ -47,6 +47,7 @@ derive_more = { workspace = true, features = ["from"] }
 default = ["ecdsa"]
 ecdsa = ["p256/ecdsa", "ecdsa-core"]
 ecdsa-core = ["p256/ecdsa-core"]
+std = ["p256/std", "openvm-ecc-guest/std"]
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint = { workspace = true }
