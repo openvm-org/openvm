@@ -1,7 +1,7 @@
 use core::hint::black_box;
 use openvm as _;
 
-const ARRAY_SIZE: usize = 100;
+const ARRAY_SIZE: usize = 1_000;
 
 fn bubblesort<T: Ord>(arr: &mut [T]) {
     let len = arr.len();

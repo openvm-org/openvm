@@ -3,7 +3,7 @@ use std::{array, borrow::BorrowMut};
 use openvm_circuit::{
     arch::{
         testing::{memory::gen_pointer, VmChipTestBuilder},
-        VmAdapterChip,
+        VmAirWrapper,
     },
     utils::u32_into_limbs,
 };
@@ -17,20 +17,48 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
-    verifier::VerificationError,
 };
-use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, seq::SliceRandom, Rng};
+use test_case::test_case;
 
-use super::{run_write_data, LoadStoreCoreChip, Rv32LoadStoreChip};
+use super::{run_write_data, LoadStoreCoreAir, LoadStoreStep, Rv32LoadStoreChip};
 use crate::{
-    adapters::{compose, Rv32LoadStoreAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+    adapters::{
+        compose, Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterCols, Rv32LoadStoreAdapterStep,
+        RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+    },
     loadstore::LoadStoreCoreCols,
+    test_utils::get_verification_error,
 };
 
 const IMM_BITS: usize = 16;
+const MAX_INS_CAPACITY: usize = 128;
 
 type F = BabyBear;
+
+fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32LoadStoreChip<F> {
+    let range_checker_chip = tester.range_checker();
+
+    Rv32LoadStoreChip::<F>::new(
+        VmAirWrapper::new(
+            Rv32LoadStoreAdapterAir::new(
+                tester.memory_bridge(),
+                tester.execution_bridge(),
+                range_checker_chip.bus(),
+                tester.address_bits(),
+            ),
+            LoadStoreCoreAir::new(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        ),
+        LoadStoreStep::new(
+            Rv32LoadStoreAdapterStep::new(tester.address_bits()),
+            range_checker_chip.clone(),
+            Rv32LoadStoreOpcode::CLASS_OFFSET,
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
+    )
+}
 
 #[allow(clippy::too_many_arguments)]
 fn set_and_execute(
@@ -55,13 +83,7 @@ fn set_and_execute(
     };
 
     let ptr_val = rng.gen_range(
-        0..(1
-            << (tester
-                .memory_controller()
-                .borrow()
-                .mem_config()
-                .pointer_max_bits
-                - alignment)),
+        0..(1 << (tester.memory_controller().mem_config().pointer_max_bits - alignment)),
     ) << alignment;
 
     let rs1 = rs1
@@ -143,80 +165,23 @@ fn set_and_execute(
 /// Randomly generate computations and execute, ensuring that the generated trace
 /// passes all constraints.
 ///////////////////////////////////////////////////////////////////////////////////////
-#[test]
-fn rand_loadstore_test() {
-    setup_tracing();
+#[test_case(LOADW, 100)]
+#[test_case(LOADBU, 100)]
+#[test_case(LOADHU, 100)]
+#[test_case(STOREW, 100)]
+#[test_case(STOREB, 100)]
+#[test_case(STOREH, 100)]
+fn rand_loadstore_test(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
-    let adapter = Rv32LoadStoreAdapterChip::<F>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        tester.memory_bridge(),
-        tester.address_bits(),
-        range_checker_chip.clone(),
-    );
+    let mut chip = create_test_chip(&mut tester);
 
-    let core = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::CLASS_OFFSET);
-    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
-
-    let num_tests: usize = 100;
-    for _ in 0..num_tests {
+    for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
             &mut chip,
             &mut rng,
-            LOADW,
-            None,
-            None,
-            None,
-            None,
-        );
-        set_and_execute(
-            &mut tester,
-            &mut chip,
-            &mut rng,
-            LOADBU,
-            None,
-            None,
-            None,
-            None,
-        );
-        set_and_execute(
-            &mut tester,
-            &mut chip,
-            &mut rng,
-            LOADHU,
-            None,
-            None,
-            None,
-            None,
-        );
-        set_and_execute(
-            &mut tester,
-            &mut chip,
-            &mut rng,
-            STOREW,
-            None,
-            None,
-            None,
-            None,
-        );
-        set_and_execute(
-            &mut tester,
-            &mut chip,
-            &mut rng,
-            STOREB,
-            None,
-            None,
-            None,
-            None,
-        );
-        set_and_execute(
-            &mut tester,
-            &mut chip,
-            &mut rng,
-            STOREH,
+            opcode,
             None,
             None,
             None,
@@ -224,7 +189,6 @@ fn rand_loadstore_test() {
         );
     }
 
-    drop(range_checker_chip);
     let tester = tester.build().load(chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
@@ -233,38 +197,31 @@ fn rand_loadstore_test() {
 // NEGATIVE TESTS
 //
 // Given a fake trace of a single operation, setup a chip and run the test. We replace
-// the write part of the trace and check that the core chip throws the expected error.
-// A dummy adaptor is used so memory interactions don't indirectly cause false passes.
+// part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
-#[allow(clippy::too_many_arguments)]
-fn run_negative_loadstore_test(
-    opcode: Rv32LoadStoreOpcode,
+#[derive(Clone, Copy, Default, PartialEq)]
+struct LoadStorePrankValues {
     read_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     prev_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     write_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     flags: Option<[u32; 4]>,
     is_load: Option<bool>,
+    mem_as: Option<u32>,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_negative_loadstore_test(
+    opcode: Rv32LoadStoreOpcode,
     rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     imm: Option<u32>,
     imm_sign: Option<u32>,
-    mem_as: Option<usize>,
-    expected_error: VerificationError,
+    prank_vals: LoadStorePrankValues,
+    interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
-    let adapter = Rv32LoadStoreAdapterChip::<F>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        tester.memory_bridge(),
-        tester.address_bits(),
-        range_checker_chip.clone(),
-    );
-
-    let core = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::CLASS_OFFSET);
-    let adapter_width = BaseAir::<F>::width(adapter.air());
-    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
+    let mut chip = create_test_chip(&mut tester);
 
     set_and_execute(
         &mut tester,
@@ -274,38 +231,45 @@ fn run_negative_loadstore_test(
         rs1,
         imm,
         imm_sign,
-        mem_as,
+        None,
     );
+
+    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
-        let (_, core_row) = trace_row.split_at_mut(adapter_width);
+        let (adapter_row, core_row) = trace_row.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv32LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
         let core_cols: &mut LoadStoreCoreCols<F, RV32_REGISTER_NUM_LIMBS> = core_row.borrow_mut();
-        if let Some(read_data) = read_data {
+
+        if let Some(read_data) = prank_vals.read_data {
             core_cols.read_data = read_data.map(F::from_canonical_u32);
         }
-        if let Some(prev_data) = prev_data {
+        if let Some(prev_data) = prank_vals.prev_data {
             core_cols.prev_data = prev_data.map(F::from_canonical_u32);
         }
-        if let Some(write_data) = write_data {
+        if let Some(write_data) = prank_vals.write_data {
             core_cols.write_data = write_data.map(F::from_canonical_u32);
         }
-        if let Some(flags) = flags {
+        if let Some(flags) = prank_vals.flags {
             core_cols.flags = flags.map(F::from_canonical_u32);
         }
-        if let Some(is_load) = is_load {
+        if let Some(is_load) = prank_vals.is_load {
             core_cols.is_load = F::from_bool(is_load);
         }
+        if let Some(mem_as) = prank_vals.mem_as {
+            adapter_cols.mem_as = F::from_canonical_u32(mem_as);
+        }
+
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
-    drop(range_checker_chip);
     disable_debug_builder();
     let tester = tester
         .build()
         .load_and_prank_trace(chip, modify_trace)
         .finalize();
-    tester.simple_test_with_expected_error(expected_error);
+    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
 }
 
 #[test]
@@ -315,41 +279,36 @@ fn negative_wrong_opcode_tests() {
         None,
         None,
         None,
-        None,
-        Some(false),
-        None,
-        None,
-        None,
-        None,
-        VerificationError::OodEvaluationMismatch,
+        LoadStorePrankValues {
+            is_load: Some(false),
+            ..Default::default()
+        },
+        false,
     );
 
     run_negative_loadstore_test(
         LOADBU,
-        None,
-        None,
-        None,
-        Some([0, 0, 0, 2]),
-        None,
         Some([4, 0, 0, 0]),
         Some(1),
         None,
-        None,
-        VerificationError::OodEvaluationMismatch,
+        LoadStorePrankValues {
+            flags: Some([0, 0, 0, 2]),
+            ..Default::default()
+        },
+        false,
     );
 
     run_negative_loadstore_test(
         STOREH,
-        None,
-        None,
-        None,
-        Some([1, 0, 1, 0]),
-        Some(true),
         Some([11, 169, 76, 28]),
         Some(37121),
         None,
-        None,
-        VerificationError::OodEvaluationMismatch,
+        LoadStorePrankValues {
+            flags: Some([1, 0, 1, 0]),
+            is_load: Some(true),
+            ..Default::default()
+        },
+        false,
     );
 }
 
@@ -357,30 +316,34 @@ fn negative_wrong_opcode_tests() {
 fn negative_write_data_tests() {
     run_negative_loadstore_test(
         LOADHU,
-        Some([175, 33, 198, 250]),
-        Some([90, 121, 64, 205]),
-        Some([175, 33, 0, 0]),
-        Some([0, 2, 0, 0]),
-        Some(true),
         Some([13, 11, 156, 23]),
         Some(43641),
         None,
-        None,
-        VerificationError::ChallengePhaseError,
+        LoadStorePrankValues {
+            read_data: Some([175, 33, 198, 250]),
+            prev_data: Some([90, 121, 64, 205]),
+            write_data: Some([175, 33, 0, 0]),
+            flags: Some([0, 2, 0, 0]),
+            is_load: Some(true),
+            mem_as: None,
+        },
+        true,
     );
 
     run_negative_loadstore_test(
         STOREB,
-        Some([175, 33, 198, 250]),
-        Some([90, 121, 64, 205]),
-        Some([175, 121, 64, 205]),
-        Some([0, 0, 1, 1]),
-        None,
         Some([45, 123, 87, 24]),
         Some(28122),
         Some(0),
-        None,
-        VerificationError::OodEvaluationMismatch,
+        LoadStorePrankValues {
+            read_data: Some([175, 33, 198, 250]),
+            prev_data: Some([90, 121, 64, 205]),
+            write_data: Some([175, 121, 64, 205]),
+            flags: Some([0, 0, 1, 1]),
+            is_load: None,
+            mem_as: None,
+        },
+        false,
     );
 }
 
@@ -391,39 +354,35 @@ fn negative_wrong_address_space_tests() {
         None,
         None,
         None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        Some(3),
-        VerificationError::OodEvaluationMismatch,
+        LoadStorePrankValues {
+            mem_as: Some(3),
+            ..Default::default()
+        },
+        false,
     );
+
     run_negative_loadstore_test(
         LOADW,
         None,
         None,
         None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        Some(4),
-        VerificationError::OodEvaluationMismatch,
+        LoadStorePrankValues {
+            mem_as: Some(4),
+            ..Default::default()
+        },
+        false,
     );
+
     run_negative_loadstore_test(
         STOREW,
         None,
         None,
         None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        Some(1),
-        VerificationError::OodEvaluationMismatch,
+        LoadStorePrankValues {
+            mem_as: Some(1),
+            ..Default::default()
+        },
+        false,
     );
 }
 
@@ -432,86 +391,6 @@ fn negative_wrong_address_space_tests() {
 ///
 /// Ensure that solve functions produce the correct results.
 ///////////////////////////////////////////////////////////////////////////////////////
-#[test]
-fn execute_roundtrip_sanity_test() {
-    let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
-    let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
-    let adapter = Rv32LoadStoreAdapterChip::<F>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        tester.memory_bridge(),
-        tester.address_bits(),
-        range_checker_chip.clone(),
-    );
-    let core = LoadStoreCoreChip::new(Rv32LoadStoreOpcode::CLASS_OFFSET);
-    let mut chip = Rv32LoadStoreChip::<F>::new(adapter, core, tester.offline_memory_mutex_arc());
-
-    let num_tests: usize = 100;
-    for _ in 0..num_tests {
-        set_and_execute(
-            &mut tester,
-            &mut chip,
-            &mut rng,
-            LOADW,
-            None,
-            None,
-            None,
-            None,
-        );
-        set_and_execute(
-            &mut tester,
-            &mut chip,
-            &mut rng,
-            LOADBU,
-            None,
-            None,
-            None,
-            None,
-        );
-        set_and_execute(
-            &mut tester,
-            &mut chip,
-            &mut rng,
-            LOADHU,
-            None,
-            None,
-            None,
-            None,
-        );
-        set_and_execute(
-            &mut tester,
-            &mut chip,
-            &mut rng,
-            STOREW,
-            None,
-            None,
-            None,
-            None,
-        );
-        set_and_execute(
-            &mut tester,
-            &mut chip,
-            &mut rng,
-            STOREB,
-            None,
-            None,
-            None,
-            None,
-        );
-        set_and_execute(
-            &mut tester,
-            &mut chip,
-            &mut rng,
-            STOREH,
-            None,
-            None,
-            None,
-            None,
-        );
-    }
-}
-
 #[test]
 fn run_loadw_storew_sanity_test() {
     let read_data = [138, 45, 202, 76].map(F::from_canonical_u32);

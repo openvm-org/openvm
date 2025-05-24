@@ -1,14 +1,21 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
+        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+    },
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::CastfOpcode;
 use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::{
@@ -17,7 +24,6 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use serde::{Deserialize, Serialize};
 
 // LIMB_BITS is the size of the limbs in bits.
 pub(crate) const LIMB_BITS: usize = 8;
@@ -32,7 +38,7 @@ pub struct CastFCoreCols<T> {
     pub is_valid: T,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(derive_new::new, Copy, Clone, Debug)]
 pub struct CastFCoreAir {
     pub bus: VariableRangeCheckerBus, /* to communicate with the range checker that checks that
                                        * all limbs are < 2^LIMB_BITS */
@@ -104,44 +110,36 @@ where
     }
 }
 
-#[repr(C)]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CastFRecord<F> {
-    pub in_val: F,
-    pub out_val: [u32; RV32_REGISTER_NUM_LIMBS],
-}
-
-pub struct CastFCoreChip {
-    pub air: CastFCoreAir,
+#[derive(derive_new::new)]
+pub struct CastFCoreStep<A> {
+    adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl CastFCoreChip {
-    pub fn new(range_checker_chip: SharedVariableRangeCheckerChip) -> Self {
-        Self {
-            air: CastFCoreAir {
-                bus: range_checker_chip.bus(),
-            },
-            range_checker_chip,
-        }
-    }
-}
-
-impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for CastFCoreChip
+impl<F, CTX, A> TraceStep<F, CTX> for CastFCoreStep<A>
 where
-    I::Reads: Into<[[F; 1]; 1]>,
-    I::Writes: From<[[F; RV32_REGISTER_NUM_LIMBS]; 1]>,
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            CTX,
+            ReadData = [F; 1],
+            WriteData = [u8; RV32_REGISTER_NUM_LIMBS],
+            TraceContext<'a> = (),
+        >,
 {
-    type Record = CastFRecord<F>;
-    type Air = CastFCoreAir;
+    fn get_opcode_name(&self, _opcode: usize) -> String {
+        format!("{:?}", CastfOpcode::CASTF)
+    }
 
-    #[allow(clippy::type_complexity)]
-    fn execute_instruction(
-        &self,
+    fn execute(
+        &mut self,
+        state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        _from_pc: u32,
-        reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
+        trace: &mut [F],
+        trace_offset: &mut usize,
+        width: usize,
+    ) -> Result<()> {
         let Instruction { opcode, .. } = instruction;
 
         assert_eq!(
@@ -149,52 +147,102 @@ where
             CastfOpcode::CASTF as usize
         );
 
-        let y = reads.into()[0][0];
+        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        A::start(*state.pc, state.memory, adapter_row);
+
+        let [y] = self.adapter.read(state.memory, instruction, adapter_row);
+
         let x = CastF::solve(y.as_canonical_u32());
 
-        let output = AdapterRuntimeContext {
-            to_pc: None,
-            writes: [x.map(F::from_canonical_u32)].into(),
-        };
+        let core_row: &mut CastFCoreCols<F> = core_row.borrow_mut();
+        core_row.in_val = y;
+        core_row.out_val = x.map(F::from_canonical_u8);
+        core_row.is_valid = F::ONE;
 
-        let record = CastFRecord {
-            in_val: y,
-            out_val: x,
-        };
+        self.adapter
+            .write(state.memory, instruction, adapter_row, &x);
 
-        Ok((output, record))
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        *trace_offset += width;
+
+        Ok(())
     }
 
-    fn get_opcode_name(&self, _opcode: usize) -> String {
-        format!("{:?}", CastfOpcode::CASTF)
-    }
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        for (i, limb) in record.out_val.iter().enumerate() {
-            if i == 3 {
-                self.range_checker_chip.add_count(*limb, FINAL_LIMB_BITS);
-            } else {
-                self.range_checker_chip.add_count(*limb, LIMB_BITS);
+        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
+
+        let core_row: &mut CastFCoreCols<F> = core_row.borrow_mut();
+
+        if core_row.is_valid == F::ONE {
+            for (i, limb) in core_row.out_val.iter().enumerate() {
+                if i == 3 {
+                    self.range_checker_chip
+                        .add_count(limb.as_canonical_u32(), FINAL_LIMB_BITS);
+                } else {
+                    self.range_checker_chip
+                        .add_count(limb.as_canonical_u32(), LIMB_BITS);
+                }
             }
         }
+    }
+}
 
-        let cols: &mut CastFCoreCols<F> = row_slice.borrow_mut();
-        cols.in_val = record.in_val;
-        cols.out_val = record.out_val.map(F::from_canonical_u32);
-        cols.is_valid = F::ONE;
+impl<F, A> StepExecutorE1<F> for CastFCoreStep<A>
+where
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterExecutorE1<F, ReadData = [F; 1], WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
+{
+    fn execute_e1<Ctx>(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+        let Instruction { opcode, .. } = instruction;
+
+        assert_eq!(
+            opcode.local_opcode_idx(CastfOpcode::CLASS_OFFSET),
+            CastfOpcode::CASTF as usize
+        );
+
+        let [y] = self.adapter.read(state, instruction);
+
+        let x = CastF::solve(y.as_canonical_u32());
+
+        self.adapter.write(state, instruction, &x);
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 
-    fn air(&self) -> &Self::Air {
-        &self.air
+    fn execute_metered(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += 1;
+
+        Ok(())
     }
 }
 
 pub struct CastF;
 impl CastF {
-    pub(super) fn solve(y: u32) -> [u32; RV32_REGISTER_NUM_LIMBS] {
-        let mut x = [0; 4];
+    pub(super) fn solve(y: u32) -> [u8; RV32_REGISTER_NUM_LIMBS] {
+        let mut x = [0u8; RV32_REGISTER_NUM_LIMBS];
         for (i, limb) in x.iter_mut().enumerate() {
-            *limb = (y >> (8 * i)) & 0xFF;
+            *limb = ((y >> (8 * i)) & 0xFF) as u8;
         }
         x
     }

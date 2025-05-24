@@ -4,10 +4,12 @@ use num_traits::{FromPrimitive, Zero};
 use once_cell::sync::Lazy;
 use openvm_algebra_guest::IntMod;
 use openvm_circuit::{
-    arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
+    arch::{
+        ExecutionBridge, SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+    },
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
@@ -19,13 +21,15 @@ use openvm_ecc_guest::{
 use openvm_ecc_transpiler::{EccPhantom, Rv32WeierstrassOpcode};
 use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
-use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
 
 use super::{EcAddNeChip, EcDoubleChip};
+
+// TODO: this should be decided after e2 execution
+const MAX_INS_CAPACITY: usize = 1 << 22;
 
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
@@ -63,7 +67,7 @@ pub struct WeierstrassExtension {
     pub supported_curves: Vec<CurveConfig>,
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, InsExecutorE1)]
 pub enum WeierstrassExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
     EcAddNeRv32_32(EcAddNeChip<F, 2, 32>),
@@ -93,6 +97,11 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
             program_bus,
             memory_bridge,
         } = builder.system_port();
+
+        let execution_bridge = ExecutionBridge::new(execution_bus, program_bus);
+        let range_checker = builder.system_base().range_checker_chip.clone();
+        let pointer_max_bits = builder.system_config().memory_config.pointer_max_bits;
+
         let bitwise_lu_chip = if let Some(&chip) = builder
             .find_chip::<SharedBitwiseOperationLookupChip<8>>()
             .first()
@@ -104,9 +113,7 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
-        let offline_memory = builder.system_base().offline_memory();
-        let range_checker = builder.system_base().range_checker_chip.clone();
-        let pointer_bits = builder.system_config().memory_config.pointer_max_bits;
+
         let ec_add_ne_opcodes = (Rv32WeierstrassOpcode::EC_ADD_NE as usize)
             ..=(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize);
         let ec_double_opcodes = (Rv32WeierstrassOpcode::EC_DOUBLE as usize)
@@ -128,18 +135,17 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
             };
             if bytes <= 32 {
                 let add_ne_chip = EcAddNeChip::new(
-                    Rv32VecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
-                        execution_bus,
-                        program_bus,
-                        memory_bridge,
-                        pointer_bits,
-                        bitwise_lu_chip.clone(),
-                    ),
+                    execution_bridge.clone(),
+                    memory_bridge.clone(),
+                    builder.system_base().memory_controller.helper(),
+                    pointer_max_bits,
                     config32.clone(),
                     start_offset,
+                    bitwise_lu_chip.clone(),
                     range_checker.clone(),
-                    offline_memory.clone(),
+                    MAX_INS_CAPACITY,
                 );
+
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcAddNeRv32_32(add_ne_chip),
                     ec_add_ne_opcodes
@@ -147,18 +153,16 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
                 let double_chip = EcDoubleChip::new(
-                    Rv32VecHeapAdapterChip::<F, 1, 2, 2, 32, 32>::new(
-                        execution_bus,
-                        program_bus,
-                        memory_bridge,
-                        pointer_bits,
-                        bitwise_lu_chip.clone(),
-                    ),
-                    range_checker.clone(),
+                    execution_bridge.clone(),
+                    memory_bridge.clone(),
+                    builder.system_base().memory_controller.helper(),
+                    pointer_max_bits,
                     config32.clone(),
                     start_offset,
+                    bitwise_lu_chip.clone(),
+                    range_checker.clone(),
                     curve.a.clone(),
-                    offline_memory.clone(),
+                    MAX_INS_CAPACITY,
                 );
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcDoubleRv32_32(double_chip),
@@ -168,18 +172,17 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                 )?;
             } else if bytes <= 48 {
                 let add_ne_chip = EcAddNeChip::new(
-                    Rv32VecHeapAdapterChip::<F, 2, 6, 6, 16, 16>::new(
-                        execution_bus,
-                        program_bus,
-                        memory_bridge,
-                        pointer_bits,
-                        bitwise_lu_chip.clone(),
-                    ),
+                    execution_bridge.clone(),
+                    memory_bridge.clone(),
+                    builder.system_base().memory_controller.helper(),
+                    pointer_max_bits,
                     config48.clone(),
                     start_offset,
+                    bitwise_lu_chip.clone(),
                     range_checker.clone(),
-                    offline_memory.clone(),
+                    MAX_INS_CAPACITY,
                 );
+
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcAddNeRv32_48(add_ne_chip),
                     ec_add_ne_opcodes
@@ -187,18 +190,16 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
                 let double_chip = EcDoubleChip::new(
-                    Rv32VecHeapAdapterChip::<F, 1, 6, 6, 16, 16>::new(
-                        execution_bus,
-                        program_bus,
-                        memory_bridge,
-                        pointer_bits,
-                        bitwise_lu_chip.clone(),
-                    ),
-                    range_checker.clone(),
+                    execution_bridge.clone(),
+                    memory_bridge.clone(),
+                    builder.system_base().memory_controller.helper(),
+                    pointer_max_bits,
                     config48.clone(),
                     start_offset,
+                    bitwise_lu_chip.clone(),
+                    range_checker.clone(),
                     curve.a.clone(),
-                    offline_memory.clone(),
+                    MAX_INS_CAPACITY,
                 );
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcDoubleRv32_48(double_chip),
@@ -236,11 +237,14 @@ pub(crate) mod phantom {
     use num_traits::{FromPrimitive, One};
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
-        system::memory::MemoryController,
+        system::memory::online::GuestMemory,
     };
     use openvm_ecc_guest::weierstrass::DecompressionHint;
-    use openvm_instructions::{riscv::RV32_MEMORY_AS, PhantomDiscriminant};
-    use openvm_rv32im_circuit::adapters::unsafe_read_rv32_register;
+    use openvm_instructions::{
+        riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+        PhantomDiscriminant,
+    };
+    use openvm_rv32im_circuit::adapters::new_read_rv32_register;
     use openvm_stark_backend::p3_field::PrimeField32;
     use rand::{rngs::StdRng, SeedableRng};
 
@@ -260,11 +264,11 @@ pub(crate) mod phantom {
     impl<F: PrimeField32> PhantomSubExecutor<F> for DecompressHintSubEx {
         fn phantom_execute(
             &mut self,
-            memory: &MemoryController<F>,
+            memory: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
-            a: F,
-            b: F,
+            a: u32,
+            b: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
             let c_idx = c_upper as usize;
@@ -275,7 +279,7 @@ pub(crate) mod phantom {
                 );
             }
             let curve = &self.supported_curves[c_idx];
-            let rs1 = unsafe_read_rv32_register(memory, a);
+            let rs1 = new_read_rv32_register(memory, RV32_REGISTER_AS, a);
             let num_limbs: usize = if curve.modulus.bits().div_ceil(8) <= 32 {
                 32
             } else if curve.modulus.bits().div_ceil(8) <= 48 {
@@ -283,21 +287,15 @@ pub(crate) mod phantom {
             } else {
                 bail!("Modulus too large")
             };
-            let mut x_limbs: Vec<u8> = Vec::with_capacity(num_limbs);
-            for i in 0..num_limbs {
-                let limb = memory.unsafe_read_cell(
-                    F::from_canonical_u32(RV32_MEMORY_AS),
-                    F::from_canonical_u32(rs1 + i as u32),
-                );
-                x_limbs.push(limb.as_canonical_u32() as u8);
-            }
+            let x_limbs: Vec<u8> = memory
+                .memory
+                .read_range_generic((RV32_MEMORY_AS, rs1), num_limbs);
             let x = BigUint::from_bytes_le(&x_limbs);
-            let rs2 = unsafe_read_rv32_register(memory, b);
-            let rec_id = memory.unsafe_read_cell(
-                F::from_canonical_u32(RV32_MEMORY_AS),
-                F::from_canonical_u32(rs2),
-            );
-            let hint = self.decompress_point(x, rec_id.as_canonical_u32() & 1 == 1, c_idx);
+            let rs2 = new_read_rv32_register(memory, RV32_REGISTER_AS, b);
+            let rec_id = memory
+                .memory
+                .read_range_generic::<u8>((RV32_MEMORY_AS, rs2), 1)[0];
+            let hint = self.decompress_point(x, rec_id & 1 == 1, c_idx);
             let hint_bytes = once(F::from_bool(hint.possible))
                 .chain(repeat(F::ZERO))
                 .take(4)
@@ -311,6 +309,7 @@ pub(crate) mod phantom {
                 )
                 .collect();
             streams.hint_stream = hint_bytes;
+
             Ok(())
         }
     }
@@ -442,11 +441,11 @@ pub(crate) mod phantom {
     impl<F: PrimeField32> PhantomSubExecutor<F> for NonQrHintSubEx {
         fn phantom_execute(
             &mut self,
-            _: &MemoryController<F>,
+            _: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
-            _: F,
-            _: F,
+            _: u32,
+            _: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
             let c_idx = c_upper as usize;

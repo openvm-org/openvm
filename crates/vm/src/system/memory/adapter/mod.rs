@@ -1,11 +1,10 @@
-use std::{borrow::BorrowMut, cmp::max, sync::Arc};
+use std::{borrow::BorrowMut, io::Cursor, sync::Arc};
 
 pub use air::*;
 pub use columns::*;
 use enum_dispatch::enum_dispatch;
 use openvm_circuit_primitives::{
-    is_less_than::IsLtSubAir, utils::next_power_of_two_or_zero,
-    var_range::SharedVariableRangeCheckerChip, TraceSubRowGenerator,
+    is_less_than::IsLtSubAir, var_range::SharedVariableRangeCheckerChip, TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_stark_backend::{
@@ -13,8 +12,7 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
-    p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*,
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_util::log2_strict_usize,
     prover::types::AirProofInput,
     AirRef, Chip, ChipUsageGetter,
@@ -32,7 +30,7 @@ pub struct AccessAdapterInventory<F> {
     air_names: Vec<String>,
 }
 
-impl<F> AccessAdapterInventory<F> {
+impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
     pub fn new(
         range_checker: SharedVariableRangeCheckerChip,
         memory_bus: MemoryBus,
@@ -78,6 +76,14 @@ impl<F> AccessAdapterInventory<F> {
         for record in records {
             self.add_record(record);
         }
+    }
+
+    pub fn set_trace(&mut self, index: usize, trace: Vec<F>, width: usize)
+    where
+        F: PrimeField32,
+    {
+        let trace = RowMajorMatrix::new(trace, width);
+        self.chips[index].set_trace(trace);
     }
 
     #[cfg(test)]
@@ -134,7 +140,10 @@ impl<F> AccessAdapterInventory<F> {
         memory_bus: MemoryBus,
         clk_max_bits: usize,
         max_access_adapter_n: usize,
-    ) -> Option<GenericAccessAdapterChip<F>> {
+    ) -> Option<GenericAccessAdapterChip<F>>
+    where
+        F: Clone + Send + Sync,
+    {
         if N <= max_access_adapter_n {
             Some(GenericAccessAdapterChip::new::<N>(
                 range_checker,
@@ -144,6 +153,39 @@ impl<F> AccessAdapterInventory<F> {
         } else {
             None
         }
+    }
+
+    pub(crate) fn execute_split(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[F],
+        timestamp: u32,
+        row_slice: &mut [F],
+    ) where
+        F: PrimeField32,
+    {
+        let index = get_chip_index(values.len());
+        self.chips[index].execute_split(address, values, timestamp, row_slice);
+    }
+
+    pub(crate) fn execute_merge(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[F],
+        left_timestamp: u32,
+        right_timestamp: u32,
+        row_slice: &mut [F],
+    ) where
+        F: PrimeField32,
+    {
+        let index = get_chip_index(values.len());
+        self.chips[index].execute_merge(
+            address,
+            values,
+            left_timestamp,
+            right_timestamp,
+            row_slice,
+        );
     }
 }
 
@@ -173,6 +215,28 @@ pub trait GenericAccessAdapterChipTrait<F> {
     fn generate_trace(self) -> RowMajorMatrix<F>
     where
         F: PrimeField32;
+    fn set_trace(&mut self, trace: RowMajorMatrix<F>)
+    where
+        F: PrimeField32;
+
+    fn execute_split(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[F],
+        timestamp: u32,
+        row_slice: &mut [F],
+    ) where
+        F: PrimeField32;
+
+    fn execute_merge(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[F],
+        left_timestamp: u32,
+        right_timestamp: u32,
+        row_slice: &mut [F],
+    ) where
+        F: PrimeField32;
 }
 
 #[derive(Chip, ChipUsageGetter)]
@@ -186,7 +250,7 @@ enum GenericAccessAdapterChip<F> {
     N32(AccessAdapterChip<F, 32>),
 }
 
-impl<F> GenericAccessAdapterChip<F> {
+impl<F: Clone + Send + Sync> GenericAccessAdapterChip<F> {
     fn new<const N: usize>(
         range_checker: SharedVariableRangeCheckerChip,
         memory_bus: MemoryBus,
@@ -216,13 +280,16 @@ impl<F> GenericAccessAdapterChip<F> {
         }
     }
 }
+
 pub struct AccessAdapterChip<F, const N: usize> {
     air: AccessAdapterAir<N>,
     range_checker: SharedVariableRangeCheckerChip,
     pub records: Vec<AccessAdapterRecord<F>>,
+    trace: RowMajorMatrix<F>,
     overridden_height: Option<usize>,
 }
-impl<F, const N: usize> AccessAdapterChip<F, N> {
+
+impl<F: Clone + Send + Sync, const N: usize> AccessAdapterChip<F, N> {
     pub fn new(
         range_checker: SharedVariableRangeCheckerChip,
         memory_bus: MemoryBus,
@@ -233,6 +300,7 @@ impl<F, const N: usize> AccessAdapterChip<F, N> {
             air: AccessAdapterAir::<N> { memory_bus, lt_air },
             range_checker,
             records: vec![],
+            trace: RowMajorMatrix::new(Vec::new(), 0),
             overridden_height: None,
         }
     }
@@ -251,48 +319,135 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
     where
         F: PrimeField32,
     {
-        let width = BaseAir::<F>::width(&self.air);
-        let height = if let Some(oh) = self.overridden_height {
-            assert!(
-                oh >= self.records.len(),
-                "Overridden height is less than the required height"
-            );
-            oh
-        } else {
-            self.records.len()
-        };
-        let height = next_power_of_two_or_zero(height);
-        let mut values = F::zero_vec(height * width);
+        let mut trace = self.trace;
+        let height = trace.height();
+        trace.pad_to_height(height.next_power_of_two(), F::ZERO);
+        trace
+        // TODO(AG): everything related to the calculated trace height
+        // needs to be in memory controller, who owns these traces.
 
-        values
-            .par_chunks_mut(width)
-            .zip(self.records.into_par_iter())
-            .for_each(|(row, record)| {
-                let row: &mut AccessAdapterCols<F, N> = row.borrow_mut();
+        // let width = BaseAir::<F>::width(&self.air);
+        // let height = if let Some(oh) = self.overridden_height {
+        //     assert!(
+        //         oh >= self.records.len(),
+        //         "Overridden height is less than the required height"
+        //     );
+        //     oh
+        // } else {
+        //     self.records.len()
+        // };
+        // let height = next_power_of_two_or_zero(height);
+        // let mut values = F::zero_vec(height * width);
 
-                row.is_valid = F::ONE;
-                row.values = record.data.try_into().unwrap();
-                row.address = MemoryAddress::new(record.address_space, record.start_index);
+        // values
+        //     .par_chunks_mut(width)
+        //     .zip(self.records.into_par_iter())
+        //     .for_each(|(row, record)| {
+        //         let row: &mut AccessAdapterCols<F, N> = row.borrow_mut();
 
-                let (left_timestamp, right_timestamp) = match record.kind {
-                    AccessAdapterRecordKind::Split => (record.timestamp, record.timestamp),
-                    AccessAdapterRecordKind::Merge {
-                        left_timestamp,
-                        right_timestamp,
-                    } => (left_timestamp, right_timestamp),
-                };
-                debug_assert_eq!(max(left_timestamp, right_timestamp), record.timestamp);
+        //         row.is_valid = F::ONE;
+        //         row.values = record.data.try_into().unwrap();
+        //         row.address = MemoryAddress::new(record.address_space, record.start_index);
 
-                row.left_timestamp = F::from_canonical_u32(left_timestamp);
-                row.right_timestamp = F::from_canonical_u32(right_timestamp);
-                row.is_split = F::from_bool(record.kind == AccessAdapterRecordKind::Split);
+        //         let (left_timestamp, right_timestamp) = match record.kind {
+        //             AccessAdapterRecordKind::Split => (record.timestamp, record.timestamp),
+        //             AccessAdapterRecordKind::Merge {
+        //                 left_timestamp,
+        //                 right_timestamp,
+        //             } => (left_timestamp, right_timestamp),
+        //         };
+        //         debug_assert_eq!(max(left_timestamp, right_timestamp), record.timestamp);
 
-                self.air.lt_air.generate_subrow(
-                    (self.range_checker.as_ref(), left_timestamp, right_timestamp),
-                    (&mut row.lt_aux, &mut row.is_right_larger),
-                );
-            });
-        RowMajorMatrix::new(values, width)
+        //         row.left_timestamp = F::from_canonical_u32(left_timestamp);
+        //         row.right_timestamp = F::from_canonical_u32(right_timestamp);
+        //         row.is_split = F::from_bool(record.kind == AccessAdapterRecordKind::Split);
+
+        //         self.air.lt_air.generate_subrow(
+        //             (self.range_checker.as_ref(), left_timestamp, right_timestamp),
+        //             (&mut row.lt_aux, &mut row.is_right_larger),
+        //         );
+        //     });
+        // RowMajorMatrix::new(values, width)
+    }
+
+    fn set_trace(&mut self, trace: RowMajorMatrix<F>) {
+        self.trace = trace;
+    }
+
+    fn execute_split(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[F],
+        timestamp: u32,
+        row_slice: &mut [F],
+    ) where
+        F: PrimeField32,
+    {
+        let row: &mut AccessAdapterCols<F, N> = row_slice.borrow_mut();
+        row.is_valid = F::ONE;
+        row.is_split = F::ONE;
+        row.address = MemoryAddress::new(
+            F::from_canonical_u32(address.address_space),
+            F::from_canonical_u32(address.pointer),
+        );
+        row.left_timestamp = F::from_canonical_u32(timestamp);
+        row.right_timestamp = F::from_canonical_u32(timestamp);
+        row.is_right_larger = F::ZERO;
+        debug_assert_eq!(
+            values.len(),
+            N,
+            "Input values slice length must match the access adapter type"
+        );
+        // TODO: move this to `fill_trace_row`
+        self.air.lt_air.generate_subrow(
+            (self.range_checker.as_ref(), timestamp, timestamp),
+            (&mut row.lt_aux, &mut row.is_right_larger),
+        );
+
+        // SAFETY: `values` slice is asserted to have length N. `row.values` is an array of length
+        // N. Pointers are valid and regions do not overlap because exactly one of them is a
+        // part of the trace.
+        unsafe {
+            std::ptr::copy_nonoverlapping(values.as_ptr(), row.values.as_mut_ptr(), N);
+        }
+    }
+
+    fn execute_merge(
+        &mut self,
+        address: MemoryAddress<u32, u32>,
+        values: &[F],
+        left_timestamp: u32,
+        right_timestamp: u32,
+        row_slice: &mut [F],
+    ) where
+        F: PrimeField32,
+    {
+        let row: &mut AccessAdapterCols<F, N> = row_slice.borrow_mut();
+        row.is_valid = F::ONE;
+        row.is_split = F::ZERO;
+        row.address = MemoryAddress::new(
+            F::from_canonical_u32(address.address_space),
+            F::from_canonical_u32(address.pointer),
+        );
+        row.left_timestamp = F::from_canonical_u32(left_timestamp);
+        row.right_timestamp = F::from_canonical_u32(right_timestamp);
+        debug_assert_eq!(
+            values.len(),
+            N,
+            "Input values slice length must match the access adapter type"
+        );
+        // TODO: move this to `fill_trace_row`
+        self.air.lt_air.generate_subrow(
+            (self.range_checker.as_ref(), left_timestamp, right_timestamp),
+            (&mut row.lt_aux, &mut row.is_right_larger),
+        );
+
+        // SAFETY: `values` slice is asserted to have length N. `row.values` is an array of length
+        // N. Pointers are valid and regions do not overlap because exactly one of them is a
+        // part of the trace.
+        unsafe {
+            std::ptr::copy_nonoverlapping(values.as_ptr(), row.values.as_mut_ptr(), N);
+        }
     }
 }
 
@@ -327,4 +482,52 @@ impl<F, const N: usize> ChipUsageGetter for AccessAdapterChip<F, N> {
 #[inline]
 fn air_name(n: usize) -> String {
     format!("AccessAdapter<{}>", n)
+}
+
+#[inline(always)]
+pub fn get_chip_index(block_size: usize) -> usize {
+    assert!(
+        block_size.is_power_of_two() && block_size >= 2,
+        "Invalid block size {} for split operation",
+        block_size
+    );
+    let index = block_size.trailing_zeros() - 1;
+    index as usize
+}
+
+pub struct AdapterInventoryTraceCursor<F> {
+    // [AG] TODO: replace with a pre-allocated space
+    cursors: Vec<Cursor<Vec<F>>>,
+    widths: Vec<usize>,
+}
+
+impl<F: PrimeField32> AdapterInventoryTraceCursor<F> {
+    pub fn new(as_cnt: usize) -> Self {
+        let cursors = vec![Cursor::new(Vec::new()); as_cnt];
+        let widths = vec![
+            size_of::<AccessAdapterCols<u8, 2>>(),
+            size_of::<AccessAdapterCols<u8, 4>>(),
+            size_of::<AccessAdapterCols<u8, 8>>(),
+            size_of::<AccessAdapterCols<u8, 16>>(),
+            size_of::<AccessAdapterCols<u8, 32>>(),
+        ];
+        Self { cursors, widths }
+    }
+
+    pub fn get_row_slice(&mut self, block_size: usize) -> &mut [F] {
+        let index = get_chip_index(block_size);
+        let begin = self.cursors[index].position() as usize;
+        let end = begin + self.widths[index];
+        self.cursors[index].get_mut().resize(end, F::ZERO);
+        self.cursors[index].set_position(end as u64);
+        &mut self.cursors[index].get_mut()[begin..end]
+    }
+
+    pub fn extract_trace(&mut self, index: usize) -> Vec<F> {
+        std::mem::replace(&mut self.cursors[index], Cursor::new(Vec::new())).into_inner()
+    }
+
+    pub fn width(&self, index: usize) -> usize {
+        self.widths[index]
+    }
 }

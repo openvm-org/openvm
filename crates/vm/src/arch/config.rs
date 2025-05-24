@@ -8,9 +8,9 @@ use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{
-    segment::DefaultSegmentationStrategy, AnyEnum, InstructionExecutor, SegmentationStrategy,
-    SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex, VmInventoryError,
-    PUBLIC_VALUES_AIR_ID,
+    segmentation_strategy::{DefaultSegmentationStrategy, SegmentationStrategy},
+    AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,
+    VmInventoryError, PUBLIC_VALUES_AIR_ID,
 };
 use crate::system::memory::BOUNDARY_AIR_OFFSET;
 
@@ -45,6 +45,7 @@ pub struct MemoryConfig {
     /// space `0` in memory.
     pub as_height: usize,
     /// The offset of the address space. Should be fixed to equal `1`.
+    // TODO[jpw]: remove this and make constant
     pub as_offset: u32,
     pub pointer_max_bits: usize,
     /// All timestamps must be in the range `[0, 2^clk_max_bits)`. Maximum allowed: 29.

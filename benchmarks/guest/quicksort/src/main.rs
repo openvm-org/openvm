@@ -1,7 +1,7 @@
 use core::hint::black_box;
 use openvm as _;
 
-const ARRAY_SIZE: usize = 1_000;
+const ARRAY_SIZE: usize = 3_500;
 
 fn quicksort<T: Ord>(arr: &mut [T]) {
     if arr.len() <= 1 {

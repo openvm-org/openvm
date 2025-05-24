@@ -23,11 +23,12 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-use super::memory::MemoryController;
+use super::memory::{online::GuestMemory, MemoryController};
 use crate::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor,
-        PcIncOrSet, PhantomSubExecutor, Streams,
+        execution_mode::{e1::E1Ctx, metered::MeteredCtx, E1E2ExecutionCtx},
+        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutorE1,
+        InstructionExecutor, PcIncOrSet, PhantomSubExecutor, Streams, VmStateMut,
     },
     system::program::ProgramBus,
 };
@@ -124,13 +125,19 @@ impl<F> PhantomChip<F> {
     }
 }
 
-impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
-    fn execute(
+impl<F> InsExecutorE1<F> for PhantomChip<F>
+where
+    F: PrimeField32,
+{
+    fn execute_e1<Ctx>(
         &mut self,
-        memory: &mut MemoryController<F>,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>, ExecutionError> {
+    ) -> Result<(), ExecutionError>
+    where
+        F: PrimeField32,
+        Ctx: E1E2ExecutionCtx,
+    {
         let &Instruction {
             opcode, a, b, c, ..
         } = instruction;
@@ -145,38 +152,72 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
                 .phantom_executors
                 .get_mut(&discriminant)
                 .ok_or_else(|| ExecutionError::PhantomNotFound {
-                    pc: from_state.pc,
+                    pc: *state.pc,
                     discriminant,
                 })?;
             let mut streams = self.streams.get().unwrap().lock().unwrap();
+            // TODO(ayush): implement phantom subexecutor for new traits
             sub_executor
                 .as_mut()
                 .phantom_execute(
-                    memory,
+                    state.memory,
                     &mut streams,
                     discriminant,
-                    a,
-                    b,
+                    a.as_canonical_u32(),
+                    b.as_canonical_u32(),
                     (c_u32 >> 16) as u16,
                 )
                 .map_err(|e| ExecutionError::Phantom {
-                    pc: from_state.pc,
+                    pc: *state.pc,
                     discriminant,
                     inner: e,
                 })?;
         }
 
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+
+    fn execute_metered(
+        &mut self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        _chip_index: usize,
+    ) -> Result<(), ExecutionError> {
+        self.execute_e1(state, instruction)?;
+
+        Ok(())
+    }
+}
+
+impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
+    fn execute(
+        &mut self,
+        memory: &mut MemoryController<F>,
+        instruction: &Instruction<F>,
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>, ExecutionError> {
+        let mut pc = from_state.pc;
         self.rows.push(PhantomCols {
-            pc: F::from_canonical_u32(from_state.pc),
-            operands: [a, b, c],
-            timestamp: F::from_canonical_u32(from_state.timestamp),
+            pc: F::from_canonical_u32(pc),
+            operands: [instruction.a, instruction.b, instruction.c],
+            timestamp: F::from_canonical_u32(memory.memory.timestamp),
             is_valid: F::ONE,
         });
+
+        let mut state = VmStateMut {
+            pc: &mut pc,
+            memory: &mut memory.memory.data,
+            ctx: &mut E1Ctx::default(),
+        };
+        self.execute_e1(&mut state, instruction)?;
         memory.increment_timestamp();
-        Ok(ExecutionState::new(
-            from_state.pc + DEFAULT_PC_STEP,
-            from_state.timestamp + 1,
-        ))
+
+        Ok(ExecutionState {
+            pc,
+            timestamp: memory.memory.timestamp,
+        })
     }
 
     fn get_opcode_name(&self, _: usize) -> String {
