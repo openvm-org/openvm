@@ -1,5 +1,8 @@
 // re-export types that are visible in the k256 crate for API compatibility
 
+// Use these types instead of k256::ecdsa::{Signature, VerifyingKey}
+// because those are type aliases that use non-zkvm implementations
+
 pub use k256::ecdsa::{Error, RecoveryId};
 
 /// ECDSA/secp256k1 signature (fixed-size)

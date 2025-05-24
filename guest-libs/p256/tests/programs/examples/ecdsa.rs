@@ -3,13 +3,16 @@
 
 extern crate alloc;
 
-use ecdsa::{signature::hazmat::PrehashVerifier, Signature};
+use ecdsa::signature::hazmat::PrehashVerifier;
 use elliptic_curve::{sec1::FromEncodedPoint, CurveArithmetic};
 use hex_literal::hex;
 // clippy thinks this is unused, but it's used in the init! macro
 #[allow(unused)]
 use openvm_p256::P256Point;
-use openvm_p256::{ecdsa::VerifyingKey, EncodedPoint, P256};
+use openvm_p256::{
+    ecdsa::{Signature, VerifyingKey},
+    EncodedPoint, P256,
+};
 
 openvm::init!("openvm_init_ecdsa.rs");
 
