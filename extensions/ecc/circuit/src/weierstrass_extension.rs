@@ -448,33 +448,32 @@ pub(crate) mod phantom {
             _: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
-            todo!()
-            // let c_idx = c_upper as usize;
-            // if c_idx >= self.supported_curves.len() {
-            //     bail!(
-            //         "Curve index {c_idx} out of range: {} supported curves",
-            //         self.supported_curves.len()
-            //     );
-            // }
-            // let curve = &self.supported_curves[c_idx];
+            let c_idx = c_upper as usize;
+            if c_idx >= self.supported_curves.len() {
+                bail!(
+                    "Curve index {c_idx} out of range: {} supported curves",
+                    self.supported_curves.len()
+                );
+            }
+            let curve = &self.supported_curves[c_idx];
 
-            // let num_limbs: usize = if curve.modulus.bits().div_ceil(8) <= 32 {
-            //     32
-            // } else if curve.modulus.bits().div_ceil(8) <= 48 {
-            //     48
-            // } else {
-            //     bail!("Modulus too large")
-            // };
+            let num_limbs: usize = if curve.modulus.bits().div_ceil(8) <= 32 {
+                32
+            } else if curve.modulus.bits().div_ceil(8) <= 48 {
+                48
+            } else {
+                bail!("Modulus too large")
+            };
 
-            // let hint_bytes = self.non_qrs[c_idx]
-            //     .to_bytes_le()
-            //     .into_iter()
-            //     .map(F::from_canonical_u8)
-            //     .chain(repeat(F::ZERO))
-            //     .take(num_limbs)
-            //     .collect();
-            // streams.hint_stream = hint_bytes;
-            // Ok(())
+            let hint_bytes = self.non_qrs[c_idx]
+                .to_bytes_le()
+                .into_iter()
+                .map(F::from_canonical_u8)
+                .chain(repeat(F::ZERO))
+                .take(num_limbs)
+                .collect();
+            streams.hint_stream = hint_bytes;
+            Ok(())
         }
     }
 
