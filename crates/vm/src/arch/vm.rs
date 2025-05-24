@@ -298,7 +298,7 @@ where
         let metrics = segment.metrics.partial_take();
 
         // TODO(ayush): this can probably be avoided
-        let memory = segment.ctrl.final_memory.as_ref().unwrap().clone();
+        let memory = segment.ctrl.final_memory.clone().unwrap();
         Ok(VmExecutorOneSegmentResult {
             segment,
             next_state: Some(VmState {
