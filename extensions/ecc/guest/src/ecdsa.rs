@@ -123,7 +123,7 @@ where
     /// (a.k.a. point at infinity).
     pub fn from_affine(affine: AffinePoint<C2>) -> Result<Self> {
         Ok(Self {
-            ecdsa_verifying_key: ecdsa::VerifyingKey::<C2>::from_affine(affine.into())?,
+            ecdsa_verifying_key: ecdsa::VerifyingKey::<C2>::from_affine(affine)?,
             phantom: core::marker::PhantomData,
         })
     }
@@ -148,8 +148,9 @@ where
     /// (page 10).
     ///
     /// <http://www.secg.org/sec1-v2.pdf>
+    // Note: this is feature-gated to mimic ecdsa::VerifyingKey::to_sec1_bytes
     #[cfg(feature = "alloc")]
-    pub fn to_sec1_bytes(&self) -> Box<[u8]>
+    pub fn to_sec1_bytes(&self) -> alloc::boxed::Box<[u8]>
     where
         C2: PointCompression,
     {

@@ -1,10 +1,10 @@
 use alloy_primitives::{Bytes, B256, B512};
-// Be careful not to import k256::ecdsa::{Signature, VerifyingKey}
-// because those are type aliases that their (non-zkvm) implementations
-use k256::{
-    ecdsa::{Error, RecoveryId, Signature, VerifyingKey},
-    Secp256k1Point,
-};
+// Note: k256 here refers to openvm_k256
+// Be careful not to import Signature and VerifyingKey from the actual k256 crate
+// because those are type aliases that use non-zkvm implementations
+use k256::ecdsa::{Error, RecoveryId, Signature, VerifyingKey};
+#[allow(unused_imports)]
+use k256::Secp256k1Point;
 use openvm::io::read_vec;
 #[allow(unused_imports, clippy::single_component_path_imports)]
 use openvm_keccak256::keccak256;
