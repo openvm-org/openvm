@@ -1,32 +1,210 @@
 use alloc::vec::Vec;
 use core::ops::{Add, AddAssign, Mul};
 
-use ecdsa::{self, hazmat::bits2field, Error, RecoveryId, Result};
-use elliptic_curve::{sec1::Tag, PrimeCurve};
+use ecdsa::{
+    self,
+    hazmat::{bits2field, DigestPrimitive, VerifyPrimitive},
+    EncodedPoint, Error, RecoveryId, Result, Signature, SignatureSize,
+};
+use elliptic_curve::{
+    generic_array::ArrayLength,
+    point::{DecompressPoint, PointCompression},
+    sec1::{FromEncodedPoint, ModulusSize, Tag, ToEncodedPoint},
+    AffinePoint, CurveArithmetic, FieldBytesSize, PrimeCurve,
+};
 use openvm_algebra_guest::{DivUnsafe, IntMod, Reduce};
+use signature::{digest::Digest, hazmat::PrehashVerifier};
 
 use crate::{
     weierstrass::{FromCompressed, IntrinsicCurve, WeierstrassPoint},
     CyclicGroup, Group,
 };
 
-pub type Coordinate<C> = <<C as IntrinsicCurve>::Point as WeierstrassPoint>::Coordinate;
-pub type Scalar<C> = <C as IntrinsicCurve>::Scalar;
+type Coordinate<C> = <<C as IntrinsicCurve>::Point as WeierstrassPoint>::Coordinate;
+type Scalar<C> = <C as IntrinsicCurve>::Scalar;
 
 #[repr(C)]
 #[derive(Clone)]
-pub struct VerifyingKey<C: IntrinsicCurve> {
-    pub(crate) inner: PublicKey<C>,
+pub struct VerifyingKey<C1, C2: PrimeCurve + CurveArithmetic> {
+    pub(crate) ecdsa_verifying_key: ecdsa::VerifyingKey<C2>,
+    // C1 is the internal struct associated to the curve specified by C2
+    phantom: core::marker::PhantomData<C1>,
+}
+impl<C1, C2: PrimeCurve + CurveArithmetic> VerifyingKey<C1, C2>
+where
+    C1: IntrinsicCurve + PrimeCurve,
+    C1::Point:
+        WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C1>> + Into<C2::AffinePoint>,
+    Coordinate<C1>: IntMod,
+    C1::Scalar: IntMod + Reduce,
+    for<'a> &'a C1::Point: Add<&'a C1::Point, Output = C1::Point>,
+    for<'a> &'a Coordinate<C1>: Mul<&'a Coordinate<C1>, Output = Coordinate<C1>>,
+    C2: PrimeCurve + CurveArithmetic,
+    AffinePoint<C2>:
+        DecompressPoint<C2> + FromEncodedPoint<C2> + ToEncodedPoint<C2> + VerifyPrimitive<C2>,
+    FieldBytesSize<C2>: ModulusSize,
+    SignatureSize<C2>: ArrayLength<u8>,
+{
+    /// Recover a [`VerifyingKey`] from the given message, signature, and
+    /// [`RecoveryId`].
+    ///
+    /// The message is first hashed using this curve's [`DigestPrimitive`].
+    pub fn recover_from_msg(
+        msg: &[u8],
+        signature: &Signature<C2>,
+        recovery_id: RecoveryId,
+    ) -> Result<Self>
+    where
+        C2: DigestPrimitive,
+    {
+        Self::recover_from_digest(C2::Digest::new_with_prefix(msg), signature, recovery_id)
+    }
+
+    /// Recover a [`VerifyingKey`] from the given message [`Digest`],
+    /// signature, and [`RecoveryId`].
+    pub fn recover_from_digest<D>(
+        msg_digest: D,
+        signature: &Signature<C2>,
+        recovery_id: RecoveryId,
+    ) -> Result<Self>
+    where
+        D: Digest,
+    {
+        Self::recover_from_prehash(&msg_digest.finalize(), signature, recovery_id)
+    }
+
+    /// Recover a [`VerifyingKey`] from the given `prehash` of a message, the
+    /// signature over that prehashed message, and a [`RecoveryId`].
+    /// Note that this function does not verify the signature with the recovered key.
+    #[allow(non_snake_case)]
+    pub fn recover_from_prehash(
+        prehash: &[u8],
+        signature: &Signature<C2>,
+        recovery_id: RecoveryId,
+    ) -> Result<Self> {
+        let ret = OpenVMVerifyingKey::<C1>::recover_from_prehash_noverify(
+            prehash,
+            &signature.to_bytes(),
+            recovery_id,
+        )?;
+        Ok(Self {
+            ecdsa_verifying_key: ecdsa::VerifyingKey::<C2>::from_affine(ret.into_affine().into())?,
+            phantom: core::marker::PhantomData,
+        })
+    }
 }
 
+// Pass through the functions on the inner ecdsa::VerifyingKey
+// See: https://docs.rs/ecdsa/0.16.9/src/ecdsa/verifying.rs.html#85
+impl<C1, C2: PrimeCurve + CurveArithmetic> VerifyingKey<C1, C2>
+where
+    C1: IntrinsicCurve + PrimeCurve,
+    C1::Point:
+        WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C1>> + Into<C2::AffinePoint>,
+    Coordinate<C1>: IntMod,
+    C1::Scalar: IntMod + Reduce,
+    for<'a> &'a C1::Point: Add<&'a C1::Point, Output = C1::Point>,
+    for<'a> &'a Coordinate<C1>: Mul<&'a Coordinate<C1>, Output = Coordinate<C1>>,
+    C2: PrimeCurve + CurveArithmetic,
+    AffinePoint<C2>: FromEncodedPoint<C2> + ToEncodedPoint<C2>,
+    FieldBytesSize<C2>: ModulusSize,
+{
+    /// Initialize [`VerifyingKey`] from a SEC1-encoded public key.
+    pub fn from_sec1_bytes(bytes: &[u8]) -> Result<Self> {
+        Ok(Self {
+            ecdsa_verifying_key: ecdsa::VerifyingKey::<C2>::from_sec1_bytes(bytes)?,
+            phantom: core::marker::PhantomData,
+        })
+    }
+
+    /// Initialize [`VerifyingKey`] from an affine point.
+    ///
+    /// Returns an [`Error`] if the given affine point is the additive identity
+    /// (a.k.a. point at infinity).
+    pub fn from_affine(affine: AffinePoint<C2>) -> Result<Self> {
+        Ok(Self {
+            ecdsa_verifying_key: ecdsa::VerifyingKey::<C2>::from_affine(affine.into())?,
+            phantom: core::marker::PhantomData,
+        })
+    }
+
+    /// Initialize [`VerifyingKey`] from an [`EncodedPoint`].
+    pub fn from_encoded_point(public_key: &EncodedPoint<C2>) -> Result<Self> {
+        Ok(Self {
+            ecdsa_verifying_key: ecdsa::VerifyingKey::<C2>::from_encoded_point(public_key)?,
+            phantom: core::marker::PhantomData,
+        })
+    }
+
+    /// Serialize this [`VerifyingKey`] as a SEC1 [`EncodedPoint`], optionally
+    /// applying point compression.
+    pub fn to_encoded_point(&self, compress: bool) -> EncodedPoint<C2> {
+        self.ecdsa_verifying_key.to_encoded_point(compress)
+    }
+
+    /// Convert this [`VerifyingKey`] into the
+    /// `Elliptic-Curve-Point-to-Octet-String` encoding described in
+    /// SEC 1: Elliptic Curve Cryptography (Version 2.0) section 2.3.3
+    /// (page 10).
+    ///
+    /// <http://www.secg.org/sec1-v2.pdf>
+    #[cfg(feature = "alloc")]
+    pub fn to_sec1_bytes(&self) -> Box<[u8]>
+    where
+        C2: PointCompression,
+    {
+        self.ecdsa_verifying_key.to_sec1_bytes()
+    }
+
+    /// Borrow the inner [`AffinePoint`] for this public key.
+    pub fn as_affine(&self) -> &AffinePoint<C2> {
+        self.ecdsa_verifying_key.as_affine()
+    }
+}
+
+// From https://docs.rs/ecdsa/0.16.9/src/ecdsa/verifying.rs.html#157
+impl<C1, C2: PrimeCurve + CurveArithmetic> PrehashVerifier<Signature<C2>> for VerifyingKey<C1, C2>
+where
+    C1: IntrinsicCurve + PrimeCurve,
+    C2: PrimeCurve + CurveArithmetic,
+    AffinePoint<C2>: VerifyPrimitive<C2>,
+    SignatureSize<C2>: ArrayLength<u8>,
+{
+    fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C2>) -> Result<()> {
+        self.ecdsa_verifying_key.verify_prehash(prehash, signature)
+    }
+}
+
+// From https://docs.rs/ecdsa/0.16.9/src/ecdsa/verifying.rs.html#294
+impl<C1, C2: PrimeCurve + CurveArithmetic> From<&VerifyingKey<C1, C2>> for EncodedPoint<C2>
+where
+    C1: IntrinsicCurve + PrimeCurve,
+    C2: PrimeCurve + CurveArithmetic + PointCompression,
+    AffinePoint<C2>: FromEncodedPoint<C2> + ToEncodedPoint<C2>,
+    FieldBytesSize<C2>: ModulusSize,
+{
+    fn from(verifying_key: &VerifyingKey<C1, C2>) -> EncodedPoint<C2> {
+        verifying_key.ecdsa_verifying_key.into()
+    }
+}
+
+// This struct is public because it is used by the VerifyPrimitive impl in the k256 and p256 guest
+// libraries.
 #[repr(C)]
 #[derive(Clone)]
-pub struct PublicKey<C: IntrinsicCurve> {
+pub struct OpenVMVerifyingKey<C: IntrinsicCurve> {
+    pub(crate) inner: OpenVMPublicKey<C>,
+}
+
+// This struct is public because it is used by the VerifyPrimitive impl in the k256 and p256 guest
+#[repr(C)]
+#[derive(Clone)]
+pub struct OpenVMPublicKey<C: IntrinsicCurve> {
     /// Affine point
     point: <C as IntrinsicCurve>::Point,
 }
 
-impl<C: IntrinsicCurve> PublicKey<C>
+impl<C: IntrinsicCurve> OpenVMPublicKey<C>
 where
     C::Point: WeierstrassPoint + Group + FromCompressed<Coordinate<C>>,
     Coordinate<C>: IntMod,
@@ -104,25 +282,29 @@ where
     pub fn as_affine(&self) -> &<C as IntrinsicCurve>::Point {
         &self.point
     }
+
+    pub fn into_affine(self) -> <C as IntrinsicCurve>::Point {
+        self.point
+    }
 }
 
-impl<C: IntrinsicCurve> VerifyingKey<C>
+impl<C: IntrinsicCurve> OpenVMVerifyingKey<C>
 where
     C::Point: WeierstrassPoint + Group + FromCompressed<Coordinate<C>>,
     Coordinate<C>: IntMod,
     for<'a> &'a Coordinate<C>: Mul<&'a Coordinate<C>, Output = Coordinate<C>>,
 {
-    pub fn new(public_key: PublicKey<C>) -> Self {
+    pub fn new(public_key: OpenVMPublicKey<C>) -> Self {
         Self { inner: public_key }
     }
 
     pub fn from_sec1_bytes(bytes: &[u8]) -> Result<Self> {
-        let public_key = PublicKey::<C>::from_sec1_bytes(bytes)?;
+        let public_key = OpenVMPublicKey::<C>::from_sec1_bytes(bytes)?;
         Ok(Self::new(public_key))
     }
 
     pub fn from_affine(point: <C as IntrinsicCurve>::Point) -> Result<Self> {
-        let public_key = PublicKey::<C>::new(point);
+        let public_key = OpenVMPublicKey::<C>::new(point);
         Ok(Self::new(public_key))
     }
 
@@ -133,11 +315,15 @@ where
     pub fn as_affine(&self) -> &<C as IntrinsicCurve>::Point {
         self.inner.as_affine()
     }
+
+    pub fn into_affine(self) -> <C as IntrinsicCurve>::Point {
+        self.inner.into_affine()
+    }
 }
 
-impl<C> VerifyingKey<C>
+impl<C> OpenVMVerifyingKey<C>
 where
-    C: PrimeCurve + IntrinsicCurve,
+    C: IntrinsicCurve + PrimeCurve,
     C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>>,
     Coordinate<C>: IntMod,
     C::Scalar: IntMod + Reduce,
@@ -193,9 +379,9 @@ where
         let u2 = s.div_unsafe(&r);
         let NEG_G = C::Point::NEG_GENERATOR;
         let point = <C as IntrinsicCurve>::msm(&[neg_u1, u2], &[NEG_G, R]);
-        let public_key = PublicKey { point };
+        let public_key = OpenVMPublicKey { point };
 
-        Ok(VerifyingKey { inner: public_key })
+        Ok(OpenVMVerifyingKey { inner: public_key })
     }
 
     // Ref: https://docs.rs/ecdsa/latest/src/ecdsa/hazmat.rs.html#270
