@@ -379,7 +379,14 @@ where
         let neg_u1 = z.div_unsafe(&r);
         let u2 = s.div_unsafe(&r);
         let NEG_G = C::Point::NEG_GENERATOR;
-        let point = <C as IntrinsicCurve>::msm(&[neg_u1, u2], &[NEG_G, R]);
+
+        // let point = <C as IntrinsicCurve>::msm(&[neg_u1, u2], &[NEG_G, R]);
+
+        let bases = vec![NEG_G, R];
+        let coeffs = vec![neg_u1, u2];
+        let table = crate::weierstrass::CachedMulTable::<C>::new_with_prime_order(&bases, 4);
+        let point = table.windowed_mul(&coeffs);
+
         let public_key = OpenVMPublicKey { point };
 
         Ok(OpenVMVerifyingKey { inner: public_key })
