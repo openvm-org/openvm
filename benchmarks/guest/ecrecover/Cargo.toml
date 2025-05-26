@@ -23,6 +23,7 @@ derive_more = { version = "1.0.0", default-features = false, features = [
     "from",
     "display",
 ] }
+orig-k256 = { version = "0.13.4", package = "k256", default-features = false }
 
 [features]
 default = []
