@@ -2,7 +2,7 @@ use alloy_primitives::{Bytes, B256, B512};
 // Note: k256 here refers to openvm_k256
 // Be careful not to import Signature and VerifyingKey from the actual k256 crate
 // because those are type aliases that use non-zkvm implementations
-use k256::ecdsa::{Error, RecoveryId, Signature};
+use k256::ecdsa::{Error, RecoveryId};
 #[allow(unused_imports)]
 use k256::Secp256k1Point;
 use openvm::io::read_vec;
@@ -27,7 +27,7 @@ pub fn main() {
 
 fn ecrecover(sig: &B512, mut recid: u8, msg: &B256) -> Result<B256, Error> {
     // parse signature
-    let mut sig = Signature::from_slice(sig.as_slice())?;
+    let mut sig = ecdsa::Signature::<orig_k256::Secp256k1>::from_slice(sig.as_slice())?;
     if let Some(sig_normalized) = sig.normalize_s() {
         sig = sig_normalized;
         recid ^= 1;
