@@ -32,19 +32,19 @@ impl Ru32 {
     }
 }
 
-/// **SAFETY** Self must be 4-byte aligned
-impl<'a> Into<&'a u32> for &'a Ru32 {
+impl AsMut<u32> for Ru32 {
+    // **SAFETY** Self must be 4-byte aligned
     #[inline(always)]
-    fn into(self) -> &'a u32 {
-        unsafe { &*(self.0.as_ptr() as *const u32) }
+    fn as_mut(&mut self) -> &mut u32 {
+        unsafe { &mut *(self.0.as_ptr() as *mut u32) }
     }
 }
 
-/// **SAFETY** Self must be 4-byte aligned
-impl<'a> Into<&'a mut u32> for &'a mut Ru32 {
+impl AsRef<u32> for Ru32 {
+    // **SAFETY** Self must be 4-byte aligned
     #[inline(always)]
-    fn into(self) -> &'a mut u32 {
-        unsafe { &mut *(self.0.as_ptr() as *mut u32) }
+    fn as_ref(&self) -> &u32 {
+        unsafe { &*(self.0.as_ptr() as *const u32) }
     }
 }
 

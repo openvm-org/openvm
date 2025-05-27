@@ -227,7 +227,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
             memory,
             RV32_REGISTER_AS,
             record.rs1_ptr as u32,
-            (&mut record.reads_aux[0].prev_timestamp).into(),
+            record.reads_aux[0].prev_timestamp.as_mut(),
         );
 
         let rs2 = if e.as_canonical_u32() == RV32_REGISTER_AS {
@@ -238,7 +238,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
                 memory,
                 RV32_REGISTER_AS,
                 record.rs2,
-                (&mut record.reads_aux[1].prev_timestamp).into(),
+                record.reads_aux[1].prev_timestamp.as_mut(),
             )
         } else {
             record.rs2_as = RV32_IMM_AS;

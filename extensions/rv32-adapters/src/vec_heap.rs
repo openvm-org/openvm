@@ -374,7 +374,7 @@ impl<
                 memory,
                 RV32_REGISTER_AS,
                 record.rs_ptrs[i].into(),
-                (&mut record.rs_read_aux[i].prev_timestamp).into(),
+                record.rs_read_aux[i].prev_timestamp.as_mut(),
             ))
         });
 
@@ -383,7 +383,7 @@ impl<
             memory,
             RV32_REGISTER_AS,
             a.as_canonical_u32(),
-            (&mut record.rd_read_aux.prev_timestamp).into(),
+            record.rd_read_aux.prev_timestamp.as_mut(),
         ));
 
         // Read memory values
@@ -397,7 +397,7 @@ impl<
                     memory,
                     RV32_MEMORY_AS,
                     record.rs_vals[i].as_u32() + (j * READ_SIZE) as u32,
-                    (&mut record.reads_aux[i][j].prev_timestamp).into(),
+                    record.reads_aux[i][j].prev_timestamp.as_mut(),
                 )
             })
         })
@@ -429,8 +429,8 @@ impl<
                 RV32_MEMORY_AS,
                 record.rd_val.as_u32() + (i * WRITE_SIZE) as u32,
                 &data[i],
-                (&mut record.writes_aux[i].prev_timestamp).into(),
-                (&mut record.writes_aux[i].prev_data).into(),
+                record.writes_aux[i].prev_timestamp.as_mut(),
+                &mut record.writes_aux[i].prev_data,
             );
         }
     }
