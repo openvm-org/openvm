@@ -62,6 +62,13 @@ impl AppExecutionCommit {
         }
     }
 
+    pub fn from_field_commit(vm_commit: [F; DIGEST_SIZE], exe_commit: [F; DIGEST_SIZE]) -> Self {
+        Self {
+            vm_commit: vm_commit.map(|x| x.as_canonical_u32()),
+            exe_commit: exe_commit.map(|x| x.as_canonical_u32()),
+        }
+    }
+
     pub fn to_bn254_commit(&self) -> AppExecutionBn254Commit {
         AppExecutionBn254Commit {
             vm_commit: self.vm_commit_to_bn254(),
@@ -77,6 +84,7 @@ impl AppExecutionCommit {
         babybear_u32_digest_to_bn254(&self.exe_commit)
     }
 }
+
 fn babybear_u32_digest_to_bn254(digest: &[u32; DIGEST_SIZE]) -> Bn254Fr {
     babybear_digest_to_bn254(&digest.map(F::from_canonical_u32))
 }
