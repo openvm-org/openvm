@@ -1,5 +1,5 @@
 use std::{
-    fs::read_to_string,
+    fs::{read_dir, read_to_string},
     path::{Path, PathBuf},
 };
 
@@ -144,4 +144,20 @@ pub fn get_single_target_name(cargo_args: &RunCargoArgs) -> Result<String> {
         cargo_args.bin[0].clone()
     };
     Ok(single_target_name)
+}
+
+pub fn get_files_with_ext(dir: &Path, extension: &str) -> Result<Vec<PathBuf>> {
+    let dir = dir.canonicalize()?;
+    let mut files = Vec::new();
+    for entry in read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_file()
+            && path
+                .to_str()
+                .is_some_and(|path_str| path_str.ends_with(extension))
+        {
+            files.push(path);
+        }
+    }
+    Ok(files)
 }

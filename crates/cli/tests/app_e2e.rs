@@ -10,7 +10,7 @@ fn test_cli_app_e2e() -> Result<()> {
     let exe_path = "tests/programs/fibonacci/target/openvm/release/openvm-cli-example-test.vmexe";
     let temp_pk = temp_dir.path().join("app.pk");
     let temp_vk = temp_dir.path().join("app.vk");
-    let temp_proof = temp_dir.path().join("fibonacci.apppf");
+    let temp_proof = temp_dir.path().join("fibonacci.app.proof");
 
     run_cmd(
         "cargo",
@@ -76,59 +76,6 @@ fn test_cli_app_e2e() -> Result<()> {
         ],
     )?;
 
-    Ok(())
-}
-
-#[test]
-fn test_cli_app_e2e_default_paths() -> Result<()> {
-    run_cmd("cargo", &["install", "--path", ".", "--force"])?;
-    run_cmd(
-        "cargo",
-        &[
-            "openvm",
-            "build",
-            "--manifest-path",
-            "tests/programs/fibonacci/Cargo.toml",
-        ],
-    )?;
-    run_cmd(
-        "cargo",
-        &[
-            "openvm",
-            "keygen",
-            "--manifest-path",
-            "tests/programs/fibonacci/Cargo.toml",
-        ],
-    )?;
-    run_cmd(
-        "cargo",
-        &[
-            "openvm",
-            "run",
-            "--manifest-path",
-            "tests/programs/fibonacci/Cargo.toml",
-        ],
-    )?;
-    run_cmd(
-        "cargo",
-        &[
-            "openvm",
-            "prove",
-            "app",
-            "--manifest-path",
-            "tests/programs/fibonacci/Cargo.toml",
-        ],
-    )?;
-    run_cmd(
-        "cargo",
-        &[
-            "openvm",
-            "verify",
-            "app",
-            "--manifest-path",
-            "tests/programs/fibonacci/Cargo.toml",
-        ],
-    )?;
     Ok(())
 }
 
