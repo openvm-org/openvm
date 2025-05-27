@@ -14,10 +14,10 @@ The following figure shows that the shape of the aggregation tree is not fixed.
 
 ![Another aggregation example](../../assets/agg-2.png)
 
-In some cases, a minimal snark proof is not needed. We can use the following aggregation architecture to generate a
-stark proof which proves the whole execution.
+In some cases, a minimal SNARK proof is not needed. We can use the following aggregation architecture to generate a
+STARK proof which proves the whole execution.
 
-![Stark aggregation example](../../assets/agg-stark.png)
+![STARK aggregation example](../../assets/agg-stark.png)
 
 We will now give an overview of the steps of the overall aggregation, starting from the final smart contract verifier
 and going down to the application proof.
