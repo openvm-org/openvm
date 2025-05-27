@@ -57,6 +57,20 @@ pub struct VmConnectorPvs<F> {
     pub is_terminate: F,
 }
 
+impl<F: PrimeField32> VmConnectorPvs<F> {
+    pub fn is_terminate(&self) -> bool {
+        self.is_terminate == F::from_bool(true)
+    }
+
+    pub fn exit_code(&self) -> Option<u32> {
+        if self.is_terminate() && self.exit_code == F::ZERO {
+            Some(self.exit_code.as_canonical_u32())
+        } else {
+            None
+        }
+    }
+}
+
 impl<F: Field> BaseAirWithPublicValues<F> for VmConnectorAir {
     fn num_public_values(&self) -> usize {
         VmConnectorPvs::<F>::width()

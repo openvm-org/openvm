@@ -2,7 +2,7 @@ use std::{borrow::Borrow, fs::read, marker::PhantomData, path::Path, sync::Arc};
 
 #[cfg(feature = "evm-verify")]
 use alloy_sol_types::sol;
-use commit::commit_app_exe;
+use commit::{commit_app_exe, AppExecutionCommit};
 use config::{AggregationTreeConfig, AppConfig};
 use eyre::Result;
 use keygen::{AppProvingKey, AppVerifyingKey};
@@ -14,8 +14,8 @@ use openvm_circuit::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         instructions::exe::VmExe,
         verify_segments, ContinuationVmProof, ExecutionError, InitFileGenerator,
-        VerifiedExecutionPayload, VmConfig, VmExecutor, PROGRAM_CACHED_TRACE_INDEX,
-        PUBLIC_VALUES_AIR_ID,
+        VerifiedExecutionPayload, VmConfig, VmExecutor, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
+        PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
     },
     system::{
         memory::{tree::public_values::extract_public_values, CHUNK},
@@ -328,17 +328,30 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
 
     pub fn verify_e2e_stark_proof(
         &self,
-        agg_stark_pk: AggStarkProvingKey,
+        agg_stark_pk: &AggStarkProvingKey,
         proof: &VmStarkProof<SC>,
-    ) -> Result<[F; CHUNK]> {
+    ) -> Result<AppExecutionCommit> {
+        proof
+            .proof
+            .per_air
+            .iter()
+            .find(|p| p.air_id == PROGRAM_AIR_ID)
+            .ok_or_else(|| eyre::eyre!("Missing program AIR"))?;
+        proof
+            .proof
+            .per_air
+            .iter()
+            .find(|p| p.air_id == CONNECTOR_AIR_ID)
+            .ok_or_else(|| eyre::eyre!("Missing connector AIR"))?;
+
         let program_commit =
             proof.proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref();
-        let internal_commit: &[_; CHUNK] = &agg_stark_pk
+        let vm_commit: &[_; CHUNK] = &agg_stark_pk
             .internal_committed_exe
             .get_program_commit()
             .into();
 
-        let vm_pk = if program_commit == internal_commit {
+        let vm_pk = if program_commit == vm_commit {
             &agg_stark_pk.internal_vm_pk
         } else {
             &agg_stark_pk.leaf_vm_pk
@@ -351,9 +364,21 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
             .per_air
             .iter()
             .find(|p| p.air_id == PUBLIC_VALUES_AIR_ID)
-            .unwrap();
+            .ok_or_else(|| eyre::eyre!("Missing public values AIR"))?;
+
         let pvs: &VmVerifierPvs<_> =
             public_values_air_proof_data.public_values[..VmVerifierPvs::<u8>::width()].borrow();
+
+        if let Some(exit_code) = pvs.connector.exit_code() {
+            if exit_code != 0 {
+                return Err(eyre::eyre!(
+                    "Invalid exit code: expected 0, got {}",
+                    exit_code
+                ));
+            }
+        } else {
+            return Err(eyre::eyre!("Program did not terminate"));
+        }
 
         let hasher = vm_poseidon2_hasher();
         let public_values_root = hasher.merkle_root(&proof.user_public_values);
@@ -368,7 +393,9 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         let start_pc = pvs.connector.initial_pc;
         let initial_memory_root = &pvs.memory.initial_root;
         let exe_commit = compute_exe_commit(&hasher, program_commit, initial_memory_root, start_pc);
-        Ok(exe_commit)
+        Ok(AppExecutionCommit::from_field_commit(
+            *vm_commit, exe_commit,
+        ))
     }
 
     #[cfg(feature = "evm-prove")]

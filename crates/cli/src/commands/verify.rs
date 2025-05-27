@@ -120,7 +120,7 @@ impl VerifyCmd {
                     files[0].clone()
                 };
                 let stark_proof = decode_from_file(proof_path)?;
-                sdk.verify_e2e_stark_proof(agg_stark_pk, &stark_proof)?;
+                sdk.verify_e2e_stark_proof(&agg_stark_pk, &stark_proof)?;
             }
             #[cfg(feature = "evm-verify")]
             VerifySubCommand::Evm { proof } => {
