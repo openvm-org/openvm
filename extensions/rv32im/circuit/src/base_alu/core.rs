@@ -7,9 +7,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, EmptyLayout,
-        MatrixRecordArena, MinimalInstruction, RecordArena, Result, RowMajorMatrixArena,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, MinimalInstruction, RecordArena, Result, StepExecutorE1, TraceFiller,
+        TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -19,24 +19,18 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
-    TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode,
-};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    p3_matrix::dense::RowMajorMatrix,
     rap::BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
-
-use crate::adapters::{Rv32BaseAluAdapterCols, Rv32BaseAluAdapterRecord};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -222,7 +216,7 @@ where
         >,
 {
     /// Instructions that use one trace row per instruction have implicit layout
-    type RecordLayout = EmptyLayout;
+    type RecordLayout = AdapterCoreLayout;
     type RecordMut<'a> = (A::RecordMut<'a>, &'a mut BaseAluCoreRecord<NUM_LIMBS>);
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -236,13 +230,14 @@ where
         arena: &'buf mut RA,
     ) -> Result<()>
     where
-        RA: RecordArena<'buf, EmptyLayout, Self::RecordMut<'buf>>,
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
     {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-
-        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout);
+        let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
+            adapter_width: A::WIDTH * size_of::<F>(),
+        });
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -314,64 +309,6 @@ where
             core_row.b = record.b.map(F::from_canonical_u8);
             core_row.a = record.a.map(F::from_canonical_u8);
         }
-    }
-}
-
-pub struct Rv32BaseAluRecordArena<F> {
-    inner: MatrixRecordArena<F>,
-}
-
-// NOTE[jpw]: this is an implementation only for RV32IM extension, not for bigint etc
-impl<'a, F: PrimeField32>
-    RecordArena<
-        'a,
-        EmptyLayout,
-        (
-            &'a mut Rv32BaseAluAdapterRecord,
-            &'a mut BaseAluCoreRecord<RV32_REGISTER_NUM_LIMBS>,
-        ),
-    > for Rv32BaseAluRecordArena<F>
-{
-    fn alloc(
-        &'a mut self,
-        _: EmptyLayout,
-    ) -> (
-        &'a mut Rv32BaseAluAdapterRecord,
-        &'a mut BaseAluCoreRecord<RV32_REGISTER_NUM_LIMBS>,
-    ) {
-        let buffer = self.inner.alloc_single_row();
-        // NOTE: the Cols type has generic <F> because we want the size in bytes, not number of
-        // field elements
-        let (adapter_buffer, core_buffer) =
-            buffer.split_at_mut(size_of::<Rv32BaseAluAdapterCols<F>>());
-        // PERF: we could skip these unwraps if the RecordArena guarantees the size and alignment
-        // properties
-        let (adapter_record, _) =
-            Rv32BaseAluAdapterRecord::mut_from_prefix(adapter_buffer).unwrap();
-        let (core_record, _) = BaseAluCoreRecord::mut_from_prefix(core_buffer).unwrap();
-
-        (adapter_record, core_record)
-    }
-}
-
-// TODO: make a macro
-impl<F: Field> RowMajorMatrixArena<F> for Rv32BaseAluRecordArena<F> {
-    fn with_capacity(height: usize, width: usize) -> Self {
-        Self {
-            inner: MatrixRecordArena::with_capacity(height, width),
-        }
-    }
-
-    fn width(&self) -> usize {
-        self.inner.width()
-    }
-
-    fn trace_offset(&self) -> usize {
-        self.inner.trace_offset()
-    }
-
-    fn into_matrix(self) -> RowMajorMatrix<F> {
-        self.inner.into_matrix()
     }
 }
 

@@ -6,15 +6,15 @@ use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PackedValue, PrimeField32},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     AirRef, Chip, ChipUsageGetter,
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use zerocopy::FromBytes;
+use serde::{Deserialize, Serialize};
+use zerocopy::{FromBytes, IntoBytes, KnownLayout};
 
 use super::{ExecutionState, InsExecutorE1, InstructionExecutor, Result, VmStateMut};
 use crate::system::memory::{
@@ -235,6 +235,63 @@ impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
     }
 }
 
+/// A record arena struct that can be used by chips that
+/// - have a single row per instruction
+/// - have trace row = [adapter_row, core_row]
+/// TODO(arayi): come up with a better name
+pub struct AdapterCoreRecordArena<F> {
+    inner: MatrixRecordArena<F>,
+}
+
+/// The minimal information that [AdapterCoreRecordArena] needs to know to allocate a row
+/// **WARNING**: `adapter_width` is in bytes, not number of field elements
+pub struct AdapterCoreLayout {
+    pub adapter_width: usize,
+}
+
+/// RecordArena implementation for [AdapterCoreRecordArena]
+/// A is the adapter record type and C is the core record type
+impl<'a, F: Field, A, C> RecordArena<'a, AdapterCoreLayout, (&'a mut A, &'a mut C)>
+    for AdapterCoreRecordArena<F>
+where
+    A: FromBytes + IntoBytes + KnownLayout,
+    C: FromBytes + IntoBytes + KnownLayout,
+{
+    fn alloc(&'a mut self, layout: AdapterCoreLayout) -> (&'a mut A, &'a mut C) {
+        let buffer = self.inner.alloc_single_row();
+        // NOTE: the Cols type has generic <F> because we want the size in bytes, not number of
+        // field elements
+        let (adapter_buffer, core_buffer) = buffer.split_at_mut(layout.adapter_width);
+        // PERF: we could skip these unwraps if the RecordArena guarantees the size and alignment
+        // properties
+        let (adapter_record, _) = A::mut_from_prefix(adapter_buffer).unwrap();
+        let (core_record, _) = C::mut_from_prefix(core_buffer).unwrap();
+
+        (adapter_record, core_record)
+    }
+}
+
+// TODO: make a macro
+impl<F: Field> RowMajorMatrixArena<F> for AdapterCoreRecordArena<F> {
+    fn with_capacity(height: usize, width: usize) -> Self {
+        Self {
+            inner: MatrixRecordArena::with_capacity(height, width),
+        }
+    }
+
+    fn width(&self) -> usize {
+        self.inner.width()
+    }
+
+    fn trace_offset(&self) -> usize {
+        self.inner.trace_offset()
+    }
+
+    fn into_matrix(self) -> RowMajorMatrix<F> {
+        self.inner.into_matrix()
+    }
+}
+
 // TODO(ayush): rename to ChipWithExecutionContext or something
 pub struct NewVmChipWrapper<F, AIR, STEP, RA> {
     pub air: AIR,
@@ -353,6 +410,7 @@ where
 /// is reused or shared by multiple implementations. It is not required to implement this trait if
 /// it is easier to implement the [TraceStep] trait directly without this trait.
 pub trait AdapterTraceStep<F, CTX> {
+    const WIDTH: usize;
     type ReadData;
     type WriteData;
     // @dev This can either be a &mut _ type or a struct with &mut _ fields.

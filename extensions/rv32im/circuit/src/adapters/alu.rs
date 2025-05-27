@@ -19,7 +19,6 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
-    TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -176,17 +175,16 @@ pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize> {
 
 // Intermediate type that should not be copied or cloned and should be directly written to
 #[repr(C)]
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Debug)]
 pub struct Rv32BaseAluAdapterRecord {
     pub from_pc: u32,
     pub from_timestamp: u32,
 
     // Pack u8 together for alignment
-    pub rd_ptr: u8,
-    pub rs1_ptr: u8,
+    pub rd_ptr: u32,
+    pub rs1_ptr: u32,
     /// 1 if rs2 was a read, 0 if an immediate
-    pub rs2_as: u8,
-    pub _padding: u8,
+    pub rs2_as: u32,
 
     /// Pointer if rs2 was a read, immediate value otherwise
     pub rs2: u32,
@@ -198,6 +196,7 @@ pub struct Rv32BaseAluAdapterRecord {
 impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     for Rv32BaseAluAdapterStep<LIMB_BITS>
 {
+    const WIDTH: usize = size_of::<Rv32BaseAluAdapterCols<u8>>();
     type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
     type WriteData = [[u8; RV32_REGISTER_NUM_LIMBS]; 1];
     type RecordMut<'a> = &'a mut Rv32BaseAluAdapterRecord;
@@ -223,26 +222,26 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
             e.as_canonical_u32() == RV32_REGISTER_AS || e.as_canonical_u32() == RV32_IMM_AS
         );
 
-        record.rs1_ptr = b.as_canonical_u32() as u8;
+        record.rs1_ptr = b.as_canonical_u32();
         let rs1 = tracing_read(
             memory,
             RV32_REGISTER_AS,
             record.rs1_ptr as u32,
-            &mut record.reads_aux[0].prev_timestamp,
+            (&mut record.reads_aux[0].prev_timestamp).into(),
         );
 
         let rs2 = if e.as_canonical_u32() == RV32_REGISTER_AS {
-            record.rs2_as = RV32_REGISTER_AS as u8;
+            record.rs2_as = RV32_REGISTER_AS;
             record.rs2 = c.as_canonical_u32();
 
             tracing_read(
                 memory,
                 RV32_REGISTER_AS,
                 record.rs2,
-                &mut record.reads_aux[1].prev_timestamp,
+                (&mut record.reads_aux[1].prev_timestamp).into(),
             )
         } else {
-            record.rs2_as = RV32_IMM_AS as u8;
+            record.rs2_as = RV32_IMM_AS;
 
             tracing_read_imm(memory, c.as_canonical_u32(), &mut record.rs2)
         };
@@ -262,7 +261,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        record.rd_ptr = a.as_canonical_u32() as u8;
+        record.rd_ptr = a.as_canonical_u32();
         tracing_write(
             memory,
             RV32_REGISTER_AS,
@@ -309,12 +308,12 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
             let rs2_as = record.rs2_as;
             if rs2_as != 0 {
                 mem_helper.fill(
-                    record.reads_aux[1].prev_timestamp,
+                    record.reads_aux[1].prev_timestamp.into(),
                     timestamp,
                     adapter_row.reads_aux[1].as_mut(),
                 );
             } else {
-                let rs2_imm = adapter_row.rs2.as_canonical_u32();
+                let rs2_imm = record.rs2;
                 let mask = (1 << RV32_CELL_BITS) - 1;
                 self.bitwise_lookup_chip
                     .request_range(rs2_imm & mask, (rs2_imm >> 8) & mask);
@@ -322,16 +321,16 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
             timestamp -= 1;
 
             mem_helper.fill(
-                record.reads_aux[0].prev_timestamp,
+                record.reads_aux[0].prev_timestamp.into(),
                 timestamp,
                 adapter_row.reads_aux[0].as_mut(),
             );
 
             // Write to rs2 first just in case since it appears later in Record
             adapter_row.rs2 = F::from_canonical_u32(record.rs2);
-            adapter_row.rs2_as = F::from_canonical_u8(rs2_as);
-            adapter_row.rs1_ptr = F::from_canonical_u8(record.rs1_ptr);
-            adapter_row.rd_ptr = F::from_canonical_u8(record.rd_ptr);
+            adapter_row.rs2_as = F::from_canonical_u32(rs2_as);
+            adapter_row.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
+            adapter_row.rd_ptr = F::from_canonical_u32(record.rd_ptr);
             adapter_row.from_state.timestamp = F::from_canonical_u32(timestamp);
             adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
         }

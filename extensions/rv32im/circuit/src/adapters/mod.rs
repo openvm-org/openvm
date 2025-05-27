@@ -12,19 +12,19 @@ use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 
 mod alu;
-mod branch;
-mod jalr;
-mod loadstore;
-mod mul;
-mod rdwrite;
+// mod branch;
+// mod jalr;
+// mod loadstore;
+// mod mul;
+// mod rdwrite;
 
 pub use alu::*;
-pub use branch::*;
-pub use jalr::*;
-pub use loadstore::*;
-pub use mul::*;
+// pub use branch::*;
+// pub use jalr::*;
+// pub use loadstore::*;
+// pub use mul::*;
+// pub use rdwrite::*;
 pub use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-pub use rdwrite::*;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 /// 256-bit heap integer stored as 32 bytes (32 limbs of 8-bits)
@@ -39,7 +39,7 @@ pub const RV_B_TYPE_IMM_BITS: usize = 13;
 pub const RV_J_TYPE_IMM_BITS: usize = 21;
 
 #[repr(C)]
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Debug)]
 pub struct Rv32WordWriteAuxRecord {
     pub prev_timestamp: u32,
     pub prev_data: [u8; RV32_REGISTER_NUM_LIMBS],
@@ -151,7 +151,7 @@ where
     F: PrimeField32,
 {
     let (t_prev, data) = timed_read(memory, address_space, ptr);
-    *prev_timestamp = t_prev;
+    *prev_timestamp = t_prev.into();
     data
 }
 
