@@ -299,7 +299,7 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
                 .writes_aux
                 .set_prev_data(record.writes_aux.prev_data.map(F::from_canonical_u8));
             mem_helper.fill(
-                record.writes_aux.prev_timestamp.as_u32(),
+                record.writes_aux.prev_timestamp.as_inner(),
                 timestamp,
                 adapter_row.writes_aux.as_mut(),
             );

@@ -389,14 +389,14 @@ impl<
         // Read memory values
         from_fn(|i| {
             assert!(
-                (record.rs_vals[i].as_u32() + (READ_SIZE * BLOCKS_PER_READ - 1) as u32)
+                (record.rs_vals[i].as_inner() + (READ_SIZE * BLOCKS_PER_READ - 1) as u32)
                     < (1 << self.pointer_max_bits) as u32
             );
             from_fn(|j| {
                 tracing_read(
                     memory,
                     RV32_MEMORY_AS,
-                    record.rs_vals[i].as_u32() + (j * READ_SIZE) as u32,
+                    record.rs_vals[i].as_inner() + (j * READ_SIZE) as u32,
                     record.reads_aux[i][j].prev_timestamp.as_mut(),
                 )
             })
@@ -419,7 +419,7 @@ impl<
         debug_assert_eq!(instruction.e.as_canonical_u32(), RV32_MEMORY_AS);
 
         assert!(
-            record.rd_val.as_u32() as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1
+            record.rd_val.as_inner() as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1
                 < (1 << self.pointer_max_bits)
         );
 
@@ -427,7 +427,7 @@ impl<
             tracing_write(
                 memory,
                 RV32_MEMORY_AS,
-                record.rd_val.as_u32() + (i * WRITE_SIZE) as u32,
+                record.rd_val.as_inner() + (i * WRITE_SIZE) as u32,
                 &data[i],
                 record.writes_aux[i].prev_timestamp.as_mut(),
                 &mut record.writes_aux[i].prev_data,

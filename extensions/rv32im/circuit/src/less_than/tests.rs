@@ -104,7 +104,8 @@ fn set_and_execute<E: InstructionExecutor<F>>(
     );
     tester.execute(chip, &instruction);
 
-    let (cmp, _, _, _) = run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
+    let (cmp, _, _, _) =
+        run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode == SLT, &b, &c);
     let mut a = [F::ZERO; RV32_REGISTER_NUM_LIMBS];
     a[0] = F::from_bool(cmp);
     assert_eq!(a, tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd));
@@ -418,7 +419,7 @@ fn run_sltu_sanity_test() {
     let x: [u8; RV32_REGISTER_NUM_LIMBS] = [145, 34, 25, 205];
     let y: [u8; RV32_REGISTER_NUM_LIMBS] = [73, 35, 25, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(SLTU, &x, &y);
+        run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(false, &x, &y);
     assert!(cmp_result);
     assert_eq!(diff_idx, 1);
     assert!(!x_sign); // unsigned
@@ -430,7 +431,7 @@ fn run_slt_same_sign_sanity_test() {
     let x: [u8; RV32_REGISTER_NUM_LIMBS] = [145, 34, 25, 205];
     let y: [u8; RV32_REGISTER_NUM_LIMBS] = [73, 35, 25, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(SLT, &x, &y);
+        run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(true, &x, &y);
     assert!(cmp_result);
     assert_eq!(diff_idx, 1);
     assert!(x_sign); // negative
@@ -442,7 +443,7 @@ fn run_slt_diff_sign_sanity_test() {
     let x: [u8; RV32_REGISTER_NUM_LIMBS] = [45, 35, 25, 55];
     let y: [u8; RV32_REGISTER_NUM_LIMBS] = [173, 34, 25, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(SLT, &x, &y);
+        run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(true, &x, &y);
     assert!(!cmp_result);
     assert_eq!(diff_idx, 3);
     assert!(!x_sign); // positive
@@ -453,7 +454,7 @@ fn run_slt_diff_sign_sanity_test() {
 fn run_less_than_equal_sanity_test() {
     let x: [u8; RV32_REGISTER_NUM_LIMBS] = [45, 35, 25, 55];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(SLT, &x, &x);
+        run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(true, &x, &x);
     assert!(!cmp_result);
     assert_eq!(diff_idx, RV32_REGISTER_NUM_LIMBS);
     assert!(!x_sign); // positive
