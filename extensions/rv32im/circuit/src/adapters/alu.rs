@@ -11,6 +11,7 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+            MemoryWriteAuxRecord,
         },
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
@@ -34,8 +35,7 @@ use openvm_stark_backend::{
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 use super::{
-    tracing_read, tracing_read_imm, tracing_write, Rv32WordWriteAuxRecord, RV32_CELL_BITS,
-    RV32_REGISTER_NUM_LIMBS,
+    tracing_read, tracing_read_imm, tracing_write, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
 use crate::adapters::{memory_read, memory_write};
 
@@ -190,7 +190,7 @@ pub struct Rv32BaseAluAdapterRecord {
     pub rs2: u32,
 
     pub reads_aux: [MemoryReadAuxRecord; 2],
-    pub writes_aux: Rv32WordWriteAuxRecord,
+    pub writes_aux: MemoryWriteAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
 impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
@@ -267,7 +267,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
             RV32_REGISTER_AS,
             record.rd_ptr as u32,
             &data[0],
-            &mut record.writes_aux.prev_timestamp,
+            record.writes_aux.prev_timestamp.as_mut(),
             &mut record.writes_aux.prev_data,
         );
     }
@@ -299,7 +299,7 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
                 .writes_aux
                 .set_prev_data(record.writes_aux.prev_data.map(F::from_canonical_u8));
             mem_helper.fill(
-                record.writes_aux.prev_timestamp,
+                record.writes_aux.prev_timestamp.as_u32(),
                 timestamp,
                 adapter_row.writes_aux.as_mut(),
             );

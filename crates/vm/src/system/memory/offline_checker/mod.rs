@@ -49,14 +49,14 @@ impl AsRef<u32> for Ru32 {
 }
 
 #[repr(transparent)]
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Debug, Unaligned)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Debug)]
 pub struct MemoryReadAuxRecord {
     pub prev_timestamp: Ru32,
 }
 
 /// **SAFETY** NUM_LIMBS must be divisible by 4 so that the `prev_data` field is aligned
 #[repr(C)]
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Debug)]
 pub struct MemoryWriteAuxRecord<const NUM_LIMBS: usize> {
     pub prev_timestamp: Ru32,
     pub prev_data: [u8; NUM_LIMBS],
