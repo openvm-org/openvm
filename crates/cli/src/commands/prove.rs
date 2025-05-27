@@ -16,14 +16,14 @@ use openvm_sdk::{
 };
 
 use super::{RunArgs, RunCargoArgs};
-#[cfg(feature = "evm-prove")]
-use crate::util::read_default_agg_pk;
 use crate::{
     commands::build,
-    default::*,
+    default::default_agg_stark_pk_path,
     input::read_to_stdin,
     util::{get_app_pk_path, get_manifest_path_and_dir, get_single_target_name, get_target_dir},
 };
+#[cfg(feature = "evm-prove")]
+use crate::{default::default_params_dir, util::read_default_agg_pk};
 
 #[derive(Parser)]
 #[command(name = "prove", about = "Generate a program proof")]
@@ -38,11 +38,10 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            default_value = DEFAULT_APP_PROOF_PATH,
-            help = "Path to app proof output",
+            help = "Path to app proof output, by default will be ./${bin_name}.app.proof",
             help_heading = "Output"
         )]
-        proof: PathBuf,
+        proof: Option<PathBuf>,
 
         #[arg(
             long,
@@ -62,11 +61,10 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            default_value = DEFAULT_STARK_PROOF_PATH,
-            help = "Path to STARK proof output",
+            help = "Path to STARK proof output, by default will be ./${bin_name}.stark.proof",
             help_heading = "Output"
         )]
-        proof: PathBuf,
+        proof: Option<PathBuf>,
 
         #[arg(
             long,
@@ -90,11 +88,10 @@ enum ProveSubCommand {
         #[arg(
             long,
             action,
-            default_value = DEFAULT_EVM_PROOF_PATH,
-            help = "Path to EVM proof output",
+            help = "Path to EVM proof output, by default will be ./${bin_name}.evm.proof",
             help_heading = "Output"
         )]
-        proof: PathBuf,
+        proof: Option<PathBuf>,
 
         #[arg(
             long,
@@ -126,12 +123,18 @@ impl ProveCmd {
             } => {
                 let sdk = Sdk::new();
                 let app_pk = load_app_pk(app_pk, cargo_args)?;
-                let committed_exe =
+                let (committed_exe, target_name) =
                     load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
 
                 let app_proof =
                     sdk.generate_app_proof(app_pk, committed_exe, read_to_stdin(&run_args.input)?)?;
-                write_app_proof_to_file(app_proof, proof)?;
+
+                let proof_path = if let Some(proof) = proof {
+                    proof
+                } else {
+                    &PathBuf::from(format!("{}.app.proof", target_name))
+                };
+                write_app_proof_to_file(app_proof, proof_path)?;
             }
             ProveSubCommand::Stark {
                 app_pk,
@@ -142,7 +145,7 @@ impl ProveCmd {
             } => {
                 let sdk = Sdk::new().with_agg_tree_config(*agg_tree_config);
                 let app_pk = load_app_pk(app_pk, cargo_args)?;
-                let committed_exe =
+                let (committed_exe, target_name) =
                     load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
 
                 let commits = AppExecutionCommit::compute(
@@ -163,7 +166,12 @@ impl ProveCmd {
                     read_to_stdin(&run_args.input)?,
                 )?;
 
-                encode_to_file(proof, stark_proof)?;
+                let proof_path = if let Some(proof) = proof {
+                    proof
+                } else {
+                    &PathBuf::from(format!("{}.stark.proof", target_name))
+                };
+                encode_to_file(proof_path, stark_proof)?;
             }
             #[cfg(feature = "evm-prove")]
             ProveSubCommand::Evm {
@@ -177,7 +185,7 @@ impl ProveCmd {
 
                 let sdk = Sdk::new().with_agg_tree_config(*agg_tree_config);
                 let app_pk = load_app_pk(app_pk, cargo_args)?;
-                let committed_exe =
+                let (committed_exe, target_name) =
                     load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
 
                 let commits = AppExecutionCommit::compute(
@@ -201,7 +209,12 @@ impl ProveCmd {
                     read_to_stdin(&run_args.input)?,
                 )?;
 
-                write_evm_proof_to_file(evm_proof, proof)?;
+                let proof_path = if let Some(proof) = proof {
+                    proof
+                } else {
+                    &PathBuf::from(format!("{}.evm.proof", target_name))
+                };
+                write_evm_proof_to_file(evm_proof, proof_path)?;
             }
         }
         Ok(())
@@ -224,12 +237,13 @@ pub(crate) fn load_app_pk(
     Ok(Arc::new(read_app_pk_from_file(app_pk_path)?))
 }
 
+// Returns (committed_exe, target_name) where target_name has no extension
 pub(crate) fn load_or_build_and_commit_exe(
     sdk: &Sdk,
     run_args: &RunArgs,
     cargo_args: &RunCargoArgs,
     app_pk: &Arc<AppProvingKey<SdkVmConfig>>,
-) -> Result<Arc<NonRootCommittedExe>> {
+) -> Result<(Arc<NonRootCommittedExe>, String)> {
     let exe_path = if let Some(exe) = &run_args.exe {
         exe
     } else {
@@ -243,5 +257,8 @@ pub(crate) fn load_or_build_and_commit_exe(
 
     let app_exe = read_exe_from_file(exe_path)?;
     let committed_exe = sdk.commit_app_exe(app_pk.app_fri_params(), app_exe)?;
-    Ok(committed_exe)
+    Ok((
+        committed_exe,
+        exe_path.file_stem().unwrap().to_string_lossy().into_owned(),
+    ))
 }

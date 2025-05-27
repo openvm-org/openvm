@@ -11,9 +11,7 @@ use openvm_sdk::{commit::AppExecutionCommit, fs::write_to_file_json, Sdk};
 use super::{RunArgs, RunCargoArgs};
 use crate::{
     commands::{load_app_pk, load_or_build_and_commit_exe},
-    util::{
-        get_manifest_path_and_dir, get_single_target_name, get_target_dir, get_target_output_dir,
-    },
+    util::{get_manifest_path_and_dir, get_target_dir, get_target_output_dir},
 };
 
 #[derive(Parser)]
@@ -76,7 +74,7 @@ impl CommitCmd {
             init_file_name: self.init_file_name.clone(),
             input: None,
         };
-        let committed_exe =
+        let (committed_exe, target_name) =
             load_or_build_and_commit_exe(&sdk, &run_args, &self.cargo_args, &app_pk)?;
 
         let commits = AppExecutionCommit::compute(
@@ -91,7 +89,6 @@ impl CommitCmd {
         let (manifest_path, _) = get_manifest_path_and_dir(&self.cargo_args.manifest_path)?;
         let target_dir = get_target_dir(&self.cargo_args.target_dir, &manifest_path);
         let target_output_dir = get_target_output_dir(&target_dir, &self.cargo_args.profile);
-        let target_name = get_single_target_name(&self.cargo_args)?;
 
         let commit_name = format!("{}.commit.json", &target_name);
         let commit_path = target_output_dir.join(&commit_name);
