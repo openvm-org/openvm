@@ -120,6 +120,7 @@ impl VerifyCmd {
                     }
                     files[0].clone()
                 };
+                println!("Verifying STARK proof at {}", proof_path.display());
                 let stark_proof = decode_from_file(proof_path)?;
                 sdk.verify_e2e_stark_proof(&agg_stark_pk, &stark_proof)?;
             }
