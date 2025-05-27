@@ -331,33 +331,16 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         agg_stark_pk: &AggStarkProvingKey,
         proof: &VmStarkProof<SC>,
     ) -> Result<AppExecutionCommit> {
-        proof
-            .proof
-            .per_air
-            .iter()
-            .find(|p| p.air_id == PROGRAM_AIR_ID)
-            .ok_or_else(|| eyre::eyre!("Missing program AIR"))?;
-        proof
-            .proof
-            .per_air
-            .iter()
-            .find(|p| p.air_id == CONNECTOR_AIR_ID)
-            .ok_or_else(|| eyre::eyre!("Missing connector AIR"))?;
-
-        let program_commit =
-            proof.proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref();
-        let vm_commit: &[_; CHUNK] = &agg_stark_pk
-            .internal_committed_exe
-            .get_program_commit()
-            .into();
-
-        let vm_pk = if program_commit == vm_commit {
-            &agg_stark_pk.internal_vm_pk
-        } else {
-            &agg_stark_pk.leaf_vm_pk
-        };
-        let e = E::new(vm_pk.fri_params);
-        e.verify(&vm_pk.vm_pk.get_vk(), &proof.proof)?;
+        if proof.proof.per_air.len() < 3 {
+            return Err(eyre::eyre!(
+                "Invalid number of AIRs: expected at least 3, got {}",
+                proof.proof.per_air.len()
+            ));
+        } else if proof.proof.per_air[0].air_id != PROGRAM_AIR_ID {
+            return Err(eyre::eyre!("Missing program AIR"));
+        } else if proof.proof.per_air[1].air_id != CONNECTOR_AIR_ID {
+            return Err(eyre::eyre!("Missing connector AIR"));
+        }
 
         let public_values_air_proof_data = proof
             .proof
@@ -365,6 +348,20 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
             .iter()
             .find(|p| p.air_id == PUBLIC_VALUES_AIR_ID)
             .ok_or_else(|| eyre::eyre!("Missing public values AIR"))?;
+
+        let vm_commit = proof.proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref();
+        let internal_commit: &[_; CHUNK] = &agg_stark_pk
+            .internal_committed_exe
+            .get_program_commit()
+            .into();
+
+        let vm_pk = if vm_commit == internal_commit {
+            &agg_stark_pk.internal_vm_pk
+        } else {
+            &agg_stark_pk.leaf_vm_pk
+        };
+        let e = E::new(vm_pk.fri_params);
+        e.verify(&vm_pk.vm_pk.get_vk(), &proof.proof)?;
 
         let pvs: &VmVerifierPvs<_> =
             public_values_air_proof_data.public_values[..VmVerifierPvs::<u8>::width()].borrow();
@@ -392,7 +389,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
 
         let start_pc = pvs.connector.initial_pc;
         let initial_memory_root = &pvs.memory.initial_root;
-        let exe_commit = compute_exe_commit(&hasher, program_commit, initial_memory_root, start_pc);
+        let exe_commit = compute_exe_commit(&hasher, vm_commit, initial_memory_root, start_pc);
         Ok(AppExecutionCommit::from_field_commit(
             *vm_commit, exe_commit,
         ))
