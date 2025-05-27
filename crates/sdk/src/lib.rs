@@ -340,14 +340,9 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
             return Err(eyre::eyre!("Missing program AIR"));
         } else if proof.proof.per_air[1].air_id != CONNECTOR_AIR_ID {
             return Err(eyre::eyre!("Missing connector AIR"));
+        } else if proof.proof.per_air[2].air_id != PUBLIC_VALUES_AIR_ID {
+            return Err(eyre::eyre!("Missing public values AIR"));
         }
-
-        let public_values_air_proof_data = proof
-            .proof
-            .per_air
-            .iter()
-            .find(|p| p.air_id == PUBLIC_VALUES_AIR_ID)
-            .ok_or_else(|| eyre::eyre!("Missing public values AIR"))?;
 
         let vm_commit = proof.proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref();
         let internal_commit: &[_; CHUNK] = &agg_stark_pk
@@ -363,6 +358,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         let e = E::new(vm_pk.fri_params);
         e.verify(&vm_pk.vm_pk.get_vk(), &proof.proof)?;
 
+        let public_values_air_proof_data = &proof.proof.per_air[2];
         let pvs: &VmVerifierPvs<_> =
             public_values_air_proof_data.public_values[..VmVerifierPvs::<u8>::width()].borrow();
 
