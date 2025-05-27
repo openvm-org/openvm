@@ -259,6 +259,6 @@ pub(crate) fn load_or_build_and_commit_exe(
     let committed_exe = sdk.commit_app_exe(app_pk.app_fri_params(), app_exe)?;
     Ok((
         committed_exe,
-        exe_path.file_stem().unwrap().to_str().unwrap().to_string(),
+        exe_path.file_stem().unwrap().to_string_lossy().into_owned(),
     ))
 }

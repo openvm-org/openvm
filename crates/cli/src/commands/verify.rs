@@ -82,6 +82,7 @@ impl VerifyCmd {
                     }
                     files[0].clone()
                 };
+                println!("Verifying application proof at {}", proof_path.display());
                 let app_proof = read_app_proof_from_file(proof_path)?;
                 sdk.verify_app_proof(&app_vk, &app_proof)?;
             }
@@ -111,6 +112,7 @@ impl VerifyCmd {
                     }
                     files[0].clone()
                 };
+                println!("Verifying EVM proof at {}", proof_path.display());
                 let evm_proof = read_evm_proof_from_file(proof_path)?;
                 sdk.verify_evm_halo2_proof(&evm_verifier, evm_proof)?;
             }
