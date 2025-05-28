@@ -3,14 +3,16 @@ use std::{marker::PhantomData, mem, sync::Arc};
 use async_trait::async_trait;
 use openvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, GenerationError, SingleSegmentVmExecutor, Streams,
-        VirtualMachine, VmComplexTraceHeights, VmConfig,
+        create_and_initialize_chip_complex, hasher::poseidon2::vm_poseidon2_hasher,
+        GenerationError, SingleSegmentVmExecutor, Streams, VirtualMachine, VmComplexTraceHeights,
+        VmConfig,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::PrimeField32,
+    p3_matrix::Matrix,
     proof::Proof,
     Chip,
 };
@@ -91,6 +93,15 @@ where
         } = self.committed_exe.as_ref();
         let input = input.into();
 
+        let chip_complex = create_and_initialize_chip_complex(
+            &self.pk.vm_config,
+            exe.program.clone(),
+            input.clone(),
+            None,
+        )
+        .unwrap();
+        let airs = chip_complex.airs();
+
         // This loop should typically iterate exactly once. Only in exceptional cases will the
         // segmentation produce an invalid segment and we will have to retry.
         let mut retries = 0;
@@ -102,8 +113,22 @@ where
                     final_memory = mem::take(&mut seg.ctrl.final_memory);
                     let proof_input = info_span!("trace_gen", segment = seg_idx)
                         .in_scope(|| seg.generate_proof_input(Some(committed_program.clone())))?;
-                    info_span!("prove_segment", segment = seg_idx)
-                        .in_scope(|| Ok(vm.engine.prove(&self.pk.vm_pk, proof_input)))
+                    info_span!("prove_segment", segment = seg_idx).in_scope(|| {
+                        vm.engine.debug(
+                            &airs,
+                            &self.pk.vm_pk.per_air,
+                            &proof_input
+                                .per_air
+                                .iter()
+                                .map(|x| x.1.clone())
+                                .collect::<Vec<_>>(),
+                        );
+                        let proof = vm.engine.prove(&self.pk.vm_pk, proof_input);
+                        vm.engine
+                            .verify(&self.pk.vm_pk.get_vk(), &proof)
+                            .expect("verification failed");
+                        Ok(proof)
+                    })
                 },
                 GenerationError::Execution,
             ) {
