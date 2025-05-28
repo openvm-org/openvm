@@ -200,7 +200,6 @@ pub struct BranchLessThanCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usi
     pub b: [u8; NUM_LIMBS],
     pub imm: u32,
     pub local_opcode: u8,
-    pub _pad: [u8; 3],
 }
 
 #[derive(derive_new::new)]
