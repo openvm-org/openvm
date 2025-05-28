@@ -200,7 +200,7 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                 })
                 .collect()
         } else {
-            let index = (1 << self.height) + md.label_to_index((md.as_offset, 0));
+            let index = 1 << self.height;
             vec![(index, self.get_node(index))]
         };
         let mut rows = Vec::with_capacity(if layer.is_empty() {
@@ -216,7 +216,11 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
         self.process_layers(layer, md, Some(&mut rows), |left, right| {
             hasher.compress_and_record(left, right)
         });
-        eprintln!("rows: {:?}", rows);
+        if touched.is_empty() {
+            // If we made an artificial touch, we need to change the direction changes for the leaves
+            rows[1].left_direction_different = F::ONE;
+            rows[1].right_direction_different = F::ONE;
+        }
         let final_root = self.get_node(1);
         FinalState {
             rows,
