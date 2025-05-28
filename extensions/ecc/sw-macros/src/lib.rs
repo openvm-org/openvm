@@ -211,11 +211,11 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
 
                 // Helper function to call the setup instruction on first use
                 fn assert_is_setup() {
-                    static is_setup: ::openvm_ecc_guest::once_cell::race::OnceBool = ::openvm_ecc_guest::once_cell::race::OnceBool::new();
-                    is_setup.get_or_init(|| {
-                        unsafe { #sw_setup_extern_func(); }
-                        true
-                    });
+                    // static is_setup: ::openvm_ecc_guest::once_cell::race::OnceBool = ::openvm_ecc_guest::once_cell::race::OnceBool::new();
+                    // is_setup.get_or_init(|| {
+                    //     unsafe { #sw_setup_extern_func(); }
+                    //     true
+                    // });
                 }
             }
 
