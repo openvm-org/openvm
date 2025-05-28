@@ -11,16 +11,16 @@ use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 
 mod alu;
 mod branch;
-// mod jalr;
+mod jalr;
 // mod loadstore;
-// mod mul;
+mod mul;
 // mod rdwrite;
 
 pub use alu::*;
 pub use branch::*;
-// pub use jalr::*;
+pub use jalr::*;
 // pub use loadstore::*;
-// pub use mul::*;
+pub use mul::*;
 // pub use rdwrite::*;
 pub use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 

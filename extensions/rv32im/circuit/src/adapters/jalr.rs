@@ -1,17 +1,23 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    ptr::slice_from_raw_parts,
+};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface,
-        ExecutionBridge, ExecutionState, SignedImmInstruction, VmAdapterAir,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep,
+        BasicAdapterInterface, ExecutionBridge, ExecutionState, SignedImmInstruction, VmAdapterAir,
     },
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::{
+            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+            MemoryWriteAuxRecord,
+        },
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::utils::not;
+use openvm_circuit_primitives::{utils::not, AlignedBytesBorrow};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS,
@@ -21,7 +27,6 @@ use openvm_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-use serde::{Deserialize, Serialize};
 
 use super::RV32_REGISTER_NUM_LIMBS;
 use crate::adapters::{memory_read, memory_write, tracing_read, tracing_write};
@@ -139,6 +144,19 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
     }
 }
 
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct Rv32JalrAdapterRecord {
+    pub from_pc: u32,
+    pub from_timestamp: u32,
+
+    pub rs1_ptr: u32,
+    pub rd_ptr: Option<u32>,
+
+    pub reads_aux: MemoryReadAuxRecord,
+    pub writes_aux: MemoryWriteAuxRecord<RV32_REGISTER_NUM_LIMBS>,
+}
+
 // This adapter reads from [b:4]_d (rs1) and writes to [a:4]_d (rd)
 #[derive(derive_new::new)]
 pub struct Rv32JalrAdapterStep;
@@ -150,13 +168,12 @@ where
     const WIDTH: usize = size_of::<Rv32JalrAdapterCols<u8>>();
     type ReadData = [u8; RV32_REGISTER_NUM_LIMBS];
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
-    type TraceContext<'a> = ();
+    type RecordMut<'a> = &'a mut Rv32JalrAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]) {
-        let adapter_row: &mut Rv32JalrAdapterCols<F> = adapter_row.borrow_mut();
-        adapter_row.from_state.pc = F::from_canonical_u32(pc);
-        adapter_row.from_state.timestamp = F::from_canonical_u32(memory.timestamp);
+    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+        record.from_pc = pc;
+        record.from_timestamp = memory.timestamp;
     }
 
     #[inline(always)]
@@ -164,20 +181,18 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        adapter_row: &mut [F],
+        record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
         let &Instruction { b, d, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        let adapter_row: &mut Rv32JalrAdapterCols<F> = adapter_row.borrow_mut();
-
-        adapter_row.rs1_ptr = b;
+        record.rs1_ptr = b.as_canonical_u32();
         tracing_read(
             memory,
             RV32_REGISTER_AS,
             b.as_canonical_u32(),
-            &mut adapter_row.rs1_aux_cols,
+            &mut record.reads_aux.prev_timestamp,
         )
     }
 
@@ -186,8 +201,8 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        adapter_row: &mut [F],
         data: &Self::WriteData,
+        record: &mut Self::RecordMut<'_>,
     ) {
         let &Instruction {
             a, d, f: enabled, ..
@@ -195,40 +210,56 @@ where
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        if enabled != F::ZERO {
-            let adapter_row: &mut Rv32JalrAdapterCols<F> = adapter_row.borrow_mut();
+        if enabled.is_one() {
+            record.rd_ptr = Some(a.as_canonical_u32());
 
-            adapter_row.needs_write = F::ONE;
-
-            adapter_row.rd_ptr = a;
             tracing_write(
                 memory,
                 RV32_REGISTER_AS,
                 a.as_canonical_u32(),
                 data,
-                &mut adapter_row.rd_aux_cols,
+                &mut record.writes_aux.prev_timestamp,
+                &mut record.writes_aux.prev_data,
             );
         } else {
             memory.increment_timestamp();
         }
     }
+}
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32JalrAdapterStep {
+    const WIDTH: usize = size_of::<Rv32JalrAdapterCols<u8>>();
 
     #[inline(always)]
-    fn fill_trace_row(
-        &self,
-        mem_helper: &MemoryAuxColsFactory<F>,
-        _trace_ctx: Self::TraceContext<'_>,
-        adapter_row: &mut [F],
-    ) {
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
         let adapter_row: &mut Rv32JalrAdapterCols<F> = adapter_row.borrow_mut();
+        unsafe {
+            let ptr = adapter_row as *mut _ as *mut u8;
+            let record_buffer = &*slice_from_raw_parts(ptr, size_of::<Rv32JalrAdapterRecord>());
+            let record: &Rv32JalrAdapterRecord = record_buffer.borrow();
+            
+            // We must assign in reverse
+            adapter_row.needs_write = F::from_bool(record.rd_ptr.is_some());
 
-        let mut timestamp = adapter_row.from_state.timestamp.as_canonical_u32();
+            if let Some(rd_ptr) = record.rd_ptr {
+                adapter_row
+                    .rd_aux_cols
+                    .set_prev_data(record.writes_aux.prev_data.map(F::from_canonical_u8));
+                mem_helper.fill(
+                    record.writes_aux.prev_timestamp,
+                    record.from_timestamp + 1,
+                    adapter_row.rd_aux_cols.as_mut(),
+                );
+                adapter_row.rd_ptr = F::from_canonical_u32(rd_ptr);
+            }
 
-        mem_helper.fill_from_prev(timestamp, adapter_row.rs1_aux_cols.as_mut());
-        timestamp += 1;
-
-        if adapter_row.needs_write.is_one() {
-            mem_helper.fill_from_prev(timestamp, adapter_row.rd_aux_cols.as_mut());
+            mem_helper.fill(
+                record.reads_aux.prev_timestamp,
+                record.from_timestamp,
+                adapter_row.rs1_aux_cols.as_mut(),
+            );
+            adapter_row.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
+            adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
+            adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
         }
     }
 }
