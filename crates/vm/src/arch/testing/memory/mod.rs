@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use air::{MemoryDummyAir, MemoryDummyChip};
 use openvm_circuit::system::memory::MemoryController;
+use openvm_instructions::riscv::RV32_MAX_REGISTER_ADDRESS;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::Rng;
 
@@ -106,4 +107,18 @@ where
 {
     const MAX_MEMORY: usize = 1 << 29;
     rng.gen_range(0..MAX_MEMORY - len) / len * len
+}
+
+/// Generates a register address that is not equal to [other] if provided.
+pub fn gen_register_address<R>(rng: &mut R, other: Option<usize>) -> usize
+where
+    R: Rng + ?Sized,
+{
+    let mut addr = rng.gen_range(0..RV32_MAX_REGISTER_ADDRESS >> 2) << 2;
+    if let Some(other) = other {
+        while addr == other {
+            addr = rng.gen_range(0..RV32_MAX_REGISTER_ADDRESS >> 2) << 2;
+        }
+    }
+    addr
 }

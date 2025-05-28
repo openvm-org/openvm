@@ -314,7 +314,7 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
                     adapter_row.reads_aux[1].as_mut(),
                 );
             } else {
-                let rs2_imm = adapter_row.rs2.as_canonical_u32();
+                let rs2_imm = record.rs2;
                 let mask = (1 << RV32_CELL_BITS) - 1;
                 self.bitwise_lookup_chip
                     .request_range(rs2_imm & mask, (rs2_imm >> 8) & mask);

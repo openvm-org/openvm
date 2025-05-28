@@ -90,7 +90,7 @@ fn set_and_execute(
         )
     };
 
-    let (instruction, rd) = rv32_rand_write_register_or_imm(
+let (instruction, rd) = rv32_rand_write_register_or_imm(
         tester,
         b,
         c,
