@@ -1,0 +1,11 @@
+[package]
+name = "tracegen-gpu"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+cuda-utils = { workspace = true }
+cuda_kernels = { package = "cuda-kernels-tracegen", path = "../../cuda/kernels/tracegen" }
