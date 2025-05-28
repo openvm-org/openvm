@@ -591,7 +591,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
             unreachable!()
         }
 
-        *state.pc += DEFAULT_PC_STEP;
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         Ok(())
     }
 
@@ -975,7 +975,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_R
         } else {
             unreachable!()
         }
-        *state.pc += DEFAULT_PC_STEP;
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         height
     }

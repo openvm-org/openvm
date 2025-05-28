@@ -10,7 +10,7 @@ use openvm_circuit::{
         MemoryAuxColsFactory,
     },
 };
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode};
 use openvm_native_compiler::NativeBranchEqualOpcode;
 use openvm_rv32im_circuit::BranchEqualCoreCols;
 use openvm_rv32im_transpiler::BranchEqualOpcode;
@@ -74,7 +74,11 @@ where
             .read(state.memory, instruction, adapter_row)
             .into();
 
-        let (cmp_result, diff_idx, diff_inv_val) = run_eq(branch_eq_opcode, rs1, rs2);
+        let (cmp_result, diff_idx, diff_inv_val) = run_eq::<F, RV32_REGISTER_NUM_LIMBS>(
+            branch_eq_opcode.0,
+            &rs1.as_canonical_u32().to_le_bytes(),
+            &rs2.as_canonical_u32().to_le_bytes(),
+        );
 
         let core_row: &mut BranchEqualCoreCols<_, 1> = core_row.borrow_mut();
         core_row.a = [rs1];
@@ -125,7 +129,11 @@ where
         let [rs1, rs2] = self.adapter.read(state, instruction).into();
 
         // TODO(ayush): probably don't need the other values
-        let (cmp_result, _, _) = run_eq::<F>(branch_eq_opcode, rs1, rs2);
+        let (cmp_result, _, _) = run_eq::<F, RV32_REGISTER_NUM_LIMBS>(
+            branch_eq_opcode.0,
+            &rs1.as_canonical_u32().to_le_bytes(),
+            &rs2.as_canonical_u32().to_le_bytes(),
+        );
 
         if cmp_result {
             // TODO(ayush): verify this is fine
@@ -153,16 +161,22 @@ where
 
 // Returns (cmp_result, diff_idx, x[diff_idx] - y[diff_idx])
 #[inline(always)]
-pub(super) fn run_eq<F>(local_opcode: NativeBranchEqualOpcode, x: F, y: F) -> (bool, usize, F)
+pub(super) fn run_eq<F, const NUM_LIMBS: usize>(
+    local_opcode: BranchEqualOpcode,
+    x: &[u8; NUM_LIMBS],
+    y: &[u8; NUM_LIMBS],
+) -> (bool, usize, F)
 where
     F: PrimeField32,
 {
-    if x != y {
-        return (
-            local_opcode.0 == BranchEqualOpcode::BNE,
-            0,
-            (x - y).inverse(),
-        );
+    for i in 0..NUM_LIMBS {
+        if x[i] != y[i] {
+            return (
+                local_opcode == BranchEqualOpcode::BNE,
+                i,
+                (F::from_canonical_u8(x[i]) - F::from_canonical_u8(y[i])).inverse(),
+            );
+        }
     }
-    (local_opcode.0 == BranchEqualOpcode::BEQ, 0, F::ZERO)
+    (local_opcode == BranchEqualOpcode::BEQ, 0, F::ZERO)
 }
