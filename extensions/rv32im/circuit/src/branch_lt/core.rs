@@ -10,7 +10,6 @@ use openvm_circuit::{
         TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
-        offline_checker::Ru32,
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
     },
@@ -18,6 +17,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
+    AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
@@ -29,7 +29,6 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -195,12 +194,11 @@ where
 }
 
 #[repr(C)]
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Debug)]
+#[derive(AlignedBytesBorrow, Debug)]
 pub struct BranchLessThanCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub a: [u8; NUM_LIMBS],
     pub b: [u8; NUM_LIMBS],
-    // **SAFETY** `NUM_LIMBS` must be a multiple of 2 to ensure `imm`'s offset is aligned
-    pub imm: Ru32,
+    pub imm: u32,
     pub local_opcode: u8,
     pub _pad: [u8; 3],
 }
@@ -287,9 +285,7 @@ where
                 ptr,
                 size_of::<BranchLessThanCoreRecord<NUM_LIMBS, LIMB_BITS>>(),
             );
-            let (record, _) =
-                BranchLessThanCoreRecord::<NUM_LIMBS, LIMB_BITS>::ref_from_prefix(record_buffer)
-                    .unwrap();
+            let record: &BranchLessThanCoreRecord<NUM_LIMBS, LIMB_BITS> = record_buffer.borrow();
 
             let signed = record.local_opcode == BranchLessThanOpcode::BLT as u8
                 || record.local_opcode == BranchLessThanOpcode::BGE as u8;
@@ -363,7 +359,7 @@ where
             core_row.opcode_blt_flag =
                 F::from_bool(record.local_opcode == BranchLessThanOpcode::BLT as u8);
 
-            core_row.imm = F::from_canonical_u32(record.imm.as_inner());
+            core_row.imm = F::from_canonical_u32(record.imm);
             core_row.cmp_result = F::from_bool(cmp_result);
             core_row.b = record.b.map(F::from_canonical_u8);
             core_row.a = record.a.map(F::from_canonical_u8);

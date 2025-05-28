@@ -19,6 +19,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
+    AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
@@ -30,10 +31,9 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, Debug)]
 pub struct BaseAluCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
@@ -194,7 +194,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluStep<A, NUM_LIMBS
 }
 
 #[repr(C)]
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable)]
+#[derive(AlignedBytesBorrow, Debug)]
 pub struct BaseAluCoreRecord<const NUM_LIMBS: usize> {
     pub a: [u8; NUM_LIMBS],
     pub b: [u8; NUM_LIMBS],
@@ -279,12 +279,12 @@ where
         // - Cols and Record structs should be repr(C) and we write in reverse order (to ensure
         //   non-overlapping)
         // - Do not overwrite any reference in `record` before it has already been used or moved
-        // - alignment of `F` must be >= alignment of Record (zerocopy will panic otherwise)
+        // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic otherwise)
         unsafe {
             let ptr = core_row as *mut _ as *mut u8;
             let record_buffer =
                 &*slice_from_raw_parts(ptr, size_of::<BaseAluCoreRecord<NUM_LIMBS>>());
-            let (record, _) = BaseAluCoreRecord::ref_from_prefix(record_buffer).unwrap();
+            let record: &BaseAluCoreRecord<NUM_LIMBS> = record_buffer.borrow();
 
             // PERF: needless conversion
             let local_opcode = BaseAluOpcode::from_usize(record.local_opcode as usize);

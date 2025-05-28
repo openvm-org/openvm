@@ -18,6 +18,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
+    AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
@@ -29,7 +30,6 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
@@ -171,7 +171,7 @@ where
 }
 
 #[repr(C)]
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Debug)]
+#[derive(AlignedBytesBorrow, Debug)]
 pub struct LessThanCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub b: [u8; NUM_LIMBS],
     pub c: [u8; NUM_LIMBS],
@@ -270,8 +270,7 @@ where
             let ptr = core_row as *mut _ as *mut u8;
             let record_buffer =
                 &*slice_from_raw_parts(ptr, size_of::<LessThanCoreRecord<NUM_LIMBS, LIMB_BITS>>());
-            let (record, _) =
-                LessThanCoreRecord::<NUM_LIMBS, LIMB_BITS>::ref_from_prefix(record_buffer).unwrap();
+            let record: &LessThanCoreRecord<NUM_LIMBS, LIMB_BITS> = record_buffer.borrow();
 
             let is_slt = record.local_opcode == LessThanOpcode::SLT as u8;
             let (cmp_result, diff_idx, b_sign, c_sign) =

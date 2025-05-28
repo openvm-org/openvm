@@ -16,7 +16,6 @@ openvm-circuit = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
 
-zerocopy = { workspace = true, features = ["derive"] }
 itertools.workspace = true
 derive-new.workspace = true
 rand.workspace = true

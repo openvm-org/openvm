@@ -73,6 +73,40 @@ pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
     TokenStream::from(methods)
 }
 
+/// Implements Borrow<T> and BorrowMut<T> for [u8]
+#[proc_macro_derive(AlignedBytesBorrow)]
+pub fn aligned_bytes_borrow_derive(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    let name = &ast.ident;
+
+    // Get impl generics, type generics, where clause
+    let (impl_generics, type_generics, where_clause) = ast.generics.split_for_impl();
+
+    let methods = quote! {
+        impl #impl_generics core::borrow::Borrow<#name #type_generics> for [u8] #where_clause {
+            fn borrow(&self) -> &#name #type_generics {
+                debug_assert_eq!(self.len(), core::mem::size_of::<#name #type_generics>());
+                let (prefix, shorts, _suffix) = unsafe { self.align_to::<#name #type_generics>() };
+                debug_assert!(prefix.is_empty(), "Alignment should match");
+                debug_assert_eq!(shorts.len(), 1);
+                &shorts[0]
+            }
+        }
+
+        impl #impl_generics core::borrow::BorrowMut<#name #type_generics> for [u8] #where_clause {
+            fn borrow_mut(&mut self) -> &mut #name #type_generics {
+                debug_assert_eq!(self.len(), core::mem::size_of::<#name #type_generics>());
+                let (prefix, shorts, _suffix) = unsafe { self.align_to_mut::<#name #type_generics>() };
+                debug_assert!(prefix.is_empty(), "Alignment should match");
+                debug_assert_eq!(shorts.len(), 1);
+                &mut shorts[0]
+            }
+        }
+    };
+
+    TokenStream::from(methods)
+}
+
 #[proc_macro_derive(Chip, attributes(chip))]
 pub fn chip_derive(input: TokenStream) -> TokenStream {
     // Parse the attributes from the struct or enum

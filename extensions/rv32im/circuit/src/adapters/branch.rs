@@ -14,6 +14,7 @@ use openvm_circuit::{
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS,
@@ -23,7 +24,6 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 use super::RV32_REGISTER_NUM_LIMBS;
 use crate::adapters::{memory_read, tracing_read};
@@ -109,7 +109,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BranchAdapterAir {
 }
 
 #[repr(C)]
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Debug)]
+#[derive(AlignedBytesBorrow, Debug)]
 pub struct Rv32BranchAdapterRecord {
     pub from_pc: u32,
     pub from_timestamp: u32,
@@ -155,14 +155,14 @@ where
             memory,
             RV32_REGISTER_AS,
             a.as_canonical_u32(),
-            record.reads_aux[0].prev_timestamp.as_mut(),
+            &mut record.reads_aux[0].prev_timestamp,
         );
         record.rs2_ptr = b.as_canonical_u32();
         let rs2 = tracing_read(
             memory,
             RV32_REGISTER_AS,
             b.as_canonical_u32(),
-            record.reads_aux[1].prev_timestamp.as_mut(),
+            &mut record.reads_aux[1].prev_timestamp,
         );
 
         [rs1, rs2]
@@ -189,7 +189,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32BranchAdapterStep {
         unsafe {
             let ptr = adapter_row as *mut _ as *mut u8;
             let record_buffer = &*slice_from_raw_parts(ptr, size_of::<Rv32BranchAdapterRecord>());
-            let (record, _) = Rv32BranchAdapterRecord::ref_from_prefix(record_buffer).unwrap();
+            let record: &Rv32BranchAdapterRecord = record_buffer.borrow();
             // We must assign in reverse
 
             let timestamp = record.from_timestamp;

@@ -1,4 +1,10 @@
-use std::{any::type_name, array::from_fn, borrow::Borrow, marker::PhantomData, sync::Arc};
+use std::{
+    any::type_name,
+    array::from_fn,
+    borrow::{Borrow, BorrowMut},
+    marker::PhantomData,
+    sync::Arc,
+};
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -14,7 +20,6 @@ use openvm_stark_backend::{
     AirRef, Chip, ChipUsageGetter,
 };
 use serde::{Deserialize, Serialize};
-use zerocopy::{FromBytes, IntoBytes, KnownLayout};
 
 use super::{ExecutionState, InsExecutorE1, InstructionExecutor, Result, VmStateMut};
 use crate::system::memory::{
@@ -254,8 +259,9 @@ pub struct AdapterCoreLayout {
 impl<'a, F: Field, A, C> RecordArena<'a, AdapterCoreLayout, (&'a mut A, &'a mut C)>
     for AdapterCoreRecordArena<F>
 where
-    A: FromBytes + IntoBytes + KnownLayout,
-    C: FromBytes + IntoBytes + KnownLayout,
+    A: Sized,
+    C: Sized,
+    [u8]: BorrowMut<A> + BorrowMut<C>,
 {
     fn alloc(&'a mut self, layout: AdapterCoreLayout) -> (&'a mut A, &'a mut C) {
         let buffer = self.inner.alloc_single_row();
@@ -264,8 +270,8 @@ where
         let (adapter_buffer, core_buffer) = buffer.split_at_mut(layout.adapter_width);
         // PERF: we could skip these unwraps if the RecordArena guarantees the size and alignment
         // properties
-        let (adapter_record, _) = A::mut_from_prefix(adapter_buffer).unwrap();
-        let (core_record, _) = C::mut_from_prefix(core_buffer).unwrap();
+        let adapter_record = adapter_buffer[..size_of::<A>()].borrow_mut();
+        let core_record = core_buffer[..size_of::<C>()].borrow_mut();
 
         (adapter_record, core_record)
     }

@@ -19,7 +19,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    utils::not,
+    utils::not, AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -32,7 +32,6 @@ use openvm_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 use super::{
     tracing_read, tracing_read_imm, tracing_write, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
@@ -175,7 +174,7 @@ pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize> {
 
 // Intermediate type that should not be copied or cloned and should be directly written to
 #[repr(C)]
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Debug)]
+#[derive(AlignedBytesBorrow, Debug)]
 pub struct Rv32BaseAluAdapterRecord {
     pub from_pc: u32,
     pub from_timestamp: u32,
@@ -227,7 +226,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
             memory,
             RV32_REGISTER_AS,
             record.rs1_ptr as u32,
-            record.reads_aux[0].prev_timestamp.as_mut(),
+            &mut record.reads_aux[0].prev_timestamp,
         );
 
         let rs2 = if e.as_canonical_u32() == RV32_REGISTER_AS {
@@ -238,7 +237,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
                 memory,
                 RV32_REGISTER_AS,
                 record.rs2,
-                record.reads_aux[1].prev_timestamp.as_mut(),
+                &mut record.reads_aux[1].prev_timestamp,
             )
         } else {
             record.rs2_as = RV32_IMM_AS;
@@ -267,7 +266,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
             RV32_REGISTER_AS,
             record.rd_ptr as u32,
             &data[0],
-            record.writes_aux.prev_timestamp.as_mut(),
+            &mut record.writes_aux.prev_timestamp,
             &mut record.writes_aux.prev_data,
         );
     }
@@ -285,11 +284,11 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
         // elements. This requires:
         // - Cols struct should be repr(C) and we write in reverse order (to ensure non-overlapping)
         // - Do not overwrite any reference in `record` before it has already been used or moved
-        // - alignment of `F` must be >= alignment of Record (zerocopy will panic otherwise)
+        // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic otherwise)
         unsafe {
             let ptr = adapter_row as *mut _ as *mut u8;
             let record_buffer = &*slice_from_raw_parts(ptr, size_of::<Rv32BaseAluAdapterRecord>());
-            let (record, _) = Rv32BaseAluAdapterRecord::ref_from_prefix(record_buffer).unwrap();
+            let record: &Rv32BaseAluAdapterRecord = record_buffer.borrow();
             // We must assign in reverse
             // TODO[jpw]: is there a way to not hardcode?
             const TIMESTAMP_DELTA: u32 = 2;
@@ -299,7 +298,7 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
                 .writes_aux
                 .set_prev_data(record.writes_aux.prev_data.map(F::from_canonical_u8));
             mem_helper.fill(
-                record.writes_aux.prev_timestamp.as_inner(),
+                record.writes_aux.prev_timestamp,
                 timestamp,
                 adapter_row.writes_aux.as_mut(),
             );

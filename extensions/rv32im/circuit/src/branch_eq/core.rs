@@ -10,12 +10,11 @@ use openvm_circuit::{
         TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
-        offline_checker::Ru32,
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::utils::not;
+use openvm_circuit_primitives::{utils::not, AlignedBytesBorrow};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::BranchEqualOpcode;
@@ -26,7 +25,6 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -142,12 +140,11 @@ where
 }
 
 #[repr(C)]
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Debug)]
+#[derive(AlignedBytesBorrow, Debug)]
 pub struct BranchEqualCoreRecord<const NUM_LIMBS: usize> {
     pub a: [u8; NUM_LIMBS],
     pub b: [u8; NUM_LIMBS],
-    // **SAFETY** `NUM_LIMBS` must be a multiple of 2 to ensure `imm`'s offset is aligned
-    pub imm: Ru32,
+    pub imm: u32,
     pub local_opcode: u8,
     pub _pad: [u8; 3],
 }
@@ -225,8 +222,7 @@ where
             let ptr = core_row as *mut _ as *mut u8;
             let record_buffer =
                 &*slice_from_raw_parts(ptr, size_of::<BranchEqualCoreRecord<NUM_LIMBS>>());
-            let (record, _) =
-                BranchEqualCoreRecord::<NUM_LIMBS>::ref_from_prefix(record_buffer).unwrap();
+            let record: &BranchEqualCoreRecord<NUM_LIMBS> = record_buffer.borrow();
 
             let (cmp_result, diff_idx, diff_inv_val) = run_eq::<F, NUM_LIMBS>(
                 record.local_opcode == BranchEqualOpcode::BEQ as u8,
@@ -241,7 +237,7 @@ where
             core_row.opcode_beq_flag =
                 F::from_bool(record.local_opcode == BranchEqualOpcode::BEQ as u8);
 
-            core_row.imm = F::from_canonical_u32(record.imm.as_inner());
+            core_row.imm = F::from_canonical_u32(record.imm);
             core_row.cmp_result = F::from_bool(cmp_result);
 
             core_row.b = record.b.map(F::from_canonical_u8);
