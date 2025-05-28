@@ -216,6 +216,7 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
         self.process_layers(layer, md, Some(&mut rows), |left, right| {
             hasher.compress_and_record(left, right)
         });
+        eprintln!("rows: {:?}", rows);
         let final_root = self.get_node(1);
         FinalState {
             rows,
