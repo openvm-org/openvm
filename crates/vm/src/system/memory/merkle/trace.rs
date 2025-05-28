@@ -57,8 +57,8 @@ where
         } = self.final_state.unwrap();
         // important that this sort be stable,
         // because we need the initial root to be first and the final root to be second
+        rows.reverse();
         if rows.len() > 1 {
-            rows.reverse();
             rows.swap(0, 1);
         }
 
