@@ -1,7 +1,9 @@
 use std::ops::Mul;
 
 use openvm_circuit::system::memory::{
-    offline_checker::{MemoryBaseAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
+    offline_checker::{
+        MemoryBaseAuxCols, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+    },
     online::{GuestMemory, TracingMemory},
     tree::public_values::PUBLIC_VALUES_AS,
     MemoryController, RecordId,
@@ -23,6 +25,7 @@ pub use loadstore::*;
 pub use mul::*;
 pub use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 pub use rdwrite::*;
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 /// 256-bit heap integer stored as 32 bytes (32 limbs of 8-bits)
 pub const INT256_NUM_LIMBS: usize = 32;
@@ -34,6 +37,13 @@ pub const RV_IS_TYPE_IMM_BITS: usize = 12;
 pub const RV_B_TYPE_IMM_BITS: usize = 13;
 
 pub const RV_J_TYPE_IMM_BITS: usize = 21;
+
+#[repr(C)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable)]
+pub struct Rv32WordWriteAuxRecord {
+    pub prev_timestamp: u32,
+    pub prev_data: [u8; RV32_REGISTER_NUM_LIMBS],
+}
 
 /// Convert the RISC-V register data (32 bits represented as 4 bytes, where each byte is represented
 /// as a field element) back into its value as u32.
@@ -135,14 +145,13 @@ pub fn tracing_read<F, const N: usize>(
     memory: &mut TracingMemory<F>,
     address_space: u32,
     ptr: u32,
-    aux_cols: &mut MemoryReadAuxCols<F>, /* TODO[jpw]: switch to raw u8
-                                          * buffer */
+    prev_timestamp: &mut u32,
 ) -> [u8; N]
 where
     F: PrimeField32,
 {
     let (t_prev, data) = timed_read(memory, address_space, ptr);
-    aux_cols.set_prev(F::from_canonical_u32(t_prev));
+    *prev_timestamp = t_prev;
     data
 }
 
@@ -154,17 +163,14 @@ pub fn tracing_write<F, const N: usize>(
     address_space: u32,
     ptr: u32,
     data: &[u8; N],
-    aux_cols: &mut MemoryWriteAuxCols<F, N>, /* TODO[jpw]: switch to raw
-                                              * u8
-                                              * buffer */
+    prev_timestamp: &mut u32,
+    prev_data: &mut [u8; N],
 ) where
     F: PrimeField32,
 {
     let (t_prev, data_prev) = timed_write(memory, address_space, ptr, data);
-    aux_cols.set_prev(
-        F::from_canonical_u32(t_prev),
-        data_prev.map(F::from_canonical_u8),
-    );
+    *prev_timestamp = t_prev;
+    *prev_data = data_prev;
 }
 
 // TODO(ayush): this is bad but not sure how to avoid
@@ -186,12 +192,12 @@ pub fn tracing_write_with_base_aux<F, const N: usize>(
 pub fn tracing_read_imm<F>(
     memory: &mut TracingMemory<F>,
     imm: u32,
-    imm_mut: &mut F,
+    imm_mut: &mut u32,
 ) -> [u8; RV32_REGISTER_NUM_LIMBS]
 where
     F: PrimeField32,
 {
-    *imm_mut = F::from_canonical_u32(imm);
+    *imm_mut = imm;
     debug_assert_eq!(imm >> 24, 0); // highest byte should be zero to prevent overflow
 
     memory.increment_timestamp();

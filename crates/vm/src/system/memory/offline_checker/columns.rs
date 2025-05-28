@@ -1,8 +1,6 @@
 //! Defines auxiliary columns for memory operations: `MemoryReadAuxCols`,
 //! `MemoryReadWithImmediateAuxCols`, and `MemoryWriteAuxCols`.
 
-use std::ops::DerefMut;
-
 use openvm_circuit_primitives::is_less_than::LessThanAuxCols;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -11,8 +9,8 @@ use crate::system::memory::offline_checker::bridge::AUX_LEN;
 
 // repr(C) is needed to make sure that the compiler does not reorder the fields
 // we assume the order of the fields when using borrow or borrow_mut
-#[repr(C)]
 /// Base structure for auxiliary memory columns.
+#[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryBaseAuxCols<T> {
     /// The previous timestamps in which the cells were accessed.
@@ -61,9 +59,8 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
         &self.prev_data
     }
 
-    /// Sets the previous timestamp and data **without** updating the less than auxiliary columns.
-    pub fn set_prev(&mut self, timestamp: T, data: [T; N]) {
-        self.base.prev_timestamp = timestamp;
+    /// Sets the previous data **without** updating the less than auxiliary columns.
+    pub fn set_prev_data(&mut self, data: [T; N]) {
         self.prev_data = data;
     }
 }

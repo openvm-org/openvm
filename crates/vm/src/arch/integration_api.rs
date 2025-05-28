@@ -1,4 +1,4 @@
-use std::{array::from_fn, borrow::Borrow, marker::PhantomData, sync::Arc};
+use std::{any::type_name, array::from_fn, borrow::Borrow, marker::PhantomData, sync::Arc};
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -6,7 +6,7 @@ use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, FieldAlgebra, PackedValue, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
@@ -14,6 +14,7 @@ use openvm_stark_backend::{
     AirRef, Chip, ChipUsageGetter,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use zerocopy::FromBytes;
 
 use super::{ExecutionState, InsExecutorE1, InstructionExecutor, Result, VmStateMut};
 use crate::system::memory::{
@@ -54,48 +55,6 @@ pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var;
 }
 
-// TODO: delete
-/// Trait to be implemented on primitive chip to integrate with the machine.
-pub trait VmCoreChip<F, I: VmAdapterInterface<F>> {
-    /// Minimum data that must be recorded to be able to generate trace for one row of
-    /// `PrimitiveAir`.
-    type Record: Send + Serialize + DeserializeOwned;
-    /// The primitive AIR with main constraints that do not depend on memory and other
-    /// architecture-specifics.
-    type Air: BaseAirWithPublicValues<F> + Clone;
-
-    #[allow(clippy::type_complexity)]
-    fn execute_instruction(
-        &self,
-        instruction: &Instruction<F>,
-        from_pc: u32,
-        reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)>;
-
-    fn get_opcode_name(&self, opcode: usize) -> String;
-
-    /// Populates `row_slice` with values corresponding to `record`.
-    /// The provided `row_slice` will have length equal to `self.air().width()`.
-    /// This function will be called for each row in the trace which is being used, and all other
-    /// rows in the trace will be filled with zeroes.
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record);
-
-    /// Returns a list of public values to publish.
-    fn generate_public_values(&self) -> Vec<F> {
-        vec![]
-    }
-
-    fn air(&self) -> &Self::Air;
-
-    /// Finalize the trace, especially the padded rows if the all-zero rows don't satisfy the
-    /// constraints. This is done **after** records are consumed and the trace matrix is
-    /// generated. Most implementations should just leave the default implementation if padding
-    /// with rows of all 0s satisfies the constraints.
-    fn finalize(&self, _trace: &mut RowMajorMatrix<F>, _num_records: usize) {
-        // do nothing by default
-    }
-}
-
 pub trait VmCoreAir<AB, I>: BaseAirWithPublicValues<AB::F>
 where
     AB: AirBuilder,
@@ -127,23 +86,6 @@ where
     }
 }
 
-// TODO: delete
-pub struct AdapterRuntimeContext<T, I: VmAdapterInterface<T>> {
-    /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
-    pub to_pc: Option<u32>,
-    pub writes: I::Writes,
-}
-
-impl<T, I: VmAdapterInterface<T>> AdapterRuntimeContext<T, I> {
-    /// Leave `to_pc` as `None` to allow the adapter to decide the `to_pc` automatically.
-    pub fn without_pc(writes: impl Into<I::Writes>) -> Self {
-        Self {
-            to_pc: None,
-            writes: writes.into(),
-        }
-    }
-}
-
 pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
     /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
     pub to_pc: Option<T>,
@@ -152,65 +94,37 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
     pub instruction: I::ProcessedInstruction,
 }
 
+/// Given some minimum metadata of type `Layout` that specifies the record size, the `RecordArena`
+/// should allocate a buffer, of size possibly larger than the record, and then return mutable
+/// pointers to the record within the buffer.
+pub trait RecordArena<'a, Layout, RecordMut> {
+    /// Allocates underlying buffer and returns a mutable reference `RecordMut`.
+    /// Note that calling this function may not call an underlying memory allocation as the record
+    /// arena may be virtual.
+    fn alloc(&'a mut self, layout: Layout) -> RecordMut;
+}
+
+/// ZST to represent empty layout. Used when the layout can be inferred from other context (such as
+/// AIR or record types).
+pub struct EmptyLayout;
+
 /// Interface for trace generation of a single instruction.The trace is provided as a mutable
 /// buffer during both instruction execution and trace generation.
 /// It is expected that no additional memory allocation is necessary and the trace buffer
 /// is sufficient, with possible overwriting.
 pub trait TraceStep<F, CTX> {
-    fn execute(
+    type RecordLayout;
+    type RecordMut<'a>;
+
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        // TODO(ayush): combine to a single struct
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        // TODO(ayush): move air inside step and remove width
-        width: usize,
-    ) -> Result<()>;
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>;
 
-    /// Populates `trace`. This function will always be called after
-    /// [`TraceStep::execute`], so the `trace` should already contain context necessary to
-    /// fill in the rest of it.
-    // TODO(ayush): come up with a better abstraction for chips that fill a dynamic number of rows
-    fn fill_trace(
-        &self,
-        mem_helper: &MemoryAuxColsFactory<F>,
-        trace: &mut [F],
-        width: usize,
-        rows_used: usize,
-    ) where
-        Self: Send + Sync,
-        F: Send + Sync,
-    {
-        trace[..rows_used * width]
-            .par_chunks_exact_mut(width)
-            .for_each(|row_slice| {
-                self.fill_trace_row(mem_helper, row_slice);
-            });
-        trace[rows_used * width..]
-            .par_chunks_exact_mut(width)
-            .for_each(|row_slice| {
-                self.fill_dummy_trace_row(mem_helper, row_slice);
-            });
-    }
-
-    /// Populates `row_slice`. This function will always be called after
-    /// [`TraceStep::execute`], so the `row_slice` should already contain context necessary to
-    /// fill in the rest of the row. This function will be called for each row in the trace which is
-    /// being used, and all other rows in the trace will be filled with zeroes.
-    ///
-    /// The provided `row_slice` will have length equal to the width of the AIR.
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        unreachable!("fill_trace_row is not implemented")
-    }
-
-    /// Populates `row_slice`. This function will be called on dummy rows.
-    /// By default the trace is padded with empty (all 0) rows to make the height a power of 2.
-    ///
-    /// The provided `row_slice` will have length equal to the width of the AIR.
-    fn fill_dummy_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // By default, the row is filled with zeroes
-    }
     /// Returns a list of public values to publish.
     fn generate_public_values(&self) -> Vec<F> {
         vec![]
@@ -220,42 +134,145 @@ pub trait TraceStep<F, CTX> {
     fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
-// TODO(ayush): rename to ChipWithExecutionContext or something
-pub struct NewVmChipWrapper<F, AIR, STEP> {
-    pub air: AIR,
-    pub step: STEP,
+// TODO[jpw]: this might be temporary trait before moving trace to CTX
+pub trait RowMajorMatrixArena<F> {
+    fn with_capacity(height: usize, width: usize) -> Self;
+    fn width(&self) -> usize;
+    fn trace_offset(&self) -> usize;
+    fn into_matrix(self) -> RowMajorMatrix<F>;
+}
+
+// TODO[jpw]: revisit if this trait makes sense
+pub trait TraceFiller<F, CTX> {
+    /// Populates `trace`. This function will always be called after
+    /// [`TraceStep::execute`], so the `trace` should already contain the records necessary to fill
+    /// in the rest of it.
+    // TODO(ayush): come up with a better abstraction for chips that fill a dynamic number of rows
+    fn fill_trace(
+        &self,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        trace: &mut RowMajorMatrix<F>,
+        rows_used: usize,
+    ) where
+        Self: Send + Sync,
+        F: Send + Sync + Clone,
+    {
+        let width = trace.width();
+        trace.values[..rows_used * width]
+            .par_chunks_exact_mut(width)
+            .for_each(|row_slice| {
+                self.fill_trace_row(mem_helper, row_slice);
+            });
+        trace.values[rows_used * width..]
+            .par_chunks_exact_mut(width)
+            .for_each(|row_slice| {
+                self.fill_dummy_trace_row(mem_helper, row_slice);
+            });
+    }
+
+    /// Populates `row_slice`. This function will always be called after
+    /// [`TraceStep::execute`], so the `row_slice` should already contain context necessary to
+    /// fill in the rest of the row. This function will be called for each row in the trace which
+    /// is being used, and for all other rows in the trace see `fill_dummy_trace_row`.
+    ///
+    /// The provided `row_slice` will have length equal to the width of the AIR.
+    fn fill_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, _row_slice: &mut [F]) {
+        unreachable!("fill_trace_row is not implemented")
+    }
+
+    /// Populates `row_slice`. This function will be called on dummy rows.
+    /// By default the trace is padded with empty (all 0) rows to make the height a power of 2.
+    ///
+    /// The provided `row_slice` will have length equal to the width of the AIR.
+    fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, _row_slice: &mut [F]) {
+        // By default, the row is filled with zeroes
+    }
+}
+
+// TEMP[jpw]: buffer should be inside CTX
+pub struct MatrixRecordArena<F> {
     pub trace_buffer: Vec<F>,
     // TODO(ayush): width should be a constant?
-    width: usize,
-    buffer_idx: usize,
+    pub width: usize,
+    pub trace_offset: usize,
+}
+
+impl<F: Field> MatrixRecordArena<F> {
+    pub fn alloc_single_row(&mut self) -> &mut [u8] {
+        let start = self.trace_offset;
+        self.trace_offset += self.width;
+        let row_slice = &mut self.trace_buffer[start..self.trace_offset];
+        let size = size_of_val(row_slice);
+        let ptr = row_slice as *mut [F] as *mut u8;
+        // SAFETY:
+        // - `ptr` is non-null
+        // - `size` is correct
+        // - alignment of `u8` is always satisfied
+        unsafe { &mut *std::ptr::slice_from_raw_parts_mut(ptr, size) }
+    }
+}
+
+impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
+    fn with_capacity(height: usize, width: usize) -> Self {
+        let trace_buffer = F::zero_vec(height * width);
+        Self {
+            trace_buffer,
+            width,
+            trace_offset: 0,
+        }
+    }
+
+    fn width(&self) -> usize {
+        self.width
+    }
+
+    fn trace_offset(&self) -> usize {
+        self.trace_offset
+    }
+
+    fn into_matrix(self) -> RowMajorMatrix<F> {
+        RowMajorMatrix::new(self.trace_buffer, self.width)
+    }
+}
+
+// TODO(ayush): rename to ChipWithExecutionContext or something
+pub struct NewVmChipWrapper<F, AIR, STEP, RA> {
+    pub air: AIR,
+    pub step: STEP,
+    pub arena: RA,
     mem_helper: SharedMemoryHelper<F>,
 }
 
-impl<F, AIR, STEP> NewVmChipWrapper<F, AIR, STEP>
+impl<F, AIR, STEP, RA> NewVmChipWrapper<F, AIR, STEP, RA>
 where
     F: Field,
     AIR: BaseAir<F>,
+    RA: RowMajorMatrixArena<F>,
 {
     pub fn new(air: AIR, step: STEP, height: usize, mem_helper: SharedMemoryHelper<F>) -> Self {
-        assert!(height == 0 || height.is_power_of_two());
         let width = air.width();
-        let trace_buffer = F::zero_vec(height * width);
+        assert!(height == 0 || height.is_power_of_two());
+        assert!(
+            align_of::<F>() >= align_of::<u32>(),
+            "type {} should have at least alignment of u32",
+            type_name::<F>()
+        );
+        let arena = RA::with_capacity(height, width);
         Self {
             air,
             step,
-            trace_buffer,
-            width,
-            buffer_idx: 0,
+            arena,
             mem_helper,
         }
     }
 }
 
-impl<F, AIR, STEP> InstructionExecutor<F> for NewVmChipWrapper<F, AIR, STEP>
+impl<F, AIR, STEP, RA> InstructionExecutor<F> for NewVmChipWrapper<F, AIR, STEP, RA>
 where
     F: PrimeField32,
     STEP: TraceStep<F, ()> // TODO: CTX?
         + StepExecutorE1<F>,
+    for<'buf> RA: RecordArena<'buf, STEP::RecordLayout, STEP::RecordMut<'buf>>,
 {
     fn execute(
         &mut self,
@@ -269,13 +286,7 @@ where
             memory: &mut memory.memory,
             ctx: &mut (),
         };
-        self.step.execute(
-            state,
-            instruction,
-            &mut self.trace_buffer,
-            &mut self.buffer_idx,
-            self.width,
-        )?;
+        self.step.execute(state, instruction, &mut self.arena)?;
 
         Ok(ExecutionState {
             pc,
@@ -292,92 +303,98 @@ where
 // - `Air` is an `Air<AB>` for all `AB: AirBuilder`s needed by stark-backend
 // which is equivalent to saying it implements AirRef<SC>
 // The where clauses to achieve this statement is unfortunately really verbose.
-impl<SC, AIR, STEP> Chip<SC> for NewVmChipWrapper<Val<SC>, AIR, STEP>
+impl<SC, AIR, STEP, RA> Chip<SC> for NewVmChipWrapper<Val<SC>, AIR, STEP, RA>
 where
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
-    STEP: TraceStep<Val<SC>, ()> + Send + Sync,
+    STEP: TraceStep<Val<SC>, ()> + TraceFiller<Val<SC>, ()> + Send + Sync,
     AIR: Clone + AnyRap<SC> + 'static,
+    RA: RowMajorMatrixArena<Val<SC>>,
 {
     fn air(&self) -> AirRef<SC> {
         Arc::new(self.air.clone())
     }
 
-    fn generate_air_proof_input(mut self) -> AirProofInput<SC> {
-        assert_eq!(self.buffer_idx % self.width, 0);
-        let rows_used = self.current_trace_height();
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        let width = self.arena.width();
+        assert_eq!(self.arena.trace_offset() % width, 0);
+        let rows_used = self.arena.trace_offset() / width;
         let height = next_power_of_two_or_zero(rows_used);
+        let mut trace = self.arena.into_matrix();
         // This should be automatic since trace_buffer's height is a power of two:
-        assert!(height.checked_mul(self.width).unwrap() <= self.trace_buffer.len());
-        self.trace_buffer.truncate(height * self.width);
+        assert!(height.checked_mul(width).unwrap() <= trace.values.len());
+        trace.values.truncate(height * width);
         let mem_helper = self.mem_helper.as_borrowed();
-        self.step
-            .fill_trace(&mem_helper, &mut self.trace_buffer, self.width, rows_used);
+        self.step.fill_trace(&mem_helper, &mut trace, rows_used);
         drop(self.mem_helper);
-        let trace = RowMajorMatrix::new(self.trace_buffer, self.width);
-        // self.inner.finalize(&mut trace, num_records);
 
         AirProofInput::simple(trace, self.step.generate_public_values())
     }
 }
 
-impl<F, AIR, C> ChipUsageGetter for NewVmChipWrapper<F, AIR, C>
+impl<F, AIR, C, RA> ChipUsageGetter for NewVmChipWrapper<F, AIR, C, RA>
 where
     C: Sync,
+    RA: RowMajorMatrixArena<F>,
 {
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
     fn current_trace_height(&self) -> usize {
-        self.buffer_idx / self.width
+        self.arena.trace_offset() / self.arena.width()
     }
     fn trace_width(&self) -> usize {
-        self.width
+        self.arena.width()
     }
 }
 
-// TODO[jpw]: switch read,write to store into abstract buffer, then fill_trace_row using buffer
 /// A helper trait for expressing generic state accesses within the implementation of
 /// [TraceStep]. Note that this is only a helper trait when the same interface of state access
 /// is reused or shared by multiple implementations. It is not required to implement this trait if
 /// it is easier to implement the [TraceStep] trait directly without this trait.
 pub trait AdapterTraceStep<F, CTX> {
-    /// Adapter row width
-    const WIDTH: usize;
     type ReadData;
     type WriteData;
-    /// The minimal amount of information needed to generate the sub-row of the trace matrix.
-    /// This type has a lifetime so other context, such as references to other chips, can be
-    /// provided.
-    type TraceContext<'a>
+    // @dev This can either be a &mut _ type or a struct with &mut _ fields.
+    // The latter is helpful if we want to directly write certain values in place into a trace
+    // matrix.
+    type RecordMut<'a>
     where
         Self: 'a;
 
-    fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]);
+    // /// The minimal amount of information needed to generate the sub-row of the trace matrix.
+    // /// This type has a lifetime so other context, such as references to other chips, can be
+    // /// provided.
+    // type TraceContext<'a>
+    // where
+    //     Self: 'a;
+
+    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>);
 
     fn read(
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        adapter_row: &mut [F],
+        record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData;
 
     fn write(
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        adapter_row: &mut [F],
         data: &Self::WriteData,
+        record: &mut Self::RecordMut<'_>,
     );
+}
 
-    // Note[jpw]: should we reuse TraceSubRowGenerator trait instead?
+// NOTE[jpw]: cannot reuse `TraceSubRowGenerator` trait because we need associated constant
+// `WIDTH`.
+pub trait AdapterTraceFiller<F> {
+    /// Adapter sub-air column width
+    const WIDTH: usize;
+
     /// Post-execution filling of rest of adapter row.
-    fn fill_trace_row(
-        &self,
-        mem_helper: &MemoryAuxColsFactory<F>,
-        ctx: Self::TraceContext<'_>,
-        adapter_row: &mut [F],
-    );
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]);
 }
 
 pub trait AdapterExecutorE1<F>
@@ -403,7 +420,7 @@ pub trait StepExecutorE1<F> {
 
 const DEFAULT_RECORDS_CAPACITY: usize = 1 << 20;
 
-impl<F, A, S> InsExecutorE1<F> for NewVmChipWrapper<F, A, S>
+impl<F, A, S, RA> InsExecutorE1<F> for NewVmChipWrapper<F, A, S, RA>
 where
     F: PrimeField32,
     S: StepExecutorE1<F>,
@@ -685,49 +702,6 @@ mod conversions {
         }
     }
 
-    // AdapterRuntimeContext: VecHeapAdapterInterface -> DynInterface
-    impl<
-            T,
-            const NUM_READS: usize,
-            const BLOCKS_PER_READ: usize,
-            const BLOCKS_PER_WRITE: usize,
-            const READ_SIZE: usize,
-            const WRITE_SIZE: usize,
-        >
-        From<
-            AdapterRuntimeContext<
-                T,
-                VecHeapAdapterInterface<
-                    T,
-                    NUM_READS,
-                    BLOCKS_PER_READ,
-                    BLOCKS_PER_WRITE,
-                    READ_SIZE,
-                    WRITE_SIZE,
-                >,
-            >,
-        > for AdapterRuntimeContext<T, DynAdapterInterface<T>>
-    {
-        fn from(
-            ctx: AdapterRuntimeContext<
-                T,
-                VecHeapAdapterInterface<
-                    T,
-                    NUM_READS,
-                    BLOCKS_PER_READ,
-                    BLOCKS_PER_WRITE,
-                    READ_SIZE,
-                    WRITE_SIZE,
-                >,
-            >,
-        ) -> Self {
-            AdapterRuntimeContext {
-                to_pc: ctx.to_pc,
-                writes: ctx.writes.into(),
-            }
-        }
-    }
-
     // AdapterAirContext: DynInterface -> VecHeapAdapterInterface
     impl<
             T,
@@ -759,35 +733,6 @@ mod conversions {
         }
     }
 
-    // AdapterRuntimeContext: DynInterface -> VecHeapAdapterInterface
-    impl<
-            T,
-            const NUM_READS: usize,
-            const BLOCKS_PER_READ: usize,
-            const BLOCKS_PER_WRITE: usize,
-            const READ_SIZE: usize,
-            const WRITE_SIZE: usize,
-        > From<AdapterRuntimeContext<T, DynAdapterInterface<T>>>
-        for AdapterRuntimeContext<
-            T,
-            VecHeapAdapterInterface<
-                T,
-                NUM_READS,
-                BLOCKS_PER_READ,
-                BLOCKS_PER_WRITE,
-                READ_SIZE,
-                WRITE_SIZE,
-            >,
-        >
-    {
-        fn from(ctx: AdapterRuntimeContext<T, DynAdapterInterface<T>>) -> Self {
-            AdapterRuntimeContext {
-                to_pc: ctx.to_pc,
-                writes: ctx.writes.into(),
-            }
-        }
-    }
-
     // AdapterAirContext: DynInterface -> VecHeapTwoReadsAdapterInterface
     impl<
             T: Clone,
@@ -815,95 +760,6 @@ mod conversions {
                 reads: ctx.reads.into(),
                 writes: ctx.writes.into(),
                 instruction: ctx.instruction.into(),
-            }
-        }
-    }
-
-    // AdapterRuntimeContext: DynInterface -> VecHeapAdapterInterface
-    impl<
-            T,
-            const BLOCKS_PER_READ1: usize,
-            const BLOCKS_PER_READ2: usize,
-            const BLOCKS_PER_WRITE: usize,
-            const READ_SIZE: usize,
-            const WRITE_SIZE: usize,
-        > From<AdapterRuntimeContext<T, DynAdapterInterface<T>>>
-        for AdapterRuntimeContext<
-            T,
-            VecHeapTwoReadsAdapterInterface<
-                T,
-                BLOCKS_PER_READ1,
-                BLOCKS_PER_READ2,
-                BLOCKS_PER_WRITE,
-                READ_SIZE,
-                WRITE_SIZE,
-            >,
-        >
-    {
-        fn from(ctx: AdapterRuntimeContext<T, DynAdapterInterface<T>>) -> Self {
-            AdapterRuntimeContext {
-                to_pc: ctx.to_pc,
-                writes: ctx.writes.into(),
-            }
-        }
-    }
-
-    // AdapterRuntimeContext: BasicInterface -> VecHeapAdapterInterface
-    impl<
-            T,
-            PI,
-            const BASIC_NUM_READS: usize,
-            const BASIC_NUM_WRITES: usize,
-            const NUM_READS: usize,
-            const BLOCKS_PER_READ: usize,
-            const BLOCKS_PER_WRITE: usize,
-            const READ_SIZE: usize,
-            const WRITE_SIZE: usize,
-        >
-        From<
-            AdapterRuntimeContext<
-                T,
-                BasicAdapterInterface<
-                    T,
-                    PI,
-                    BASIC_NUM_READS,
-                    BASIC_NUM_WRITES,
-                    READ_SIZE,
-                    WRITE_SIZE,
-                >,
-            >,
-        >
-        for AdapterRuntimeContext<
-            T,
-            VecHeapAdapterInterface<
-                T,
-                NUM_READS,
-                BLOCKS_PER_READ,
-                BLOCKS_PER_WRITE,
-                READ_SIZE,
-                WRITE_SIZE,
-            >,
-        >
-    {
-        fn from(
-            ctx: AdapterRuntimeContext<
-                T,
-                BasicAdapterInterface<
-                    T,
-                    PI,
-                    BASIC_NUM_READS,
-                    BASIC_NUM_WRITES,
-                    READ_SIZE,
-                    WRITE_SIZE,
-                >,
-            >,
-        ) -> Self {
-            assert_eq!(BASIC_NUM_WRITES, BLOCKS_PER_WRITE);
-            let mut writes_it = ctx.writes.into_iter();
-            let writes = from_fn(|_| writes_it.next().unwrap());
-            AdapterRuntimeContext {
-                to_pc: ctx.to_pc,
-                writes,
             }
         }
     }
@@ -1062,79 +918,6 @@ mod conversions {
         }
     }
 
-    // AdapterRuntimeContext: BasicInterface -> FlatInterface
-    impl<
-            T,
-            PI,
-            const NUM_READS: usize,
-            const NUM_WRITES: usize,
-            const READ_SIZE: usize,
-            const WRITE_SIZE: usize,
-            const READ_CELLS: usize,
-            const WRITE_CELLS: usize,
-        >
-        From<
-            AdapterRuntimeContext<
-                T,
-                BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-            >,
-        > for AdapterRuntimeContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>
-    {
-        /// ## Panics
-        /// If `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
-        /// This is a runtime assertion until Rust const generics expressions are stabilized.
-        fn from(
-            ctx: AdapterRuntimeContext<
-                T,
-                BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-            >,
-        ) -> AdapterRuntimeContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>> {
-            assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
-            let mut writes_it = ctx.writes.into_iter().flatten();
-            let writes = from_fn(|_| writes_it.next().unwrap());
-            AdapterRuntimeContext {
-                to_pc: ctx.to_pc,
-                writes,
-            }
-        }
-    }
-
-    // AdapterRuntimeContext: FlatInterface -> BasicInterface
-    impl<
-            T: FieldAlgebra,
-            PI,
-            const NUM_READS: usize,
-            const NUM_WRITES: usize,
-            const READ_SIZE: usize,
-            const WRITE_SIZE: usize,
-            const READ_CELLS: usize,
-            const WRITE_CELLS: usize,
-        > From<AdapterRuntimeContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>>
-        for AdapterRuntimeContext<
-            T,
-            BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-        >
-    {
-        /// ## Panics
-        /// If `WRITE_CELLS != NUM_WRITES * WRITE_SIZE`.
-        /// This is a runtime assertion until Rust const generics expressions are stabilized.
-        fn from(
-            ctx: AdapterRuntimeContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>,
-        ) -> AdapterRuntimeContext<
-            T,
-            BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-        > {
-            assert_eq!(WRITE_CELLS, NUM_WRITES * WRITE_SIZE);
-            let mut writes_it = ctx.writes.into_iter();
-            let writes: [[T; WRITE_SIZE]; NUM_WRITES] =
-                from_fn(|_| from_fn(|_| writes_it.next().unwrap()));
-            AdapterRuntimeContext {
-                to_pc: ctx.to_pc,
-                writes,
-            }
-        }
-    }
-
     impl<T> From<Vec<T>> for DynArray<T> {
         fn from(v: Vec<T>) -> Self {
             Self(v)
@@ -1246,35 +1029,6 @@ mod conversions {
         }
     }
 
-    // AdapterRuntimeContext: BasicInterface -> DynInterface
-    impl<
-            T,
-            PI,
-            const NUM_READS: usize,
-            const NUM_WRITES: usize,
-            const READ_SIZE: usize,
-            const WRITE_SIZE: usize,
-        >
-        From<
-            AdapterRuntimeContext<
-                T,
-                BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-            >,
-        > for AdapterRuntimeContext<T, DynAdapterInterface<T>>
-    {
-        fn from(
-            ctx: AdapterRuntimeContext<
-                T,
-                BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-            >,
-        ) -> Self {
-            AdapterRuntimeContext {
-                to_pc: ctx.to_pc,
-                writes: ctx.writes.into(),
-            }
-        }
-    }
-
     // AdapterAirContext: DynInterface -> BasicInterface
     impl<
             T,
@@ -1301,28 +1055,6 @@ mod conversions {
         }
     }
 
-    // AdapterRuntimeContext: DynInterface -> BasicInterface
-    impl<
-            T,
-            PI,
-            const NUM_READS: usize,
-            const NUM_WRITES: usize,
-            const READ_SIZE: usize,
-            const WRITE_SIZE: usize,
-        > From<AdapterRuntimeContext<T, DynAdapterInterface<T>>>
-        for AdapterRuntimeContext<
-            T,
-            BasicAdapterInterface<T, PI, NUM_READS, NUM_WRITES, READ_SIZE, WRITE_SIZE>,
-        >
-    {
-        fn from(ctx: AdapterRuntimeContext<T, DynAdapterInterface<T>>) -> Self {
-            AdapterRuntimeContext {
-                to_pc: ctx.to_pc,
-                writes: ctx.writes.into(),
-            }
-        }
-    }
-
     // AdapterAirContext: FlatInterface -> DynInterface
     impl<T: Clone, PI: Into<DynArray<T>>, const READ_CELLS: usize, const WRITE_CELLS: usize>
         From<AdapterAirContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>>
@@ -1334,21 +1066,6 @@ mod conversions {
                 reads: ctx.reads.to_vec().into(),
                 writes: ctx.writes.to_vec().into(),
                 instruction: ctx.instruction.into(),
-            }
-        }
-    }
-
-    // AdapterRuntimeContext: FlatInterface -> DynInterface
-    impl<T: Clone, PI, const READ_CELLS: usize, const WRITE_CELLS: usize>
-        From<AdapterRuntimeContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>>
-        for AdapterRuntimeContext<T, DynAdapterInterface<T>>
-    {
-        fn from(
-            ctx: AdapterRuntimeContext<T, FlatInterface<T, PI, READ_CELLS, WRITE_CELLS>>,
-        ) -> Self {
-            AdapterRuntimeContext {
-                to_pc: ctx.to_pc,
-                writes: ctx.writes.to_vec().into(),
             }
         }
     }
