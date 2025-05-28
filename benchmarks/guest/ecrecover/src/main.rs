@@ -6,6 +6,7 @@ use k256::ecdsa::{Error, RecoveryId, Signature, VerifyingKey};
 #[allow(unused_imports)]
 use k256::Secp256k1Point;
 use openvm::io::read_vec;
+use openvm_ecc_guest::{algebra::IntMod, weierstrass::WeierstrassPoint};
 #[allow(unused_imports, clippy::single_component_path_imports)]
 use openvm_keccak256::keccak256;
 // export native keccak
@@ -34,11 +35,18 @@ fn ecrecover(sig: &B512, mut recid: u8, msg: &B256) -> Result<B256, Error> {
     let recid = RecoveryId::from_byte(recid).expect("recovery ID is valid");
 
     let recovered_key = VerifyingKey::recover_from_prehash(&msg[..], &sig, recid)?;
-    let mut hash = keccak256(
-        &recovered_key
-            .to_encoded_point(/* compress = */ false)
-            .as_bytes()[1..],
-    );
+
+    let public_key = recovered_key.as_affine();
+    let mut encoded = [0u8; 64];
+    encoded[..32].copy_from_slice(&public_key.x().to_be_bytes());
+    encoded[32..].copy_from_slice(&public_key.y().to_be_bytes());
+    let mut hash = keccak256(&encoded);
+
+    // let mut hash = keccak256(
+    //     &recovered_key
+    //         .to_encoded_point(/* compress = */ false)
+    //         .as_bytes()[1..],
+    // );
 
     // truncate to 20 bytes
     hash[..12].fill(0);
