@@ -116,9 +116,9 @@ where
 {
     let mut addr = rng.gen_range(0..RV32_MAX_REGISTER_ADDRESS >> 2) << 2;
     if let Some(other) = other {
-        while addr == other {
+        while addr == other as u32 {
             addr = rng.gen_range(0..RV32_MAX_REGISTER_ADDRESS >> 2) << 2;
         }
     }
-    addr
+    addr as usize
 }

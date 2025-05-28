@@ -19,13 +19,12 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
-    TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
+    riscv::{RV32_IMM_AS, RV32_MAX_REGISTER_ADDRESS, RV32_REGISTER_AS},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -218,10 +217,14 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     ) -> Self::ReadData {
         let &Instruction { b, c, d, e, .. } = instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert!(
-            e.as_canonical_u32() == RV32_REGISTER_AS || e.as_canonical_u32() == RV32_IMM_AS
-        );
+        #[cfg(debug_assertions)]
+        {
+            assert!(b.as_canonical_u32() <= RV32_MAX_REGISTER_ADDRESS);
+            assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+            assert!(
+                e.as_canonical_u32() == RV32_REGISTER_AS || e.as_canonical_u32() == RV32_IMM_AS
+            );
+        }
 
         record.rs1_ptr = b.as_canonical_u32() as u8;
         let rs1 = tracing_read(
@@ -232,6 +235,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
         );
 
         let rs2 = if e.as_canonical_u32() == RV32_REGISTER_AS {
+            debug_assert!(c.as_canonical_u32() <= RV32_MAX_REGISTER_ADDRESS);
             record.rs2_as = RV32_REGISTER_AS as u8;
             record.rs2 = c.as_canonical_u32();
 
@@ -260,6 +264,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     ) {
         let &Instruction { a, d, .. } = instruction;
 
+        debug_assert!(a.as_canonical_u32() <= RV32_MAX_REGISTER_ADDRESS);
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
         record.rd_ptr = a.as_canonical_u32() as u8;
