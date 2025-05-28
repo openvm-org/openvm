@@ -178,7 +178,7 @@ pub trait TraceFiller<F, CTX> {
     /// Populates `row_slice`. This function will always be called after
     /// [`TraceStep::execute`], so the `row_slice` should already contain context necessary to
     /// fill in the rest of the row. This function will be called for each row in the trace which
-    /// being used, and all other rows in the trace will be filled with zeroes.
+    /// is being used, and for all other rows in the trace see `fill_dummy_trace_row`.
     ///
     /// The provided `row_slice` will have length equal to the width of the AIR.
     fn fill_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, _row_slice: &mut [F]) {

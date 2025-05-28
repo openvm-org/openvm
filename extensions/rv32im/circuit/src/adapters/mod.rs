@@ -1,9 +1,7 @@
 use std::ops::Mul;
 
 use openvm_circuit::system::memory::{
-    offline_checker::{
-        MemoryBaseAuxCols, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-    },
+    offline_checker::MemoryBaseAuxCols,
     online::{GuestMemory, TracingMemory},
     tree::public_values::PUBLIC_VALUES_AS,
     MemoryController, RecordId,
