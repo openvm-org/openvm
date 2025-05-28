@@ -23,7 +23,7 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let height = next_power_of_two_or_zero(self.current_trace_height());
+        let height = self.current_trace_height().next_power_of_two();
         let width = self.trace_width();
 
         let mut inputs = Vec::with_capacity(height);
