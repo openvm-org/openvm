@@ -217,7 +217,8 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
             hasher.compress_and_record(left, right)
         });
         if touched.is_empty() {
-            // If we made an artificial touch, we need to change the direction changes for the leaves
+            // If we made an artificial touch, we need to change the direction changes for the
+            // leaves
             rows[1].left_direction_different = F::ONE;
             rows[1].right_direction_different = F::ONE;
         }
