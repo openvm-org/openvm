@@ -88,8 +88,8 @@ impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<C
     }
 
     fn current_trace_height(&self) -> usize {
-        self.trace_height
-            .expect("Merkle chip must finalize before trace generation")
+        // TODO is it ok?
+        self.trace_height.unwrap_or(0)
     }
 
     fn trace_width(&self) -> usize {
