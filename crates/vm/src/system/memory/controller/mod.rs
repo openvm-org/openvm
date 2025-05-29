@@ -51,10 +51,6 @@ pub const MERKLE_AIR_OFFSET: usize = 1;
 /// The offset of the boundary AIR in AIRs of MemoryController.
 pub const BOUNDARY_AIR_OFFSET: usize = 0;
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RecordId(pub usize);
-
 pub type MemoryImage = AddressMap<PAGE_SIZE>;
 
 #[repr(C)]
@@ -332,77 +328,6 @@ impl<F: PrimeField32> MemoryController<F> {
             self.mem_config.clk_max_bits,
             self.range_checker_bus,
         )
-    }
-
-    pub fn read_cell(&mut self, address_space: F, pointer: F) -> (RecordId, F) {
-        let (record_id, [data]) = self.read(address_space, pointer);
-        (record_id, data)
-    }
-
-    // TEMP[jpw]: Function is safe temporarily for refactoring
-    /// # Safety
-    /// The type `T` must be stack-allocated `repr(C)` or `repr(transparent)`, and it must be the
-    /// exact type used to represent a single memory cell in address space `address_space`. For
-    /// standard usage, `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
-    pub fn read<T: Copy, const N: usize>(
-        &mut self,
-        address_space: F,
-        pointer: F,
-    ) -> (RecordId, [T; N]) {
-        let address_space_u32 = address_space.as_canonical_u32();
-        let ptr_u32 = pointer.as_canonical_u32();
-        assert!(
-            address_space == F::ZERO || ptr_u32 < (1 << self.mem_config.pointer_max_bits),
-            "memory out of bounds: {ptr_u32:?}",
-        );
-        todo!()
-        // let (record_id, values) = unsafe { self.memory.read::<T, N>(address_space_u32, ptr_u32)
-        // };
-
-        // (record_id, values)
-    }
-
-    /// Reads a word directly from memory without updating internal state.
-    ///
-    /// Any value returned is unconstrained.
-    pub fn unsafe_read_cell<T: Copy>(&self, addr_space: F, ptr: F) -> T {
-        self.unsafe_read::<T, 1>(addr_space, ptr)[0]
-    }
-
-    /// Reads a word directly from memory without updating internal state.
-    ///
-    /// Any value returned is unconstrained.
-    pub fn unsafe_read<T: Copy, const N: usize>(&self, addr_space: F, ptr: F) -> [T; N] {
-        let addr_space = addr_space.as_canonical_u32();
-        let ptr = ptr.as_canonical_u32();
-        todo!()
-        // unsafe { array::from_fn(|i| self.memory.get::<T>(addr_space, ptr + i as u32)) }
-    }
-
-    /// Writes `data` to the given cell.
-    ///
-    /// Returns the `RecordId` and previous data.
-    pub fn write_cell<T: Copy>(&mut self, address_space: F, pointer: F, data: T) -> (RecordId, T) {
-        let (record_id, [data]) = self.write(address_space, pointer, &[data]);
-        (record_id, data)
-    }
-
-    pub fn write<T: Copy, const N: usize>(
-        &mut self,
-        address_space: F,
-        pointer: F,
-        data: &[T; N],
-    ) -> (RecordId, [T; N]) {
-        debug_assert_ne!(address_space, F::ZERO);
-        let address_space_u32 = address_space.as_canonical_u32();
-        let ptr_u32 = pointer.as_canonical_u32();
-        assert!(
-            ptr_u32 < (1 << self.mem_config.pointer_max_bits),
-            "memory out of bounds: {ptr_u32:?}",
-        );
-
-        todo!()
-        // unsafe { self.memory.write::<T, N>(address_space_u32, ptr_u32, data) }
     }
 
     pub fn helper(&self) -> SharedMemoryHelper<F> {
@@ -805,18 +730,6 @@ impl<F: PrimeField32> MemoryAuxColsFactory<'_, F> {
             &mut buffer.lower_decomp,
         );
     }
-
-    fn generate_timestamp_lt_cols(
-        &self,
-        prev_timestamp: u32,
-        timestamp: u32,
-    ) -> LessThanAuxCols<F, AUX_LEN> {
-        debug_assert!(prev_timestamp < timestamp);
-        let mut decomp = [F::ZERO; AUX_LEN];
-        self.timestamp_lt_air
-            .generate_subrow((self.range_checker, prev_timestamp, timestamp), &mut decomp);
-        LessThanAuxCols::new(decomp)
-    }
 }
 
 impl<T> SharedMemoryHelper<T> {
@@ -836,7 +749,7 @@ mod tests {
     };
     use openvm_stark_backend::{interaction::BusIndex, p3_field::FieldAlgebra};
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
-    use rand::{prelude::SliceRandom, thread_rng, Rng};
+    use rand::{thread_rng, Rng};
 
     use super::MemoryController;
     use crate::{
@@ -855,7 +768,7 @@ mod tests {
         let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
         let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
 
-        let mut memory_controller = MemoryController::with_volatile_memory(
+        let mut memory_controller = MemoryController::<F>::with_volatile_memory(
             memory_bus,
             memory_config,
             range_checker.clone(),
@@ -863,15 +776,24 @@ mod tests {
 
         let mut rng = thread_rng();
         for _ in 0..1000 {
-            let address_space = F::from_canonical_u32(*[1, 2].choose(&mut rng).unwrap());
-            let pointer =
-                F::from_canonical_u32(rng.gen_range(0..1 << memory_config.pointer_max_bits));
+            // TODO[jpw]: test other address spaces?
+            let address_space = 4u32;
+            let pointer = rng.gen_range(0..1 << memory_config.pointer_max_bits);
 
             if rng.gen_bool(0.5) {
                 let data = F::from_canonical_u32(rng.gen_range(0..1 << 30));
-                memory_controller.write(address_space, pointer, &[data]);
+                // address space is 4 so cell type is `F`
+                unsafe {
+                    memory_controller
+                        .memory
+                        .write::<F, 1, 1>(address_space, pointer, &[data]);
+                }
             } else {
-                memory_controller.read::<F, 1>(address_space, pointer);
+                unsafe {
+                    memory_controller
+                        .memory
+                        .read::<F, 1, 1>(address_space, pointer);
+                }
             }
         }
         assert!(memory_controller

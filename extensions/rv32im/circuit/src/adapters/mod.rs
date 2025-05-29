@@ -6,7 +6,6 @@ use openvm_circuit::{
         offline_checker::{MemoryBaseAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
         online::{GuestMemory, TracingMemory},
         tree::public_values::PUBLIC_VALUES_AS,
-        MemoryController, RecordId,
     },
 };
 use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
@@ -235,27 +234,14 @@ pub fn tracing_write_with_base_aux<F, const N: usize>(
     base_aux_cols.set_prev(F::from_canonical_u32(t_prev));
 }
 
-// TODO: delete
-/// Read register value as [RV32_REGISTER_NUM_LIMBS] limbs from memory.
-/// Returns the read record and the register value as u32.
-/// Does not make any range check calls.
-pub fn read_rv32_register<F: PrimeField32>(
-    memory: &mut MemoryController<F>,
-    address_space: F,
-    pointer: F,
-) -> (RecordId, u32) {
-    debug_assert_eq!(address_space, F::ONE);
-    let record = memory.read::<u8, RV32_REGISTER_NUM_LIMBS>(address_space, pointer);
-    let val = u32::from_le_bytes(record.1);
-    (record.0, val)
-}
-
+// TODO: remove new_
 #[inline(always)]
 pub fn new_read_rv32_register(memory: &GuestMemory, address_space: u32, ptr: u32) -> u32 {
     u32::from_le_bytes(memory_read(memory, address_space, ptr))
 }
 
 // TODO(AG): if "register", why `address_space` is not hardcoded to be 1?
+// TODO(jpw): remove new_
 #[inline(always)]
 pub fn new_read_rv32_register_from_state<Ctx>(
     state: &mut VmStateMut<GuestMemory, Ctx>,
@@ -266,13 +252,6 @@ where
     Ctx: E1E2ExecutionCtx,
 {
     u32::from_le_bytes(memory_read_from_state(state, address_space, ptr))
-}
-
-/// Peeks at the value of a register without updating the memory state or incrementing the
-/// timestamp.
-pub fn unsafe_read_rv32_register<F: PrimeField32>(memory: &MemoryController<F>, pointer: F) -> u32 {
-    let data = memory.unsafe_read::<u8, RV32_REGISTER_NUM_LIMBS>(F::ONE, pointer);
-    u32::from_le_bytes(data)
 }
 
 pub fn abstract_compose<T: FieldAlgebra, V: Mul<T, Output = T>>(

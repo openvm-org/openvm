@@ -176,7 +176,11 @@ pub fn tracing_read_or_imm_native<F>(
 where
     F: PrimeField32,
 {
-    debug_assert!(addr_space == AS::Immediate as u32 || addr_space == AS::Native as u32);
+    debug_assert!(
+        addr_space == AS::Immediate as u32 || addr_space == AS::Native as u32,
+        "addr_space={} is not valid",
+        addr_space
+    );
 
     if addr_space == AS::Immediate as u32 {
         *addr_space_mut = F::ZERO;

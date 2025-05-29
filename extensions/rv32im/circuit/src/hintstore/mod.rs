@@ -12,7 +12,7 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
         online::{GuestMemory, TracingMemory},
-        MemoryAddress, MemoryAuxColsFactory, RecordId,
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
@@ -262,19 +262,6 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
             next_cols.from_state.timestamp,
         );
     }
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
-pub struct Rv32HintStoreRecord<F: Field> {
-    pub from_state: ExecutionState<u32>,
-    pub instruction: Instruction<F>,
-    pub mem_ptr_read: RecordId,
-    pub mem_ptr: u32,
-    pub num_words: u32,
-
-    pub num_words_read: Option<RecordId>,
-    pub hints: Vec<([F; RV32_REGISTER_NUM_LIMBS], RecordId)>,
 }
 
 pub struct Rv32HintStoreStep<F: Field> {
