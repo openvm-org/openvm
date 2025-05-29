@@ -325,7 +325,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
         let padded_height = if let Some(oh) = self.overridden_height {
             assert!(
                 oh >= height,
-                "Overridden height is less than the required height"
+                "Overridden height {oh} is less than the required height {height}"
             );
             oh
         } else {

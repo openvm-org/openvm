@@ -466,7 +466,8 @@ where
         let num_access_adapters = executor
             .chip_complex
             .memory_controller()
-            .access_adapters
+            .memory
+            .access_adapter_inventory
             .num_access_adapters();
         let ctx = MeteredCtx::new(
             widths.len(),

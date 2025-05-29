@@ -31,7 +31,6 @@ use super::{
 use crate::{
     arch::{hasher::HasherChip, MemoryConfig},
     system::memory::{
-        adapter::AccessAdapterInventory,
         dimensions::MemoryDimensions,
         merkle::{MemoryMerkleChip, SerialReceiver},
         offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
@@ -88,7 +87,6 @@ pub struct MemoryController<F> {
     range_checker_bus: VariableRangeCheckerBus,
     // addr_space -> Memory data structure
     pub memory: TracingMemory<F>,
-    pub access_adapters: AccessAdapterInventory<F>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -211,12 +209,6 @@ impl<F: PrimeField32> MemoryController<F> {
                 ),
             },
             memory: TracingMemory::new(&mem_config, range_checker.clone(), memory_bus, 1),
-            access_adapters: AccessAdapterInventory::new(
-                range_checker.clone(),
-                memory_bus,
-                mem_config.clk_max_bits,
-                mem_config.max_access_adapter_n,
-            ),
             range_checker,
             range_checker_bus,
         }
@@ -255,12 +247,6 @@ impl<F: PrimeField32> MemoryController<F> {
             interface_chip,
             memory: TracingMemory::new(&mem_config, range_checker.clone(), memory_bus, CHUNK), /* it is expected that the memory will be
                                                                                                 * set later */
-            access_adapters: AccessAdapterInventory::new(
-                range_checker.clone(),
-                memory_bus,
-                mem_config.clk_max_bits,
-                mem_config.max_access_adapter_n,
-            ),
             range_checker,
             range_checker_bus,
         }
@@ -275,7 +261,8 @@ impl<F: PrimeField32> MemoryController<F> {
             MemoryInterface::Volatile { boundary_chip } => match overridden_heights {
                 MemoryTraceHeights::Volatile(oh) => {
                     boundary_chip.set_overridden_height(oh.boundary);
-                    self.access_adapters
+                    self.memory
+                        .access_adapter_inventory
                         .set_override_trace_heights(oh.access_adapters);
                 }
                 _ => panic!("Expect overridden_heights to be MemoryTraceHeights::Volatile"),
@@ -288,7 +275,8 @@ impl<F: PrimeField32> MemoryController<F> {
                 MemoryTraceHeights::Persistent(oh) => {
                     boundary_chip.set_overridden_height(oh.boundary);
                     merkle_chip.set_overridden_height(oh.merkle);
-                    self.access_adapters
+                    self.memory
+                        .access_adapter_inventory
                         .set_override_trace_heights(oh.access_adapters);
                 }
                 _ => panic!("Expect overridden_heights to be MemoryTraceHeights::Persistent"),
@@ -497,10 +485,13 @@ impl<F: PrimeField32> MemoryController<F> {
             );
         }
 
-        for i in 0..self.access_adapters.num_access_adapters() {
+        for i in 0..self.memory.access_adapter_inventory.num_access_adapters() {
             let width = self.memory.adapter_inventory_trace_cursor.width(i);
             let trace = self.memory.adapter_inventory_trace_cursor.extract_trace(i);
-            self.access_adapters.set_trace(i, trace, width);
+            println!("access adapter {} trace_len: {}", i, trace.len());
+            self.memory
+                .access_adapter_inventory
+                .set_trace(i, trace, width);
         }
 
         final_memory
@@ -557,12 +548,8 @@ impl<F: PrimeField32> MemoryController<F> {
     {
         let mut ret = Vec::new();
 
-        let Self {
-            interface_chip,
-            access_adapters,
-            ..
-        } = self;
-        match interface_chip {
+        let access_adapters = self.memory.access_adapter_inventory;
+        match self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 ret.push(boundary_chip.generate_air_proof_input());
             }
@@ -603,7 +590,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 airs.push(merkle_chip.air());
             }
         }
-        airs.extend(self.access_adapters.airs());
+        airs.extend(self.memory.access_adapter_inventory.airs());
 
         airs
     }
@@ -614,7 +601,7 @@ impl<F: PrimeField32> MemoryController<F> {
         if self.continuation_enabled() {
             num_airs += 1;
         }
-        num_airs += self.access_adapters.num_access_adapters();
+        num_airs += self.memory.access_adapter_inventory.num_access_adapters();
         num_airs
     }
 
@@ -623,7 +610,7 @@ impl<F: PrimeField32> MemoryController<F> {
         if self.continuation_enabled() {
             air_names.push("Merkle".to_string());
         }
-        air_names.extend(self.access_adapters.air_names());
+        air_names.extend(self.memory.access_adapter_inventory.air_names());
         air_names
     }
 
@@ -632,7 +619,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn get_memory_trace_heights(&self) -> MemoryTraceHeights {
-        let access_adapters = self.access_adapters.get_heights();
+        let access_adapters = self.memory.access_adapter_inventory.get_heights();
         match &self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
@@ -653,7 +640,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn get_dummy_memory_trace_heights(&self) -> MemoryTraceHeights {
-        let access_adapters = vec![1; self.access_adapters.num_access_adapters()];
+        let access_adapters = vec![1; self.memory.access_adapter_inventory.num_access_adapters()];
         match &self.interface_chip {
             MemoryInterface::Volatile { .. } => {
                 MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
@@ -686,7 +673,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 ret.push(merkle_chip.current_trace_cells());
             }
         }
-        ret.extend(self.access_adapters.get_cells());
+        ret.extend(self.memory.access_adapter_inventory.get_cells());
         ret
     }
 }
@@ -797,7 +784,8 @@ mod tests {
             }
         }
         assert!(memory_controller
-            .access_adapters
+            .memory
+            .access_adapter_inventory
             .get_heights()
             .iter()
             .all(|&h| h == 0));
