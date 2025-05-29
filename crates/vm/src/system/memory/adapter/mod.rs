@@ -4,7 +4,8 @@ pub use air::*;
 pub use columns::*;
 use enum_dispatch::enum_dispatch;
 use openvm_circuit_primitives::{
-    is_less_than::IsLtSubAir, var_range::SharedVariableRangeCheckerChip, TraceSubRowGenerator,
+    is_less_than::IsLtSubAir, utils::next_power_of_two_or_zero,
+    var_range::SharedVariableRangeCheckerChip, TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_stark_backend::{
@@ -321,53 +322,20 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
     {
         let mut trace = self.trace;
         let height = trace.height();
-        trace.pad_to_height(height.next_power_of_two(), F::ZERO);
+        let padded_height = if let Some(oh) = self.overridden_height {
+            assert!(
+                oh >= height,
+                "Overridden height is less than the required height"
+            );
+            oh
+        } else {
+            height
+        };
+        let padded_height = next_power_of_two_or_zero(padded_height);
+        trace.pad_to_height(padded_height, F::ZERO);
         trace
         // TODO(AG): everything related to the calculated trace height
         // needs to be in memory controller, who owns these traces.
-
-        // let width = BaseAir::<F>::width(&self.air);
-        // let height = if let Some(oh) = self.overridden_height {
-        //     assert!(
-        //         oh >= self.records.len(),
-        //         "Overridden height is less than the required height"
-        //     );
-        //     oh
-        // } else {
-        //     self.records.len()
-        // };
-        // let height = next_power_of_two_or_zero(height);
-        // let mut values = F::zero_vec(height * width);
-
-        // values
-        //     .par_chunks_mut(width)
-        //     .zip(self.records.into_par_iter())
-        //     .for_each(|(row, record)| {
-        //         let row: &mut AccessAdapterCols<F, N> = row.borrow_mut();
-
-        //         row.is_valid = F::ONE;
-        //         row.values = record.data.try_into().unwrap();
-        //         row.address = MemoryAddress::new(record.address_space, record.start_index);
-
-        //         let (left_timestamp, right_timestamp) = match record.kind {
-        //             AccessAdapterRecordKind::Split => (record.timestamp, record.timestamp),
-        //             AccessAdapterRecordKind::Merge {
-        //                 left_timestamp,
-        //                 right_timestamp,
-        //             } => (left_timestamp, right_timestamp),
-        //         };
-        //         debug_assert_eq!(max(left_timestamp, right_timestamp), record.timestamp);
-
-        //         row.left_timestamp = F::from_canonical_u32(left_timestamp);
-        //         row.right_timestamp = F::from_canonical_u32(right_timestamp);
-        //         row.is_split = F::from_bool(record.kind == AccessAdapterRecordKind::Split);
-
-        //         self.air.lt_air.generate_subrow(
-        //             (self.range_checker.as_ref(), left_timestamp, right_timestamp),
-        //             (&mut row.lt_aux, &mut row.is_right_larger),
-        //         );
-        //     });
-        // RowMajorMatrix::new(values, width)
     }
 
     fn set_trace(&mut self, trace: RowMajorMatrix<F>) {
