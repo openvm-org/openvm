@@ -151,7 +151,7 @@ pub struct Rv32JalrAdapterRecord {
     pub from_timestamp: u32,
 
     pub rs1_ptr: u32,
-    pub rd_ptr: Option<u32>,
+    pub rd_ptr: u32,
 
     pub reads_aux: MemoryReadAuxRecord,
     pub writes_aux: MemoryWriteAuxRecord<RV32_REGISTER_NUM_LIMBS>,
@@ -211,7 +211,7 @@ where
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
         if enabled.is_one() {
-            record.rd_ptr = Some(a.as_canonical_u32());
+            record.rd_ptr = a.as_canonical_u32();
 
             tracing_write(
                 memory,
@@ -222,6 +222,7 @@ where
                 &mut record.writes_aux.prev_data,
             );
         } else {
+            record.rd_ptr = u32::MAX;
             memory.increment_timestamp();
         }
     }
@@ -236,11 +237,11 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32JalrAdapterStep {
             let ptr = adapter_row as *mut _ as *mut u8;
             let record_buffer = &*slice_from_raw_parts(ptr, size_of::<Rv32JalrAdapterRecord>());
             let record: &Rv32JalrAdapterRecord = record_buffer.borrow();
-            
-            // We must assign in reverse
-            adapter_row.needs_write = F::from_bool(record.rd_ptr.is_some());
 
-            if let Some(rd_ptr) = record.rd_ptr {
+            // We must assign in reverse
+            adapter_row.needs_write = F::from_bool(record.rd_ptr != u32::MAX);
+
+            if record.rd_ptr != u32::MAX {
                 adapter_row
                     .rd_aux_cols
                     .set_prev_data(record.writes_aux.prev_data.map(F::from_canonical_u8));
@@ -249,7 +250,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32JalrAdapterStep {
                     record.from_timestamp + 1,
                     adapter_row.rd_aux_cols.as_mut(),
                 );
-                adapter_row.rd_ptr = F::from_canonical_u32(rd_ptr);
+                adapter_row.rd_ptr = F::from_canonical_u32(record.rd_ptr);
             }
 
             mem_helper.fill(

@@ -503,7 +503,7 @@ impl<
 
             let timestamp_delta = NUM_READS + 1 + NUM_READS * BLOCKS_PER_READ + BLOCKS_PER_WRITE;
             let mut timestamp = record.from_timestamp + timestamp_delta as u32;
-            let mut timestamp_pp = || {
+            let mut timestamp_mm = || {
                 timestamp -= 1;
                 timestamp
             };
@@ -516,7 +516,7 @@ impl<
                 .zip(cols.writes_aux.iter_mut().rev())
                 .for_each(|(write, cols_write)| {
                     cols_write.set_prev_data(write.prev_data.map(F::from_canonical_u8));
-                    mem_helper.fill(write.prev_timestamp, timestamp_pp(), cols_write.as_mut());
+                    mem_helper.fill(write.prev_timestamp, timestamp_mm(), cols_write.as_mut());
                 });
 
             record
@@ -531,7 +531,7 @@ impl<
                         .for_each(|(read, cols_read)| {
                             mem_helper.fill(
                                 read.prev_timestamp,
-                                timestamp_pp(),
+                                timestamp_mm(),
                                 cols_read.as_mut(),
                             );
                         });
@@ -539,7 +539,7 @@ impl<
 
             mem_helper.fill(
                 record.rd_read_aux.prev_timestamp,
-                timestamp_pp(),
+                timestamp_mm(),
                 cols.rd_read_aux.as_mut(),
             );
 
@@ -549,7 +549,7 @@ impl<
                 .rev()
                 .zip(cols.rs_read_aux.iter_mut().rev())
                 .for_each(|(aux, cols_aux)| {
-                    mem_helper.fill(aux.prev_timestamp, timestamp_pp(), cols_aux.as_mut());
+                    mem_helper.fill(aux.prev_timestamp, timestamp_mm(), cols_aux.as_mut());
                 });
 
             cols.rd_val = record.rd_val.to_le_bytes().map(F::from_canonical_u8);
