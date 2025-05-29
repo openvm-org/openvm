@@ -25,7 +25,7 @@ use strum::IntoEnumIterator;
 use crate::{adapters::*, *};
 
 // TODO(ayush): this should be decided after e2 execution
-const MAX_INS_CAPACITY: usize = 1 << 22;
+const MAX_INS_CAPACITY: usize = 1 << 23;
 
 /// Config for a VM with base extension and IO extension
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]

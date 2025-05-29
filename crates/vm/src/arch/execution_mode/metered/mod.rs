@@ -10,16 +10,15 @@ use p3_baby_bear::BabyBear;
 use crate::arch::{
     execution_control::ExecutionControl, execution_mode::metered::bounded::Segment, ChipId,
     ExecutionError, InsExecutorE1, VmChipComplex, VmConfig, VmSegmentState, VmStateMut,
-    CONNECTOR_AIR_ID, DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT, DEFAULT_MAX_SEGMENT_LEN,
-    PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID,
+    CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID,
 };
 
 /// Check segment every 100 instructions.
 const SEGMENT_CHECK_INTERVAL: u64 = 100;
 
 // TODO(ayush): fix these values
-const MAX_TRACE_HEIGHT: u32 = DEFAULT_MAX_SEGMENT_LEN as u32;
-const MAX_TRACE_CELLS_PER_CHIP: usize = DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT;
+const MAX_TRACE_HEIGHT: u32 = (1 << 23) - 100;
+const MAX_TRACE_CELLS: usize = 1_200_000_000; // 1.2B
 const MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 
 pub struct MeteredExecutionControl<'a> {
@@ -43,7 +42,7 @@ impl<'a> MeteredExecutionControl<'a> {
         trace_heights
             .iter()
             .zip(self.widths)
-            .map(|(&height, &width)| height.next_power_of_two() as usize * width)
+            .map(|(&height, &width)| height as usize * width)
             .sum()
     }
 
@@ -59,17 +58,15 @@ impl<'a> MeteredExecutionControl<'a> {
 
     fn should_segment(&self, state: &mut VmSegmentState<MeteredCtx>) -> bool {
         let trace_heights = state.ctx.trace_heights_if_finalized();
-        let max_trace_cells = MAX_TRACE_CELLS_PER_CHIP * trace_heights.len();
         for (i, &height) in trace_heights.iter().enumerate() {
-            let padded_height = height.next_power_of_two();
-            if padded_height > MAX_TRACE_HEIGHT {
+            if height > MAX_TRACE_HEIGHT {
                 tracing::info!(
                     "Segment {:2} | clk {:9} | chip {} ({}) height ({:8}) > max ({:8})",
                     state.ctx.segments.len(),
                     state.ctx.clk_last_segment_check,
                     i,
                     self.air_names[i],
-                    padded_height,
+                    height,
                     MAX_TRACE_HEIGHT
                 );
                 return true;
@@ -77,13 +74,13 @@ impl<'a> MeteredExecutionControl<'a> {
         }
 
         let total_cells = self.calculate_total_cells(&trace_heights);
-        if total_cells > max_trace_cells {
+        if total_cells > MAX_TRACE_CELLS {
             tracing::info!(
                 "Segment {:2} | clk {:9} | total cells ({:10}) > max ({:10})",
                 state.ctx.segments.len(),
                 state.ctx.clk_last_segment_check,
                 total_cells,
-                max_trace_cells
+                MAX_TRACE_CELLS
             );
             return true;
         }
