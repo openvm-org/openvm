@@ -97,6 +97,9 @@ pub struct BuildArgs {
 
     #[arg(long, default_value = "false", help = "use --offline in cargo build")]
     pub offline: bool,
+
+    #[arg(long, default_value = "false", help = "use --locked in cargo build")]
+    pub locked: bool,
 }
 
 #[derive(Clone, Default, clap::Args)]
@@ -133,7 +136,10 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
         .with_rustc_flags(var("RUSTFLAGS").unwrap_or_default().split_whitespace());
     guest_options.target_dir = build_args.target_dir.clone();
     if build_args.offline {
-        guest_options.options = vec!["--offline".to_string()];
+        guest_options.options.push("--offline".to_string());
+    }
+    if build_args.locked {
+        guest_options.options.push("--locked".to_string());
     }
 
     let pkg = get_package(&build_args.manifest_dir);
@@ -224,6 +230,7 @@ mod tests {
             profile: "dev".to_string(),
             target_dir: Some(target_dir.to_path_buf()),
             offline: false,
+            locked: false,
         };
         build(&build_args)?;
         assert!(
