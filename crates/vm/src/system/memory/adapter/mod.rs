@@ -14,7 +14,6 @@ use openvm_stark_backend::{
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    p3_util::log2_strict_usize,
     prover::types::AirProofInput,
     AirRef, Chip, ChipUsageGetter,
 };
@@ -64,31 +63,6 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         for (chip, oh) in self.chips.iter_mut().zip(overridden_heights) {
             chip.set_override_trace_heights(oh);
         }
-    }
-    pub fn add_record(&mut self, record: AccessAdapterRecord<F>) {
-        let n = record.data.len();
-        let idx = log2_strict_usize(n) - 1;
-        let chip = &mut self.chips[idx];
-        debug_assert!(chip.n() == n);
-        chip.add_record(record);
-    }
-
-    pub fn extend_records(&mut self, records: Vec<AccessAdapterRecord<F>>) {
-        for record in records {
-            self.add_record(record);
-        }
-    }
-
-    #[cfg(test)]
-    pub fn records_for_n(&self, n: usize) -> &[AccessAdapterRecord<F>] {
-        let idx = log2_strict_usize(n) - 1;
-        let chip = &self.chips[idx];
-        chip.records()
-    }
-
-    #[cfg(test)]
-    pub fn total_records(&self) -> usize {
-        self.chips.iter().map(|chip| chip.records().len()).sum()
     }
 
     pub fn get_heights(&self) -> Vec<usize> {
@@ -195,7 +169,6 @@ pub struct AccessAdapterRecord<T> {
 #[enum_dispatch]
 pub trait GenericAccessAdapterChipTrait<F> {
     fn set_override_trace_heights(&mut self, overridden_height: usize);
-    fn add_record(&mut self, record: AccessAdapterRecord<F>);
     fn n(&self) -> usize;
     fn generate_trace(self) -> RowMajorMatrix<F>
     where
@@ -244,23 +217,11 @@ impl<F: Clone + Send + Sync> GenericAccessAdapterChip<F> {
             _ => panic!("Only supports N in (2, 4, 8, 16, 32)"),
         }
     }
-
-    #[cfg(test)]
-    fn records(&self) -> &[AccessAdapterRecord<F>] {
-        match &self {
-            GenericAccessAdapterChip::N2(chip) => &chip.records,
-            GenericAccessAdapterChip::N4(chip) => &chip.records,
-            GenericAccessAdapterChip::N8(chip) => &chip.records,
-            GenericAccessAdapterChip::N16(chip) => &chip.records,
-            GenericAccessAdapterChip::N32(chip) => &chip.records,
-        }
-    }
 }
 
 pub struct AccessAdapterChip<F, const N: usize> {
     air: AccessAdapterAir<N>,
     range_checker: SharedVariableRangeCheckerChip,
-    pub records: Vec<AccessAdapterRecord<F>>,
     trace_cursor: Cursor<Vec<F>>,
     overridden_height: Option<usize>,
 }
@@ -275,7 +236,6 @@ impl<F: Clone + Send + Sync, const N: usize> AccessAdapterChip<F, N> {
         Self {
             air: AccessAdapterAir::<N> { memory_bus, lt_air },
             range_checker,
-            records: vec![],
             trace_cursor: Cursor::new(Vec::new()),
             overridden_height: None,
         }
@@ -284,9 +244,6 @@ impl<F: Clone + Send + Sync, const N: usize> AccessAdapterChip<F, N> {
 impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F, N> {
     fn set_override_trace_heights(&mut self, overridden_height: usize) {
         self.overridden_height = Some(overridden_height);
-    }
-    fn add_record(&mut self, record: AccessAdapterRecord<F>) {
-        self.records.push(record);
     }
     fn n(&self) -> usize {
         N
