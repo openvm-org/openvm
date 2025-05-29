@@ -192,7 +192,6 @@ pub struct TracingMemory<F> {
     /// all memory accesses in `addr_space` must be aligned to this block size.
     pub min_block_size: Vec<u32>,
     pub access_adapter_inventory: AccessAdapterInventory<F>,
-    pub adapter_inventory_trace_cursor: AdapterInventoryTraceCursor<F>,
 }
 
 impl<F: PrimeField32> TracingMemory<F> {
@@ -234,7 +233,6 @@ impl<F: PrimeField32> TracingMemory<F> {
                 mem_config.clk_max_bits,
                 mem_config.max_access_adapter_n,
             ),
-            adapter_inventory_trace_cursor: AdapterInventoryTraceCursor::new(num_addr_sp),
         }
     }
 
@@ -300,7 +298,6 @@ impl<F: PrimeField32> TracingMemory<F> {
                     },
                     &values[i..i + size],
                     timestamp,
-                    self.adapter_inventory_trace_cursor.get_row_slice(size),
                 );
             }
         }
@@ -346,7 +343,6 @@ impl<F: PrimeField32> TracingMemory<F> {
                     &values[i..i + size],
                     *left_timestamp,
                     *right_timestamp,
-                    self.adapter_inventory_trace_cursor.get_row_slice(size),
                 );
             }
         }
