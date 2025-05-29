@@ -658,7 +658,7 @@ fn test_vm_hint() {
         Instruction::from_isize(LOADW.global_opcode(), 38, 0, 32, 4, 4),
         Instruction::large_from_isize(ADD.global_opcode(), 44, 20, 0, 4, 4, 0, 0),
         Instruction::from_isize(MUL.global_opcode(), 24, 38, 1, 4, 4),
-        Instruction::large_from_isize(ADD.global_opcode(), 20, 20, 24, 4, 4, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 20, 20, 24, 4, 4, 4, 0),
         Instruction::large_from_isize(ADD.global_opcode(), 50, 16, 0, 4, 4, 0, 0),
         Instruction::from_isize(
             JAL.global_opcode(),
