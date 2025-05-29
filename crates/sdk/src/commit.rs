@@ -1,5 +1,6 @@
-use std::sync::Arc;
+use std::{array::from_fn, sync::Arc};
 
+use num_bigint::BigUint;
 use openvm_circuit::{
     arch::{instructions::exe::VmExe, VmConfig},
     system::program::trace::VmCommittedExe,
@@ -18,12 +19,47 @@ use serde_with::serde_as;
 
 use crate::{types::BN254_BYTES, NonRootCommittedExe, F, SC};
 
+/// Wrapper for an array of big-endian bytes, representing a Bn254. Each commit can be
+/// converted to a Bn254 and/or base-F::MODULUS number as a u32 digest.
+#[serde_as]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+pub struct CommitBytes(#[serde_as(as = "serde_with::hex::Hex")] [u8; BN254_BYTES]);
+
+impl CommitBytes {
+    pub fn new(bytes: [u8; BN254_BYTES]) -> Self {
+        Self(bytes)
+    }
+
+    pub fn as_slice(&self) -> &[u8; BN254_BYTES] {
+        &self.0
+    }
+
+    pub fn to_bn254(&self) -> Bn254Fr {
+        bytes_to_bn254(&self.0)
+    }
+
+    pub fn to_u32_digest(&self) -> [u32; DIGEST_SIZE] {
+        bytes_to_u32_digest(&self.0)
+    }
+
+    pub fn from_bn254(bn254: Bn254Fr) -> Self {
+        Self(bn254_to_bytes(bn254))
+    }
+
+    pub fn from_u32_digest(digest: &[u32; DIGEST_SIZE]) -> Self {
+        Self(u32_digest_to_bytes(digest))
+    }
+
+    pub fn reverse(&mut self) {
+        self.0.reverse();
+    }
+}
+
 /// `AppExecutionCommit` has all the commitments users should check against the final proof.
-/// Each commit is stored as a u32 array, where each element is a member of F. The array
-/// represents a little-endian base-F number.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde_as]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct AppExecutionCommit {
-    /// Commitment of the executable. It's computed as
+    /// Commitment of the executable. In base-F::MODULUS, it's computed as
     /// compress(
     ///     compress(
     ///         hash(app_program_commit),
@@ -32,10 +68,11 @@ pub struct AppExecutionCommit {
     ///     hash(right_pad(pc_start, 0))
     /// )
     /// `right_pad` example, if pc_start = 123, right_pad(pc_start, 0) = \[123,0,0,0,0,0,0,0\]
-    pub exe_commit: [u32; DIGEST_SIZE],
+    pub app_exe_commit: CommitBytes,
+
     /// Commitment of the leaf VM verifier program which commits the VmConfig of App VM.
     /// Internal verifier will verify `leaf_vm_verifier_commit`.
-    pub vm_commit: [u32; DIGEST_SIZE],
+    pub app_vm_commit: CommitBytes,
 }
 
 impl AppExecutionCommit {
@@ -55,41 +92,19 @@ impl AppExecutionCommit {
 
     pub fn from_field_commit(exe_commit: [F; DIGEST_SIZE], vm_commit: [F; DIGEST_SIZE]) -> Self {
         Self {
-            exe_commit: exe_commit.map(|x| x.as_canonical_u32()),
-            vm_commit: vm_commit.map(|x| x.as_canonical_u32()),
+            app_exe_commit: CommitBytes::from_u32_digest(&exe_commit.map(|x| x.as_canonical_u32())),
+            app_vm_commit: CommitBytes::from_u32_digest(&vm_commit.map(|x| x.as_canonical_u32())),
         }
-    }
-
-    pub fn to_bytes(&self) -> AppExecutionCommitBytes {
-        AppExecutionCommitBytes {
-            app_exe_commit: self.exe_commit_to_bytes(),
-            app_vm_commit: self.vm_commit_to_bytes(),
-        }
-    }
-
-    pub fn exe_commit_to_bn254(&self) -> Bn254Fr {
-        babybear_u32_digest_to_bn254(&self.exe_commit)
-    }
-
-    pub fn vm_commit_to_bn254(&self) -> Bn254Fr {
-        babybear_u32_digest_to_bn254(&self.vm_commit)
-    }
-
-    pub fn exe_commit_to_bytes(&self) -> [u8; BN254_BYTES] {
-        let mut ret = self.exe_commit_to_bn254().value.to_bytes();
-        ret.reverse();
-        ret
-    }
-
-    pub fn vm_commit_to_bytes(&self) -> [u8; BN254_BYTES] {
-        let mut ret = self.vm_commit_to_bn254().value.to_bytes();
-        ret.reverse();
-        ret
     }
 }
 
-fn babybear_u32_digest_to_bn254(digest: &[u32; DIGEST_SIZE]) -> Bn254Fr {
-    babybear_digest_to_bn254(&digest.map(F::from_canonical_u32))
+pub fn commit_app_exe(
+    app_fri_params: FriParameters,
+    app_exe: impl Into<VmExe<F>>,
+) -> Arc<NonRootCommittedExe> {
+    let exe: VmExe<_> = app_exe.into();
+    let app_engine = BabyBearPoseidon2Engine::new(app_fri_params);
+    Arc::new(VmCommittedExe::<SC>::commit(exe, app_engine.config.pcs()))
 }
 
 pub(crate) fn babybear_digest_to_bn254(digest: &[F; DIGEST_SIZE]) -> Bn254Fr {
@@ -103,40 +118,6 @@ pub(crate) fn babybear_digest_to_bn254(digest: &[F; DIGEST_SIZE]) -> Bn254Fr {
     ret
 }
 
-pub fn commit_app_exe(
-    app_fri_params: FriParameters,
-    app_exe: impl Into<VmExe<F>>,
-) -> Arc<NonRootCommittedExe> {
-    let exe: VmExe<_> = app_exe.into();
-    let app_engine = BabyBearPoseidon2Engine::new(app_fri_params);
-    Arc::new(VmCommittedExe::<SC>::commit(exe, app_engine.config.pcs()))
-}
-
-/// Byte representation of AppExecutionCommit. Because the commits in AppExecutionCommit
-/// are stored as an array representing a base-F number, the 256 bits that make up each
-/// commit are different than actual the 256-bit representation of the Bn254. This class
-/// stores the latter to enable consistent serialization between different proof outputs.
-#[serde_as]
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
-pub struct AppExecutionCommitBytes {
-    #[serde_as(as = "serde_with::hex::Hex")]
-    /// 1 Bn254Fr public value for app exe commit in big-endian bytes.
-    pub app_exe_commit: [u8; BN254_BYTES],
-    #[serde_as(as = "serde_with::hex::Hex")]
-    /// 1 Bn254Fr public value for app vm commit in big-endian bytes.
-    pub app_vm_commit: [u8; BN254_BYTES],
-}
-
-impl AppExecutionCommitBytes {
-    pub fn exe_commit_to_bn254(&self) -> Bn254Fr {
-        bytes_to_bn254(&self.app_exe_commit)
-    }
-
-    pub fn vm_commit_to_bn254(&self) -> Bn254Fr {
-        bytes_to_bn254(&self.app_vm_commit)
-    }
-}
-
 fn bytes_to_bn254(bytes: &[u8; BN254_BYTES]) -> Bn254Fr {
     let order = Bn254Fr::from_canonical_u32(1 << 8);
     let mut ret = Bn254Fr::ZERO;
@@ -146,4 +127,33 @@ fn bytes_to_bn254(bytes: &[u8; BN254_BYTES]) -> Bn254Fr {
         base *= order;
     }
     ret
+}
+
+fn bn254_to_bytes(bn254: Bn254Fr) -> [u8; BN254_BYTES] {
+    let mut ret = bn254.value.to_bytes();
+    ret.reverse();
+    ret
+}
+
+fn bytes_to_u32_digest(bytes: &[u8; BN254_BYTES]) -> [u32; DIGEST_SIZE] {
+    let mut bigint = BigUint::ZERO;
+    for byte in bytes.iter() {
+        bigint <<= 8;
+        bigint += BigUint::from(*byte);
+    }
+    let order = BabyBear::ORDER_U32;
+    from_fn(|_| {
+        let bigint_digit = bigint.clone() % order;
+        let digit = if bigint_digit == BigUint::ZERO {
+            0u32
+        } else {
+            bigint_digit.to_u32_digits()[0]
+        };
+        bigint /= order;
+        digit
+    })
+}
+
+fn u32_digest_to_bytes(digest: &[u32; DIGEST_SIZE]) -> [u8; BN254_BYTES] {
+    bn254_to_bytes(babybear_digest_to_bn254(&digest.map(F::from_canonical_u32)))
 }

@@ -14,7 +14,7 @@ use thiserror::Error;
 
 use crate::{
     codec::{decode_vec, encode_slice, Decode, Encode},
-    commit::AppExecutionCommitBytes,
+    commit::{AppExecutionCommit, CommitBytes},
 };
 
 /// Number of bytes in a Bn254Fr.
@@ -49,7 +49,7 @@ pub struct ProofData {
 pub struct EvmProof {
     #[serde(flatten)]
     /// Bn254Fr public value app commits.
-    pub app_commit: AppExecutionCommitBytes,
+    pub app_commit: AppExecutionCommit,
     #[serde_as(as = "serde_with::hex::Hex")]
     /// User public values packed into bytes.
     pub user_public_values: Vec<u8>,
@@ -91,8 +91,8 @@ impl EvmProof {
         IOpenVmHalo2Verifier::verifyCall {
             publicValues: user_public_values.into(),
             proofData: proof_data.into(),
-            appExeCommit: app_commit.app_exe_commit.into(),
-            appVmCommit: app_commit.app_vm_commit.into(),
+            appExeCommit: app_commit.app_exe_commit.as_slice().into(),
+            appVmCommit: app_commit.app_vm_commit.as_slice().into(),
         }
         .abi_encode()
     }
@@ -137,9 +137,9 @@ impl TryFrom<RawEvmProof> for EvmProof {
                 acc
             },
         );
-        let app_commit = AppExecutionCommitBytes {
-            app_exe_commit,
-            app_vm_commit,
+        let app_commit = AppExecutionCommit {
+            app_exe_commit: CommitBytes::new(app_exe_commit),
+            app_vm_commit: CommitBytes::new(app_vm_commit),
         };
 
         Ok(Self {
@@ -192,8 +192,8 @@ impl TryFrom<EvmProof> for RawEvmProof {
             let mut ret = Vec::new();
             for chunk in &reversed_accumulator
                 .iter()
-                .chain(&app_commit.app_exe_commit)
-                .chain(&app_commit.app_vm_commit)
+                .chain(app_commit.app_exe_commit.as_slice())
+                .chain(app_commit.app_vm_commit.as_slice())
                 .chain(&user_public_values)
                 .chunks(BN254_BYTES)
             {
@@ -210,7 +210,7 @@ impl TryFrom<EvmProof> for RawEvmProof {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VmStarkProofBytes {
     #[serde(flatten)]
-    pub app_commit: AppExecutionCommitBytes,
+    pub app_commit: AppExecutionCommit,
     #[serde_as(as = "serde_with::hex::Hex")]
     pub user_public_values: Vec<u8>,
     #[serde_as(as = "serde_with::hex::Hex")]
@@ -218,7 +218,7 @@ pub struct VmStarkProofBytes {
 }
 
 impl VmStarkProofBytes {
-    pub fn new(app_commit: AppExecutionCommitBytes, proof: VmStarkProof<SC>) -> Result<Self> {
+    pub fn new(app_commit: AppExecutionCommit, proof: VmStarkProof<SC>) -> Result<Self> {
         let mut user_public_values = Vec::new();
         encode_slice(&proof.user_public_values, &mut user_public_values)?;
         Ok(Self {

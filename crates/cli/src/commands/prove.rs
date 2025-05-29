@@ -153,10 +153,9 @@ impl ProveCmd {
                     &app_pk.app_vm_pk.vm_config,
                     &committed_exe,
                     &app_pk.leaf_committed_exe,
-                )
-                .to_bytes();
-                println!("exe commit: {:?}", commits.exe_commit_to_bn254());
-                println!("vm commit: {:?}", commits.vm_commit_to_bn254());
+                );
+                println!("exe commit: {:?}", commits.app_exe_commit.to_bn254());
+                println!("vm commit: {:?}", commits.app_vm_commit.to_bn254());
 
                 let agg_stark_pk = read_agg_stark_pk_from_file(default_agg_stark_pk_path()).map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
@@ -197,8 +196,8 @@ impl ProveCmd {
                     &committed_exe,
                     &app_pk.leaf_committed_exe,
                 );
-                println!("exe commit: {:?}", commits.exe_commit_to_bn254());
-                println!("vm commit: {:?}", commits.vm_commit_to_bn254());
+                println!("exe commit: {:?}", commits.app_exe_commit.to_bn254());
+                println!("vm commit: {:?}", commits.app_vm_commit.to_bn254());
 
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
                 let agg_pk = read_default_agg_pk().map_err(|e| {

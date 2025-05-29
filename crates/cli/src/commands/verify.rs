@@ -123,8 +123,8 @@ impl VerifyCmd {
                 };
                 println!("Verifying STARK proof at {}", proof_path.display());
                 let stark_proof_bytes: VmStarkProofBytes = read_from_file_json(proof_path)?;
-                let expected_exe_commit = stark_proof_bytes.app_commit.exe_commit_to_bn254();
-                let expected_vm_commit = stark_proof_bytes.app_commit.vm_commit_to_bn254();
+                let expected_exe_commit = stark_proof_bytes.app_commit.app_exe_commit.to_bn254();
+                let expected_vm_commit = stark_proof_bytes.app_commit.app_vm_commit.to_bn254();
                 sdk.verify_e2e_stark_proof(
                     &agg_stark_pk,
                     &stark_proof_bytes.try_into()?,

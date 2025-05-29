@@ -408,8 +408,8 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
             pvs.connector.initial_pc,
         );
         let app_commit = AppExecutionCommit::from_field_commit(exe_commit, vm_commit);
-        let exe_commit_bn254 = app_commit.exe_commit_to_bn254();
-        let vm_commit_bn254 = app_commit.vm_commit_to_bn254();
+        let exe_commit_bn254 = app_commit.app_exe_commit.to_bn254();
+        let vm_commit_bn254 = app_commit.app_vm_commit.to_bn254();
 
         if exe_commit_bn254 != *expected_exe_commit {
             return Err(eyre::eyre!(
