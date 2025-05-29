@@ -14,15 +14,15 @@ mod branch;
 mod jalr;
 // mod loadstore;
 mod mul;
-// mod rdwrite;
+mod rdwrite;
 
 pub use alu::*;
 pub use branch::*;
 pub use jalr::*;
 // pub use loadstore::*;
 pub use mul::*;
-// pub use rdwrite::*;
 pub use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+pub use rdwrite::*;
 
 /// 256-bit heap integer stored as 32 bytes (32 limbs of 8-bits)
 pub const INT256_NUM_LIMBS: usize = 32;

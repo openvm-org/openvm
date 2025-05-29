@@ -20,12 +20,12 @@ use openvm_instructions::{
 };
 use openvm_rv32_adapters::{
     rv32_heap_branch_default, rv32_write_heap_default, Rv32HeapAdapterAir, Rv32HeapAdapterStep,
-    // Rv32HeapBranchAdapterAir, Rv32HeapBranchAdapterStep,
+    Rv32HeapBranchAdapterAir, Rv32HeapBranchAdapterStep,
 };
 use openvm_rv32im_circuit::{
-    adapters::{INT256_NUM_LIMBS, RV_B_TYPE_IMM_BITS}, BaseAluCoreAir,
-    // BaseAluCoreAir, BranchEqualCoreAir, BranchLessThanCoreAir, LessThanCoreAir,
-    // MultiplicationCoreAir, ShiftCoreAir,
+    adapters::{INT256_NUM_LIMBS, RV_B_TYPE_IMM_BITS},
+    BaseAluCoreAir, BranchEqualCoreAir, BranchLessThanCoreAir, LessThanCoreAir,
+    MultiplicationCoreAir, ShiftCoreAir,
 };
 use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
@@ -35,16 +35,11 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
-use crate::{Rv32BaseAlu256Chip, Rv32BaseAlu256Step};
-
-// use super::{
-//     Rv32BaseAlu256Chip, Rv32BranchEqual256Chip, Rv32BranchLessThan256Chip, Rv32LessThan256Chip,
-//     Rv32Multiplication256Chip, Rv32Shift256Chip,
-// };
-// use crate::{
-//     Rv32BaseAlu256Step, Rv32BranchEqual256Step, Rv32BranchLessThan256Step, Rv32LessThan256Step,
-//     Rv32Multiplication256Step, Rv32Shift256Step,
-// };
+use crate::{
+    Rv32BaseAlu256Chip, Rv32BaseAlu256Step, Rv32BranchEqual256Chip, Rv32BranchEqual256Step,
+    Rv32BranchLessThan256Chip, Rv32BranchLessThan256Step, Rv32LessThan256Chip, Rv32LessThan256Step,
+    Rv32Multiplication256Chip, Rv32Multiplication256Step, Rv32Shift256Chip, Rv32Shift256Step,
+};
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
@@ -138,8 +133,6 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
     tester.simple_test().expect("Verification failed");
 }
 
-
-/*
 #[test_case(LessThanOpcode::SLT, 24)]
 #[test_case(LessThanOpcode::SLTU, 24)]
 fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
@@ -394,5 +387,3 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
-
-*/

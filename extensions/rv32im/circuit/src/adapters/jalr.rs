@@ -151,6 +151,7 @@ pub struct Rv32JalrAdapterRecord {
     pub from_timestamp: u32,
 
     pub rs1_ptr: u32,
+    // Will use u32::MAX to indicate no write
     pub rd_ptr: u32,
 
     pub reads_aux: MemoryReadAuxRecord,
@@ -251,6 +252,9 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32JalrAdapterStep {
                     adapter_row.rd_aux_cols.as_mut(),
                 );
                 adapter_row.rd_ptr = F::from_canonical_u32(record.rd_ptr);
+            }
+            else {
+                adapter_row.rd_ptr = F::ZERO;
             }
 
             mem_helper.fill(

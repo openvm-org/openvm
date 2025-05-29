@@ -335,17 +335,7 @@ impl<
     >;
 
     #[inline(always)]
-    fn start(
-        pc: u32,
-        memory: &TracingMemory<F>,
-        record: &mut &mut Rv32VecHeapAdapterRecord<
-            NUM_READS,
-            BLOCKS_PER_READ,
-            BLOCKS_PER_WRITE,
-            READ_SIZE,
-            WRITE_SIZE,
-        >,
-    ) {
+    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc.into();
         record.from_timestamp = memory.timestamp.into();
     }
@@ -373,7 +363,7 @@ impl<
             u32::from_le_bytes(tracing_read(
                 memory,
                 RV32_REGISTER_AS,
-                record.rs_ptrs[i].into(),
+                record.rs_ptrs[i],
                 &mut record.rs_read_aux[i].prev_timestamp,
             ))
         });

@@ -6,11 +6,14 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, ExecutionBridge, ExecutionState,
-        VmAdapterAir, VmAdapterInterface,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep,
+        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface,
     },
     system::memory::{
-        offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::{
+            MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
+            MemoryWriteAuxCols,
+        },
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
     },
@@ -18,6 +21,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     utils::{not, select},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+    AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -288,17 +292,32 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
     }
 }
 
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct Rv32LoadStoreAdapterRecord {
+    pub from_pc: u32,
+    pub from_timestamp: u32,
+
+    pub rs1_ptr: u32,
+    pub rs1_val: u32,
+    pub rs1_aux_record: MemoryReadAuxRecord,
+
+    pub read_data_aux: MemoryReadAuxRecord,
+
+    pub imm: u16,
+    pub imm_sign: bool,
+    pub mem_as: u8,
+
+    pub rd_rs2_ptr: u32,
+}
+
 /// This chip reads rs1 and gets a intermediate memory pointer address with rs1 + imm.
 /// In case of Loads, reads from the shifted intermediate pointer and writes to rd.
 /// In case of Stores, reads from rs2 and writes to the shifted intermediate pointer.
+#[derive(derive_new::new)]
 pub struct Rv32LoadStoreAdapterStep {
     pointer_max_bits: usize,
-}
-
-impl Rv32LoadStoreAdapterStep {
-    pub fn new(pointer_max_bits: usize) -> Self {
-        Self { pointer_max_bits }
-    }
+    pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32LoadStoreAdapterStep
@@ -311,13 +330,12 @@ where
         u32,
     );
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
-    type TraceContext<'a> = &'a SharedVariableRangeCheckerChip;
+    type RecordMut<'a> = &'a mut Rv32LoadStoreAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]) {
-        let adapter_row: &mut Rv32LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
-        adapter_row.from_state.pc = F::from_canonical_u32(pc);
-        adapter_row.from_state.timestamp = F::from_canonical_u32(memory.timestamp);
+    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+        record.from_pc = pc;
+        record.from_timestamp = memory.timestamp;
     }
 
     #[inline(always)]
@@ -325,7 +343,7 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        adapter_row: &mut [F],
+        record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
         let &Instruction {
             opcode,
@@ -341,34 +359,32 @@ where
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert!(e.as_canonical_u32() != RV32_IMM_AS);
 
-        let adapter_row: &mut Rv32LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
-
         let local_opcode = Rv32LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
 
-        adapter_row.rs1_ptr = b;
+        record.rs1_ptr = b.as_canonical_u32();
         let rs1 = tracing_read(
             memory,
             RV32_REGISTER_AS,
-            b.as_canonical_u32(),
-            &mut adapter_row.rs1_aux_cols,
+            record.rs1_ptr,
+            &mut record.rs1_aux_record.prev_timestamp,
         );
 
-        let rs1_val = u32::from_le_bytes(rs1);
-        let imm = c.as_canonical_u32();
-        let imm_sign = g.as_canonical_u32();
-        let imm_extended = imm + imm_sign * 0xffff0000;
+        record.rs1_val = u32::from_le_bytes(rs1);
+        record.mem_as = e.as_canonical_u32() as u8;
+        record.imm = c.as_canonical_u32() as u16;
+        record.imm_sign = g.is_one();
+        let imm_extended = record.imm as u32 + record.imm_sign as u32 * 0xffff0000;
 
-        let ptr_val = rs1_val.wrapping_add(imm_extended);
+        let ptr_val = record.rs1_val.wrapping_add(imm_extended);
         let shift_amount = ptr_val % 4;
         assert!(
             ptr_val < (1 << self.pointer_max_bits),
-            "ptr_val: {ptr_val} = rs1_val: {rs1_val} + imm_extended: {imm_extended} >= 2 ** {}",
+            "ptr_val: {ptr_val} = rs1_val: {} + imm_extended: {imm_extended} >= 2 ** {}",
+            record.rs1_val,
             self.pointer_max_bits
         );
-
-        let mem_ptr_limbs = array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
 
         let ptr_val = ptr_val - shift_amount;
         let read_data = match local_opcode {
@@ -376,13 +392,13 @@ where
                 memory,
                 e.as_canonical_u32(),
                 ptr_val,
-                &mut adapter_row.read_data_aux,
+                &mut record.read_data_aux.prev_timestamp,
             ),
             STOREW | STOREH | STOREB => tracing_read(
                 memory,
                 RV32_REGISTER_AS,
                 a.as_canonical_u32(),
-                &mut adapter_row.read_data_aux,
+                &mut record.read_data_aux.prev_timestamp,
             ),
         };
 
@@ -405,14 +421,6 @@ where
             }
         };
 
-        adapter_row
-            .rs1_data
-            .copy_from_slice(&rs1.map(F::from_canonical_u8));
-        adapter_row.imm = c;
-        adapter_row.imm_sign = g;
-        adapter_row.mem_ptr_limbs = mem_ptr_limbs.map(F::from_canonical_u32);
-        adapter_row.mem_as = e;
-
         ((prev_data, read_data), shift_amount)
     }
 
@@ -421,8 +429,8 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        adapter_row: &mut [F],
         data: &Self::WriteData,
+        record: &mut Self::RecordMut<'_>,
     ) {
         let &Instruction {
             opcode,
@@ -442,19 +450,13 @@ where
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
 
-        let adapter_row: &mut Rv32LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
+        let imm_extended = record.imm as u32 + record.imm_sign as u32 * 0xffff0000;
 
-        let rs1 = adapter_row.rs1_data.map(|x| x.as_canonical_u32() as u8);
-
-        let rs1_val = u32::from_le_bytes(rs1);
-        let imm = c.as_canonical_u32();
-        let imm_sign = g.as_canonical_u32();
-        let imm_extended = imm + imm_sign * 0xffff0000;
-
-        let ptr_val = rs1_val.wrapping_add(imm_extended);
+        let ptr_val = record.rs1_val.wrapping_add(imm_extended);
         assert!(
             ptr_val < (1 << self.pointer_max_bits),
-            "ptr_val: {ptr_val} = rs1_val: {rs1_val} + imm_extended: {imm_extended} >= 2 ** {}",
+            "ptr_val: {ptr_val} = rs1_val: {} + imm_extended: {imm_extended} >= 2 ** {}",
+            record.rs1_val,
             self.pointer_max_bits
         );
 
@@ -506,6 +508,13 @@ where
             memory.increment_timestamp();
         };
     }
+}
+
+impl<F> AdapterTraceFiller<F> for Rv32LoadStoreAdapterStep
+where
+    F: PrimeField32,
+{
+    const WIDTH: usize = size_of::<Rv32LoadStoreAdapterCols<u8>>();
 
     #[inline(always)]
     fn fill_trace_row(
