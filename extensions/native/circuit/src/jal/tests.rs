@@ -19,7 +19,6 @@ use rand::{rngs::StdRng, Rng};
 use super::{JalRangeCheckAir, JalRangeCheckStep};
 use crate::jal::{JalRangeCheckChip, JalRangeCheckCols};
 
-const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
 fn create_test_chip(tester: &VmChipTestBuilder<F>) -> JalRangeCheckChip<F> {
@@ -30,7 +29,6 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> JalRangeCheckChip<F> {
             tester.range_checker().bus(),
         ),
         JalRangeCheckStep::new(tester.range_checker().clone()),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     )
 }

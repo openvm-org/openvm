@@ -22,7 +22,6 @@ impl<F, VC> ExecutionControl<F, VC> for E1ExecutionControl
 where
     F: PrimeField32,
     VC: VmConfig<F>,
-    VC::Executor: InsExecutorE1<F>,
 {
     type Ctx = E1Ctx;
 
@@ -66,6 +65,7 @@ where
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
+        VC::Executor: InsExecutorE1<F>,
     {
         let &Instruction { opcode, .. } = instruction;
 

@@ -14,8 +14,8 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    execution_control::ExecutionControl, ExecutionError, GenerationError, SystemConfig,
-    VmChipComplex, VmComplexTraceHeights, VmConfig,
+    execution_control::ExecutionControl, ExecutionError, GenerationError, InsExecutorE1,
+    SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -68,6 +68,7 @@ where
     F: PrimeField32,
     VC: VmConfig<F>,
     Ctrl: ExecutionControl<F, VC>,
+    VC::Executor: InsExecutorE1<F>,
 {
     /// Creates a new execution segment from a program and initial state, using parent VM config
     pub fn new(

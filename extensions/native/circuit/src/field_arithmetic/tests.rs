@@ -27,7 +27,6 @@ use crate::adapters::alu_native_adapter::{
     AluNativeAdapterAir, AluNativeAdapterCols, AluNativeAdapterStep,
 };
 
-const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
 fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FieldArithmeticChip<F> {
@@ -37,7 +36,6 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FieldArithmeticChip<F> {
             FieldArithmeticCoreAir::new(),
         ),
         FieldArithmeticStep::new(AluNativeAdapterStep::new()),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     )
 }

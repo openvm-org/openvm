@@ -33,7 +33,6 @@ use crate::{
 };
 
 type F = BabyBear;
-const MAX_INS_CAPACITY: usize = 128;
 
 fn create_test_chip(
     tester: &VmChipTestBuilder<F>,
@@ -63,7 +62,6 @@ fn create_test_chip(
             tester.range_checker().clone(),
             ShiftOpcode::CLASS_OFFSET,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
 

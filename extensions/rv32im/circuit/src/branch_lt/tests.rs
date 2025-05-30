@@ -40,7 +40,6 @@ use crate::{
 };
 
 type F = BabyBear;
-const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_IMM: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
 
 fn create_test_chip(
@@ -61,7 +60,6 @@ fn create_test_chip(
             bitwise_chip.clone(),
             BranchLessThanOpcode::CLASS_OFFSET,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
 

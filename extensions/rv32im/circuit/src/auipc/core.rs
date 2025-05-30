@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, ImmInstruction, Result,
         StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },

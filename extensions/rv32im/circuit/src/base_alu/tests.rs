@@ -33,7 +33,6 @@ use crate::{
     },
 };
 
-const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
 fn create_test_chip(
@@ -59,7 +58,6 @@ fn create_test_chip(
             bitwise_chip.clone(),
             BaseAluOpcode::CLASS_OFFSET,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
 

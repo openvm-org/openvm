@@ -162,6 +162,16 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     where {
                         self.0.execute_metered(state, instruction, chip_index)
                     }
+
+                    fn execute_tracegen(
+                        &mut self,
+                        state: &mut ::openvm_circuit::arch::VmStateMut<::openvm_circuit::system::memory::online::TracingMemory<F>, ::openvm_circuit::arch::execution_mode::tracegen::TracegenCtx<F>>,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        chip_index: usize,
+                    ) -> ::openvm_circuit::arch::Result<()>
+                    where {
+                        self.0.execute_tracegen(state, instruction, chip_index)
+                    }
                 }
             }
             .into()
@@ -202,6 +212,12 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_metered(x, state, instruction, chip_index)
                 }
             }).collect::<Vec<_>>();
+            let execute_tracegen_arms = variants.iter().map(|(variant_name, field)| {
+                let field_ty = &field.ty;
+                quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_tracegen(x, state, instruction, chip_index)
+                }
+            }).collect::<Vec<_>>();
 
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic> for #name #ty_generics {
@@ -226,6 +242,17 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     ) -> ::openvm_circuit::arch::Result<()> {
                         match self {
                             #(#execute_metered_arms,)*
+                        }
+                    }
+
+                    fn execute_tracegen(
+                        &mut self,
+                        state: &mut ::openvm_circuit::arch::VmStateMut<::openvm_circuit::system::memory::online::TracingMemory<#first_ty_generic>, ::openvm_circuit::arch::execution_mode::tracegen::TracegenCtx<#first_ty_generic>>,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
+                        chip_index: usize,
+                    ) -> ::openvm_circuit::arch::Result<()> {
+                        match self {
+                            #(#execute_tracegen_arms,)*
                         }
                     }
                 }

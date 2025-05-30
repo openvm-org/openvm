@@ -28,7 +28,6 @@ use super::{columns::KeccakVmCols, utils::num_keccak_f, KeccakVmChip};
 use crate::{KeccakVmAir, KeccakVmStep};
 
 type F = BabyBear;
-const MAX_INS_CAPACITY: usize = 4096;
 
 fn create_test_chips(
     tester: &mut VmChipTestBuilder<F>,
@@ -48,7 +47,6 @@ fn create_test_chips(
             Rv32KeccakOpcode::CLASS_OFFSET,
             tester.address_bits(),
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
     (chip, bitwise_chip)

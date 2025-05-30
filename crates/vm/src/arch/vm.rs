@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, collections::VecDeque, marker::PhantomData, mem, sync::Arc};
+use std::{borrow::Borrow, collections::VecDeque, marker::PhantomData, sync::Arc};
 
 use openvm_circuit::system::program::trace::compute_exe_commit;
 use openvm_instructions::{exe::VmExe, program::Program};
@@ -147,6 +147,7 @@ impl<F, VC> VmExecutor<F, VC>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
+    VC::Executor: InsExecutorE1<F>,
 {
     /// Create a new VM executor with a given config.
     ///
@@ -540,6 +541,8 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         state: VmState<F>,
+        trace_heights: Vec<usize>,
+        trace_widths: Vec<usize>,
         num_cycles: u64,
     ) -> Result<VmExecutorResult<SC>, GenerationError>
     where
@@ -570,7 +573,8 @@ where
             segment.set_override_trace_heights(overridden_heights.clone());
         }
 
-        let mut exec_state = VmSegmentState::new(state.clk, state.pc, None, ());
+        let ctx = TracegenCtx::new(trace_widths, trace_heights);
+        let mut exec_state = VmSegmentState::new(state.clk, state.pc, None, ctx);
         metrics_span("execute_from_state", || {
             segment.execute_from_state(&mut exec_state)
         })?;
@@ -631,7 +635,7 @@ where
         let per_segment = self.execute_and_then(
             exe,
             input,
-            |seg_idx, mut seg| {
+            |seg_idx, seg| {
                 // Note: this will only be Some on the last segment; otherwise it is
                 // already moved into next segment state
                 final_memory = Some(seg.chip_complex.memory_controller().memory_image().clone());
@@ -674,6 +678,7 @@ impl<F, VC> SingleSegmentVmExecutor<F, VC>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
+    VC::Executor: InsExecutorE1<F>,
 {
     pub fn new(config: VC) -> Self {
         Self::new_with_overridden_trace_heights(config, None)
@@ -771,14 +776,8 @@ where
             segment.set_override_trace_heights(overridden_heights.clone());
         }
 
-        let mut exec_state = VmSegmentState::new(
-            0,
-            exe.pc_start,
-            None,
-            TracegenCtx {
-                since_last_segment_check: 0,
-            },
-        );
+        let ctx = TracegenCtx::new(trace_widths, trace_heights);
+        let mut exec_state = VmSegmentState::new(0, exe.pc_start, None, ctx);
         metrics_span("execute_time_ms", || {
             segment.execute_from_state(&mut exec_state)
         })?;
@@ -836,6 +835,7 @@ where
     VC: VmConfig<F>,
     VC::Executor: Chip<SC>,
     VC::Periphery: Chip<SC>,
+    VC::Executor: InsExecutorE1<F>,
 {
     pub fn new(engine: E, config: VC) -> Self {
         let executor = VmExecutor::new(config);

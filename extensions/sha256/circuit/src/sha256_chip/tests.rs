@@ -18,7 +18,6 @@ use crate::{sha256_solve, Sha256VmDigestCols, Sha256VmRoundCols};
 
 type F = BabyBear;
 const SELF_BUS_IDX: BusIndex = 28;
-const MAX_INS_CAPACITY: usize = 4096;
 
 fn create_test_chips(
     tester: &mut VmChipTestBuilder<F>,
@@ -40,7 +39,6 @@ fn create_test_chips(
             Rv32Sha256Opcode::CLASS_OFFSET,
             tester.address_bits(),
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
     (chip, bitwise_chip)

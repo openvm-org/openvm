@@ -39,7 +39,6 @@ use crate::{
 };
 
 const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus::new(7);
-const MAX_INS_CAPACITY: usize = 1 << 15;
 
 fn compute_commit<F: Field>(
     dim: &[usize],
@@ -161,7 +160,6 @@ fn test<const N: usize>(cases: [Case; N]) {
         Poseidon2Config::default(),
         VERIFY_BATCH_BUS,
         streams.clone(),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
 
@@ -392,7 +390,6 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
         Poseidon2Config::default(),
         VERIFY_BATCH_BUS,
         streams.clone(),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
 

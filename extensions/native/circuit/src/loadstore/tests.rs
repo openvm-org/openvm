@@ -12,7 +12,6 @@ use crate::adapters::loadstore_native_adapter::{
     NativeLoadStoreAdapterAir, NativeLoadStoreAdapterStep,
 };
 
-const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
 #[derive(Debug)]
@@ -39,7 +38,6 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> NativeLoadStoreChip<F, 1> 
             NativeLoadStoreAdapterStep::new(NativeLoadStoreOpcode::CLASS_OFFSET),
             NativeLoadStoreOpcode::CLASS_OFFSET,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
     chip.step

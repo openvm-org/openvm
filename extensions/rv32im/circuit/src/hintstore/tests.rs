@@ -32,7 +32,6 @@ use super::{Rv32HintStoreAir, Rv32HintStoreChip, Rv32HintStoreCols, Rv32HintStor
 use crate::{adapters::decompose, test_utils::get_verification_error};
 
 type F = BabyBear;
-const MAX_INS_CAPACITY: usize = 1024;
 
 fn create_test_chip(
     tester: &mut VmChipTestBuilder<F>,
@@ -52,7 +51,6 @@ fn create_test_chip(
             tester.address_bits(),
         ),
         Rv32HintStoreStep::new(bitwise_chip.clone(), tester.address_bits(), 0),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
     chip.step

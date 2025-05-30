@@ -4,10 +4,10 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use super::TracegenCtx;
 use crate::{
     arch::{
-        execution_control::ExecutionControl, ExecutionError, ExecutionState, InstructionExecutor,
-        VmChipComplex, VmConfig, VmSegmentState,
+        execution_control::ExecutionControl, ExecutionError, ExecutionState, InsExecutorE1,
+        VmChipComplex, VmConfig, VmSegmentState, VmStateMut, PUBLIC_VALUES_AIR_ID,
     },
-    system::memory::{MemoryImage, INITIAL_TIMESTAMP},
+    system::memory::INITIAL_TIMESTAMP,
 };
 
 /// Check segment every 100 instructions.
@@ -31,12 +31,13 @@ where
     F: PrimeField32,
     VC: VmConfig<F>,
 {
-    type Ctx = TracegenCtx;
+    type Ctx = TracegenCtx<F>;
 
     fn initialize_context(&self) -> Self::Ctx {
-        Self::Ctx {
-            since_last_segment_check: 0,
-        }
+        todo!()
+        // Self::Ctx {
+        //     since_last_segment_check: 0,
+        // }
     }
     fn should_suspend(
         &self,
@@ -87,19 +88,23 @@ where
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
+        VC::Executor: InsExecutorE1<F>,
     {
-        let timestamp = chip_complex.memory_controller().timestamp();
+        let mut offset = if chip_complex.config().has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1
+        } else {
+            PUBLIC_VALUES_AIR_ID
+        };
+        offset += chip_complex.memory_controller().num_airs();
 
         let &Instruction { opcode, .. } = instruction;
-
-        if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
-            let memory_controller = &mut chip_complex.base.memory_controller;
-            let new_state = executor.execute(
-                memory_controller,
-                instruction,
-                ExecutionState::new(state.pc, timestamp),
-            )?;
-            state.pc = new_state.pc;
+        if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode) {
+            let mut vm_state = VmStateMut {
+                pc: &mut state.pc,
+                memory: &mut chip_complex.base.memory_controller.memory,
+                ctx: &mut state.ctx,
+            };
+            executor.execute_tracegen(&mut vm_state, instruction, offset + i)?;
         } else {
             return Err(ExecutionError::DisabledOperation {
                 pc: state.pc,

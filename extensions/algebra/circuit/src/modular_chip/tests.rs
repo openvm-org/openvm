@@ -31,7 +31,6 @@ use super::{
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
 const _BLOCK_SIZE: usize = 32;
-const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
 #[cfg(test)]
@@ -138,7 +137,6 @@ mod addsubtests {
             Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset,
             bitwise_chip.clone(),
             tester.range_checker(),
-            MAX_INS_CAPACITY,
         );
 
         for i in 0..num_ops {
@@ -253,7 +251,6 @@ mod muldivtests {
             Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset,
             bitwise_chip.clone(),
             tester.range_checker(),
-            MAX_INS_CAPACITY,
         );
 
         for i in 0..num_ops {
@@ -313,7 +310,6 @@ mod is_equal_tests {
                 offset,
                 bitwise_chip.clone(),
             ),
-            MAX_INS_CAPACITY,
             tester.memory_helper(),
         );
 

@@ -40,7 +40,6 @@ use crate::{
 };
 
 type F = BabyBear;
-const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
 const MAX_NUM_LIMBS: u32 = 32;
 
@@ -80,7 +79,6 @@ fn create_test_chip(
             range_tuple_chip.clone(),
             DivRemOpcode::CLASS_OFFSET,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
 

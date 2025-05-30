@@ -1,10 +1,11 @@
 use openvm_instructions::{exe::VmExe, program::Program, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
 
+use super::InsExecutorE1;
 use crate::{
     arch::{
         execution_control::ExecutionControl, execution_mode::E1E2ExecutionCtx, ExecutionError,
-        Streams, VmChipComplex, VmConfig, VmSegmentState,
+        Streams, VmConfig, VmSegmentState,
     },
     system::memory::{online::GuestMemory, AddressMap},
 };
@@ -31,6 +32,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
     ) -> Result<VmSegmentState<CTRL::Ctx>, ExecutionError>
     where
         CTRL::Ctx: E1E2ExecutionCtx,
+        VC::Executor: InsExecutorE1<F>,
     {
         // Initialize the chip complex
         let mut chip_complex = self.vm_config.create_chip_complex().unwrap();

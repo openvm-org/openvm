@@ -19,7 +19,6 @@ use super::{EcAddNeChip, EcDoubleChip};
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
 const BLOCK_SIZE: usize = 32;
-const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
 lazy_static::lazy_static! {
@@ -98,7 +97,6 @@ fn test_add_ne() {
         Rv32WeierstrassOpcode::CLASS_OFFSET,
         bitwise_chip.clone(),
         tester.range_checker(),
-        MAX_INS_CAPACITY,
     );
 
     assert_eq!(chip.0.step.expr.builder.num_variables, 3); // lambda, x3, y3
@@ -169,7 +167,6 @@ fn test_double() {
         bitwise_chip.clone(),
         tester.range_checker(),
         BigUint::zero(),
-        MAX_INS_CAPACITY,
     );
 
     let (p1_x, p1_y) = SampleEcPoints[1].clone();
@@ -235,7 +232,6 @@ fn test_p256_double() {
         bitwise_chip.clone(),
         tester.range_checker(),
         a.clone(),
-        MAX_INS_CAPACITY,
     );
 
     // Testing data from: http://point-at-infinity.org/ecc/nisttv

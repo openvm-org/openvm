@@ -45,7 +45,6 @@ use crate::{
 };
 
 type F = BabyBear;
-const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_BRANCH: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
 
 #[allow(clippy::type_complexity)]
@@ -119,7 +118,6 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
             bitwise_chip.clone(),
             offset,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
 
@@ -160,7 +158,6 @@ fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
             bitwise_chip.clone(),
             offset,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
 
@@ -209,7 +206,6 @@ fn run_mul_256_rand_test(opcode: MulOpcode, num_ops: usize) {
             range_tuple_chip.clone(),
             offset,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
 
@@ -259,7 +255,6 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
             range_checker_chip.clone(),
             offset,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
 
@@ -302,7 +297,6 @@ fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
             offset,
             DEFAULT_PC_STEP,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
 
@@ -354,7 +348,6 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
             bitwise_chip.clone(),
             offset,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
     let branch_fn =

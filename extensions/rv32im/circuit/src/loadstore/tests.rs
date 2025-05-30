@@ -33,7 +33,6 @@ use crate::{
 };
 
 const IMM_BITS: usize = 16;
-const MAX_INS_CAPACITY: usize = 128;
 
 type F = BabyBear;
 
@@ -55,7 +54,6 @@ fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32LoadStoreChip<F> {
             range_checker_chip.clone(),
             Rv32LoadStoreOpcode::CLASS_OFFSET,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     )
 }

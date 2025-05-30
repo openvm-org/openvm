@@ -175,7 +175,6 @@ mod tests {
     const NUM_LIMBS: usize = 32;
     const LIMB_BITS: usize = 8;
     const OFFSET: usize = Fp2Opcode::CLASS_OFFSET;
-    const MAX_INS_CAPACITY: usize = 128;
     type F = BabyBear;
 
     fn set_and_execute_rand(
@@ -261,7 +260,6 @@ mod tests {
             OFFSET,
             bitwise_chip.clone(),
             tester.range_checker(),
-            MAX_INS_CAPACITY,
         );
         assert_eq!(
             chip.expr().builder.num_variables,

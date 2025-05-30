@@ -24,7 +24,6 @@ use crate::adapters::native_vectorized_adapter::{
     NativeVectorizedAdapterAir, NativeVectorizedAdapterStep,
 };
 
-const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
 fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FieldExtensionChip<F> {
@@ -34,7 +33,6 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FieldExtensionChip<F> {
             FieldExtensionCoreAir::new(),
         ),
         FieldExtensionCoreStep::new(NativeVectorizedAdapterStep::new()),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     )
 }

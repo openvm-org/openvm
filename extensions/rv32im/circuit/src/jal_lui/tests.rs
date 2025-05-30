@@ -35,7 +35,6 @@ use crate::{
 
 const IMM_BITS: usize = 20;
 const LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
-const MAX_INS_CAPACITY: usize = 128;
 
 type F = BabyBear;
 
@@ -60,7 +59,6 @@ fn create_test_chip(
             Rv32CondRdWriteAdapterStep::new(Rv32RdWriteAdapterStep::new()),
             bitwise_chip.clone(),
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
     (chip, bitwise_chip)

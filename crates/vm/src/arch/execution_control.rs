@@ -1,7 +1,7 @@
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{ExecutionError, VmChipComplex, VmConfig, VmSegmentState};
+use super::{ExecutionError, InsExecutorE1, VmChipComplex, VmConfig, VmSegmentState};
 
 /// Trait for execution control, determining segmentation and stopping conditions
 /// Invariants:
@@ -66,5 +66,6 @@ where
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
     where
-        F: PrimeField32;
+        F: PrimeField32,
+        VC::Executor: InsExecutorE1<F>;
 }

@@ -21,7 +21,6 @@ use super::{
 };
 use crate::fri::OVERALL_WIDTH;
 
-const MAX_INS_CAPACITY: usize = 1024;
 type F = BabyBear;
 
 fn create_test_chip(
@@ -31,7 +30,6 @@ fn create_test_chip(
     FriReducedOpeningChip::<F>::new(
         FriReducedOpeningAir::new(tester.execution_bridge(), tester.memory_bridge()),
         FriReducedOpeningStep::new(streams),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     )
 }

@@ -20,7 +20,6 @@ use super::{
     CastF, CastFChip, CastFCoreAir, CastFCoreCols, CastFStep, FINAL_LIMB_BITS, LIMB_BITS,
 };
 
-const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
 fn create_test_chip(tester: &VmChipTestBuilder<F>) -> CastFChip<F> {
@@ -33,7 +32,6 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> CastFChip<F> {
             ConvertAdapterStep::<1, 4>::new(),
             tester.range_checker().clone(),
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     )
 }

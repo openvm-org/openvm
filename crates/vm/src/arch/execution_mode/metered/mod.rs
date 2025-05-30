@@ -190,7 +190,6 @@ impl<F, VC> ExecutionControl<F, VC> for MeteredExecutionControl<'_>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
-    VC::Executor: InsExecutorE1<F>,
 {
     type Ctx = MeteredCtx;
 
@@ -251,6 +250,7 @@ where
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
+        VC::Executor: InsExecutorE1<F>,
     {
         // Check if segmentation needs to happen
         self.check_segment_limits::<F, VC>(state, chip_complex);

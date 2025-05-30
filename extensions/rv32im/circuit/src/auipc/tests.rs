@@ -30,7 +30,6 @@ use crate::{
 };
 
 const IMM_BITS: usize = 24;
-const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
 fn create_test_chip(
@@ -48,7 +47,6 @@ fn create_test_chip(
             Rv32AuipcCoreAir::new(bitwise_bus),
         ),
         Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_chip.clone()),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
 

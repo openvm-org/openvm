@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::{
-    execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+    execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
     Streams,
 };
 use crate::system::{
@@ -133,6 +133,15 @@ pub trait InsExecutorE1<F> {
     ) -> Result<()>
     where
         F: PrimeField32;
+
+    /// Runtime execution of the instruction, if the instruction is owned by the
+    /// current instance. May internally store records of this call for later trace generation.
+    fn execute_tracegen(
+        &mut self,
+        state: &mut VmStateMut<TracingMemory<F>, TracegenCtx<F>>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()>;
 }
 
 impl<F, C> InsExecutorE1<F> for RefCell<C>
@@ -162,6 +171,18 @@ where
     {
         self.borrow_mut()
             .execute_metered(state, instruction, chip_index)
+    }
+
+    /// Runtime execution of the instruction, if the instruction is owned by the
+    /// current instance. May internally store records of this call for later trace generation.
+    fn execute_tracegen(
+        &mut self,
+        state: &mut VmStateMut<TracingMemory<F>, TracegenCtx<F>>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        self.borrow_mut()
+            .execute_tracegen(state, instruction, chip_index)
     }
 }
 
