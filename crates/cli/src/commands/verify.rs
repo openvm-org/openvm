@@ -4,9 +4,10 @@ use clap::Parser;
 use eyre::Result;
 use openvm_sdk::{
     fs::{
-        decode_from_file, read_agg_stark_pk_from_file, read_app_proof_from_file,
-        read_app_vk_from_file,
+        read_agg_stark_pk_from_file, read_app_proof_from_file, read_app_vk_from_file,
+        read_from_file_json,
     },
+    types::VmStarkProofBytes,
     Sdk,
 };
 
@@ -121,8 +122,15 @@ impl VerifyCmd {
                     files[0].clone()
                 };
                 println!("Verifying STARK proof at {}", proof_path.display());
-                let stark_proof = decode_from_file(proof_path)?;
-                sdk.verify_e2e_stark_proof(&agg_stark_pk, &stark_proof)?;
+                let stark_proof_bytes: VmStarkProofBytes = read_from_file_json(proof_path)?;
+                let expected_exe_commit = stark_proof_bytes.app_commit.app_exe_commit.to_bn254();
+                let expected_vm_commit = stark_proof_bytes.app_commit.app_vm_commit.to_bn254();
+                sdk.verify_e2e_stark_proof(
+                    &agg_stark_pk,
+                    &stark_proof_bytes.try_into()?,
+                    &expected_exe_commit,
+                    &expected_vm_commit,
+                )?;
             }
             #[cfg(feature = "evm-verify")]
             VerifySubCommand::Evm { proof } => {

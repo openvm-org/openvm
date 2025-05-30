@@ -298,7 +298,7 @@ impl Encode for [F; DIGEST_SIZE] {
 }
 
 /// Encodes length of slice and then each element
-fn encode_slice<T: Encode, W: Write>(slice: &[T], writer: &mut W) -> Result<()> {
+pub(crate) fn encode_slice<T: Encode, W: Write>(slice: &[T], writer: &mut W) -> Result<()> {
     slice.len().encode(writer)?;
     for elt in slice {
         elt.encode(writer)?;
@@ -610,7 +610,7 @@ impl Decode for [F; DIGEST_SIZE] {
 }
 
 /// Decodes a vector of elements
-fn decode_vec<T: Decode, R: Read>(reader: &mut R) -> Result<Vec<T>> {
+pub(crate) fn decode_vec<T: Decode, R: Read>(reader: &mut R) -> Result<Vec<T>> {
     let len = usize::decode(reader)?;
     let mut vec = Vec::with_capacity(len);
 

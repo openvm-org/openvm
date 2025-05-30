@@ -8,10 +8,11 @@ use openvm_sdk::{
     commit::AppExecutionCommit,
     config::{AggregationTreeConfig, SdkVmConfig},
     fs::{
-        encode_to_file, read_agg_stark_pk_from_file, read_app_pk_from_file, read_exe_from_file,
-        write_app_proof_to_file,
+        read_agg_stark_pk_from_file, read_app_pk_from_file, read_exe_from_file,
+        write_app_proof_to_file, write_to_file_json,
     },
     keygen::AppProvingKey,
+    types::VmStarkProofBytes,
     NonRootCommittedExe, Sdk,
 };
 
@@ -153,8 +154,8 @@ impl ProveCmd {
                     &committed_exe,
                     &app_pk.leaf_committed_exe,
                 );
-                println!("exe commit: {:?}", commits.exe_commit);
-                println!("vm commit: {:?}", commits.vm_commit);
+                println!("exe commit: {:?}", commits.app_exe_commit.to_bn254());
+                println!("vm commit: {:?}", commits.app_vm_commit.to_bn254());
 
                 let agg_stark_pk = read_agg_stark_pk_from_file(default_agg_stark_pk_path()).map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
@@ -166,12 +167,14 @@ impl ProveCmd {
                     read_to_stdin(&run_args.input)?,
                 )?;
 
+                let stark_proof_bytes = VmStarkProofBytes::new(commits, stark_proof)?;
+
                 let proof_path = if let Some(proof) = proof {
                     proof
                 } else {
                     &PathBuf::from(format!("{}.stark.proof", target_name))
                 };
-                encode_to_file(proof_path, stark_proof)?;
+                write_to_file_json(proof_path, stark_proof_bytes)?;
             }
             #[cfg(feature = "evm-prove")]
             ProveSubCommand::Evm {
@@ -193,8 +196,8 @@ impl ProveCmd {
                     &committed_exe,
                     &app_pk.leaf_committed_exe,
                 );
-                println!("exe commit: {:?}", commits.exe_commit_to_bn254());
-                println!("vm commit: {:?}", commits.vm_commit_to_bn254());
+                println!("exe commit: {:?}", commits.app_exe_commit.to_bn254());
+                println!("vm commit: {:?}", commits.app_vm_commit.to_bn254());
 
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
                 let agg_pk = read_default_agg_pk().map_err(|e| {
