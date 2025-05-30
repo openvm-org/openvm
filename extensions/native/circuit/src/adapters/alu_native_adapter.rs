@@ -74,6 +74,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for AluNativeAdapterAir {
 
         let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
 
+        // TODO: we assume address space is either 0 or 4, should we add a
+        //       constraint for that?
         self.memory_bridge
             .read_or_immediate(
                 MemoryAddress::new(cols.e_as, cols.b_pointer),
