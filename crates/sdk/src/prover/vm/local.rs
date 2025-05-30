@@ -98,7 +98,7 @@ where
             match vm.executor.execute_and_then(
                 exe.clone(),
                 input.clone(),
-                |seg_idx, mut seg| {
+                |seg_idx, seg| {
                     final_memory = Some(
                         seg.chip_complex
                             .memory_controller()

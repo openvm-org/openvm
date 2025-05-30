@@ -4,6 +4,10 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use super::{ExecutionError, VmChipComplex, VmConfig, VmSegmentState};
 
 /// Trait for execution control, determining segmentation and stopping conditions
+/// Invariants:
+/// - `ExecutionControl` should be stateless.
+/// - For E3/E4, `ExecutionControl` is for a specific execution and cannot be used for another
+///   execution with different inputs or segmentation criteria.
 pub trait ExecutionControl<F, VC>
 where
     F: PrimeField32,

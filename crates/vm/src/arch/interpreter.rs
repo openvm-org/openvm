@@ -10,18 +10,20 @@ use crate::{
 };
 
 /// VM pure executor(E1/E2 executor) which doesn't consider trace generation.
-/// Note: This executor doesn't hold any VM state.
-pub struct VmPureExecutor<F: PrimeField32, VC: VmConfig<F>> {
+/// Note: This executor doesn't hold any VM state and can be used for multiple execution.
+pub struct InterpretedInstance<F: PrimeField32, VC: VmConfig<F>> {
     exe: VmExe<F>,
     vm_config: VC,
 }
 
-impl<F: PrimeField32, VC: VmConfig<F>> VmPureExecutor<F, VC> {
+impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
     pub fn new(vm_config: VC, exe: impl Into<VmExe<F>>) -> Self {
         let exe = exe.into();
         Self { exe, vm_config }
     }
 
+    /// Execute the VM program with the given execution control and inputs. Returns the final VM
+    /// state with the `ExecutionControl` context.
     pub fn execute<CTRL: ExecutionControl<F, VC>>(
         &self,
         ctrl: CTRL,

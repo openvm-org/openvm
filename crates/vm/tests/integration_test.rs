@@ -13,7 +13,7 @@ use openvm_circuit::{
             e1::E1ExecutionControl, tracegen::TracegenExecutionControlWithSegmentation,
         },
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-        pure_execution::VmPureExecutor,
+        interpreter::InterpretedInstance,
         ChipId, MemoryConfig, SingleSegmentVmExecutor, SystemConfig, SystemTraceHeights,
         VirtualMachine, VmComplexTraceHeights, VmConfig, VmInventoryTraceHeights,
         VmSegmentExecutor, VmSegmentState,
@@ -844,7 +844,7 @@ fn test_vm_pure_execution_non_continuation() {
 
     let program = Program::from_instructions(&instructions);
 
-    let executor = VmPureExecutor::<F, _>::new(test_native_config(), program);
+    let executor = InterpretedInstance::<F, _>::new(test_native_config(), program);
     executor
         .execute(E1ExecutionControl::new(None), vec![])
         .expect("Failed to execute");
@@ -871,7 +871,7 @@ fn test_vm_pure_execution_continuation() {
     ];
 
     let program = Program::from_instructions(&instructions);
-    let executor = VmPureExecutor::<F, _>::new(test_native_continuations_config(), program);
+    let executor = InterpretedInstance::<F, _>::new(test_native_continuations_config(), program);
     executor
         .execute(E1ExecutionControl::new(None), vec![])
         .expect("Failed to execute");
