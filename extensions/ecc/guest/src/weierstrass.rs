@@ -393,6 +393,7 @@ macro_rules! impl_sw_group_ops {
         impl core::ops::Add<&$struct_name> for $struct_name {
             type Output = Self;
 
+            #[inline(never)]
             fn add(mut self, p2: &$struct_name) -> Self::Output {
                 use core::ops::AddAssign;
                 self.add_assign(p2);
@@ -429,6 +430,7 @@ macro_rules! impl_sw_group_ops {
         }
 
         impl core::ops::AddAssign<&$struct_name> for $struct_name {
+            #[inline(never)]
             fn add_assign(&mut self, p2: &$struct_name) {
                 if self.is_identity() {
                     *self = p2.clone();
@@ -447,6 +449,7 @@ macro_rules! impl_sw_group_ops {
         }
 
         impl core::ops::AddAssign for $struct_name {
+            #[inline(never)]
             fn add_assign(&mut self, rhs: Self) {
                 self.add_assign(&rhs);
             }
