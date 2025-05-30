@@ -81,10 +81,9 @@ impl CommitCmd {
             &app_pk.app_vm_pk.vm_config,
             &committed_exe,
             &app_pk.leaf_committed_exe,
-        )
-        .to_bn254_commit();
-        println!("exe commit: {:?}", commits.exe_commit);
-        println!("vm commit: {:?}", commits.vm_commit);
+        );
+        println!("exe commit: {:?}", commits.app_exe_commit.to_bn254());
+        println!("vm commit: {:?}", commits.app_vm_commit.to_bn254());
 
         let (manifest_path, _) = get_manifest_path_and_dir(&self.cargo_args.manifest_path)?;
         let target_dir = get_target_dir(&self.cargo_args.target_dir, &manifest_path);

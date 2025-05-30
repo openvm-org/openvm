@@ -350,8 +350,8 @@ fn test_static_verifier_custom_pv_handler() {
         &app_committed_exe,
         &app_pk.leaf_committed_exe,
     );
-    let exe_commit = commits.exe_commit_to_bn254();
-    let leaf_verifier_commit = commits.vm_commit_to_bn254();
+    let exe_commit = commits.app_exe_commit.to_bn254();
+    let leaf_verifier_commit = commits.app_vm_commit.to_bn254();
 
     let pv_handler = CustomPvHandler {
         exe_commit,

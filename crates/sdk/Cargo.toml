@@ -57,6 +57,7 @@ tempfile.workspace = true
 hex.workspace = true
 forge-fmt = { workspace = true, optional = true }
 rrs-lib = { workspace = true }
+num-bigint = { workspace = true }
 
 [features]
 default = ["parallel", "jemalloc", "evm-verify"]

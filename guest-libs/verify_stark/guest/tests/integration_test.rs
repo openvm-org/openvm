@@ -58,6 +58,8 @@ mod tests {
 
         let commits =
             AppExecutionCommit::compute(&vm_config, &committed_app_exe, &app_pk.leaf_committed_exe);
+        let exe_commit = commits.app_exe_commit.to_u32_digest();
+        let vm_commit = commits.app_vm_commit.to_u32_digest();
 
         let agg_pk = AggStarkProvingKey::keygen(AggStarkConfig {
             max_num_user_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
@@ -106,17 +108,13 @@ mod tests {
             .collect();
 
         let mut stdin = StdIn::default();
-        let key = compute_hint_key_for_verify_openvm_stark(
-            ASM_FILENAME,
-            &commits.exe_commit,
-            &commits.vm_commit,
-            &pvs,
-        );
+        let key =
+            compute_hint_key_for_verify_openvm_stark(ASM_FILENAME, &exe_commit, &vm_commit, &pvs);
         let value = encode_proof_to_kv_store_value(&e2e_stark_proof.proof);
         stdin.add_key_value(key, value);
 
-        stdin.write(&commits.exe_commit);
-        stdin.write(&commits.vm_commit);
+        stdin.write(&exe_commit);
+        stdin.write(&vm_commit);
         stdin.write(&pvs);
 
         sdk.execute(verify_exe, vm_config, stdin)?;

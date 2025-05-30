@@ -210,7 +210,7 @@ pub fn write_to_file_json<T: Serialize, P: AsRef<Path>>(path: P, data: T) -> Res
         create_dir_all(parent).map_err(|e| write_error(&path, e.into()))?;
     }
     File::create(&path)
-        .and_then(|file| serde_json::to_writer(file, &data).map_err(|e| e.into()))
+        .and_then(|file| serde_json::to_writer_pretty(file, &data).map_err(|e| e.into()))
         .map_err(|e| write_error(&path, e.into()))?;
     Ok(())
 }

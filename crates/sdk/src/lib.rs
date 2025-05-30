@@ -24,7 +24,7 @@ use openvm_circuit::{
 };
 use openvm_continuations::verifier::{
     common::types::VmVerifierPvs,
-    internal::types::VmStarkProof,
+    internal::types::{InternalVmVerifierPvs, VmStarkProof},
     root::{types::RootVmVerifierInput, RootVmVerifierConfig},
 };
 pub use openvm_continuations::{
@@ -37,6 +37,7 @@ use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
     openvm_stark_backend::Chip,
+    p3_bn254_fr::Bn254Fr,
 };
 use openvm_transpiler::{
     elf::Elf,
@@ -330,6 +331,8 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         &self,
         agg_stark_pk: &AggStarkProvingKey,
         proof: &VmStarkProof<SC>,
+        expected_exe_commit: &Bn254Fr,
+        expected_vm_commit: &Bn254Fr,
     ) -> Result<AppExecutionCommit> {
         if proof.proof.per_air.len() < 3 {
             return Err(eyre::eyre!(
@@ -343,22 +346,37 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         } else if proof.proof.per_air[2].air_id != PUBLIC_VALUES_AIR_ID {
             return Err(eyre::eyre!("Missing public values AIR"));
         }
+        let public_values_air_proof_data = &proof.proof.per_air[2];
 
-        let vm_commit = proof.proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref();
+        let program_commit =
+            proof.proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref();
         let internal_commit: &[_; CHUNK] = &agg_stark_pk
             .internal_committed_exe
             .get_program_commit()
             .into();
 
-        let vm_pk = if vm_commit == internal_commit {
-            &agg_stark_pk.internal_vm_pk
+        let (vm_pk, vm_commit) = if program_commit == internal_commit {
+            let internal_pvs: &InternalVmVerifierPvs<_> = public_values_air_proof_data
+                .public_values
+                .as_slice()
+                .borrow();
+            if internal_commit != &internal_pvs.extra_pvs.internal_program_commit {
+                return Err(eyre::eyre!(
+                    "Invalid internal program commit: expected {:?}, got {:?}",
+                    internal_commit,
+                    internal_pvs.extra_pvs.internal_program_commit
+                ));
+            }
+            (
+                &agg_stark_pk.internal_vm_pk,
+                internal_pvs.extra_pvs.leaf_verifier_commit,
+            )
         } else {
-            &agg_stark_pk.leaf_vm_pk
+            (&agg_stark_pk.leaf_vm_pk, *program_commit)
         };
         let e = E::new(vm_pk.fri_params);
         e.verify(&vm_pk.vm_pk.get_vk(), &proof.proof)?;
 
-        let public_values_air_proof_data = &proof.proof.per_air[2];
         let pvs: &VmVerifierPvs<_> =
             public_values_air_proof_data.public_values[..VmVerifierPvs::<u8>::width()].borrow();
 
@@ -383,12 +401,30 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
             ));
         }
 
-        let start_pc = pvs.connector.initial_pc;
-        let initial_memory_root = &pvs.memory.initial_root;
-        let exe_commit = compute_exe_commit(&hasher, vm_commit, initial_memory_root, start_pc);
-        Ok(AppExecutionCommit::from_field_commit(
-            *vm_commit, exe_commit,
-        ))
+        let exe_commit = compute_exe_commit(
+            &hasher,
+            &pvs.app_commit,
+            &pvs.memory.initial_root,
+            pvs.connector.initial_pc,
+        );
+        let app_commit = AppExecutionCommit::from_field_commit(exe_commit, vm_commit);
+        let exe_commit_bn254 = app_commit.app_exe_commit.to_bn254();
+        let vm_commit_bn254 = app_commit.app_vm_commit.to_bn254();
+
+        if exe_commit_bn254 != *expected_exe_commit {
+            return Err(eyre::eyre!(
+                "Invalid app exe commit: expected {:?}, got {:?}",
+                expected_exe_commit,
+                exe_commit_bn254
+            ));
+        } else if vm_commit_bn254 != *expected_vm_commit {
+            return Err(eyre::eyre!(
+                "Invalid app vm commit: expected {:?}, got {:?}",
+                expected_vm_commit,
+                vm_commit_bn254
+            ));
+        }
+        Ok(app_commit)
     }
 
     #[cfg(feature = "evm-prove")]
