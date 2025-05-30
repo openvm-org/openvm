@@ -19,8 +19,9 @@ use serde_with::serde_as;
 
 use crate::{types::BN254_BYTES, NonRootCommittedExe, F, SC};
 
-/// Wrapper for an array of big-endian bytes, representing a Bn254. Each commit can be
-/// converted to a Bn254 and/or base-F::MODULUS number as a u32 digest.
+/// Wrapper for an array of big-endian bytes, representing an unsigned big integer. Each commit can
+/// be converted to a Bn254Fr using the trivial identification as natural numbers or into a `u32`
+/// digest by decomposing the big integer base-`F::MODULUS`.
 #[serde_as]
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct CommitBytes(#[serde_as(as = "serde_with::hex::Hex")] [u8; BN254_BYTES]);
