@@ -724,7 +724,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE1<F>
     for NativePoseidon2Step<F, SBOX_REGISTERS>
 {
     fn execute_e1<Ctx>(
-        &mut self,
+        &self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> openvm_circuit::arch::Result<()>
@@ -736,7 +736,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE1<F>
     }
 
     fn execute_metered(
-        &mut self,
+        &self,
         state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
@@ -751,7 +751,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE1<F>
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_REGISTERS> {
     /// Returns the number of used rows.
     fn execute_e1_impl<Ctx>(
-        &mut self,
+        &self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> usize

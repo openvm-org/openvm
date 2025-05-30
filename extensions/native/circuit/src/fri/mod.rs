@@ -543,13 +543,12 @@ fn elem_to_ext<F: Field>(elem: F) -> [F; EXT_DEG] {
 }
 
 pub struct FriReducedOpeningStep<F: Field> {
-    pub height: usize,
     streams: Arc<Mutex<Streams<F>>>,
 }
 
 impl<F: PrimeField32> FriReducedOpeningStep<F> {
     pub fn new(streams: Arc<Mutex<Streams<F>>>) -> Self {
-        Self { height: 0, streams }
+        Self { streams }
     }
 }
 
@@ -615,10 +614,6 @@ where
         let length = length.as_canonical_u32() as usize;
 
         let write_a = F::ONE - is_init_read;
-
-        // TODO(ayush): why do we need this?should this be incremented only in tracegen execute?
-        // 2 for instruction rows
-        self.height += length + 2;
 
         let data = if is_init == 0 {
             let mut streams = self.streams.lock().unwrap();
@@ -790,7 +785,7 @@ where
     F: PrimeField32,
 {
     fn execute_e1<Ctx>(
-        &mut self,
+        &self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
@@ -861,10 +856,6 @@ where
             );
         }
 
-        // TODO(ayush): why do we need this?should this be incremented only in tracegen execute?
-        // 2 for instruction rows
-        self.height += length + 2;
-
         memory_write_native(state.memory, result_ptr, &result);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
@@ -873,7 +864,7 @@ where
     }
 
     fn execute_metered(
-        &mut self,
+        &self,
         state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,

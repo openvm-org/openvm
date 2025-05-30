@@ -285,7 +285,7 @@ where
         >,
 {
     fn execute_e1<Ctx>(
-        &mut self,
+        &self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
@@ -306,7 +306,7 @@ where
     }
 
     fn execute_metered(
-        &mut self,
+        &self,
         state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,

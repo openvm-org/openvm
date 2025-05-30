@@ -410,7 +410,7 @@ where
 // TODO: Rename core/step to operator
 pub trait StepExecutorE1<F> {
     fn execute_e1<Ctx>(
-        &mut self,
+        &self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
@@ -418,7 +418,7 @@ pub trait StepExecutorE1<F> {
         Ctx: E1E2ExecutionCtx;
 
     fn execute_metered(
-        &mut self,
+        &self,
         state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
@@ -431,7 +431,7 @@ where
     S: StepExecutorE1<F>,
 {
     fn execute_e1<Ctx>(
-        &mut self,
+        &self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
@@ -442,7 +442,7 @@ where
     }
 
     fn execute_metered(
-        &mut self,
+        &self,
         state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,

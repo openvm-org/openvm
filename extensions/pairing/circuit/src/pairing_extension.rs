@@ -115,7 +115,7 @@ pub(crate) mod phantom {
 
     impl<F: PrimeField32> PhantomSubExecutor<F> for PairingHintSubEx {
         fn phantom_execute(
-            &mut self,
+            &self,
             memory: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,

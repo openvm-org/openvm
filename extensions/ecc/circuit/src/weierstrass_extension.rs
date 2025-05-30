@@ -263,7 +263,7 @@ pub(crate) mod phantom {
 
     impl<F: PrimeField32> PhantomSubExecutor<F> for DecompressHintSubEx {
         fn phantom_execute(
-            &mut self,
+            &self,
             memory: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
@@ -440,7 +440,7 @@ pub(crate) mod phantom {
 
     impl<F: PrimeField32> PhantomSubExecutor<F> for NonQrHintSubEx {
         fn phantom_execute(
-            &mut self,
+            &self,
             _: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,

@@ -130,7 +130,7 @@ where
     F: PrimeField32,
 {
     fn execute_e1<Ctx>(
-        &mut self,
+        &self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError>
@@ -148,17 +148,16 @@ where
         // If not a system phantom sub-instruction (which is handled in
         // ExecutionSegment), look for a phantom sub-executor to handle it.
         if SysPhantom::from_repr(discriminant.0).is_none() {
-            let sub_executor = self
-                .phantom_executors
-                .get_mut(&discriminant)
-                .ok_or_else(|| ExecutionError::PhantomNotFound {
+            let sub_executor = self.phantom_executors.get(&discriminant).ok_or_else(|| {
+                ExecutionError::PhantomNotFound {
                     pc: *state.pc,
                     discriminant,
-                })?;
+                }
+            })?;
             let mut streams = self.streams.get().unwrap().lock().unwrap();
             // TODO(ayush): implement phantom subexecutor for new traits
             sub_executor
-                .as_mut()
+                .as_ref()
                 .phantom_execute(
                     state.memory,
                     &mut streams,
@@ -180,7 +179,7 @@ where
     }
 
     fn execute_metered(
-        &mut self,
+        &self,
         state: &mut VmStateMut<GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         _chip_index: usize,

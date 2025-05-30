@@ -611,6 +611,8 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
 
 /// Phantom sub-executors
 mod phantom {
+    use std::sync::{Arc, Mutex};
+
     use eyre::bail;
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
@@ -624,18 +626,21 @@ mod phantom {
 
     pub struct Rv32HintInputSubEx;
     pub struct Rv32HintRandomSubEx {
-        rng: OsRng,
+        // TODO: this should be moved to VmState in order to be reproducible.
+        rng: Arc<Mutex<OsRng>>,
     }
     impl Rv32HintRandomSubEx {
         pub fn new() -> Self {
-            Self { rng: OsRng }
+            Self {
+                rng: Default::default(),
+            }
         }
     }
     pub struct Rv32PrintStrSubEx;
 
     impl<F: Field> PhantomSubExecutor<F> for Rv32HintInputSubEx {
         fn phantom_execute(
-            &mut self,
+            &self,
             _: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
@@ -666,7 +671,7 @@ mod phantom {
 
     impl<F: PrimeField32> PhantomSubExecutor<F> for Rv32HintRandomSubEx {
         fn phantom_execute(
-            &mut self,
+            &self,
             memory: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
@@ -677,7 +682,10 @@ mod phantom {
             let len = new_read_rv32_register(memory, 1, a) as usize;
             streams.hint_stream.clear();
             streams.hint_stream.extend(
-                std::iter::repeat_with(|| F::from_canonical_u8(self.rng.gen::<u8>())).take(len * 4),
+                std::iter::repeat_with(|| {
+                    F::from_canonical_u8(self.rng.lock().unwrap().gen::<u8>())
+                })
+                .take(len * 4),
             );
             Ok(())
         }
@@ -685,7 +693,7 @@ mod phantom {
 
     impl<F: PrimeField32> PhantomSubExecutor<F> for Rv32PrintStrSubEx {
         fn phantom_execute(
-            &mut self,
+            &self,
             memory: &GuestMemory,
             _: &mut Streams<F>,
             _: PhantomDiscriminant,

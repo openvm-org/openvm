@@ -298,7 +298,7 @@ pub(crate) mod phantom {
 
     impl<F: Field> PhantomSubExecutor<F> for NativeHintInputSubEx {
         fn phantom_execute(
-            &mut self,
+            &self,
             _: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
@@ -323,7 +323,7 @@ pub(crate) mod phantom {
 
     impl<F: Field, const N: usize> PhantomSubExecutor<F> for NativeHintSliceSubEx<N> {
         fn phantom_execute(
-            &mut self,
+            &self,
             _: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
@@ -346,7 +346,7 @@ pub(crate) mod phantom {
 
     impl<F: PrimeField32> PhantomSubExecutor<F> for NativePrintSubEx {
         fn phantom_execute(
-            &mut self,
+            &self,
             memory: &GuestMemory,
             _: &mut Streams<F>,
             _: PhantomDiscriminant,
@@ -362,7 +362,7 @@ pub(crate) mod phantom {
 
     impl<F: PrimeField32> PhantomSubExecutor<F> for NativeHintBitsSubEx {
         fn phantom_execute(
-            &mut self,
+            &self,
             memory: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
@@ -386,7 +386,7 @@ pub(crate) mod phantom {
 
     impl<F: PrimeField32> PhantomSubExecutor<F> for NativeHintLoadSubEx {
         fn phantom_execute(
-            &mut self,
+            &self,
             _: &GuestMemory,
             streams: &mut Streams<F>,
             _: PhantomDiscriminant,
