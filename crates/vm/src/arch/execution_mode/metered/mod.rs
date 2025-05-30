@@ -8,9 +8,10 @@ use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 use p3_baby_bear::BabyBear;
 
 use crate::arch::{
-    execution_control::ExecutionControl, ChipId, ExecutionError, InsExecutorE1, VmChipComplex,
-    VmConfig, VmSegmentState, VmStateMut, CONNECTOR_AIR_ID, DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT,
-    DEFAULT_MAX_SEGMENT_LEN, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID,
+    execution_control::ExecutionControl, execution_mode::metered::bounded::Segment, ChipId,
+    ExecutionError, InsExecutorE1, VmChipComplex, VmConfig, VmSegmentState, VmStateMut,
+    CONNECTOR_AIR_ID, DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT, DEFAULT_MAX_SEGMENT_LEN,
+    PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID,
 };
 
 /// Check segment every 100 instructions.
@@ -20,13 +21,6 @@ const SEGMENT_CHECK_INTERVAL: u64 = 100;
 const MAX_TRACE_HEIGHT: u32 = DEFAULT_MAX_SEGMENT_LEN as u32;
 const MAX_TRACE_CELLS_PER_CHIP: usize = DEFAULT_MAX_CELLS_PER_CHIP_IN_SEGMENT;
 const MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
-
-#[derive(derive_new::new, Debug)]
-pub struct Segment {
-    pub clk_start: u64,
-    pub num_cycles: u64,
-    pub trace_heights: Vec<u32>,
-}
 
 pub struct MeteredExecutionControl<'a> {
     // Constants
@@ -71,7 +65,7 @@ impl<'a> MeteredExecutionControl<'a> {
             if padded_height > MAX_TRACE_HEIGHT {
                 tracing::info!(
                     "Segment {:2} | clk {:9} | chip {} ({}) height ({:8}) > max ({:8})",
-                    state.ctx.num_segments,
+                    state.ctx.segments.len(),
                     state.ctx.clk_last_segment_check,
                     i,
                     self.air_names[i],
@@ -86,7 +80,7 @@ impl<'a> MeteredExecutionControl<'a> {
         if total_cells > max_trace_cells {
             tracing::info!(
                 "Segment {:2} | clk {:9} | total cells ({:10}) > max ({:10})",
-                state.ctx.num_segments,
+                state.ctx.segments.len(),
                 state.ctx.clk_last_segment_check,
                 total_cells,
                 max_trace_cells
@@ -98,7 +92,7 @@ impl<'a> MeteredExecutionControl<'a> {
         if total_interactions > MAX_INTERACTIONS {
             tracing::info!(
                 "Segment {:2} | clk {:9} | total interactions ({:11}) > max ({:11})",
-                state.ctx.num_segments,
+                state.ctx.segments.len(),
                 state.ctx.clk_last_segment_check,
                 total_interactions,
                 MAX_INTERACTIONS
@@ -176,8 +170,19 @@ impl<'a> MeteredExecutionControl<'a> {
         }
 
         if self.should_segment(state) {
+            let clk_start = state
+                .ctx
+                .segments
+                .last()
+                .map_or(0, |s| s.clk_start + s.num_cycles);
+            let segment = Segment {
+                clk_start,
+                num_cycles: state.ctx.clk_last_segment_check - clk_start,
+                // TODO(ayush): this is trace heights after overflow so an overestimate
+                trace_heights: state.ctx.trace_heights.clone(),
+            };
+            state.ctx.segments.push(segment);
             self.reset_segment::<F, VC>(state, chip_complex);
-            state.ctx.num_segments += 1;
         }
 
         state.ctx.clk_last_segment_check = state.clk;
@@ -222,11 +227,22 @@ where
 
         tracing::info!(
             "Segment {:2} | clk {:9} | terminated",
-            state.ctx.num_segments,
+            state.ctx.segments.len(),
             state.clk,
         );
         // Add the last segment
-        state.ctx.num_segments += 1;
+        let clk_start = state
+            .ctx
+            .segments
+            .last()
+            .map_or(0, |s| s.clk_start + s.num_cycles);
+        let segment = Segment {
+            clk_start,
+            num_cycles: state.clk - clk_start,
+            // TODO(ayush): this is trace heights after overflow so an overestimate
+            trace_heights: state.ctx.trace_heights.clone(),
+        };
+        state.ctx.segments.push(segment);
     }
 
     /// Execute a single instruction

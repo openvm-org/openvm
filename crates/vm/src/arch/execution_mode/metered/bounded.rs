@@ -20,7 +20,7 @@ pub struct MeteredCtxBounded {
     // Indices of leaf nodes in the memory merkle tree
     pub leaf_indices: Vec<u64>,
     pub clk_last_segment_check: u64,
-    pub num_segments: usize,
+    pub segments: Vec<Segment>,
 }
 
 impl MeteredCtxBounded {
@@ -39,7 +39,7 @@ impl MeteredCtxBounded {
             memory_dimensions,
             leaf_indices: Vec::new(),
             clk_last_segment_check: 0,
-            num_segments: 0,
+            segments: Vec::new(),
         }
     }
 }
@@ -184,4 +184,11 @@ fn calculate_merkle_node_updates(
     }
 
     diff
+}
+
+#[derive(derive_new::new, Debug)]
+pub struct Segment {
+    pub clk_start: u64,
+    pub num_cycles: u64,
+    pub trace_heights: Vec<u32>,
 }
