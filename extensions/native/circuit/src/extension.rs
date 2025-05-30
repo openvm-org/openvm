@@ -38,7 +38,7 @@ use crate::{
 };
 
 // TODO(ayush): this should be decided after e2 execution
-const MAX_INS_CAPACITY: usize = 1 << 22;
+const MAX_INS_CAPACITY: usize = 1 << 23;
 
 #[derive(Clone, Debug, Serialize, Deserialize, VmConfig, derive_new::new)]
 pub struct NativeConfig {

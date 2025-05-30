@@ -592,7 +592,7 @@ impl<F: PrimeField32> SystemComplex<F> {
             assert_eq!(inventory.executors().len(), Self::PV_EXECUTOR_IDX);
 
             // TODO(ayush): this should be decided after e2 execution
-            const MAX_INS_CAPACITY: usize = 1 << 22;
+            const MAX_INS_CAPACITY: usize = 1 << 23;
             let chip = PublicValuesChip::new(
                 VmAirWrapper::new(
                     NativeAdapterAir::new(
