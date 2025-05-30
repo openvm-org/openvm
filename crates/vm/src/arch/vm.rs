@@ -299,6 +299,7 @@ where
         #[cfg(feature = "bench-metrics")]
         let metrics = segment.metrics.partial_take();
 
+        // TODO(ayush): this can probably be avoided
         let memory = segment
             .chip_complex
             .base
