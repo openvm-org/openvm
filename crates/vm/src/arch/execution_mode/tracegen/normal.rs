@@ -6,7 +6,7 @@ use crate::{
         execution_control::ExecutionControl, ExecutionError, ExecutionState, InstructionExecutor,
         VmChipComplex, VmConfig, VmSegmentState,
     },
-    system::memory::{MemoryImage, INITIAL_TIMESTAMP},
+    system::memory::INITIAL_TIMESTAMP,
 };
 
 pub type TracegenCtx = ();
@@ -15,16 +15,11 @@ pub type TracegenCtx = ();
 pub struct TracegenExecutionControl {
     // State
     pub clk_end: u64,
-    // TODO(ayush): do we need this if only executing one segment?
-    pub final_memory: Option<MemoryImage>,
 }
 
 impl TracegenExecutionControl {
     pub fn new(clk_end: u64) -> Self {
-        Self {
-            clk_end,
-            final_memory: None,
-        }
+        Self { clk_end }
     }
 }
 
@@ -35,8 +30,12 @@ where
 {
     type Ctx = TracegenCtx;
 
+    fn initialize_context(&self) -> Self::Ctx {
+        ()
+    }
+
     fn should_suspend(
-        &mut self,
+        &self,
         state: &mut VmSegmentState<Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
@@ -44,7 +43,7 @@ where
     }
 
     fn on_start(
-        &mut self,
+        &self,
         state: &mut VmSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
@@ -54,14 +53,11 @@ where
     }
 
     fn on_suspend_or_terminate(
-        &mut self,
+        &self,
         state: &mut VmSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         exit_code: Option<u32>,
     ) {
-        // TODO(ayush): this should ideally not be here
-        self.final_memory = Some(chip_complex.base.memory_controller.memory_image().clone());
-
         let timestamp = chip_complex.memory_controller().timestamp();
         chip_complex
             .connector_chip_mut()
@@ -70,7 +66,7 @@ where
 
     /// Execute a single instruction
     fn execute_instruction(
-        &mut self,
+        &self,
         state: &mut VmSegmentState<Self::Ctx>,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,

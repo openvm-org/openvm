@@ -19,6 +19,8 @@ pub struct MeteredCtxBounded {
 
     // Indices of leaf nodes in the memory merkle tree
     pub leaf_indices: Vec<u64>,
+    pub clk_last_segment_check: u64,
+    pub num_segments: usize,
 }
 
 impl MeteredCtxBounded {
@@ -36,6 +38,8 @@ impl MeteredCtxBounded {
             as_byte_alignment_bits,
             memory_dimensions,
             leaf_indices: Vec::new(),
+            clk_last_segment_check: 0,
+            num_segments: 0,
         }
     }
 }

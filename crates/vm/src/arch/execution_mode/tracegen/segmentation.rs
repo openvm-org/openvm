@@ -18,18 +18,11 @@ const SEGMENT_CHECK_INTERVAL: usize = 100;
 pub struct TracegenExecutionControlWithSegmentation {
     // Constant
     air_names: Vec<String>,
-    // State
-    pub since_last_segment_check: usize,
-    pub final_memory: Option<MemoryImage>,
 }
 
 impl TracegenExecutionControlWithSegmentation {
     pub fn new(air_names: Vec<String>) -> Self {
-        Self {
-            since_last_segment_check: 0,
-            air_names,
-            final_memory: None,
-        }
+        Self { air_names }
     }
 }
 
@@ -40,17 +33,22 @@ where
 {
     type Ctx = TracegenCtx;
 
+    fn initialize_context(&self) -> Self::Ctx {
+        Self::Ctx {
+            since_last_segment_check: 0,
+        }
+    }
     fn should_suspend(
-        &mut self,
-        _state: &mut VmSegmentState<Self::Ctx>,
+        &self,
+        state: &mut VmSegmentState<Self::Ctx>,
         chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
         // Avoid checking segment too often.
-        if self.since_last_segment_check != SEGMENT_CHECK_INTERVAL {
-            self.since_last_segment_check += 1;
+        if state.ctx.since_last_segment_check != SEGMENT_CHECK_INTERVAL {
+            state.ctx.since_last_segment_check += 1;
             return false;
         }
-        self.since_last_segment_check = 0;
+        state.ctx.since_last_segment_check = 0;
         chip_complex.config().segmentation_strategy.should_segment(
             &self.air_names,
             &chip_complex.dynamic_trace_heights().collect::<Vec<_>>(),
@@ -59,7 +57,7 @@ where
     }
 
     fn on_start(
-        &mut self,
+        &self,
         state: &mut VmSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
@@ -69,14 +67,11 @@ where
     }
 
     fn on_suspend_or_terminate(
-        &mut self,
+        &self,
         state: &mut VmSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         exit_code: Option<u32>,
     ) {
-        // TODO(ayush): this should ideally not be here
-        self.final_memory = Some(chip_complex.base.memory_controller.memory_image().clone());
-
         let timestamp = chip_complex.memory_controller().timestamp();
         chip_complex
             .connector_chip_mut()
@@ -85,7 +80,7 @@ where
 
     /// Execute a single instruction
     fn execute_instruction(
-        &mut self,
+        &self,
         state: &mut VmSegmentState<Self::Ctx>,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,

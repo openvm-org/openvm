@@ -26,8 +26,12 @@ where
 {
     type Ctx = E1Ctx;
 
+    fn initialize_context(&self) -> Self::Ctx {
+        ()
+    }
+
     fn should_suspend(
-        &mut self,
+        &self,
         state: &mut VmSegmentState<Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
@@ -39,14 +43,14 @@ where
     }
 
     fn on_start(
-        &mut self,
+        &self,
         _state: &mut VmSegmentState<Self::Ctx>,
         _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
     }
 
     fn on_suspend_or_terminate(
-        &mut self,
+        &self,
         _state: &mut VmSegmentState<Self::Ctx>,
         _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         _exit_code: Option<u32>,
@@ -55,7 +59,7 @@ where
 
     /// Execute a single instruction
     fn execute_instruction(
-        &mut self,
+        &self,
         state: &mut VmSegmentState<Self::Ctx>,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,

@@ -33,10 +33,6 @@ pub struct MeteredExecutionControl<'a> {
     air_names: &'a [String],
     pub widths: &'a [usize],
     pub interactions: &'a [usize],
-    // State
-    // TODO(ayush): should probably be in metered ctx
-    pub clk_last_segment_check: u64,
-    pub segments: Vec<Segment>,
 }
 
 impl<'a> MeteredExecutionControl<'a> {
@@ -45,8 +41,6 @@ impl<'a> MeteredExecutionControl<'a> {
             air_names,
             widths,
             interactions,
-            clk_last_segment_check: 0,
-            segments: vec![],
         }
     }
 
@@ -69,7 +63,7 @@ impl<'a> MeteredExecutionControl<'a> {
             .sum()
     }
 
-    fn should_segment(&mut self, state: &mut VmSegmentState<MeteredCtx>) -> bool {
+    fn should_segment(&self, state: &mut VmSegmentState<MeteredCtx>) -> bool {
         let trace_heights = state.ctx.trace_heights_if_finalized();
         let max_trace_cells = MAX_TRACE_CELLS_PER_CHIP * trace_heights.len();
         for (i, &height) in trace_heights.iter().enumerate() {
@@ -77,8 +71,8 @@ impl<'a> MeteredExecutionControl<'a> {
             if padded_height > MAX_TRACE_HEIGHT {
                 tracing::info!(
                     "Segment {:2} | clk {:9} | chip {} ({}) height ({:8}) > max ({:8})",
-                    self.segments.len(),
-                    self.clk_last_segment_check,
+                    state.ctx.num_segments,
+                    state.ctx.clk_last_segment_check,
                     i,
                     self.air_names[i],
                     padded_height,
@@ -92,8 +86,8 @@ impl<'a> MeteredExecutionControl<'a> {
         if total_cells > max_trace_cells {
             tracing::info!(
                 "Segment {:2} | clk {:9} | total cells ({:10}) > max ({:10})",
-                self.segments.len(),
-                self.clk_last_segment_check,
+                state.ctx.num_segments,
+                state.ctx.clk_last_segment_check,
                 total_cells,
                 max_trace_cells
             );
@@ -104,8 +98,8 @@ impl<'a> MeteredExecutionControl<'a> {
         if total_interactions > MAX_INTERACTIONS {
             tracing::info!(
                 "Segment {:2} | clk {:9} | total interactions ({:11}) > max ({:11})",
-                self.segments.len(),
-                self.clk_last_segment_check,
+                state.ctx.num_segments,
+                state.ctx.clk_last_segment_check,
                 total_interactions,
                 MAX_INTERACTIONS
             );
@@ -116,7 +110,7 @@ impl<'a> MeteredExecutionControl<'a> {
     }
 
     fn reset_segment<F, VC>(
-        &mut self,
+        &self,
         state: &mut VmSegmentState<MeteredCtx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) where
@@ -169,7 +163,7 @@ impl<'a> MeteredExecutionControl<'a> {
     }
 
     fn check_segment_limits<F, VC>(
-        &mut self,
+        &self,
         state: &mut VmSegmentState<MeteredCtx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) where
@@ -177,27 +171,16 @@ impl<'a> MeteredExecutionControl<'a> {
         VC: VmConfig<F>,
     {
         // Avoid checking segment too often.
-        if state.clk < self.clk_last_segment_check + SEGMENT_CHECK_INTERVAL {
+        if state.clk < state.ctx.clk_last_segment_check + SEGMENT_CHECK_INTERVAL {
             return;
         }
 
         if self.should_segment(state) {
-            let clk_start = self
-                .segments
-                .last()
-                .map_or(0, |s| s.clk_start + s.num_cycles);
-            let segment = Segment {
-                clk_start,
-                num_cycles: self.clk_last_segment_check - clk_start,
-                // TODO(ayush): this is trace heights after overflow so an overestimate
-                trace_heights: state.ctx.trace_heights.clone(),
-            };
-            self.segments.push(segment);
-
             self.reset_segment::<F, VC>(state, chip_complex);
+            state.ctx.num_segments += 1;
         }
 
-        self.clk_last_segment_check = state.clk;
+        state.ctx.clk_last_segment_check = state.clk;
     }
 }
 
@@ -209,8 +192,12 @@ where
 {
     type Ctx = MeteredCtx;
 
+    fn initialize_context(&self) -> Self::Ctx {
+        todo!()
+    }
+
     fn should_suspend(
-        &mut self,
+        &self,
         _state: &mut VmSegmentState<Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
@@ -218,7 +205,7 @@ where
     }
 
     fn on_start(
-        &mut self,
+        &self,
         state: &mut VmSegmentState<Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
@@ -226,7 +213,7 @@ where
     }
 
     fn on_suspend_or_terminate(
-        &mut self,
+        &self,
         state: &mut VmSegmentState<Self::Ctx>,
         _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         _exit_code: Option<u32>,
@@ -235,26 +222,16 @@ where
 
         tracing::info!(
             "Segment {:2} | clk {:9} | terminated",
-            self.segments.len(),
+            state.ctx.num_segments,
             state.clk,
         );
         // Add the last segment
-        let clk_start = self
-            .segments
-            .last()
-            .map_or(0, |s| s.clk_start + s.num_cycles);
-        let segment = Segment {
-            clk_start,
-            num_cycles: state.clk - clk_start,
-            // TODO(ayush): this is trace heights after overflow so an overestimate
-            trace_heights: state.ctx.trace_heights.clone(),
-        };
-        self.segments.push(segment);
+        state.ctx.num_segments += 1;
     }
 
     /// Execute a single instruction
     fn execute_instruction(
-        &mut self,
+        &self,
         state: &mut VmSegmentState<Self::Ctx>,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
