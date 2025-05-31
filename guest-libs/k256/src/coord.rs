@@ -25,9 +25,18 @@ impl ConditionallySelectable for Secp256k1Coord {
     }
 }
 
-// Requires canonical form
 impl ConstantTimeEq for Secp256k1Coord {
     fn ct_eq(&self, other: &Secp256k1Coord) -> Choice {
-        self.as_le_bytes().ct_eq(other.as_le_bytes())
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            // Requires canonical form
+            self.as_le_bytes().ct_eq(other.as_le_bytes())
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            // The zkVM implementation calls iseqmod opcode so it is constant time, _except_ a check
+            // of whether the setup opcode has been called already
+            Choice::from(self == other)
+        }
     }
 }
