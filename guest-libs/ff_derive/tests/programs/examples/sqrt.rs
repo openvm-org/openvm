@@ -12,7 +12,7 @@ use openvm_ff_derive::openvm_prime_field;
 #[PrimeFieldModulus = "357686312646216567629137"]
 #[PrimeFieldGenerator = "5"]
 #[PrimeFieldReprEndianness = "little"]
-struct Fp([u64; 2]);
+struct Fp;
 
 fn test(square_root: Fp) {
     let square = square_root.square();

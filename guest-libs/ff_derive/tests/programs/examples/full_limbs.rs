@@ -11,7 +11,7 @@ use openvm_ff_derive::openvm_prime_field;
 #[PrimeFieldModulus = "39402006196394479212279040100143613805079739270465446667948293404245721771496870329047266088258938001861606973112319"]
 #[PrimeFieldGenerator = "19"]
 #[PrimeFieldReprEndianness = "little"]
-struct F384p([u64; 7]);
+struct F384p;
 
 fn test(square_root: F384p) {
     let square = square_root.square();

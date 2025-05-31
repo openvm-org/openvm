@@ -11,7 +11,7 @@ extern crate alloc;
 #[PrimeFieldModulus = "52435875175126190479447740508185965837690552500527637822603658699938581184513"]
 #[PrimeFieldGenerator = "7"]
 #[PrimeFieldReprEndianness = "little"]
-struct Bls381K12Scalar([u64; 4]);
+struct Bls381K12Scalar;
 
 openvm::init!("openvm_init_from_u128.rs");
 
