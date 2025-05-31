@@ -345,6 +345,61 @@ pub(crate) mod phantom {
         }
     }
 
+    /// Find the square root of `x` modulo `modulus` with `non_qr` a
+    /// quadratic nonresidue of the field.
+    pub fn mod_sqrt(x: &BigUint, modulus: &BigUint, non_qr: &BigUint) -> Option<BigUint> {
+        if modulus % 4u32 == BigUint::from_u8(3).unwrap() {
+            // x^(1/2) = x^((p+1)/4) when p = 3 mod 4
+            let exponent = (modulus + BigUint::one()) >> 2;
+            let ret = x.modpow(&exponent, modulus);
+            if &ret * &ret % modulus == x % modulus {
+                Some(ret)
+            } else {
+                None
+            }
+        } else {
+            // Tonelli-Shanks algorithm
+            // https://en.wikipedia.org/wiki/Tonelli%E2%80%93Shanks_algorithm#The_algorithm
+            let mut q = modulus - BigUint::one();
+            let mut s = 0;
+            while &q % 2u32 == BigUint::ZERO {
+                s += 1;
+                q /= 2u32;
+            }
+            let z = non_qr;
+            let mut m = s;
+            let mut c = z.modpow(&q, modulus);
+            let mut t = x.modpow(&q, modulus);
+            let mut r = x.modpow(&((q + BigUint::one()) >> 1), modulus);
+            loop {
+                if t == BigUint::ZERO {
+                    return Some(BigUint::ZERO);
+                }
+                if t == BigUint::one() {
+                    return Some(r);
+                }
+                let mut i = 0;
+                let mut tmp = t.clone();
+                while tmp != BigUint::one() && i < m {
+                    tmp = &tmp * &tmp % modulus;
+                    i += 1;
+                }
+                if i == m {
+                    // self is not a quadratic residue
+                    return None;
+                }
+                for _ in 0..m - i - 1 {
+                    c = &c * &c % modulus;
+                }
+                let b = c;
+                m = i;
+                c = &b * &b % modulus;
+                t = ((t * &b % modulus) * &b) % modulus;
+                r = (r * b) % modulus;
+            }
+        }
+    }
+
     #[derive(Clone)]
     pub struct NonQrHintSubEx {
         pub supported_moduli: Vec<BigUint>,
@@ -397,61 +452,6 @@ pub(crate) mod phantom {
                 .collect();
             streams.hint_stream = hint_bytes;
             Ok(())
-        }
-    }
-}
-
-/// Find the square root of `x` modulo `modulus` with `non_qr` a
-/// quadratic nonresidue of the field.
-pub fn mod_sqrt(x: &BigUint, modulus: &BigUint, non_qr: &BigUint) -> Option<BigUint> {
-    if modulus % 4u32 == BigUint::from_u8(3).unwrap() {
-        // x^(1/2) = x^((p+1)/4) when p = 3 mod 4
-        let exponent = (modulus + BigUint::one()) >> 2;
-        let ret = x.modpow(&exponent, modulus);
-        if &ret * &ret % modulus == x % modulus {
-            Some(ret)
-        } else {
-            None
-        }
-    } else {
-        // Tonelli-Shanks algorithm
-        // https://en.wikipedia.org/wiki/Tonelli%E2%80%93Shanks_algorithm#The_algorithm
-        let mut q = modulus - BigUint::one();
-        let mut s = 0;
-        while &q % 2u32 == BigUint::ZERO {
-            s += 1;
-            q /= 2u32;
-        }
-        let z = non_qr;
-        let mut m = s;
-        let mut c = z.modpow(&q, modulus);
-        let mut t = x.modpow(&q, modulus);
-        let mut r = x.modpow(&((q + BigUint::one()) >> 1), modulus);
-        loop {
-            if t == BigUint::ZERO {
-                return Some(BigUint::ZERO);
-            }
-            if t == BigUint::one() {
-                return Some(r);
-            }
-            let mut i = 0;
-            let mut tmp = t.clone();
-            while tmp != BigUint::one() && i < m {
-                tmp = &tmp * &tmp % modulus;
-                i += 1;
-            }
-            if i == m {
-                // self is not a quadratic residue
-                return None;
-            }
-            for _ in 0..m - i - 1 {
-                c = &c * &c % modulus;
-            }
-            let b = c;
-            m = i;
-            c = &b * &b % modulus;
-            t = ((t * &b % modulus) * &b) % modulus;
-            r = (r * b) % modulus;
         }
     }
 }
