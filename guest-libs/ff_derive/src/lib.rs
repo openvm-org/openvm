@@ -155,8 +155,11 @@ impl ReprEndianness {
 }
 
 /// Derive the `PrimeField` trait.
-/// This macro removes the struct definition and inserts our own zkvm-compatible struct into the
-/// token stream.
+/// **Warning**: This macro removes the struct definition and inserts our own zkvm-compatible struct
+/// into the token stream.
+/// Currently the memory layout of the new struct will always be either 32 or 48-bytes, where the
+/// smallest that will fit the field's modulus is used. Moduli that are larger than 48-bytes are not
+/// yet supported.
 // Required attributes: PrimeFieldModulus, PrimeFieldGenerator, PrimeFieldReprEndianness
 // Note: In our fork, we changed the macro from a derive macro to an attribute-style macro because
 // we need to be able to remove the struct definition and insert our own into the token stream.
