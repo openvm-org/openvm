@@ -13,7 +13,7 @@ use openvm_ff_derive::openvm_prime_field;
 #[PrimeFieldModulus = "52435875175126190479447740508185965837690552500527637822603658699938581184513"]
 #[PrimeFieldGenerator = "7"]
 #[PrimeFieldReprEndianness = "little"]
-struct Bls381K12Scalar;
+struct Bls381K12Scalar([u64; 4]);
 
 openvm::init!("openvm_init_batch_inversion_std.rs");
 

@@ -228,8 +228,8 @@ pub fn openvm_prime_field(
         .into();
     };
 
-    // The struct we're deriving for must have no fields.
-    if let Some(err) = validate_struct(&ast) {
+    // The struct we're deriving for must be a wrapper around `pub [u64; limbs]`.
+    if let Some(err) = validate_struct(&ast, limbs) {
         return err.into();
     }
 
@@ -286,21 +286,106 @@ fn openvm_struct_impl(ast: &syn::ItemStruct, modulus: &BigUint) -> proc_macro2::
     }
 }
 
-/// Check that the struct is unit (no fields)
-fn validate_struct(ast: &syn::ItemStruct) -> Option<proc_macro2::TokenStream> {
-    match &ast.fields {
-        syn::Fields::Unit => {
-            // Valid!
-            None
+/// Checks that `body` contains `pub [u64; limbs]`.
+fn validate_struct(ast: &syn::ItemStruct, limbs: usize) -> Option<proc_macro2::TokenStream> {
+    // The struct should contain a single unnamed field.
+    let fields = match &ast.fields {
+        syn::Fields::Unnamed(x) if x.unnamed.len() == 1 => x,
+        _ => {
+            return Some(
+                syn::Error::new_spanned(
+                    &ast.ident,
+                    format!(
+                        "The struct must contain an array of limbs. Change this to `{}([u64; {}])`",
+                        ast.ident, limbs,
+                    ),
+                )
+                .to_compile_error(),
+            )
         }
-        _ => Some(
+    };
+    let field = &fields.unnamed[0];
+
+    // The field should be an array.
+    let arr = match &field.ty {
+        syn::Type::Array(x) => x,
+        _ => {
+            return Some(
+                syn::Error::new_spanned(
+                    field,
+                    format!(
+                        "The inner field must be an array of limbs. Change this to `[u64; {}]`",
+                        limbs,
+                    ),
+                )
+                .to_compile_error(),
+            )
+        }
+    };
+
+    // The array's element type should be `u64`.
+    if match arr.elem.as_ref() {
+        syn::Type::Path(path) => path.path.get_ident().map(|x| *x != "u64").unwrap_or(true),
+        _ => true,
+    } {
+        return Some(
             syn::Error::new_spanned(
-                &ast.ident,
-                "The struct should be a unit struct with no fields",
+                arr,
+                format!(
+                    "PrimeField derive requires 64-bit limbs. Change this to `[u64; {}]",
+                    limbs
+                ),
             )
             .to_compile_error(),
-        ),
+        );
     }
+
+    // The array's length should be a literal int equal to `limbs`.
+    let expr_lit = match &arr.len {
+        syn::Expr::Lit(expr_lit) => Some(&expr_lit.lit),
+        syn::Expr::Group(expr_group) => match &*expr_group.expr {
+            syn::Expr::Lit(expr_lit) => Some(&expr_lit.lit),
+            _ => None,
+        },
+        _ => None,
+    };
+    let lit_int = match match expr_lit {
+        Some(syn::Lit::Int(lit_int)) => Some(lit_int),
+        _ => None,
+    } {
+        Some(x) => x,
+        _ => {
+            return Some(
+                syn::Error::new_spanned(
+                    arr,
+                    format!("To derive PrimeField, change this to `[u64; {}]`.", limbs),
+                )
+                .to_compile_error(),
+            )
+        }
+    };
+    if lit_int.base10_digits() != limbs.to_string() {
+        return Some(
+            syn::Error::new_spanned(
+                lit_int,
+                format!("The given modulus requires {} limbs.", limbs),
+            )
+            .to_compile_error(),
+        );
+    }
+
+    // The field should not be public.
+    match &field.vis {
+        syn::Visibility::Inherited => (),
+        _ => {
+            return Some(
+                syn::Error::new_spanned(&field.vis, "Field must not be public.").to_compile_error(),
+            )
+        }
+    }
+
+    // Valid!
+    None
 }
 
 /// Fetch an attribute string from the derived struct.

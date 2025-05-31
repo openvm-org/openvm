@@ -12,7 +12,7 @@ use openvm_ff_derive::openvm_prime_field;
 #[PrimeFieldModulus = "65537"]
 #[PrimeFieldGenerator = "3"]
 #[PrimeFieldReprEndianness = "little"]
-struct Fermat65537Field;
+struct Fermat65537Field([u64; 1]);
 
 openvm::init!("openvm_init_fermat.rs");
 
