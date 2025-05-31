@@ -36,7 +36,7 @@ impl ConstantTimeEq for Secp256k1Coord {
         {
             // The zkVM implementation calls iseqmod opcode so it is constant time, _except_ a check
             // of whether the setup opcode has been called already
-            Choice::from(self == other)
+            Choice::from((self == other) as u8)
         }
     }
 }
