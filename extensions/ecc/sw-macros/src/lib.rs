@@ -321,7 +321,8 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                                 } else {
                                     -y
                                 };
-                                Some(<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::from_xy(x, correct_y).unwrap())
+                                // In order for sqrt() to return Some, we are guaranteed that y * y == y_squared, which already proves (x, correct_y) is on the curve
+                                Some(<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::from_xy_unchecked(x, correct_y))
                             }
                         }
                     }
