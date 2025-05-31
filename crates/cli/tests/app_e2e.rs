@@ -7,10 +7,10 @@ use tempfile::tempdir;
 fn test_cli_app_e2e() -> Result<()> {
     let temp_dir = tempdir()?;
     run_cmd("cargo", &["install", "--path", ".", "--force"])?;
-    let temp_exe = temp_dir.path().join("fibonacci.vmexe");
-    let temp_pk = temp_dir.path().join("fibonacci.pk");
-    let temp_vk = temp_dir.path().join("fibonacci.vk");
-    let temp_proof = temp_dir.path().join("fibonacci.apppf");
+    let exe_path = "tests/programs/fibonacci/target/openvm/release/openvm-cli-example-test.vmexe";
+    let temp_pk = temp_dir.path().join("app.pk");
+    let temp_vk = temp_dir.path().join("app.vk");
+    let temp_proof = temp_dir.path().join("fibonacci.app.proof");
 
     run_cmd(
         "cargo",
@@ -21,8 +21,6 @@ fn test_cli_app_e2e() -> Result<()> {
             "tests/programs/fibonacci/Cargo.toml",
             "--config",
             "tests/programs/fibonacci/openvm.toml",
-            "--exe-output",
-            temp_exe.to_str().unwrap(),
         ],
     )?;
 
@@ -33,10 +31,8 @@ fn test_cli_app_e2e() -> Result<()> {
             "keygen",
             "--config",
             "tests/programs/fibonacci/openvm.toml",
-            "--output",
-            temp_pk.to_str().unwrap(),
-            "--vk-output",
-            temp_vk.to_str().unwrap(),
+            "--output-dir",
+            temp_dir.path().to_str().unwrap(),
         ],
     )?;
 
@@ -46,7 +42,7 @@ fn test_cli_app_e2e() -> Result<()> {
             "openvm",
             "run",
             "--exe",
-            temp_exe.to_str().unwrap(),
+            exe_path,
             "--config",
             "tests/programs/fibonacci/openvm.toml",
         ],
@@ -61,8 +57,8 @@ fn test_cli_app_e2e() -> Result<()> {
             "--app-pk",
             temp_pk.to_str().unwrap(),
             "--exe",
-            temp_exe.to_str().unwrap(),
-            "--output",
+            exe_path,
+            "--proof",
             temp_proof.to_str().unwrap(),
         ],
     )?;
@@ -84,21 +80,73 @@ fn test_cli_app_e2e() -> Result<()> {
 }
 
 #[test]
-fn test_cli_app_e2e_default_paths() -> Result<()> {
+fn test_cli_app_e2e_simplified() -> Result<()> {
     run_cmd("cargo", &["install", "--path", ".", "--force"])?;
     run_cmd(
         "cargo",
         &[
             "openvm",
-            "build",
+            "keygen",
             "--manifest-path",
-            "tests/programs/fibonacci/Cargo.toml",
+            "tests/programs/multi/Cargo.toml",
         ],
     )?;
-    run_cmd("cargo", &["openvm", "keygen"])?;
-    run_cmd("cargo", &["openvm", "run"])?;
-    run_cmd("cargo", &["openvm", "prove", "app"])?;
-    run_cmd("cargo", &["openvm", "verify", "app"])?;
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "prove",
+            "app",
+            "--manifest-path",
+            "tests/programs/multi/Cargo.toml",
+            "--example",
+            "fibonacci",
+        ],
+    )?;
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "verify",
+            "app",
+            "--manifest-path",
+            "tests/programs/multi/Cargo.toml",
+        ],
+    )?;
+    Ok(())
+}
+
+#[test]
+fn test_cli_init_build() -> Result<()> {
+    let temp_dir = tempdir()?;
+    let temp_path = temp_dir.path();
+    let config_path = temp_path.join("openvm.toml");
+    let manifest_path = temp_path.join("Cargo.toml");
+    run_cmd("cargo", &["install", "--path", ".", "--force"])?;
+
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "init",
+            temp_path.to_str().unwrap(),
+            "--name",
+            "cli-package",
+        ],
+    )?;
+
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "build",
+            "--config",
+            config_path.to_str().unwrap(),
+            "--manifest-path",
+            manifest_path.to_str().unwrap(),
+        ],
+    )?;
+
     Ok(())
 }
 
