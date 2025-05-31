@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: ["**"]
     paths:
+      - "crates/circuits/**"
+      - "crates/vm/**"
+      - "extensions/**"
       - "guest-libs/**"
       - "Cargo.toml"
       - ".github/workflows/guest-lib-tests.yml"
@@ -46,6 +49,9 @@ jobs:
         id: filter
         with:
           filters: |
+            - "crates/circuits/**"
+            - "crates/vm/**"
+            - "extensions/**"
             - "guest-libs/${{ matrix.crate.path }}/**"
             - ".github/workflows/guest-lib-tests.yml"
       - name: Skip if no changes
