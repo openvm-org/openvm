@@ -32,7 +32,7 @@ openvm_algebra_guest::moduli_macros::moduli_declare! {
 openvm::init!();
 
 fn materialize_modular_chip<T: IntMod>() {
-    // hopefully the compiler doesn't optimize out the operations
+    // ensure the compiler doesn't optimize out the operations
     // add/sub chip
     black_box(T::ZERO + T::ZERO);
     // mul/div chip
@@ -44,7 +44,7 @@ fn materialize_modular_chip<T: IntMod>() {
 // making this a macro since there's no complex extension trait
 macro_rules! materialize_complex_chip {
     ($complex_type:ty, $modular_type:ty) => {
-        // hopefully the compiler doesn't optimize out the operations
+        // ensure the compiler doesn't optimize out the operations
         let zero = <$complex_type>::new(
             <$modular_type as IntMod>::ZERO,
             <$modular_type as IntMod>::ZERO,
