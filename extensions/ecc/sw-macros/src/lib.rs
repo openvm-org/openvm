@@ -321,7 +321,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                                 } else {
                                     -y
                                 };
-                                Some(<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::from_xy_nonidentity(x, correct_y).unwrap())
+                                Some(<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::from_xy_unchecked(x, correct_y))
                             }
                         }
                     }
