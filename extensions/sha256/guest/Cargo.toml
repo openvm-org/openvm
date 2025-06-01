@@ -8,8 +8,5 @@ description = "Guest extension for Sha256"
 [dependencies]
 openvm-platform = { workspace = true }
 
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
-sha2 = { version = "0.10", default-features = false }
-
 [features]
 default = []

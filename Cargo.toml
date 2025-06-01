@@ -48,25 +48,27 @@ members = [
     "extensions/bigint/circuit",
     "extensions/bigint/transpiler",
     "extensions/bigint/guest",
-    "extensions/bigint/tests",
     "extensions/keccak256/circuit",
     "extensions/keccak256/transpiler",
     "extensions/keccak256/guest",
-    "extensions/keccak256/tests",
     "extensions/sha256/circuit",
     "extensions/sha256/transpiler",
     "extensions/sha256/guest",
-    "extensions/sha256/tests",
     "extensions/ecc/circuit",
     "extensions/ecc/transpiler",
     "extensions/ecc/guest",
     "extensions/ecc/sw-macros",
     "extensions/ecc/tests",
     "extensions/pairing/circuit",
-    "extensions/pairing/transpiler",
     "extensions/pairing/guest",
-    "extensions/pairing/tests",
     "guest-libs/verify_stark/guest",
+    "guest-libs/ff_derive/",
+    "guest-libs/k256/",
+    "guest-libs/p256/",
+    "guest-libs/keccak256/",
+    "guest-libs/pairing/",
+    "guest-libs/ruint/",
+    "guest-libs/sha2/",
 ]
 exclude = ["crates/sdk/example"]
 resolver = "2"
@@ -242,6 +244,8 @@ ecdsa = { version = "0.16.9", default-features = false }
 num-bigint = { version = "0.4.6", default-features = false }
 num-integer = { version = "0.1.46", default-features = false }
 num-traits = { version = "0.2.19", default-features = false }
+ff = { version = "0.13.1", default-features = false }
+sha2 = { version = "0.10", default-features = false }
 
 # For local development. Add to your `.cargo/config.toml`
 # [patch."https://github.com/Plonky3/Plonky3.git"]

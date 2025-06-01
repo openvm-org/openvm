@@ -87,8 +87,6 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         }
         create_extern_func!(sw_add_ne_extern_func);
         create_extern_func!(sw_double_extern_func);
-        create_extern_func!(hint_decompress_extern_func);
-        create_extern_func!(hint_non_qr_extern_func);
         create_extern_func!(sw_setup_extern_func);
 
         let group_ops_mod_name = format_ident!("{}_ops", struct_name.to_string().to_lowercase());
@@ -97,8 +95,6 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             extern "C" {
                 fn #sw_add_ne_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #sw_double_extern_func(rd: usize, rs1: usize);
-                fn #hint_decompress_extern_func(rs1: usize, rs2: usize);
-                fn #hint_non_qr_extern_func();
                 fn #sw_setup_extern_func();
             }
 
@@ -307,122 +303,28 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             }
 
             mod #group_ops_mod_name {
-                use ::openvm_ecc_guest::{weierstrass::{WeierstrassPoint, FromCompressed, DecompressionHint}, impl_sw_group_ops, algebra::{IntMod, DivUnsafe, DivAssignUnsafe, ExpBytes}};
+                use ::openvm_ecc_guest::{weierstrass::{WeierstrassPoint, FromCompressed}, impl_sw_group_ops, algebra::IntMod};
                 use super::*;
 
                 impl_sw_group_ops!(#struct_name, #intmod_type);
 
                 impl FromCompressed<#intmod_type> for #struct_name {
                     fn decompress(x: #intmod_type, rec_id: &u8) -> Option<Self> {
-                        match Self::honest_host_decompress(&x, rec_id) {
-                            // successfully decompressed
-                            Some(Some(ret)) => Some(ret),
-                            // successfully proved that the point cannot be decompressed
-                            Some(None) => None,
-                            None => {
-                                // host is dishonest, enter infinite loop
-                                loop {
-                                    openvm::io::println("ERROR: Decompression hint is invalid. Entering infinite loop.");
-                                }
-                            }
-                        }
-                    }
-
-                    fn hint_decompress(x: &#intmod_type, rec_id: &u8) -> Option<DecompressionHint<#intmod_type>> {
-                        #[cfg(not(target_os = "zkvm"))]
-                        {
-                            unimplemented!()
-                        }
-                        #[cfg(target_os = "zkvm")]
-                        {
-                            use openvm::platform as openvm_platform; // needed for hint_store_u32!
-
-                            let possible = core::mem::MaybeUninit::<u32>::uninit();
-                            let sqrt = core::mem::MaybeUninit::<#intmod_type>::uninit();
-                            unsafe {
-                                #hint_decompress_extern_func(x as *const _ as usize, rec_id as *const u8 as usize);
-                                let possible_ptr = possible.as_ptr() as *const u32;
-                                openvm_rv32im_guest::hint_store_u32!(possible_ptr);
-                                openvm_rv32im_guest::hint_buffer_u32!(sqrt.as_ptr() as *const u8, <#intmod_type as openvm_algebra_guest::IntMod>::NUM_LIMBS / 4);
-                                let possible = possible.assume_init();
-                                if possible == 0 || possible == 1 {
-                                    Some(DecompressionHint { possible: possible == 1, sqrt: sqrt.assume_init() })
+                        use openvm_algebra_guest::Sqrt;
+                        let y_squared = &x * &x * &x + &<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A * &x + &<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_B;
+                        let y = y_squared.sqrt();
+                        match y {
+                            None => None,
+                            Some(y) => {
+                                let correct_y = if y.as_le_bytes()[0] & 1 == *rec_id & 1 {
+                                    y
                                 } else {
-                                    None
-                                }
+                                    -y
+                                };
+                                // In order for sqrt() to return Some, we are guaranteed that y * y == y_squared, which already proves (x, correct_y) is on the curve
+                                Some(<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::from_xy_unchecked(x, correct_y))
                             }
                         }
-                    }
-                }
-
-                impl #struct_name {
-                    // Returns None if the hint is incorrect (i.e. the host is dishonest)
-                    // Returns Some(None) if the hint proves that the point cannot be decompressed
-                    fn honest_host_decompress(x: &#intmod_type, rec_id: &u8) -> Option<Option<Self>> {
-                        let hint = <#struct_name as FromCompressed<#intmod_type>>::hint_decompress(x, rec_id)?;
-
-                        if hint.possible {
-                            // ensure y < modulus
-                            hint.sqrt.assert_reduced();
-
-                            if hint.sqrt.as_le_bytes()[0] & 1 != *rec_id & 1 {
-                                None
-                            } else {
-                                let ret = <#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::from_xy_nonidentity(x.clone(), hint.sqrt)?;
-                                Some(Some(ret))
-                            }
-                        } else {
-                            // ensure sqrt < modulus
-                            hint.sqrt.assert_reduced();
-
-                            let alpha = (x * x * x) + (x * &<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A) + &<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_B;
-                            if &hint.sqrt * &hint.sqrt == alpha * Self::get_non_qr() {
-                                Some(None)
-                            } else {
-                                None
-                            }
-                        }
-                    }
-
-                    // Generate a non quadratic residue in the coordinate field by using a hint
-                    fn init_non_qr() -> alloc::boxed::Box<<Self as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate> {
-                        #[cfg(not(target_os = "zkvm"))]
-                        {
-                            unimplemented!();
-                        }
-                        #[cfg(target_os = "zkvm")]
-                        {
-                            use openvm::platform as openvm_platform; // needed for hint_buffer_u32
-                            let mut non_qr_uninit = core::mem::MaybeUninit::<#intmod_type>::uninit();
-                            let mut non_qr;
-                            unsafe {
-                                #hint_non_qr_extern_func();
-                                let ptr = non_qr_uninit.as_ptr() as *const u8;
-                                openvm_rv32im_guest::hint_buffer_u32!(ptr, <#intmod_type as openvm_algebra_guest::IntMod>::NUM_LIMBS / 4);
-                                non_qr = non_qr_uninit.assume_init();
-                            }
-                            // ensure non_qr < modulus
-                            non_qr.assert_reduced();
-
-                            // construct exp = (p-1)/2 as an integer by first constraining exp = (p-1)/2 (mod p) and then exp < p
-                            let exp = -<#intmod_type as openvm_algebra_guest::IntMod>::ONE.div_unsafe(#intmod_type::from_const_u8(2));
-                            exp.assert_reduced();
-
-                            if non_qr.exp_bytes(true, &exp.to_be_bytes()) != -<#intmod_type as openvm_algebra_guest::IntMod>::ONE
-                            {
-                                // non_qr is not a non quadratic residue, so host is dishonest
-                                loop {
-                                    openvm::io::println("ERROR: Non quadratic residue hint is invalid. Entering infinite loop.");
-                                }
-                            }
-
-                            alloc::boxed::Box::new(non_qr)
-                        }
-                    }
-
-                    pub fn get_non_qr() -> &'static #intmod_type {
-                        static non_qr: ::openvm_ecc_guest::once_cell::race::OnceBox<#intmod_type> = ::openvm_ecc_guest::once_cell::race::OnceBox::new();
-                        &non_qr.get_or_init(Self::init_non_qr)
                     }
                 }
             }
@@ -474,14 +376,6 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             syn::Ident::new(&format!("sw_add_ne_extern_func_{}", str_path), span.into());
         let double_extern_func =
             syn::Ident::new(&format!("sw_double_extern_func_{}", str_path), span.into());
-        let hint_decompress_extern_func = syn::Ident::new(
-            &format!("hint_decompress_extern_func_{}", str_path),
-            span.into(),
-        );
-        let hint_non_qr_extern_func = syn::Ident::new(
-            &format!("hint_non_qr_extern_func_{}", str_path),
-            span.into(),
-        );
         let setup_extern_func =
             syn::Ident::new(&format!("sw_setup_extern_func_{}", str_path), span.into());
 
@@ -508,32 +402,6 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                         * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                     rd = In rd,
                     rs1 = In rs1,
-                    rs2 = Const "x0"
-                );
-            }
-
-            #[no_mangle]
-            extern "C" fn #hint_decompress_extern_func(rs1: usize, rs2: usize) {
-                openvm::platform::custom_insn_r!(
-                    opcode = OPCODE,
-                    funct3 = SW_FUNCT3 as usize,
-                    funct7 = SwBaseFunct7::HintDecompress as usize + #ec_idx
-                        * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                    rd = Const "x0",
-                    rs1 = In rs1,
-                    rs2 = In rs2
-                );
-            }
-
-            #[no_mangle]
-            extern "C" fn #hint_non_qr_extern_func() {
-                openvm::platform::custom_insn_r!(
-                    opcode = OPCODE,
-                    funct3 = SW_FUNCT3 as usize,
-                    funct7 = SwBaseFunct7::HintNonQr as usize + #ec_idx
-                        * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                    rd = Const "x0",
-                    rs1 = Const "x0",
                     rs2 = Const "x0"
                 );
             }

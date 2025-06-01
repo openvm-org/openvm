@@ -1,0 +1,40 @@
+[package]
+name = "openvm-ff-derive"
+description = "OpenVM fork of ff_derive for finite field arithmetic"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[features]
+# enabled when generating bitvec code utilizing the version of ff's bitvec
+bits = []
+
+[lib]
+proc-macro = true
+
+[dependencies]
+addchain = "0.2"
+num-bigint = "0.3"
+num-traits = "0.2"
+num-integer = "0.1"
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+openvm-instructions = { workspace = true }
+openvm-stark-sdk = { workspace = true } 
+openvm-circuit = { workspace = true, features = ["test-utils", "parallel"]}
+openvm-transpiler = { workspace = true }
+openvm-algebra-transpiler = { workspace = true }
+openvm-algebra-circuit = { workspace = true }
+openvm-rv32im-transpiler = { workspace = true }
+openvm-toolchain-tests = { workspace = true }
+
+eyre = { workspace = true }
+num-bigint = { workspace = true }
+
