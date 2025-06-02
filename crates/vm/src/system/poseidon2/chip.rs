@@ -3,12 +3,12 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
+use dashmap::DashMap;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::{
     interaction::{BusIndex, LookupBus},
     p3_field::PrimeField32,
 };
-use rustc_hash::FxHashMap;
 
 use super::{
     air::Poseidon2PeripheryAir, PERIPHERY_POSEIDON2_CHUNK_SIZE, PERIPHERY_POSEIDON2_WIDTH,
@@ -19,7 +19,7 @@ use crate::arch::hasher::{Hasher, HasherChip};
 pub struct Poseidon2PeripheryBaseChip<F: PrimeField32, const SBOX_REGISTERS: usize> {
     pub air: Arc<Poseidon2PeripheryAir<F, SBOX_REGISTERS>>,
     pub subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
-    pub records: FxHashMap<[F; PERIPHERY_POSEIDON2_WIDTH], AtomicU32>,
+    pub records: DashMap<[F; PERIPHERY_POSEIDON2_WIDTH], AtomicU32>,
 }
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS> {
@@ -31,7 +31,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> Poseidon2PeripheryBaseChip<F,
                 LookupBus::new(bus_idx),
             )),
             subchip,
-            records: FxHashMap::default(),
+            records: DashMap::default(),
         }
     }
 }
@@ -63,7 +63,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> HasherChip<PERIPHERY_POSEIDON
     ///
     /// No interactions with other chips.
     fn compress_and_record(
-        &mut self,
+        &self,
         lhs: &[F; PERIPHERY_POSEIDON2_CHUNK_SIZE],
         rhs: &[F; PERIPHERY_POSEIDON2_CHUNK_SIZE],
     ) -> [F; PERIPHERY_POSEIDON2_CHUNK_SIZE] {

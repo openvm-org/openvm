@@ -24,10 +24,10 @@ pub trait Hasher<const CHUNK: usize, F: Field> {
         leaves[0]
     }
 }
-pub trait HasherChip<const CHUNK: usize, F: Field>: Hasher<CHUNK, F> {
+pub trait HasherChip<const CHUNK: usize, F: Field>: Hasher<CHUNK, F> + Send + Sync {
     /// Stateful version of `hash` for recording the event in the chip.
-    fn compress_and_record(&mut self, left: &[F; CHUNK], right: &[F; CHUNK]) -> [F; CHUNK];
-    fn hash_and_record(&mut self, values: &[F; CHUNK]) -> [F; CHUNK] {
+    fn compress_and_record(&self, left: &[F; CHUNK], right: &[F; CHUNK]) -> [F; CHUNK];
+    fn hash_and_record(&self, values: &[F; CHUNK]) -> [F; CHUNK] {
         self.compress_and_record(values, &[F::ZERO; CHUNK])
     }
 }

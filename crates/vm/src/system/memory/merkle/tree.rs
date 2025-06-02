@@ -1,4 +1,7 @@
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{
+    p3_field::PrimeField32,
+    p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
+};
 use rustc_hash::FxHashMap;
 
 use super::{memory_to_partition, FinalState, MemoryMerkleCols};
@@ -33,143 +36,141 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     /// Shared logic for both from_memory and finalize.
     fn process_layers<CompressFn>(
         &mut self,
         layer: Vec<(u64, [F; CHUNK])>,
         md: &MemoryDimensions,
         mut rows: Option<&mut Vec<MemoryMerkleCols<F, CHUNK>>>,
-        mut compress: CompressFn,
+        compress: CompressFn,
     ) where
-        CompressFn: FnMut(&[F; CHUNK], &[F; CHUNK]) -> [F; CHUNK],
+        CompressFn: Fn(&[F; CHUNK], &[F; CHUNK]) -> [F; CHUNK] + Send + Sync,
     {
         let mut layer = layer
             .into_iter()
-            .map(|(index, values)| (index, values, self.get_node(index)))
+            .map(|(index, values)| {
+                let old_values = self
+                    .nodes
+                    .insert(index, values)
+                    .unwrap_or(self.zero_nodes[0]);
+                (index, values, old_values)
+            })
             .collect::<Vec<_>>();
         for height in 1..=self.height {
             let mut i = 0;
             let mut new_layer = Vec::new();
             while i < layer.len() {
-                let (&index, values, old_values) = &layer[i];
+                let (index, values, old_values) = &layer[i];
                 let par_index = index >> 1;
                 i += 1;
 
                 if i < layer.len() && layer[i].0 == index ^ 1 {
-                    let (_, sibling_values, sibling_old_values) = layer[i];
+                    let (_, sibling_values, sibling_old_values) = &layer[i];
                     i += 1;
-                    new_layer.push((par_index, Some((values, old_values)), Some((sibling_values, sibling_old_values))));
+                    new_layer.push((
+                        par_index,
+                        Some((values, old_values)),
+                        Some((sibling_values, sibling_old_values)),
+                    ));
                 } else if index & 1 == 0 {
                     new_layer.push((par_index, Some((values, old_values)), None));
                 } else {
                     new_layer.push((par_index, None, Some((values, old_values))));
                 }
+            }
 
-                // let par_old_values = self.get_node(par_index);
-
-                // // Lowest `label_section_height` bits of `par_index` are the address label,
-                // // The remaining highest are the address space label.
-                // let label_section_height = md.address_height.saturating_sub(height);
-                // let parent_address_label = (par_index & ((1 << label_section_height) - 1)) as u32;
-                // let parent_as_label =
-                //     ((par_index & !(1 << (self.height - height))) >> label_section_height) as u32;
-
-                // self.nodes.insert(index, values);
-
-                // if i < layer.len() && layer[i].0 == index ^ 1 {
-                //     // sibling found
-                //     let (_, sibling_values, sibling_old_values) = layer[i];
-                //     i += 1;
-                //     let combined = compress(&values, &sibling_values);
-
-                //     // Only record rows if requested
-                //     if let Some(rows) = rows.as_deref_mut() {
-                //         rows.push(MemoryMerkleCols {
-                //             expand_direction: F::ONE,
-                //             height_section: F::from_bool(height > md.address_height),
-                //             parent_height: F::from_canonical_usize(height),
-                //             is_root: F::from_bool(height == md.overall_height()),
-                //             parent_as_label: F::from_canonical_u32(parent_as_label),
-                //             parent_address_label: F::from_canonical_u32(parent_address_label),
-                //             parent_hash: self.get_node(par_index),
-                //             left_child_hash: old_values,
-                //             right_child_hash: sibling_old_values,
-                //             left_direction_different: F::ZERO,
-                //             right_direction_different: F::ZERO,
-                //         });
-                //         rows.push(MemoryMerkleCols {
-                //             expand_direction: F::NEG_ONE,
-                //             height_section: F::from_bool(height > md.address_height),
-                //             parent_height: F::from_canonical_usize(height),
-                //             is_root: F::from_bool(height == md.overall_height()),
-                //             parent_as_label: F::from_canonical_u32(parent_as_label),
-                //             parent_address_label: F::from_canonical_u32(parent_address_label),
-                //             parent_hash: combined,
-                //             left_child_hash: values,
-                //             right_child_hash: sibling_values,
-                //             left_direction_different: F::ZERO,
-                //             right_direction_different: F::ZERO,
-                //         });
-                //         // This is a hacky way to say "and we also want to record the old values"
-                //         compress(&old_values, &sibling_old_values);
-                //     }
-
-                //     self.nodes.insert(index ^ 1, sibling_values);
-                //     new_layer.push((par_index, combined, par_old_values));
-                // } else {
-                //     // no sibling found
-                //     let sibling_values = self.get_node(index ^ 1);
-                //     let is_left = index % 2 == 0;
-                //     let (left, right) = if is_left {
-                //         (values, sibling_values)
-                //     } else {
-                //         (sibling_values, values)
-                //     };
-                //     let combined = compress(&left, &right);
-
-                //     if let Some(rows) = rows.as_deref_mut() {
-                //         rows.push(MemoryMerkleCols {
-                //             expand_direction: F::ONE,
-                //             height_section: F::from_bool(height > md.address_height),
-                //             parent_height: F::from_canonical_usize(height),
-                //             is_root: F::from_bool(height == md.overall_height()),
-                //             parent_as_label: F::from_canonical_u32(parent_as_label),
-                //             parent_address_label: F::from_canonical_u32(parent_address_label),
-                //             parent_hash: self.get_node(par_index),
-                //             left_child_hash: if is_left { old_values } else { left },
-                //             right_child_hash: if is_left { right } else { old_values },
-                //             left_direction_different: F::ZERO,
-                //             right_direction_different: F::ZERO,
-                //         });
-                //         rows.push(MemoryMerkleCols {
-                //             expand_direction: F::NEG_ONE,
-                //             height_section: F::from_bool(height > md.address_height),
-                //             parent_height: F::from_canonical_usize(height),
-                //             is_root: F::from_bool(height == md.overall_height()),
-                //             parent_as_label: F::from_canonical_u32(parent_as_label),
-                //             parent_address_label: F::from_canonical_u32(parent_address_label),
-                //             parent_hash: combined,
-                //             left_child_hash: left,
-                //             right_child_hash: right,
-                //             left_direction_different: F::from_bool(!is_left),
-                //             right_direction_different: F::from_bool(is_left),
-                //         });
-                //         // This is a hacky way to say "and we also want to record the old values"
-                //         if is_left {
-                //             compress(&old_values, &right);
-                //         } else {
-                //             compress(&left, &old_values);
-                //         }
-                //     }
-
-                //     new_layer.push((par_index, combined, par_old_values));
+            match rows {
+                None => {
+                    layer = new_layer
+                        .into_par_iter()
+                        .map(|(par_index, left, right)| {
+                            let left = left.map_or(self.get_node(2 * par_index), |x| *x.0);
+                            let right = right.map_or(self.get_node(2 * par_index + 1), |x| *x.0);
+                            let combined = compress(&left, &right);
+                            let par_old_values = self.get_node(par_index);
+                            (par_index, combined, par_old_values)
+                        })
+                        .collect();
+                }
+                Some(ref mut rows) => {
+                    let label_section_height = md.address_height.saturating_sub(height);
+                    let (tmp, new_rows): (Vec<(u64, [F; CHUNK], [F; CHUNK])>, Vec<[_; 2]>) =
+                        new_layer
+                            .into_par_iter()
+                            .map(|(par_index, left, right)| {
+                                let parent_address_label =
+                                    (par_index & ((1 << label_section_height) - 1)) as u32;
+                                let parent_as_label = ((par_index & !(1 << (self.height - height)))
+                                    >> label_section_height)
+                                    as u32;
+                                let (left, old_left, changed_left) = match left {
+                                    Some((left, old_left)) => (*left, *old_left, true),
+                                    None => {
+                                        let values = self.get_node(2 * par_index);
+                                        (values, values, false)
+                                    }
+                                };
+                                let (right, old_right, changed_right) = match right {
+                                    Some((right, old_right)) => (*right, *old_right, true),
+                                    None => {
+                                        let values = self.get_node(2 * par_index + 1);
+                                        (values, values, false)
+                                    }
+                                };
+                                let combined = compress(&left, &right);
+                                // This is a hacky way to say:
+                                // "and we also want to record the old values"
+                                compress(&old_left, &old_right);
+                                let par_old_values = self.get_node(par_index);
+                                (
+                                    (par_index, combined, par_old_values),
+                                    [
+                                        MemoryMerkleCols {
+                                            expand_direction: F::ONE,
+                                            height_section: F::from_bool(
+                                                height > md.address_height,
+                                            ),
+                                            parent_height: F::from_canonical_usize(height),
+                                            is_root: F::from_bool(height == md.overall_height()),
+                                            parent_as_label: F::from_canonical_u32(parent_as_label),
+                                            parent_address_label: F::from_canonical_u32(
+                                                parent_address_label,
+                                            ),
+                                            parent_hash: par_old_values,
+                                            left_child_hash: old_left,
+                                            right_child_hash: old_right,
+                                            left_direction_different: F::ZERO,
+                                            right_direction_different: F::ZERO,
+                                        },
+                                        MemoryMerkleCols {
+                                            expand_direction: F::NEG_ONE,
+                                            height_section: F::from_bool(
+                                                height > md.address_height,
+                                            ),
+                                            parent_height: F::from_canonical_usize(height),
+                                            is_root: F::from_bool(height == md.overall_height()),
+                                            parent_as_label: F::from_canonical_u32(parent_as_label),
+                                            parent_address_label: F::from_canonical_u32(
+                                                parent_address_label,
+                                            ),
+                                            parent_hash: combined,
+                                            left_child_hash: left,
+                                            right_child_hash: right,
+                                            left_direction_different: F::from_bool(!changed_left),
+                                            right_direction_different: F::from_bool(!changed_right),
+                                        },
+                                    ],
+                                )
+                            })
+                            .unzip();
+                    rows.extend(new_rows.into_iter().flatten());
+                    layer = tmp;
                 }
             }
-            layer = new_layer;
-        }
-        if !layer.is_empty() {
-            assert_eq!(layer.len(), 1);
-            self.nodes.insert(layer[0].0, layer[0].1);
+            for (idx, values, _) in layer.iter() {
+                self.nodes.insert(*idx, *values);
+            }
         }
     }
 
