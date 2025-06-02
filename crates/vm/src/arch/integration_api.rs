@@ -1,4 +1,10 @@
-use std::{any::type_name, array::from_fn, borrow::Borrow, marker::PhantomData, sync::Arc};
+use std::{
+    any::type_name,
+    array::from_fn,
+    borrow::{Borrow, BorrowMut},
+    marker::PhantomData,
+    sync::Arc,
+};
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -6,15 +12,14 @@ use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PackedValue, PrimeField32},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     AirRef, Chip, ChipUsageGetter,
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use zerocopy::FromBytes;
+use serde::{Deserialize, Serialize};
 
 use super::{ExecutionState, InsExecutorE1, InstructionExecutor, Result, VmStateMut};
 use crate::system::memory::{
@@ -235,6 +240,60 @@ impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
     }
 }
 
+/// A record arena struct that can be used by chips that
+/// - have a single row per instruction
+/// - have trace row = [adapter_row, core_row]
+pub struct AdapterCoreRecordArena<F> {
+    inner: MatrixRecordArena<F>,
+}
+
+/// The minimal information that [AdapterCoreRecordArena] needs to know to allocate a row
+/// **WARNING**: `adapter_width` is number of field elements, not in bytes
+pub struct AdapterCoreLayout {
+    pub adapter_width: usize,
+}
+
+/// RecordArena implementation for [AdapterCoreRecordArena]
+/// A is the adapter record type and C is the core record type
+impl<'a, F: Field, A, C> RecordArena<'a, AdapterCoreLayout, (&'a mut A, &'a mut C)>
+    for AdapterCoreRecordArena<F>
+where
+    A: Sized,
+    C: Sized,
+    [u8]: BorrowMut<A> + BorrowMut<C>,
+{
+    fn alloc(&'a mut self, layout: AdapterCoreLayout) -> (&'a mut A, &'a mut C) {
+        let buffer = self.inner.alloc_single_row();
+        let (adapter_buffer, core_buffer) =
+            buffer.split_at_mut(layout.adapter_width * size_of::<F>());
+
+        let adapter_record: &mut A = adapter_buffer.borrow_mut();
+        let core_record: &mut C = core_buffer.borrow_mut();
+
+        (adapter_record, core_record)
+    }
+}
+
+impl<F: Field> RowMajorMatrixArena<F> for AdapterCoreRecordArena<F> {
+    fn with_capacity(height: usize, width: usize) -> Self {
+        Self {
+            inner: MatrixRecordArena::with_capacity(height, width),
+        }
+    }
+
+    fn width(&self) -> usize {
+        self.inner.width()
+    }
+
+    fn trace_offset(&self) -> usize {
+        self.inner.trace_offset()
+    }
+
+    fn into_matrix(self) -> RowMajorMatrix<F> {
+        self.inner.into_matrix()
+    }
+}
+
 // TODO(ayush): rename to ChipWithExecutionContext or something
 pub struct NewVmChipWrapper<F, AIR, STEP, RA> {
     pub air: AIR,
@@ -353,6 +412,7 @@ where
 /// is reused or shared by multiple implementations. It is not required to implement this trait if
 /// it is easier to implement the [TraceStep] trait directly without this trait.
 pub trait AdapterTraceStep<F, CTX> {
+    const WIDTH: usize;
     type ReadData;
     type WriteData;
     // @dev This can either be a &mut _ type or a struct with &mut _ fields.
@@ -389,10 +449,7 @@ pub trait AdapterTraceStep<F, CTX> {
 
 // NOTE[jpw]: cannot reuse `TraceSubRowGenerator` trait because we need associated constant
 // `WIDTH`.
-pub trait AdapterTraceFiller<F> {
-    /// Adapter sub-air column width
-    const WIDTH: usize;
-
+pub trait AdapterTraceFiller<F, CTX>: AdapterTraceStep<F, CTX> {
     /// Post-execution filling of rest of adapter row.
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]);
 }

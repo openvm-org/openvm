@@ -4915,7 +4915,6 @@ dependencies = [
  "test-log",
  "thiserror 1.0.69",
  "tracing",
- "zerocopy 0.8.25",
 ]
 
 [[package]]
@@ -5466,7 +5465,6 @@ dependencies = [
  "serde-big-array",
  "strum",
  "test-case",
- "zerocopy 0.8.25",
 ]
 
 [[package]]

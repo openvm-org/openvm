@@ -195,6 +195,7 @@ impl<F, CTX, const R: usize, const W: usize> AdapterTraceStep<F, CTX> for Native
 where
     F: PrimeField32,
 {
+    const WIDTH: usize = size_of::<NativeAdapterCols<F, R, W>>();
     type ReadData = [[F; 1]; R];
     type WriteData = [[F; 1]; W];
     type RecordMut<'a> = (); // TODO

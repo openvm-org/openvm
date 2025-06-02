@@ -1,4 +1,4 @@
-use openvm_circuit::arch::{NewVmChipWrapper, VmAirWrapper};
+use openvm_circuit::arch::{AdapterCoreRecordArena, NewVmChipWrapper, VmAirWrapper};
 
 use super::adapters::RV32_REGISTER_NUM_LIMBS;
 use crate::adapters::{Rv32BranchAdapterAir, Rv32BranchAdapterStep};
@@ -11,7 +11,6 @@ mod tests;
 
 pub type Rv32BranchEqualAir =
     VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<RV32_REGISTER_NUM_LIMBS>>;
-pub type Rv32BranchEqualStepWithAdapter =
-    BranchEqualStep<Rv32BranchAdapterStep, RV32_REGISTER_NUM_LIMBS>;
+pub type Rv32BranchEqualStep = BranchEqualStep<Rv32BranchAdapterStep, RV32_REGISTER_NUM_LIMBS>;
 pub type Rv32BranchEqualChip<F> =
-    NewVmChipWrapper<F, Rv32BranchEqualAir, Rv32BranchEqualStepWithAdapter>;
+    NewVmChipWrapper<F, Rv32BranchEqualAir, Rv32BranchEqualStep, AdapterCoreRecordArena<F>>;

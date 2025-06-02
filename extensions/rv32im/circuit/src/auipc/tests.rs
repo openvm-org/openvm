@@ -72,7 +72,7 @@ fn set_and_execute(
         initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
     );
     let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
-    let rd_data = run_auipc(opcode, initial_pc, imm as u32);
+    let rd_data = run_auipc(initial_pc, imm as u32);
     assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
 }
 
@@ -269,10 +269,9 @@ fn overflow_negative_tests() {
 
 #[test]
 fn run_auipc_sanity_test() {
-    let opcode = AUIPC;
     let initial_pc = 234567890;
     let imm = 11302451;
-    let rd_data = run_auipc(opcode, initial_pc, imm);
+    let rd_data = run_auipc(initial_pc, imm);
 
     assert_eq!(rd_data, [210, 107, 113, 186]);
 }
