@@ -15,6 +15,8 @@ openvm-keccak256 = { path = "../../../guest-libs/keccak256/", default-features =
 revm-precompile = { version = "14.0.0", default-features = false }
 alloy-primitives = { version = "0.8.10", default-features = false, features = ["native-keccak"] } # revm does not re-export this feature so we enable it here
 derive_more = { version = "1.0.0", default-features = false, features = ["from", "display"] }
+# todo: switch to patch
+k256 = { path = "../../../guest-libs/k256/", default-features = false, features = ["ecdsa"], package = "openvm-k256" }
 
 [features]
 default = []
@@ -28,5 +30,5 @@ inherits = "release"
 debug = 2
 strip = false
 
-[patch.crates-io]
-k256 = { path = "../../../guest-libs/k256/", default-features = false, features = ["ecdsa"], package = "openvm-k256" }
+# [patch.crates-io]
+# k256 = { path = "../../../guest-libs/k256/", default-features = false, features = ["ecdsa"], package = "openvm-k256" }

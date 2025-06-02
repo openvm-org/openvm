@@ -7,9 +7,9 @@ use k256::ecdsa::{Error, RecoveryId, Signature, VerifyingKey};
 use k256::Secp256k1Point;
 use openvm::io::read_vec;
 use openvm_ecc_guest::{algebra::IntMod, weierstrass::WeierstrassPoint};
+// export native keccak
 #[allow(unused_imports, clippy::single_component_path_imports)]
 use openvm_keccak256::keccak256;
-// export native keccak
 use revm_precompile::{
     utilities::right_pad, Error as PrecompileError, PrecompileOutput, PrecompileResult,
 };
