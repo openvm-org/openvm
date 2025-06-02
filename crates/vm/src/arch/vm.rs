@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, collections::VecDeque, marker::PhantomData, mem, sync::Arc};
+use std::{borrow::Borrow, collections::VecDeque, marker::PhantomData, sync::Arc};
 
 use openvm_circuit::system::program::trace::compute_exe_commit;
 use openvm_instructions::{exe::VmExe, program::Program};
@@ -521,7 +521,7 @@ where
             None => return Err(ExecutionError::DidNotTerminate),
         };
 
-        todo!("record segments")
+        Ok(exec_state.ctx.segments)
     }
 
     pub fn execute_and_generate<SC: StarkGenericConfig>(
