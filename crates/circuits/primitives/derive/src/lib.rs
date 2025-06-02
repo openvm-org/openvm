@@ -99,7 +99,7 @@ pub fn aligned_bytes_borrow_derive(input: TokenStream) -> TokenStream {
             fn borrow(&self) -> &#name #type_generics {
                 use core::mem::{align_of, size_of_val};
                 debug_assert!(size_of_val(self) >= core::mem::size_of::<#name #type_generics>());
-                debug_assert!(align_of::<T>() >= align_of::<#name #type_generics>());
+                debug_assert_eq!(self.as_ptr() as usize % align_of::<#name #type_generics>(), 0);
                 unsafe { &*(self.as_ptr() as *const #name #type_generics) }
             }
         }
@@ -112,7 +112,7 @@ pub fn aligned_bytes_borrow_derive(input: TokenStream) -> TokenStream {
             fn borrow_mut(&mut self) -> &mut #name #type_generics {
                 use core::mem::{align_of, size_of_val};
                 debug_assert!(size_of_val(self) >= core::mem::size_of::<#name #type_generics>());
-                debug_assert!(align_of::<T>() >= align_of::<#name #type_generics>());
+                debug_assert_eq!(self.as_ptr() as usize % align_of::<#name #type_generics>(), 0);
                 unsafe { &mut *(self.as_mut_ptr() as *mut #name #type_generics) }
             }
         }
