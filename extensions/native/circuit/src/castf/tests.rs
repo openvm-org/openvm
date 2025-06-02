@@ -1,6 +1,9 @@
-use std::borrow::BorrowMut;
+use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, VmChipTestBuilder},
+    VmAirWrapper,
+};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::CastfOpcode;
 use openvm_stark_backend::{
@@ -13,10 +16,27 @@ use openvm_stark_sdk::{
 use rand::{rngs::StdRng, Rng};
 
 use super::{
-    super::adapters::convert_adapter::{ConvertAdapterChip, ConvertAdapterCols},
-    CastF, CastFChip, CastFCoreChip, CastFCoreCols, FINAL_LIMB_BITS, LIMB_BITS,
+    super::adapters::convert_adapter::{ConvertAdapterAir, ConvertAdapterCols, ConvertAdapterStep},
+    CastF, CastFChip, CastFCoreAir, CastFCoreCols, CastFStep, FINAL_LIMB_BITS, LIMB_BITS,
 };
+
+const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
+
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> CastFChip<F> {
+    CastFChip::<F>::new(
+        VmAirWrapper::new(
+            ConvertAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+            CastFCoreAir::new(tester.range_checker().bus()),
+        ),
+        CastFStep::new(
+            ConvertAdapterStep::<1, 4>::new(),
+            tester.range_checker().clone(),
+        ),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
+    )
+}
 
 fn generate_uint_number(rng: &mut StdRng) -> u32 {
     rng.gen_range(0..(1 << 30) - 1)
@@ -37,7 +57,7 @@ fn prepare_castf_rand_write_execute(
 
     let operand1_f = F::from_canonical_u32(y);
 
-    tester.write_cell(as_y, address_y, operand1_f);
+    tester.memory.write(as_y, address_y, [operand1_f]);
     let x = CastF::solve(operand1);
 
     tester.execute(
@@ -48,7 +68,7 @@ fn prepare_castf_rand_write_execute(
         ),
     );
     assert_eq!(
-        x.map(F::from_canonical_u32),
+        x.map(F::from_canonical_u8),
         tester.read::<4>(as_x, address_x)
     );
 }
@@ -57,15 +77,7 @@ fn prepare_castf_rand_write_execute(
 fn castf_rand_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = CastFChip::<F>::new(
-        ConvertAdapterChip::new(
-            tester.execution_bus(),
-            tester.program_bus(),
-            tester.memory_bridge(),
-        ),
-        CastFCoreChip::new(tester.range_checker()),
-        tester.offline_memory_mutex_arc(),
-    );
+    let mut chip = create_test_chip(&tester);
     let num_tests: usize = 3;
 
     for _ in 0..num_tests {
@@ -81,15 +93,7 @@ fn castf_rand_test() {
 fn negative_castf_overflow_test() {
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.range_checker();
-    let mut chip = CastFChip::<F>::new(
-        ConvertAdapterChip::new(
-            tester.execution_bus(),
-            tester.program_bus(),
-            tester.memory_bridge(),
-        ),
-        CastFCoreChip::new(range_checker_chip.clone()),
-        tester.offline_memory_mutex_arc(),
-    );
+    let mut chip = create_test_chip(&tester);
 
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);
@@ -125,15 +129,7 @@ fn negative_castf_overflow_test() {
 fn negative_castf_memread_test() {
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
-    let mut chip = CastFChip::<F>::new(
-        ConvertAdapterChip::new(
-            tester.execution_bus(),
-            tester.program_bus(),
-            tester.memory_bridge(),
-        ),
-        CastFCoreChip::new(range_checker_chip.clone()),
-        tester.offline_memory_mutex_arc(),
-    );
+    let mut chip = create_test_chip(&tester);
 
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);
@@ -169,15 +165,7 @@ fn negative_castf_memread_test() {
 fn negative_castf_memwrite_test() {
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
-    let mut chip = CastFChip::<F>::new(
-        ConvertAdapterChip::new(
-            tester.execution_bus(),
-            tester.program_bus(),
-            tester.memory_bridge(),
-        ),
-        CastFCoreChip::new(range_checker_chip.clone()),
-        tester.offline_memory_mutex_arc(),
-    );
+    let mut chip = create_test_chip(&tester);
 
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);
@@ -213,15 +201,7 @@ fn negative_castf_memwrite_test() {
 fn negative_castf_as_test() {
     let mut tester = VmChipTestBuilder::default();
     let range_checker_chip = tester.memory_controller().borrow().range_checker.clone();
-    let mut chip = CastFChip::<F>::new(
-        ConvertAdapterChip::new(
-            tester.execution_bus(),
-            tester.program_bus(),
-            tester.memory_bridge(),
-        ),
-        CastFCoreChip::new(range_checker_chip.clone()),
-        tester.offline_memory_mutex_arc(),
-    );
+    let mut chip = create_test_chip(&tester);
 
     let mut rng = create_seeded_rng();
     let y = generate_uint_number(&mut rng);

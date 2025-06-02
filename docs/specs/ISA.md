@@ -461,7 +461,7 @@ reads but not allowed for writes. When using immediates, we interpret `[a]_0` as
 
 #### Field Arithmetic
 
-This instruction set does native field operations. Below, `e,f` may be any address space.
+This instruction set does native field operations. Below, `e,f` must be either `0` or `4`.
 When either `e` or `f` is zero, `[b]_0` and `[c]_0` should be interpreted as the immediates `b`
 and `c`, respectively.
 

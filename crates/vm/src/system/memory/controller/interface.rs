@@ -13,25 +13,11 @@ pub enum MemoryInterface<F> {
     Persistent {
         boundary_chip: PersistentBoundaryChip<F, CHUNK>,
         merkle_chip: MemoryMerkleChip<CHUNK, F>,
-        initial_memory: MemoryImage<F>,
+        initial_memory: MemoryImage,
     },
 }
 
 impl<F: PrimeField32> MemoryInterface<F> {
-    pub fn touch_range(&mut self, addr_space: u32, pointer: u32, len: u32) {
-        match self {
-            MemoryInterface::Volatile { .. } => {}
-            MemoryInterface::Persistent {
-                boundary_chip,
-                merkle_chip,
-                ..
-            } => {
-                boundary_chip.touch_range(addr_space, pointer, len);
-                merkle_chip.touch_range(addr_space, pointer, len);
-            }
-        }
-    }
-
     pub fn compression_bus(&self) -> Option<PermutationCheckBus> {
         match self {
             MemoryInterface::Volatile { .. } => None,

@@ -1,6 +1,8 @@
 //! Defines auxiliary columns for memory operations: `MemoryReadAuxCols`,
 //! `MemoryReadWithImmediateAuxCols`, and `MemoryWriteAuxCols`.
 
+use std::ops::DerefMut;
+
 use openvm_circuit_primitives::is_less_than::LessThanAuxCols;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -16,13 +18,19 @@ pub struct MemoryBaseAuxCols<T> {
     /// The previous timestamps in which the cells were accessed.
     pub(in crate::system::memory) prev_timestamp: T,
     /// The auxiliary columns to perform the less than check.
-    pub(in crate::system::memory) timestamp_lt_aux: LessThanAuxCols<T, AUX_LEN>,
+    pub timestamp_lt_aux: LessThanAuxCols<T, AUX_LEN>,
+}
+
+impl<F: PrimeField32> MemoryBaseAuxCols<F> {
+    pub fn set_prev(&mut self, prev_timestamp: F) {
+        self.prev_timestamp = prev_timestamp;
+    }
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryWriteAuxCols<T, const N: usize> {
-    pub(in crate::system::memory) base: MemoryBaseAuxCols<T>,
+    pub base: MemoryBaseAuxCols<T>,
     pub(in crate::system::memory) prev_data: [T; N],
 }
 
@@ -40,9 +48,7 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
             prev_data,
         }
     }
-}
 
-impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
     pub fn from_base(base: MemoryBaseAuxCols<T>, prev_data: [T; N]) -> Self {
         Self { base, prev_data }
     }
@@ -53,6 +59,12 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
 
     pub fn prev_data(&self) -> &[T; N] {
         &self.prev_data
+    }
+
+    /// Sets the previous timestamp and data **without** updating the less than auxiliary columns.
+    pub fn set_prev(&mut self, timestamp: T, data: [T; N]) {
+        self.base.prev_timestamp = timestamp;
+        self.prev_data = data;
     }
 }
 
@@ -67,10 +79,7 @@ pub struct MemoryReadAuxCols<T> {
 }
 
 impl<F: PrimeField32> MemoryReadAuxCols<F> {
-    pub(in crate::system::memory) fn new(
-        prev_timestamp: u32,
-        timestamp_lt_aux: LessThanAuxCols<F, AUX_LEN>,
-    ) -> Self {
+    pub fn new(prev_timestamp: u32, timestamp_lt_aux: LessThanAuxCols<F, AUX_LEN>) -> Self {
         Self {
             base: MemoryBaseAuxCols {
                 prev_timestamp: F::from_canonical_u32(prev_timestamp),
@@ -82,14 +91,19 @@ impl<F: PrimeField32> MemoryReadAuxCols<F> {
     pub fn get_base(self) -> MemoryBaseAuxCols<F> {
         self.base
     }
+
+    /// Sets the previous timestamp **without** updating the less than auxiliary columns.
+    pub fn set_prev(&mut self, timestamp: F) {
+        self.base.prev_timestamp = timestamp;
+    }
 }
 
 #[repr(C)]
 #[derive(Clone, Debug, AlignedBorrow)]
 pub struct MemoryReadOrImmediateAuxCols<T> {
-    pub(crate) base: MemoryBaseAuxCols<T>,
-    pub(crate) is_immediate: T,
-    pub(crate) is_zero_aux: T,
+    pub base: MemoryBaseAuxCols<T>,
+    pub is_immediate: T,
+    pub is_zero_aux: T,
 }
 
 impl<T, const N: usize> AsRef<MemoryReadAuxCols<T>> for MemoryWriteAuxCols<T, N> {
@@ -100,5 +114,17 @@ impl<T, const N: usize> AsRef<MemoryReadAuxCols<T>> for MemoryWriteAuxCols<T, N>
         //  - Thus, the memory layout of `MemoryWriteAuxCols<T, N>` begins with a valid
         //    `MemoryReadAuxCols<T>`.
         unsafe { &*(self as *const MemoryWriteAuxCols<T, N> as *const MemoryReadAuxCols<T>) }
+    }
+}
+
+impl<T, const N: usize> AsMut<MemoryBaseAuxCols<T>> for MemoryWriteAuxCols<T, N> {
+    fn as_mut(&mut self) -> &mut MemoryBaseAuxCols<T> {
+        &mut self.base
+    }
+}
+
+impl<T> AsMut<MemoryBaseAuxCols<T>> for MemoryReadAuxCols<T> {
+    fn as_mut(&mut self) -> &mut MemoryBaseAuxCols<T> {
+        &mut self.base
     }
 }

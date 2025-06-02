@@ -1,6 +1,9 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, VmChipTestBuilder},
+    VmAirWrapper,
+};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::FieldArithmeticOpcode;
 use openvm_stark_backend::{
@@ -17,9 +20,27 @@ use rand::Rng;
 use strum::EnumCount;
 
 use super::{
-    core::FieldArithmeticCoreChip, FieldArithmetic, FieldArithmeticChip, FieldArithmeticCoreCols,
+    FieldArithmetic, FieldArithmeticChip, FieldArithmeticCoreAir, FieldArithmeticCoreCols,
+    FieldArithmeticStep,
 };
-use crate::adapters::alu_native_adapter::{AluNativeAdapterChip, AluNativeAdapterCols};
+use crate::adapters::alu_native_adapter::{
+    AluNativeAdapterAir, AluNativeAdapterCols, AluNativeAdapterStep,
+};
+
+const MAX_INS_CAPACITY: usize = 128;
+type F = BabyBear;
+
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FieldArithmeticChip<F> {
+    FieldArithmeticChip::<F>::new(
+        VmAirWrapper::new(
+            AluNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+            FieldArithmeticCoreAir::new(),
+        ),
+        FieldArithmeticStep::new(AluNativeAdapterStep::new()),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
+    )
+}
 
 #[test]
 fn new_field_arithmetic_air_test() {
@@ -28,15 +49,7 @@ fn new_field_arithmetic_air_test() {
     let xy_address_space_range = || 0usize..=1;
 
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = FieldArithmeticChip::new(
-        AluNativeAdapterChip::new(
-            tester.execution_bus(),
-            tester.program_bus(),
-            tester.memory_bridge(),
-        ),
-        FieldArithmeticCoreChip::new(),
-        tester.offline_memory_mutex_arc(),
-    );
+    let mut chip = create_test_chip(&tester);
 
     let mut rng = create_seeded_rng();
 
@@ -74,10 +87,10 @@ fn new_field_arithmetic_air_test() {
         );
 
         if as1 != 0 {
-            tester.write_cell(as1, address1, operand1);
+            tester.write(as1, address1, [operand1]);
         }
         if as2 != 0 {
-            tester.write_cell(as2, address2, operand2);
+            tester.write(as2, address2, [operand2]);
         }
         tester.execute(
             &mut chip,
@@ -86,7 +99,7 @@ fn new_field_arithmetic_air_test() {
                 [result_address, address1, address2, result_as, as1, as2],
             ),
         );
-        assert_eq!(result, tester.read_cell(result_as, result_address));
+        assert_eq!(result, tester.read::<1>(result_as, result_address)[0]);
     }
 
     let mut tester = tester.build().load(chip).finalize();
@@ -122,17 +135,9 @@ fn new_field_arithmetic_air_test() {
 #[test]
 fn new_field_arithmetic_air_zero_div_zero() {
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = FieldArithmeticChip::new(
-        AluNativeAdapterChip::new(
-            tester.execution_bus(),
-            tester.program_bus(),
-            tester.memory_bridge(),
-        ),
-        FieldArithmeticCoreChip::new(),
-        tester.offline_memory_mutex_arc(),
-    );
-    tester.write_cell(4, 6, BabyBear::from_canonical_u32(111));
-    tester.write_cell(4, 7, BabyBear::from_canonical_u32(222));
+    let mut chip = create_test_chip(&tester);
+    tester.write(4, 6, [BabyBear::from_canonical_u32(111)]);
+    tester.write(4, 7, [BabyBear::from_canonical_u32(222)]);
 
     tester.execute(
         &mut chip,
@@ -166,16 +171,8 @@ fn new_field_arithmetic_air_zero_div_zero() {
 #[test]
 fn new_field_arithmetic_air_test_panic() {
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = FieldArithmeticChip::new(
-        AluNativeAdapterChip::new(
-            tester.execution_bus(),
-            tester.program_bus(),
-            tester.memory_bridge(),
-        ),
-        FieldArithmeticCoreChip::new(),
-        tester.offline_memory_mutex_arc(),
-    );
-    tester.write_cell(4, 0, BabyBear::ZERO);
+    let mut chip = create_test_chip(&tester);
+    tester.write(4, 0, [BabyBear::ZERO]);
     // should panic
     tester.execute(
         &mut chip,

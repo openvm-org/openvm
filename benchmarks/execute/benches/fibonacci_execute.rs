@@ -5,7 +5,8 @@ use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sdk::StdIn;
+// TODO(ayush): add this back
+// use openvm_sdk::StdIn;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
@@ -28,10 +29,11 @@ fn benchmark_function(c: &mut Criterion) {
 
     group.bench_function("execute", |b| {
         b.iter(|| {
-            let n = 100_000u64;
-            let mut stdin = StdIn::default();
-            stdin.write(&n);
-            executor.execute(exe.clone(), stdin).unwrap();
+            // TODO(ayush): add this back
+            // let n = 100_000u64;
+            // let mut stdin = StdIn::default();
+            // stdin.write(&n);
+            executor.execute(exe.clone(), vec![]).unwrap();
         })
     });
 

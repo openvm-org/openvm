@@ -131,7 +131,7 @@ mod tests {
         let config = Rv32IConfig::default();
         let executor = VmExecutor::<F, _>::new(config.clone());
         let final_memory = executor.execute(exe, vec![])?.unwrap();
-        let hasher = vm_poseidon2_hasher();
+        let hasher = vm_poseidon2_hasher::<F>();
         let pv_proof = UserPublicValuesProof::compute(
             config.system.memory_config.memory_dimensions(),
             64,
