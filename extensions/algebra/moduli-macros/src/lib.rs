@@ -164,7 +164,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         unsafe {
                             #add_extern_func(
                                 self as *mut Self as usize,
@@ -186,7 +186,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         unsafe {
                             #sub_extern_func(
                                 self as *mut Self as usize,
@@ -207,7 +207,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         unsafe {
                             #mul_extern_func(
                                 self as *mut Self as usize,
@@ -228,7 +228,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         unsafe {
                             #div_extern_func(
                                 self as *mut Self as usize,
@@ -253,7 +253,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         unsafe {
                             #add_extern_func(
                                 dst_ptr as usize,
@@ -278,7 +278,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         unsafe {
                             #sub_extern_func(
                                 dst_ptr as usize,
@@ -303,7 +303,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         unsafe {
                             #mul_extern_func(
                                 dst_ptr as usize,
@@ -324,7 +324,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
                         unsafe {
                             #div_extern_func(
@@ -345,7 +345,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         unsafe {
                             #is_eq_extern_func(self as *const #struct_name as usize, other as *const #struct_name as usize)
                         }
@@ -353,7 +353,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                 }
 
                 // Helper function to call the setup instruction on first use
-                fn assert_is_setup() {
+                fn set_up_once() {
                     static is_setup: ::openvm_algebra_guest::once_cell::race::OnceBool = ::openvm_algebra_guest::once_cell::race::OnceBool::new();
                     is_setup.get_or_init(|| {
                         unsafe { #moduli_setup_extern_func(); }

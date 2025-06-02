@@ -184,12 +184,12 @@ pub type Signature = ecdsa::Signature<Secp256k1>;
 
 impl VerifyPrimitive<Secp256k1> for Secp256k1Point {
     fn verify_prehashed(&self, z: &FieldBytes, sig: &Signature) -> Result<(), ecdsa::Error> {
-        type PublicKey = openvm_ecc_guest::ecdsa::PublicKey<Secp256k1>;
-        type VerifyingKey = openvm_ecc_guest::ecdsa::VerifyingKey<Secp256k1>;
-
-        let vk = VerifyingKey::new(PublicKey::new(*self));
-        vk.verify_prehashed(z.as_slice(), sig.to_bytes().as_slice())
-            .map_err(|_| ecdsa::Error::new())
+        openvm_ecc_guest::ecdsa::verify_prehashed::<Secp256k1>(
+            *self,
+            z.as_slice(),
+            sig.to_bytes().as_slice(),
+        )
+        .map_err(|_| ecdsa::Error::new())
     }
 }
 

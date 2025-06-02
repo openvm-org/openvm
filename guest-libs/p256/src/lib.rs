@@ -17,9 +17,7 @@ mod scalar;
 pub mod ecdsa;
 
 // Needs to be public so that the `sw_init` macro can access it
-pub use internal::{
-    P256Point, P256Point as AffinePoint, P256Point as ProjectivePoint, P256Scalar as Scalar,
-};
+pub use internal::{P256Point, P256Scalar};
 
 // -- Define the ZST for implementing the elliptic curve traits --
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
@@ -47,9 +45,10 @@ impl Curve for P256 {
 impl PrimeCurve for P256 {}
 
 impl CurveArithmetic for P256 {
-    type AffinePoint = AffinePoint;
-    type ProjectivePoint = ProjectivePoint;
-    type Scalar = Scalar;
+    type AffinePoint = P256Point;
+    /// The `ProjectivePoint` type is still internally represented as an affine point.
+    type ProjectivePoint = P256Point;
+    type Scalar = P256Scalar;
 }
 
 impl PointCompression for P256 {

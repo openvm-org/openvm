@@ -1,8 +1,21 @@
 use alloc::vec::Vec;
 use core::ops::{Add, AddAssign, Mul};
 
-use ecdsa::{self, hazmat::bits2field, Error, RecoveryId, Result};
-use elliptic_curve::{sec1::Tag, PrimeCurve};
+use ecdsa::{
+    self,
+    hazmat::{bits2field, DigestPrimitive},
+    signature::{
+        digest::{Digest, FixedOutput},
+        hazmat::PrehashVerifier,
+        DigestVerifier, Verifier,
+    },
+    Error, RecoveryId, Result, Signature, SignatureSize,
+};
+use elliptic_curve::{
+    generic_array::ArrayLength,
+    sec1::{ModulusSize, Tag},
+    CurveArithmetic, FieldBytesSize, PrimeCurve,
+};
 use openvm_algebra_guest::{DivUnsafe, IntMod, Reduce};
 
 use crate::{
@@ -10,33 +23,39 @@ use crate::{
     CyclicGroup, Group,
 };
 
-pub type Coordinate<C> = <<C as IntrinsicCurve>::Point as WeierstrassPoint>::Coordinate;
-pub type Scalar<C> = <C as IntrinsicCurve>::Scalar;
+type Coordinate<C> = <<C as IntrinsicCurve>::Point as WeierstrassPoint>::Coordinate;
+type Scalar<C> = <C as IntrinsicCurve>::Scalar;
+type AffinePoint<C> = <C as IntrinsicCurve>::Point;
 
+// This struct is public because it is used by the VerifyPrimitive impl in the k256 and p256 guest
+// libraries.
 #[repr(C)]
 #[derive(Clone)]
 pub struct VerifyingKey<C: IntrinsicCurve> {
     pub(crate) inner: PublicKey<C>,
 }
 
+// This struct is public because it is used by the VerifyPrimitive impl in the k256 and p256 guest
 #[repr(C)]
 #[derive(Clone)]
 pub struct PublicKey<C: IntrinsicCurve> {
     /// Affine point
-    point: <C as IntrinsicCurve>::Point,
+    point: AffinePoint<C>,
 }
 
 impl<C: IntrinsicCurve> PublicKey<C>
 where
     C::Point: WeierstrassPoint + Group + FromCompressed<Coordinate<C>>,
     Coordinate<C>: IntMod,
-    for<'a> &'a Coordinate<C>: Mul<&'a Coordinate<C>, Output = Coordinate<C>>,
 {
     pub fn new(point: <C as IntrinsicCurve>::Point) -> Self {
         Self { point }
     }
 
-    pub fn from_sec1_bytes(bytes: &[u8]) -> Result<Self> {
+    pub fn from_sec1_bytes(bytes: &[u8]) -> Result<Self>
+    where
+        for<'a> &'a Coordinate<C>: Mul<&'a Coordinate<C>, Output = Coordinate<C>>,
+    {
         if bytes.is_empty() {
             return Err(Error::new());
         }
@@ -101,8 +120,12 @@ where
         }
     }
 
-    pub fn as_affine(&self) -> &<C as IntrinsicCurve>::Point {
+    pub fn as_affine(&self) -> &AffinePoint<C> {
         &self.point
+    }
+
+    pub fn into_affine(self) -> AffinePoint<C> {
+        self.point
     }
 }
 
@@ -133,11 +156,127 @@ where
     pub fn as_affine(&self) -> &<C as IntrinsicCurve>::Point {
         self.inner.as_affine()
     }
+
+    pub fn into_affine(self) -> <C as IntrinsicCurve>::Point {
+        self.inner.into_affine()
+    }
 }
 
+// Functions for compatibility with `ecdsa` crate
 impl<C> VerifyingKey<C>
 where
+    C: IntrinsicCurve + PrimeCurve,
+    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>>,
+    Coordinate<C>: IntMod,
+    C::Scalar: IntMod + Reduce,
+    for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
+    for<'a> &'a Coordinate<C>: Mul<&'a Coordinate<C>, Output = Coordinate<C>>,
+    FieldBytesSize<C>: ModulusSize,
+    SignatureSize<C>: ArrayLength<u8>,
+{
+    /// Recover a [`VerifyingKey`] from the given message, signature, and
+    /// [`RecoveryId`].
+    ///
+    /// The message is first hashed using this curve's [`DigestPrimitive`].
+    pub fn recover_from_msg(
+        msg: &[u8],
+        signature: &Signature<C>,
+        recovery_id: RecoveryId,
+    ) -> Result<Self>
+    where
+        C: DigestPrimitive,
+    {
+        Self::recover_from_digest(C::Digest::new_with_prefix(msg), signature, recovery_id)
+    }
+
+    /// Recover a [`VerifyingKey`] from the given message [`Digest`],
+    /// signature, and [`RecoveryId`].
+    pub fn recover_from_digest<D>(
+        msg_digest: D,
+        signature: &Signature<C>,
+        recovery_id: RecoveryId,
+    ) -> Result<Self>
+    where
+        D: Digest,
+    {
+        Self::recover_from_prehash(&msg_digest.finalize(), signature, recovery_id)
+    }
+
+    /// Recover a [`VerifyingKey`] from the given `prehash` of a message, the
+    /// signature over that prehashed message, and a [`RecoveryId`].
+    /// Note that this function does not verify the signature with the recovered key.
+    pub fn recover_from_prehash(
+        prehash: &[u8],
+        signature: &Signature<C>,
+        recovery_id: RecoveryId,
+    ) -> Result<Self> {
+        let sig = signature.to_bytes();
+        Self::recover_from_prehash_noverify(prehash, &sig, recovery_id)
+    }
+}
+
+//
+// `*Verifier` trait impls
+//
+
+impl<C, D> DigestVerifier<D, Signature<C>> for VerifyingKey<C>
+where
     C: PrimeCurve + IntrinsicCurve,
+    D: Digest + FixedOutput<OutputSize = FieldBytesSize<C>>,
+    SignatureSize<C>: ArrayLength<u8>,
+    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>>,
+    Coordinate<C>: IntMod,
+    <C as IntrinsicCurve>::Scalar: IntMod + Reduce,
+    for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
+    for<'a> &'a Scalar<C>: DivUnsafe<&'a Scalar<C>, Output = Scalar<C>>,
+{
+    fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
+        verify_prehashed::<C>(
+            self.inner.as_affine().clone(),
+            &msg_digest.finalize_fixed(),
+            &signature.to_bytes(),
+        )
+    }
+}
+
+impl<C> PrehashVerifier<Signature<C>> for VerifyingKey<C>
+where
+    C: PrimeCurve + IntrinsicCurve,
+    SignatureSize<C>: ArrayLength<u8>,
+    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>>,
+    Coordinate<C>: IntMod,
+    C::Scalar: IntMod + Reduce,
+    for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
+    for<'a> &'a Scalar<C>: DivUnsafe<&'a Scalar<C>, Output = Scalar<C>>,
+{
+    fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
+        verify_prehashed::<C>(
+            self.inner.as_affine().clone(),
+            prehash,
+            &signature.to_bytes(),
+        )
+    }
+}
+
+impl<C> Verifier<Signature<C>> for VerifyingKey<C>
+where
+    C: PrimeCurve + CurveArithmetic + DigestPrimitive + IntrinsicCurve,
+    SignatureSize<C>: ArrayLength<u8>,
+    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>>,
+    Coordinate<C>: IntMod,
+    <C as IntrinsicCurve>::Scalar: IntMod + Reduce,
+    for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
+    for<'a> &'a Scalar<C>: DivUnsafe<&'a Scalar<C>, Output = Scalar<C>>,
+{
+    fn verify(&self, msg: &[u8], signature: &Signature<C>) -> Result<()> {
+        self.verify_digest(C::Digest::new_with_prefix(msg), signature)
+    }
+}
+
+// Custom openvm implementations
+impl<C> VerifyingKey<C>
+where
+    C: IntrinsicCurve + PrimeCurve,
     C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>>,
     Coordinate<C>: IntMod,
     C::Scalar: IntMod + Reduce,
@@ -197,52 +336,55 @@ where
 
         Ok(VerifyingKey { inner: public_key })
     }
+}
 
-    // Ref: https://docs.rs/ecdsa/latest/src/ecdsa/hazmat.rs.html#270
-    #[allow(non_snake_case)]
-    pub fn verify_prehashed(self, prehash: &[u8], sig: &[u8]) -> Result<()>
-    where
-        for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
-        for<'a> &'a Scalar<C>: DivUnsafe<&'a Scalar<C>, Output = Scalar<C>>,
-    {
-        // This should get compiled out:
-        assert!(Scalar::<C>::NUM_LIMBS <= Coordinate::<C>::NUM_LIMBS);
-        // IntMod limbs are currently always bytes
-        assert_eq!(sig.len(), Scalar::<C>::NUM_LIMBS * 2);
-        // Signature is default encoded in big endian bytes
-        let (r_be, s_be) = sig.split_at(<C as IntrinsicCurve>::Scalar::NUM_LIMBS);
-        // Note: Scalar internally stores using little endian
-        let r = Scalar::<C>::from_be_bytes(r_be);
-        let s = Scalar::<C>::from_be_bytes(s_be);
-        if !r.is_reduced() || !s.is_reduced() {
-            return Err(Error::new());
-        }
-        if r == Scalar::<C>::ZERO || s == Scalar::<C>::ZERO {
-            return Err(Error::new());
-        }
+// Ref: https://docs.rs/ecdsa/latest/src/ecdsa/hazmat.rs.html#270
+#[allow(non_snake_case)]
+pub fn verify_prehashed<C>(pubkey: AffinePoint<C>, prehash: &[u8], sig: &[u8]) -> Result<()>
+where
+    C: IntrinsicCurve + PrimeCurve,
+    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>>,
+    Coordinate<C>: IntMod,
+    C::Scalar: IntMod + Reduce,
+    for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
+    for<'a> &'a Scalar<C>: DivUnsafe<&'a Scalar<C>, Output = Scalar<C>>,
+{
+    // This should get compiled out:
+    assert!(Scalar::<C>::NUM_LIMBS <= Coordinate::<C>::NUM_LIMBS);
+    // IntMod limbs are currently always bytes
+    assert_eq!(sig.len(), Scalar::<C>::NUM_LIMBS * 2);
+    // Signature is default encoded in big endian bytes
+    let (r_be, s_be) = sig.split_at(<C as IntrinsicCurve>::Scalar::NUM_LIMBS);
+    // Note: Scalar internally stores using little endian
+    let r = Scalar::<C>::from_be_bytes(r_be);
+    let s = Scalar::<C>::from_be_bytes(s_be);
+    if !r.is_reduced() || !s.is_reduced() {
+        return Err(Error::new());
+    }
+    if r == Scalar::<C>::ZERO || s == Scalar::<C>::ZERO {
+        return Err(Error::new());
+    }
 
-        // Perf: don't use bits2field from ::ecdsa
-        let z = <C as IntrinsicCurve>::Scalar::from_be_bytes(
-            bits2field::<C>(prehash).unwrap().as_ref(),
-        );
+    // Perf: don't use bits2field from ::ecdsa
+    let z =
+        <C as IntrinsicCurve>::Scalar::from_be_bytes(bits2field::<C>(prehash).unwrap().as_ref());
 
-        let u1 = z.div_unsafe(&s);
-        let u2 = (&r).div_unsafe(&s);
+    let u1 = z.div_unsafe(&s);
+    let u2 = (&r).div_unsafe(&s);
 
-        let G = C::Point::GENERATOR;
-        // public key
-        let Q = self.inner.point;
-        let R = <C as IntrinsicCurve>::msm(&[u1, u2], &[G, Q]);
-        if R.is_identity() {
-            return Err(Error::new());
-        }
-        let (x_1, _) = R.into_coords();
-        // Scalar and Coordinate may be different byte lengths, so we use an inefficient reduction
-        let x_mod_n = Scalar::<C>::reduce_le_bytes(x_1.as_le_bytes());
-        if x_mod_n == r {
-            Ok(())
-        } else {
-            Err(Error::new())
-        }
+    let G = C::Point::GENERATOR;
+    // public key
+    let Q = pubkey;
+    let R = <C as IntrinsicCurve>::msm(&[u1, u2], &[G, Q]);
+    if R.is_identity() {
+        return Err(Error::new());
+    }
+    let (x_1, _) = R.into_coords();
+    // Scalar and Coordinate may be different byte lengths, so we use an inefficient reduction
+    let x_mod_n = Scalar::<C>::reduce_le_bytes(x_1.as_le_bytes());
+    if x_mod_n == r {
+        Ok(())
+    } else {
+        Err(Error::new())
     }
 }

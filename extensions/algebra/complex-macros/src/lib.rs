@@ -112,7 +112,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         unsafe {
                             #complex_add_extern_func(
                                 self as *mut Self as usize,
@@ -133,7 +133,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         unsafe {
                             #complex_sub_extern_func(
                                 self as *mut Self as usize,
@@ -158,7 +158,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         unsafe {
                             #complex_mul_extern_func(
                                 self as *mut Self as usize,
@@ -184,7 +184,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         unsafe {
                             #complex_div_extern_func(
                                 self as *mut Self as usize,
@@ -205,7 +205,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         let mut uninit: core::mem::MaybeUninit<Self> = core::mem::MaybeUninit::uninit();
                         unsafe {
                             #complex_add_extern_func(
@@ -229,7 +229,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         let mut uninit: core::mem::MaybeUninit<Self> = core::mem::MaybeUninit::uninit();
                         unsafe {
                             #complex_sub_extern_func(
@@ -257,7 +257,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         unsafe {
                             #complex_mul_extern_func(
                                 dst_ptr as usize,
@@ -279,7 +279,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         let mut uninit: core::mem::MaybeUninit<Self> = core::mem::MaybeUninit::uninit();
                         unsafe {
                             #complex_div_extern_func(
@@ -293,7 +293,7 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
                 }
 
                 // Helper function to call the setup instruction on first use
-                fn assert_is_setup() {
+                fn set_up_once() {
                     static is_setup: ::openvm_algebra_guest::once_cell::race::OnceBool = ::openvm_algebra_guest::once_cell::race::OnceBool::new();
                     is_setup.get_or_init(|| {
                         unsafe { #complex_setup_extern_func(); }

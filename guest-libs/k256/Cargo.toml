@@ -50,6 +50,7 @@ derive_more = { workspace = true, features = ["from"] }
 default = ["ecdsa"]
 ecdsa = ["k256/ecdsa", "ecdsa-core"]
 ecdsa-core = ["k256/ecdsa-core"]
+std = ["k256/std", "openvm-ecc-guest/std"]
 
 [package.metadata.cargo-shear]
 ignored = ["openvm", "num-bigint", "serde", "derive_more"]

@@ -4,8 +4,7 @@
 use elliptic_curve::{ops::LinearCombination, Group, PrimeField};
 // clippy thinks this is unused, but it's used in the init! macro
 #[allow(unused)]
-use openvm_p256::P256Point;
-use openvm_p256::{ProjectivePoint, Scalar};
+use openvm_p256::{P256Point, P256Point as ProjectivePoint, P256Scalar as Scalar};
 
 openvm::init!("openvm_init_linear_combination.rs");
 

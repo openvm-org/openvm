@@ -38,6 +38,13 @@ default = []
 k256 = ["dep:k256"]
 p256 = ["dep:p256"]
 halo2curves = ["dep:halo2curves-axiom", "openvm-algebra-guest/halo2curves"]
+std = ["alloc"]
+alloc = []
 
 [package.metadata.cargo-shear]
-ignored = ["openvm", "openvm-custom-insn", "openvm-rv32im-guest", "halo2curves-axiom"]
+ignored = [
+    "openvm",
+    "openvm-custom-insn",
+    "openvm-rv32im-guest",
+    "halo2curves-axiom",
+]
