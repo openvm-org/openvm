@@ -1,6 +1,6 @@
 # Solidity SDK
 
-As a supplement to OpenVM, we provide a [Solidity SDK](https://github.com/openvm-org/openvm-solidity-sdk) containing OpenVM verifier contracts generated at official release commits using the `cargo openvm setup` [command](../advanced-usage/sdk.md#setup). The contracts are built at every _minor_ release as OpenVM guarantees verifier backward compatibility across patch releases. 
+As a supplement to OpenVM, we provide a [Solidity SDK](https://github.com/openvm-org/openvm-solidity-sdk) containing OpenVM verifier contracts generated at official release commits using the `cargo openvm setup` [command](../advanced-usage/sdk.md#setup). The contracts are built at every _minor_ release as OpenVM guarantees verifier backward compatibility across patch releases.
 
 Note that these builds are for the default aggregation VM config which should be sufficient for most users. If you use a custom config, you will need to manually generate the verifier contract using the [OpenVM SDK](../advanced-usage/sdk.md).
 
@@ -17,7 +17,7 @@ forge install openvm-org/openvm-solidity-sdk
 Once you have the SDK installed, you can import the SDK contracts into your Solidity project:
 
 ```solidity
-import "openvm-solidity-sdk/v1.1/OpenVmHalo2Verifier.sol";
+import "openvm-solidity-sdk/v1.2/OpenVmHalo2Verifier.sol";
 ```
 
 If you are using an already-deployed verifier contract, you can simply import the `IOpenVmHalo2Verifier` interface:

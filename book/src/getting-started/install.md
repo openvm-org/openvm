@@ -9,7 +9,7 @@ To use OpenVM for generating proofs, you must install the OpenVM command line to
 Begin the installation:
 
 ```bash
-cargo install --locked --git http://github.com/openvm-org/openvm.git --tag v1.1.2 cargo-openvm
+cargo install --locked --git http://github.com/openvm-org/openvm.git --tag v1.2.0 cargo-openvm
 ```
 
 This will globally install `cargo-openvm`. You can validate a successful installation with:
@@ -23,7 +23,7 @@ cargo openvm --version
 To build from source, clone the repository and begin the installation.
 
 ```bash
-git clone --branch v1.1.2 --single-branch https://github.com/openvm-org/openvm.git
+git clone --branch v1.2.0 --single-branch https://github.com/openvm-org/openvm.git
 cd openvm
 cargo install --locked --force --path crates/cli
 ```
