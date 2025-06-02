@@ -127,7 +127,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
                         unsafe {
                             #sw_add_ne_extern_func(
@@ -153,7 +153,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         unsafe {
                             #sw_add_ne_extern_func(
                                 self as *mut #struct_name as usize,
@@ -179,7 +179,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
                         unsafe {
                             #sw_double_extern_func(
@@ -199,7 +199,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::assert_is_setup();
+                        Self::set_up_once();
                         unsafe {
                             #sw_double_extern_func(
                                 self as *mut #struct_name as usize,
@@ -210,7 +210,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 }
 
                 // Helper function to call the setup instruction on first use
-                fn assert_is_setup() {
+                fn set_up_once() {
                     static is_setup: ::openvm_ecc_guest::once_cell::race::OnceBool = ::openvm_ecc_guest::once_cell::race::OnceBool::new();
                     is_setup.get_or_init(|| {
                         unsafe { #sw_setup_extern_func(); }
