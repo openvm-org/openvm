@@ -439,7 +439,18 @@ impl<
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
         let record = unsafe {
-            let record_buffer = &*slice_from_raw_parts(adapter_row.as_ptr(), adapter_row.len());
+            let record_buffer = &*slice_from_raw_parts(
+                adapter_row.as_ptr() as *const u8,
+                size_of::<
+                    Rv32VecHeapAdapterRecord<
+                        NUM_READS,
+                        BLOCKS_PER_READ,
+                        BLOCKS_PER_WRITE,
+                        READ_SIZE,
+                        WRITE_SIZE,
+                    >,
+                >(),
+            );
             let record: &Rv32VecHeapAdapterRecord<
                 NUM_READS,
                 BLOCKS_PER_READ,

@@ -332,7 +332,10 @@ where
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
         let record = unsafe {
-            let record_buffer = &*slice_from_raw_parts(core_row.as_ptr(), core_row.len());
+            let record_buffer = &*slice_from_raw_parts(
+                core_row.as_ptr() as *const u8,
+                size_of::<LoadStoreCoreRecord<NUM_CELLS>>(),
+            );
             let record: &LoadStoreCoreRecord<NUM_CELLS> = record_buffer.borrow();
             record
         };

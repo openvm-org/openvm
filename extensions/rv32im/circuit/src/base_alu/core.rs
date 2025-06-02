@@ -176,7 +176,6 @@ where
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct BaseAluCoreRecord<const NUM_LIMBS: usize> {
-    pub a: [u8; NUM_LIMBS],
     pub b: [u8; NUM_LIMBS],
     pub c: [u8; NUM_LIMBS],
     // Use u8 instead of usize for better packing
@@ -228,16 +227,13 @@ where
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
-        let [rs1, rs2] = self
+        [core_record.b, core_record.c] = self
             .adapter
             .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        let rd = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
+        let rd = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &core_record.b, &core_record.c);
 
-        core_record.a = rd;
-        core_record.b = rs1;
-        core_record.c = rs2;
         core_record.local_opcode = local_opcode as u8;
 
         self.adapter
@@ -260,7 +256,10 @@ where
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
         let record = unsafe {
-            let record_buffer = &*slice_from_raw_parts(core_row.as_ptr(), core_row.len());
+            let record_buffer = &*slice_from_raw_parts(
+                core_row.as_ptr() as *const u8,
+                size_of::<BaseAluCoreRecord<NUM_LIMBS>>(),
+            );
             let record: &BaseAluCoreRecord<NUM_LIMBS> = record_buffer.borrow();
             record
         };
@@ -273,8 +272,9 @@ where
         // - Do not overwrite any reference in `record` before it has already been used or moved
         // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic otherwise)
 
-        // PERF: needless conversion
         let local_opcode = BaseAluOpcode::from_usize(record.local_opcode as usize);
+        let a = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &record.b, &record.c);
+        // PERF: needless conversion
         core_row.opcode_and_flag = F::from_bool(local_opcode == BaseAluOpcode::AND);
         core_row.opcode_or_flag = F::from_bool(local_opcode == BaseAluOpcode::OR);
         core_row.opcode_xor_flag = F::from_bool(local_opcode == BaseAluOpcode::XOR);
@@ -282,7 +282,7 @@ where
         core_row.opcode_add_flag = F::from_bool(local_opcode == BaseAluOpcode::ADD);
 
         if local_opcode == BaseAluOpcode::ADD || local_opcode == BaseAluOpcode::SUB {
-            for a_val in record.a {
+            for a_val in a {
                 self.bitwise_lookup_chip
                     .request_xor(a_val as u32, a_val as u32);
             }
@@ -294,7 +294,7 @@ where
         }
         core_row.c = record.c.map(F::from_canonical_u8);
         core_row.b = record.b.map(F::from_canonical_u8);
-        core_row.a = record.a.map(F::from_canonical_u8);
+        core_row.a = a.map(F::from_canonical_u8);
     }
 }
 

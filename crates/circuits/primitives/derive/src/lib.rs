@@ -74,26 +74,22 @@ pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
 }
 
 /// `S` is the type the derive macro is being called on
-/// Implements Borrow<S> and BorrowMut<S> for [AT]
-/// [AT] has to have (checked via `debug_assert!`s)
+/// Implements Borrow<S> and BorrowMut<S> for [u8]
+/// [u8] has to have (checked via `debug_assert!`s)
 /// - at least size_of(S) length
-/// - at least align_of(S) alignemnt
+/// - at least align_of(S) alignment
 #[proc_macro_derive(AlignedBytesBorrow)]
 pub fn aligned_bytes_borrow_derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
-    let mut ast_clone = ast.clone();
     let name = &ast.ident;
 
     // Get impl generics, type generics, where clause
     // Note, need to add the new type generic to the `impl_generics`
-    let (_, type_generics, where_clause) = ast.generics.split_for_impl();
-    ast_clone.generics.params.push(syn::parse_quote!(T));
-    let impl_generics = ast_clone.generics.split_for_impl().0;
+    let (impl_generics, type_generics, where_clause) = ast.generics.split_for_impl();
 
     let methods = quote! {
-        impl #impl_generics core::borrow::Borrow<#name #type_generics> for [T]
+        impl #impl_generics core::borrow::Borrow<#name #type_generics> for [u8]
         where
-            T: Sized,
             #where_clause
         {
             fn borrow(&self) -> &#name #type_generics {
@@ -104,9 +100,8 @@ pub fn aligned_bytes_borrow_derive(input: TokenStream) -> TokenStream {
             }
         }
 
-        impl #impl_generics core::borrow::BorrowMut<#name #type_generics> for [T]
+        impl #impl_generics core::borrow::BorrowMut<#name #type_generics> for [u8]
         where
-            T: Sized,
             #where_clause
         {
             fn borrow_mut(&mut self) -> &mut #name #type_generics {

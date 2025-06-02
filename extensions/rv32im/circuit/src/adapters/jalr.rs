@@ -229,11 +229,13 @@ where
     }
 }
 impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32JalrAdapterStep {
-
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
         let record = unsafe {
-            let record_buffer = &*slice_from_raw_parts(adapter_row.as_ptr(), adapter_row.len());
+            let record_buffer = &*slice_from_raw_parts(
+                adapter_row.as_ptr() as *const u8,
+                size_of::<Rv32JalrAdapterRecord>(),
+            );
             let record: &Rv32JalrAdapterRecord = record_buffer.borrow();
             record
         };

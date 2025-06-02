@@ -203,10 +203,17 @@ pub struct MatrixRecordArena<F> {
 }
 
 impl<F: Field> MatrixRecordArena<F> {
-    pub fn alloc_single_row(&mut self) -> &mut [F] {
+    pub fn alloc_single_row(&mut self) -> &mut [u8] {
         let start = self.trace_offset;
         self.trace_offset += self.width;
-        &mut self.trace_buffer[start..self.trace_offset]
+        let row_slice = &mut self.trace_buffer[start..self.trace_offset];
+        let size = size_of_val(row_slice);
+        let ptr = row_slice as *mut [F] as *mut u8;
+        // SAFETY:
+        // - `ptr` is non-null
+        // - `size` is correct
+        // - alignment of `u8` is always satisfied
+        unsafe { &mut *std::ptr::slice_from_raw_parts_mut(ptr, size) }
     }
 }
 
@@ -236,7 +243,6 @@ impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
 /// A record arena struct that can be used by chips that
 /// - have a single row per instruction
 /// - have trace row = [adapter_row, core_row]
-/// TODO(arayi): come up with a better name
 pub struct AdapterCoreRecordArena<F> {
     inner: MatrixRecordArena<F>,
 }
@@ -254,11 +260,12 @@ impl<'a, F: Field, A, C> RecordArena<'a, AdapterCoreLayout, (&'a mut A, &'a mut 
 where
     A: Sized,
     C: Sized,
-    [F]: BorrowMut<A> + BorrowMut<C>,
+    [u8]: BorrowMut<A> + BorrowMut<C>,
 {
     fn alloc(&'a mut self, layout: AdapterCoreLayout) -> (&'a mut A, &'a mut C) {
         let buffer = self.inner.alloc_single_row();
-        let (adapter_buffer, core_buffer) = buffer.split_at_mut(layout.adapter_width);
+        let (adapter_buffer, core_buffer) =
+            buffer.split_at_mut(layout.adapter_width * size_of::<F>());
 
         let adapter_record: &mut A = adapter_buffer.borrow_mut();
         let core_record: &mut C = core_buffer.borrow_mut();
@@ -267,7 +274,6 @@ where
     }
 }
 
-// TODO: make a macro
 impl<F: Field> RowMajorMatrixArena<F> for AdapterCoreRecordArena<F> {
     fn with_capacity(height: usize, width: usize) -> Self {
         Self {

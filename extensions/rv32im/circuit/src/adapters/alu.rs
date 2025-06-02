@@ -284,7 +284,10 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceFiller<F, CTX>
         // - Do not overwrite any reference in `record` before it has already been used or moved
         // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic otherwise)
         let record = unsafe {
-            let record_buffer = &*slice_from_raw_parts(adapter_row.as_ptr(), adapter_row.len());
+            let record_buffer = &*slice_from_raw_parts(
+                adapter_row.as_ptr() as *const u8,
+                size_of::<Rv32BaseAluAdapterRecord>(),
+            );
             let record: &Rv32BaseAluAdapterRecord = record_buffer.borrow();
             record
         };

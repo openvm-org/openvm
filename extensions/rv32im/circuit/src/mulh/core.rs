@@ -309,7 +309,10 @@ where
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
         let record = unsafe {
-            let record_buffer = &*slice_from_raw_parts(core_row.as_ptr(), core_row.len());
+            let record_buffer = &*slice_from_raw_parts(
+                core_row.as_ptr() as *const u8,
+                size_of::<MulHCoreRecord<NUM_LIMBS, LIMB_BITS>>(),
+            );
             let record: &MulHCoreRecord<NUM_LIMBS, LIMB_BITS> = record_buffer.borrow();
             record
         };
