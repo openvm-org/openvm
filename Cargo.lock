@@ -5102,7 +5102,6 @@ dependencies = [
  "openvm-rv32im-guest",
  "p256 0.13.2",
  "serde",
- "signature 2.2.0",
  "strum_macros",
 ]
 

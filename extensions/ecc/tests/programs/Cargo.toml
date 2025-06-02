@@ -27,6 +27,7 @@ k256 = { version = "0.13.3", default-features = false, features = [
     "ecdsa-core",
     "ecdsa",
 ], optional = true }
+signature = { version = "2.2.0", default-features = false }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint = "0.4.6"

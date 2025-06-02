@@ -6,13 +6,18 @@ use core::hint::black_box;
 
 use hex_literal::hex;
 use k256::{
-    ecdsa::{self, RecoveryId},
+    ecdsa::{self, RecoveryId, Signature},
     Secp256k1,
 };
 use openvm_ecc_guest::{
-    algebra::IntMod, ecdsa::VerifyingKey, k256::Secp256k1Point, weierstrass::WeierstrassPoint,
+    algebra::IntMod,
+    ecdsa::{verify_prehashed, VerifyingKey},
+    k256::Secp256k1Point,
+    weierstrass::WeierstrassPoint,
 };
 use openvm_keccak256::keccak256;
+use signature::hazmat::PrehashVerifier;
+
 openvm::entry!(main);
 
 openvm::init!("openvm_init_ecdsa_k256.rs");
@@ -66,8 +71,7 @@ pub fn main() {
 
     // Test verification
     recovered_key
-        .clone()
-        .verify_prehashed(&prehash, &signature)
+        .verify_prehash(&prehash, &Signature::from_slice(&signature).unwrap())
         .unwrap();
 
     // Test bad signature
@@ -84,9 +88,11 @@ pub fn main() {
             &prehash, &bad_sig, recid
         )
         .is_err());
-        assert!(recovered_key
-            .clone()
-            .verify_prehashed(&prehash, &bad_sig)
-            .is_err());
+        assert!(verify_prehashed::<Secp256k1>(
+            recovered_key.as_affine().clone(),
+            &prehash,
+            &bad_sig
+        )
+        .is_err());
     }
 }

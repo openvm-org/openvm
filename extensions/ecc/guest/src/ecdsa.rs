@@ -4,6 +4,11 @@ use core::ops::{Add, AddAssign, Mul};
 use ecdsa::{
     self,
     hazmat::{bits2field, DigestPrimitive},
+    signature::{
+        digest::{Digest, FixedOutput},
+        hazmat::PrehashVerifier,
+        DigestVerifier, Verifier,
+    },
     Error, RecoveryId, Result, Signature, SignatureSize,
 };
 use elliptic_curve::{
@@ -12,11 +17,6 @@ use elliptic_curve::{
     CurveArithmetic, FieldBytesSize, PrimeCurve,
 };
 use openvm_algebra_guest::{DivUnsafe, IntMod, Reduce};
-use signature::{
-    digest::{Digest, FixedOutput},
-    hazmat::PrehashVerifier,
-    DigestVerifier, Verifier,
-};
 
 use crate::{
     weierstrass::{FromCompressed, IntrinsicCurve, WeierstrassPoint},

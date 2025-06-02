@@ -12,7 +12,6 @@ openvm = { workspace = true }
 serde = { workspace = true }
 strum_macros.workspace = true
 ecdsa = { workspace = true, features = ["verifying"] }
-signature = { workspace = true }
 elliptic-curve = { workspace = true, features = ["arithmetic", "sec1"] }
 k256 = { workspace = true, optional = true }
 p256 = { workspace = true, optional = true }
@@ -43,4 +42,9 @@ std = ["alloc"]
 alloc = []
 
 [package.metadata.cargo-shear]
-ignored = ["openvm", "openvm-custom-insn", "openvm-rv32im-guest", "halo2curves-axiom"]
+ignored = [
+    "openvm",
+    "openvm-custom-insn",
+    "openvm-rv32im-guest",
+    "halo2curves-axiom",
+]
