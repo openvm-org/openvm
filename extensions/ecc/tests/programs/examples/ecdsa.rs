@@ -10,7 +10,7 @@ use k256::{
     Secp256k1,
 };
 use openvm_ecc_guest::{
-    algebra::IntMod, ecdsa::OpenVMVerifyingKey, k256::Secp256k1Point, weierstrass::WeierstrassPoint,
+    algebra::IntMod, ecdsa::VerifyingKey, k256::Secp256k1Point, weierstrass::WeierstrassPoint,
 };
 use openvm_keccak256::keccak256;
 openvm::entry!(main);
@@ -30,7 +30,7 @@ pub fn main() {
     let prehash = keccak256(black_box(msg));
 
     let recovered_key =
-        OpenVMVerifyingKey::<Secp256k1>::recover_from_prehash_noverify(&prehash, &signature, recid)
+        VerifyingKey::<Secp256k1>::recover_from_prehash_noverify(&prehash, &signature, recid)
             .unwrap();
 
     let expected_key = ecdsa::VerifyingKey::from_sec1_bytes(&hex!(
@@ -51,9 +51,9 @@ pub fn main() {
     assert_eq!(&public_key_compressed, &expected_key_compressed.as_bytes());
 
     let public_key_uncompressed_decoded =
-        OpenVMVerifyingKey::<Secp256k1>::from_sec1_bytes(&public_key_uncompressed).unwrap();
+        VerifyingKey::<Secp256k1>::from_sec1_bytes(&public_key_uncompressed).unwrap();
     let public_key_compressed_decoded =
-        OpenVMVerifyingKey::<Secp256k1>::from_sec1_bytes(&public_key_compressed).unwrap();
+        VerifyingKey::<Secp256k1>::from_sec1_bytes(&public_key_compressed).unwrap();
 
     assert_eq!(
         public_key_uncompressed_decoded.as_affine(),
@@ -80,12 +80,10 @@ pub fn main() {
     let mut bad_sig4 = signature;
     bad_sig4[32..].copy_from_slice(&[0xff; 32]);
     for bad_sig in [bad_sig1, bad_sig2, bad_sig3, bad_sig4] {
-        assert!(
-            OpenVMVerifyingKey::<Secp256k1>::recover_from_prehash_noverify(
-                &prehash, &bad_sig, recid
-            )
-            .is_err()
-        );
+        assert!(VerifyingKey::<Secp256k1>::recover_from_prehash_noverify(
+            &prehash, &bad_sig, recid
+        )
+        .is_err());
         assert!(recovered_key
             .clone()
             .verify_prehashed(&prehash, &bad_sig)
