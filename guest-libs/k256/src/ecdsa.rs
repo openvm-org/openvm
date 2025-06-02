@@ -14,4 +14,4 @@ pub type SigningKey = ecdsa::SigningKey<crate::Secp256k1>;
 
 /// ECDSA/secp256k1 verification key (i.e. public key)
 #[cfg(feature = "ecdsa")]
-pub type VerifyingKey = openvm_ecc_guest::ecdsa::VerifyingKey<crate::Secp256k1, crate::Secp256k1>;
+pub type VerifyingKey = openvm_ecc_guest::ecdsa::VerifyingKey<crate::Secp256k1>;

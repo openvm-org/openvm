@@ -15,7 +15,7 @@ pub use group::*;
 mod msm;
 pub use msm::*;
 
-/// ECDSA
+/// Optimized ECDSA implementation with the same functional interface as the `ecdsa` crate
 pub mod ecdsa;
 /// Weierstrass curve traits
 pub mod weierstrass;
