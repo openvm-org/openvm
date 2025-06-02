@@ -18,7 +18,7 @@ const SEGMENT_CHECK_INTERVAL: u64 = 100;
 
 // TODO(ayush): fix these values
 const MAX_TRACE_HEIGHT: u32 = (1 << 23) - 100;
-const MAX_TRACE_CELLS: usize = 1_200_000_000; // 1.2B
+const MAX_TRACE_CELLS: usize = 2_000_000_000; // 2B
 const MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 
 pub struct MeteredExecutionControl<'a> {
