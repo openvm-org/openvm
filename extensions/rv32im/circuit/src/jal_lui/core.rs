@@ -191,7 +191,7 @@ where
         let &Instruction { opcode, c: imm, .. } = instruction;
 
         let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
-            adapter_width: A::WIDTH * size_of::<F>(),
+            adapter_width: A::WIDTH,
         });
 
         A::start(*state.pc, state.memory, &mut adapter_record);
@@ -221,30 +221,28 @@ where
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(core_row.as_ptr(), core_row.len());
+            let record: &Rv32JalLuiStepRecord = record_buffer.borrow();
+            record
+        };
         let core_row: &mut Rv32JalLuiCoreCols<F> = core_row.borrow_mut();
 
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
-
-        unsafe {
-            let ptr = core_row as *mut _ as *mut u8;
-            let record_buffer = &*slice_from_raw_parts(ptr, size_of::<Rv32JalLuiStepRecord>());
-            let record: &Rv32JalLuiStepRecord = record_buffer.borrow();
-
-            for pair in record.rd_data.chunks_exact(2) {
-                self.bitwise_lookup_chip
-                    .request_range(pair[0] as u32, pair[1] as u32);
-            }
-            if record.is_jal {
-                self.bitwise_lookup_chip
-                    .request_xor(record.rd_data[3] as u32, ADDITIONAL_BITS);
-            }
-
-            // Writing in reverse order
-            core_row.is_lui = F::from_bool(!record.is_jal);
-            core_row.is_jal = F::from_bool(record.is_jal);
-            core_row.rd_data = record.rd_data.map(F::from_canonical_u8);
-            core_row.imm = F::from_canonical_u32(record.imm);
+        for pair in record.rd_data.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(pair[0] as u32, pair[1] as u32);
         }
+        if record.is_jal {
+            self.bitwise_lookup_chip
+                .request_xor(record.rd_data[3] as u32, ADDITIONAL_BITS);
+        }
+
+        // Writing in reverse order
+        core_row.is_lui = F::from_bool(!record.is_jal);
+        core_row.is_jal = F::from_bool(record.is_jal);
+        core_row.rd_data = record.rd_data.map(F::from_canonical_u8);
+        core_row.imm = F::from_canonical_u32(record.imm);
     }
 }
 

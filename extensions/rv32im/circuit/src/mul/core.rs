@@ -200,7 +200,7 @@ where
             MulOpcode::MUL
         );
         let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
-            adapter_width: A::WIDTH * size_of::<F>(),
+            adapter_width: A::WIDTH,
         });
 
         A::start(*state.pc, state.memory, &mut adapter_record);
@@ -233,27 +233,25 @@ where
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        let core_row: &mut MultiplicationCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        unsafe {
-            let ptr = core_row as *mut _ as *mut u8;
-            let record_buffer = &*slice_from_raw_parts(
-                ptr,
-                size_of::<MultiplicationCoreRecord<NUM_LIMBS, LIMB_BITS>>(),
-            );
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(core_row.as_ptr(), core_row.len());
             let record: &MultiplicationCoreRecord<NUM_LIMBS, LIMB_BITS> = record_buffer.borrow();
+            record
+        };
 
-            let (a, carry) = run_mul::<NUM_LIMBS, LIMB_BITS>(&record.b, &record.c);
+        let core_row: &mut MultiplicationCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 
-            for (a, carry) in a.iter().zip(carry.iter()) {
-                self.range_tuple_chip.add_count(&[*a as u32, *carry]);
-            }
+        let (a, carry) = run_mul::<NUM_LIMBS, LIMB_BITS>(&record.b, &record.c);
 
-            // write in reverse order
-            core_row.is_valid = F::ONE;
-            core_row.c = record.c.map(F::from_canonical_u8);
-            core_row.b = record.b.map(F::from_canonical_u8);
-            core_row.a = a.map(F::from_canonical_u8);
+        for (a, carry) in a.iter().zip(carry.iter()) {
+            self.range_tuple_chip.add_count(&[*a as u32, *carry]);
         }
+
+        // write in reverse order
+        core_row.is_valid = F::ONE;
+        core_row.c = record.c.map(F::from_canonical_u8);
+        core_row.b = record.b.map(F::from_canonical_u8);
+        core_row.a = a.map(F::from_canonical_u8);
     }
 }
 

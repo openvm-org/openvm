@@ -313,7 +313,7 @@ where
         let local_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
-            adapter_width: A::WIDTH * size_of::<F>(),
+            adapter_width: A::WIDTH,
         });
 
         A::start(*state.pc, state.memory, &mut adapter_record);
@@ -348,78 +348,75 @@ where
     A: 'static + for<'a> AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_record) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        let core_row: &mut ShiftCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_record.borrow_mut();
-
-        unsafe {
-            let ptr = core_row as *mut _ as *mut u8;
-            let record_buffer =
-                &*slice_from_raw_parts(ptr, size_of::<ShiftCoreRecord<NUM_LIMBS, LIMB_BITS>>());
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(core_row.as_ptr(), core_row.len());
             let record: &ShiftCoreRecord<NUM_LIMBS, LIMB_BITS> = record_buffer.borrow();
+            record
+        };
+        let core_row: &mut ShiftCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 
-            let opcode = ShiftOpcode::from_usize(record.local_opcode as usize);
-            let (a, limb_shift, bit_shift) =
-                run_shift::<NUM_LIMBS, LIMB_BITS>(opcode, &record.b, &record.c);
+        let opcode = ShiftOpcode::from_usize(record.local_opcode as usize);
+        let (a, limb_shift, bit_shift) =
+            run_shift::<NUM_LIMBS, LIMB_BITS>(opcode, &record.b, &record.c);
 
-            for pair in a.chunks_exact(2) {
-                self.bitwise_lookup_chip
-                    .request_range(pair[0] as u32, pair[1] as u32);
-            }
-
-            let num_bits_log = (NUM_LIMBS * LIMB_BITS).ilog2();
-            self.range_checker_chip.add_count(
-                ((record.c[0] as usize - bit_shift - limb_shift * LIMB_BITS) >> num_bits_log)
-                    as u32,
-                LIMB_BITS - num_bits_log as usize,
-            );
-
-            core_row.bit_shift_carry = if bit_shift == 0 {
-                for _ in 0..NUM_LIMBS {
-                    self.range_checker_chip.add_count(0, 0);
-                }
-                [F::ZERO; NUM_LIMBS]
-            } else {
-                array::from_fn(|i| {
-                    let carry = match opcode {
-                        ShiftOpcode::SLL => record.b[i] >> (LIMB_BITS - bit_shift),
-                        _ => record.b[i] % (1 << bit_shift),
-                    };
-                    self.range_checker_chip.add_count(carry as u32, bit_shift);
-                    F::from_canonical_u8(carry)
-                })
-            };
-
-            core_row.limb_shift_marker = [F::ZERO; NUM_LIMBS];
-            core_row.limb_shift_marker[limb_shift] = F::ONE;
-            core_row.bit_shift_marker = [F::ZERO; LIMB_BITS];
-            core_row.bit_shift_marker[bit_shift] = F::ONE;
-
-            core_row.b_sign = F::ZERO;
-            if opcode == ShiftOpcode::SRA {
-                core_row.b_sign = F::from_canonical_u8(record.b[NUM_LIMBS - 1] >> (LIMB_BITS - 1));
-                self.bitwise_lookup_chip
-                    .request_xor(record.b[NUM_LIMBS - 1] as u32, 1 << (LIMB_BITS - 1));
-            }
-
-            core_row.bit_multiplier_right = match opcode {
-                ShiftOpcode::SLL => F::ZERO,
-                _ => F::from_canonical_usize(1 << bit_shift),
-            };
-            core_row.bit_multiplier_left = match opcode {
-                ShiftOpcode::SLL => F::from_canonical_usize(1 << bit_shift),
-                _ => F::ZERO,
-            };
-
-            core_row.opcode_sra_flag = F::from_bool(opcode == ShiftOpcode::SRA);
-            core_row.opcode_srl_flag = F::from_bool(opcode == ShiftOpcode::SRL);
-            core_row.opcode_sll_flag = F::from_bool(opcode == ShiftOpcode::SLL);
-
-            core_row.c = record.c.map(F::from_canonical_u8);
-            core_row.b = record.b.map(F::from_canonical_u8);
-            core_row.a = a.map(F::from_canonical_u8);
+        for pair in a.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(pair[0] as u32, pair[1] as u32);
         }
+
+        let num_bits_log = (NUM_LIMBS * LIMB_BITS).ilog2();
+        self.range_checker_chip.add_count(
+            ((record.c[0] as usize - bit_shift - limb_shift * LIMB_BITS) >> num_bits_log) as u32,
+            LIMB_BITS - num_bits_log as usize,
+        );
+
+        core_row.bit_shift_carry = if bit_shift == 0 {
+            for _ in 0..NUM_LIMBS {
+                self.range_checker_chip.add_count(0, 0);
+            }
+            [F::ZERO; NUM_LIMBS]
+        } else {
+            array::from_fn(|i| {
+                let carry = match opcode {
+                    ShiftOpcode::SLL => record.b[i] >> (LIMB_BITS - bit_shift),
+                    _ => record.b[i] % (1 << bit_shift),
+                };
+                self.range_checker_chip.add_count(carry as u32, bit_shift);
+                F::from_canonical_u8(carry)
+            })
+        };
+
+        core_row.limb_shift_marker = [F::ZERO; NUM_LIMBS];
+        core_row.limb_shift_marker[limb_shift] = F::ONE;
+        core_row.bit_shift_marker = [F::ZERO; LIMB_BITS];
+        core_row.bit_shift_marker[bit_shift] = F::ONE;
+
+        core_row.b_sign = F::ZERO;
+        if opcode == ShiftOpcode::SRA {
+            core_row.b_sign = F::from_canonical_u8(record.b[NUM_LIMBS - 1] >> (LIMB_BITS - 1));
+            self.bitwise_lookup_chip
+                .request_xor(record.b[NUM_LIMBS - 1] as u32, 1 << (LIMB_BITS - 1));
+        }
+
+        core_row.bit_multiplier_right = match opcode {
+            ShiftOpcode::SLL => F::ZERO,
+            _ => F::from_canonical_usize(1 << bit_shift),
+        };
+        core_row.bit_multiplier_left = match opcode {
+            ShiftOpcode::SLL => F::from_canonical_usize(1 << bit_shift),
+            _ => F::ZERO,
+        };
+
+        core_row.opcode_sra_flag = F::from_bool(opcode == ShiftOpcode::SRA);
+        core_row.opcode_srl_flag = F::from_bool(opcode == ShiftOpcode::SRL);
+        core_row.opcode_sll_flag = F::from_bool(opcode == ShiftOpcode::SLL);
+
+        core_row.c = record.c.map(F::from_canonical_u8);
+        core_row.b = record.b.map(F::from_canonical_u8);
+        core_row.a = a.map(F::from_canonical_u8);
     }
 }
 

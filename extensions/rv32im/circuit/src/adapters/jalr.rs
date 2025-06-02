@@ -233,39 +233,38 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32JalrAdapterStep {
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
-        let adapter_row: &mut Rv32JalrAdapterCols<F> = adapter_row.borrow_mut();
-        unsafe {
-            let ptr = adapter_row as *mut _ as *mut u8;
-            let record_buffer = &*slice_from_raw_parts(ptr, size_of::<Rv32JalrAdapterRecord>());
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(adapter_row.as_ptr(), adapter_row.len());
             let record: &Rv32JalrAdapterRecord = record_buffer.borrow();
+            record
+        };
+        let adapter_row: &mut Rv32JalrAdapterCols<F> = adapter_row.borrow_mut();
 
-            // We must assign in reverse
-            adapter_row.needs_write = F::from_bool(record.rd_ptr != u32::MAX);
+        // We must assign in reverse
+        adapter_row.needs_write = F::from_bool(record.rd_ptr != u32::MAX);
 
-            if record.rd_ptr != u32::MAX {
-                adapter_row
-                    .rd_aux_cols
-                    .set_prev_data(record.writes_aux.prev_data.map(F::from_canonical_u8));
-                mem_helper.fill(
-                    record.writes_aux.prev_timestamp,
-                    record.from_timestamp + 1,
-                    adapter_row.rd_aux_cols.as_mut(),
-                );
-                adapter_row.rd_ptr = F::from_canonical_u32(record.rd_ptr);
-            }
-            else {
-                adapter_row.rd_ptr = F::ZERO;
-            }
-
+        if record.rd_ptr != u32::MAX {
+            adapter_row
+                .rd_aux_cols
+                .set_prev_data(record.writes_aux.prev_data.map(F::from_canonical_u8));
             mem_helper.fill(
-                record.reads_aux.prev_timestamp,
-                record.from_timestamp,
-                adapter_row.rs1_aux_cols.as_mut(),
+                record.writes_aux.prev_timestamp,
+                record.from_timestamp + 1,
+                adapter_row.rd_aux_cols.as_mut(),
             );
-            adapter_row.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
-            adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-            adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+            adapter_row.rd_ptr = F::from_canonical_u32(record.rd_ptr);
+        } else {
+            adapter_row.rd_ptr = F::ZERO;
         }
+
+        mem_helper.fill(
+            record.reads_aux.prev_timestamp,
+            record.from_timestamp,
+            adapter_row.rs1_aux_cols.as_mut(),
+        );
+        adapter_row.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
+        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
+        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
     }
 }
 

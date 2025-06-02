@@ -279,61 +279,62 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
     const WIDTH: usize = size_of::<Rv32BaseAluAdapterCols<u8>>();
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
-        let adapter_row: &mut Rv32BaseAluAdapterCols<F> = adapter_row.borrow_mut();
         // SAFETY: the following is highly unsafe. We are going to cast `adapter_row` to a record
         // buffer, and then do an _overlapping_ write to the `adapter_row` as a row of field
         // elements. This requires:
         // - Cols struct should be repr(C) and we write in reverse order (to ensure non-overlapping)
         // - Do not overwrite any reference in `record` before it has already been used or moved
         // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic otherwise)
-        unsafe {
-            let ptr = adapter_row as *mut _ as *mut u8;
-            let record_buffer = &*slice_from_raw_parts(ptr, size_of::<Rv32BaseAluAdapterRecord>());
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(adapter_row.as_ptr(), adapter_row.len());
             let record: &Rv32BaseAluAdapterRecord = record_buffer.borrow();
-            // We must assign in reverse
-            // TODO[jpw]: is there a way to not hardcode?
-            const TIMESTAMP_DELTA: u32 = 2;
-            let mut timestamp = record.from_timestamp + TIMESTAMP_DELTA;
+            record
+        };
+        let adapter_row: &mut Rv32BaseAluAdapterCols<F> = adapter_row.borrow_mut();
 
-            adapter_row
-                .writes_aux
-                .set_prev_data(record.writes_aux.prev_data.map(F::from_canonical_u8));
+        // We must assign in reverse
+        // TODO[jpw]: is there a way to not hardcode?
+        const TIMESTAMP_DELTA: u32 = 2;
+        let mut timestamp = record.from_timestamp + TIMESTAMP_DELTA;
+
+        adapter_row
+            .writes_aux
+            .set_prev_data(record.writes_aux.prev_data.map(F::from_canonical_u8));
+        mem_helper.fill(
+            record.writes_aux.prev_timestamp,
+            timestamp,
+            adapter_row.writes_aux.as_mut(),
+        );
+        timestamp -= 1;
+
+        let rs2_as = record.rs2_as;
+        if rs2_as != 0 {
             mem_helper.fill(
-                record.writes_aux.prev_timestamp,
+                record.reads_aux[1].prev_timestamp.into(),
                 timestamp,
-                adapter_row.writes_aux.as_mut(),
+                adapter_row.reads_aux[1].as_mut(),
             );
-            timestamp -= 1;
-
-            let rs2_as = record.rs2_as;
-            if rs2_as != 0 {
-                mem_helper.fill(
-                    record.reads_aux[1].prev_timestamp.into(),
-                    timestamp,
-                    adapter_row.reads_aux[1].as_mut(),
-                );
-            } else {
-                let rs2_imm = record.rs2;
-                let mask = (1 << RV32_CELL_BITS) - 1;
-                self.bitwise_lookup_chip
-                    .request_range(rs2_imm & mask, (rs2_imm >> 8) & mask);
-            }
-            timestamp -= 1;
-
-            mem_helper.fill(
-                record.reads_aux[0].prev_timestamp.into(),
-                timestamp,
-                adapter_row.reads_aux[0].as_mut(),
-            );
-
-            // Write to rs2 first just in case since it appears later in Record
-            adapter_row.rs2 = F::from_canonical_u32(record.rs2);
-            adapter_row.rs2_as = F::from_canonical_u32(rs2_as);
-            adapter_row.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
-            adapter_row.rd_ptr = F::from_canonical_u32(record.rd_ptr);
-            adapter_row.from_state.timestamp = F::from_canonical_u32(timestamp);
-            adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+        } else {
+            let rs2_imm = record.rs2;
+            let mask = (1 << RV32_CELL_BITS) - 1;
+            self.bitwise_lookup_chip
+                .request_range(rs2_imm & mask, (rs2_imm >> 8) & mask);
         }
+        timestamp -= 1;
+
+        mem_helper.fill(
+            record.reads_aux[0].prev_timestamp.into(),
+            timestamp,
+            adapter_row.reads_aux[0].as_mut(),
+        );
+
+        // Write to rs2 first just in case since it appears later in Record
+        adapter_row.rs2 = F::from_canonical_u32(record.rs2);
+        adapter_row.rs2_as = F::from_canonical_u32(rs2_as);
+        adapter_row.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
+        adapter_row.rd_ptr = F::from_canonical_u32(record.rd_ptr);
+        adapter_row.from_state.timestamp = F::from_canonical_u32(timestamp);
+        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
     }
 }
 

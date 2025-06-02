@@ -73,33 +73,47 @@ pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
     TokenStream::from(methods)
 }
 
-/// Implements Borrow<T> and BorrowMut<T> for [u8]
+/// `S` is the type the derive macro is being called on
+/// Implements Borrow<S> and BorrowMut<S> for [AT]
+/// [AT] has to have (checked via `debug_assert!`s)
+/// - at least size_of(S) length
+/// - at least align_of(S) alignemnt
 #[proc_macro_derive(AlignedBytesBorrow)]
 pub fn aligned_bytes_borrow_derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
+    let mut ast_clone = ast.clone();
     let name = &ast.ident;
 
     // Get impl generics, type generics, where clause
-    let (impl_generics, type_generics, where_clause) = ast.generics.split_for_impl();
+    // Note, need to add the new type generic to the `impl_generics`
+    let (_, type_generics, where_clause) = ast.generics.split_for_impl();
+    ast_clone.generics.params.push(syn::parse_quote!(T));
+    let impl_generics = ast_clone.generics.split_for_impl().0;
 
     let methods = quote! {
-        impl #impl_generics core::borrow::Borrow<#name #type_generics> for [u8] #where_clause {
+        impl #impl_generics core::borrow::Borrow<#name #type_generics> for [T]
+        where
+            T: Sized,
+            #where_clause
+        {
             fn borrow(&self) -> &#name #type_generics {
-                debug_assert_eq!(self.len(), core::mem::size_of::<#name #type_generics>());
-                let (prefix, shorts, _suffix) = unsafe { self.align_to::<#name #type_generics>() };
-                debug_assert!(prefix.is_empty(), "Alignment should match");
-                debug_assert_eq!(shorts.len(), 1);
-                &shorts[0]
+                use core::mem::{align_of, size_of_val};
+                debug_assert!(size_of_val(self) >= core::mem::size_of::<#name #type_generics>());
+                debug_assert!(align_of::<T>() >= align_of::<#name #type_generics>());
+                unsafe { &*(self.as_ptr() as *const #name #type_generics) }
             }
         }
 
-        impl #impl_generics core::borrow::BorrowMut<#name #type_generics> for [u8] #where_clause {
+        impl #impl_generics core::borrow::BorrowMut<#name #type_generics> for [T]
+        where
+            T: Sized,
+            #where_clause
+        {
             fn borrow_mut(&mut self) -> &mut #name #type_generics {
-                debug_assert_eq!(self.len(), core::mem::size_of::<#name #type_generics>());
-                let (prefix, shorts, _suffix) = unsafe { self.align_to_mut::<#name #type_generics>() };
-                debug_assert!(prefix.is_empty(), "Alignment should match");
-                debug_assert_eq!(shorts.len(), 1);
-                &mut shorts[0]
+                use core::mem::{align_of, size_of_val};
+                debug_assert!(size_of_val(self) >= core::mem::size_of::<#name #type_generics>());
+                debug_assert!(align_of::<T>() >= align_of::<#name #type_generics>());
+                unsafe { &mut *(self.as_mut_ptr() as *mut #name #type_generics) }
             }
         }
     };

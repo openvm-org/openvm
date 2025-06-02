@@ -203,17 +203,10 @@ pub struct MatrixRecordArena<F> {
 }
 
 impl<F: Field> MatrixRecordArena<F> {
-    pub fn alloc_single_row(&mut self) -> &mut [u8] {
+    pub fn alloc_single_row(&mut self) -> &mut [F] {
         let start = self.trace_offset;
         self.trace_offset += self.width;
-        let row_slice = &mut self.trace_buffer[start..self.trace_offset];
-        let size = size_of_val(row_slice);
-        let ptr = row_slice as *mut [F] as *mut u8;
-        // SAFETY:
-        // - `ptr` is non-null
-        // - `size` is correct
-        // - alignment of `u8` is always satisfied
-        unsafe { &mut *std::ptr::slice_from_raw_parts_mut(ptr, size) }
+        &mut self.trace_buffer[start..self.trace_offset]
     }
 }
 
@@ -249,7 +242,7 @@ pub struct AdapterCoreRecordArena<F> {
 }
 
 /// The minimal information that [AdapterCoreRecordArena] needs to know to allocate a row
-/// **WARNING**: `adapter_width` is in bytes, not number of field elements
+/// **WARNING**: `adapter_width` is number of field elements, not in bytes
 pub struct AdapterCoreLayout {
     pub adapter_width: usize,
 }
@@ -261,17 +254,14 @@ impl<'a, F: Field, A, C> RecordArena<'a, AdapterCoreLayout, (&'a mut A, &'a mut 
 where
     A: Sized,
     C: Sized,
-    [u8]: BorrowMut<A> + BorrowMut<C>,
+    [F]: BorrowMut<A> + BorrowMut<C>,
 {
     fn alloc(&'a mut self, layout: AdapterCoreLayout) -> (&'a mut A, &'a mut C) {
         let buffer = self.inner.alloc_single_row();
-        // NOTE: the Cols type has generic <F> because we want the size in bytes, not number of
-        // field elements
         let (adapter_buffer, core_buffer) = buffer.split_at_mut(layout.adapter_width);
-        // PERF: we could skip these unwraps if the RecordArena guarantees the size and alignment
-        // properties
-        let adapter_record = adapter_buffer[..size_of::<A>()].borrow_mut();
-        let core_record = core_buffer[..size_of::<C>()].borrow_mut();
+
+        let adapter_record: &mut A = adapter_buffer.borrow_mut();
+        let core_record: &mut C = core_buffer.borrow_mut();
 
         (adapter_record, core_record)
     }

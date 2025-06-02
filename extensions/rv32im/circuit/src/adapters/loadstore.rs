@@ -491,62 +491,59 @@ where
         // TODO(ayush): should this be here?
         debug_assert!(self.range_checker_chip.range_max_bits() >= 15);
 
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(adapter_row.as_ptr(), adapter_row.len());
+            let record: &Rv32LoadStoreAdapterRecord = record_buffer.borrow();
+            record
+        };
         let adapter_row: &mut Rv32LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
 
-        unsafe {
-            let ptr = adapter_row as *mut _ as *mut u8;
-            let record_buffer =
-                &*slice_from_raw_parts(ptr, size_of::<Rv32LoadStoreAdapterRecord>());
-            let record: &Rv32LoadStoreAdapterRecord = record_buffer.borrow();
+        // Writing in reverse order
+        adapter_row.needs_write = F::from_bool(record.rd_rs2_ptr != u32::MAX);
 
-            // Writing in reverse order
-            adapter_row.needs_write = F::from_bool(record.rd_rs2_ptr != u32::MAX);
+        mem_helper.fill(
+            record.write_prev_timestamp,
+            record.from_timestamp + 2,
+            &mut adapter_row.write_base_aux,
+        );
 
-            mem_helper.fill(
-                record.write_prev_timestamp,
-                record.from_timestamp + 2,
-                &mut adapter_row.write_base_aux,
-            );
+        adapter_row.mem_as = F::from_canonical_u8(record.mem_as);
+        let ptr = record
+            .rs1_val
+            .wrapping_add(record.imm as u32 + record.imm_sign as u32 * 0xffff0000);
 
-            adapter_row.mem_as = F::from_canonical_u8(record.mem_as);
-            let ptr = record
-                .rs1_val
-                .wrapping_add(record.imm as u32 + record.imm_sign as u32 * 0xffff0000);
+        let ptr_limbs = [ptr & 0xffff, ptr >> 16];
+        self.range_checker_chip
+            .add_count(ptr_limbs[0] >> 2, RV32_CELL_BITS * 2 - 2);
+        self.range_checker_chip
+            .add_count(ptr_limbs[1], self.pointer_max_bits - 16);
+        adapter_row.mem_ptr_limbs = ptr_limbs.map(F::from_canonical_u32);
 
-            let ptr_limbs = [ptr & 0xffff, ptr >> 16];
-            self.range_checker_chip
-                .add_count(ptr_limbs[0] >> 2, RV32_CELL_BITS * 2 - 2);
-            self.range_checker_chip
-                .add_count(ptr_limbs[1], self.pointer_max_bits - 16);
-            adapter_row.mem_ptr_limbs = ptr_limbs.map(F::from_canonical_u32);
+        adapter_row.imm_sign = F::from_bool(record.imm_sign);
+        adapter_row.imm = F::from_canonical_u16(record.imm);
 
-            adapter_row.imm_sign = F::from_bool(record.imm_sign);
-            adapter_row.imm = F::from_canonical_u16(record.imm);
+        mem_helper.fill(
+            record.read_data_aux.prev_timestamp,
+            record.from_timestamp + 1,
+            adapter_row.read_data_aux.as_mut(),
+        );
+        adapter_row.rd_rs2_ptr = if record.rd_rs2_ptr != u32::MAX {
+            F::from_canonical_u32(record.rd_rs2_ptr)
+        } else {
+            F::ZERO
+        };
 
-            mem_helper.fill(
-                record.read_data_aux.prev_timestamp,
-                record.from_timestamp + 1,
-                adapter_row.read_data_aux.as_mut(),
-            );
-            adapter_row.rd_rs2_ptr = if record.rd_rs2_ptr != u32::MAX {
-                F::from_canonical_u32(record.rd_rs2_ptr)
-            } else {
-                F::ZERO
-            };
+        mem_helper.fill(
+            record.rs1_aux_record.prev_timestamp,
+            record.from_timestamp,
+            adapter_row.rs1_aux_cols.as_mut(),
+        );
 
-            mem_helper.fill(
-                record.rs1_aux_record.prev_timestamp,
-                record.from_timestamp,
-                adapter_row.rs1_aux_cols.as_mut(),
-            );
+        adapter_row.rs1_data = record.rs1_val.to_le_bytes().map(F::from_canonical_u8);
+        adapter_row.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
 
-            adapter_row.rs1_data = record.rs1_val.to_le_bytes().map(F::from_canonical_u8);
-            adapter_row.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
-
-            adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-            adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
-            // println!("adapter_row: {:?}", adapter_row);
-        }
+        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
+        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
     }
 }
 

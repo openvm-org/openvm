@@ -269,7 +269,7 @@ where
         let Instruction { opcode, .. } = instruction;
 
         let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
-            adapter_width: A::WIDTH * size_of::<F>(),
+            adapter_width: A::WIDTH,
         });
 
         A::start(*state.pc, state.memory, &mut adapter_record);
@@ -308,49 +308,46 @@ where
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
-
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(core_row.as_ptr(), core_row.len());
+            let record: &MulHCoreRecord<NUM_LIMBS, LIMB_BITS> = record_buffer.borrow();
+            record
+        };
         let core_row: &mut MulHCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 
-        unsafe {
-            let ptr = core_row as *mut _ as *mut u8;
-            let record_buffer =
-                &*slice_from_raw_parts(ptr, size_of::<MulHCoreRecord<NUM_LIMBS, LIMB_BITS>>());
-            let record: &MulHCoreRecord<NUM_LIMBS, LIMB_BITS> = record_buffer.borrow();
+        let opcode = MulHOpcode::from_usize(record.local_opcode as usize);
+        let (a, a_mul, carry, b_ext, c_ext) = run_mulh::<NUM_LIMBS, LIMB_BITS>(
+            opcode,
+            &record.b.map(u32::from),
+            &record.c.map(u32::from),
+        );
 
-            let opcode = MulHOpcode::from_usize(record.local_opcode as usize);
-            let (a, a_mul, carry, b_ext, c_ext) = run_mulh::<NUM_LIMBS, LIMB_BITS>(
-                opcode,
-                &record.b.map(u32::from),
-                &record.c.map(u32::from),
-            );
-
-            for i in 0..NUM_LIMBS {
-                self.range_tuple_chip.add_count(&[a_mul[i], carry[i]]);
-                self.range_tuple_chip
-                    .add_count(&[a[i], carry[NUM_LIMBS + i]]);
-            }
-
-            if opcode != MulHOpcode::MULHU {
-                let b_sign_mask = if b_ext == 0 { 0 } else { 1 << (LIMB_BITS - 1) };
-                let c_sign_mask = if c_ext == 0 { 0 } else { 1 << (LIMB_BITS - 1) };
-                self.bitwise_lookup_chip.request_range(
-                    (record.b[NUM_LIMBS - 1] as u32 - b_sign_mask) << 1,
-                    (record.c[NUM_LIMBS - 1] as u32 - c_sign_mask)
-                        << ((opcode == MulHOpcode::MULH) as u32),
-                );
-            }
-
-            // Write in reverse order
-            core_row.opcode_mulhu_flag = F::from_bool(opcode == MulHOpcode::MULHU);
-            core_row.opcode_mulhsu_flag = F::from_bool(opcode == MulHOpcode::MULHSU);
-            core_row.opcode_mulh_flag = F::from_bool(opcode == MulHOpcode::MULH);
-            core_row.c_ext = F::from_canonical_u32(c_ext);
-            core_row.b_ext = F::from_canonical_u32(b_ext);
-            core_row.a_mul = a_mul.map(F::from_canonical_u32);
-            core_row.c = record.c.map(F::from_canonical_u8);
-            core_row.b = record.b.map(F::from_canonical_u8);
-            core_row.a = a.map(F::from_canonical_u32);
+        for i in 0..NUM_LIMBS {
+            self.range_tuple_chip.add_count(&[a_mul[i], carry[i]]);
+            self.range_tuple_chip
+                .add_count(&[a[i], carry[NUM_LIMBS + i]]);
         }
+
+        if opcode != MulHOpcode::MULHU {
+            let b_sign_mask = if b_ext == 0 { 0 } else { 1 << (LIMB_BITS - 1) };
+            let c_sign_mask = if c_ext == 0 { 0 } else { 1 << (LIMB_BITS - 1) };
+            self.bitwise_lookup_chip.request_range(
+                (record.b[NUM_LIMBS - 1] as u32 - b_sign_mask) << 1,
+                (record.c[NUM_LIMBS - 1] as u32 - c_sign_mask)
+                    << ((opcode == MulHOpcode::MULH) as u32),
+            );
+        }
+
+        // Write in reverse order
+        core_row.opcode_mulhu_flag = F::from_bool(opcode == MulHOpcode::MULHU);
+        core_row.opcode_mulhsu_flag = F::from_bool(opcode == MulHOpcode::MULHSU);
+        core_row.opcode_mulh_flag = F::from_bool(opcode == MulHOpcode::MULH);
+        core_row.c_ext = F::from_canonical_u32(c_ext);
+        core_row.b_ext = F::from_canonical_u32(b_ext);
+        core_row.a_mul = a_mul.map(F::from_canonical_u32);
+        core_row.c = record.c.map(F::from_canonical_u8);
+        core_row.b = record.b.map(F::from_canonical_u8);
+        core_row.a = a.map(F::from_canonical_u32);
     }
 }
 

@@ -244,7 +244,7 @@ where
         );
 
         let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
-            adapter_width: A::WIDTH * size_of::<F>(),
+            adapter_width: A::WIDTH,
         });
 
         A::start(*state.pc, state.memory, &mut adapter_record);
@@ -282,45 +282,45 @@ where
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
         self.adapter.fill_trace_row(mem_helper, adapter_row);
-
-        let core_row: &mut Rv32JalrCoreCols<F> = core_row.borrow_mut();
-        unsafe {
-            let ptr = core_row as *mut _ as *mut u8;
-            let record_buffer = &*slice_from_raw_parts(ptr, size_of::<Rv32JalrCoreRecord>());
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(core_row.as_ptr(), core_row.len());
             let record: &Rv32JalrCoreRecord = record_buffer.borrow();
+            record
+        };
+        let core_row: &mut Rv32JalrCoreCols<F> = core_row.borrow_mut();
 
-            let (to_pc, rd_data) =
-                run_jalr(record.from_pc, record.rs1_val, record.imm, record.imm_sign);
-            let to_pc_limbs = [(to_pc & ((1 << 16) - 1)) >> 1, to_pc >> 16];
-            self.range_checker_chip.add_count(to_pc_limbs[0], 15);
-            self.range_checker_chip
-                .add_count(to_pc_limbs[1], PC_BITS - 16);
-            self.bitwise_lookup_chip
-                .request_range(rd_data[0] as u32, rd_data[1] as u32);
+        let (to_pc, rd_data) =
+            run_jalr(record.from_pc, record.rs1_val, record.imm, record.imm_sign);
+        let to_pc_limbs = [(to_pc & ((1 << 16) - 1)) >> 1, to_pc >> 16];
+        self.range_checker_chip.add_count(to_pc_limbs[0], 15);
+        self.range_checker_chip
+            .add_count(to_pc_limbs[1], PC_BITS - 16);
+        self.bitwise_lookup_chip
+            .request_range(rd_data[0] as u32, rd_data[1] as u32);
 
-            self.range_checker_chip
-                .add_count(rd_data[2] as u32, RV32_CELL_BITS);
-            self.range_checker_chip
-                .add_count(rd_data[3] as u32, PC_BITS - RV32_CELL_BITS * 3);
+        self.range_checker_chip
+            .add_count(rd_data[2] as u32, RV32_CELL_BITS);
+        self.range_checker_chip
+            .add_count(rd_data[3] as u32, PC_BITS - RV32_CELL_BITS * 3);
 
-            // Write in reverse order
-            core_row.imm_sign = F::from_bool(record.imm_sign);
-            core_row.to_pc_limbs = to_pc_limbs.map(F::from_canonical_u32);
-            core_row.to_pc_least_sig_bit = F::from_bool(to_pc & 1 == 1);
-            // fill_trace_row is called only on valid rows
-            core_row.is_valid = F::ONE;
-            core_row.rs1_data = record.rs1_val.to_le_bytes().map(F::from_canonical_u8);
-            core_row
-                .rd_data
-                .iter_mut()
-                .rev()
-                .zip(rd_data.iter().skip(1).rev())
-                .for_each(|(dst, src)| {
-                    *dst = F::from_canonical_u8(*src);
-                });
-            core_row.imm = F::from_canonical_u16(record.imm);
-        }
+        // Write in reverse order
+        core_row.imm_sign = F::from_bool(record.imm_sign);
+        core_row.to_pc_limbs = to_pc_limbs.map(F::from_canonical_u32);
+        core_row.to_pc_least_sig_bit = F::from_bool(to_pc & 1 == 1);
+        // fill_trace_row is called only on valid rows
+        core_row.is_valid = F::ONE;
+        core_row.rs1_data = record.rs1_val.to_le_bytes().map(F::from_canonical_u8);
+        core_row
+            .rd_data
+            .iter_mut()
+            .rev()
+            .zip(rd_data.iter().skip(1).rev())
+            .for_each(|(dst, src)| {
+                *dst = F::from_canonical_u8(*src);
+            });
+        core_row.imm = F::from_canonical_u16(record.imm);
     }
 }
 

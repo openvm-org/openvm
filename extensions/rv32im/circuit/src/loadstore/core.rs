@@ -292,7 +292,7 @@ where
         let Instruction { opcode, .. } = instruction;
 
         let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
-            adapter_width: A::WIDTH * size_of::<F>(),
+            adapter_width: A::WIDTH,
         });
 
         A::start(*state.pc, state.memory, &mut adapter_record);
@@ -329,49 +329,46 @@ where
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        let core_row: &mut LoadStoreCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
-
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        unsafe {
-            let ptr = core_row as *mut _ as *mut u8;
-            let record_buffer =
-                &*slice_from_raw_parts(ptr, size_of::<LoadStoreCoreRecord<NUM_CELLS>>());
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(core_row.as_ptr(), core_row.len());
             let record: &LoadStoreCoreRecord<NUM_CELLS> = record_buffer.borrow();
+            record
+        };
+        let core_row: &mut LoadStoreCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
 
-            let opcode = Rv32LoadStoreOpcode::from_usize(record.local_opcode as usize);
-            let shift = record.shift_amount;
+        let opcode = Rv32LoadStoreOpcode::from_usize(record.local_opcode as usize);
+        let shift = record.shift_amount;
 
-            let write_data =
-                run_write_data(opcode, record.read_data, record.prev_data, shift as usize);
-            // Writing in reverse order
-            core_row.write_data = write_data.map(F::from_canonical_u32);
-            core_row.prev_data = record.prev_data.map(F::from_canonical_u32);
-            core_row.read_data = record.read_data.map(F::from_canonical_u8);
-            core_row.is_load = F::from_bool([LOADW, LOADHU, LOADBU].contains(&opcode));
-            core_row.is_valid = F::ONE;
-            let flags = &mut core_row.flags;
-            *flags = [F::ZERO; 4];
-            match (opcode, shift) {
-                (LOADW, 0) => flags[0] = F::TWO,
-                (LOADHU, 0) => flags[1] = F::TWO,
-                (LOADHU, 2) => flags[2] = F::TWO,
-                (LOADBU, 0) => flags[3] = F::TWO,
+        let write_data = run_write_data(opcode, record.read_data, record.prev_data, shift as usize);
+        // Writing in reverse order
+        core_row.write_data = write_data.map(F::from_canonical_u32);
+        core_row.prev_data = record.prev_data.map(F::from_canonical_u32);
+        core_row.read_data = record.read_data.map(F::from_canonical_u8);
+        core_row.is_load = F::from_bool([LOADW, LOADHU, LOADBU].contains(&opcode));
+        core_row.is_valid = F::ONE;
+        let flags = &mut core_row.flags;
+        *flags = [F::ZERO; 4];
+        match (opcode, shift) {
+            (LOADW, 0) => flags[0] = F::TWO,
+            (LOADHU, 0) => flags[1] = F::TWO,
+            (LOADHU, 2) => flags[2] = F::TWO,
+            (LOADBU, 0) => flags[3] = F::TWO,
 
-                (LOADBU, 1) => flags[0] = F::ONE,
-                (LOADBU, 2) => flags[1] = F::ONE,
-                (LOADBU, 3) => flags[2] = F::ONE,
-                (STOREW, 0) => flags[3] = F::ONE,
+            (LOADBU, 1) => flags[0] = F::ONE,
+            (LOADBU, 2) => flags[1] = F::ONE,
+            (LOADBU, 3) => flags[2] = F::ONE,
+            (STOREW, 0) => flags[3] = F::ONE,
 
-                (STOREH, 0) => (flags[0], flags[1]) = (F::ONE, F::ONE),
-                (STOREH, 2) => (flags[0], flags[2]) = (F::ONE, F::ONE),
-                (STOREB, 0) => (flags[0], flags[3]) = (F::ONE, F::ONE),
-                (STOREB, 1) => (flags[1], flags[2]) = (F::ONE, F::ONE),
-                (STOREB, 2) => (flags[1], flags[3]) = (F::ONE, F::ONE),
-                (STOREB, 3) => (flags[2], flags[3]) = (F::ONE, F::ONE),
-                _ => unreachable!(),
-            };
-        }
+            (STOREH, 0) => (flags[0], flags[1]) = (F::ONE, F::ONE),
+            (STOREH, 2) => (flags[0], flags[2]) = (F::ONE, F::ONE),
+            (STOREB, 0) => (flags[0], flags[3]) = (F::ONE, F::ONE),
+            (STOREB, 1) => (flags[1], flags[2]) = (F::ONE, F::ONE),
+            (STOREB, 2) => (flags[1], flags[3]) = (F::ONE, F::ONE),
+            (STOREB, 3) => (flags[2], flags[3]) = (F::ONE, F::ONE),
+            _ => unreachable!(),
+        };
     }
 }
 

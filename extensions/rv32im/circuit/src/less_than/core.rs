@@ -220,7 +220,7 @@ where
         let Instruction { opcode, .. } = instruction;
 
         let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
-            adapter_width: A::WIDTH * size_of::<F>(),
+            adapter_width: A::WIDTH,
         });
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -262,77 +262,75 @@ where
     A: 'static + for<'a> AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        unsafe {
-            let (adapter_row, core_row) = row_slice.split_at_mut_unchecked(A::WIDTH);
-            self.adapter.fill_trace_row(mem_helper, adapter_row);
-            let core_row: &mut LessThanCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-
-            let ptr = core_row as *mut _ as *mut u8;
-            let record_buffer =
-                &*slice_from_raw_parts(ptr, size_of::<LessThanCoreRecord<NUM_LIMBS, LIMB_BITS>>());
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(core_row.as_ptr(), core_row.len());
             let record: &LessThanCoreRecord<NUM_LIMBS, LIMB_BITS> = record_buffer.borrow();
+            record
+        };
+        let core_row: &mut LessThanCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 
-            let is_slt = record.local_opcode == LessThanOpcode::SLT as u8;
-            let (cmp_result, diff_idx, b_sign, c_sign) =
-                run_less_than::<NUM_LIMBS, LIMB_BITS>(is_slt, &record.b, &record.c);
+        let is_slt = record.local_opcode == LessThanOpcode::SLT as u8;
+        let (cmp_result, diff_idx, b_sign, c_sign) =
+            run_less_than::<NUM_LIMBS, LIMB_BITS>(is_slt, &record.b, &record.c);
 
-            // We range check (b_msb_f + 128) and (c_msb_f + 128) if signed,
-            // b_msb_f and c_msb_f if not
-            let (b_msb_f, b_msb_range) = if b_sign {
-                (
-                    -F::from_canonical_u16((1u16 << LIMB_BITS) - record.b[NUM_LIMBS - 1] as u16),
-                    record.b[NUM_LIMBS - 1] - (1u8 << (LIMB_BITS - 1)),
-                )
+        // We range check (b_msb_f + 128) and (c_msb_f + 128) if signed,
+        // b_msb_f and c_msb_f if not
+        let (b_msb_f, b_msb_range) = if b_sign {
+            (
+                -F::from_canonical_u16((1u16 << LIMB_BITS) - record.b[NUM_LIMBS - 1] as u16),
+                record.b[NUM_LIMBS - 1] - (1u8 << (LIMB_BITS - 1)),
+            )
+        } else {
+            (
+                F::from_canonical_u8(record.b[NUM_LIMBS - 1]),
+                record.b[NUM_LIMBS - 1] + ((is_slt as u8) << (LIMB_BITS - 1)),
+            )
+        };
+        let (c_msb_f, c_msb_range) = if c_sign {
+            (
+                -F::from_canonical_u16((1u16 << LIMB_BITS) - record.c[NUM_LIMBS - 1] as u16),
+                record.c[NUM_LIMBS - 1] - (1u8 << (LIMB_BITS - 1)),
+            )
+        } else {
+            (
+                F::from_canonical_u8(record.c[NUM_LIMBS - 1]),
+                record.c[NUM_LIMBS - 1] + ((is_slt as u8) << (LIMB_BITS - 1)),
+            )
+        };
+
+        core_row.diff_val = if diff_idx == NUM_LIMBS {
+            F::ZERO
+        } else if diff_idx == (NUM_LIMBS - 1) {
+            if cmp_result {
+                c_msb_f - b_msb_f
             } else {
-                (
-                    F::from_canonical_u8(record.b[NUM_LIMBS - 1]),
-                    record.b[NUM_LIMBS - 1] + ((is_slt as u8) << (LIMB_BITS - 1)),
-                )
-            };
-            let (c_msb_f, c_msb_range) = if c_sign {
-                (
-                    -F::from_canonical_u16((1u16 << LIMB_BITS) - record.c[NUM_LIMBS - 1] as u16),
-                    record.c[NUM_LIMBS - 1] - (1u8 << (LIMB_BITS - 1)),
-                )
-            } else {
-                (
-                    F::from_canonical_u8(record.c[NUM_LIMBS - 1]),
-                    record.c[NUM_LIMBS - 1] + ((is_slt as u8) << (LIMB_BITS - 1)),
-                )
-            };
-
-            core_row.diff_val = if diff_idx == NUM_LIMBS {
-                F::ZERO
-            } else if diff_idx == (NUM_LIMBS - 1) {
-                if cmp_result {
-                    c_msb_f - b_msb_f
-                } else {
-                    b_msb_f - c_msb_f
-                }
-            } else if cmp_result {
-                F::from_canonical_u8(record.c[diff_idx] - record.b[diff_idx])
-            } else {
-                F::from_canonical_u8(record.b[diff_idx] - record.c[diff_idx])
-            };
-
-            self.bitwise_lookup_chip
-                .request_range(b_msb_range as u32, c_msb_range as u32);
-
-            core_row.diff_marker = [F::ZERO; NUM_LIMBS];
-            if diff_idx != NUM_LIMBS {
-                self.bitwise_lookup_chip
-                    .request_range(core_row.diff_val.as_canonical_u32() - 1, 0);
-                core_row.diff_marker[diff_idx] = F::ONE;
+                b_msb_f - c_msb_f
             }
+        } else if cmp_result {
+            F::from_canonical_u8(record.c[diff_idx] - record.b[diff_idx])
+        } else {
+            F::from_canonical_u8(record.b[diff_idx] - record.c[diff_idx])
+        };
 
-            core_row.c_msb_f = c_msb_f;
-            core_row.b_msb_f = b_msb_f;
-            core_row.opcode_sltu_flag = F::from_bool(!is_slt);
-            core_row.opcode_slt_flag = F::from_bool(is_slt);
-            core_row.cmp_result = F::from_bool(cmp_result);
-            core_row.c = record.c.map(F::from_canonical_u8);
-            core_row.b = record.b.map(F::from_canonical_u8);
+        self.bitwise_lookup_chip
+            .request_range(b_msb_range as u32, c_msb_range as u32);
+
+        core_row.diff_marker = [F::ZERO; NUM_LIMBS];
+        if diff_idx != NUM_LIMBS {
+            self.bitwise_lookup_chip
+                .request_range(core_row.diff_val.as_canonical_u32() - 1, 0);
+            core_row.diff_marker[diff_idx] = F::ONE;
         }
+
+        core_row.c_msb_f = c_msb_f;
+        core_row.b_msb_f = b_msb_f;
+        core_row.opcode_sltu_flag = F::from_bool(!is_slt);
+        core_row.opcode_slt_flag = F::from_bool(is_slt);
+        core_row.cmp_result = F::from_bool(cmp_result);
+        core_row.c = record.c.map(F::from_canonical_u8);
+        core_row.b = record.b.map(F::from_canonical_u8);
     }
 }
 

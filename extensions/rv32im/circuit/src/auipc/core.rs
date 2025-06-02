@@ -197,7 +197,7 @@ where
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv32AuipcStepRecord {
+pub struct Rv32AuipcCoreRecord {
     pub from_pc: u32,
     pub imm: u32,
 }
@@ -215,7 +215,7 @@ where
         + for<'a> AdapterTraceStep<F, CTX, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
 {
     type RecordLayout = AdapterCoreLayout;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut Rv32AuipcStepRecord);
+    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut Rv32AuipcCoreRecord);
 
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{:?}", AUIPC)
@@ -231,7 +231,7 @@ where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
     {
         let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
-            adapter_width: A::WIDTH * size_of::<F>(),
+            adapter_width: A::WIDTH,
         });
 
         A::start(*state.pc, state.memory, &mut adapter_record);
@@ -260,40 +260,40 @@ where
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(core_row.as_mut_ptr(), core_row.len());
+            let record: &Rv32AuipcCoreRecord = (*record_buffer).borrow();
+            record
+        };
+
         let core_row: &mut Rv32AuipcCoreCols<F> = core_row.borrow_mut();
 
-        unsafe {
-            let ptr = core_row as *mut _ as *mut u8;
-            let record_buffer = &*slice_from_raw_parts(ptr, size_of::<Rv32AuipcStepRecord>());
-            let record: &Rv32AuipcStepRecord = record_buffer.borrow();
+        let imm_limbs = record.imm.to_le_bytes();
+        let pc_limbs = record.from_pc.to_le_bytes();
+        let rd_data = run_auipc(record.from_pc, record.imm);
+        debug_assert_eq!(imm_limbs[3], 0);
 
-            let imm_limbs = record.imm.to_le_bytes();
-            let pc_limbs = record.from_pc.to_le_bytes();
-            let rd_data = run_auipc(record.from_pc, record.imm);
-            debug_assert_eq!(imm_limbs[3], 0);
-
-            // range checks:
-            // hardcoding for performance: first 3 limbs of imm_limbs, last 3 limbs of pc_limbs where
-            // most significant limb of pc_limbs is shifted up
+        // range checks:
+        // hardcoding for performance: first 3 limbs of imm_limbs, last 3 limbs of pc_limbs where
+        // most significant limb of pc_limbs is shifted up
+        self.bitwise_lookup_chip
+            .request_range(imm_limbs[0] as u32, imm_limbs[1] as u32);
+        self.bitwise_lookup_chip
+            .request_range(imm_limbs[2] as u32, pc_limbs[1] as u32);
+        let msl_shift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - PC_BITS;
+        self.bitwise_lookup_chip
+            .request_range(pc_limbs[2] as u32, (pc_limbs[3] as u32) << msl_shift);
+        for pair in rd_data.chunks_exact(2) {
             self.bitwise_lookup_chip
-                .request_range(imm_limbs[0] as u32, imm_limbs[1] as u32);
-            self.bitwise_lookup_chip
-                .request_range(imm_limbs[2] as u32, pc_limbs[1] as u32);
-            let msl_shift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - PC_BITS;
-            self.bitwise_lookup_chip
-                .request_range(pc_limbs[2] as u32, (pc_limbs[3] as u32) << msl_shift);
-            for pair in rd_data.chunks_exact(2) {
-                self.bitwise_lookup_chip
-                    .request_range(pair[0] as u32, pair[1] as u32);
-            }
-            // Writing in reverse order
-            core_row.rd_data = rd_data.map(F::from_canonical_u8);
-            // only the middle 2 limbs:
-            core_row.pc_limbs = from_fn(|i| F::from_canonical_u8(pc_limbs[i + 1]));
-            core_row.imm_limbs = from_fn(|i| F::from_canonical_u8(imm_limbs[i]));
-
-            core_row.is_valid = F::ONE;
+                .request_range(pair[0] as u32, pair[1] as u32);
         }
+        // Writing in reverse order
+        core_row.rd_data = rd_data.map(F::from_canonical_u8);
+        // only the middle 2 limbs:
+        core_row.pc_limbs = from_fn(|i| F::from_canonical_u8(pc_limbs[i + 1]));
+        core_row.imm_limbs = from_fn(|i| F::from_canonical_u8(imm_limbs[i]));
+
+        core_row.is_valid = F::ONE;
     }
 }
 

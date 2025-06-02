@@ -266,65 +266,63 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterTra
 {
     const WIDTH: usize = Rv32HeapBranchAdapterCols::<F, NUM_READS, READ_SIZE>::width();
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(adapter_row.as_ptr(), adapter_row.len());
+            let record: &Rv32HeapBranchAdapterRecord<NUM_READS> = record_buffer.borrow();
+            record
+        };
         let cols: &mut Rv32HeapBranchAdapterCols<F, NUM_READS, READ_SIZE> =
             adapter_row.borrow_mut();
 
-        unsafe {
-            let ptr = cols as *mut _ as *mut u8;
-            let record_buffer =
-                &*slice_from_raw_parts(ptr, size_of::<Rv32HeapBranchAdapterRecord<NUM_READS>>());
-            let record: &Rv32HeapBranchAdapterRecord<NUM_READS> = record_buffer.borrow();
+        // Range checks:
+        // **NOTE**: Must do the range checks before overwriting the records
+        debug_assert!(self.pointer_max_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
+        let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits;
+        const MSL_SHIFT: usize = RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
+        self.bitwise_lookup_chip.request_range(
+            (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
+            if NUM_READS > 1 {
+                (record.rs_vals[1] >> MSL_SHIFT) << limb_shift_bits
+            } else {
+                0
+            },
+        );
 
-            // Range checks:
-            // **NOTE**: Must do the range checks before overwriting the records
-            debug_assert!(self.pointer_max_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
-            let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits;
-            const MSL_SHIFT: usize = RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
-            self.bitwise_lookup_chip.request_range(
-                (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
-                if NUM_READS > 1 {
-                    (record.rs_vals[1] >> MSL_SHIFT) << limb_shift_bits
-                } else {
-                    0
-                },
+        // **NOTE**: Must iterate everything in reverse order to avoid overwriting the records
+        for i in (0..NUM_READS).rev() {
+            mem_helper.fill(
+                record.heap_read_aux[i].prev_timestamp,
+                record.from_timestamp + (i + NUM_READS) as u32,
+                cols.heap_read_aux[i].as_mut(),
             );
-
-            // **NOTE**: Must iterate everything in reverse order to avoid overwriting the records
-            for i in (0..NUM_READS).rev() {
-                mem_helper.fill(
-                    record.heap_read_aux[i].prev_timestamp,
-                    record.from_timestamp + (i + NUM_READS) as u32,
-                    cols.heap_read_aux[i].as_mut(),
-                );
-            }
-
-            for i in (0..NUM_READS).rev() {
-                mem_helper.fill(
-                    record.rs_read_aux[i].prev_timestamp,
-                    record.from_timestamp + i as u32,
-                    cols.rs_read_aux[i].as_mut(),
-                );
-            }
-
-            cols.rs_val
-                .iter_mut()
-                .rev()
-                .zip(record.rs_vals.iter().rev())
-                .for_each(|(col, record)| {
-                    *col = record.to_le_bytes().map(F::from_canonical_u8);
-                });
-
-            cols.rs_ptr
-                .iter_mut()
-                .rev()
-                .zip(record.rs_ptr.iter().rev())
-                .for_each(|(col, record)| {
-                    *col = F::from_canonical_u32(*record);
-                });
-
-            cols.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-            cols.from_state.pc = F::from_canonical_u32(record.from_pc);
         }
+
+        for i in (0..NUM_READS).rev() {
+            mem_helper.fill(
+                record.rs_read_aux[i].prev_timestamp,
+                record.from_timestamp + i as u32,
+                cols.rs_read_aux[i].as_mut(),
+            );
+        }
+
+        cols.rs_val
+            .iter_mut()
+            .rev()
+            .zip(record.rs_vals.iter().rev())
+            .for_each(|(col, record)| {
+                *col = record.to_le_bytes().map(F::from_canonical_u8);
+            });
+
+        cols.rs_ptr
+            .iter_mut()
+            .rev()
+            .zip(record.rs_ptr.iter().rev())
+            .for_each(|(col, record)| {
+                *col = F::from_canonical_u32(*record);
+            });
+
+        cols.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
+        cols.from_state.pc = F::from_canonical_u32(record.from_pc);
     }
 }
 

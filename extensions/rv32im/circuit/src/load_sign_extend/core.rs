@@ -229,7 +229,7 @@ where
         );
 
         let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
-            adapter_width: A::WIDTH * size_of::<F>(),
+            adapter_width: A::WIDTH,
         });
 
         A::start(*state.pc, state.memory, &mut adapter_record);
@@ -271,37 +271,34 @@ where
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(core_row.as_ptr(), core_row.len());
+            let record: &LoadSignExtendCoreRecord<NUM_CELLS> = record_buffer.borrow();
+            record
+        };
         let core_row: &mut LoadSignExtendCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
 
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let shift = record.shift_amount;
+        let most_sig_limb = if record.is_byte {
+            record.read_data[shift as usize]
+        } else {
+            record.read_data[NUM_CELLS / 2 - 1 + shift as usize]
+        };
 
-        unsafe {
-            let ptr = core_row as *mut _ as *mut u8;
-            let record_buffer =
-                &*slice_from_raw_parts(ptr, size_of::<LoadSignExtendCoreRecord<NUM_CELLS>>());
-            let record: &LoadSignExtendCoreRecord<NUM_CELLS> = record_buffer.borrow();
+        let most_sig_bit = most_sig_limb & (1 << 7);
+        self.range_checker_chip
+            .add_count((most_sig_limb - most_sig_bit) as u32, 7);
 
-            let shift = record.shift_amount;
-            let most_sig_limb = if record.is_byte {
-                record.read_data[shift as usize]
-            } else {
-                record.read_data[NUM_CELLS / 2 - 1 + shift as usize]
-            };
+        core_row.prev_data = record.prev_data.map(F::from_canonical_u8);
+        core_row.shifted_read_data = record.read_data.map(F::from_canonical_u8);
+        core_row.shifted_read_data.rotate_left((shift & 2) as usize);
 
-            let most_sig_bit = most_sig_limb & (1 << 7);
-            self.range_checker_chip
-                .add_count((most_sig_limb - most_sig_bit) as u32, 7);
-
-            core_row.prev_data = record.prev_data.map(F::from_canonical_u8);
-            core_row.shifted_read_data = record.read_data.map(F::from_canonical_u8);
-            core_row.shifted_read_data.rotate_left((shift & 2) as usize);
-
-            core_row.data_most_sig_bit = F::from_bool(most_sig_bit != 0);
-            core_row.shift_most_sig_bit = F::from_bool(shift & 2 == 2);
-            core_row.opcode_loadh_flag = F::from_bool(!record.is_byte);
-            core_row.opcode_loadb_flag1 = F::from_bool(record.is_byte && ((shift & 1) == 1));
-            core_row.opcode_loadb_flag0 = F::from_bool(record.is_byte && ((shift & 1) == 0));
-        }
+        core_row.data_most_sig_bit = F::from_bool(most_sig_bit != 0);
+        core_row.shift_most_sig_bit = F::from_bool(shift & 2 == 2);
+        core_row.opcode_loadh_flag = F::from_bool(!record.is_byte);
+        core_row.opcode_loadb_flag1 = F::from_bool(record.is_byte && ((shift & 1) == 1));
+        core_row.opcode_loadb_flag0 = F::from_bool(record.is_byte && ((shift & 1) == 0));
     }
 }
 

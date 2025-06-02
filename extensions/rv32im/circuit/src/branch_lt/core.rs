@@ -241,7 +241,7 @@ where
         let &Instruction { opcode, c: imm, .. } = instruction;
 
         let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
-            adapter_width: A::WIDTH * size_of::<F>(),
+            adapter_width: A::WIDTH,
         });
 
         A::start(*state.pc, state.memory, &mut adapter_record);
@@ -273,96 +273,92 @@ where
     A: 'static + for<'a> AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        unsafe {
-            let (adapter_row, core_row) = row_slice.split_at_mut_unchecked(A::WIDTH);
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-            self.adapter.fill_trace_row(mem_helper, adapter_row);
-            let core_row: &mut BranchLessThanCoreCols<F, NUM_LIMBS, LIMB_BITS> =
-                core_row.borrow_mut();
-            let ptr = core_row as *mut _ as *mut u8;
-            let record_buffer = &*slice_from_raw_parts(
-                ptr,
-                size_of::<BranchLessThanCoreRecord<NUM_LIMBS, LIMB_BITS>>(),
-            );
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(core_row.as_ptr(), core_row.len());
             let record: &BranchLessThanCoreRecord<NUM_LIMBS, LIMB_BITS> = record_buffer.borrow();
+            record
+        };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let core_row: &mut BranchLessThanCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 
-            let signed = record.local_opcode == BranchLessThanOpcode::BLT as u8
-                || record.local_opcode == BranchLessThanOpcode::BGE as u8;
-            let ge_op = record.local_opcode == BranchLessThanOpcode::BGE as u8
-                || record.local_opcode == BranchLessThanOpcode::BGEU as u8;
+        let signed = record.local_opcode == BranchLessThanOpcode::BLT as u8
+            || record.local_opcode == BranchLessThanOpcode::BGE as u8;
+        let ge_op = record.local_opcode == BranchLessThanOpcode::BGE as u8
+            || record.local_opcode == BranchLessThanOpcode::BGEU as u8;
 
-            let (cmp_result, diff_idx, a_sign, b_sign) =
-                run_cmp::<NUM_LIMBS, LIMB_BITS>(record.local_opcode, &record.a, &record.b);
+        let (cmp_result, diff_idx, a_sign, b_sign) =
+            run_cmp::<NUM_LIMBS, LIMB_BITS>(record.local_opcode, &record.a, &record.b);
 
-            let cmp_lt = cmp_result ^ ge_op;
+        let cmp_lt = cmp_result ^ ge_op;
 
-            // We range check (a_msb_f + 128) and (b_msb_f + 128) if signed,
-            // a_msb_f and b_msb_f if not
-            let (a_msb_f, a_msb_range) = if a_sign {
-                (
-                    -F::from_canonical_u32((1 << LIMB_BITS) - record.a[NUM_LIMBS - 1] as u32),
-                    record.a[NUM_LIMBS - 1] as u32 - (1 << (LIMB_BITS - 1)),
-                )
+        // We range check (a_msb_f + 128) and (b_msb_f + 128) if signed,
+        // a_msb_f and b_msb_f if not
+        let (a_msb_f, a_msb_range) = if a_sign {
+            (
+                -F::from_canonical_u32((1 << LIMB_BITS) - record.a[NUM_LIMBS - 1] as u32),
+                record.a[NUM_LIMBS - 1] as u32 - (1 << (LIMB_BITS - 1)),
+            )
+        } else {
+            (
+                F::from_canonical_u32(record.a[NUM_LIMBS - 1] as u32),
+                record.a[NUM_LIMBS - 1] as u32 + ((signed as u32) << (LIMB_BITS - 1)),
+            )
+        };
+        let (b_msb_f, b_msb_range) = if b_sign {
+            (
+                -F::from_canonical_u32((1 << LIMB_BITS) - record.b[NUM_LIMBS - 1] as u32),
+                record.b[NUM_LIMBS - 1] as u32 - (1 << (LIMB_BITS - 1)),
+            )
+        } else {
+            (
+                F::from_canonical_u32(record.b[NUM_LIMBS - 1] as u32),
+                record.b[NUM_LIMBS - 1] as u32 + ((signed as u32) << (LIMB_BITS - 1)),
+            )
+        };
+
+        core_row.diff_val = if diff_idx == NUM_LIMBS {
+            F::ZERO
+        } else if diff_idx == (NUM_LIMBS - 1) {
+            if cmp_lt {
+                b_msb_f - a_msb_f
             } else {
-                (
-                    F::from_canonical_u32(record.a[NUM_LIMBS - 1] as u32),
-                    record.a[NUM_LIMBS - 1] as u32 + ((signed as u32) << (LIMB_BITS - 1)),
-                )
-            };
-            let (b_msb_f, b_msb_range) = if b_sign {
-                (
-                    -F::from_canonical_u32((1 << LIMB_BITS) - record.b[NUM_LIMBS - 1] as u32),
-                    record.b[NUM_LIMBS - 1] as u32 - (1 << (LIMB_BITS - 1)),
-                )
-            } else {
-                (
-                    F::from_canonical_u32(record.b[NUM_LIMBS - 1] as u32),
-                    record.b[NUM_LIMBS - 1] as u32 + ((signed as u32) << (LIMB_BITS - 1)),
-                )
-            };
-
-            core_row.diff_val = if diff_idx == NUM_LIMBS {
-                F::ZERO
-            } else if diff_idx == (NUM_LIMBS - 1) {
-                if cmp_lt {
-                    b_msb_f - a_msb_f
-                } else {
-                    a_msb_f - b_msb_f
-                }
-            } else if cmp_lt {
-                F::from_canonical_u8(record.b[diff_idx] - record.a[diff_idx])
-            } else {
-                F::from_canonical_u8(record.a[diff_idx] - record.b[diff_idx])
-            };
-
-            self.bitwise_lookup_chip
-                .request_range(a_msb_range, b_msb_range);
-
-            core_row.diff_marker = [F::ZERO; NUM_LIMBS];
-
-            if diff_idx != NUM_LIMBS {
-                self.bitwise_lookup_chip
-                    .request_range(core_row.diff_val.as_canonical_u32() - 1, 0);
-                core_row.diff_marker[diff_idx] = F::ONE;
+                a_msb_f - b_msb_f
             }
+        } else if cmp_lt {
+            F::from_canonical_u8(record.b[diff_idx] - record.a[diff_idx])
+        } else {
+            F::from_canonical_u8(record.a[diff_idx] - record.b[diff_idx])
+        };
 
-            core_row.cmp_lt = F::from_bool(cmp_lt);
-            core_row.b_msb_f = b_msb_f;
-            core_row.a_msb_f = a_msb_f;
-            core_row.opcode_bgeu_flag =
-                F::from_bool(record.local_opcode == BranchLessThanOpcode::BGEU as u8);
-            core_row.opcode_bge_flag =
-                F::from_bool(record.local_opcode == BranchLessThanOpcode::BGE as u8);
-            core_row.opcode_bltu_flag =
-                F::from_bool(record.local_opcode == BranchLessThanOpcode::BLTU as u8);
-            core_row.opcode_blt_flag =
-                F::from_bool(record.local_opcode == BranchLessThanOpcode::BLT as u8);
+        self.bitwise_lookup_chip
+            .request_range(a_msb_range, b_msb_range);
 
-            core_row.imm = F::from_canonical_u32(record.imm);
-            core_row.cmp_result = F::from_bool(cmp_result);
-            core_row.b = record.b.map(F::from_canonical_u8);
-            core_row.a = record.a.map(F::from_canonical_u8);
+        core_row.diff_marker = [F::ZERO; NUM_LIMBS];
+
+        if diff_idx != NUM_LIMBS {
+            self.bitwise_lookup_chip
+                .request_range(core_row.diff_val.as_canonical_u32() - 1, 0);
+            core_row.diff_marker[diff_idx] = F::ONE;
         }
+
+        core_row.cmp_lt = F::from_bool(cmp_lt);
+        core_row.b_msb_f = b_msb_f;
+        core_row.a_msb_f = a_msb_f;
+        core_row.opcode_bgeu_flag =
+            F::from_bool(record.local_opcode == BranchLessThanOpcode::BGEU as u8);
+        core_row.opcode_bge_flag =
+            F::from_bool(record.local_opcode == BranchLessThanOpcode::BGE as u8);
+        core_row.opcode_bltu_flag =
+            F::from_bool(record.local_opcode == BranchLessThanOpcode::BLTU as u8);
+        core_row.opcode_blt_flag =
+            F::from_bool(record.local_opcode == BranchLessThanOpcode::BLT as u8);
+
+        core_row.imm = F::from_canonical_u32(record.imm);
+        core_row.cmp_result = F::from_bool(cmp_result);
+        core_row.b = record.b.map(F::from_canonical_u8);
+        core_row.a = record.a.map(F::from_canonical_u8);
     }
 }
 

@@ -182,7 +182,7 @@ where
         let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
-            adapter_width: A::WIDTH * size_of::<F>(),
+            adapter_width: A::WIDTH,
         });
 
         A::start(*state.pc, state.memory, &mut adapter_record);
@@ -213,35 +213,33 @@ where
     A: 'static + for<'a> AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        unsafe {
-            let (adapter_row, core_row) = row_slice.split_at_mut_unchecked(A::WIDTH);
-
-            self.adapter.fill_trace_row(mem_helper, adapter_row);
-            let core_row: &mut BranchEqualCoreCols<F, NUM_LIMBS> = core_row.borrow_mut();
-            let ptr = core_row as *mut _ as *mut u8;
-            let record_buffer =
-                &*slice_from_raw_parts(ptr, size_of::<BranchEqualCoreRecord<NUM_LIMBS>>());
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(core_row.as_ptr(), core_row.len());
             let record: &BranchEqualCoreRecord<NUM_LIMBS> = record_buffer.borrow();
+            record
+        };
+        let core_row: &mut BranchEqualCoreCols<F, NUM_LIMBS> = core_row.borrow_mut();
 
-            let (cmp_result, diff_idx, diff_inv_val) = run_eq::<F, NUM_LIMBS>(
-                record.local_opcode == BranchEqualOpcode::BEQ as u8,
-                &record.a,
-                &record.b,
-            );
-            core_row.diff_inv_marker = [F::ZERO; NUM_LIMBS];
-            core_row.diff_inv_marker[diff_idx] = diff_inv_val;
+        let (cmp_result, diff_idx, diff_inv_val) = run_eq::<F, NUM_LIMBS>(
+            record.local_opcode == BranchEqualOpcode::BEQ as u8,
+            &record.a,
+            &record.b,
+        );
+        core_row.diff_inv_marker = [F::ZERO; NUM_LIMBS];
+        core_row.diff_inv_marker[diff_idx] = diff_inv_val;
 
-            core_row.opcode_bne_flag =
-                F::from_bool(record.local_opcode == BranchEqualOpcode::BNE as u8);
-            core_row.opcode_beq_flag =
-                F::from_bool(record.local_opcode == BranchEqualOpcode::BEQ as u8);
+        core_row.opcode_bne_flag =
+            F::from_bool(record.local_opcode == BranchEqualOpcode::BNE as u8);
+        core_row.opcode_beq_flag =
+            F::from_bool(record.local_opcode == BranchEqualOpcode::BEQ as u8);
 
-            core_row.imm = F::from_canonical_u32(record.imm);
-            core_row.cmp_result = F::from_bool(cmp_result);
+        core_row.imm = F::from_canonical_u32(record.imm);
+        core_row.cmp_result = F::from_bool(cmp_result);
 
-            core_row.b = record.b.map(F::from_canonical_u8);
-            core_row.a = record.a.map(F::from_canonical_u8);
-        }
+        core_row.b = record.b.map(F::from_canonical_u8);
+        core_row.a = record.a.map(F::from_canonical_u8);
     }
 }
 

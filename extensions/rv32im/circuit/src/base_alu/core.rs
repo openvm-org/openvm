@@ -173,26 +173,6 @@ where
     }
 }
 
-pub struct BaseAluStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
-    pub offset: usize,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
-}
-
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluStep<A, NUM_LIMBS, LIMB_BITS> {
-    pub fn new(
-        adapter: A,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
-        offset: usize,
-    ) -> Self {
-        Self {
-            adapter,
-            offset,
-            bitwise_lookup_chip,
-        }
-    }
-}
-
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct BaseAluCoreRecord<const NUM_LIMBS: usize> {
@@ -201,6 +181,13 @@ pub struct BaseAluCoreRecord<const NUM_LIMBS: usize> {
     pub c: [u8; NUM_LIMBS],
     // Use u8 instead of usize for better packing
     pub local_opcode: u8,
+}
+
+#[derive(derive_new::new)]
+pub struct BaseAluStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+    pub offset: usize,
 }
 
 impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F, CTX>
@@ -236,7 +223,7 @@ where
 
         let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
-            adapter_width: A::WIDTH * size_of::<F>(),
+            adapter_width: A::WIDTH,
         });
 
         A::start(*state.pc, state.memory, &mut adapter_record);
@@ -272,6 +259,11 @@ where
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(core_row.as_ptr(), core_row.len());
+            let record: &BaseAluCoreRecord<NUM_LIMBS> = record_buffer.borrow();
+            record
+        };
         let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
         // SAFETY: the following is highly unsafe. We are going to cast `core_row` to a record
         // buffer, and then do an _overlapping_ write to the `core_row` as a row of field elements.
@@ -280,35 +272,29 @@ where
         //   non-overlapping)
         // - Do not overwrite any reference in `record` before it has already been used or moved
         // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic otherwise)
-        unsafe {
-            let ptr = core_row as *mut _ as *mut u8;
-            let record_buffer =
-                &*slice_from_raw_parts(ptr, size_of::<BaseAluCoreRecord<NUM_LIMBS>>());
-            let record: &BaseAluCoreRecord<NUM_LIMBS> = record_buffer.borrow();
 
-            // PERF: needless conversion
-            let local_opcode = BaseAluOpcode::from_usize(record.local_opcode as usize);
-            core_row.opcode_and_flag = F::from_bool(local_opcode == BaseAluOpcode::AND);
-            core_row.opcode_or_flag = F::from_bool(local_opcode == BaseAluOpcode::OR);
-            core_row.opcode_xor_flag = F::from_bool(local_opcode == BaseAluOpcode::XOR);
-            core_row.opcode_sub_flag = F::from_bool(local_opcode == BaseAluOpcode::SUB);
-            core_row.opcode_add_flag = F::from_bool(local_opcode == BaseAluOpcode::ADD);
+        // PERF: needless conversion
+        let local_opcode = BaseAluOpcode::from_usize(record.local_opcode as usize);
+        core_row.opcode_and_flag = F::from_bool(local_opcode == BaseAluOpcode::AND);
+        core_row.opcode_or_flag = F::from_bool(local_opcode == BaseAluOpcode::OR);
+        core_row.opcode_xor_flag = F::from_bool(local_opcode == BaseAluOpcode::XOR);
+        core_row.opcode_sub_flag = F::from_bool(local_opcode == BaseAluOpcode::SUB);
+        core_row.opcode_add_flag = F::from_bool(local_opcode == BaseAluOpcode::ADD);
 
-            if local_opcode == BaseAluOpcode::ADD || local_opcode == BaseAluOpcode::SUB {
-                for a_val in record.a {
-                    self.bitwise_lookup_chip
-                        .request_xor(a_val as u32, a_val as u32);
-                }
-            } else {
-                for (b_val, c_val) in zip(record.b, record.c) {
-                    self.bitwise_lookup_chip
-                        .request_xor(b_val as u32, c_val as u32);
-                }
+        if local_opcode == BaseAluOpcode::ADD || local_opcode == BaseAluOpcode::SUB {
+            for a_val in record.a {
+                self.bitwise_lookup_chip
+                    .request_xor(a_val as u32, a_val as u32);
             }
-            core_row.c = record.c.map(F::from_canonical_u8);
-            core_row.b = record.b.map(F::from_canonical_u8);
-            core_row.a = record.a.map(F::from_canonical_u8);
+        } else {
+            for (b_val, c_val) in zip(record.b, record.c) {
+                self.bitwise_lookup_chip
+                    .request_xor(b_val as u32, c_val as u32);
+            }
         }
+        core_row.c = record.c.map(F::from_canonical_u8);
+        core_row.b = record.b.map(F::from_canonical_u8);
+        core_row.a = record.a.map(F::from_canonical_u8);
     }
 }
 

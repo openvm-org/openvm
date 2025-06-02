@@ -433,7 +433,7 @@ where
         let Instruction { opcode, .. } = instruction;
 
         let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
-            adapter_width: A::WIDTH * size_of::<F>(),
+            adapter_width: A::WIDTH,
         });
 
         A::start(*state.pc, state.memory, &mut adapter_record);
@@ -478,98 +478,96 @@ where
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
-
-        let core_row: &mut DivRemCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        unsafe {
-            let ptr = core_row as *mut _ as *mut u8;
-            let record_buffer =
-                &*slice_from_raw_parts(ptr, size_of::<DivRemCoreRecords<NUM_LIMBS>>());
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(core_row.as_ptr(), core_row.len());
             let record: &DivRemCoreRecords<NUM_LIMBS> = record_buffer.borrow();
+            record
+        };
+        let core_row: &mut DivRemCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 
-            let opcode = DivRemOpcode::from_usize(record.local_opcode as usize);
-            let is_signed = opcode == DivRemOpcode::DIV || opcode == DivRemOpcode::REM;
+        let opcode = DivRemOpcode::from_usize(record.local_opcode as usize);
+        let is_signed = opcode == DivRemOpcode::DIV || opcode == DivRemOpcode::REM;
 
-            let (q, r, b_sign, c_sign, q_sign, case) = run_divrem::<NUM_LIMBS, LIMB_BITS>(
-                is_signed,
-                &record.b.map(u32::from),
-                &record.c.map(u32::from),
-            );
+        let (q, r, b_sign, c_sign, q_sign, case) = run_divrem::<NUM_LIMBS, LIMB_BITS>(
+            is_signed,
+            &record.b.map(u32::from),
+            &record.c.map(u32::from),
+        );
 
-            let carries = run_mul_carries::<NUM_LIMBS, LIMB_BITS>(
-                is_signed,
-                &record.c.map(u32::from),
-                &q,
-                &r,
-                q_sign,
-            );
-            for i in 0..NUM_LIMBS {
-                self.range_tuple_chip.add_count(&[q[i], carries[i]]);
-                self.range_tuple_chip
-                    .add_count(&[r[i], carries[i + NUM_LIMBS]]);
-            }
-
-            let sign_xor = b_sign ^ c_sign;
-            let r_prime = if sign_xor {
-                negate::<NUM_LIMBS, LIMB_BITS>(&r)
-            } else {
-                r
-            };
-            let r_zero = r.iter().all(|&v| v == 0) && case != DivRemCoreSpecialCase::ZeroDivisor;
-
-            if is_signed {
-                let b_sign_mask = if b_sign { 1 << (LIMB_BITS - 1) } else { 0 };
-                let c_sign_mask = if c_sign { 1 << (LIMB_BITS - 1) } else { 0 };
-                self.bitwise_lookup_chip.request_range(
-                    (record.b[NUM_LIMBS - 1] as u32 - b_sign_mask) << 1,
-                    (record.c[NUM_LIMBS - 1] as u32 - c_sign_mask) << 1,
-                );
-            }
-
-            // Write in a reverse order
-            core_row.opcode_remu_flag = F::from_bool(opcode == DivRemOpcode::REMU);
-            core_row.opcode_rem_flag = F::from_bool(opcode == DivRemOpcode::REM);
-            core_row.opcode_divu_flag = F::from_bool(opcode == DivRemOpcode::DIVU);
-            core_row.opcode_div_flag = F::from_bool(opcode == DivRemOpcode::DIV);
-
-            core_row.lt_diff = F::ZERO;
-            core_row.lt_marker = [F::ZERO; NUM_LIMBS];
-            if case == DivRemCoreSpecialCase::None && !r_zero {
-                let idx = run_sltu_diff_idx(&record.c.map(u32::from), &r_prime, c_sign);
-                let val = if c_sign {
-                    r_prime[idx] - record.c[idx] as u32
-                } else {
-                    record.c[idx] as u32 - r_prime[idx]
-                };
-                self.bitwise_lookup_chip.request_range(val - 1, 0);
-                core_row.lt_diff = F::from_canonical_u32(val);
-                core_row.lt_marker[idx] = F::ONE;
-            }
-
-            let r_prime_f = r_prime.map(F::from_canonical_u32);
-            core_row.r_inv = r_prime_f.map(|r| (r - F::from_canonical_u32(256)).inverse());
-            core_row.r_prime = r_prime_f;
-
-            let r_sum_f = r
-                .iter()
-                .fold(F::ZERO, |acc, r| acc + F::from_canonical_u32(*r));
-            core_row.r_sum_inv = r_sum_f.try_inverse().unwrap_or(F::ZERO);
-
-            let c_sum_f = F::from_canonical_u32(record.c.iter().fold(0, |acc, c| acc + *c as u32));
-            core_row.c_sum_inv = c_sum_f.try_inverse().unwrap_or(F::ZERO);
-
-            core_row.sign_xor = F::from_bool(sign_xor);
-            core_row.q_sign = F::from_bool(q_sign);
-            core_row.c_sign = F::from_bool(c_sign);
-            core_row.b_sign = F::from_bool(b_sign);
-
-            core_row.r_zero = F::from_bool(r_zero);
-            core_row.zero_divisor = F::from_bool(case == DivRemCoreSpecialCase::ZeroDivisor);
-
-            core_row.r = r.map(F::from_canonical_u32);
-            core_row.q = q.map(F::from_canonical_u32);
-            core_row.c = record.c.map(F::from_canonical_u8);
-            core_row.b = record.b.map(F::from_canonical_u8);
+        let carries = run_mul_carries::<NUM_LIMBS, LIMB_BITS>(
+            is_signed,
+            &record.c.map(u32::from),
+            &q,
+            &r,
+            q_sign,
+        );
+        for i in 0..NUM_LIMBS {
+            self.range_tuple_chip.add_count(&[q[i], carries[i]]);
+            self.range_tuple_chip
+                .add_count(&[r[i], carries[i + NUM_LIMBS]]);
         }
+
+        let sign_xor = b_sign ^ c_sign;
+        let r_prime = if sign_xor {
+            negate::<NUM_LIMBS, LIMB_BITS>(&r)
+        } else {
+            r
+        };
+        let r_zero = r.iter().all(|&v| v == 0) && case != DivRemCoreSpecialCase::ZeroDivisor;
+
+        if is_signed {
+            let b_sign_mask = if b_sign { 1 << (LIMB_BITS - 1) } else { 0 };
+            let c_sign_mask = if c_sign { 1 << (LIMB_BITS - 1) } else { 0 };
+            self.bitwise_lookup_chip.request_range(
+                (record.b[NUM_LIMBS - 1] as u32 - b_sign_mask) << 1,
+                (record.c[NUM_LIMBS - 1] as u32 - c_sign_mask) << 1,
+            );
+        }
+
+        // Write in a reverse order
+        core_row.opcode_remu_flag = F::from_bool(opcode == DivRemOpcode::REMU);
+        core_row.opcode_rem_flag = F::from_bool(opcode == DivRemOpcode::REM);
+        core_row.opcode_divu_flag = F::from_bool(opcode == DivRemOpcode::DIVU);
+        core_row.opcode_div_flag = F::from_bool(opcode == DivRemOpcode::DIV);
+
+        core_row.lt_diff = F::ZERO;
+        core_row.lt_marker = [F::ZERO; NUM_LIMBS];
+        if case == DivRemCoreSpecialCase::None && !r_zero {
+            let idx = run_sltu_diff_idx(&record.c.map(u32::from), &r_prime, c_sign);
+            let val = if c_sign {
+                r_prime[idx] - record.c[idx] as u32
+            } else {
+                record.c[idx] as u32 - r_prime[idx]
+            };
+            self.bitwise_lookup_chip.request_range(val - 1, 0);
+            core_row.lt_diff = F::from_canonical_u32(val);
+            core_row.lt_marker[idx] = F::ONE;
+        }
+
+        let r_prime_f = r_prime.map(F::from_canonical_u32);
+        core_row.r_inv = r_prime_f.map(|r| (r - F::from_canonical_u32(256)).inverse());
+        core_row.r_prime = r_prime_f;
+
+        let r_sum_f = r
+            .iter()
+            .fold(F::ZERO, |acc, r| acc + F::from_canonical_u32(*r));
+        core_row.r_sum_inv = r_sum_f.try_inverse().unwrap_or(F::ZERO);
+
+        let c_sum_f = F::from_canonical_u32(record.c.iter().fold(0, |acc, c| acc + *c as u32));
+        core_row.c_sum_inv = c_sum_f.try_inverse().unwrap_or(F::ZERO);
+
+        core_row.sign_xor = F::from_bool(sign_xor);
+        core_row.q_sign = F::from_bool(q_sign);
+        core_row.c_sign = F::from_bool(c_sign);
+        core_row.b_sign = F::from_bool(b_sign);
+
+        core_row.r_zero = F::from_bool(r_zero);
+        core_row.zero_divisor = F::from_bool(case == DivRemCoreSpecialCase::ZeroDivisor);
+
+        core_row.r = r.map(F::from_canonical_u32);
+        core_row.q = q.map(F::from_canonical_u32);
+        core_row.c = record.c.map(F::from_canonical_u8);
+        core_row.b = record.b.map(F::from_canonical_u8);
     }
 }
 

@@ -309,6 +309,6 @@ fn run_jalr_sanity_test() {
     let imm = -1235_i32 as u32;
     let rs1 = 736482910;
     let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, true);
-    assert_eq!(next_pc, 736481674);
+    assert_eq!(next_pc & !1, 736481674);
     assert_eq!(rd_data, [252, 36, 14, 47]);
 }

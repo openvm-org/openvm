@@ -9,7 +9,9 @@ use openvm_circuit_primitives::{
         check_carry_to_zero::get_carry_max_abs_and_bits,
         utils::*,
         OverflowInt,
-    }, var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip}, AlignedBorrow, SubAir, TraceSubRowGenerator
+    },
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    AlignedBorrow, SubAir, TraceSubRowGenerator,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,

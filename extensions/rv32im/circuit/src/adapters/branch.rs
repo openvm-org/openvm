@@ -184,33 +184,32 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32BranchAdapterStep {
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(adapter_row.as_ptr(), adapter_row.len());
+            let record: &Rv32BranchAdapterRecord = record_buffer.borrow();
+            record
+        };
         let adapter_row: &mut Rv32BranchAdapterCols<F> = adapter_row.borrow_mut();
 
-        unsafe {
-            let ptr = adapter_row as *mut _ as *mut u8;
-            let record_buffer = &*slice_from_raw_parts(ptr, size_of::<Rv32BranchAdapterRecord>());
-            let record: &Rv32BranchAdapterRecord = record_buffer.borrow();
-            // We must assign in reverse
+        // We must assign in reverse
+        let timestamp = record.from_timestamp;
 
-            let timestamp = record.from_timestamp;
+        mem_helper.fill(
+            record.reads_aux[1].prev_timestamp.into(),
+            timestamp + 1,
+            adapter_row.reads_aux[1].as_mut(),
+        );
 
-            mem_helper.fill(
-                record.reads_aux[1].prev_timestamp.into(),
-                timestamp + 1,
-                adapter_row.reads_aux[1].as_mut(),
-            );
+        mem_helper.fill(
+            record.reads_aux[0].prev_timestamp.into(),
+            timestamp,
+            adapter_row.reads_aux[0].as_mut(),
+        );
 
-            mem_helper.fill(
-                record.reads_aux[0].prev_timestamp.into(),
-                timestamp,
-                adapter_row.reads_aux[0].as_mut(),
-            );
-
-            adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
-            adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-            adapter_row.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
-            adapter_row.rs2_ptr = F::from_canonical_u32(record.rs2_ptr);
-        }
+        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
+        adapter_row.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
+        adapter_row.rs2_ptr = F::from_canonical_u32(record.rs2_ptr);
     }
 }
 
