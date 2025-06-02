@@ -58,27 +58,30 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
             })
             .collect::<Vec<_>>();
         for height in 1..=self.height {
-            let mut i = 0;
-            let mut new_layer = Vec::new();
-            while i < layer.len() {
-                let (index, values, old_values) = &layer[i];
-                let par_index = index >> 1;
-                i += 1;
+            let new_layer = layer
+                .iter()
+                .enumerate()
+                .filter_map(|(i, (index, values, old_values))| {
+                    if i > 0 && layer[i - 1].0 ^ 1 == *index {
+                        return None;
+                    }
 
-                if i < layer.len() && layer[i].0 == index ^ 1 {
-                    let (_, sibling_values, sibling_old_values) = &layer[i];
-                    i += 1;
-                    new_layer.push((
-                        par_index,
-                        Some((values, old_values)),
-                        Some((sibling_values, sibling_old_values)),
-                    ));
-                } else if index & 1 == 0 {
-                    new_layer.push((par_index, Some((values, old_values)), None));
-                } else {
-                    new_layer.push((par_index, None, Some((values, old_values))));
-                }
-            }
+                    let par_index = index >> 1;
+
+                    if i + 1 < layer.len() && layer[i + 1].0 == index ^ 1 {
+                        let (_, sibling_values, sibling_old_values) = &layer[i + 1];
+                        Some((
+                            par_index,
+                            Some((values, old_values)),
+                            Some((sibling_values, sibling_old_values)),
+                        ))
+                    } else if index & 1 == 0 {
+                        Some((par_index, Some((values, old_values)), None))
+                    } else {
+                        Some((par_index, None, Some((values, old_values))))
+                    }
+                })
+                .collect::<Vec<_>>();
 
             match rows {
                 None => {
