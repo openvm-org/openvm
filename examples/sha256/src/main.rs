@@ -1,3 +1,5 @@
+openvm::entry!(main);
+
 // ANCHOR: imports
 use core::hint::black_box;
 

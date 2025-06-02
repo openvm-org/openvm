@@ -4,7 +4,8 @@ pub use air::*;
 pub use columns::*;
 use enum_dispatch::enum_dispatch;
 use openvm_circuit_primitives::{
-    is_less_than::IsLtSubAir, var_range::SharedVariableRangeCheckerChip, TraceSubRowGenerator,
+    is_less_than::IsLtSubAir, utils::next_power_of_two_or_zero,
+    var_range::SharedVariableRangeCheckerChip, TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_stark_backend::{
@@ -13,7 +14,6 @@ use openvm_stark_backend::{
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    p3_util::log2_strict_usize,
     prover::types::AirProofInput,
     AirRef, Chip, ChipUsageGetter,
 };
@@ -63,38 +63,6 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         for (chip, oh) in self.chips.iter_mut().zip(overridden_heights) {
             chip.set_override_trace_heights(oh);
         }
-    }
-    pub fn add_record(&mut self, record: AccessAdapterRecord<F>) {
-        let n = record.data.len();
-        let idx = log2_strict_usize(n) - 1;
-        let chip = &mut self.chips[idx];
-        debug_assert!(chip.n() == n);
-        chip.add_record(record);
-    }
-
-    pub fn extend_records(&mut self, records: Vec<AccessAdapterRecord<F>>) {
-        for record in records {
-            self.add_record(record);
-        }
-    }
-
-    pub fn set_trace(&mut self, index: usize, trace: Vec<F>, width: usize)
-    where
-        F: PrimeField32,
-    {
-        self.chips[index].set_trace(RowMajorMatrix::new(trace, width));
-    }
-
-    #[cfg(test)]
-    pub fn records_for_n(&self, n: usize) -> &[AccessAdapterRecord<F>] {
-        let idx = log2_strict_usize(n) - 1;
-        let chip = &self.chips[idx];
-        chip.records()
-    }
-
-    #[cfg(test)]
-    pub fn total_records(&self) -> usize {
-        self.chips.iter().map(|chip| chip.records().len()).sum()
     }
 
     pub fn get_heights(&self) -> Vec<usize> {
@@ -159,12 +127,11 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         address: MemoryAddress<u32, u32>,
         values: &[F],
         timestamp: u32,
-        row_slice: &mut [F],
     ) where
         F: PrimeField32,
     {
         let index = get_chip_index(values.len());
-        self.chips[index].execute_split(address, values, timestamp, row_slice);
+        self.chips[index].execute_split(address, values, timestamp);
     }
 
     pub(crate) fn execute_merge(
@@ -173,18 +140,11 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         values: &[F],
         left_timestamp: u32,
         right_timestamp: u32,
-        row_slice: &mut [F],
     ) where
         F: PrimeField32,
     {
         let index = get_chip_index(values.len());
-        self.chips[index].execute_merge(
-            address,
-            values,
-            left_timestamp,
-            right_timestamp,
-            row_slice,
-        );
+        self.chips[index].execute_merge(address, values, left_timestamp, right_timestamp);
     }
 }
 
@@ -209,22 +169,13 @@ pub struct AccessAdapterRecord<T> {
 #[enum_dispatch]
 pub trait GenericAccessAdapterChipTrait<F> {
     fn set_override_trace_heights(&mut self, overridden_height: usize);
-    fn add_record(&mut self, record: AccessAdapterRecord<F>);
     fn n(&self) -> usize;
     fn generate_trace(self) -> RowMajorMatrix<F>
     where
         F: PrimeField32;
-    fn set_trace(&mut self, trace: RowMajorMatrix<F>)
-    where
-        F: PrimeField32;
 
-    fn execute_split(
-        &mut self,
-        address: MemoryAddress<u32, u32>,
-        values: &[F],
-        timestamp: u32,
-        row_slice: &mut [F],
-    ) where
+    fn execute_split(&mut self, address: MemoryAddress<u32, u32>, values: &[F], timestamp: u32)
+    where
         F: PrimeField32;
 
     fn execute_merge(
@@ -233,7 +184,6 @@ pub trait GenericAccessAdapterChipTrait<F> {
         values: &[F],
         left_timestamp: u32,
         right_timestamp: u32,
-        row_slice: &mut [F],
     ) where
         F: PrimeField32;
 }
@@ -267,24 +217,12 @@ impl<F: Clone + Send + Sync> GenericAccessAdapterChip<F> {
             _ => panic!("Only supports N in (2, 4, 8, 16, 32)"),
         }
     }
-
-    #[cfg(test)]
-    fn records(&self) -> &[AccessAdapterRecord<F>] {
-        match &self {
-            GenericAccessAdapterChip::N2(chip) => &chip.records,
-            GenericAccessAdapterChip::N4(chip) => &chip.records,
-            GenericAccessAdapterChip::N8(chip) => &chip.records,
-            GenericAccessAdapterChip::N16(chip) => &chip.records,
-            GenericAccessAdapterChip::N32(chip) => &chip.records,
-        }
-    }
 }
 
 pub struct AccessAdapterChip<F, const N: usize> {
     air: AccessAdapterAir<N>,
     range_checker: SharedVariableRangeCheckerChip,
-    pub records: Vec<AccessAdapterRecord<F>>,
-    trace: RowMajorMatrix<F>,
+    trace_cursor: Cursor<Vec<F>>,
     overridden_height: Option<usize>,
 }
 
@@ -298,8 +236,7 @@ impl<F: Clone + Send + Sync, const N: usize> AccessAdapterChip<F, N> {
         Self {
             air: AccessAdapterAir::<N> { memory_bus, lt_air },
             range_checker,
-            records: vec![],
-            trace: RowMajorMatrix::new(Vec::new(), 0),
+            trace_cursor: Cursor::new(Vec::new()),
             overridden_height: None,
         }
     }
@@ -308,9 +245,6 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
     fn set_override_trace_heights(&mut self, overridden_height: usize) {
         self.overridden_height = Some(overridden_height);
     }
-    fn add_record(&mut self, record: AccessAdapterRecord<F>) {
-        self.records.push(record);
-    }
     fn n(&self) -> usize {
         N
     }
@@ -318,70 +252,36 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
     where
         F: PrimeField32,
     {
-        let mut trace = self.trace;
+        let width = self.trace_width();
+        let mut trace = RowMajorMatrix::new(self.trace_cursor.into_inner(), width);
         let height = trace.height();
-        trace.pad_to_height(height.next_power_of_two(), F::ZERO);
+        let padded_height = if let Some(oh) = self.overridden_height {
+            assert!(
+                oh >= height,
+                "Overridden height {oh} is less than the required height {height}"
+            );
+            oh
+        } else {
+            height
+        };
+        let padded_height = next_power_of_two_or_zero(padded_height);
+        trace.pad_to_height(padded_height, F::ZERO);
         trace
         // TODO(AG): everything related to the calculated trace height
         // needs to be in memory controller, who owns these traces.
-
-        // let width = BaseAir::<F>::width(&self.air);
-        // let height = if let Some(oh) = self.overridden_height {
-        //     assert!(
-        //         oh >= self.records.len(),
-        //         "Overridden height is less than the required height"
-        //     );
-        //     oh
-        // } else {
-        //     self.records.len()
-        // };
-        // let height = next_power_of_two_or_zero(height);
-        // let mut values = F::zero_vec(height * width);
-
-        // values
-        //     .par_chunks_mut(width)
-        //     .zip(self.records.into_par_iter())
-        //     .for_each(|(row, record)| {
-        //         let row: &mut AccessAdapterCols<F, N> = row.borrow_mut();
-
-        //         row.is_valid = F::ONE;
-        //         row.values = record.data.try_into().unwrap();
-        //         row.address = MemoryAddress::new(record.address_space, record.start_index);
-
-        //         let (left_timestamp, right_timestamp) = match record.kind {
-        //             AccessAdapterRecordKind::Split => (record.timestamp, record.timestamp),
-        //             AccessAdapterRecordKind::Merge {
-        //                 left_timestamp,
-        //                 right_timestamp,
-        //             } => (left_timestamp, right_timestamp),
-        //         };
-        //         debug_assert_eq!(max(left_timestamp, right_timestamp), record.timestamp);
-
-        //         row.left_timestamp = F::from_canonical_u32(left_timestamp);
-        //         row.right_timestamp = F::from_canonical_u32(right_timestamp);
-        //         row.is_split = F::from_bool(record.kind == AccessAdapterRecordKind::Split);
-
-        //         self.air.lt_air.generate_subrow(
-        //             (self.range_checker.as_ref(), left_timestamp, right_timestamp),
-        //             (&mut row.lt_aux, &mut row.is_right_larger),
-        //         );
-        //     });
-        // RowMajorMatrix::new(values, width)
     }
 
-    fn set_trace(&mut self, trace: RowMajorMatrix<F>) {
-        self.trace = trace;
-    }
-
-    fn execute_split(
-        &mut self,
-        address: MemoryAddress<u32, u32>,
-        values: &[F],
-        timestamp: u32,
-        row_slice: &mut [F],
-    ) where
+    fn execute_split(&mut self, address: MemoryAddress<u32, u32>, values: &[F], timestamp: u32)
+    where
         F: PrimeField32,
     {
+        let row_slice = {
+            let begin = self.trace_cursor.position() as usize;
+            let end = begin + self.trace_width();
+            self.trace_cursor.get_mut().resize(end, F::ZERO);
+            self.trace_cursor.set_position(end as u64);
+            &mut self.trace_cursor.get_mut()[begin..end]
+        };
         let row: &mut AccessAdapterCols<F, N> = row_slice.borrow_mut();
         row.is_valid = F::ONE;
         row.is_split = F::ONE;
@@ -417,10 +317,16 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
         values: &[F],
         left_timestamp: u32,
         right_timestamp: u32,
-        row_slice: &mut [F],
     ) where
         F: PrimeField32,
     {
+        let row_slice = {
+            let begin = self.trace_cursor.position() as usize;
+            let end = begin + self.trace_width();
+            self.trace_cursor.get_mut().resize(end, F::ZERO);
+            self.trace_cursor.set_position(end as u64);
+            &mut self.trace_cursor.get_mut()[begin..end]
+        };
         let row: &mut AccessAdapterCols<F, N> = row_slice.borrow_mut();
         row.is_valid = F::ONE;
         row.is_split = F::ZERO;
@@ -470,7 +376,7 @@ impl<F, const N: usize> ChipUsageGetter for AccessAdapterChip<F, N> {
     }
 
     fn current_trace_height(&self) -> usize {
-        self.records.len()
+        self.trace_cursor.position() as usize / self.trace_width()
     }
 
     fn trace_width(&self) -> usize {

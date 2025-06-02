@@ -1,4 +1,6 @@
 #![allow(clippy::needless_range_loop)]
+openvm::entry!(main);
+
 use core::array;
 
 use openvm_bigint_guest::I256;

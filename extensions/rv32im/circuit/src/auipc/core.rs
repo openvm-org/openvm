@@ -6,9 +6,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, ImmInstruction, RecordArena, Result, StepExecutorE1, TraceFiller,
-        TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx}, AdapterAirContext, AdapterCoreLayout,
+        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, ImmInstruction, RecordArena,
+        Result, StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -307,17 +307,32 @@ where
         + for<'a> AdapterExecutorE1<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
 {
     fn execute_e1<Ctx>(
-        &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let Instruction { c: imm, .. } = instruction;
 
         let rd = run_auipc(*state.pc, imm.as_canonical_u32());
 
-        self.adapter.write(state.memory, instruction, &rd);
+        self.adapter.write(state, instruction, &rd);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += 1;
 
         Ok(())
     }

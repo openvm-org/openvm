@@ -17,6 +17,7 @@ openvm-circuit = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
+openvm-rv32im-transpiler = { workspace = true }
 openvm-native-compiler = { workspace = true }
 
 

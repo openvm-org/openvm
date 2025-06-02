@@ -5,6 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, ImmInstruction, RecordArena, Result, StepExecutorE1, TraceFiller,
         TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
@@ -252,15 +253,18 @@ where
     A: 'static + for<'a> AdapterExecutorE1<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
 {
     fn execute_e1<Ctx>(
-        &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let &Instruction { opcode, c: imm, .. } = instruction;
 
         let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let [rs1, rs2] = self.adapter.read(state.memory, instruction).into();
+        let [rs1, rs2] = self.adapter.read(state, instruction).into();
 
         let cmp_result = fast_run_eq(branch_eq_opcode, &rs1, &rs2);
 
@@ -271,6 +275,18 @@ where
         } else {
             *state.pc = state.pc.wrapping_add(self.pc_step);
         }
+
+        Ok(())
+    }
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += 1;
 
         Ok(())
     }

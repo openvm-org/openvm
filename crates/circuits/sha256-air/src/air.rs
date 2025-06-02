@@ -15,11 +15,11 @@ use openvm_stark_backend::{
 
 use super::{
     big_sig0_field, big_sig1_field, ch_field, compose, maj_field, small_sig0_field,
-    small_sig1_field, u32_into_limbs, Sha256DigestCols, Sha256RoundCols, SHA256_DIGEST_WIDTH,
-    SHA256_H, SHA256_HASH_WORDS, SHA256_K, SHA256_ROUNDS_PER_ROW, SHA256_ROUND_WIDTH,
-    SHA256_WORD_BITS, SHA256_WORD_U16S, SHA256_WORD_U8S,
+    small_sig1_field, Sha256DigestCols, Sha256RoundCols, SHA256_DIGEST_WIDTH, SHA256_H,
+    SHA256_HASH_WORDS, SHA256_K, SHA256_ROUNDS_PER_ROW, SHA256_ROUND_WIDTH, SHA256_WORD_BITS,
+    SHA256_WORD_U16S, SHA256_WORD_U8S,
 };
-use crate::constraint_word_addition;
+use crate::{constraint_word_addition, u32_into_u16s};
 
 /// Expects the message to be padded to a multiple of 512 bits
 #[derive(Clone, Debug)]
@@ -154,7 +154,7 @@ impl Sha256Air {
                     .assert_eq(
                         a_limb,
                         AB::Expr::from_canonical_u32(
-                            u32_into_limbs::<2>(SHA256_H[SHA256_ROUNDS_PER_ROW - i - 1])[j],
+                            u32_into_u16s(SHA256_H[SHA256_ROUNDS_PER_ROW - i - 1])[j],
                         ),
                     );
 
@@ -166,7 +166,7 @@ impl Sha256Air {
                     .assert_eq(
                         e_limb,
                         AB::Expr::from_canonical_u32(
-                            u32_into_limbs::<2>(SHA256_H[SHA256_ROUNDS_PER_ROW - i + 3])[j],
+                            u32_into_u16s(SHA256_H[SHA256_ROUNDS_PER_ROW - i + 3])[j],
                         ),
                     );
             }
@@ -561,9 +561,8 @@ impl Sha256Air {
                         .map(|rw_idx| {
                             (
                                 rw_idx,
-                                u32_into_limbs::<SHA256_WORD_U16S>(
-                                    SHA256_K[rw_idx * SHA256_ROUNDS_PER_ROW + i],
-                                )[j] as usize,
+                                u32_into_u16s(SHA256_K[rw_idx * SHA256_ROUNDS_PER_ROW + i])[j]
+                                    as usize,
                             )
                         })
                         .collect::<Vec<_>>(),

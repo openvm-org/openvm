@@ -34,11 +34,12 @@ use rand::{rngs::StdRng, Rng};
 
 use super::air::VerifyBatchBus;
 use crate::{
-    poseidon2::{chip::NativePoseidon2Chip, CHUNK},
+    poseidon2::{new_native_poseidon2_chip, CHUNK},
     NativeConfig,
 };
 
 const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus::new(7);
+const MAX_INS_CAPACITY: usize = 1 << 15;
 
 fn compute_commit<F: Field>(
     dim: &[usize],
@@ -155,12 +156,13 @@ fn test<const N: usize>(cases: [Case; N]) {
 
     let mut tester = VmChipTestBuilder::default();
     let streams = Arc::new(Mutex::new(Streams::default()));
-    let mut chip = NativePoseidon2Chip::<F, SBOX_REGISTERS>::new(
+    let mut chip = new_native_poseidon2_chip::<F, SBOX_REGISTERS>(
         tester.system_port(),
-        tester.offline_memory_mutex_arc(),
         Poseidon2Config::default(),
         VERIFY_BATCH_BUS,
         streams.clone(),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
     );
 
     let mut rng = create_seeded_rng();
@@ -174,7 +176,7 @@ fn test<const N: usize>(cases: [Case; N]) {
             random_instance(&mut rng, row_lengths, opened_element_size, |left, right| {
                 let concatenated =
                     std::array::from_fn(|i| if i < CHUNK { left[i] } else { right[i - CHUNK] });
-                let permuted = chip.subchip.permute(concatenated);
+                let permuted = chip.step.subchip.permute(concatenated);
                 (
                     std::array::from_fn(|i| permuted[i]),
                     std::array::from_fn(|i| permuted[i + CHUNK]),
@@ -218,7 +220,7 @@ fn test<const N: usize>(cases: [Case; N]) {
                 [row_pointer, opened_row.len() / opened_element_size],
             );
             for (j, &opened_value) in opened_row.iter().enumerate() {
-                tester.write_cell(address_space, row_pointer + j, opened_value);
+                tester.write(address_space, row_pointer + j, [opened_value]);
             }
         }
         streams
@@ -226,7 +228,7 @@ fn test<const N: usize>(cases: [Case; N]) {
             .push(proof.iter().flatten().copied().collect());
         drop(streams);
         for (i, &bit) in sibling_is_on_right.iter().enumerate() {
-            tester.write_cell(address_space, index_base_pointer + i, F::from_bool(bit));
+            tester.write(address_space, index_base_pointer + i, [F::from_bool(bit)]);
         }
         tester.write(address_space, commit_pointer, commit);
 
@@ -385,12 +387,13 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
 
     let mut tester = VmChipTestBuilder::default();
     let streams = Arc::new(Mutex::new(Streams::default()));
-    let mut chip = NativePoseidon2Chip::<F, SBOX_REGISTERS>::new(
+    let mut chip = new_native_poseidon2_chip::<F, SBOX_REGISTERS>(
         tester.system_port(),
-        tester.offline_memory_mutex_arc(),
         Poseidon2Config::default(),
         VERIFY_BATCH_BUS,
         streams.clone(),
+        MAX_INS_CAPACITY,
+        tester.memory_helper(),
     );
 
     let mut rng = create_seeded_rng();
@@ -417,12 +420,12 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
         let data: [_; 2 * CHUNK] =
             std::array::from_fn(|_| BabyBear::from_canonical_usize(rng.gen_range(elem_range())));
 
-        let hash = chip.subchip.permute(data);
+        let hash = chip.step.subchip.permute(data);
 
-        tester.write_cell(d, a, BabyBear::from_canonical_usize(dst));
-        tester.write_cell(d, b, BabyBear::from_canonical_usize(lhs));
+        tester.write(d, a, [BabyBear::from_canonical_usize(dst)]);
+        tester.write(d, b, [BabyBear::from_canonical_usize(lhs)]);
         if opcode == COMP_POS2 {
-            tester.write_cell(d, c, BabyBear::from_canonical_usize(rhs));
+            tester.write(d, c, [BabyBear::from_canonical_usize(rhs)]);
         }
 
         match opcode {

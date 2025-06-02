@@ -6,9 +6,10 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, RecordArena, Result, SignedImmInstruction, StepExecutorE1, TraceFiller,
-        TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx}, AdapterAirContext, AdapterCoreLayout,
+        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, RecordArena, Result,
+        SignedImmInstruction, StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface,
+        VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -338,20 +339,35 @@ where
         >,
 {
     fn execute_e1<Ctx>(
-        &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let Instruction { c, g, .. } = instruction;
 
-        let rs1 = u32::from_le_bytes(self.adapter.read(state.memory, instruction));
+        let rs1 = u32::from_le_bytes(self.adapter.read(state, instruction));
 
         let (to_pc, rd) = run_jalr(*state.pc, rs1, c.as_canonical_u32() as u16, g.is_one());
         let rd = rd.map(|x| x as u8);
 
-        self.adapter.write(state.memory, instruction, &rd);
+        self.adapter.write(state, instruction, &rd);
 
         *state.pc = to_pc & !1;
+
+        Ok(())
+    }
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += 1;
 
         Ok(())
     }

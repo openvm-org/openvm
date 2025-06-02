@@ -3,6 +3,7 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_circuit::{
     arch::{
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, DynAdapterInterface, DynArray,
         MinimalInstruction, Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir,
         VmStateMut,
@@ -288,6 +289,9 @@ where
     // We will be setting is_valid = 0. That forces all flags be 0 (otherwise setup will be -1).
     // We generate a dummy row with all flags set to 0, then we set is_valid = 0.
     fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, row: &mut [F]) {
+        if !self.should_finalize {
+            return;
+        }
         let inputs: Vec<BigUint> = vec![BigUint::zero(); self.num_inputs()];
         let flags: Vec<bool> = vec![false; self.num_flags()];
         let core_row = &mut row[A::WIDTH..];
@@ -307,16 +311,30 @@ where
         + for<'a> AdapterExecutorE1<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
 {
     fn execute_e1<Ctx>(
-        &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
-        let data: DynArray<_> = self.adapter.read(state.memory, instruction).into();
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+        let data: DynArray<_> = self.adapter.read(state, instruction).into();
 
         let writes = run_field_expression(self, &data, instruction).0;
-        self.adapter
-            .write(state.memory, instruction, &writes.into());
+        self.adapter.write(state, instruction, &writes.into());
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        Ok(())
+    }
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += 1;
+
         Ok(())
     }
 }

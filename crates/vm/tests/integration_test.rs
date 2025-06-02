@@ -7,10 +7,16 @@ use std::{
 
 use openvm_circuit::{
     arch::{
+        create_and_initialize_chip_complex,
+        execution_control::ExecutionControl,
+        execution_mode::{
+            e1::E1ExecutionControl, tracegen::TracegenExecutionControlWithSegmentation,
+        },
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
+        interpreter::InterpretedInstance,
         ChipId, MemoryConfig, SingleSegmentVmExecutor, SystemConfig, SystemTraceHeights,
-        TracegenVmExecutionState, TracegenVmSegmentExecutor, VirtualMachine, VmComplexTraceHeights,
-        VmConfig, VmInventoryTraceHeights,
+        VirtualMachine, VmComplexTraceHeights, VmConfig, VmInventoryTraceHeights,
+        VmSegmentExecutor, VmSegmentState,
     },
     system::{
         memory::{MemoryTraceHeights, VolatileMemoryTraceHeights, CHUNK},
@@ -656,7 +662,7 @@ fn test_vm_hint() {
         Instruction::from_isize(LOADW.global_opcode(), 38, 0, 32, 4, 4),
         Instruction::large_from_isize(ADD.global_opcode(), 44, 20, 0, 4, 4, 0, 0),
         Instruction::from_isize(MUL.global_opcode(), 24, 38, 1, 4, 4),
-        Instruction::large_from_isize(ADD.global_opcode(), 20, 20, 24, 4, 4, 1, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 20, 20, 24, 4, 4, 4, 0),
         Instruction::large_from_isize(ADD.global_opcode(), 50, 16, 0, 4, 4, 0, 0),
         Instruction::from_isize(
             JAL.global_opcode(),
@@ -713,19 +719,25 @@ fn test_hint_load_1() {
 
     let program = Program::from_instructions(&instructions);
 
-    let mut segment = TracegenVmSegmentExecutor::new(
+    let chip_complex = create_and_initialize_chip_complex(
         &test_native_config(),
         program,
         vec![vec![F::ONE, F::TWO]].into(),
         None,
+    )
+    .unwrap();
+    let ctrl = TracegenExecutionControlWithSegmentation::new(chip_complex.air_names());
+    let ctx = ExecutionControl::<F, NativeConfig>::initialize_context(&ctrl);
+    let mut segment = VmSegmentExecutor::<F, NativeConfig, _>::new(
+        chip_complex,
         vec![],
         Default::default(),
+        ctrl,
     );
-    let mut vm_state = TracegenVmExecutionState::from_pc_and_memory_controller(
-        0,
-        segment.chip_complex.memory_controller(),
-    );
-    segment.execute_from_state(&mut vm_state).unwrap();
+
+    let mut exec_state = VmSegmentState::new(0, 0, None, ctx);
+    segment.execute_from_state(&mut exec_state).unwrap();
+
     let streams = segment.chip_complex.take_streams();
     assert!(streams.input_stream.is_empty());
     assert_eq!(streams.hint_stream, VecDeque::from(vec![F::ZERO]));
@@ -754,26 +766,34 @@ fn test_hint_load_2() {
 
     let program = Program::from_instructions(&instructions);
 
-    let mut segment = TracegenVmSegmentExecutor::new(
+    let chip_complex = create_and_initialize_chip_complex(
         &test_native_config(),
         program,
         vec![vec![F::ONE, F::TWO], vec![F::TWO, F::ONE]].into(),
         None,
+    )
+    .unwrap();
+    let ctrl = TracegenExecutionControlWithSegmentation::new(chip_complex.air_names());
+    let ctx = ExecutionControl::<F, NativeConfig>::initialize_context(&ctrl);
+    let mut segment = VmSegmentExecutor::<F, NativeConfig, _>::new(
+        chip_complex,
         vec![],
         Default::default(),
+        ctrl,
     );
-    let mut vm_state = TracegenVmExecutionState::from_pc_and_memory_controller(
-        0,
-        segment.chip_complex.memory_controller(),
-    );
-    segment.execute_from_state(&mut vm_state).unwrap();
-    assert_eq!(
+
+    let mut exec_state = VmSegmentState::new(0, 0, None, ctx);
+    segment.execute_from_state(&mut exec_state).unwrap();
+
+    let [read] = unsafe {
         segment
             .chip_complex
             .memory_controller()
-            .unsafe_read_cell::<F>(F::from_canonical_usize(4), F::from_canonical_usize(32)),
-        F::ZERO
-    );
+            .memory
+            .data
+            .read::<F, 1>(4, 32)
+    };
+    assert_eq!(read, F::ZERO);
     let streams = segment.chip_complex.take_streams();
     assert!(streams.input_stream.is_empty());
     assert_eq!(streams.hint_stream, VecDeque::from(vec![F::ONE]));
@@ -781,4 +801,78 @@ fn test_hint_load_2() {
         streams.hint_space,
         vec![vec![F::ONE, F::TWO], vec![F::TWO, F::ONE]]
     );
+}
+
+#[test]
+fn test_vm_pure_execution_non_continuation() {
+    type F = BabyBear;
+    let n = 6;
+    /*
+    Instruction 0 assigns word[0]_4 to n.
+    Instruction 4 terminates
+    The remainder is a loop that decrements word[0]_4 until it reaches 0, then terminates.
+    Instruction 1 checks if word[0]_4 is 0 yet, and if so sets pc to 5 in order to terminate
+    Instruction 2 decrements word[0]_4 (using word[1]_4)
+    Instruction 3 uses JAL as a simple jump to go back to instruction 1 (repeating the loop).
+     */
+    let instructions = vec![
+        // word[0]_4 <- word[n]_0
+        Instruction::large_from_isize(ADD.global_opcode(), 0, n, 0, 4, 0, 0, 0),
+        // if word[0]_4 == 0 then pc += 3 * DEFAULT_PC_STEP
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BEQ).global_opcode(),
+            0,
+            0,
+            3 * DEFAULT_PC_STEP as isize,
+            4,
+            0,
+        ),
+        // word[0]_4 <- word[0]_4 - word[1]_4
+        Instruction::large_from_isize(SUB.global_opcode(), 0, 0, 1, 4, 4, 0, 0),
+        // word[2]_4 <- pc + DEFAULT_PC_STEP, pc -= 2 * DEFAULT_PC_STEP
+        Instruction::from_isize(
+            JAL.global_opcode(),
+            2,
+            -2 * DEFAULT_PC_STEP as isize,
+            0,
+            4,
+            0,
+        ),
+        // terminate
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let program = Program::from_instructions(&instructions);
+
+    let executor = InterpretedInstance::<F, _>::new(test_native_config(), program);
+    executor
+        .execute(E1ExecutionControl::new(None), vec![])
+        .expect("Failed to execute");
+}
+
+#[test]
+fn test_vm_pure_execution_continuation() {
+    type F = BabyBear;
+    let instructions = vec![
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 1, 0, 2, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 2, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 3, 0, 2, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 4, 0, 2, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 5, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 6, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(ADD.global_opcode(), 7, 0, 2, 4, 0, 0, 0),
+        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 4, 4),
+        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 4, 4),
+        Instruction::from_isize(FE4SUB.global_opcode(), 12, 0, 4, 4, 4),
+        Instruction::from_isize(BBE4MUL.global_opcode(), 12, 0, 4, 4, 4),
+        Instruction::from_isize(BBE4DIV.global_opcode(), 12, 0, 4, 4, 4),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let program = Program::from_instructions(&instructions);
+    let executor = InterpretedInstance::<F, _>::new(test_native_continuations_config(), program);
+    executor
+        .execute(E1ExecutionControl::new(None), vec![])
+        .expect("Failed to execute");
 }

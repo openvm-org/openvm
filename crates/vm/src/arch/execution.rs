@@ -11,7 +11,10 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::Streams;
+use super::{
+    execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+    Streams,
+};
 use crate::system::{
     memory::{
         online::{GuestMemory, TracingMemory},
@@ -114,9 +117,19 @@ pub trait InstructionExecutor<F> {
 /// New trait for instruction execution
 pub trait InsExecutorE1<F> {
     fn execute_e1<Ctx>(
-        &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        F: PrimeField32,
+        Ctx: E1E2ExecutionCtx;
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
     ) -> Result<()>
     where
         F: PrimeField32;
@@ -127,14 +140,28 @@ where
     C: InsExecutorE1<F>,
 {
     fn execute_e1<Ctx>(
-        &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
         F: PrimeField32,
+        Ctx: E1E2ExecutionCtx,
     {
         self.borrow_mut().execute_e1(state, instruction)
+    }
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()>
+    where
+        F: PrimeField32,
+    {
+        self.borrow_mut()
+            .execute_metered(state, instruction, chip_index)
     }
 }
 
@@ -364,7 +391,7 @@ impl<T: FieldAlgebra> From<(u32, Option<T>)> for PcIncOrSet<T> {
 /// `a,b` and `c_upper = c.as_canonical_u32() >> 16`.
 pub trait PhantomSubExecutor<F>: Send {
     fn phantom_execute(
-        &mut self,
+        &self,
         memory: &GuestMemory,
         streams: &mut Streams<F>,
         discriminant: PhantomDiscriminant,
