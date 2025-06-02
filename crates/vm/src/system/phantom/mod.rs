@@ -23,10 +23,13 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-use super::memory::{online::GuestMemory, MemoryController};
+use super::memory::{
+    online::{GuestMemory, TracingMemory},
+    MemoryController,
+};
 use crate::{
     arch::{
-        execution_mode::{e1::E1Ctx, metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{e1::E1Ctx, metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutorE1,
         InstructionExecutor, PcIncOrSet, PhantomSubExecutor, Streams, VmStateMut,
     },
@@ -186,6 +189,35 @@ where
         _chip_index: usize,
     ) -> Result<(), ExecutionError> {
         self.execute_e1(state, instruction)?;
+
+        Ok(())
+    }
+
+    fn execute_tracegen(
+        &mut self,
+        state: &mut VmStateMut<TracingMemory<F>, TracegenCtx<F>>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<(), ExecutionError> {
+        let &Instruction { a, b, c, .. } = instruction;
+
+        let offset = state.ctx.buffer_indices[chip_index];
+        let width = state.ctx.trace_widths[chip_index];
+        let row: &mut PhantomCols<F> =
+            state.ctx.trace_buffers[chip_index][offset..offset + width].borrow_mut();
+
+        row.is_valid = F::ONE;
+        row.pc = F::from_canonical_u32(*state.pc);
+        row.timestamp = F::from_canonical_u32(state.memory.timestamp);
+        row.operands = [a, b, c];
+
+        let mut state_e1 = VmStateMut {
+            pc: state.pc,
+            memory: &mut state.memory.data,
+            ctx: &mut E1Ctx::default(),
+        };
+        self.execute_e1(&mut state_e1, instruction)?;
+        state.memory.increment_timestamp();
 
         Ok(())
     }

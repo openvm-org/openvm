@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface,
         MinimalInstruction, Result, StepExecutorE1, TraceStep, VmCoreAir, VmStateMut,
     },
@@ -143,13 +143,12 @@ where
     }
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for PublicValuesCoreStep<A, F>
+impl<F, A> TraceStep<F> for PublicValuesCoreStep<A, F>
 where
     F: PrimeField32,
     A: 'static
         + for<'a> AdapterTraceStep<
             F,
-            CTX,
             ReadData = [[F; 1]; 2],
             WriteData = [[F; 1]; 0],
             TraceContext<'a> = (),
@@ -164,12 +163,14 @@ where
 
     fn execute(
         &mut self,
-        state: VmStateMut<TracingMemory<F>, CTX>,
+        state: &mut VmStateMut<TracingMemory<F>, TracegenCtx<F>>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
+        chip_index: usize,
     ) -> Result<()> {
+        let width = state.ctx.trace_widths[chip_index];
+        let trace = &mut state.ctx.trace_buffers[chip_index];
+        let trace_offset = &mut state.ctx.buffer_indices[chip_index];
+
         let row_slice = &mut trace[*trace_offset..*trace_offset + width];
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 

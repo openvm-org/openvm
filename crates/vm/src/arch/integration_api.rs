@@ -159,10 +159,10 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 /// buffer during both instruction execution and trace generation.
 /// It is expected that no additional memory allocation is necessary and the trace buffer
 /// is sufficient, with possible overwriting.
-pub trait TraceStep<F, CTX> {
+pub trait TraceStep<F> {
     fn execute(
         &mut self,
-        state: &mut VmStateMut<TracingMemory<F>, CTX>,
+        state: &mut VmStateMut<TracingMemory<F>, TracegenCtx<F>>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()>;
@@ -243,8 +243,7 @@ where
 impl<F, AIR, STEP> InstructionExecutor<F> for NewVmChipWrapper<F, AIR, STEP>
 where
     F: PrimeField32,
-    STEP: TraceStep<F, ()> // TODO: CTX?
-        + StepExecutorE1<F>,
+    STEP: TraceStep<F> + StepExecutorE1<F>,
 {
     fn execute(
         &mut self,
@@ -286,7 +285,7 @@ impl<SC, AIR, STEP> Chip<SC> for NewVmChipWrapper<Val<SC>, AIR, STEP>
 where
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
-    STEP: TraceStep<Val<SC>, ()> + Send + Sync,
+    STEP: TraceStep<Val<SC>> + Send + Sync,
     AIR: Clone + AnyRap<SC> + 'static,
 {
     fn air(&self) -> AirRef<SC> {
@@ -349,7 +348,7 @@ where
 /// [TraceStep]. Note that this is only a helper trait when the same interface of state access
 /// is reused or shared by multiple implementations. It is not required to implement this trait if
 /// it is easier to implement the [TraceStep] trait directly without this trait.
-pub trait AdapterTraceStep<F, CTX> {
+pub trait AdapterTraceStep<F> {
     /// Adapter row width
     const WIDTH: usize;
     type ReadData;
@@ -433,7 +432,7 @@ pub trait StepExecutorE1<F> {
 impl<F, A, S> InsExecutorE1<F> for NewVmChipWrapper<F, A, S>
 where
     F: PrimeField32,
-    S: StepExecutorE1<F> + TraceStep<F, TracegenCtx<F>>,
+    S: StepExecutorE1<F> + TraceStep<F>,
 {
     fn execute_e1<Ctx>(
         &mut self,
@@ -461,9 +460,6 @@ where
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {
-        // &mut state.ctx.trace_buffers[chip_index],
-        // &mut state.ctx.buffer_indices[chip_index],
-        // state.ctx.trace_widths[chip_index],
         self.step.execute(state, instruction, chip_index)?;
         Ok(())
     }

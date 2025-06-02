@@ -776,6 +776,9 @@ where
             segment.set_override_trace_heights(overridden_heights.clone());
         }
 
+        // TODO(ayush): fix this
+        let trace_widths = vec![];
+        let trace_heights = vec![];
         let ctx = TracegenCtx::new(trace_widths, trace_heights);
         let mut exec_state = VmSegmentState::new(0, exe.pc_start, None, ctx);
         metrics_span("execute_time_ms", || {
