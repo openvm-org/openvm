@@ -273,11 +273,9 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     }
 }
 
-impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
+impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceFiller<F, CTX>
     for Rv32BaseAluAdapterStep<LIMB_BITS>
 {
-    const WIDTH: usize = size_of::<Rv32BaseAluAdapterCols<u8>>();
-
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
         // SAFETY: the following is highly unsafe. We are going to cast `adapter_row` to a record
         // buffer, and then do an _overlapping_ write to the `adapter_row` as a row of field

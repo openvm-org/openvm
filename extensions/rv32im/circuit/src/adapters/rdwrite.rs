@@ -254,9 +254,7 @@ where
     }
 }
 
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32RdWriteAdapterStep {
-    const WIDTH: usize = size_of::<Rv32RdWriteAdapterCols<u8>>();
-
+impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32RdWriteAdapterStep {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
         let record = unsafe {
@@ -361,9 +359,7 @@ where
     }
 }
 
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32CondRdWriteAdapterStep {
-    const WIDTH: usize = size_of::<Rv32CondRdWriteAdapterCols<u8>>();
-
+impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32CondRdWriteAdapterStep {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
         let record = unsafe {
@@ -377,7 +373,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32CondRdWriteAdapterStep {
 
         if record.rd_ptr != u32::MAX {
             unsafe {
-                self.inner.fill_trace_row(
+                <Rv32RdWriteAdapterStep as AdapterTraceFiller<F, CTX>>::fill_trace_row(
+                    &self.inner,
                     mem_helper,
                     adapter_row
                         .split_at_mut_unchecked(size_of::<Rv32RdWriteAdapterCols<u8>>())

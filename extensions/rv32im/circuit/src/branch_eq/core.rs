@@ -210,7 +210,7 @@ where
 impl<F, CTX, A, const NUM_LIMBS: usize> TraceFiller<F, CTX> for BranchEqualStep<A, NUM_LIMBS>
 where
     F: PrimeField32,
-    A: 'static + for<'a> AdapterTraceFiller<F>,
+    A: 'static + AdapterTraceFiller<F, CTX>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };

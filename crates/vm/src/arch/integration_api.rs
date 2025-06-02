@@ -443,10 +443,7 @@ pub trait AdapterTraceStep<F, CTX> {
 
 // NOTE[jpw]: cannot reuse `TraceSubRowGenerator` trait because we need associated constant
 // `WIDTH`.
-pub trait AdapterTraceFiller<F> {
-    /// Adapter sub-air column width
-    const WIDTH: usize;
-
+pub trait AdapterTraceFiller<F, CTX>: AdapterTraceStep<F, CTX> {
     /// Post-execution filling of rest of adapter row.
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]);
 }

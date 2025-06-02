@@ -228,8 +228,7 @@ where
         }
     }
 }
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32JalrAdapterStep {
-    const WIDTH: usize = size_of::<Rv32JalrAdapterCols<u8>>();
+impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32JalrAdapterStep {
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {

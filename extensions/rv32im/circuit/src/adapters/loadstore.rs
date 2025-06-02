@@ -480,11 +480,7 @@ where
     }
 }
 
-impl<F> AdapterTraceFiller<F> for Rv32LoadStoreAdapterStep
-where
-    F: PrimeField32,
-{
-    const WIDTH: usize = size_of::<Rv32LoadStoreAdapterCols<u8>>();
+impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32LoadStoreAdapterStep {
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {

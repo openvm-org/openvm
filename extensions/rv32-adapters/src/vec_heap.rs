@@ -428,16 +428,15 @@ impl<
 
 impl<
         F: PrimeField32,
+        CTX,
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
-    > AdapterTraceFiller<F>
+    > AdapterTraceFiller<F, CTX>
     for Rv32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
 {
-    const WIDTH: usize = <Self as AdapterTraceStep<F, ()>>::WIDTH;
-
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
         let record = unsafe {
             let record_buffer = &*slice_from_raw_parts(adapter_row.as_ptr(), adapter_row.len());

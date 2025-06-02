@@ -161,13 +161,16 @@ where
     }
 }
 
-impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
-    AdapterTraceFiller<F> for Rv32HeapAdapterStep<NUM_READS, READ_SIZE, WRITE_SIZE>
+impl<
+        F: PrimeField32,
+        CTX,
+        const NUM_READS: usize,
+        const READ_SIZE: usize,
+        const WRITE_SIZE: usize,
+    > AdapterTraceFiller<F, CTX> for Rv32HeapAdapterStep<NUM_READS, READ_SIZE, WRITE_SIZE>
 {
-    const WIDTH: usize = <Self as AdapterTraceStep<F, ()>>::WIDTH;
-
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
-        AdapterTraceFiller::<F>::fill_trace_row(&self.0, mem_helper, adapter_row);
+        AdapterTraceFiller::<F, CTX>::fill_trace_row(&self.0, mem_helper, adapter_row);
     }
 }
 

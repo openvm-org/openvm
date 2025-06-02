@@ -179,8 +179,7 @@ where
         // This function is intentionally left empty
     }
 }
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32BranchAdapterStep {
-    const WIDTH: usize = size_of::<Rv32BranchAdapterCols<u8>>();
+impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32BranchAdapterStep {
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {

@@ -215,8 +215,7 @@ where
     }
 }
 
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32MultAdapterStep {
-    const WIDTH: usize = size_of::<Rv32MultAdapterCols<u8>>();
+impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32MultAdapterStep {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
         let record = unsafe {
