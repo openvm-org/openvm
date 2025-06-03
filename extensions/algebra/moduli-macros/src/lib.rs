@@ -239,10 +239,10 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                /// SAFETY: `dst_ptr` must be a raw pointer to `&mut Self`.
-                /// It will be written to only at the very end .
+                /// # Safety
+                /// - `dst_ptr` must be a raw pointer to `&mut Self`. It will be written to only at the very end.
                 #[inline(always)]
-                unsafe fn add_refs_impl(&self, other: &Self, dst_ptr: *mut Self) {
+                unsafe fn add_refs_impl<const CHECK_SETUP: bool>(&self, other: &Self, dst_ptr: *mut Self) {
                     #[cfg(not(target_os = "zkvm"))]
                     {
                         let mut res = self.clone();
@@ -253,14 +253,14 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::set_up_once();
-                        unsafe {
-                            #add_extern_func(
-                                dst_ptr as usize,
-                                self as *const #struct_name as usize,
-                                other as *const #struct_name as usize,
-                            );
+                        if CHECK_SETUP {
+                            Self::set_up_once();
                         }
+                        #add_extern_func(
+                            dst_ptr as usize,
+                            self as *const #struct_name as usize,
+                            other as *const #struct_name as usize,
+                        );
                     }
                 }
 
@@ -449,7 +449,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         unsafe {
                             // SAFETY: we borrow self as &Self and as *mut Self but
                             // the latter will only be written to at the very end.
-                            self.add_refs_impl(self, self as *const Self as *mut Self);
+                            self.add_refs_impl::<true>(self, self as *const Self as *mut Self);
                         }
                     }
 
@@ -502,6 +502,13 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     unsafe fn eq_impl<const CHECK_SETUP: bool>(&self, other: &Self) -> bool {
                         Self::eq_impl::<CHECK_SETUP>(self, other)
                     }
+
+                    #[inline(always)]
+                    unsafe fn add_ref<const CHECK_SETUP: bool>(&self, other: &Self) -> Self {
+                        let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
+                        self.add_refs_impl::<CHECK_SETUP>(other, uninit.as_mut_ptr());
+                        uninit.assume_init()
+                    }
                 }
 
                 impl<'a> core::ops::AddAssign<&'a #struct_name> for #struct_name {
@@ -540,11 +547,8 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     type Output = #struct_name;
                     #[inline(always)]
                     fn add(self, other: &'a #struct_name) -> Self::Output {
-                        let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
-                        unsafe {
-                            self.add_refs_impl(other, uninit.as_mut_ptr());
-                            uninit.assume_init()
-                        }
+                        // Safety: ensure setup
+                        unsafe { self.add_ref::<true>(other) }
                     }
                 }
 

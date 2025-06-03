@@ -253,13 +253,19 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
                     use openvm_algebra_guest::IntMod;
 
+                    if CHECK_SETUP {
+                        // Call setup here so we skip it below
+                        #intmod_type::set_up_once();
+                    }
+
                     if self.is_identity_impl::<CHECK_SETUP>() {
                         *self = p2.clone();
                     } else if p2.is_identity_impl::<CHECK_SETUP>() {
                         // do nothing
-                    } else if unsafe { self.x.eq_impl::<CHECK_SETUP>(&p2.x) } {
-                        // Safety: Self::set_up_once() ensures that IntMod::set_up_once() is called
-                        if unsafe { IntMod::eq_impl::<CHECK_SETUP>(&(&self.y + &p2.y), &<#intmod_type as IntMod>::ZERO) } {
+                    } else if unsafe { self.x.eq_impl::<false>(&p2.x) } { // Safety: we called IntMod setup above
+                        let sum_ys = unsafe { self.y.add_ref::<false>(&p2.y) };
+                        // Safety: we called IntMod setup above
+                        if unsafe { IntMod::eq_impl::<false>(&sum_ys, &<#intmod_type as IntMod>::ZERO) } {
                             *self = Self::identity();
                         } else {
                             unsafe {

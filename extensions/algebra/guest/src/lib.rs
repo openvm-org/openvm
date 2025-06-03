@@ -241,6 +241,14 @@ pub trait IntMod:
     ///   `Self::set_up_once()`. Only set `CHECK_SETUP` to `false` if you are sure that setup has
     ///   been called already.
     unsafe fn eq_impl<const CHECK_SETUP: bool>(&self, other: &Self) -> bool;
+
+    /// Add two elements.
+    ///
+    /// # Safety
+    /// - If `CHECK_SETUP` is true, checks if setup has been called for this curve and if not, calls
+    ///   `Self::set_up_once()`. Only set `CHECK_SETUP` to `false` if you are sure that setup has
+    ///   been called already.
+    unsafe fn add_ref<const CHECK_SETUP: bool>(&self, other: &Self) -> Self;
 }
 
 // Ref: https://docs.rs/elliptic-curve/latest/elliptic_curve/ops/trait.Reduce.html
