@@ -1,6 +1,8 @@
 use openvm_stark_backend::{
     p3_field::PrimeField32,
-    p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
+    p3_maybe_rayon::prelude::{
+        FromParallelIterator, IntoParallelIterator, ParallelExtend, ParallelIterator,
+    },
 };
 use rustc_hash::FxHashMap;
 
@@ -47,12 +49,11 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
     ) where
         CompressFn: Fn(&[F; CHUNK], &[F; CHUNK]) -> [F; CHUNK] + Send + Sync,
     {
-        let mut new_entries = Vec::new();
+        let mut new_entries = layer.clone();
         let mut layer = layer
-            .into_iter()
+            .into_par_iter()
             .map(|(index, values)| {
                 let old_values = self.nodes.get(&index).unwrap_or(&self.zero_nodes[0]);
-                new_entries.push((index, values));
                 (index, values, *old_values)
             })
             .collect::<Vec<_>>();
@@ -185,9 +186,9 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
 
         if self.nodes.is_empty() {
             // This, for example, should happen in every `from_memory` call
-            self.nodes = FxHashMap::from_iter(new_entries);
+            self.nodes = FxHashMap::from_par_iter(new_entries.into_par_iter());
         } else {
-            self.nodes.extend(new_entries);
+            self.nodes.par_extend(new_entries.into_par_iter());
         }
     }
 
