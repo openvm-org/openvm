@@ -298,10 +298,13 @@ pub struct Rv32HintStoreRecord {
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct Rv32HintStoreVar {
-    pub data: [u8; RV32_REGISTER_NUM_LIMBS],
     pub data_write_aux: MemoryWriteAuxRecord<RV32_REGISTER_NUM_LIMBS>,
+    pub data: [u8; RV32_REGISTER_NUM_LIMBS],
 }
 
+/// **SAFETY**: the order of the fields in `Rv32HintStoreRecord` and `Rv32HintStoreVar` is important.
+/// The chip also assumes that the offset of the fields `write_aux` and `data` in `Rv32HintStoreCols`
+/// is bigger than `size_of::<Rv32HintStoreRecord>()`
 #[derive(Debug)]
 pub struct Rv32HintStoreRecordMut<'a> {
     pub inner: &'a mut Rv32HintStoreRecord,
@@ -521,7 +524,9 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep<F> {
                 let mut mem_ptr =
                     record.inner.mem_ptr + (num_words * RV32_REGISTER_NUM_LIMBS) as u32;
 
-                // going from last row to the first row
+                // Assuming that `num_words` is usually small (e.g. 1 for `HINT_STOREW`)
+                // it is better to do a serial pass of the rows per instructon (going from the last row to the first row)
+                // instead of a parallel pass, since need to copy the record to a new buffer in parallel case.
                 chunk
                     .rchunks_exact_mut(trace.width)
                     .zip(record.var.iter().enumerate().rev())
@@ -584,7 +589,6 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep<F> {
                             .map(|x| F::from_canonical_u8(x));
                         cols.is_buffer = F::from_bool(!is_single);
                         cols.is_single = F::from_bool(is_single);
-                        println!("cols: {:?}", cols);
                     });
             })
     }
