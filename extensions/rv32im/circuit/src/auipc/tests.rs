@@ -1,9 +1,9 @@
-use std::{borrow::BorrowMut, sync::Arc};
+use std::borrow::BorrowMut;
 
 use openvm_circuit::arch::{
     execution_mode::tracegen::TracegenCtx,
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    NewVmChipWrapper, TraceStep, VmAirWrapper,
+    VmAirWrapper,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -11,16 +11,14 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
     },
-    prover::types::AirProofInput,
     utils::disable_debug_builder,
-    Chip, ChipUsageGetter,
+    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -30,7 +28,7 @@ use crate::{
     adapters::{
         Rv32RdWriteAdapterAir, Rv32RdWriteAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
-    test_utils::get_verification_error,
+    test_utils::{generate_air_proof_input_with_trace, get_verification_error},
 };
 
 const IMM_BITS: usize = 24;
@@ -55,23 +53,6 @@ fn create_test_chip(
     );
 
     (chip, bitwise_chip)
-}
-
-fn generate_air_proof_input<SC, AIR, STEP>(
-    chip: NewVmChipWrapper<Val<SC>, AIR, STEP>,
-    trace: RowMajorMatrix<Val<SC>>,
-) -> (Arc<AIR>, AirProofInput<SC>)
-where
-    SC: StarkGenericConfig,
-    Val<SC>: Field,
-    AIR: BaseAir<Val<SC>>,
-    STEP: TraceStep<Val<SC>> + Send + Sync,
-{
-    let public_values = chip.step.generate_public_values();
-    let air_proof_input = AirProofInput::simple(trace, public_values);
-    let air = Arc::new(chip.air);
-
-    (air, air_proof_input)
 }
 
 fn set_and_execute(
@@ -128,7 +109,7 @@ fn rand_auipc_test() {
     chip.fill_trace(&mut ctx.trace_buffers[0]);
 
     let mut traces = ctx.into_matrices();
-    let (air, air_proof_input) = generate_air_proof_input(chip, traces.remove(0));
+    let (air, air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
 
     let tester = tester
         .build()
@@ -197,7 +178,7 @@ fn run_negative_auipc_test(
     chip.fill_trace(&mut ctx.trace_buffers[0]);
 
     let mut traces = ctx.into_matrices();
-    let (air, mut air_proof_input) = generate_air_proof_input(chip, traces.remove(0));
+    let (air, mut air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
 
     let trace = air_proof_input.raw.common_main.as_mut().unwrap();
     modify_trace(trace);
