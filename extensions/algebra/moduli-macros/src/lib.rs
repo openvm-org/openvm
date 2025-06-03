@@ -353,12 +353,17 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                 }
 
                 // Helper function to call the setup instruction on first use
+                #[cfg(target_os = "zkvm")]
                 fn set_up_once() {
                     static is_setup: ::openvm_algebra_guest::once_cell::race::OnceBool = ::openvm_algebra_guest::once_cell::race::OnceBool::new();
                     is_setup.get_or_init(|| {
                         unsafe { #moduli_setup_extern_func(); }
                         true
                     });
+                }
+                #[cfg(not(target_os = "zkvm"))]
+                fn set_up_once() {
+                    // No-op for non-ZKVM targets
                 }
             }
 

@@ -192,6 +192,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 }
 
                 // Helper function to call the setup instruction on first use
+                #[cfg(target_os = "zkvm")]
                 fn set_up_once() {
                     static is_setup: ::openvm_ecc_guest::once_cell::race::OnceBool = ::openvm_ecc_guest::once_cell::race::OnceBool::new();
                     is_setup.get_or_init(|| {
