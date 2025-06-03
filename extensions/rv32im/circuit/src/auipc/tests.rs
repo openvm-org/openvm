@@ -91,7 +91,7 @@ fn rand_auipc_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
-    let mut ctx = TracegenCtx::new(vec![chip.trace_width()], vec![1 << 22]);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {
@@ -146,7 +146,7 @@ fn run_negative_auipc_test(
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
-    let mut ctx = TracegenCtx::new(vec![chip.trace_width()], vec![1 << 22]);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
 
     set_and_execute(
         &mut tester,

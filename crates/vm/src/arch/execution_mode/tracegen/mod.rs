@@ -8,15 +8,23 @@ pub use segmentation::TracegenExecutionControlWithSegmentation;
 // TODO(ayush): this should be generic over arena
 #[derive(Debug)]
 pub struct TracegenCtx<F> {
-    pub trace_buffers: Vec<Vec<F>>,
-    // TODO(ayush): see if i need this here, can get from airs
     pub trace_widths: Vec<usize>,
+    pub trace_buffers: Vec<Vec<F>>,
     // TODO(ayush): for segmentation, remove from tracegen
     pub since_last_segment_check: usize,
 }
 
 impl<F: Field> TracegenCtx<F> {
-    pub fn new(trace_widths: Vec<usize>, trace_heights: Vec<usize>) -> Self {
+    pub fn new(trace_widths: Vec<usize>) -> Self {
+        let trace_buffers = vec![Vec::new(); trace_widths.len()];
+        Self {
+            trace_widths,
+            trace_buffers,
+            since_last_segment_check: 0,
+        }
+    }
+
+    pub fn new_with_capacity(trace_widths: Vec<usize>, trace_heights: Vec<usize>) -> Self {
         let trace_buffers = trace_widths
             .iter()
             .zip(trace_heights.iter())
@@ -24,8 +32,8 @@ impl<F: Field> TracegenCtx<F> {
             .collect();
 
         Self {
-            trace_buffers,
             trace_widths,
+            trace_buffers,
             since_last_segment_check: 0,
         }
     }
