@@ -66,7 +66,11 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> ChipUsageGetter
     }
 
     fn current_trace_height(&self) -> usize {
-        0 // TODO: take it into account somehow
+        if self.finalized {
+            self.records.len()
+        } else {
+            0 // TODO: take it into account somehow
+        }
     }
 
     fn trace_width(&self) -> usize {

@@ -47,14 +47,13 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
     ) where
         CompressFn: Fn(&[F; CHUNK], &[F; CHUNK]) -> [F; CHUNK] + Send + Sync,
     {
+        let mut new_entries = Vec::new();
         let mut layer = layer
             .into_iter()
             .map(|(index, values)| {
-                let old_values = self
-                    .nodes
-                    .insert(index, values)
-                    .unwrap_or(self.zero_nodes[0]);
-                (index, values, old_values)
+                let old_values = self.nodes.get(&index).unwrap_or(&self.zero_nodes[0]);
+                new_entries.push((index, values));
+                (index, values, *old_values)
             })
             .collect::<Vec<_>>();
         for height in 1..=self.height {
@@ -181,9 +180,14 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                     layer = tmp;
                 }
             }
-            for (idx, values, _) in layer.iter() {
-                self.nodes.insert(*idx, *values);
-            }
+            new_entries.extend(layer.iter().map(|(idx, values, _)| (*idx, *values)));
+        }
+
+        if self.nodes.is_empty() {
+            // This, for example, should happen in every `from_memory` call
+            self.nodes = FxHashMap::from_iter(new_entries);
+        } else {
+            self.nodes.extend(new_entries);
         }
     }
 

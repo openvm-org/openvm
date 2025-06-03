@@ -21,6 +21,7 @@ pub struct Poseidon2PeripheryBaseChip<F: PrimeField32, const SBOX_REGISTERS: usi
     pub air: Arc<Poseidon2PeripheryAir<F, SBOX_REGISTERS>>,
     pub subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
     pub records: DashMap<[F; PERIPHERY_POSEIDON2_WIDTH], AtomicU32, FxBuildHasher>,
+    pub finalized: bool,
 }
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS> {
@@ -33,7 +34,13 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> Poseidon2PeripheryBaseChip<F,
             )),
             subchip,
             records: DashMap::default(),
+            finalized: false,
         }
+    }
+
+    /// Switches what `current_trace_height` returns
+    pub fn finalize(&mut self) {
+        self.finalized = true;
     }
 }
 
