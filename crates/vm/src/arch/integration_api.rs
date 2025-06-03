@@ -343,7 +343,8 @@ where
 
     // TODO(ayush): remove
     fn current_trace_height(&self) -> usize {
-        unimplemented!()
+        // unimplemented!()
+        0
     }
 
     fn trace_width(&self) -> usize {

@@ -124,7 +124,7 @@ fn rand_rv32_alu_test(opcode: BaseAluOpcode, num_ops: usize) {
 
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
-    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
+    let mut ctx = TracegenCtx::new(&[chip.trace_width()]);
 
     // TODO(AG): make a more meaningful test for memory accesses
     tester.write(2, 1024, [F::ONE; 4]);
@@ -168,7 +168,7 @@ fn rand_rv32_alu_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
 
     let mut tester = VmChipTestBuilder::default_persistent();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
-    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
+    let mut ctx = TracegenCtx::new(&[chip.trace_width()]);
 
     // TODO(AG): make a more meaningful test for memory accesses
     tester.write(2, 1024, [F::ONE; 4]);
@@ -223,7 +223,7 @@ fn run_negative_alu_test(
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
-    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
+    let mut ctx = TracegenCtx::new(&[chip.trace_width()]);
 
     let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
 

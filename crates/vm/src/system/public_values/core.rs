@@ -167,7 +167,7 @@ where
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {
-        let width = state.ctx.trace_widths[chip_index];
+        let width = state.ctx.main_widths[chip_index];
 
         let row_slice = state.ctx.alloc(chip_index);
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };

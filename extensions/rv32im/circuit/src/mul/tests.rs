@@ -100,7 +100,7 @@ fn run_rv32_mul_rand_test() {
     let mut tester = VmChipTestBuilder::default();
 
     let (mut chip, range_tuple_checker) = create_test_chip(&mut tester);
-    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
+    let mut ctx = TracegenCtx::new(&[chip.trace_width()]);
 
     let num_ops = 100;
     for _ in 0..num_ops {
@@ -139,7 +139,7 @@ fn run_negative_mul_test(
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, range_tuple_chip) = create_test_chip(&mut tester);
-    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
+    let mut ctx = TracegenCtx::new(&[chip.trace_width()]);
 
     let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
 

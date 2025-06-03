@@ -161,7 +161,7 @@ fn rand_hintstore_test() {
     let mut tester = VmChipTestBuilder::default();
 
     let (mut chip, bitwise_chip) = create_test_chip(&mut tester);
-    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
+    let mut ctx = TracegenCtx::new(&[chip.trace_width()]);
 
     let num_ops: usize = 100;
     for _ in 0..num_ops {
@@ -201,7 +201,7 @@ fn run_negative_hintstore_test(
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&mut tester);
-    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
+    let mut ctx = TracegenCtx::new(&[chip.trace_width()]);
 
     set_and_execute(&mut tester, &mut chip, &mut ctx, &mut rng, opcode);
 
@@ -247,7 +247,7 @@ fn execute_roundtrip_sanity_test() {
     let mut tester = VmChipTestBuilder::default();
 
     let (mut chip, _) = create_test_chip(&mut tester);
-    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
+    let mut ctx = TracegenCtx::new(&[chip.trace_width()]);
 
     let num_ops: usize = 10;
     for _ in 0..num_ops {

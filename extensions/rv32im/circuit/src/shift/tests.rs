@@ -126,7 +126,7 @@ fn run_rv32_shift_rand_test(opcode: ShiftOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
-    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
+    let mut ctx = TracegenCtx::new(&[chip.trace_width()]);
 
     for _ in 0..num_ops {
         set_and_execute(
@@ -184,7 +184,7 @@ fn run_negative_shift_test(
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
-    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
+    let mut ctx = TracegenCtx::new(&[chip.trace_width()]);
 
     let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
 

@@ -39,6 +39,7 @@ where
         //     since_last_segment_check: 0,
         // }
     }
+
     fn should_suspend(
         &self,
         state: &mut VmSegmentState<Self::Ctx>,

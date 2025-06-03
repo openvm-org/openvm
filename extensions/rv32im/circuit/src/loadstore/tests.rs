@@ -177,7 +177,7 @@ fn rand_loadstore_test(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let mut chip = create_test_chip(&mut tester);
-    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
+    let mut ctx = TracegenCtx::new(&[chip.trace_width()]);
 
     for _ in 0..num_ops {
         set_and_execute(
@@ -234,7 +234,7 @@ fn run_negative_loadstore_test(
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let mut chip = create_test_chip(&mut tester);
-    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
+    let mut ctx = TracegenCtx::new(&[chip.trace_width()]);
 
     let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
 

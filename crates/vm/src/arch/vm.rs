@@ -93,6 +93,9 @@ pub struct VmExecutor<F, VC> {
     pub config: VC,
     pub overridden_heights: Option<VmComplexTraceHeights>,
     pub trace_height_constraints: Vec<LinearConstraint>,
+    pub main_widths: Vec<usize>,
+    pub total_widths: Vec<usize>,
+    pub num_interactions: Vec<usize>,
     _marker: PhantomData<F>,
 }
 
@@ -156,10 +159,6 @@ where
         Self::new_with_overridden_trace_heights(config, None)
     }
 
-    pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
-        self.overridden_heights = Some(overridden_heights);
-    }
-
     pub fn new_with_overridden_trace_heights(
         config: VC,
         overridden_heights: Option<VmComplexTraceHeights>,
@@ -168,8 +167,28 @@ where
             config,
             overridden_heights,
             trace_height_constraints: vec![],
+            // TODO(ayush): correct values for these two should be passed as arguments
+            main_widths: vec![],
+            total_widths: vec![],
+            num_interactions: vec![],
             _marker: Default::default(),
         }
+    }
+
+    pub fn set_main_widths(&mut self, main_widths: Vec<usize>) {
+        self.main_widths = main_widths;
+    }
+
+    pub fn set_total_widths(&mut self, total_widths: Vec<usize>) {
+        self.total_widths = total_widths;
+    }
+
+    pub fn set_num_interactions(&mut self, num_interactions: Vec<usize>) {
+        self.num_interactions = num_interactions;
+    }
+
+    pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
+        self.overridden_heights = Some(overridden_heights);
     }
 
     pub fn continuation_enabled(&self) -> bool {
@@ -258,7 +277,8 @@ where
         )
         .unwrap();
         let ctrl = TracegenExecutionControlWithSegmentation::new(chip_complex.air_names());
-        let ctx = ExecutionControl::<F, VC>::initialize_context(&ctrl);
+        let ctx = TracegenCtx::new(&self.main_widths);
+
         let mut segment = VmSegmentExecutor::new(
             chip_complex,
             self.trace_height_constraints.clone(),
@@ -433,8 +453,6 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-        widths: Vec<usize>,
-        interactions: Vec<usize>,
     ) -> Result<Vec<Segment>, ExecutionError>
     where
         VC::Executor: InsExecutorE1<F>,
@@ -460,7 +478,8 @@ where
         )
         .unwrap();
         let air_names = chip_complex.air_names();
-        let ctrl = MeteredExecutionControl::new(&air_names, &widths, &interactions);
+        let ctrl =
+            MeteredExecutionControl::new(&air_names, &self.total_widths, &self.num_interactions);
         let mut executor = VmSegmentExecutor::<F, VC, _>::new(
             chip_complex,
             self.trace_height_constraints.clone(),
@@ -483,7 +502,7 @@ where
             .access_adapters
             .num_access_adapters();
         let ctx = MeteredCtx::new(
-            widths.len(),
+            self.total_widths.len(),
             continuations_enabled,
             num_access_adapters as u8,
             executor
@@ -542,7 +561,6 @@ where
         exe: impl Into<VmExe<F>>,
         state: VmState<F>,
         trace_heights: Vec<usize>,
-        trace_widths: Vec<usize>,
         num_cycles: u64,
     ) -> Result<VmExecutorResult<SC>, GenerationError>
     where
@@ -573,7 +591,7 @@ where
             segment.set_override_trace_heights(overridden_heights.clone());
         }
 
-        let ctx = TracegenCtx::new_with_capacity(trace_widths, trace_heights);
+        let ctx = TracegenCtx::new_with_capacity(&self.main_widths, trace_heights);
         let mut exec_state = VmSegmentState::new(state.clk, state.pc, None, ctx);
         metrics_span("execute_from_state", || {
             segment.execute_from_state(&mut exec_state)
@@ -777,8 +795,8 @@ where
         }
 
         // TODO(ayush): fix this
-        let trace_widths = vec![];
-        let ctx = TracegenCtx::new(trace_widths);
+        let trace_widths: Vec<usize> = vec![];
+        let ctx = TracegenCtx::new(&trace_widths);
         let mut exec_state = VmSegmentState::new(0, exe.pc_start, None, ctx);
         metrics_span("execute_time_ms", || {
             segment.execute_from_state(&mut exec_state)
