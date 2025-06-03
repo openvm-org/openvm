@@ -371,9 +371,10 @@ macro_rules! impl_sw_group_ops {
         impl Group for $struct_name {
             type SelfRef<'a> = &'a Self;
 
-            const IDENTITY: Self = <Self as WeierstrassPoint>::IDENTITY;
+            const IDENTITY: Self = <Self as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::IDENTITY;
 
             fn double(&self) -> Self {
+                use openvm_ecc_guest::weierstrass::WeierstrassPoint;
                 if self.is_identity() {
                     self.clone()
                 } else {
@@ -382,6 +383,7 @@ macro_rules! impl_sw_group_ops {
             }
 
             fn double_assign(&mut self) {
+                use openvm_ecc_guest::weierstrass::WeierstrassPoint;
                 if !self.is_identity() {
                     self.double_assign_nonidentity();
                 }
@@ -410,6 +412,7 @@ macro_rules! impl_sw_group_ops {
             type Output = $struct_name;
 
             fn add(self, p2: &$struct_name) -> Self::Output {
+                use openvm_ecc_guest::weierstrass::WeierstrassPoint;
                 if self.is_identity() {
                     p2.clone()
                 } else if p2.is_identity() {
@@ -428,6 +431,7 @@ macro_rules! impl_sw_group_ops {
 
         impl core::ops::AddAssign<&$struct_name> for $struct_name {
             fn add_assign(&mut self, p2: &$struct_name) {
+                use openvm_ecc_guest::weierstrass::WeierstrassPoint;
                 if self.is_identity() {
                     *self = p2.clone();
                 } else if p2.is_identity() {
@@ -470,6 +474,7 @@ macro_rules! impl_sw_group_ops {
             type Output = $struct_name;
 
             fn sub(self, p2: &$struct_name) -> Self::Output {
+                use openvm_ecc_guest::weierstrass::WeierstrassPoint;
                 if p2.is_identity() {
                     self.clone()
                 } else if self.is_identity() {
@@ -488,6 +493,7 @@ macro_rules! impl_sw_group_ops {
 
         impl core::ops::SubAssign<&$struct_name> for $struct_name {
             fn sub_assign(&mut self, p2: &$struct_name) {
+                use openvm_ecc_guest::weierstrass::WeierstrassPoint;
                 if p2.is_identity() {
                     // do nothing
                 } else if self.is_identity() {

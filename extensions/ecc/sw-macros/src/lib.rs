@@ -89,7 +89,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         create_extern_func!(sw_double_extern_func);
         create_extern_func!(sw_setup_extern_func);
 
-        let group_ops_mod_name = format_ident!("{}_ops", struct_name.to_string().to_lowercase());
+        // let group_ops_mod_name = format_ident!("{}_ops", struct_name.to_string().to_lowercase());
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
             extern "C" {
@@ -302,14 +302,15 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 }
             }
 
-            mod #group_ops_mod_name {
-                use ::openvm_ecc_guest::{weierstrass::{WeierstrassPoint, FromCompressed}, impl_sw_group_ops, algebra::IntMod};
-                use super::*;
+            // mod #group_ops_mod_name {
+                // use ::openvm_ecc_guest::{weierstrass::{WeierstrassPoint, FromCompressed}, impl_sw_group_ops, algebra::IntMod};
+                // use super::*;
 
-                impl_sw_group_ops!(#struct_name, #intmod_type);
+                ::openvm_ecc_guest::impl_sw_group_ops!(#struct_name, #intmod_type);
 
-                impl FromCompressed<#intmod_type> for #struct_name {
+                impl ::openvm_ecc_guest::weierstrass::FromCompressed<#intmod_type> for #struct_name {
                     fn decompress(x: #intmod_type, rec_id: &u8) -> Option<Self> {
+                        use ::openvm_ecc_guest::{weierstrass::{WeierstrassPoint, FromCompressed}, algebra::IntMod};
                         use openvm_algebra_guest::Sqrt;
                         let y_squared = &x * &x * &x + &<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A * &x + &<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_B;
                         let y = y_squared.sqrt();
@@ -327,7 +328,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                         }
                     }
                 }
-            }
+            // }
         });
         output.push(result);
     }
