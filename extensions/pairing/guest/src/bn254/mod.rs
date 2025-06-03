@@ -1,3 +1,4 @@
+#[cfg(not(target_os = "zkvm"))]
 use hex_literal::hex;
 #[cfg(not(target_os = "zkvm"))]
 use lazy_static::lazy_static;

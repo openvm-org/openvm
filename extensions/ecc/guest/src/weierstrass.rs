@@ -47,6 +47,7 @@ pub trait WeierstrassPoint: Clone + Sized {
     ///   `Self::set_up_once()`. Only set `CHECK_SETUP` to `false` if you are sure that setup has
     ///   been called already.
     fn double_assign_impl<const CHECK_SETUP: bool>(&mut self);
+
     /// # Safety
     /// - Assumes self != +- p2 and self != identity and p2 != identity.
     /// - If `CHECK_SETUP` is true, checks if setup has been called for this curve and if not, calls
@@ -340,8 +341,9 @@ macro_rules! impl_sw_affine {
                     *self = p2.clone();
                 } else if p2 == &<Self as WeierstrassPoint>::IDENTITY {
                     // do nothing
-                } else if self.x == p2.x {
-                    if self.y + p2.y == <Self::Coordinate as openvm_algebra_guest::Field>::ZERO {
+                } else if self.x() == p2.x() {
+                    if self.y() + p2.y() == <Self::Coordinate as openvm_algebra_guest::Field>::ZERO
+                    {
                         *self = <Self as WeierstrassPoint>::IDENTITY;
                     } else {
                         unsafe {
@@ -376,7 +378,7 @@ macro_rules! impl_sw_affine {
             }
 
             unsafe fn double_assign_nonidentity<const CHECK_SETUP: bool>(&mut self) {
-                *self = self.double_nonidentity();
+                *self = self.double_nonidentity::<CHECK_SETUP>();
             }
 
             unsafe fn add_ne_nonidentity<const CHECK_SETUP: bool>(&self, p2: &Self) -> Self {
@@ -391,7 +393,7 @@ macro_rules! impl_sw_affine {
             }
 
             unsafe fn add_ne_assign_nonidentity<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
-                *self = self.add_ne_nonidentity(p2);
+                *self = self.add_ne_nonidentity::<CHECK_SETUP>(p2);
             }
 
             unsafe fn sub_ne_nonidentity<const CHECK_SETUP: bool>(&self, p2: &Self) -> Self {
@@ -406,7 +408,7 @@ macro_rules! impl_sw_affine {
             }
 
             unsafe fn sub_ne_assign_nonidentity<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
-                *self = self.sub_ne_nonidentity(p2);
+                *self = self.sub_ne_nonidentity::<CHECK_SETUP>(p2);
             }
         }
 
