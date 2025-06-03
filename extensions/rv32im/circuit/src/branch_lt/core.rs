@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, ImmInstruction, Result,
         StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
@@ -214,14 +214,13 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F, CTX>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F>
     for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
         + for<'a> AdapterTraceStep<
             F,
-            CTX,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData = (),
             TraceContext<'a> = (),
@@ -236,17 +235,15 @@ where
 
     fn execute(
         &mut self,
-        state: VmStateMut<TracingMemory<F>, CTX>,
+        state: &mut VmStateMut<TracingMemory<F>, TracegenCtx<F>>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
+        chip_index: usize,
     ) -> Result<()> {
         let &Instruction { opcode, c: imm, .. } = instruction;
 
         let blt_opcode = BranchLessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
+        let row_slice = state.ctx.alloc(chip_index);
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
@@ -340,8 +337,6 @@ where
         if diff_idx != NUM_LIMBS {
             self.bitwise_lookup_chip.request_range(diff_val - 1, 0);
         }
-
-        *trace_offset += width;
 
         Ok(())
     }

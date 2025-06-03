@@ -75,9 +75,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
+        chip_index: usize,
     ) -> openvm_circuit::arch::Result<()> {
         debug_assert_eq!(width, NativePoseidon2Cols::<u8, SBOX_REGISTERS>::width());
         let init_timestamp_u32 = state.memory.timestamp;

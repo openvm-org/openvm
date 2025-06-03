@@ -1,8 +1,9 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::arch::{
+    execution_mode::tracegen::TracegenCtx,
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    VmAirWrapper,
+    TraceStep, VmAirWrapper,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -16,7 +17,9 @@ use openvm_stark_backend::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
     },
+    prover::types::AirProofInput,
     utils::disable_debug_builder,
+    Chip, ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -56,6 +59,7 @@ fn create_test_chip(
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32AuipcChip<F>,
+    ctx: &mut TracegenCtx<F>,
     rng: &mut StdRng,
     opcode: Rv32AuipcOpcode,
     imm: Option<u32>,
@@ -64,13 +68,14 @@ fn set_and_execute(
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS))) as usize;
     let a = rng.gen_range(0..32) << 2;
 
-    tester.execute_with_pc(
-        chip,
-        &Instruction::from_usize(opcode.global_opcode(), [a, 0, imm, 1, 0]),
-        initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
-    );
+    let instruction = Instruction::from_usize(opcode.global_opcode(), [a, 0, imm, 1, 0]);
+    let pc = initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS)));
+
+    tester.execute_with_pc_and_ctx(chip, &instruction, pc, ctx);
+
     let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
     let rd_data = run_auipc(opcode, initial_pc, imm as u32);
+
     assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
 }
 
@@ -86,13 +91,34 @@ fn rand_auipc_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()], vec![1 << 22]);
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, AUIPC, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            AUIPC,
+            None,
+            None,
+        );
     }
 
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    chip.fill_trace(&mut ctx.trace_buffers[0]);
+
+    let mut traces = ctx.into_matrices();
+    let public_values = chip.step.generate_public_values();
+    let air_proof_input = AirProofInput::simple(traces.remove(0), public_values);
+    let air = chip.air();
+    drop(chip);
+
+    let tester = tester
+        .build()
+        .load_air_proof_input((air, air_proof_input))
+        .load(bitwise_chip)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -120,10 +146,12 @@ fn run_negative_auipc_test(
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()], vec![1 << 22]);
 
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         initial_imm,

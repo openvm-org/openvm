@@ -192,7 +192,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32CondRdWriteAdapterAir {
 #[derive(derive_new::new)]
 pub struct Rv32RdWriteAdapterStep;
 
-impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32RdWriteAdapterStep
+impl<F> AdapterTraceStep<F> for Rv32RdWriteAdapterStep
 where
     F: PrimeField32,
 {
@@ -298,7 +298,7 @@ pub struct Rv32CondRdWriteAdapterStep {
     inner: Rv32RdWriteAdapterStep,
 }
 
-impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32CondRdWriteAdapterStep
+impl<F> AdapterTraceStep<F> for Rv32CondRdWriteAdapterStep
 where
     F: PrimeField32,
 {
@@ -322,7 +322,7 @@ where
         instruction: &Instruction<F>,
         adapter_row: &mut [F],
     ) -> Self::ReadData {
-        <Rv32RdWriteAdapterStep as AdapterTraceStep<F, CTX>>::read(
+        <Rv32RdWriteAdapterStep as AdapterTraceStep<F>>::read(
             &self.inner,
             memory,
             instruction,
@@ -346,7 +346,7 @@ where
             };
 
             needs_write[0] = F::ONE;
-            <Rv32RdWriteAdapterStep as AdapterTraceStep<F, CTX>>::write(
+            <Rv32RdWriteAdapterStep as AdapterTraceStep<F>>::write(
                 &self.inner,
                 memory,
                 instruction,
@@ -372,7 +372,7 @@ where
                 adapter_row.split_at_mut_unchecked(size_of::<Rv32RdWriteAdapterCols<u8>>())
             };
 
-            <Rv32RdWriteAdapterStep as AdapterTraceStep<F, CTX>>::fill_trace_row(
+            <Rv32RdWriteAdapterStep as AdapterTraceStep<F>>::fill_trace_row(
                 &self.inner,
                 mem_helper,
                 trace_ctx,

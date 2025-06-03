@@ -210,13 +210,12 @@ impl<A> Rv32AuipcCoreStep<A> {
     }
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for Rv32AuipcCoreStep<A>
+impl<F, A> TraceStep<F> for Rv32AuipcCoreStep<A>
 where
     F: PrimeField32,
     A: 'static
         + for<'a> AdapterTraceStep<
             F,
-            CTX,
             ReadData = (),
             WriteData = [u8; RV32_REGISTER_NUM_LIMBS],
             TraceContext<'a> = (),
@@ -228,18 +227,16 @@ where
 
     fn execute(
         &mut self,
-        state: VmStateMut<TracingMemory<F>, CTX>,
+        state: &mut VmStateMut<TracingMemory<F>, TracegenCtx<F>>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
+        chip_index: usize,
     ) -> Result<()> {
         let Instruction { opcode, c: imm, .. } = instruction;
 
         let local_opcode =
             Rv32AuipcOpcode::from_usize(opcode.local_opcode_idx(Rv32AuipcOpcode::CLASS_OFFSET));
 
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
+        let row_slice = state.ctx.alloc(chip_index);
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
@@ -259,8 +256,6 @@ where
 
         // TODO(ayush): add increment_pc function to vmstate
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        *trace_offset += width;
 
         Ok(())
     }

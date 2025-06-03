@@ -230,6 +230,7 @@ impl<F, AIR, STEP> NewVmChipWrapper<F, AIR, STEP>
 where
     F: Field,
     AIR: BaseAir<F>,
+    STEP: TraceStep<F> + Send + Sync,
 {
     pub fn new(air: AIR, step: STEP, mem_helper: SharedMemoryHelper<F>) -> Self {
         Self {
@@ -237,6 +238,18 @@ where
             step,
             mem_helper,
         }
+    }
+
+    pub fn fill_trace(&self, trace: &mut Vec<F>) {
+        let width = self.air.width();
+        let height = trace.len() / width;
+        debug_assert!(trace.len() % width == 0);
+
+        let padded_height = next_power_of_two_or_zero(height);
+        trace.resize(padded_height * width, F::ZERO);
+
+        let mem_helper = self.mem_helper.as_borrowed();
+        self.step.fill_trace(&mem_helper, trace, width, height);
     }
 }
 
@@ -292,13 +305,8 @@ where
         Arc::new(self.air.clone())
     }
 
-    fn generate_air_proof_input(
-        self,
-        // &self,
-        // state: &mut VmStateMut<TracingMemory<F>, TracegenCtx<F>>,
-        // chip_index: usize,
-    ) -> AirProofInput<SC> {
-        unimplemented!()
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        unimplemented!("NewVmChipWrapper::generate_air_proof_input isn't implemented")
         // let trace_buffer = &mut state.ctx.trace_buffers[chip_index];
         // let buffer_idx = &mut state.ctx.buffer_indices[chip_index];
         // let width = state.ctx.trace_widths[chip_index];

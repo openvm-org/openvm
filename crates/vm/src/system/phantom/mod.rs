@@ -201,10 +201,8 @@ where
     ) -> Result<(), ExecutionError> {
         let &Instruction { a, b, c, .. } = instruction;
 
-        let offset = state.ctx.buffer_indices[chip_index];
-        let width = state.ctx.trace_widths[chip_index];
-        let row: &mut PhantomCols<F> =
-            state.ctx.trace_buffers[chip_index][offset..offset + width].borrow_mut();
+        let row_slice = state.ctx.alloc(chip_index);
+        let row: &mut PhantomCols<F> = row_slice.borrow_mut();
 
         row.is_valid = F::ONE;
         row.pc = F::from_canonical_u32(*state.pc);

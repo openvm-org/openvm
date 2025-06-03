@@ -239,7 +239,6 @@ where
     A: 'static
         + for<'a> AdapterTraceStep<
             F,
-            CTX,
             ReadData: Into<DynArray<u8>>,
             WriteData: From<DynArray<u8>>,
             TraceContext<'a> = (),
@@ -253,9 +252,7 @@ where
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
+        chip_index: usize,
     ) -> Result<()> {
         let row_slice = &mut trace[*trace_offset..*trace_offset + width];
         let (adapter_row, core_row) = row_slice.split_at_mut(A::WIDTH);

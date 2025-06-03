@@ -302,7 +302,7 @@ impl Rv32LoadStoreAdapterStep {
     }
 }
 
-impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32LoadStoreAdapterStep
+impl<F> AdapterTraceStep<F> for Rv32LoadStoreAdapterStep
 where
     F: PrimeField32,
 {

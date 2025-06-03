@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         ExecutionBridge, ExecutionError, ExecutionState, NewVmChipWrapper, Result, StepExecutorE1,
         Streams, TraceStep, VmStateMut,
     },
@@ -303,7 +303,7 @@ impl<F: PrimeField32> Rv32HintStoreStep<F> {
     }
 }
 
-impl<F, CTX> TraceStep<F, CTX> for Rv32HintStoreStep<F>
+impl<F> TraceStep<F> for Rv32HintStoreStep<F>
 where
     F: PrimeField32,
 {
@@ -319,11 +319,9 @@ where
 
     fn execute(
         &mut self,
-        state: VmStateMut<TracingMemory<F>, CTX>,
+        state: &mut VmStateMut<TracingMemory<F>, TracegenCtx<F>>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
+        chip_index: usize,
     ) -> Result<()> {
         let &Instruction {
             opcode,
@@ -339,8 +337,7 @@ where
 
         let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let row: &mut Rv32HintStoreCols<F> =
-            trace[*trace_offset..*trace_offset + width].borrow_mut();
+        let row: &mut Rv32HintStoreCols<F> = state.ctx.alloc(chip_index).borrow_mut();
 
         row.from_state.pc = F::from_canonical_u32(*state.pc);
         row.from_state.timestamp = F::from_canonical_u32(state.memory.timestamp);
@@ -388,8 +385,11 @@ where
         );
 
         for word_index in 0..(num_words as usize) {
-            let offset = *trace_offset + word_index * width;
-            let row: &mut Rv32HintStoreCols<F> = trace[offset..offset + width].borrow_mut();
+            let row: &mut Rv32HintStoreCols<F> = if word_index == 0 {
+                state.ctx.last(chip_index).borrow_mut()
+            } else {
+                state.ctx.alloc(chip_index).borrow_mut()
+            };
 
             if word_index != 0 {
                 row.is_buffer = F::ONE;
@@ -420,8 +420,6 @@ where
         }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        *trace_offset += (num_words as usize) * width;
 
         Ok(())
     }

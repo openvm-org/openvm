@@ -28,13 +28,17 @@ use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
 
-use super::{ExecutionBridge, ExecutionBus, InstructionExecutor, SystemPort};
+use super::{
+    execution_mode::tracegen::TracegenCtx, ExecutionBridge, ExecutionBus, InsExecutorE1,
+    InstructionExecutor, SystemPort,
+};
 use crate::{
-    arch::{ExecutionState, MemoryConfig},
+    arch::{ExecutionState, MemoryConfig, VmStateMut},
     system::{
         memory::{
             interface::MemoryInterface,
             offline_checker::{MemoryBridge, MemoryBus},
+            online::TracingMemory,
             MemoryController, SharedMemoryHelper,
         },
         poseidon2::Poseidon2PeripheryChip,
@@ -112,6 +116,38 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         let final_state = executor
             .execute(&mut self.memory.controller, instruction, initial_state)
             .expect("Expected the execution not to fail");
+
+        self.program.execute(instruction, &initial_state);
+        self.execution.execute(initial_state, final_state);
+    }
+
+    pub fn execute_with_pc_and_ctx<E: InsExecutorE1<F>>(
+        &mut self,
+        executor: &mut E,
+        instruction: &Instruction<F>,
+        initial_pc: u32,
+        ctx: &mut TracegenCtx<F>,
+    ) {
+        let initial_state = ExecutionState {
+            pc: initial_pc,
+            timestamp: self.memory.controller.timestamp(),
+        };
+
+        let mut pc = initial_pc;
+        let mut state = VmStateMut {
+            pc: &mut pc,
+            memory: &mut self.memory.controller.memory,
+            ctx,
+        };
+        // TODO(ayush): avoid passing chip_idx everywhere
+        executor
+            .execute_tracegen(&mut state, instruction, 0)
+            .expect("Expected the execution not to fail");
+
+        let final_state = ExecutionState {
+            pc: *state.pc,
+            timestamp: self.memory.controller.timestamp(),
+        };
 
         self.program.execute(instruction, &initial_state);
         self.execution.execute(initial_state, final_state);

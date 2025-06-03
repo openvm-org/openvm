@@ -167,7 +167,7 @@ pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize> {
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 
-impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
+impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceStep<F>
     for Rv32BaseAluAdapterStep<LIMB_BITS>
 {
     const WIDTH: usize = size_of::<Rv32BaseAluAdapterCols<u8>>();

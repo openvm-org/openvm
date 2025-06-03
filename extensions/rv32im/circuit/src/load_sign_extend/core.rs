@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, Result, StepExecutorE1, TraceStep,
         VmAdapterInterface, VmCoreAir, VmStateMut,
     },
@@ -202,14 +202,13 @@ impl<A, const NUM_CELLS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<F, CTX, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceStep<F, CTX>
+impl<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceStep<F>
     for LoadSignExtendStep<A, NUM_CELLS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
         + for<'a> AdapterTraceStep<
             F,
-            CTX,
             ReadData = (([u8; NUM_CELLS], [u8; NUM_CELLS]), u32),
             WriteData = [u8; NUM_CELLS],
             TraceContext<'a> = &'a SharedVariableRangeCheckerChip,
@@ -224,11 +223,9 @@ where
 
     fn execute(
         &mut self,
-        state: VmStateMut<TracingMemory<F>, CTX>,
+        state: &mut VmStateMut<TracingMemory<F>, TracegenCtx<F>>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
+        chip_index: usize,
     ) -> Result<()> {
         let Instruction { opcode, .. } = instruction;
 
@@ -236,7 +233,7 @@ where
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
 
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
+        let row_slice = state.ctx.alloc(chip_index);
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
@@ -289,8 +286,6 @@ where
             .add_count(most_sig_limb - most_sig_bit, LIMB_BITS - 1);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        *trace_offset += width;
 
         Ok(())
     }

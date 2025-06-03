@@ -127,7 +127,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32MultAdapterAir {
 #[derive(derive_new::new)]
 pub struct Rv32MultAdapterStep;
 
-impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32MultAdapterStep
+impl<F> AdapterTraceStep<F> for Rv32MultAdapterStep
 where
     F: PrimeField32,
 {

@@ -36,13 +36,7 @@ impl<F, CTX, A> TraceStep<F, CTX> for NativeBranchEqualStep<A>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
-            F,
-            CTX,
-            ReadData: Into<[F; 2]>,
-            WriteData = (),
-            TraceContext<'a> = (),
-        >,
+        + for<'a> AdapterTraceStep<F, ReadData: Into<[F; 2]>, WriteData = (), TraceContext<'a> = ()>,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
@@ -55,9 +49,7 @@ where
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
+        chip_index: usize,
     ) -> Result<()> {
         let &Instruction { opcode, c: imm, .. } = instruction;
 

@@ -159,7 +159,6 @@ where
     A: 'static
         + for<'a> AdapterTraceStep<
             F,
-            CTX,
             ReadData = [[F; EXT_DEG]; 2],
             WriteData = [F; EXT_DEG],
             TraceContext<'a> = (),
@@ -176,9 +175,7 @@ where
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
+        chip_index: usize,
     ) -> Result<()> {
         let &Instruction { opcode, .. } = instruction;
 

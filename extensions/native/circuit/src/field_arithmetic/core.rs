@@ -130,13 +130,7 @@ impl<F, CTX, A> TraceStep<F, CTX> for FieldArithmeticCoreStep<A>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
-            F,
-            CTX,
-            ReadData = [F; 2],
-            WriteData = [F; 1],
-            TraceContext<'a> = (),
-        >,
+        + for<'a> AdapterTraceStep<F, ReadData = [F; 2], WriteData = [F; 1], TraceContext<'a> = ()>,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
@@ -149,9 +143,7 @@ where
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
+        chip_index: usize,
     ) -> Result<()> {
         let &Instruction { opcode, .. } = instruction;
         let local_opcode = FieldArithmeticOpcode::from_usize(

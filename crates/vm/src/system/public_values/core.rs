@@ -168,10 +168,8 @@ where
         chip_index: usize,
     ) -> Result<()> {
         let width = state.ctx.trace_widths[chip_index];
-        let trace = &mut state.ctx.trace_buffers[chip_index];
-        let trace_offset = &mut state.ctx.buffer_indices[chip_index];
 
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
+        let row_slice = state.ctx.alloc(chip_index);
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         A::start(*state.pc, state.memory, adapter_row);
@@ -197,7 +195,6 @@ where
         *cols.index = index;
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        *trace_offset += width;
 
         Ok(())
     }
