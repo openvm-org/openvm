@@ -66,10 +66,11 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> ChipUsageGetter
     }
 
     fn current_trace_height(&self) -> usize {
-        if self.finalized {
+        if self.nonempty.load(std::sync::atomic::Ordering::Relaxed) {
+            // Not to call `DashMap::len` too often
             self.records.len()
         } else {
-            0 // TODO: take it into account somehow
+            0
         }
     }
 

@@ -1,6 +1,9 @@
 use std::{
     array,
-    sync::{atomic::AtomicU32, Arc},
+    sync::{
+        atomic::{AtomicBool, AtomicU32},
+        Arc,
+    },
 };
 
 use dashmap::DashMap;
@@ -21,7 +24,7 @@ pub struct Poseidon2PeripheryBaseChip<F: PrimeField32, const SBOX_REGISTERS: usi
     pub air: Arc<Poseidon2PeripheryAir<F, SBOX_REGISTERS>>,
     pub subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
     pub records: DashMap<[F; PERIPHERY_POSEIDON2_WIDTH], AtomicU32, FxBuildHasher>,
-    pub finalized: bool,
+    pub nonempty: AtomicBool,
 }
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS> {
@@ -34,13 +37,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> Poseidon2PeripheryBaseChip<F,
             )),
             subchip,
             records: DashMap::default(),
-            finalized: false,
+            nonempty: AtomicBool::new(false),
         }
-    }
-
-    /// Switches what `current_trace_height` returns
-    pub fn finalize(&mut self) {
-        self.finalized = true;
     }
 }
 
@@ -81,6 +79,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> HasherChip<PERIPHERY_POSEIDON
 
         let count = self.records.entry(input).or_insert(AtomicU32::new(0));
         count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.nonempty
+            .store(true, std::sync::atomic::Ordering::Relaxed);
 
         let output = self.subchip.permute(input);
         array::from_fn(|i| output[i])
