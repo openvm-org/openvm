@@ -17,6 +17,9 @@ The functional part is provided by the `openvm-algebra-guest` crate, which is a 
 - `Field` trait:
   Provides constants `ZERO` and `ONE` and methods for basic arithmetic operations within a field.
 
+- `Sqrt` trait:
+    Implements square root in a field using hinting.
+
 ## Modular arithmetic
 
 To [leverage](./overview.md) compile-time known moduli for performance, you declare, initialize, and then set up the arithmetic structures:
@@ -30,7 +33,9 @@ moduli_declare! {
 }
 ```
 
-This creates `Bls12_381Fp` and `Bn254Fp` structs, each implementing the `IntMod` trait. The modulus parameter must be a string literal in decimal or hexadecimal format.
+This creates `Bls12_381Fp` and `Bn254Fp` structs, each implementing the `IntMod` trait.
+Since both moduli are prime, both structs also implement the `Field` and `Sqrt` traits.
+The modulus parameter must be a string literal in decimal or hexadecimal format.
 
 2. **Init**: Use the `init!` macro exactly once in the final binary:
 
@@ -86,13 +91,13 @@ For the guest program to build successfully, all used moduli must be declared in
 
 ```toml
 [app_vm_config.modular]
-supported_modulus = ["115792089237316195423570985008687907853269984665640564039457584007908834671663"]
+supported_moduli = ["115792089237316195423570985008687907853269984665640564039457584007908834671663"]
 
 [app_vm_config.fp2]
-supported_modulus = [["Bn254Fp2", "115792089237316195423570985008687907853269984665640564039457584007908834671663"]]
+supported_moduli = [["Bn254Fp2", "115792089237316195423570985008687907853269984665640564039457584007908834671663"]]
 ```
 
-The `supported_modulus` parameter is a list of moduli that the guest program will use. They must be provided in decimal format in the `.toml` file.
+The `supported_moduli` parameter is a list of moduli that the guest program will use. They must be provided in decimal format in the `.toml` file.
 The order of moduli in `[app_vm_config.modular]` must match the order in the `moduli_init!` macro.
 Similarly, the order of moduli in `[app_vm_config.fp2]` must match the order in the `complex_init!` macro.
 Also, each modulus in `[app_vm_config.fp2]` must be paired with the name of the corresponding struct in `complex_declare!`.
@@ -123,8 +128,8 @@ Here is the full `openvm.toml` to accompany the above example:
 [app_vm_config.rv32m]
 [app_vm_config.io]
 [app_vm_config.modular]
-supported_modulus = ["998244353","1000000007"]
+supported_moduli = ["998244353","1000000007"]
 
 [app_vm_config.fp2]
-supported_modulus = [["Complex1", "998244353"], ["Complex2", "1000000007"]]
+supported_moduli = [["Complex1", "998244353"], ["Complex2", "1000000007"]]
 ```

@@ -13,6 +13,9 @@ openvm-algebra-guest = { path = "../../extensions/algebra/guest" }
 openvm-algebra-moduli-macros = { path = "../../extensions/algebra/moduli-macros" }
 openvm-algebra-complex-macros = { path = "../../extensions/algebra/complex-macros" }
 openvm-ecc-guest = { path = "../../extensions/ecc/guest" }
+openvm-pairing = { path = "../../guest-libs/pairing/", features = [
+    "bls12_381",
+] }
 openvm-pairing-guest = { path = "../../extensions/pairing/guest", features = [
     "bls12_381",
 ] }

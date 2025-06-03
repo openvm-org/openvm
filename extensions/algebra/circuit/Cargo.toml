@@ -30,6 +30,7 @@ derive-new = { workspace = true }
 serde.workspace = true
 serde_with = { workspace = true }
 serde-big-array = { workspace = true }
+eyre = { workspace = true }
 
 [dev-dependencies]
 halo2curves-axiom = { workspace = true }

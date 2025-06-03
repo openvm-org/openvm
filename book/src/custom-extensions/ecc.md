@@ -100,7 +100,7 @@ For the guest program to build successfully, all used moduli and curves must be 
 
 ```toml
 [app_vm_config.modular]
-supported_modulus = ["115792089237316195423570985008687907853269984665640564039457584007908834671663", "115792089237316195423570985008687907852837564279074904382605163141518161494337"]
+supported_moduli = ["115792089237316195423570985008687907853269984665640564039457584007908834671663", "115792089237316195423570985008687907852837564279074904382605163141518161494337"]
 
 [[app_vm_config.ecc.supported_curves]]
 struct_name = "Secp256k1Point"
@@ -110,7 +110,7 @@ a = "0"
 b = "7"
 ```
 
-The `supported_modulus` parameter is a list of moduli that the guest program will use. As mentioned in the [algebra extension](./algebra.md) chapter, the order of moduli in `[app_vm_config.modular]` must match the order in the `moduli_init!` macro.
+The `supported_moduli` parameter is a list of moduli that the guest program will use. As mentioned in the [algebra extension](./algebra.md) chapter, the order of moduli in `[app_vm_config.modular]` must match the order in the `moduli_init!` macro.
 
 The `ecc.supported_curves` parameter is a list of supported curves that the guest program will use. They must be provided in decimal format in the `.toml` file. For multiple curves create multiple `[[app_vm_config.ecc.supported_curves]]` sections. The order of curves in `[[app_vm_config.ecc.supported_curves]]` must match the order in the `sw_init!` macro.
 Also, the `struct_name` field must be the name of the elliptic curve struct created by `sw_declare!`.

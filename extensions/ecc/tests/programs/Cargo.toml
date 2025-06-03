@@ -13,8 +13,9 @@ openvm-ecc-guest = { path = "../../guest", default-features = false }
 openvm-ecc-sw-macros = { path = "../../../../extensions/ecc/sw-macros", default-features = false }
 openvm-algebra-guest = { path = "../../../algebra/guest", default-features = false }
 openvm-algebra-moduli-macros = { path = "../../../algebra/moduli-macros", default-features = false }
-openvm-keccak256-guest = { path = "../../../keccak256/guest", default-features = false }
 openvm-rv32im-guest = { path = "../../../../extensions/rv32im/guest", default-features = false }
+
+openvm-keccak256 = { path = "../../../../guest-libs/keccak256/" }
 
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
@@ -36,15 +37,6 @@ std = ["serde/std", "openvm/std"]
 k256 = ["openvm-ecc-guest/k256", "dep:k256"]
 p256 = ["openvm-ecc-guest/p256"]
 
-# Features to enable specific tests within decompress_invalid_hint.rs
-# Note that these tests are expected to not terminate
-test_secp256k1_possible = []
-test_secp256k1_impossible = []
-test_curvepoint5mod8_possible = []
-test_curvepoint5mod8_impossible = []
-test_curvepoint1mod4_possible = []
-test_curvepoint1mod4_impossible = []
-
 [profile.release]
 panic = "abort"
 lto = "thin"    # turn on lto = fat to decrease binary size, but this optimizes out some missing extern links so we shouldn't use it for testing
@@ -64,10 +56,6 @@ required-features = ["k256", "p256"]
 
 [[example]]
 name = "decompress"
-required-features = ["k256"]
-
-[[example]]
-name = "decompress_invalid_hint"
 required-features = ["k256"]
 
 [[example]]

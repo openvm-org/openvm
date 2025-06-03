@@ -87,18 +87,6 @@ pub trait FromCompressed<Coordinate> {
     fn decompress(x: Coordinate, rec_id: &u8) -> Option<Self>
     where
         Self: core::marker::Sized;
-
-    /// If it exists, hints the unique `y` coordinate that is less than `Coordinate::MODULUS`
-    /// such that `(x, y)` is a point on the curve and `y` has parity equal to `rec_id`.
-    /// If such `y` does not exist, hints a coordinate `sqrt` such that `sqrt^2 = rhs * non_qr`
-    /// where `rhs` is the rhs of the curve equation and `non_qr` is the non-quadratic residue
-    /// for this curve that was initialized in the setup function.
-    ///
-    /// This is only a hint, and the returned value does not guarantee any of the above properties.
-    /// They must be checked separately. Normal users should use `decompress` directly.
-    ///
-    /// Returns None if the `DecompressionHint::possible` flag in the hint stream is not a boolean.
-    fn hint_decompress(x: &Coordinate, rec_id: &u8) -> Option<DecompressionHint<Coordinate>>;
 }
 
 /// A trait for elliptic curves that bridges the openvm types and external types with
@@ -298,7 +286,7 @@ macro_rules! impl_sw_affine {
             }
 
             fn double_nonidentity(&self) -> Self {
-                use ::openvm_algebra_guest::DivUnsafe;
+                use openvm_algebra_guest::DivUnsafe;
                 // lambda = (3*x1^2+a)/(2*y1)
                 // assume a = 0
                 let lambda = (&THREE * self.x() * self.x()).div_unsafe(self.y() + self.y());
@@ -314,7 +302,7 @@ macro_rules! impl_sw_affine {
             }
 
             fn add_ne_nonidentity(&self, p2: &Self) -> Self {
-                use ::openvm_algebra_guest::DivUnsafe;
+                use openvm_algebra_guest::DivUnsafe;
                 // lambda = (y2-y1)/(x2-x1)
                 // x3 = lambda^2-x1-x2
                 // y3 = lambda*(x1-x3)-y1
@@ -329,7 +317,7 @@ macro_rules! impl_sw_affine {
             }
 
             fn sub_ne_nonidentity(&self, p2: &Self) -> Self {
-                use ::openvm_algebra_guest::DivUnsafe;
+                use openvm_algebra_guest::DivUnsafe;
                 // lambda = (y2+y1)/(x1-x2)
                 // x3 = lambda^2-x1-x2
                 // y3 = lambda*(x1-x3)-y1
@@ -426,7 +414,7 @@ macro_rules! impl_sw_group_ops {
                     p2.clone()
                 } else if p2.is_identity() {
                     self.clone()
-                } else if self.x() == p2.x() {
+                } else if WeierstrassPoint::x(self) == WeierstrassPoint::x(p2) {
                     if self.y() + p2.y() == <$field as openvm_algebra_guest::Field>::ZERO {
                         <$struct_name as WeierstrassPoint>::IDENTITY
                     } else {
@@ -444,7 +432,7 @@ macro_rules! impl_sw_group_ops {
                     *self = p2.clone();
                 } else if p2.is_identity() {
                     // do nothing
-                } else if self.x() == p2.x() {
+                } else if WeierstrassPoint::x(self) == WeierstrassPoint::x(p2) {
                     if self.y() + p2.y() == <$field as openvm_algebra_guest::Field>::ZERO {
                         *self = <$struct_name as WeierstrassPoint>::IDENTITY;
                     } else {
@@ -486,7 +474,7 @@ macro_rules! impl_sw_group_ops {
                     self.clone()
                 } else if self.is_identity() {
                     core::ops::Neg::neg(p2)
-                } else if self.x() == p2.x() {
+                } else if WeierstrassPoint::x(self) == WeierstrassPoint::x(p2) {
                     if self.y() == p2.y() {
                         <$struct_name as WeierstrassPoint>::IDENTITY
                     } else {
@@ -504,7 +492,7 @@ macro_rules! impl_sw_group_ops {
                     // do nothing
                 } else if self.is_identity() {
                     *self = core::ops::Neg::neg(p2);
-                } else if self.x() == p2.x() {
+                } else if WeierstrassPoint::x(self) == WeierstrassPoint::x(p2) {
                     if self.y() == p2.y() {
                         *self = <$struct_name as WeierstrassPoint>::IDENTITY
                     } else {

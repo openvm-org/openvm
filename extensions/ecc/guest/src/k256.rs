@@ -7,7 +7,7 @@ use hex_literal::hex;
 use lazy_static::lazy_static;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint::BigUint;
-use openvm_algebra_guest::{Field, IntMod};
+use openvm_algebra_guest::IntMod;
 use openvm_algebra_moduli_macros::moduli_declare;
 use openvm_ecc_sw_macros::sw_declare;
 
@@ -47,21 +47,6 @@ sw_declare! {
 #[cfg(not(target_os = "zkvm"))]
 // Used in WeierstrassExtension config
 pub const SECP256K1_ECC_STRUCT_NAME: &str = "Secp256k1Point";
-
-impl Field for Secp256k1Coord {
-    const ZERO: Self = <Self as IntMod>::ZERO;
-    const ONE: Self = <Self as IntMod>::ONE;
-
-    type SelfRef<'a> = &'a Self;
-
-    fn double_assign(&mut self) {
-        IntMod::double_assign(self);
-    }
-
-    fn square_assign(&mut self) {
-        IntMod::square_assign(self);
-    }
-}
 
 impl CyclicGroup for Secp256k1Point {
     // The constants are taken from: https://en.bitcoin.it/wiki/Secp256k1
