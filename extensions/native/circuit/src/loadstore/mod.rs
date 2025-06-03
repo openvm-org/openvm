@@ -12,7 +12,7 @@ use super::adapters::loadstore_native_adapter::{
 
 pub type NativeLoadStoreAir<const NUM_CELLS: usize> =
     VmAirWrapper<NativeLoadStoreAdapterAir<NUM_CELLS>, NativeLoadStoreCoreAir<NUM_CELLS>>;
-pub type NativeLoadStoreStep<F, const NUM_CELLS: usize> =
-    NativeLoadStoreCoreStep<NativeLoadStoreAdapterStep<NUM_CELLS>, F, NUM_CELLS>;
+pub type NativeLoadStoreStep<const NUM_CELLS: usize> =
+    NativeLoadStoreCoreStep<NativeLoadStoreAdapterStep<NUM_CELLS>, NUM_CELLS>;
 pub type NativeLoadStoreChip<F, const NUM_CELLS: usize> =
-    NewVmChipWrapper<F, NativeLoadStoreAir<NUM_CELLS>, NativeLoadStoreStep<F, NUM_CELLS>>;
+    NewVmChipWrapper<F, NativeLoadStoreAir<NUM_CELLS>, NativeLoadStoreStep<NUM_CELLS>>;

@@ -7,7 +7,7 @@ use crate::{
         execution_control::ExecutionControl, ExecutionError, ExecutionState, InstructionExecutor,
         VmChipComplex, VmConfig, VmSegmentState,
     },
-    system::memory::{MemoryImage, INITIAL_TIMESTAMP},
+    system::memory::INITIAL_TIMESTAMP,
 };
 
 /// Check segment every 100 instructions.
@@ -40,7 +40,7 @@ where
     }
     fn should_suspend(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
         // Avoid checking segment too often.
@@ -58,7 +58,7 @@ where
 
     fn on_start(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
         chip_complex
@@ -68,7 +68,7 @@ where
 
     fn on_suspend_or_terminate(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         exit_code: Option<u32>,
     ) {
@@ -81,7 +81,7 @@ where
     /// Execute a single instruction
     fn execute_instruction(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
@@ -96,6 +96,7 @@ where
             let memory_controller = &mut chip_complex.base.memory_controller;
             let new_state = executor.execute(
                 memory_controller,
+                &mut state.streams,
                 instruction,
                 ExecutionState::new(state.pc, timestamp),
             )?;

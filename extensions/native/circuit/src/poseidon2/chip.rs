@@ -1,12 +1,9 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    sync::{Arc, Mutex},
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        StepExecutorE1, Streams, TraceStep, VmStateMut,
+        StepExecutorE1, TraceStep, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -43,17 +40,15 @@ pub struct NativePoseidon2Step<F: Field, const SBOX_REGISTERS: usize> {
     // pre-computed Poseidon2 sub cols for dummy rows.
     empty_poseidon2_sub_cols: Vec<F>,
     pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
-    pub(super) streams: Arc<Mutex<Streams<F>>>,
 }
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_REGISTERS> {
-    pub fn new(poseidon2_config: Poseidon2Config<F>, streams: Arc<Mutex<Streams<F>>>) -> Self {
+    pub fn new(poseidon2_config: Poseidon2Config<F>) -> Self {
         let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
         let empty_poseidon2_sub_cols = subchip.generate_trace(vec![[F::ZERO; CHUNK * 2]]).values;
         Self {
             empty_poseidon2_sub_cols,
             subchip,
-            streams,
         }
     }
 
@@ -73,7 +68,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
 {
     fn execute(
         &mut self,
-        state: VmStateMut<TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
         trace: &mut [F],
         trace_offset: &mut usize,
@@ -314,9 +309,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
 
             let mut root = [F::ZERO; CHUNK];
             let sibling_proof: Vec<[F; CHUNK]> = {
-                let streams = self.streams.lock().unwrap();
                 let proof_idx = proof_id.as_canonical_u32() as usize;
-                streams.hint_space[proof_idx]
+                state.streams.hint_space[proof_idx]
                     .par_chunks(CHUNK)
                     .map(|c| c.try_into().unwrap())
                     .collect()
@@ -725,7 +719,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE1<F>
 {
     fn execute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> openvm_circuit::arch::Result<()>
     where
@@ -737,7 +731,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE1<F>
 
     fn execute_metered(
         &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> openvm_circuit::arch::Result<()> {
@@ -752,7 +746,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_R
     /// Returns the number of used rows.
     fn execute_e1_impl<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> usize
     where
@@ -862,9 +856,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_R
 
             let mut root = [F::ZERO; CHUNK];
             let sibling_proof: Vec<[F; CHUNK]> = {
-                let streams = self.streams.lock().unwrap();
                 let proof_idx = proof_id.as_canonical_u32() as usize;
-                streams.hint_space[proof_idx]
+                state.streams.hint_space[proof_idx]
                     .par_chunks(CHUNK)
                     .map(|c| c.try_into().unwrap())
                     .collect()

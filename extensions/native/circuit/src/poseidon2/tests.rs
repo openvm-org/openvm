@@ -1,11 +1,8 @@
-use std::{
-    cmp::min,
-    sync::{Arc, Mutex},
-};
+use std::cmp::min;
 
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester},
-    verify_single, Streams, VirtualMachine,
+    verify_single, VirtualMachine,
 };
 use openvm_instructions::{instruction::Instruction, program::Program, LocalOpcode, SystemOpcode};
 use openvm_native_compiler::{
@@ -155,12 +152,10 @@ fn test<const N: usize>(cases: [Case; N]) {
     let address_space = AS::Native as usize;
 
     let mut tester = VmChipTestBuilder::default();
-    let streams = Arc::new(Mutex::new(Streams::default()));
     let mut chip = new_native_poseidon2_chip::<F, SBOX_REGISTERS>(
         tester.system_port(),
         Poseidon2Config::default(),
         VERIFY_BATCH_BUS,
-        streams.clone(),
         MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
@@ -171,7 +166,6 @@ fn test<const N: usize>(cases: [Case; N]) {
         opened_element_size,
     } in cases
     {
-        let mut streams = streams.lock().unwrap();
         let instance =
             random_instance(&mut rng, row_lengths, opened_element_size, |left, right| {
                 let concatenated =
@@ -205,7 +199,7 @@ fn test<const N: usize>(cases: [Case; N]) {
         tester.write_usize(address_space, dim_register, [dim_base_pointer]);
         tester.write_usize(address_space, opened_register, [opened_base_pointer]);
         tester.write_usize(address_space, opened_length_register, [opened.len()]);
-        tester.write_usize(address_space, proof_id, [streams.hint_space.len()]);
+        tester.write_usize(address_space, proof_id, [tester.streams.hint_space.len()]);
         tester.write_usize(address_space, index_register, [index_base_pointer]);
         tester.write_usize(address_space, commit_register, [commit_pointer]);
 
@@ -223,10 +217,10 @@ fn test<const N: usize>(cases: [Case; N]) {
                 tester.write(address_space, row_pointer + j, [opened_value]);
             }
         }
-        streams
+        tester
+            .streams
             .hint_space
             .push(proof.iter().flatten().copied().collect());
-        drop(streams);
         for (i, &bit) in sibling_is_on_right.iter().enumerate() {
             tester.write(address_space, index_base_pointer + i, [F::from_bool(bit)]);
         }
@@ -386,12 +380,10 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
     let elem_range = || 1..=100;
 
     let mut tester = VmChipTestBuilder::default();
-    let streams = Arc::new(Mutex::new(Streams::default()));
     let mut chip = new_native_poseidon2_chip::<F, SBOX_REGISTERS>(
         tester.system_port(),
         Poseidon2Config::default(),
         VERIFY_BATCH_BUS,
-        streams.clone(),
         MAX_INS_CAPACITY,
         tester.memory_helper(),
     );

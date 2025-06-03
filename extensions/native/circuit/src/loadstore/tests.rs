@@ -1,6 +1,4 @@
-use std::sync::{Arc, Mutex};
-
-use openvm_circuit::arch::{testing::VmChipTestBuilder, Streams, VmAirWrapper};
+use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAirWrapper};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::NativeLoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
@@ -30,7 +28,7 @@ struct TestData {
 }
 
 fn create_test_chip(tester: &VmChipTestBuilder<F>) -> NativeLoadStoreChip<F, 1> {
-    let mut chip = NativeLoadStoreChip::<F, 1>::new(
+    NativeLoadStoreChip::<F, 1>::new(
         VmAirWrapper::new(
             NativeLoadStoreAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
             NativeLoadStoreCoreAir::new(NativeLoadStoreOpcode::CLASS_OFFSET),
@@ -41,10 +39,7 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> NativeLoadStoreChip<F, 1> 
         ),
         MAX_INS_CAPACITY,
         tester.memory_helper(),
-    );
-    chip.step
-        .set_streams(Arc::new(Mutex::new(Streams::default())));
-    chip
+    )
 }
 
 fn gen_test_data(rng: &mut StdRng, opcode: NativeLoadStoreOpcode) -> TestData {
@@ -78,11 +73,7 @@ fn get_data_pointer(data: &TestData) -> F {
     }
 }
 
-fn set_values(
-    tester: &mut VmChipTestBuilder<F>,
-    chip: &mut NativeLoadStoreChip<F, 1>,
-    data: &TestData,
-) {
+fn set_values(tester: &mut VmChipTestBuilder<F>, data: &TestData) {
     if data.d != F::ZERO {
         tester.write(
             data.d.as_canonical_u32() as usize,
@@ -105,14 +96,7 @@ fn set_values(
     }
     if data.is_hint {
         for _ in 0..data.e.as_canonical_u32() {
-            chip.step
-                .streams
-                .get()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .hint_stream
-                .push_back(data.data_val);
+            tester.streams.hint_stream.push_back(data.data_val);
         }
     }
 }
@@ -150,7 +134,7 @@ fn set_and_execute(
     opcode: NativeLoadStoreOpcode,
 ) {
     let data = gen_test_data(rng, opcode);
-    set_values(tester, chip, &data);
+    set_values(tester, &data);
 
     tester.execute_with_pc(
         chip,

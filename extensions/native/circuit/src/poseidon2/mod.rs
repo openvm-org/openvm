@@ -1,7 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use openvm_circuit::{
-    arch::{ExecutionBridge, NewVmChipWrapper, Streams, SystemPort},
+    arch::{ExecutionBridge, NewVmChipWrapper, SystemPort},
     system::memory::SharedMemoryHelper,
 };
 use openvm_native_compiler::conversion::AS;
@@ -30,7 +30,6 @@ pub fn new_native_poseidon2_chip<F: PrimeField32, const SBOX_REGISTERS: usize>(
     port: SystemPort,
     poseidon2_config: Poseidon2Config<F>,
     verify_batch_bus: VerifyBatchBus,
-    streams: Arc<Mutex<Streams<F>>>,
     max_ins_capacity: usize,
     mem_helper: SharedMemoryHelper<F>,
 ) -> NativePoseidon2Chip<F, SBOX_REGISTERS> {
@@ -42,7 +41,7 @@ pub fn new_native_poseidon2_chip<F: PrimeField32, const SBOX_REGISTERS: usize>(
             subair: Arc::new(Poseidon2SubAir::new(poseidon2_config.constants.into())),
             address_space: F::from_canonical_u32(AS::Native as u32),
         },
-        NativePoseidon2Step::new(poseidon2_config, streams),
+        NativePoseidon2Step::new(poseidon2_config),
         max_ins_capacity,
         mem_helper,
     )

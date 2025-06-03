@@ -1,13 +1,10 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    sync::{Arc, Mutex, OnceLock},
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         ExecutionBridge, ExecutionError, ExecutionState, NewVmChipWrapper, Result, StepExecutorE1,
-        Streams, TraceStep, VmStateMut,
+        TraceStep, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -37,7 +34,6 @@ use openvm_stark_backend::{
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use serde::{Deserialize, Serialize};
 
 use crate::adapters::{
     decompose, memory_read, memory_read_from_state, memory_write_from_state, tracing_read,
@@ -264,14 +260,13 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
     }
 }
 
-pub struct Rv32HintStoreStep<F: Field> {
+pub struct Rv32HintStoreStep {
     pointer_max_bits: usize,
     offset: usize,
-    pub streams: OnceLock<Arc<Mutex<Streams<F>>>>,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl<F: PrimeField32> Rv32HintStoreStep<F> {
+impl Rv32HintStoreStep {
     pub fn new(
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         pointer_max_bits: usize,
@@ -280,17 +275,12 @@ impl<F: PrimeField32> Rv32HintStoreStep<F> {
         Self {
             pointer_max_bits,
             offset,
-            streams: OnceLock::new(),
             bitwise_lookup_chip,
         }
     }
-
-    pub fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
-        self.streams.set(streams).unwrap();
-    }
 }
 
-impl<F, CTX> TraceStep<F, CTX> for Rv32HintStoreStep<F>
+impl<F, CTX> TraceStep<F, CTX> for Rv32HintStoreStep
 where
     F: PrimeField32,
 {
@@ -306,7 +296,7 @@ where
 
     fn execute(
         &mut self,
-        state: VmStateMut<TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
         trace: &mut [F],
         trace_offset: &mut usize,
@@ -361,8 +351,7 @@ where
         debug_assert_ne!(num_words, 0);
         debug_assert!(num_words <= (1 << self.pointer_max_bits));
 
-        let mut streams = self.streams.get().unwrap().lock().unwrap();
-        if streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
+        if state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
             return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
         }
 
@@ -387,7 +376,7 @@ where
             }
 
             let data_f: [F; RV32_REGISTER_NUM_LIMBS] =
-                std::array::from_fn(|_| streams.hint_stream.pop_front().unwrap());
+                std::array::from_fn(|_| state.streams.hint_stream.pop_front().unwrap());
             let data: [u8; RV32_REGISTER_NUM_LIMBS] =
                 data_f.map(|byte| byte.as_canonical_u32() as u8);
 
@@ -439,13 +428,13 @@ where
     }
 }
 
-impl<F> StepExecutorE1<F> for Rv32HintStoreStep<F>
+impl<F> StepExecutorE1<F> for Rv32HintStoreStep
 where
     F: PrimeField32,
 {
     fn execute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -480,14 +469,18 @@ where
         debug_assert_ne!(num_words, 0);
         debug_assert!(num_words <= (1 << self.pointer_max_bits));
 
-        let mut streams = self.streams.get().unwrap().lock().unwrap();
-        if streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
+        if state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
             return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
         }
 
         for word_index in 0..num_words {
             let data: [u8; RV32_REGISTER_NUM_LIMBS] = std::array::from_fn(|_| {
-                streams.hint_stream.pop_front().unwrap().as_canonical_u32() as u8
+                state
+                    .streams
+                    .hint_stream
+                    .pop_front()
+                    .unwrap()
+                    .as_canonical_u32() as u8
             });
             memory_write_from_state(
                 state,
@@ -504,7 +497,7 @@ where
 
     fn execute_metered(
         &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {
@@ -534,4 +527,4 @@ where
     }
 }
 
-pub type Rv32HintStoreChip<F> = NewVmChipWrapper<F, Rv32HintStoreAir, Rv32HintStoreStep<F>>;
+pub type Rv32HintStoreChip<F> = NewVmChipWrapper<F, Rv32HintStoreAir, Rv32HintStoreStep>;

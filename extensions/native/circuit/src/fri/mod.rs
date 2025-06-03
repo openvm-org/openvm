@@ -2,15 +2,14 @@ use core::ops::Deref;
 use std::{
     borrow::{Borrow, BorrowMut},
     mem::offset_of,
-    sync::{Arc, Mutex},
 };
 
 use itertools::zip_eq;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        ExecutionBridge, ExecutionState, NewVmChipWrapper, Result, StepExecutorE1, Streams,
-        TraceStep, VmStateMut,
+        ExecutionBridge, ExecutionState, NewVmChipWrapper, Result, StepExecutorE1, TraceStep,
+        VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols, AUX_LEN},
@@ -543,12 +542,14 @@ fn elem_to_ext<F: Field>(elem: F) -> [F; EXT_DEG] {
 }
 
 pub struct FriReducedOpeningStep<F: Field> {
-    streams: Arc<Mutex<Streams<F>>>,
+    phantom: std::marker::PhantomData<F>,
 }
 
 impl<F: PrimeField32> FriReducedOpeningStep<F> {
-    pub fn new(streams: Arc<Mutex<Streams<F>>>) -> Self {
-        Self { streams }
+    pub fn new() -> Self {
+        Self {
+            phantom: std::marker::PhantomData,
+        }
     }
 }
 
@@ -563,7 +564,7 @@ where
 
     fn execute(
         &mut self,
-        state: VmStateMut<TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
         trace: &mut [F],
         trace_offset: &mut usize,
@@ -616,8 +617,7 @@ where
         let write_a = F::ONE - is_init_read;
 
         let data = if is_init == 0 {
-            let mut streams = self.streams.lock().unwrap();
-            let hint_steam = &mut streams.hint_space[hint_id];
+            let hint_steam = &mut state.streams.hint_space[hint_id];
             hint_steam.drain(0..length).collect()
         } else {
             vec![]
@@ -786,7 +786,7 @@ where
 {
     fn execute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -824,8 +824,7 @@ where
         let length = length.as_canonical_u32() as usize;
 
         let data = if is_init == 0 {
-            let mut streams = self.streams.lock().unwrap();
-            let hint_steam = &mut streams.hint_space[hint_id];
+            let hint_steam = &mut state.streams.hint_space[hint_id];
             hint_steam.drain(0..length).collect()
         } else {
             vec![]
@@ -865,7 +864,7 @@ where
 
     fn execute_metered(
         &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {

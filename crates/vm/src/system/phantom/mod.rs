@@ -1,6 +1,6 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    sync::{Arc, Mutex, OnceLock},
+    sync::Arc,
 };
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -92,7 +92,6 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
 pub struct PhantomChip<F> {
     pub air: PhantomAir,
     pub rows: Vec<PhantomCols<F>>,
-    streams: OnceLock<Arc<Mutex<Streams<F>>>>,
     phantom_executors: FxHashMap<PhantomDiscriminant, Box<dyn PhantomSubExecutor<F>>>,
 }
 
@@ -104,14 +103,7 @@ impl<F> PhantomChip<F> {
                 phantom_opcode: VmOpcode::from_usize(offset + SystemOpcode::PHANTOM.local_usize()),
             },
             rows: vec![],
-            streams: OnceLock::new(),
             phantom_executors: FxHashMap::default(),
-        }
-    }
-
-    pub fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
-        if self.streams.set(streams).is_err() {
-            panic!("Streams should only be set once");
         }
     }
 
@@ -131,7 +123,7 @@ where
 {
     fn execute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError>
     where
@@ -154,13 +146,12 @@ where
                     discriminant,
                 }
             })?;
-            let mut streams = self.streams.get().unwrap().lock().unwrap();
             // TODO(ayush): implement phantom subexecutor for new traits
             sub_executor
                 .as_ref()
                 .phantom_execute(
                     state.memory,
-                    &mut streams,
+                    state.streams,
                     discriminant,
                     a.as_canonical_u32(),
                     b.as_canonical_u32(),
@@ -180,7 +171,7 @@ where
 
     fn execute_metered(
         &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         _chip_index: usize,
     ) -> Result<(), ExecutionError> {
@@ -194,6 +185,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
+        streams: &mut Streams<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
@@ -208,6 +200,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
         let mut state = VmStateMut {
             pc: &mut pc,
             memory: &mut memory.memory.data,
+            streams,
             ctx: &mut E1Ctx::default(),
         };
         self.execute_e1(&mut state, instruction)?;

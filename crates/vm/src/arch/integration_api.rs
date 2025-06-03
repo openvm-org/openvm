@@ -17,7 +17,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{
     execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-    ExecutionState, InsExecutorE1, InstructionExecutor, Result, VmStateMut,
+    ExecutionState, InsExecutorE1, InstructionExecutor, Result, Streams, VmStateMut,
 };
 use crate::system::memory::{
     online::{GuestMemory, TracingMemory},
@@ -162,7 +162,7 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 pub trait TraceStep<F, CTX> {
     fn execute(
         &mut self,
-        state: VmStateMut<TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
         // TODO(ayush): combine to a single struct
         trace: &mut [F],
@@ -263,6 +263,7 @@ where
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
+        streams: &mut Streams<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>> {
@@ -270,6 +271,7 @@ where
         let state = VmStateMut {
             pc: &mut pc,
             memory: &mut memory.memory,
+            streams,
             ctx: &mut (),
         };
         self.step.execute(
@@ -392,7 +394,7 @@ where
 
     fn read<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Self::ReadData
     where
@@ -400,7 +402,7 @@ where
 
     fn write<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
     ) where
@@ -411,7 +413,7 @@ where
 pub trait StepExecutorE1<F> {
     fn execute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -419,7 +421,7 @@ pub trait StepExecutorE1<F> {
 
     fn execute_metered(
         &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()>;
@@ -432,7 +434,7 @@ where
 {
     fn execute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -443,7 +445,7 @@ where
 
     fn execute_metered(
         &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()>

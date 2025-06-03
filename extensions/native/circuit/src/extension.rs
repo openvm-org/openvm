@@ -102,7 +102,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
 
         let range_checker = &builder.system_base().range_checker_chip;
 
-        let mut load_store_chip = NativeLoadStoreChip::<F, 1>::new(
+        let load_store_chip = NativeLoadStoreChip::<F, 1>::new(
             VmAirWrapper::new(
                 NativeLoadStoreAdapterAir::new(
                     memory_bridge,
@@ -117,13 +117,12 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
-        load_store_chip.step.set_streams(builder.streams().clone());
         inventory.add_executor(
             load_store_chip,
             NativeLoadStoreOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let mut block_load_store_chip = NativeLoadStoreChip::<F, BLOCK_LOAD_STORE_SIZE>::new(
+        let block_load_store_chip = NativeLoadStoreChip::<F, BLOCK_LOAD_STORE_SIZE>::new(
             VmAirWrapper::new(
                 NativeLoadStoreAdapterAir::new(
                     memory_bridge,
@@ -138,9 +137,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
-        block_load_store_chip
-            .step
-            .set_streams(builder.streams().clone());
         inventory.add_executor(
             block_load_store_chip,
             NativeLoadStore4Opcode::iter().map(|x| x.global_opcode()),
@@ -224,7 +220,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
             ),
-            FriReducedOpeningStep::new(builder.streams().clone()),
+            FriReducedOpeningStep::new(),
             MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
@@ -238,7 +234,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             builder.system_port(),
             Poseidon2Config::default(),
             VerifyBatchBus::new(builder.new_bus_idx()),
-            builder.streams().clone(),
             // TODO: this may use too much memory.
             MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),

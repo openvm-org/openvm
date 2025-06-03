@@ -56,7 +56,7 @@ impl<'a> MeteredExecutionControl<'a> {
             .sum()
     }
 
-    fn should_segment(&self, state: &mut VmSegmentState<MeteredCtx>) -> bool {
+    fn should_segment<F>(&self, state: &mut VmSegmentState<F, MeteredCtx>) -> bool {
         let trace_heights = state.ctx.trace_heights_if_finalized();
         for (i, &height) in trace_heights.iter().enumerate() {
             if height > MAX_TRACE_HEIGHT {
@@ -102,7 +102,7 @@ impl<'a> MeteredExecutionControl<'a> {
 
     fn reset_segment<F, VC>(
         &self,
-        state: &mut VmSegmentState<MeteredCtx>,
+        state: &mut VmSegmentState<F, MeteredCtx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) where
         F: PrimeField32,
@@ -155,7 +155,7 @@ impl<'a> MeteredExecutionControl<'a> {
 
     fn check_segment_limits<F, VC>(
         &self,
-        state: &mut VmSegmentState<MeteredCtx>,
+        state: &mut VmSegmentState<F, MeteredCtx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) where
         F: PrimeField32,
@@ -200,7 +200,7 @@ where
 
     fn should_suspend(
         &self,
-        _state: &mut VmSegmentState<Self::Ctx>,
+        _state: &mut VmSegmentState<F, Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
         false
@@ -208,7 +208,7 @@ where
 
     fn on_start(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
         self.reset_segment::<F, VC>(state, chip_complex);
@@ -216,7 +216,7 @@ where
 
     fn on_suspend_or_terminate(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         _exit_code: Option<u32>,
     ) {
@@ -245,7 +245,7 @@ where
     /// Execute a single instruction
     fn execute_instruction(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
@@ -267,6 +267,7 @@ where
             let mut vm_state = VmStateMut {
                 pc: &mut state.pc,
                 memory: state.memory.as_mut().unwrap(),
+                streams: &mut state.streams,
                 ctx: &mut state.ctx,
             };
             executor.execute_metered(&mut vm_state, instruction, offset + i)?;

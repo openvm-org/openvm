@@ -1,10 +1,4 @@
-use std::{
-    alloc::{alloc, Layout},
-    fmt::Debug,
-    marker::PhantomData,
-    mem::MaybeUninit,
-    ptr,
-};
+use std::{fmt::Debug, marker::PhantomData, mem::MaybeUninit, ptr};
 
 use itertools::{zip_eq, Itertools};
 use openvm_instructions::exe::SparseMemoryImage;

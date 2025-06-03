@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    sync::{Arc, Mutex, OnceLock},
 };
 
 use openvm_circuit::{
@@ -9,7 +8,7 @@ use openvm_circuit::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         instructions::LocalOpcode,
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, ExecutionError, Result,
-        StepExecutorE1, Streams, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -122,33 +121,18 @@ where
 }
 
 #[derive(Debug)]
-pub struct NativeLoadStoreCoreStep<A, F, const NUM_CELLS: usize>
-where
-    F: Field,
-{
+pub struct NativeLoadStoreCoreStep<A, const NUM_CELLS: usize> {
     adapter: A,
     offset: usize,
-    pub streams: OnceLock<Arc<Mutex<Streams<F>>>>,
 }
 
-impl<A, F, const NUM_CELLS: usize> NativeLoadStoreCoreStep<A, F, NUM_CELLS>
-where
-    F: Field,
-{
+impl<A, const NUM_CELLS: usize> NativeLoadStoreCoreStep<A, NUM_CELLS> {
     pub fn new(adapter: A, offset: usize) -> Self {
-        Self {
-            adapter,
-            offset,
-            streams: OnceLock::new(),
-        }
-    }
-    pub fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
-        self.streams.set(streams).unwrap();
+        Self { adapter, offset }
     }
 }
 
-impl<F, CTX, A, const NUM_CELLS: usize> TraceStep<F, CTX>
-    for NativeLoadStoreCoreStep<A, F, NUM_CELLS>
+impl<F, CTX, A, const NUM_CELLS: usize> TraceStep<F, CTX> for NativeLoadStoreCoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static
@@ -169,7 +153,7 @@ where
 
     fn execute(
         &mut self,
-        state: VmStateMut<TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
         trace: &mut [F],
         trace_offset: &mut usize,
@@ -187,11 +171,10 @@ where
         let (pointer_read, data_read) = self.adapter.read(state.memory, instruction, adapter_row);
 
         let data = if local_opcode == NativeLoadStoreOpcode::HINT_STOREW {
-            let mut streams = self.streams.get().unwrap().lock().unwrap();
-            if streams.hint_stream.len() < NUM_CELLS {
+            if state.streams.hint_stream.len() < NUM_CELLS {
                 return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
             }
-            array::from_fn(|_| streams.hint_stream.pop_front().unwrap())
+            array::from_fn(|_| state.streams.hint_stream.pop_front().unwrap())
         } else {
             data_read
         };
@@ -223,7 +206,7 @@ where
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> StepExecutorE1<F> for NativeLoadStoreCoreStep<A, F, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> StepExecutorE1<F> for NativeLoadStoreCoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static
@@ -231,7 +214,7 @@ where
 {
     fn execute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -245,11 +228,10 @@ where
         let (_, data_read) = self.adapter.read(state, instruction);
 
         let data = if local_opcode == NativeLoadStoreOpcode::HINT_STOREW {
-            let mut streams = self.streams.get().unwrap().lock().unwrap();
-            if streams.hint_stream.len() < NUM_CELLS {
+            if state.streams.hint_stream.len() < NUM_CELLS {
                 return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
             }
-            array::from_fn(|_| streams.hint_stream.pop_front().unwrap())
+            array::from_fn(|_| state.streams.hint_stream.pop_front().unwrap())
         } else {
             data_read
         };
@@ -263,7 +245,7 @@ where
 
     fn execute_metered(
         &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {

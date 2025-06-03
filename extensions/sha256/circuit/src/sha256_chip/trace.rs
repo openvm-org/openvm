@@ -33,7 +33,7 @@ use crate::{
 impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
     fn execute(
         &mut self,
-        state: VmStateMut<TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
         trace: &mut [F],
         trace_offset: &mut usize,

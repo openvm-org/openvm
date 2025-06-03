@@ -252,7 +252,6 @@ where
         let chip_complex = create_and_initialize_chip_complex(
             &self.config,
             exe.program.clone(),
-            from_state.input,
             Some(from_state.memory),
         )
         .unwrap();
@@ -273,7 +272,8 @@ where
             segment.set_override_trace_heights(overridden_heights.clone());
         }
 
-        let mut exec_state = VmSegmentState::new(from_state.clk, from_state.pc, None, ctx);
+        let mut exec_state =
+            VmSegmentState::new(from_state.clk, from_state.pc, None, from_state.input, ctx);
         metrics_span("execute_time_ms", || {
             segment.execute_from_state(&mut exec_state)
         })?;
@@ -295,7 +295,7 @@ where
                 .unwrap()
                 .pc
         );
-        let streams = segment.chip_complex.take_streams();
+        let streams = exec_state.streams;
         #[cfg(feature = "bench-metrics")]
         let metrics = segment.metrics.partial_take();
 
@@ -364,24 +364,17 @@ where
     {
         let mem_config = self.config.system().memory_config;
         let exe = exe.into();
-        let memory = AddressMap::from_sparse(
+        let memory = Some(GuestMemory::new(AddressMap::from_sparse(
             mem_config.as_offset,
             1 << mem_config.as_height,
             1 << mem_config.pointer_max_bits,
             exe.init_memory.clone(),
-        );
-
-        let state = VmState::new(0, exe.pc_start, memory, input);
+        )));
 
         let _span = info_span!("execute_e1_until_cycle").entered();
 
-        let chip_complex = create_and_initialize_chip_complex(
-            &self.config,
-            exe.program.clone(),
-            state.input,
-            None,
-        )
-        .unwrap();
+        let chip_complex =
+            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
         let mut segment = VmSegmentExecutor::<F, VC, _>::new(
             chip_complex,
             self.trace_height_constraints.clone(),
@@ -390,15 +383,10 @@ where
         );
         #[cfg(feature = "bench-metrics")]
         {
-            segment.metrics = state.metrics;
+            segment.metrics = Default::default();
         }
 
-        let mut exec_state = VmSegmentState::new(
-            state.clk,
-            state.pc,
-            Some(GuestMemory::new(state.memory)),
-            (),
-        );
+        let mut exec_state = VmSegmentState::new(0, exe.pc_start, memory, input.into(), ());
         metrics_span("execute_time_ms", || {
             segment.execute_from_state(&mut exec_state)
         })?;
@@ -420,7 +408,7 @@ where
             clk: exec_state.clk,
             pc: exec_state.pc,
             memory: exec_state.memory.unwrap().memory,
-            input: segment.chip_complex.take_streams(),
+            input: exec_state.streams,
             #[cfg(feature = "bench-metrics")]
             metrics: segment.metrics.partial_take(),
         };
@@ -441,23 +429,17 @@ where
         let mem_config = self.config.system().memory_config;
         let exe = exe.into();
 
-        let memory = AddressMap::from_sparse(
+        let memory = Some(GuestMemory::new(AddressMap::from_sparse(
             mem_config.as_offset,
             1 << mem_config.as_height,
             1 << mem_config.pointer_max_bits,
             exe.init_memory.clone(),
-        );
-        let state = VmState::new(0, exe.pc_start, memory, input);
+        )));
 
         let _span = info_span!("execute_metered").entered();
 
-        let chip_complex = create_and_initialize_chip_complex(
-            &self.config,
-            exe.program.clone(),
-            state.input,
-            None,
-        )
-        .unwrap();
+        let chip_complex =
+            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
         let air_names = chip_complex.air_names();
         let ctrl = MeteredExecutionControl::new(&air_names, &widths, &interactions);
         let mut executor = VmSegmentExecutor::<F, VC, _>::new(
@@ -469,7 +451,7 @@ where
 
         #[cfg(feature = "bench-metrics")]
         {
-            executor.metrics = state.metrics;
+            executor.metrics = Default::default();
         }
 
         let continuations_enabled = executor
@@ -501,12 +483,7 @@ where
                 .memory_dimensions(),
         );
 
-        let mut exec_state = VmSegmentState::new(
-            state.clk,
-            state.pc,
-            Some(GuestMemory::new(state.memory)),
-            ctx,
-        );
+        let mut exec_state = VmSegmentState::new(0, exe.pc_start, memory, input.into(), ctx);
         metrics_span("execute_time_ms", || {
             executor.execute_from_state(&mut exec_state)
         })?;
@@ -554,7 +531,6 @@ where
         let chip_complex = create_and_initialize_chip_complex(
             &self.config,
             exe.program.clone(),
-            state.input,
             Some(state.memory),
         )
         .unwrap();
@@ -571,7 +547,7 @@ where
             segment.set_override_trace_heights(overridden_heights.clone());
         }
 
-        let mut exec_state = VmSegmentState::new(state.clk, state.pc, None, ());
+        let mut exec_state = VmSegmentState::new(state.clk, state.pc, None, state.input, ());
         metrics_span("execute_from_state", || {
             segment.execute_from_state(&mut exec_state)
         })?;
@@ -632,7 +608,7 @@ where
         let per_segment = self.execute_and_then(
             exe,
             input,
-            |seg_idx, mut seg| {
+            |seg_idx, seg| {
                 // Note: this will only be Some on the last segment; otherwise it is
                 // already moved into next segment state
                 final_memory = Some(seg.chip_complex.memory_controller().memory_image().clone());
@@ -753,13 +729,8 @@ where
         input: impl Into<Streams<F>>,
     ) -> Result<VmSegmentExecutor<F, VC, TracegenExecutionControlWithSegmentation>, ExecutionError>
     {
-        let chip_complex = create_and_initialize_chip_complex(
-            &self.config,
-            exe.program.clone(),
-            input.into(),
-            None,
-        )
-        .unwrap();
+        let chip_complex =
+            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
         let ctrl = TracegenExecutionControlWithSegmentation::new(chip_complex.air_names());
         let mut segment = VmSegmentExecutor::new(
             chip_complex,
@@ -776,6 +747,7 @@ where
             0,
             exe.pc_start,
             None,
+            input.into(),
             TracegenCtx {
                 since_last_segment_check: 0,
             },
@@ -1167,7 +1139,6 @@ where
 pub fn create_and_initialize_chip_complex<F, VC>(
     config: &VC,
     program: Program<F>,
-    init_streams: Streams<F>,
     initial_memory: Option<MemoryImage>,
 ) -> Result<VmChipComplex<F, VC::Executor, VC::Periphery>, VmInventoryError>
 where
@@ -1175,7 +1146,6 @@ where
     VC: VmConfig<F>,
 {
     let mut chip_complex = config.create_chip_complex()?;
-    chip_complex.set_streams(init_streams);
 
     // Strip debug info if profiling is disabled
     let program = if !config.system().profiling {

@@ -294,7 +294,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterExe
 
     fn read<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Self::ReadData
     where
@@ -322,7 +322,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterExe
 
     fn write<Ctx>(
         &self,
-        _state: &mut VmStateMut<GuestMemory, Ctx>,
+        _state: &mut VmStateMut<F, GuestMemory, Ctx>,
         _instruction: &Instruction<F>,
         _data: &Self::WriteData,
     ) where

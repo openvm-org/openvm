@@ -13,31 +13,38 @@ use openvm_stark_backend::{
     Chip,
 };
 
+#[cfg(feature = "bench-metrics")]
+use super::InstructionExecutor;
 use super::{
-    execution_control::ExecutionControl, ExecutionError, GenerationError, SystemConfig,
+    execution_control::ExecutionControl, ExecutionError, GenerationError, Streams, SystemConfig,
     VmChipComplex, VmComplexTraceHeights, VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
-use crate::{
-    arch::{instructions::*, InstructionExecutor},
-    system::memory::online::GuestMemory,
-};
+use crate::{arch::instructions::*, system::memory::online::GuestMemory};
 
-pub struct VmSegmentState<Ctx> {
+pub struct VmSegmentState<F, Ctx> {
     pub clk: u64,
     pub pc: u32,
     pub memory: Option<GuestMemory>,
+    pub streams: Streams<F>,
     pub exit_code: Option<u32>,
     pub ctx: Ctx,
 }
 
-impl<Ctx> VmSegmentState<Ctx> {
-    pub fn new(clk: u64, pc: u32, memory: Option<GuestMemory>, ctx: Ctx) -> Self {
+impl<F, Ctx> VmSegmentState<F, Ctx> {
+    pub fn new(
+        clk: u64,
+        pc: u32,
+        memory: Option<GuestMemory>,
+        streams: Streams<F>,
+        ctx: Ctx,
+    ) -> Self {
         Self {
             clk,
             pc,
             memory,
+            streams,
             ctx,
             exit_code: None,
         }
@@ -105,7 +112,7 @@ where
     /// Stopping is triggered by should_stop() or if VM is terminated
     pub fn execute_from_state(
         &mut self,
-        state: &mut VmSegmentState<Ctrl::Ctx>,
+        state: &mut VmSegmentState<F, Ctrl::Ctx>,
     ) -> Result<(), ExecutionError> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
@@ -133,7 +140,7 @@ where
     // TODO(ayush): clean this up, separate to smaller functions
     fn execute_instruction(
         &mut self,
-        state: &mut VmSegmentState<Ctrl::Ctx>,
+        state: &mut VmSegmentState<F, Ctrl::Ctx>,
         prev_backtrace: &mut Option<Backtrace>,
     ) -> Result<(), ExecutionError> {
         let pc = state.pc;
@@ -208,7 +215,7 @@ where
     }
 
     /// Returns bool of whether to switch to next segment or not.
-    fn should_suspend(&mut self, state: &mut VmSegmentState<Ctrl::Ctx>) -> bool {
+    fn should_suspend(&mut self, state: &mut VmSegmentState<F, Ctrl::Ctx>) -> bool {
         if !self.system_config().continuation_enabled {
             return false;
         }

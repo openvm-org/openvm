@@ -1,5 +1,3 @@
-use std::sync::{Arc, Mutex};
-
 use openvm_instructions::{instruction::Instruction, SystemOpcode};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -16,7 +14,6 @@ fn test_nops_and_terminate() {
         tester.program_bus(),
         SystemOpcode::CLASS_OFFSET,
     );
-    chip.set_streams(Arc::new(Mutex::new(Default::default())));
 
     let nop = Instruction::from_isize(SystemOpcode::PHANTOM.global_opcode(), 0, 0, 0, 0, 0);
     let mut state: ExecutionState<F> = ExecutionState::new(F::ZERO, F::ONE);

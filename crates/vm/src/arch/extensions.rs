@@ -2,7 +2,7 @@ use std::{
     any::{Any, TypeId},
     cell::RefCell,
     iter::once,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use derive_more::derive::From;
@@ -36,7 +36,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     vm_poseidon2_config, ExecutionBus, GenerationError, InstructionExecutor, PhantomSubExecutor,
-    Streams, SystemConfig, SystemTraceHeights,
+    SystemConfig, SystemTraceHeights,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -122,7 +122,6 @@ pub struct SystemPort {
 pub struct VmInventoryBuilder<'a, F: PrimeField32> {
     system_config: &'a SystemConfig,
     system: &'a SystemBase<F>,
-    streams: &'a Arc<Mutex<Streams<F>>>,
     bus_idx_mgr: BusIndexManager,
     /// Chips that are already included in the chipset and may be used
     /// as dependencies. The order should be that depended-on chips are ordered
@@ -134,13 +133,11 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
     pub fn new(
         system_config: &'a SystemConfig,
         system: &'a SystemBase<F>,
-        streams: &'a Arc<Mutex<Streams<F>>>,
         bus_idx_mgr: BusIndexManager,
     ) -> Self {
         Self {
             system_config,
             system,
-            streams,
             bus_idx_mgr,
             chips: Vec::new(),
         }
@@ -191,11 +188,6 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
             return Err(VmInventoryError::PhantomSubExecutorExists { discriminant });
         }
         Ok(())
-    }
-
-    /// Shareable streams. Clone to get a shared mutable reference.
-    pub fn streams(&self) -> &Arc<Mutex<Streams<F>>> {
-        self.streams
     }
 
     fn add_chip<E: AnyEnum>(&mut self, chip: &'a E) {
@@ -466,7 +458,6 @@ pub struct VmChipComplex<F: PrimeField32, E, P> {
     /// Absolute maximum value a trace height can be and still be provable.
     max_trace_height: usize,
 
-    streams: Arc<Mutex<Streams<F>>>,
     bus_idx_mgr: BusIndexManager,
 }
 
@@ -635,11 +626,8 @@ impl<F: PrimeField32> SystemComplex<F> {
             );
             inventory.add_periphery_chip(chip);
         }
-        let streams = Arc::new(Mutex::new(Streams::default()));
         let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
-        let mut phantom_chip =
-            PhantomChip::new(execution_bus, program_bus, SystemOpcode::CLASS_OFFSET);
-        phantom_chip.set_streams(streams.clone());
+        let phantom_chip = PhantomChip::new(execution_bus, program_bus, SystemOpcode::CLASS_OFFSET);
         inventory
             .add_executor(RefCell::new(phantom_chip), [phantom_opcode])
             .unwrap();
@@ -666,7 +654,6 @@ impl<F: PrimeField32> SystemComplex<F> {
             base,
             inventory,
             bus_idx_mgr,
-            streams,
             overridden_inventory_heights: None,
             max_trace_height,
         }
@@ -685,8 +672,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         E: AnyEnum,
         P: AnyEnum,
     {
-        let mut builder =
-            VmInventoryBuilder::new(&self.config, &self.base, &self.streams, self.bus_idx_mgr);
+        let mut builder = VmInventoryBuilder::new(&self.config, &self.base, self.bus_idx_mgr);
         // Add range checker for convenience, the other system base chips aren't included - they can
         // be accessed directly from builder
         builder.add_chip(&self.base.range_checker_chip);
@@ -731,7 +717,6 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             base: self.base,
             inventory: self.inventory.transmute(),
             bus_idx_mgr: self.bus_idx_mgr,
-            streams: self.streams,
             overridden_inventory_heights: self.overridden_inventory_heights,
             max_trace_height: self.max_trace_height,
         }
@@ -825,17 +810,6 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
 
     pub(crate) fn set_initial_memory(&mut self, memory: MemoryImage) {
         self.base.memory_controller.set_initial_memory(memory);
-    }
-
-    /// Warning: this sets the stream in all chips which have a shared mutable reference to the
-    /// streams.
-    pub(crate) fn set_streams(&mut self, streams: Streams<F>) {
-        *self.streams.lock().unwrap() = streams;
-    }
-
-    /// This should **only** be called after segment execution has finished.
-    pub fn take_streams(&mut self) -> Streams<F> {
-        std::mem::take(&mut self.streams.lock().unwrap())
     }
 
     // This is O(1).

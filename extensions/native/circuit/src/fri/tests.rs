@@ -1,10 +1,5 @@
-use std::sync::{Arc, Mutex};
-
 use itertools::Itertools;
-use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, VmChipTestBuilder},
-    Streams,
-};
+use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::FriOpcode::FRI_REDUCED_OPENING;
 use openvm_stark_backend::{
@@ -24,13 +19,10 @@ use crate::fri::OVERALL_WIDTH;
 const MAX_INS_CAPACITY: usize = 1024;
 type F = BabyBear;
 
-fn create_test_chip(
-    tester: &VmChipTestBuilder<F>,
-    streams: Arc<Mutex<Streams<F>>>,
-) -> FriReducedOpeningChip<F> {
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FriReducedOpeningChip<F> {
     FriReducedOpeningChip::<F>::new(
         FriReducedOpeningAir::new(tester.execution_bridge(), tester.memory_bridge()),
-        FriReducedOpeningStep::new(streams),
+        FriReducedOpeningStep::new(),
         MAX_INS_CAPACITY,
         tester.memory_helper(),
     )
@@ -61,8 +53,7 @@ fn fri_mat_opening_air_test() {
 
     let mut tester = VmChipTestBuilder::default();
 
-    let streams = Arc::new(Mutex::new(Streams::default()));
-    let mut chip = create_test_chip(&tester, streams.clone());
+    let mut chip = create_test_chip(&tester);
 
     let mut rng = create_seeded_rng();
 
@@ -74,7 +65,7 @@ fn fri_mat_opening_air_test() {
         };
     }
 
-    streams.lock().unwrap().hint_space = vec![vec![]];
+    tester.streams.hint_space = vec![vec![]];
 
     for _ in 0..num_ops {
         let alpha = gen_ext!();
@@ -126,7 +117,7 @@ fn fri_mat_opening_air_test() {
         );
 
         if is_init == 0 {
-            streams.lock().unwrap().hint_space[0].extend_from_slice(&a);
+            tester.streams.hint_space[0].extend_from_slice(&a);
         } else {
             for (i, ai) in a.iter().enumerate() {
                 tester.write(address_space, a_pointer + i, [*ai]);

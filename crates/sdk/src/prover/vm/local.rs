@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, mem, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
 use openvm_circuit::{

@@ -83,13 +83,14 @@ pub enum ExecutionError {
 /// The state is generic in guest memory `MEM` and additional host state `CTX`.
 /// The host state is execution context specific.
 #[derive(derive_new::new)]
-pub struct VmStateMut<'a, MEM, CTX> {
+pub struct VmStateMut<'a, F, MEM, CTX> {
     pub pc: &'a mut u32,
     pub memory: &'a mut MEM,
+    pub streams: &'a mut Streams<F>,
     pub ctx: &'a mut CTX,
 }
 
-impl<F: PrimeField32, CTX> VmStateMut<'_, TracingMemory<F>, CTX> {
+impl<F: PrimeField32, CTX> VmStateMut<'_, F, TracingMemory<F>, CTX> {
     // TODO: store as u32 directly
     #[inline(always)]
     pub fn ins_start(&self, from_state: &mut ExecutionState<F>) {
@@ -105,6 +106,7 @@ pub trait InstructionExecutor<F> {
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
+        streams: &mut Streams<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>>;
@@ -118,7 +120,7 @@ pub trait InstructionExecutor<F> {
 pub trait InsExecutorE1<F> {
     fn execute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -127,7 +129,7 @@ pub trait InsExecutorE1<F> {
 
     fn execute_metered(
         &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()>
@@ -141,7 +143,7 @@ where
 {
     fn execute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -153,7 +155,7 @@ where
 
     fn execute_metered(
         &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()>
@@ -169,10 +171,12 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
+        streams: &mut Streams<F>,
         instruction: &Instruction<F>,
         prev_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>> {
-        self.borrow_mut().execute(memory, instruction, prev_state)
+        self.borrow_mut()
+            .execute(memory, streams, instruction, prev_state)
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {

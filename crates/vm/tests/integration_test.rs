@@ -719,13 +719,8 @@ fn test_hint_load_1() {
 
     let program = Program::from_instructions(&instructions);
 
-    let chip_complex = create_and_initialize_chip_complex(
-        &test_native_config(),
-        program,
-        vec![vec![F::ONE, F::TWO]].into(),
-        None,
-    )
-    .unwrap();
+    let chip_complex =
+        create_and_initialize_chip_complex(&test_native_config(), program, None).unwrap();
     let ctrl = TracegenExecutionControlWithSegmentation::new(chip_complex.air_names());
     let ctx = ExecutionControl::<F, NativeConfig>::initialize_context(&ctrl);
     let mut segment = VmSegmentExecutor::<F, NativeConfig, _>::new(
@@ -735,10 +730,10 @@ fn test_hint_load_1() {
         ctrl,
     );
 
-    let mut exec_state = VmSegmentState::new(0, 0, None, ctx);
+    let mut exec_state = VmSegmentState::new(0, 0, None, vec![vec![F::ONE, F::TWO]].into(), ctx);
     segment.execute_from_state(&mut exec_state).unwrap();
 
-    let streams = segment.chip_complex.take_streams();
+    let streams = exec_state.streams;
     assert!(streams.input_stream.is_empty());
     assert_eq!(streams.hint_stream, VecDeque::from(vec![F::ZERO]));
     assert_eq!(streams.hint_space, vec![vec![F::ONE, F::TWO]]);
@@ -766,13 +761,8 @@ fn test_hint_load_2() {
 
     let program = Program::from_instructions(&instructions);
 
-    let chip_complex = create_and_initialize_chip_complex(
-        &test_native_config(),
-        program,
-        vec![vec![F::ONE, F::TWO], vec![F::TWO, F::ONE]].into(),
-        None,
-    )
-    .unwrap();
+    let chip_complex =
+        create_and_initialize_chip_complex(&test_native_config(), program, None).unwrap();
     let ctrl = TracegenExecutionControlWithSegmentation::new(chip_complex.air_names());
     let ctx = ExecutionControl::<F, NativeConfig>::initialize_context(&ctrl);
     let mut segment = VmSegmentExecutor::<F, NativeConfig, _>::new(
@@ -782,7 +772,13 @@ fn test_hint_load_2() {
         ctrl,
     );
 
-    let mut exec_state = VmSegmentState::new(0, 0, None, ctx);
+    let mut exec_state = VmSegmentState::new(
+        0,
+        0,
+        None,
+        vec![vec![F::ONE, F::TWO], vec![F::TWO, F::ONE]].into(),
+        ctx,
+    );
     segment.execute_from_state(&mut exec_state).unwrap();
 
     let [read] = unsafe {
@@ -794,7 +790,7 @@ fn test_hint_load_2() {
             .read::<F, 1>(4, 32)
     };
     assert_eq!(read, F::ZERO);
-    let streams = segment.chip_complex.take_streams();
+    let streams = exec_state.streams;
     assert!(streams.input_stream.is_empty());
     assert_eq!(streams.hint_stream, VecDeque::from(vec![F::ONE]));
     assert_eq!(

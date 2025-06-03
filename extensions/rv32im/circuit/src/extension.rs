@@ -582,7 +582,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
             chip
         };
 
-        let mut hintstore_chip = Rv32HintStoreChip::<F>::new(
+        let hintstore_chip = Rv32HintStoreChip::<F>::new(
             Rv32HintStoreAir::new(
                 ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
@@ -598,7 +598,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
             MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
-        hintstore_chip.step.set_streams(builder.streams().clone());
 
         inventory.add_executor(
             hintstore_chip,

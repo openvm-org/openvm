@@ -1,8 +1,6 @@
 //! Defines auxiliary columns for memory operations: `MemoryReadAuxCols`,
 //! `MemoryReadWithImmediateAuxCols`, and `MemoryWriteAuxCols`.
 
-use std::ops::DerefMut;
-
 use openvm_circuit_primitives::is_less_than::LessThanAuxCols;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::p3_field::PrimeField32;

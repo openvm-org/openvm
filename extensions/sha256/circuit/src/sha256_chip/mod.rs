@@ -76,7 +76,7 @@ impl Sha256VmStep {
 impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
     fn execute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -107,7 +107,8 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         // TODO(ayush): read in a single call
         let mut message = Vec::with_capacity(len as usize);
         for offset in (0..len as usize).step_by(SHA256_READ_SIZE) {
-            let read = memory_read_from_state::<_, SHA256_READ_SIZE>(state, e, src + offset as u32);
+            let read =
+                memory_read_from_state::<F, _, SHA256_READ_SIZE>(state, e, src + offset as u32);
             let copy_len = std::cmp::min(SHA256_READ_SIZE, (len as usize) - offset);
             message.extend_from_slice(&read[..copy_len]);
         }
@@ -123,7 +124,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
 
     fn execute_metered(
         &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {
@@ -155,7 +156,8 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
 
         let mut message = Vec::with_capacity(len as usize);
         for offset in (0..len as usize).step_by(SHA256_READ_SIZE) {
-            let read = memory_read_from_state::<_, SHA256_READ_SIZE>(state, e, src + offset as u32);
+            let read =
+                memory_read_from_state::<F, _, SHA256_READ_SIZE>(state, e, src + offset as u32);
             let copy_len = std::cmp::min(SHA256_READ_SIZE, (len as usize) - offset);
             message.extend_from_slice(&read[..copy_len]);
         }

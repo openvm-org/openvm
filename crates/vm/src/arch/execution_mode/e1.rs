@@ -32,7 +32,7 @@ where
 
     fn should_suspend(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
         if let Some(clk_end) = self.clk_end {
@@ -44,14 +44,14 @@ where
 
     fn on_start(
         &self,
-        _state: &mut VmSegmentState<Self::Ctx>,
+        _state: &mut VmSegmentState<F, Self::Ctx>,
         _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
     }
 
     fn on_suspend_or_terminate(
         &self,
-        _state: &mut VmSegmentState<Self::Ctx>,
+        _state: &mut VmSegmentState<F, Self::Ctx>,
         _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         _exit_code: Option<u32>,
     ) {
@@ -60,7 +60,7 @@ where
     /// Execute a single instruction
     fn execute_instruction(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
@@ -73,6 +73,7 @@ where
             let mut vm_state = VmStateMut {
                 pc: &mut state.pc,
                 memory: state.memory.as_mut().unwrap(),
+                streams: &mut state.streams,
                 ctx: &mut state.ctx,
             };
             executor.execute_e1(&mut vm_state, instruction)?;

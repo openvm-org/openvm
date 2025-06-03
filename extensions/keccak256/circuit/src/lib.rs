@@ -94,7 +94,7 @@ impl KeccakVmStep {
 impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
     fn execute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -125,7 +125,8 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
         // TODO(ayush): read in a single call
         let mut message = Vec::with_capacity(len as usize);
         for offset in (0..len as usize).step_by(KECCAK_WORD_SIZE) {
-            let read = memory_read_from_state::<_, KECCAK_WORD_SIZE>(state, e, src + offset as u32);
+            let read =
+                memory_read_from_state::<F, _, KECCAK_WORD_SIZE>(state, e, src + offset as u32);
             let copy_len = std::cmp::min(KECCAK_WORD_SIZE, (len as usize) - offset);
             message.extend_from_slice(&read[..copy_len]);
         }
@@ -142,7 +143,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
 
     fn execute_metered(
         &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {
@@ -170,7 +171,8 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
 
         let mut message = Vec::with_capacity(len as usize);
         for offset in (0..len as usize).step_by(KECCAK_WORD_SIZE) {
-            let read = memory_read_from_state::<_, KECCAK_WORD_SIZE>(state, e, src + offset as u32);
+            let read =
+                memory_read_from_state::<F, _, KECCAK_WORD_SIZE>(state, e, src + offset as u32);
             let copy_len = std::cmp::min(KECCAK_WORD_SIZE, (len as usize) - offset);
             message.extend_from_slice(&read[..copy_len]);
         }
@@ -182,7 +184,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
         hasher.finalize(&mut output);
 
         for (i, word) in output.chunks_exact(KECCAK_WORD_SIZE).enumerate() {
-            memory_write_from_state::<_, KECCAK_WORD_SIZE>(
+            memory_write_from_state::<F, _, KECCAK_WORD_SIZE>(
                 state,
                 e,
                 dst + (i * KECCAK_WORD_SIZE) as u32,

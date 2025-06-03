@@ -98,8 +98,8 @@ pub fn memory_write<const N: usize>(
 }
 
 #[inline(always)]
-pub fn memory_read_from_state<Ctx, const N: usize>(
-    state: &mut VmStateMut<GuestMemory, Ctx>,
+pub fn memory_read_from_state<F, Ctx, const N: usize>(
+    state: &mut VmStateMut<F, GuestMemory, Ctx>,
     address_space: u32,
     ptr: u32,
 ) -> [u8; N]
@@ -112,8 +112,8 @@ where
 }
 
 #[inline(always)]
-pub fn memory_write_from_state<Ctx, const N: usize>(
-    state: &mut VmStateMut<GuestMemory, Ctx>,
+pub fn memory_write_from_state<F, Ctx, const N: usize>(
+    state: &mut VmStateMut<F, GuestMemory, Ctx>,
     address_space: u32,
     ptr: u32,
     data: &[u8; N],
@@ -243,8 +243,8 @@ pub fn new_read_rv32_register(memory: &GuestMemory, address_space: u32, ptr: u32
 // TODO(AG): if "register", why `address_space` is not hardcoded to be 1?
 // TODO(jpw): remove new_
 #[inline(always)]
-pub fn new_read_rv32_register_from_state<Ctx>(
-    state: &mut VmStateMut<GuestMemory, Ctx>,
+pub fn new_read_rv32_register_from_state<F, Ctx>(
+    state: &mut VmStateMut<F, GuestMemory, Ctx>,
     address_space: u32,
     ptr: u32,
 ) -> u32
