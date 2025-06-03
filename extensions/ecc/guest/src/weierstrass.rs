@@ -1,5 +1,5 @@
 use alloc::vec::Vec;
-use core::ops::{AddAssign, Mul};
+use core::ops::Mul;
 
 use openvm_algebra_guest::{Field, IntMod};
 
