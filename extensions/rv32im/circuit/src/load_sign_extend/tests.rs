@@ -1,6 +1,7 @@
 use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::arch::{
+    execution_mode::tracegen::TracegenCtx,
     testing::{memory::gen_pointer, VmChipTestBuilder},
     VmAirWrapper,
 };
@@ -14,6 +15,7 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -26,7 +28,7 @@ use crate::{
         RV32_REGISTER_NUM_LIMBS,
     },
     load_sign_extend::LoadSignExtendCoreCols,
-    test_utils::get_verification_error,
+    test_utils::{generate_air_proof_input_with_trace, get_verification_error},
     LoadSignExtendStep, Rv32LoadSignExtendChip,
 };
 
@@ -62,6 +64,7 @@ fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32LoadSignExtendChip
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32LoadSignExtendChip<F>,
+    ctx: &mut TracegenCtx<F>,
     rng: &mut StdRng,
     opcode: Rv32LoadStoreOpcode,
     read_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
@@ -106,7 +109,7 @@ fn set_and_execute(
     tester.write(1, a, some_prev_data);
     tester.write(2, (ptr_val - shift_amount) as usize, read_data);
 
-    tester.execute(
+    tester.execute_with_ctx(
         chip,
         &Instruction::from_usize(
             opcode.global_opcode(),
@@ -120,6 +123,7 @@ fn set_and_execute(
                 imm_sign as usize,
             ],
         ),
+        ctx,
     );
 
     let write_data = run_write_data_sign_extend::<_, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
@@ -148,10 +152,13 @@ fn rand_load_sign_extend_test(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
     let mut tester = VmChipTestBuilder::default();
 
     let mut chip = create_test_chip(&mut tester);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
+
     for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
             &mut chip,
+            &mut ctx,
             &mut rng,
             opcode,
             None,
@@ -161,7 +168,15 @@ fn rand_load_sign_extend_test(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
         );
     }
 
-    let tester = tester.build().load(chip).finalize();
+    chip.fill_trace(&mut ctx.trace_buffers[0]);
+
+    let mut traces = ctx.into_matrices();
+    let (air, air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
+
+    let tester = tester
+        .build()
+        .load_air_proof_input((air, air_proof_input))
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -192,10 +207,14 @@ fn run_negative_load_sign_extend_test(
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let mut chip = create_test_chip(&mut tester);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
+
+    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
 
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         read_data,
@@ -204,7 +223,11 @@ fn run_negative_load_sign_extend_test(
         imm_sign,
     );
 
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    chip.fill_trace(&mut ctx.trace_buffers[0]);
+
+    let mut traces = ctx.into_matrices();
+    let (air, mut air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
+
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
@@ -229,10 +252,13 @@ fn run_negative_load_sign_extend_test(
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
+    let trace = air_proof_input.raw.common_main.as_mut().unwrap();
+    modify_trace(trace);
+
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_air_proof_input((air, air_proof_input))
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
 }

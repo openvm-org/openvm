@@ -145,6 +145,8 @@ fn run_negative_auipc_test(
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
     let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
 
+    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+
     set_and_execute(
         &mut tester,
         &mut chip,
@@ -155,7 +157,11 @@ fn run_negative_auipc_test(
         initial_pc,
     );
 
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    chip.fill_trace(&mut ctx.trace_buffers[0]);
+
+    let mut traces = ctx.into_matrices();
+    let (air, mut air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
+
     let modify_trace = |trace: &mut DenseMatrix<F>| {
         let mut trace_row = trace.row_slice(0).to_vec();
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
@@ -173,12 +179,6 @@ fn run_negative_auipc_test(
 
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
-
-    // Fill remaining cells
-    chip.fill_trace(&mut ctx.trace_buffers[0]);
-
-    let mut traces = ctx.into_matrices();
-    let (air, mut air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
 
     let trace = air_proof_input.raw.common_main.as_mut().unwrap();
     modify_trace(trace);

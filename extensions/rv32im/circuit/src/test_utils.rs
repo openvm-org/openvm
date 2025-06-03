@@ -76,6 +76,7 @@ pub fn get_verification_error(is_interaction_error: bool) -> VerificationError {
     }
 }
 
+// TODO(ayush): make this a function on Chip/NewVmChipWrapper
 pub fn generate_air_proof_input_with_trace<SC, AIR, STEP>(
     chip: NewVmChipWrapper<Val<SC>, AIR, STEP>,
     trace: RowMajorMatrix<Val<SC>>,

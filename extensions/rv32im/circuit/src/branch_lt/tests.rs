@@ -2,8 +2,9 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
+        execution_mode::tracegen::TracegenCtx,
         testing::{memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        InstructionExecutor, VmAirWrapper,
+        InsExecutorE1, VmAirWrapper,
     },
     utils::i32_to_f,
 };
@@ -20,6 +21,7 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -35,7 +37,7 @@ use crate::{
         RV_B_TYPE_IMM_BITS,
     },
     branch_lt::BranchLessThanCoreCols,
-    test_utils::get_verification_error,
+    test_utils::{generate_air_proof_input_with_trace, get_verification_error},
     BranchLessThanCoreAir,
 };
 
@@ -67,9 +69,10 @@ fn create_test_chip(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: InstructionExecutor<F>>(
+fn set_and_execute<E: InsExecutorE1<F>>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut E,
+    ctx: &mut TracegenCtx<F>,
     rng: &mut StdRng,
     opcode: BranchLessThanOpcode,
     a: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
@@ -89,7 +92,7 @@ fn set_and_execute<E: InstructionExecutor<F>>(
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_canonical_u8));
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_canonical_u8));
 
-    tester.execute_with_pc(
+    tester.execute_with_pc_and_ctx(
         chip,
         &Instruction::from_isize(
             opcode.global_opcode(),
@@ -100,6 +103,7 @@ fn set_and_execute<E: InstructionExecutor<F>>(
             1,
         ),
         rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1))),
+        ctx,
     );
 
     let (cmp_result, _, _, _) = run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &a, &b);
@@ -125,15 +129,26 @@ fn rand_branch_lt_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&mut tester);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+        );
     }
 
     // Test special case where b = c
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         Some([101, 128, 202, 255]),
@@ -143,6 +158,7 @@ fn rand_branch_lt_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         Some([36, 0, 0, 0]),
@@ -150,7 +166,16 @@ fn rand_branch_lt_test(opcode: BranchLessThanOpcode, num_ops: usize) {
         Some(24),
     );
 
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    chip.fill_trace(&mut ctx.trace_buffers[0]);
+
+    let mut traces = ctx.into_matrices();
+    let (air, air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
+
+    let tester = tester
+        .build()
+        .load_air_proof_input((air, air_proof_input))
+        .load(bitwise_chip)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -182,10 +207,15 @@ fn run_negative_branch_lt_test(
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&mut tester);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
+
+    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let ge_opcode = opcode == BranchLessThanOpcode::BGE || opcode == BranchLessThanOpcode::BGEU;
 
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         Some(a),
@@ -193,8 +223,10 @@ fn run_negative_branch_lt_test(
         Some(imm),
     );
 
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
-    let ge_opcode = opcode == BranchLessThanOpcode::BGE || opcode == BranchLessThanOpcode::BGEU;
+    chip.fill_trace(&mut ctx.trace_buffers[0]);
+
+    let mut traces = ctx.into_matrices();
+    let (air, mut air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
@@ -219,10 +251,13 @@ fn run_negative_branch_lt_test(
         *trace = RowMajorMatrix::new(values, trace.width());
     };
 
+    let trace = air_proof_input.raw.common_main.as_mut().unwrap();
+    modify_trace(trace);
+
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_air_proof_input((air, air_proof_input))
         .load(bitwise_chip)
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
@@ -443,11 +478,13 @@ fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, _) = create_test_chip(&mut tester);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
 
     let x = [145, 34, 25, 205];
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         BranchLessThanOpcode::BLT,
         Some(x),
@@ -458,6 +495,7 @@ fn execute_roundtrip_sanity_test() {
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         BranchLessThanOpcode::BGE,
         Some(x),

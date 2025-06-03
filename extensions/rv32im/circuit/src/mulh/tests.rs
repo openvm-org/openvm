@@ -2,10 +2,11 @@ use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::{
+        execution_mode::tracegen::TracegenCtx,
         testing::{
             memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
-        InstructionExecutor, VmAirWrapper,
+        InsExecutorE1, VmAirWrapper,
     },
     utils::generate_long_number,
 };
@@ -23,6 +24,7 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::rngs::StdRng;
@@ -32,7 +34,7 @@ use super::core::run_mulh;
 use crate::{
     adapters::{Rv32MultAdapterAir, Rv32MultAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
     mulh::{MulHCoreCols, MulHStep, Rv32MulHChip},
-    test_utils::get_verification_error,
+    test_utils::{generate_air_proof_input_with_trace, get_verification_error},
     MulHCoreAir,
 };
 
@@ -73,9 +75,10 @@ fn create_test_chip(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: InstructionExecutor<F>>(
+fn set_and_execute<E: InsExecutorE1<F>>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut E,
+    ctx: &mut TracegenCtx<F>,
     rng: &mut StdRng,
     opcode: MulHOpcode,
     b: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
@@ -97,9 +100,10 @@ fn set_and_execute<E: InstructionExecutor<F>>(
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
 
-    tester.execute(
+    tester.execute_with_ctx(
         chip,
         &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 0]),
+        ctx,
     );
 
     let (a, _, _, _, _) = run_mulh::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
@@ -123,14 +127,28 @@ fn run_rv32_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip, range_tuple_checker) = create_test_chip(&mut tester);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            opcode,
+            None,
+            None,
+        );
     }
+
+    chip.fill_trace(&mut ctx.trace_buffers[0]);
+
+    let mut traces = ctx.into_matrices();
+    let (air, air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
 
     let tester = tester
         .build()
-        .load(chip)
+        .load_air_proof_input((air, air_proof_input))
         .load(bitwise_chip)
         .load(range_tuple_checker)
         .finalize();
@@ -158,10 +176,25 @@ fn run_negative_mulh_test(
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip, range_tuple_chip) = create_test_chip(&mut tester);
-
-    set_and_execute(&mut tester, &mut chip, &mut rng, opcode, Some(b), Some(c));
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
 
     let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+
+    set_and_execute(
+        &mut tester,
+        &mut chip,
+        &mut ctx,
+        &mut rng,
+        opcode,
+        Some(b),
+        Some(c),
+    );
+
+    chip.fill_trace(&mut ctx.trace_buffers[0]);
+
+    let mut traces = ctx.into_matrices();
+    let (air, mut air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
+
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
         let cols: &mut MulHCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
@@ -173,10 +206,13 @@ fn run_negative_mulh_test(
         *trace = RowMajorMatrix::new(values, trace.width());
     };
 
+    let trace = air_proof_input.raw.common_main.as_mut().unwrap();
+    modify_trace(trace);
+
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_air_proof_input((air, air_proof_input))
         .load(bitwise_chip)
         .load(range_tuple_chip)
         .finalize();

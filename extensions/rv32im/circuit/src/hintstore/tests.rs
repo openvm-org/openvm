@@ -5,6 +5,7 @@ use std::{
 };
 
 use openvm_circuit::arch::{
+    execution_mode::tracegen::TracegenCtx,
     testing::{memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
     ExecutionBridge, Streams,
 };
@@ -24,12 +25,16 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::{Rv32HintStoreAir, Rv32HintStoreChip, Rv32HintStoreCols, Rv32HintStoreStep};
-use crate::{adapters::decompose, test_utils::get_verification_error};
+use crate::{
+    adapters::decompose,
+    test_utils::{generate_air_proof_input_with_trace, get_verification_error},
+};
 
 type F = BabyBear;
 
@@ -61,6 +66,7 @@ fn create_test_chip(
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32HintStoreChip<F>,
+    ctx: &mut TracegenCtx<F>,
     rng: &mut StdRng,
     opcode: Rv32HintStoreOpcode,
 ) {
@@ -84,9 +90,10 @@ fn set_and_execute(
             .push_back(data);
     }
 
-    tester.execute(
+    tester.execute_with_ctx(
         chip,
         &Instruction::from_usize(VmOpcode::from_usize(opcode as usize), [0, b, 0, 1, 2]),
+        ctx,
     );
 
     let write_data = read_data;
@@ -96,6 +103,7 @@ fn set_and_execute(
 fn set_and_execute_buffer(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32HintStoreChip<F>,
+    ctx: &mut TracegenCtx<F>,
     rng: &mut StdRng,
     opcode: Rv32HintStoreOpcode,
 ) {
@@ -126,9 +134,10 @@ fn set_and_execute_buffer(
         }
     }
 
-    tester.execute(
+    tester.execute_with_ctx(
         chip,
         &Instruction::from_usize(VmOpcode::from_usize(opcode as usize), [a, b, 0, 1, 2]),
+        ctx,
     );
 
     for i in 0..num_words {
@@ -152,16 +161,27 @@ fn rand_hintstore_test() {
     let mut tester = VmChipTestBuilder::default();
 
     let (mut chip, bitwise_chip) = create_test_chip(&mut tester);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
+
     let num_ops: usize = 100;
     for _ in 0..num_ops {
         if rng.gen_bool(0.5) {
-            set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW);
+            set_and_execute(&mut tester, &mut chip, &mut ctx, &mut rng, HINT_STOREW);
         } else {
-            set_and_execute_buffer(&mut tester, &mut chip, &mut rng, HINT_BUFFER);
+            set_and_execute_buffer(&mut tester, &mut chip, &mut ctx, &mut rng, HINT_BUFFER);
         }
     }
 
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    chip.fill_trace(&mut ctx.trace_buffers[0]);
+
+    let mut traces = ctx.into_matrices();
+    let (air, air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
+
+    let tester = tester
+        .build()
+        .load_air_proof_input((air, air_proof_input))
+        .load(bitwise_chip)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -181,8 +201,14 @@ fn run_negative_hintstore_test(
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&mut tester);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
 
-    set_and_execute(&mut tester, &mut chip, &mut rng, opcode);
+    set_and_execute(&mut tester, &mut chip, &mut ctx, &mut rng, opcode);
+
+    chip.fill_trace(&mut ctx.trace_buffers[0]);
+
+    let mut traces = ctx.into_matrices();
+    let (air, mut air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
@@ -193,10 +219,13 @@ fn run_negative_hintstore_test(
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
+    let trace = air_proof_input.raw.common_main.as_mut().unwrap();
+    modify_trace(trace);
+
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_air_proof_input((air, air_proof_input))
         .load(bitwise_chip)
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
@@ -218,9 +247,10 @@ fn execute_roundtrip_sanity_test() {
     let mut tester = VmChipTestBuilder::default();
 
     let (mut chip, _) = create_test_chip(&mut tester);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
 
     let num_ops: usize = 10;
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW);
+        set_and_execute(&mut tester, &mut chip, &mut ctx, &mut rng, HINT_STOREW);
     }
 }

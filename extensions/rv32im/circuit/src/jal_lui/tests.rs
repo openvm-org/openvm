@@ -1,6 +1,7 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::arch::{
+    execution_mode::tracegen::TracegenCtx,
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
     VmAirWrapper,
 };
@@ -17,6 +18,7 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -30,7 +32,7 @@ use crate::{
         RV_IS_TYPE_IMM_BITS,
     },
     jal_lui::Rv32JalLuiCoreCols,
-    test_utils::get_verification_error,
+    test_utils::{generate_air_proof_input_with_trace, get_verification_error},
 };
 
 const IMM_BITS: usize = 20;
@@ -67,6 +69,7 @@ fn create_test_chip(
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32JalLuiChip<F>,
+    ctx: &mut TracegenCtx<F>,
     rng: &mut StdRng,
     opcode: Rv32JalLuiOpcode,
     imm: Option<i32>,
@@ -81,7 +84,7 @@ fn set_and_execute(
     let a = rng.gen_range((opcode == LUI) as usize..32) << 2;
     let needs_write = a != 0 || opcode == LUI;
 
-    tester.execute_with_pc(
+    tester.execute_with_pc_and_ctx(
         chip,
         &Instruction::large_from_isize(
             opcode.global_opcode(),
@@ -94,6 +97,7 @@ fn set_and_execute(
             0,
         ),
         initial_pc.unwrap_or(rng.gen_range(imm.unsigned_abs()..(1 << PC_BITS))),
+        ctx,
     );
     let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
     let final_pc = tester.execution.last_to_pc().as_canonical_u32();
@@ -118,12 +122,30 @@ fn rand_jal_lui_test(opcode: Rv32JalLuiOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            opcode,
+            None,
+            None,
+        );
     }
 
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    chip.fill_trace(&mut ctx.trace_buffers[0]);
+
+    let mut traces = ctx.into_matrices();
+    let (air, air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
+
+    let tester = tester
+        .build()
+        .load_air_proof_input((air, air_proof_input))
+        .load(bitwise_chip)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 //////////////////////////////////////////////////////////////////////////////////////
@@ -153,17 +175,25 @@ fn run_negative_jal_lui_test(
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
+
+    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
 
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         initial_imm,
         initial_pc,
     );
 
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    chip.fill_trace(&mut ctx.trace_buffers[0]);
+
+    let mut traces = ctx.into_matrices();
+    let (air, mut air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
+
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
         let (adapter_row, core_row) = trace_row.split_at_mut(adapter_width);
@@ -193,10 +223,13 @@ fn run_negative_jal_lui_test(
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
+    let trace = air_proof_input.raw.common_main.as_mut().unwrap();
+    modify_trace(trace);
+
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_air_proof_input((air, air_proof_input))
         .load(bitwise_chip)
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
@@ -315,10 +348,12 @@ fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, _) = create_test_chip(&tester);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
 
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         LUI,
         Some((1 << IMM_BITS) - 1),
@@ -327,6 +362,7 @@ fn execute_roundtrip_sanity_test() {
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         JAL,
         Some((1 << RV_IS_TYPE_IMM_BITS) - 1),

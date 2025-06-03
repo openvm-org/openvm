@@ -1,8 +1,9 @@
 use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::arch::{
+    execution_mode::tracegen::TracegenCtx,
     testing::{memory::gen_pointer, VmChipTestBuilder},
-    InstructionExecutor, VmAirWrapper,
+    InsExecutorE1, VmAirWrapper,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -18,6 +19,7 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -31,7 +33,7 @@ use crate::{
     adapters::{
         Rv32BranchAdapterAir, Rv32BranchAdapterStep, RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
-    test_utils::get_verification_error,
+    test_utils::{generate_air_proof_input_with_trace, get_verification_error},
     BranchEqualCoreAir,
 };
 
@@ -54,9 +56,10 @@ fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32BranchEqualChip<F>
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: InstructionExecutor<F>>(
+fn set_and_execute<E: InsExecutorE1<F>>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut E,
+    ctx: &mut TracegenCtx<F>,
     rng: &mut StdRng,
     opcode: BranchEqualOpcode,
     a: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
@@ -77,7 +80,7 @@ fn set_and_execute<E: InstructionExecutor<F>>(
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_canonical_u8));
 
     let initial_pc = rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1)));
-    tester.execute_with_pc(
+    tester.execute_with_pc_and_ctx(
         chip,
         &Instruction::from_isize(
             opcode.global_opcode(),
@@ -88,6 +91,7 @@ fn set_and_execute<E: InstructionExecutor<F>>(
             1,
         ),
         initial_pc,
+        ctx,
     );
 
     let (cmp_result, _, _) = run_eq::<F, RV32_REGISTER_NUM_LIMBS>(opcode, &a, &b);
@@ -111,12 +115,30 @@ fn rand_rv32_branch_eq_test(opcode: BranchEqualOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let mut chip = create_test_chip(&mut tester);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+        );
     }
 
-    let tester = tester.build().load(chip).finalize();
+    chip.fill_trace(&mut ctx.trace_buffers[0]);
+
+    let mut traces = ctx.into_matrices();
+    let (air, air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
+
+    let tester = tester
+        .build()
+        .load_air_proof_input((air, air_proof_input))
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -140,10 +162,14 @@ fn run_negative_branch_eq_test(
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let mut chip = create_test_chip(&mut tester);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
+
+    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
 
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         Some(a),
@@ -151,7 +177,11 @@ fn run_negative_branch_eq_test(
         Some(imm),
     );
 
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    chip.fill_trace(&mut ctx.trace_buffers[0]);
+
+    let mut traces = ctx.into_matrices();
+    let (air, mut air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
+
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
         let cols: &mut BranchEqualCoreCols<F, RV32_REGISTER_NUM_LIMBS> =
@@ -165,10 +195,13 @@ fn run_negative_branch_eq_test(
         *trace = RowMajorMatrix::new(values, trace.width());
     };
 
+    let trace = air_proof_input.raw.common_main.as_mut().unwrap();
+    modify_trace(trace);
+
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_air_proof_input((air, air_proof_input))
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
 }
@@ -274,12 +307,14 @@ fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let mut chip = create_test_chip(&mut tester);
+    let mut ctx = TracegenCtx::new(vec![chip.trace_width()]);
 
     let x = [19, 4, 179, 60];
     let y = [19, 32, 180, 60];
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         BranchEqualOpcode::BEQ,
         Some(x),
@@ -290,6 +325,7 @@ fn execute_roundtrip_sanity_test() {
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         BranchEqualOpcode::BNE,
         Some(x),

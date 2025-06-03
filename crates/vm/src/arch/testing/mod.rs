@@ -101,6 +101,16 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.execute_with_pc(executor, instruction, initial_pc);
     }
 
+    pub fn execute_with_ctx<E: InsExecutorE1<F>>(
+        &mut self,
+        executor: &mut E,
+        instruction: &Instruction<F>,
+        ctx: &mut TracegenCtx<F>,
+    ) {
+        let initial_pc = self.next_elem_size_u32();
+        self.execute_with_pc_and_ctx(executor, instruction, initial_pc, ctx);
+    }
+
     pub fn execute_with_pc<E: InstructionExecutor<F>>(
         &mut self,
         executor: &mut E,
