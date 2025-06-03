@@ -695,6 +695,11 @@ impl<F: PrimeField32> MemoryAuxColsFactory<'_, F> {
         buffer.prev_timestamp = F::from_canonical_u32(prev_timestamp);
     }
 
+    pub fn fill_zero(&self, buffer: &mut MemoryBaseAuxCols<F>) {
+        buffer.timestamp_lt_aux.lower_decomp.fill(F::ZERO);
+        buffer.prev_timestamp = F::ZERO;
+    }
+
     fn generate_timestamp_lt(
         &self,
         prev_timestamp: u32,

@@ -6,7 +6,10 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx}, AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
+        VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -246,7 +249,6 @@ where
             core_record.read_data,
             core_record.shift_amount as usize,
         );
-        println!("core_record: {:?}", core_record);
 
         self.adapter.write(
             state.memory,

@@ -1,4 +1,4 @@
-use core::{PublicValuesRecordArena, PublicValuesCoreStep};
+use core::{PublicValuesCoreStep, PublicValuesRecordArena};
 
 use crate::{
     arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper},

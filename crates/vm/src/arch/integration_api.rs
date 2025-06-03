@@ -197,7 +197,6 @@ pub trait TraceFiller<F, CTX> {
     }
 }
 
-// TEMP[jpw]: buffer should be inside CTX
 pub struct MatrixRecordArena<F> {
     pub trace_buffer: Vec<F>,
     // TODO(ayush): width should be a constant?
@@ -205,7 +204,45 @@ pub struct MatrixRecordArena<F> {
     pub trace_offset: usize,
 }
 
-impl<F: Field> MatrixRecordArena<F> {
+/// The minimal information that [AdapterCoreRecordArena] needs to know to allocate a row
+/// **WARNING**: `adapter_width` is number of field elements, not in bytes
+pub struct AdapterCoreLayout {
+    pub adapter_width: usize,
+}
+
+/// A record arena struct that can be used by chips that
+/// - have a single row per instruction
+/// - have trace row = [adapter_row, core_row]
+// TEMP[jpw]: buffer should be inside CTX
+pub struct AdapterCoreRecordArena<F> {
+    pub trace_buffer: Vec<F>,
+    // TODO(ayush): width should be a constant?
+    pub width: usize,
+    pub trace_offset: usize,
+}
+
+/// RecordArena implementation for [AdapterCoreRecordArena]
+/// A is the adapter record type and C is the core record type
+impl<'a, F: Field, A, C> RecordArena<'a, AdapterCoreLayout, (&'a mut A, &'a mut C)>
+    for AdapterCoreRecordArena<F>
+where
+    A: Sized,
+    C: Sized,
+    [u8]: BorrowMut<A> + BorrowMut<C>,
+{
+    fn alloc(&'a mut self, layout: AdapterCoreLayout) -> (&'a mut A, &'a mut C) {
+        let buffer = self.alloc_single_row();
+        let (adapter_buffer, core_buffer) =
+            buffer.split_at_mut(layout.adapter_width * size_of::<F>());
+
+        let adapter_record: &mut A = adapter_buffer.borrow_mut();
+        let core_record: &mut C = core_buffer.borrow_mut();
+
+        (adapter_record, core_record)
+    }
+}
+
+impl<F: Field> AdapterCoreRecordArena<F> {
     pub fn alloc_single_row(&mut self) -> &mut [u8] {
         let start = self.trace_offset;
         self.trace_offset += self.width;
@@ -220,7 +257,7 @@ impl<F: Field> MatrixRecordArena<F> {
     }
 }
 
-impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
+impl<F: Field> RowMajorMatrixArena<F> for AdapterCoreRecordArena<F> {
     fn with_capacity(height: usize, width: usize) -> Self {
         let trace_buffer = F::zero_vec(height * width);
         Self {
@@ -243,57 +280,74 @@ impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
     }
 }
 
-/// A record arena struct that can be used by chips that
-/// - have a single row per instruction
-/// - have trace row = [adapter_row, core_row]
-pub struct AdapterCoreRecordArena<F> {
-    inner: MatrixRecordArena<F>,
+/// A trait that allows for custom implementation of `borrow` given the neccessary information
+/// This is useful for record structs that have dynamic size
+pub trait CustomBorrow<'a, T, Info> {
+    fn custom_borrow(&'a mut self, info: Info) -> T;
 }
 
-/// The minimal information that [AdapterCoreRecordArena] needs to know to allocate a row
-/// **WARNING**: `adapter_width` is number of field elements, not in bytes
-pub struct AdapterCoreLayout {
-    pub adapter_width: usize,
+/// The minimal information that [MultiRowRecordArena] needs to know to allocate a record
+pub struct MultiRowLayout<I> {
+    pub num_rows: u32,
+    pub info: I,
 }
 
-/// RecordArena implementation for [AdapterCoreRecordArena]
-/// A is the adapter record type and C is the core record type
-impl<'a, F: Field, A, C> RecordArena<'a, AdapterCoreLayout, (&'a mut A, &'a mut C)>
-    for AdapterCoreRecordArena<F>
-where
-    A: Sized,
-    C: Sized,
-    [u8]: BorrowMut<A> + BorrowMut<C>,
-{
-    fn alloc(&'a mut self, layout: AdapterCoreLayout) -> (&'a mut A, &'a mut C) {
-        let buffer = self.inner.alloc_single_row();
-        let (adapter_buffer, core_buffer) =
-            buffer.split_at_mut(layout.adapter_width * size_of::<F>());
+// TEMP[jpw]: buffer should be inside CTX
+pub struct MultiRowRecordArena<F> {
+    pub trace_buffer: Vec<F>,
+    // TODO(ayush): width should be a constant?
+    pub width: usize,
+    pub trace_offset: usize,
+}
 
-        let adapter_record: &mut A = adapter_buffer.borrow_mut();
-        let core_record: &mut C = core_buffer.borrow_mut();
-
-        (adapter_record, core_record)
+impl<F: Field> MultiRowRecordArena<F> {
+    pub fn alloc_buffer(&mut self, num_rows: u32) -> &mut [u8] {
+        let start = self.trace_offset;
+        self.trace_offset += num_rows as usize * self.width;
+        let row_slice = &mut self.trace_buffer[start..self.trace_offset];
+        let size = size_of_val(row_slice);
+        let ptr = row_slice as *mut [F] as *mut u8;
+        // SAFETY:
+        // - `ptr` is non-null
+        // - `size` is correct
+        // - alignment of `u8` is always satisfied
+        unsafe { &mut *std::ptr::slice_from_raw_parts_mut(ptr, size) }
     }
 }
 
-impl<F: Field> RowMajorMatrixArena<F> for AdapterCoreRecordArena<F> {
+/// RecordArena implementation for [MultiRowRecordArena]
+/// R is the RecordMut type
+impl<'a, I, F: Field, R> RecordArena<'a, MultiRowLayout<I>, R> for MultiRowRecordArena<F>
+where
+    [u8]: CustomBorrow<'a, R, I>,
+{
+    fn alloc(&'a mut self, layout: MultiRowLayout<I>) -> R {
+        let buffer = self.alloc_buffer(layout.num_rows);
+        let record: R = buffer.custom_borrow(layout.info);
+        record
+    }
+}
+
+impl<F: Field> RowMajorMatrixArena<F> for MultiRowRecordArena<F> {
     fn with_capacity(height: usize, width: usize) -> Self {
+        let trace_buffer = F::zero_vec(height * width);
         Self {
-            inner: MatrixRecordArena::with_capacity(height, width),
+            trace_buffer,
+            width,
+            trace_offset: 0,
         }
     }
 
     fn width(&self) -> usize {
-        self.inner.width()
+        self.width
     }
 
     fn trace_offset(&self) -> usize {
-        self.inner.trace_offset()
+        self.trace_offset
     }
 
     fn into_matrix(self) -> RowMajorMatrix<F> {
-        self.inner.into_matrix()
+        RowMajorMatrix::new(self.trace_buffer, self.width)
     }
 }
 

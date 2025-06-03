@@ -372,6 +372,25 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
         self.paged_vecs.iter().all(|page| page.is_empty())
     }
 
+    /// # Safety
+    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
+    /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    pub fn set_range_generic<T: Copy>(&mut self, (addr_space, ptr): Address, data: &[T]) {
+        let start = (ptr as usize) * size_of::<T>();
+        let len = data.len() * size_of::<T>();
+        let mut dst = Vec::with_capacity(len);
+        unsafe {
+            self.paged_vecs
+                .get_unchecked_mut((addr_space - self.as_offset) as usize)
+                .set_range_generic(
+                    start,
+                    len,
+                    data.as_ptr() as *const u8,
+                    dst.as_mut_ptr() as *mut u8,
+                );
+        }
+    }
+
     // TODO[jpw]: stabilize the boundary memory image format and how to construct
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`

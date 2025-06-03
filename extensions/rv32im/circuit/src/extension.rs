@@ -291,8 +291,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 LoadStoreCoreAir::new(Rv32LoadStoreOpcode::CLASS_OFFSET),
             ),
             LoadStoreStep::new(
-                Rv32LoadStoreAdapterStep::new(pointer_max_bits),
-                range_checker.clone(),
+                Rv32LoadStoreAdapterStep::new(pointer_max_bits, range_checker.clone()),
                 Rv32LoadStoreOpcode::CLASS_OFFSET,
             ),
             MAX_INS_CAPACITY,
@@ -316,7 +315,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 LoadSignExtendCoreAir::new(range_checker.bus()),
             ),
             LoadSignExtendStep::new(
-                Rv32LoadStoreAdapterStep::new(pointer_max_bits),
+                Rv32LoadStoreAdapterStep::new(pointer_max_bits, range_checker.clone()),
                 range_checker.clone(),
             ),
             MAX_INS_CAPACITY,
