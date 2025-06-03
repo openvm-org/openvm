@@ -1,19 +1,19 @@
 use itertools::Itertools;
 use num_bigint::BigUint;
-use num_traits::Zero;
 use openvm_circuit::{
     arch::{
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, DynAdapterInterface, DynArray,
         MinimalInstruction, Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir,
-        VmStateMut,
+        VmStateMut, RecordArena, TraceFiller, AdapterCoreLayout,
     },
     system::memory::{
-        online::{GuestMemory, TracingMemory},
+        online::{TracingMemory, GuestMemory},
         MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
-    var_range::SharedVariableRangeCheckerChip, SubAir, TraceSubRowGenerator,
+    var_range::SharedVariableRangeCheckerChip,
+    SubAir, TraceSubRowGenerator, AlignedBytesBorrow,
 };
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::{
@@ -23,11 +23,91 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
-
-use crate::{
-    utils::{biguint_to_limbs_vec, limbs_to_biguint},
-    FieldExpr, FieldExprCols,
+use std::{
+    mem::size_of,
+    ptr::slice_from_raw_parts,
+    borrow::Borrow,
 };
+use crate::{
+    builder::{FieldExpr, FieldExprCols},
+    utils::{biguint_to_limbs_vec, limbs_to_biguint},
+};
+
+// Maximum limits for field expression records
+const MAX_INPUT_LIMBS: usize = 128; // 32 inputs * 4 limbs each
+const MAX_FLAGS: usize = 16;
+
+// Minimal execution data needed for deferred trace generation
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct FieldExpressionCoreRecord {
+    pub from_pc: u32,
+    pub from_timestamp: u32,
+    pub opcode: u8,
+    pub input_limbs: [u32; MAX_INPUT_LIMBS],
+    pub flag_states: [bool; MAX_FLAGS],
+    pub num_inputs: u8,
+    pub limbs_per_input: u8,
+    pub num_flags: u8,
+}
+
+impl FieldExpressionCoreRecord {
+    pub fn reconstruct_inputs(&self, limb_bits: usize) -> Vec<BigUint> {
+        let mut inputs = Vec::with_capacity(self.num_inputs as usize);
+        
+        for i in 0..self.num_inputs as usize {
+            let limb_start = i * self.limbs_per_input as usize;
+            let limb_end = limb_start + self.limbs_per_input as usize;
+            
+            let limbs = &self.input_limbs[limb_start..limb_end];
+            
+            let value = limbs_to_biguint(limbs, limb_bits);
+            inputs.push(value);
+        }
+        
+        inputs
+    }
+    
+    pub fn reconstruct_flags(&self) -> Vec<bool> {
+        self.flag_states[..self.num_flags as usize].to_vec()
+    }
+    
+    pub fn from_execution_data(
+        pc: u32,
+        timestamp: u32,
+        opcode: u8,
+        inputs: &[BigUint],
+        flags: Vec<bool>,
+        limb_bits: usize,
+        limbs_per_input: usize,
+    ) -> Self {
+        assert!(inputs.len() <= 32, "Too many inputs: {} > 32", inputs.len());
+        assert!(flags.len() <= MAX_FLAGS, "Too many flags: {} > {}", flags.len(), MAX_FLAGS);
+        assert!(inputs.len() * limbs_per_input <= MAX_INPUT_LIMBS, 
+                "Too many input limbs: {} > {}", inputs.len() * limbs_per_input, MAX_INPUT_LIMBS);
+        
+        let mut input_limbs = [0u32; MAX_INPUT_LIMBS];
+        let mut flag_states = [false; MAX_FLAGS];
+        
+        for (i, input) in inputs.iter().enumerate() {
+            let limbs = biguint_to_limbs_vec(input.clone(), limb_bits, limbs_per_input);
+            let start = i * limbs_per_input;
+            input_limbs[start..start + limbs_per_input].copy_from_slice(&limbs);
+        }
+        
+        flag_states[..flags.len()].copy_from_slice(&flags);
+        
+        Self {
+            from_pc: pc,
+            from_timestamp: timestamp,
+            opcode,
+            input_limbs,
+            flag_states,
+            num_inputs: inputs.len() as u8,
+            limbs_per_input: limbs_per_input as u8,
+            num_flags: flags.len() as u8,
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {
@@ -230,96 +310,105 @@ impl<A> FieldExpressionStep<A> {
     pub fn output_indices(&self) -> &[usize] {
         &self.expr.builder.output_indices
     }
+
+    fn fill_row_from_execution_record<F: PrimeField32>(
+        &self,
+        record: &FieldExpressionCoreRecord,
+        row_slice: &mut [F],
+    ) {
+        // NOTE[teokitan]: This is where GPU acceleration should happen in the future
+        let inputs = record.reconstruct_inputs(self.expr.canonical_limb_bits());
+        let flags = record.reconstruct_flags();
+        
+        let range_checker = self.range_checker.as_ref();
+        self.expr.generate_subrow(
+            (range_checker, inputs, flags),
+            row_slice,
+        );
+    }
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for FieldExpressionStep<A>
+impl<F, CTX, A> TraceStep<F, CTX> for FieldExpressionStep<A> 
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterTraceStep<
-            F,
-            CTX,
-            ReadData: Into<DynArray<u8>>,
-            WriteData: From<DynArray<u8>>,
-            TraceContext<'a> = (),
-        >,
+    A: 'static + AdapterTraceStep<F, CTX, RecordMut<'static> = ()>,
+    A::ReadData: Into<DynArray<u8>>,
+    A::WriteData: From<DynArray<u8>>,
 {
-    fn get_opcode_name(&self, _opcode: usize) -> String {
-        self.name.clone()
-    }
+    type RecordLayout = AdapterCoreLayout;
+    type RecordMut<'a> = (&'a mut (), &'a mut FieldExpressionCoreRecord);
 
-    fn execute(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
-        let (adapter_row, core_row) = row_slice.split_at_mut(A::WIDTH);
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where 
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>
+    {
+        let (mut _adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
+            adapter_width: A::WIDTH,
+        });
 
-        A::start(*state.pc, state.memory, adapter_row);
+        A::start(*state.pc, state.memory, &mut _adapter_record);
 
         let data: DynArray<_> = self
             .adapter
-            .read(state.memory, instruction, adapter_row)
+            .read(state.memory, instruction, &mut _adapter_record)
             .into();
-
+        
         let (writes, inputs, flags) = run_field_expression(self, &data, instruction);
-
-        // TODO(arayi): Should move this to fill_trace_row
-        self.expr
-            .generate_subrow((self.range_checker.as_ref(), inputs, flags), core_row);
+        
+        *core_record = FieldExpressionCoreRecord::from_execution_data(
+            *state.pc,
+            state.memory.timestamp(),
+            instruction.opcode.local_opcode_idx(self.offset) as u8,
+            &inputs,
+            flags.clone(),
+            self.expr.canonical_limb_bits(),
+            self.expr.canonical_num_limbs(),
+        );
 
         self.adapter
-            .write(state.memory, instruction, adapter_row, &writes.into());
+            .write(state.memory, instruction, &writes.into(), &mut _adapter_record);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        *trace_offset += width;
         Ok(())
     }
 
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row: &mut [F]) {
-        let (adapter_row, _) = row.split_at_mut(A::WIDTH);
-        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
-    }
-
-    // We will be setting is_valid = 0. That forces all flags be 0 (otherwise setup will be -1).
-    // We generate a dummy row with all flags set to 0, then we set is_valid = 0.
-    fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, row: &mut [F]) {
-        let inputs: Vec<BigUint> = vec![BigUint::zero(); self.num_inputs()];
-        let flags: Vec<bool> = vec![false; self.num_flags()];
-        let core_row = &mut row[A::WIDTH..];
-        // We **do not** want this trace row to update the range checker
-        // so we must create a temporary range checker
-        let tmp_range_checker = SharedVariableRangeCheckerChip::new(self.range_checker.bus());
-        self.expr
-            .generate_subrow((tmp_range_checker.as_ref(), inputs, flags), core_row);
-        core_row[0] = F::ZERO; // is_valid = 0
+    fn get_opcode_name(&self, _opcode: usize) -> String {
+        self.name.clone()
     }
 }
 
-impl<F, A> StepExecutorE1<F> for FieldExpressionStep<A>
+impl<F, CTX, A> TraceFiller<F, CTX> for FieldExpressionStep<A> 
 where
-    F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
+    F: PrimeField32 + Send + Sync + Clone,
+    A: Send + Sync + AdapterTraceStep<F, CTX>,
 {
-    fn execute_e1<Ctx>(
-        &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()> {
-        let data: DynArray<_> = self.adapter.read(state.memory, instruction).into();
+    fn fill_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        // Get the core record from the row slice
+        let (_adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        
+        let record = unsafe {
+            let record_buffer = &*slice_from_raw_parts(
+                core_row.as_ptr() as *const u8,
+                size_of::<FieldExpressionCoreRecord>(),
+            );
+            let record: &FieldExpressionCoreRecord = record_buffer.borrow();
+            record
+        };
+        
+        self.fill_row_from_execution_record(record, core_row);
+    }
 
-        let writes = run_field_expression(self, &data, instruction).0;
-        self.adapter
-            .write(state.memory, instruction, &writes.into());
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        Ok(())
+    fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        row_slice.fill(F::ZERO);
     }
 }
+
+pub type TracegenCtx = ();
 
 fn run_field_expression<F: PrimeField32, A>(
     step: &FieldExpressionStep<A>,
@@ -377,4 +466,25 @@ fn run_field_expression<F: PrimeField32, A>(
         .into();
 
     (writes, inputs, flags)
+}
+
+impl<F, A> StepExecutorE1<F> for FieldExpressionStep<A>
+where
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterExecutorE1<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
+{
+    fn execute_e1<Ctx>(
+        &mut self,
+        state: VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()> {
+        let data: DynArray<_> = self.adapter.read(state.memory, instruction).into();
+
+        let writes = run_field_expression(self, &data, instruction).0;
+        self.adapter
+            .write(state.memory, instruction, &writes.into());
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        Ok(())
+    }
 }
