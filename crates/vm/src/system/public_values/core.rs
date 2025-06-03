@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface, EmptyLayout,
         MatrixRecordArena, MinimalInstruction, RecordArena, Result, RowMajorMatrixArena,
         StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
@@ -115,22 +116,25 @@ pub struct PublicValuesRecord<F> {
 
 /// ATTENTION: If a specific public value is not provided, a default 0 will be used when generating
 /// the proof but in the perspective of constraints, it could be any value.
-pub struct PublicValuesStep<A, F> {
+pub struct PublicValuesCoreStep<A, F> {
     adapter: A,
+    // TODO(ayush): put air here and take from air
+    encoder: Encoder,
     // Mutex is to make the struct Sync. But it actually won't be accessed by multiple threads.
     pub(crate) custom_pvs: Mutex<Vec<Option<F>>>,
 }
 
-impl<A, F> PublicValuesStep<A, F>
+impl<A, F> PublicValuesCoreStep<A, F>
 where
     F: PrimeField32,
 {
     /// **Note:** `max_degree` is the maximum degree of the constraint polynomials to represent the
     /// flags. If you want the overall AIR's constraint degree to be `<= max_constraint_degree`,
     /// then typically you should set `max_degree` to `max_constraint_degree - 1`.
-    pub fn new(adapter: A, num_custom_pvs: usize) -> Self {
+    pub fn new(adapter: A, num_custom_pvs: usize, max_degree: u32) -> Self {
         Self {
             adapter,
+            encoder: Encoder::new(num_custom_pvs, max_degree, true),
             custom_pvs: Mutex::new(vec![None; num_custom_pvs]),
         }
     }
@@ -139,7 +143,7 @@ where
     }
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for PublicValuesStep<A, F>
+impl<F, CTX, A> TraceStep<F, CTX> for PublicValuesCoreStep<A, F>
 where
     F: PrimeField32,
     A: 'static
@@ -205,7 +209,7 @@ where
     }
 }
 
-impl<F, CTX, A> TraceFiller<F, CTX> for PublicValuesStep<A, F>
+impl<F, CTX, A> TraceFiller<F, CTX> for PublicValuesCoreStep<A, F>
 where
     F: PrimeField32,
     A: 'static
@@ -226,17 +230,17 @@ where
     }
 }
 
-impl<F, A> StepExecutorE1<F> for PublicValuesStep<A, F>
+impl<F, A> StepExecutorE1<F> for PublicValuesCoreStep<A, F>
 where
     F: PrimeField32,
     A: 'static + for<'a> AdapterExecutorE1<F, ReadData = [F; 2], WriteData = [F; 0]>,
 {
-    fn execute_e1<Ctx>(
-        &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+    fn execute_e1<Ctx: E1E2ExecutionCtx>(
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
-        let [value, index] = self.adapter.read(state.memory, instruction);
+        let [value, index] = self.adapter.read(state, instruction);
 
         let idx: usize = index.as_canonical_u32() as usize;
         {
@@ -252,6 +256,18 @@ where
         }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += 1;
 
         Ok(())
     }

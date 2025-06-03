@@ -6,6 +6,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
         VmAdapterInterface, VmCoreAir, VmStateMut,
@@ -382,13 +383,16 @@ where
         + for<'a> AdapterExecutorE1<F, ReadData = [u8; NUM_CELLS], WriteData = [u8; NUM_CELLS]>,
 {
     fn execute_e1<Ctx>(
-        &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let Instruction { opcode, .. } = instruction;
 
-        let mut data = self.adapter.read(state.memory, instruction);
+        let mut data = self.adapter.read(state, instruction);
         let local_opcode = opcode.local_opcode_idx(self.offset);
 
         // Need to zero extend the data for loadbu and loadhu
@@ -402,9 +406,21 @@ where
             });
         }
 
-        self.adapter.write(state.memory, instruction, &data);
+        self.adapter.write(state, instruction, &data);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += 1;
 
         Ok(())
     }

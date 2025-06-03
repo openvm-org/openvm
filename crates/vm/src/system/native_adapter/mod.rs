@@ -8,12 +8,9 @@ use openvm_circuit::{
         AdapterAirContext, BasicAdapterInterface, ExecutionBridge, ExecutionBus, ExecutionState,
         MinimalInstruction, Result, VmAdapterAir, VmAdapterInterface,
     },
-    system::{
-        memory::{
-            offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryController,
-        },
-        program::ProgramBus,
+    system::memory::{
+        offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
+        MemoryAddress, MemoryController,
     },
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -23,46 +20,12 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-use serde::{Deserialize, Serialize};
-use serde_big_array::BigArray;
 
-use super::memory::{online::TracingMemory, MemoryAuxColsFactory};
+use super::memory::online::TracingMemory;
 use crate::{
-    arch::{AdapterExecutorE1, AdapterTraceStep},
-    system::memory::{online::GuestMemory, RecordId},
+    arch::{execution_mode::E1E2ExecutionCtx, AdapterExecutorE1, AdapterTraceStep, VmStateMut},
+    system::memory::online::GuestMemory,
 };
-
-#[repr(C)]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct NativeReadRecord<F: Field, const R: usize> {
-    #[serde(with = "BigArray")]
-    pub reads: [(RecordId, [F; 1]); R],
-}
-
-impl<F: Field, const R: usize> NativeReadRecord<F, R> {
-    pub fn b(&self) -> &[F; 1] {
-        &self.reads[0].1
-    }
-
-    pub fn c(&self) -> &[F; 1] {
-        &self.reads[1].1
-    }
-}
-
-#[repr(C)]
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
-pub struct NativeWriteRecord<F: Field, const W: usize> {
-    pub from_state: ExecutionState<u32>,
-    #[serde(with = "BigArray")]
-    pub writes: [(RecordId, [F; 1]); W],
-}
-
-impl<F: Field, const W: usize> NativeWriteRecord<F, W> {
-    pub fn a(&self) -> &[F; 1] {
-        &self.writes[0].1
-    }
-}
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -235,41 +198,59 @@ where
     type WriteData = [F; W];
 
     #[inline(always)]
-    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read<Ctx>(
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         assert!(R <= 2);
 
         let &Instruction { b, c, e, f, .. } = instruction;
 
         let mut reads = [F::ZERO; R];
         if R >= 1 {
-            let [value] =
-                unsafe { memory.read::<F, 1>(e.as_canonical_u32(), b.as_canonical_u32()) };
+            let [value] = unsafe {
+                state
+                    .memory
+                    .read::<F, 1>(e.as_canonical_u32(), b.as_canonical_u32())
+            };
             reads[0] = value;
         }
         if R >= 2 {
-            let [value] =
-                unsafe { memory.read::<F, 1>(f.as_canonical_u32(), c.as_canonical_u32()) };
+            let [value] = unsafe {
+                state
+                    .memory
+                    .read::<F, 1>(f.as_canonical_u32(), c.as_canonical_u32())
+            };
             reads[1] = value;
         }
         reads
     }
 
     #[inline(always)]
-    fn write(
+    fn write<Ctx>(
         &self,
-        memory: &mut GuestMemory,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
-    ) {
+    ) where
+        Ctx: E1E2ExecutionCtx,
+    {
         assert!(W <= 1);
 
         let &Instruction { a, d, .. } = instruction;
         if W >= 1 {
-            unsafe { memory.write(d.as_canonical_u32(), a.as_canonical_u32(), data) };
+            unsafe {
+                state
+                    .memory
+                    .write(d.as_canonical_u32(), a.as_canonical_u32(), data)
+            };
         }
     }
 }
-
 // impl<F, const R: usize, const W: usize> VmAdapterChip<F> for NativeAdapterStep<F, R, W>
 // where
 //     F: PrimeField32,

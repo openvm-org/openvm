@@ -190,9 +190,8 @@ pub struct TracingMemory<F> {
     pub(super) meta: Vec<PagedVec<PAGE_SIZE>>,
     /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
     /// all memory accesses in `addr_space` must be aligned to this block size.
-    pub(super) min_block_size: Vec<u32>,
-    pub(super) access_adapter_inventory: AccessAdapterInventory<F>,
-    pub(super) adapter_inventory_trace_cursor: AdapterInventoryTraceCursor<F>,
+    pub min_block_size: Vec<u32>,
+    pub access_adapter_inventory: AccessAdapterInventory<F>,
 }
 
 impl<F: PrimeField32> TracingMemory<F> {
@@ -234,7 +233,6 @@ impl<F: PrimeField32> TracingMemory<F> {
                 mem_config.clk_max_bits,
                 mem_config.max_access_adapter_n,
             ),
-            adapter_inventory_trace_cursor: AdapterInventoryTraceCursor::new(num_addr_sp),
         }
     }
 
@@ -300,7 +298,6 @@ impl<F: PrimeField32> TracingMemory<F> {
                     },
                     &values[i..i + size],
                     timestamp,
-                    self.adapter_inventory_trace_cursor.get_row_slice(size),
                 );
             }
         }
@@ -346,7 +343,6 @@ impl<F: PrimeField32> TracingMemory<F> {
                     &values[i..i + size],
                     *left_timestamp,
                     *right_timestamp,
-                    self.adapter_inventory_trace_cursor.get_row_slice(size),
                 );
             }
         }
@@ -386,14 +382,12 @@ impl<F: PrimeField32> TracingMemory<F> {
     /// actions. In the end of this process, we have this segment intact in our `meta`.
     ///
     /// Caller must ensure alignment (e.g. via `assert_alignment`) prior to calling this function.
-    fn prev_access_time<T: Copy + Debug, const BLOCK_SIZE: usize>(
+    fn prev_access_time<const BLOCK_SIZE: usize>(
         &mut self,
         address_space: usize,
         pointer: usize,
         align: usize,
     ) -> u32 {
-        let size = size_of::<T>();
-        let seg_size = align * size;
         let num_segs = BLOCK_SIZE / align;
 
         let begin = pointer / align;
@@ -448,7 +442,7 @@ impl<F: PrimeField32> TracingMemory<F> {
                 .fill(current_metadata.timestamp);
             if current_metadata.block_size > align as u32 {
                 // Split
-                let address = MemoryAddress::new(address_space as u32, (cur_ptr * seg_size) as u32);
+                let address = MemoryAddress::new(address_space as u32, (cur_ptr * align) as u32);
                 let values = (0..current_metadata.block_size as usize)
                     .map(|i| {
                         self.data
@@ -511,7 +505,7 @@ impl<F: PrimeField32> TracingMemory<F> {
     {
         self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
         let t_prev =
-            self.prev_access_time::<T, BLOCK_SIZE>(address_space as usize, pointer as usize, ALIGN);
+            self.prev_access_time::<BLOCK_SIZE>(address_space as usize, pointer as usize, ALIGN);
         let t_curr = self.timestamp;
         self.timestamp += 1;
         let values = self.data.read(address_space, pointer);
@@ -559,7 +553,7 @@ impl<F: PrimeField32> TracingMemory<F> {
     {
         self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
         let t_prev =
-            self.prev_access_time::<T, BLOCK_SIZE>(address_space as usize, pointer as usize, ALIGN);
+            self.prev_access_time::<BLOCK_SIZE>(address_space as usize, pointer as usize, ALIGN);
         let values_prev = self.data.replace(address_space, pointer, values);
         let t_curr = self.timestamp;
         self.timestamp += 1;

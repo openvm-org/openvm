@@ -5,6 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, ImmInstruction, RecordArena, Result, StepExecutorE1, TraceFiller,
         TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
@@ -256,19 +257,37 @@ where
         + for<'a> AdapterExecutorE1<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
 {
     fn execute_e1<Ctx>(
-        &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let &Instruction { opcode, c: imm, .. } = instruction;
 
         let is_jal = opcode.local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET) == JAL as usize;
         let signed_imm = get_signed_imm(is_jal, imm);
         let (to_pc, rd) = run_jal_lui(is_jal, *state.pc, signed_imm);
 
-        self.adapter.write(state.memory, instruction, &rd);
+        self.adapter.write(state, instruction, &rd);
 
         *state.pc = to_pc;
+        self.adapter.write(state, instruction, &rd);
+
+        *state.pc = to_pc;
+
+        Ok(())
+    }
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += 1;
 
         Ok(())
     }

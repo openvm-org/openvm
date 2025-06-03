@@ -5,8 +5,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep,
-        BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, BasicAdapterInterface, ExecutionBridge, ExecutionState,
+        MinimalInstruction, VmAdapterAir, VmStateMut,
     },
     system::memory::{
         offline_checker::{
@@ -37,7 +38,7 @@ use openvm_stark_backend::{
 use super::{
     tracing_read, tracing_read_imm, tracing_write, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
-use crate::adapters::{memory_read, memory_write};
+use crate::adapters::{imm_to_bytes, memory_read_from_state, memory_write_from_state};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -348,7 +349,14 @@ where
     type WriteData = [[u8; RV32_REGISTER_NUM_LIMBS]; 1];
 
     #[inline(always)]
-    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read<Ctx>(
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let Instruction { b, c, d, e, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
@@ -357,29 +365,32 @@ where
         );
 
         let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
-            memory_read(memory, RV32_REGISTER_AS, b.as_canonical_u32());
+            memory_read_from_state(state, RV32_REGISTER_AS, b.as_canonical_u32());
 
         let rs2 = if e.as_canonical_u32() == RV32_REGISTER_AS {
             let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
-                memory_read(memory, RV32_REGISTER_AS, c.as_canonical_u32());
+                memory_read_from_state(state, RV32_REGISTER_AS, c.as_canonical_u32());
             rs2
         } else {
-            let imm = c.as_canonical_u32();
-            debug_assert_eq!(imm >> 24, 0);
-            let mut imm_le = imm.to_le_bytes();
-            imm_le[3] = imm_le[2];
-            imm_le
+            imm_to_bytes(c.as_canonical_u32())
         };
 
         [rs1, rs2]
     }
 
     #[inline(always)]
-    fn write(&self, memory: &mut GuestMemory, instruction: &Instruction<F>, rd: &Self::WriteData) {
+    fn write<Ctx>(
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+        rd: &Self::WriteData,
+    ) where
+        Ctx: E1E2ExecutionCtx,
+    {
         let Instruction { a, d, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        memory_write(memory, d.as_canonical_u32(), a.as_canonical_u32(), &rd[0]);
+        memory_write_from_state(state, d.as_canonical_u32(), a.as_canonical_u32(), &rd[0]);
     }
 }

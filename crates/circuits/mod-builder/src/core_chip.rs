@@ -2,6 +2,7 @@ use itertools::Itertools;
 use num_bigint::BigUint;
 use openvm_circuit::{
     arch::{
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, DynAdapterInterface, DynArray,
         MinimalInstruction, Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir,
         VmStateMut, RecordArena, TraceFiller, AdapterCoreLayout,
@@ -404,6 +405,10 @@ where
     }
 
     fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        if !self.should_finalize {
+            return;
+        }
+        
         row_slice.fill(F::ZERO);
     }
 }
@@ -475,16 +480,30 @@ where
         + for<'a> AdapterExecutorE1<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
 {
     fn execute_e1<Ctx>(
-        &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
-        let data: DynArray<_> = self.adapter.read(state.memory, instruction).into();
+    ) -> Result<()> 
+    where   
+        Ctx: E1E2ExecutionCtx,
+    {
+        let data: DynArray<_> = self.adapter.read(state, instruction).into();
 
         let writes = run_field_expression(self, &data, instruction).0;
-        self.adapter
-            .write(state.memory, instruction, &writes.into());
+        self.adapter.write(state, instruction, &writes.into());
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        Ok(())
+    }
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {   
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += 1;
+
         Ok(())
     }
 }

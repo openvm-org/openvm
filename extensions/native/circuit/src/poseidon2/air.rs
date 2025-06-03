@@ -20,15 +20,13 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 
-use crate::{
+use crate::poseidon2::{
     chip::{NUM_INITIAL_READS, NUM_SIMPLE_ACCESSES},
-    poseidon2::{
-        columns::{
-            InsideRowSpecificCols, NativePoseidon2Cols, SimplePoseidonSpecificCols,
-            TopLevelSpecificCols,
-        },
-        CHUNK,
+    columns::{
+        InsideRowSpecificCols, NativePoseidon2Cols, SimplePoseidonSpecificCols,
+        TopLevelSpecificCols,
     },
+    CHUNK,
 };
 
 #[derive(Clone, Debug)]

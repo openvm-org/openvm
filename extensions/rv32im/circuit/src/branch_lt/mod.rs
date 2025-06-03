@@ -13,11 +13,11 @@ pub type Rv32BranchLessThanAir = VmAirWrapper<
     Rv32BranchAdapterAir,
     BranchLessThanCoreAir<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
 >;
-pub type Rv32BranchLessThanStepWithAdapter =
+pub type Rv32BranchLessThanStep =
     BranchLessThanStep<Rv32BranchAdapterStep, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>;
 pub type Rv32BranchLessThanChip<F> = NewVmChipWrapper<
     F,
     Rv32BranchLessThanAir,
-    Rv32BranchLessThanStepWithAdapter,
+    Rv32BranchLessThanStep,
     AdapterCoreRecordArena<F>,
 >;

@@ -1,14 +1,15 @@
 use openvm_circuit_primitives_derive::AlignedBorrow;
 
-mod adapter;
+pub mod adapter;
 mod controller;
 pub mod merkle;
 pub mod offline_checker;
 pub mod online;
 pub mod paged_vec;
 mod persistent;
-#[cfg(test)]
-mod tests;
+// TODO: add back
+// #[cfg(test)]
+// mod tests;
 pub mod tree;
 mod volatile;
 

@@ -5,22 +5,19 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutorE1,
-        InstructionExecutor, NewVmChipWrapper, Result, StepExecutorE1, Streams, TraceStep,
-        VmStateMut,
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        ExecutionBridge, ExecutionError, ExecutionState, NewVmChipWrapper, Result, StepExecutorE1,
+        Streams, TraceStep, VmStateMut,
     },
-    system::{
-        memory::{
-            offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            online::{GuestMemory, TracingMemory},
-            MemoryAddress, MemoryAuxColsFactory, MemoryController, RecordId,
-        },
-        program::ProgramBus,
+    system::memory::{
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        online::{GuestMemory, TracingMemory},
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    utils::{next_power_of_two_or_zero, not},
+    utils::not,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -34,20 +31,17 @@ use openvm_rv32im_transpiler::{
     Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW},
 };
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProofInput,
-    rap::{AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    p3_matrix::Matrix,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use rand::distributions::weighted;
 use serde::{Deserialize, Serialize};
 
 use crate::adapters::{
-    decompose, memory_read, memory_write, tmp_convert_to_u8s, tracing_read, tracing_write,
+    decompose, memory_read, memory_read_from_state, memory_write_from_state, tracing_read,
+    tracing_write,
 };
 
 #[cfg(test)]
@@ -270,19 +264,6 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
-pub struct Rv32HintStoreRecord<F: Field> {
-    pub from_state: ExecutionState<u32>,
-    pub instruction: Instruction<F>,
-    pub mem_ptr_read: RecordId,
-    pub mem_ptr: u32,
-    pub num_words: u32,
-
-    pub num_words_read: Option<RecordId>,
-    pub hints: Vec<([F; RV32_REGISTER_NUM_LIMBS], RecordId)>,
-}
-
 pub struct Rv32HintStoreStep<F: Field> {
     pointer_max_bits: usize,
     offset: usize,
@@ -345,7 +326,7 @@ where
 
         let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let mut row: &mut Rv32HintStoreCols<F> =
+        let row: &mut Rv32HintStoreCols<F> =
             trace[*trace_offset..*trace_offset + width].borrow_mut();
 
         row.from_state.pc = F::from_canonical_u32(*state.pc);
@@ -463,10 +444,13 @@ where
     F: PrimeField32,
 {
     fn execute_e1<Ctx>(
-        &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let &Instruction {
             opcode,
             a: num_words_ptr,
@@ -481,22 +465,16 @@ where
 
         let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let mem_ptr_limbs = memory_read(
-            state.memory,
-            RV32_REGISTER_AS,
-            mem_ptr_ptr.as_canonical_u32(),
-        );
+        let mem_ptr_limbs =
+            memory_read_from_state(state, RV32_REGISTER_AS, mem_ptr_ptr.as_canonical_u32());
         let mem_ptr = u32::from_le_bytes(mem_ptr_limbs);
         debug_assert!(mem_ptr <= (1 << self.pointer_max_bits));
 
         let num_words = if local_opcode == HINT_STOREW {
             1
         } else {
-            let num_words_limbs = memory_read(
-                state.memory,
-                RV32_REGISTER_AS,
-                num_words_ptr.as_canonical_u32(),
-            );
+            let num_words_limbs =
+                memory_read_from_state(state, RV32_REGISTER_AS, num_words_ptr.as_canonical_u32());
             u32::from_le_bytes(num_words_limbs)
         };
         debug_assert_ne!(num_words, 0);
@@ -511,8 +489,8 @@ where
             let data: [u8; RV32_REGISTER_NUM_LIMBS] = std::array::from_fn(|_| {
                 streams.hint_stream.pop_front().unwrap().as_canonical_u32() as u8
             });
-            memory_write(
-                state.memory,
+            memory_write_from_state(
+                state,
                 RV32_MEMORY_AS,
                 mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index),
                 &data,
@@ -520,6 +498,37 @@ where
         }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        let &Instruction {
+            opcode,
+            a: num_words_ptr,
+            ..
+        } = instruction;
+
+        let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+
+        let num_words = if local_opcode == HINT_STOREW {
+            1
+        } else {
+            let num_words_limbs = memory_read(
+                state.memory,
+                RV32_REGISTER_AS,
+                num_words_ptr.as_canonical_u32(),
+            );
+            u32::from_le_bytes(num_words_limbs)
+        };
+
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += num_words;
 
         Ok(())
     }

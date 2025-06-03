@@ -5,8 +5,9 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep,
-        BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction,
+        VmAdapterAir, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord},
@@ -26,7 +27,7 @@ use openvm_stark_backend::{
 };
 
 use super::RV32_REGISTER_NUM_LIMBS;
-use crate::adapters::{memory_read, tracing_read};
+use crate::adapters::{memory_read_from_state, tracing_read};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -223,26 +224,35 @@ where
     type WriteData = ();
 
     #[inline(always)]
-    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData {
+    fn read<Ctx>(
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let Instruction { a, b, d, e, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV32_REGISTER_AS);
 
         let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
-            memory_read(memory, RV32_REGISTER_AS, a.as_canonical_u32());
+            memory_read_from_state(state, RV32_REGISTER_AS, a.as_canonical_u32());
         let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
-            memory_read(memory, RV32_REGISTER_AS, b.as_canonical_u32());
+            memory_read_from_state(state, RV32_REGISTER_AS, b.as_canonical_u32());
 
         [rs1, rs2]
     }
 
     #[inline(always)]
-    fn write(
+    fn write<Ctx>(
         &self,
-        _memory: &mut GuestMemory,
+        _state: &mut VmStateMut<GuestMemory, Ctx>,
         _instruction: &Instruction<F>,
         _data: &Self::WriteData,
-    ) {
+    ) where
+        Ctx: E1E2ExecutionCtx,
+    {
     }
 }

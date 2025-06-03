@@ -26,6 +26,7 @@ use serde_big_array::BigArray;
 use super::memory::{online::GuestMemory, MemoryController};
 use crate::{
     arch::{
+        execution_mode::{e1::E1Ctx, metered::MeteredCtx, E1E2ExecutionCtx},
         ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutorE1,
         InstructionExecutor, PcIncOrSet, PhantomSubExecutor, Streams, VmStateMut,
     },
@@ -129,12 +130,13 @@ where
     F: PrimeField32,
 {
     fn execute_e1<Ctx>(
-        &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
+        Ctx: E1E2ExecutionCtx,
     {
         let &Instruction {
             opcode, a, b, c, ..
@@ -146,17 +148,16 @@ where
         // If not a system phantom sub-instruction (which is handled in
         // ExecutionSegment), look for a phantom sub-executor to handle it.
         if SysPhantom::from_repr(discriminant.0).is_none() {
-            let sub_executor = self
-                .phantom_executors
-                .get_mut(&discriminant)
-                .ok_or_else(|| ExecutionError::PhantomNotFound {
+            let sub_executor = self.phantom_executors.get(&discriminant).ok_or_else(|| {
+                ExecutionError::PhantomNotFound {
                     pc: *state.pc,
                     discriminant,
-                })?;
+                }
+            })?;
             let mut streams = self.streams.get().unwrap().lock().unwrap();
             // TODO(ayush): implement phantom subexecutor for new traits
             sub_executor
-                .as_mut()
+                .as_ref()
                 .phantom_execute(
                     state.memory,
                     &mut streams,
@@ -173,6 +174,17 @@ where
         }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        _chip_index: usize,
+    ) -> Result<(), ExecutionError> {
+        self.execute_e1(state, instruction)?;
 
         Ok(())
     }
@@ -193,12 +205,12 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
             is_valid: F::ONE,
         });
 
-        let state = VmStateMut {
+        let mut state = VmStateMut {
             pc: &mut pc,
             memory: &mut memory.memory.data,
-            ctx: &mut (),
+            ctx: &mut E1Ctx::default(),
         };
-        self.execute_e1(state, instruction)?;
+        self.execute_e1(&mut state, instruction)?;
         memory.increment_timestamp();
 
         Ok(ExecutionState {

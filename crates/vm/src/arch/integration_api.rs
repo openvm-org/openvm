@@ -21,7 +21,10 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::{ExecutionState, InsExecutorE1, InstructionExecutor, Result, VmStateMut};
+use super::{
+    execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+    ExecutionState, InsExecutorE1, InstructionExecutor, Result, VmStateMut,
+};
 use crate::system::memory::{
     online::{GuestMemory, TracingMemory},
     MemoryAuxColsFactory, MemoryController, SharedMemoryHelper,
@@ -461,17 +464,38 @@ where
     type ReadData;
     type WriteData;
 
-    fn read(&self, memory: &mut GuestMemory, instruction: &Instruction<F>) -> Self::ReadData;
+    fn read<Ctx>(
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
+    where
+        Ctx: E1E2ExecutionCtx;
 
-    fn write(&self, memory: &mut GuestMemory, instruction: &Instruction<F>, data: &Self::WriteData);
+    fn write<Ctx>(
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+        data: &Self::WriteData,
+    ) where
+        Ctx: E1E2ExecutionCtx;
 }
 
 // TODO: Rename core/step to operator
 pub trait StepExecutorE1<F> {
     fn execute_e1<Ctx>(
-        &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx;
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
     ) -> Result<()>;
 }
 
@@ -483,11 +507,26 @@ where
     S: StepExecutorE1<F>,
 {
     fn execute_e1<Ctx>(
-        &mut self,
-        state: VmStateMut<GuestMemory, Ctx>,
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         self.step.execute_e1(state, instruction)
+    }
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()>
+    where
+        F: PrimeField32,
+    {
+        self.step.execute_metered(state, instruction, chip_index)
     }
 }
 
