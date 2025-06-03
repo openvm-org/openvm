@@ -196,12 +196,17 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     static is_setup: ::openvm_ecc_guest::once_cell::race::OnceBool = ::openvm_ecc_guest::once_cell::race::OnceBool::new();
                     is_setup.get_or_init(|| {
                         unsafe { #sw_setup_extern_func(); }
+                        <#intmod_type as openvm_algebra_guest::IntMod>::set_up_once();
                         true
                     });
                 }
 
                 fn is_identity_impl<const CHECK_SETUP: bool>(&self) -> bool {
-                    self.x == #intmod_type::ZERO && self.y == #intmod_type::ZERO
+                    use openvm_algebra_guest::IntMod;
+                    // Safety: Self::set_up_once() ensures IntMod::set_up_once() has been called.
+                    unsafe {
+                        self.x.eq_impl::<CHECK_SETUP>(&#intmod_type::ZERO) && self.y.eq_impl::<CHECK_SETUP>(&#intmod_type::ZERO)
+                    }
                 }
             }
 
@@ -246,12 +251,15 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 }
 
                 fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
+                    use openvm_algebra_guest::IntMod;
+
                     if self.is_identity_impl::<CHECK_SETUP>() {
                         *self = p2.clone();
                     } else if p2.is_identity_impl::<CHECK_SETUP>() {
                         // do nothing
-                    } else if self.x == p2.x {
-                        if &self.y + &p2.y == <#intmod_type as openvm_algebra_guest::Field>::ZERO {
+                    } else if unsafe { self.x.eq_impl::<CHECK_SETUP>(&p2.x) } {
+                        // Safety: Self::set_up_once() ensures that IntMod::set_up_once() is called
+                        if unsafe { IntMod::eq_impl::<CHECK_SETUP>(&(&self.y + &p2.y), &<#intmod_type as IntMod>::ZERO) } {
                             *self = Self::identity();
                         } else {
                             unsafe {

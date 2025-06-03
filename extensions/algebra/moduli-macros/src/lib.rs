@@ -338,17 +338,17 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                 }
 
                 #[inline(always)]
-                fn eq_impl(&self, other: &Self) -> bool {
+                unsafe fn eq_impl<const CHECK_SETUP: bool>(&self, other: &Self) -> bool {
                     #[cfg(not(target_os = "zkvm"))]
                     {
                         self.as_le_bytes() == other.as_le_bytes()
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::set_up_once();
-                        unsafe {
-                            #is_eq_extern_func(self as *const #struct_name as usize, other as *const #struct_name as usize)
+                        if CHECK_SETUP {
+                            Self::set_up_once();
                         }
+                        #is_eq_extern_func(self as *const #struct_name as usize, other as *const #struct_name as usize)
                     }
                 }
 
@@ -493,6 +493,14 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         }
                         // At this point, all limbs are equal
                         false
+                    }
+
+                    fn set_up_once() {
+                        Self::set_up_once();
+                    }
+
+                    unsafe fn eq_impl<const CHECK_SETUP: bool>(&self, other: &Self) -> bool {
+                        Self::eq_impl::<CHECK_SETUP>(self, other)
                     }
                 }
 
@@ -676,7 +684,8 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                 impl PartialEq for #struct_name {
                     #[inline(always)]
                     fn eq(&self, other: &Self) -> bool {
-                        self.eq_impl(other)
+                        // Safety: must check setup
+                        unsafe { self.eq_impl::<true>(other) }
                     }
                 }
 

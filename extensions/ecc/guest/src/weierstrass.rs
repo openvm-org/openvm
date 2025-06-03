@@ -31,8 +31,7 @@ pub trait WeierstrassPoint: Clone + Sized {
     fn y_mut(&mut self) -> &mut Self::Coordinate;
 
     /// Calls any setup required for this curve. The implementation should internally use `OnceBool`
-    /// to ensure that setup is only called once. This does not include any set up required by
-    /// `Self::Coordinate`, which should be handled by the coordinate field itself.
+    /// to ensure that setup is only called once.
     fn set_up_once();
 
     /// Add implementation that handles identity and whether points are equal or not.
@@ -339,6 +338,9 @@ macro_rules! impl_sw_affine {
             fn set_up_once() {
                 // There are no special opcodes for curve operations in this case, so no additional
                 // setup is required.
+                //
+                // Since the `Self::Coordinate` is abstract, any set up required by the field is not
+                // handled here.
             }
 
             fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
