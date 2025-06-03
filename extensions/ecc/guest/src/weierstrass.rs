@@ -30,6 +30,9 @@ pub trait WeierstrassPoint: Clone + Sized {
     fn x_mut(&mut self) -> &mut Self::Coordinate;
     fn y_mut(&mut self) -> &mut Self::Coordinate;
 
+    /// Calls any setup required for this curve. The implementation should internally use `OnceBool`
+    /// to ensure that setup is only called once. This does not include any set up required by
+    /// `Self::Coordinate`, which should be handled by the coordinate field itself.
     fn set_up_once();
 
     /// Add implementation that handles identity and whether points are equal or not.
@@ -254,14 +257,16 @@ where
             if outer != 0 {
                 for _ in 0..self.window_bits {
                     // Note: this handles identity
-                    res.double_assign();
+                    // setup has been called above
+                    res.double_assign_impl::<false>();
                 }
             }
             for (base_idx, scalar) in scalars.iter().enumerate() {
                 let scalar = (scalar.as_le_bytes()[limb_idx] >> bit_idx) & mask;
                 let summand = self.get_multiple(base_idx, scalar as usize);
                 // handles identity
-                res.add_assign(summand);
+                // setup has been called above
+                res.add_assign_impl::<false>(summand);
             }
         }
         res
