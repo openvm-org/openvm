@@ -4,12 +4,13 @@ use crate::{
 };
 use itertools::Itertools;
 use num_bigint::BigUint;
+use num_traits::Zero;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, DynAdapterInterface, DynArray, MinimalInstruction, RecordArena, Result,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterTraceStep, CustomBorrow, DynAdapterInterface, DynArray, MinimalInstruction, RecordArena, 
+        Result, StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -27,32 +28,71 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
-use std::{borrow::Borrow, mem::size_of, ptr::slice_from_raw_parts};
+use std::{
+    borrow::{Borrow, BorrowMut}, 
+    mem::size_of, 
+    ptr::slice_from_raw_parts
+};
 
-// Maximum limits for field expression records
-const MAX_INPUT_LIMBS: usize = 128; // 32 inputs * 4 limbs each
-const MAX_FLAGS: usize = 16;
-
-// Minimal execution data needed for deferred trace generation
+// Metadata record
+#[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct FieldExpressionCoreRecord {
     pub from_pc: u32,
     pub from_timestamp: u32,
     pub opcode: u8,
-    pub input_limbs: [u32; MAX_INPUT_LIMBS],
-    pub flag_states: [bool; MAX_FLAGS],
     pub num_inputs: u8,
     pub limbs_per_input: u8,
     pub num_flags: u8,
 }
 
-impl FieldExpressionCoreRecord {
-    pub fn reconstruct_inputs(&self, limb_bits: usize) -> Vec<BigUint> {
-        let mut inputs = Vec::with_capacity(self.num_inputs as usize);
+#[repr(C)]
+pub struct FieldExpressionVarInfo {
+    pub input_limbs: Vec<u32>,
+    pub flag_states: Vec<bool>,
+}
 
-        for i in 0..self.num_inputs as usize {
-            let limb_start = i * self.limbs_per_input as usize;
-            let limb_end = limb_start + self.limbs_per_input as usize;
+pub struct FieldExpressionRecordInfo {
+    pub total_input_limbs: usize, // num_inputs * limbs_per_input
+    pub num_flags: usize,
+}
+
+pub struct FieldExpressionCoreRecordMut<'a> {
+    pub inner: &'a mut FieldExpressionCoreRecord,
+    pub input_limbs: &'a mut [u32],
+    pub flag_states: &'a mut [bool],
+}
+
+impl<'a> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressionRecordInfo> for [u8] {
+    fn custom_borrow(&'a mut self, info: FieldExpressionRecordInfo) -> FieldExpressionCoreRecordMut<'a> {
+        let (record_buf, rest) = unsafe { 
+            self.split_at_mut_unchecked(size_of::<FieldExpressionCoreRecord>()) 
+        };
+        
+        // Split rest into input_limbs and flag_states
+        let input_limbs_size = info.total_input_limbs * size_of::<u32>();
+        let (input_limbs_buf, flag_states_buf) = unsafe {
+            rest.split_at_mut_unchecked(input_limbs_size)
+        };
+        
+        let (_, input_limbs, _) = unsafe { input_limbs_buf.align_to_mut::<u32>() };
+        let (_, flag_states, _) = unsafe { flag_states_buf.align_to_mut::<bool>() };
+        
+        FieldExpressionCoreRecordMut {
+            inner: record_buf.borrow_mut(),
+            input_limbs: &mut input_limbs[..info.total_input_limbs],
+            flag_states: &mut flag_states[..info.num_flags],
+        }
+    }
+}
+
+impl<'a> FieldExpressionCoreRecordMut<'a> {
+    pub fn reconstruct_inputs(&self, limb_bits: usize) -> Vec<BigUint> {
+        let mut inputs = Vec::with_capacity(self.inner.num_inputs as usize);
+
+        for i in 0..self.inner.num_inputs as usize {
+            let limb_start = i * self.inner.limbs_per_input as usize;
+            let limb_end = limb_start + self.inner.limbs_per_input as usize;
 
             let limbs = &self.input_limbs[limb_start..limb_end];
 
@@ -64,10 +104,11 @@ impl FieldExpressionCoreRecord {
     }
 
     pub fn reconstruct_flags(&self) -> Vec<bool> {
-        self.flag_states[..self.num_flags as usize].to_vec()
+        self.flag_states[..self.inner.num_flags as usize].to_vec()
     }
 
-    pub fn from_execution_data(
+    pub fn fill_from_execution_data(
+        &mut self,
         pc: u32,
         timestamp: u32,
         opcode: u8,
@@ -75,43 +116,42 @@ impl FieldExpressionCoreRecord {
         flags: Vec<bool>,
         limb_bits: usize,
         limbs_per_input: usize,
-    ) -> Self {
+    ) {
         assert!(inputs.len() <= 32, "Too many inputs: {} > 32", inputs.len());
         assert!(
-            flags.len() <= MAX_FLAGS,
+            flags.len() <= self.flag_states.len(),
             "Too many flags: {} > {}",
             flags.len(),
-            MAX_FLAGS
+            self.flag_states.len()
         );
         assert!(
-            inputs.len() * limbs_per_input <= MAX_INPUT_LIMBS,
+            inputs.len() * limbs_per_input <= self.input_limbs.len(),
             "Too many input limbs: {} > {}",
             inputs.len() * limbs_per_input,
-            MAX_INPUT_LIMBS
+            self.input_limbs.len()
         );
 
-        let mut input_limbs = [0u32; MAX_INPUT_LIMBS];
-        let mut flag_states = [false; MAX_FLAGS];
+        // Fill the metadata
+        self.inner.from_pc = pc;
+        self.inner.from_timestamp = timestamp;
+        self.inner.opcode = opcode;
+        self.inner.num_inputs = inputs.len() as u8;
+        self.inner.limbs_per_input = limbs_per_input as u8;
+        self.inner.num_flags = flags.len() as u8;
 
+        // Fill variable data
         for (i, input) in inputs.iter().enumerate() {
             let limbs = biguint_to_limbs_vec(input.clone(), limb_bits, limbs_per_input);
             let start = i * limbs_per_input;
-            input_limbs[start..start + limbs_per_input].copy_from_slice(&limbs);
+            self.input_limbs[start..start + limbs_per_input].copy_from_slice(&limbs);
         }
 
-        flag_states[..flags.len()].copy_from_slice(&flags);
-
-        Self {
-            from_pc: pc,
-            from_timestamp: timestamp,
-            opcode,
-            input_limbs,
-            flag_states,
-            num_inputs: inputs.len() as u8,
-            limbs_per_input: limbs_per_input as u8,
-            num_flags: flags.len() as u8,
-        }
+        self.flag_states[..flags.len()].copy_from_slice(&flags);
     }
+}
+
+impl FieldExpressionCoreRecord {
+    // Remove the old methods - they're now in FieldExpressionCoreRecordMut
 }
 
 #[derive(Clone)]
@@ -318,7 +358,7 @@ impl<A> FieldExpressionStep<A> {
 
     fn fill_row_from_execution_record<F: PrimeField32>(
         &self,
-        record: &FieldExpressionCoreRecord,
+        record: &FieldExpressionCoreRecordMut,
         row_slice: &mut [F],
     ) {
         // NOTE[teokitan]: This is where GPU acceleration should happen in the future
@@ -342,8 +382,8 @@ where
             WriteData: From<DynArray<u8>>,
         >,
 {
-    type RecordLayout = AdapterCoreLayout;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut FieldExpressionCoreRecord);
+    type RecordLayout = AdapterCoreLayout<FieldExpressionRecordInfo>;
+    type RecordMut<'a> = (A::RecordMut<'a>, FieldExpressionCoreRecordMut<'a>);
 
     fn execute<'buf, RA>(
         &mut self,
@@ -354,8 +394,14 @@ where
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
     {
-        let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
+        let core_record_info = FieldExpressionRecordInfo {
+            total_input_limbs: self.num_inputs() * self.expr.canonical_num_limbs(),
+            num_flags: self.num_flags(),
+        };
+
+        let (mut adapter_record, mut core_record) = arena.alloc(AdapterCoreLayout {
             adapter_width: A::WIDTH,
+            info: core_record_info,
         });
 
         A::start(*state.pc, state.memory, &mut adapter_record);
@@ -367,7 +413,7 @@ where
 
         let (writes, inputs, flags) = run_field_expression(self, &data, instruction);
 
-        *core_record = FieldExpressionCoreRecord::from_execution_data(
+        core_record.fill_from_execution_data(
             *state.pc,
             state.memory.timestamp(),
             instruction.opcode.local_opcode_idx(self.offset) as u8,
@@ -404,28 +450,73 @@ where
 
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        let record = unsafe {
-            let record_buffer = &*slice_from_raw_parts(
-                core_row.as_ptr() as *const u8,
-                size_of::<FieldExpressionCoreRecord>(),
-            );
-            let record: &FieldExpressionCoreRecord = record_buffer.borrow();
-            record
+        let core_bytes = unsafe {
+            std::slice::from_raw_parts_mut(
+                core_row.as_mut_ptr() as *mut u8,
+                core_row.len() * size_of::<F>(),
+            )
         };
 
-        self.fill_row_from_execution_record(record, core_row);
+        let record_info = FieldExpressionRecordInfo {
+            total_input_limbs: self.num_inputs() * self.expr.canonical_num_limbs(),
+            num_flags: self.num_flags(),
+        };
+
+        let record = core_bytes.custom_borrow(record_info);
+        self.fill_row_from_execution_record(&record, core_row);
     }
 
     fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         if !self.should_finalize {
             return;
         }
-
-        row_slice.fill(F::ZERO);
+        
+        let inputs: Vec<BigUint> = vec![BigUint::zero(); self.num_inputs()];
+        let flags: Vec<bool> = vec![false; self.num_flags()];
+        let core_row = &mut row_slice[A::WIDTH..];
+        // We **do not** want this trace row to update the range checker
+        // so we must create a temporary range checker
+        let tmp_range_checker = SharedVariableRangeCheckerChip::new(self.range_checker.bus());
+        self.expr
+            .generate_subrow((tmp_range_checker.as_ref(), inputs, flags), core_row);
+        core_row[0] = F::ZERO; // is_valid = 0
     }
 }
 
-pub type TracegenCtx = ();
+impl<F, A> StepExecutorE1<F> for FieldExpressionStep<A>
+where
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterExecutorE1<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
+{
+    fn execute_e1<Ctx>(
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+        let data: DynArray<_> = self.adapter.read(state, instruction).into();
+
+        let writes = run_field_expression(self, &data, instruction).0;
+        self.adapter.write(state, instruction, &writes.into());
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        Ok(())
+    }
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += 1;
+
+        Ok(())
+    }
+}
 
 fn run_field_expression<F: PrimeField32, A>(
     step: &FieldExpressionStep<A>,
@@ -483,39 +574,4 @@ fn run_field_expression<F: PrimeField32, A>(
         .into();
 
     (writes, inputs, flags)
-}
-
-impl<F, A> StepExecutorE1<F> for FieldExpressionStep<A>
-where
-    F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
-{
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let data: DynArray<_> = self.adapter.read(state, instruction).into();
-
-        let writes = run_field_expression(self, &data, instruction).0;
-        self.adapter.write(state, instruction, &writes.into());
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        Ok(())
-    }
-
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
-
-        Ok(())
-    }
 }
