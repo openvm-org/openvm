@@ -15,7 +15,7 @@ mod test_vectors;
 use test_vectors::ADD_TEST_VECTORS;
 
 pub fn main() {
-    let generator = <P256 as CurveArithmetic>::ProjectivePoint::generator();
+    let generator = <NistP256 as CurveArithmetic>::ProjectivePoint::generator();
     let mut p = generator;
 
     for test_vector in ADD_TEST_VECTORS {

@@ -3,7 +3,6 @@ use core::{
     ops::{Mul, MulAssign},
 };
 
-use ecdsa_core::hazmat::VerifyPrimitive;
 use elliptic_curve::{
     bigint::{ArrayEncoding, U256},
     ops::{LinearCombination, MulByGenerator},
@@ -174,20 +173,6 @@ impl LinearCombination for P256Point {
 
 // default implementation
 impl MulByGenerator for P256Point {}
-
-/// ECDSA/secp256k1 signature (fixed-size)
-pub type Signature = ecdsa_core::Signature<NistP256>;
-
-impl VerifyPrimitive<NistP256> for P256Point {
-    fn verify_prehashed(&self, z: &FieldBytes, sig: &Signature) -> Result<(), ecdsa_core::Error> {
-        openvm_ecc_guest::ecdsa::verify_prehashed::<NistP256>(
-            *self,
-            z.as_slice(),
-            sig.to_bytes().as_slice(),
-        )
-        .map_err(|_| ecdsa_core::Error::new())
-    }
-}
 
 impl DecompressPoint<NistP256> for P256Point {
     /// Note that this is not constant time

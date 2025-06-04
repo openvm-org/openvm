@@ -12,7 +12,7 @@ openvm::init!("openvm_init_scalar_sqrt.rs");
 openvm::entry!(main);
 
 pub fn main() {
-    type Scalar = <P256 as CurveArithmetic>::Scalar;
+    type Scalar = <NistP256 as CurveArithmetic>::Scalar;
 
     let a = Scalar::from_u128(4);
     let b = a.sqrt().unwrap();
