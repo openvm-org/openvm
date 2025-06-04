@@ -98,7 +98,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 fn #sw_setup_extern_func();
             }
 
-            #[derive(Eq, PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize)]
+            #[derive(Eq, Clone, Debug, serde::Serialize, serde::Deserialize)]
             #[repr(C)]
             pub struct #struct_name {
                 x: #intmod_type,
@@ -210,6 +210,17 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                 }
             }
+
+            impl PartialEq for #struct_name {
+                #[inline(always)]
+                fn eq(&self, other: &Self) -> bool {
+                    use openvm_algebra_guest::IntMod;
+                    unsafe {
+                        self.x.eq_impl::<false>(&other.x) && self.y.eq_impl::<false>(&other.y)
+                    }
+                }
+            }
+
 
             impl ::openvm_ecc_guest::weierstrass::WeierstrassPoint for #struct_name {
                 const CURVE_A: #intmod_type = #const_a;
