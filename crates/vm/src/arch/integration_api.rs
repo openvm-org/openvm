@@ -197,17 +197,45 @@ pub trait TraceFiller<F, CTX> {
     }
 }
 
-pub struct MatrixRecordArena<F> {
-    pub trace_buffer: Vec<F>,
-    // TODO(ayush): width should be a constant?
-    pub width: usize,
-    pub trace_offset: usize,
+/// A trait that allows for custom implementation of `borrow` given the neccessary information
+/// This is useful for record structs that have dynamic size
+pub trait CustomBorrow<'a, T, I> {
+    fn custom_borrow(&'a mut self, metadata: I) -> T;
+}
+
+impl<'a, T, I> CustomBorrow<'a, &'a mut T, I> for [u8]
+where
+    [u8]: BorrowMut<T>,
+{
+    fn custom_borrow(&'a mut self, _metadata: I) -> &'a mut T {
+        self.borrow_mut()
+    }
 }
 
 /// The minimal information that [AdapterCoreRecordArena] needs to know to allocate a row
 /// **WARNING**: `adapter_width` is number of field elements, not in bytes
-pub struct AdapterCoreLayout {
+pub struct AdapterCoreLayout<I = ()> {
     pub adapter_width: usize,
+    pub metadata: I,
+}
+
+impl<I> AdapterCoreLayout<I> {
+    pub fn new(adapter_width: usize) -> Self
+    where
+        I: Default,
+    {
+        Self {
+            adapter_width,
+            metadata: I::default(),
+        }
+    }
+
+    pub fn with_metadata(adapter_width: usize, metadata: I) -> Self {
+        Self {
+            adapter_width,
+            metadata,
+        }
+    }
 }
 
 /// A record arena struct that can be used by chips that
@@ -223,20 +251,18 @@ pub struct AdapterCoreRecordArena<F> {
 
 /// RecordArena implementation for [AdapterCoreRecordArena]
 /// A is the adapter record type and C is the core record type
-impl<'a, F: Field, A, C> RecordArena<'a, AdapterCoreLayout, (&'a mut A, &'a mut C)>
+impl<'a, F: Field, A, C, I: Clone> RecordArena<'a, AdapterCoreLayout<I>, (A, C)>
     for AdapterCoreRecordArena<F>
 where
-    A: Sized,
-    C: Sized,
-    [u8]: BorrowMut<A> + BorrowMut<C>,
+    [u8]: CustomBorrow<'a, A, I> + CustomBorrow<'a, C, I>,
 {
-    fn alloc(&'a mut self, layout: AdapterCoreLayout) -> (&'a mut A, &'a mut C) {
+    fn alloc(&'a mut self, layout: AdapterCoreLayout<I>) -> (A, C) {
         let buffer = self.alloc_single_row();
         let (adapter_buffer, core_buffer) =
             buffer.split_at_mut(layout.adapter_width * size_of::<F>());
 
-        let adapter_record: &mut A = adapter_buffer.borrow_mut();
-        let core_record: &mut C = core_buffer.borrow_mut();
+        let adapter_record: A = adapter_buffer.custom_borrow(layout.metadata.clone());
+        let core_record: C = core_buffer.custom_borrow(layout.metadata);
 
         (adapter_record, core_record)
     }
@@ -280,16 +306,10 @@ impl<F: Field> RowMajorMatrixArena<F> for AdapterCoreRecordArena<F> {
     }
 }
 
-/// A trait that allows for custom implementation of `borrow` given the neccessary information
-/// This is useful for record structs that have dynamic size
-pub trait CustomBorrow<'a, T, Info> {
-    fn custom_borrow(&'a mut self, info: Info) -> T;
-}
-
 /// The minimal information that [MultiRowRecordArena] needs to know to allocate a record
 pub struct MultiRowLayout<I> {
     pub num_rows: u32,
-    pub info: I,
+    pub metadata: I,
 }
 
 // TEMP[jpw]: buffer should be inside CTX
@@ -323,7 +343,7 @@ where
 {
     fn alloc(&'a mut self, layout: MultiRowLayout<I>) -> R {
         let buffer = self.alloc_buffer(layout.num_rows);
-        let record: R = buffer.custom_borrow(layout.info);
+        let record: R = buffer.custom_borrow(layout.metadata);
         record
     }
 }

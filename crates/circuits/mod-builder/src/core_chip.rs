@@ -9,8 +9,9 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, CustomBorrow, DynAdapterInterface, DynArray, MinimalInstruction, RecordArena, 
-        Result, StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterTraceStep, CustomBorrow, DynAdapterInterface, DynArray, MinimalInstruction,
+        RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -28,11 +29,7 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
-use std::{
-    borrow::{Borrow, BorrowMut}, 
-    mem::size_of, 
-    ptr::slice_from_raw_parts
-};
+use std::{borrow::BorrowMut, mem::size_of};
 
 // Metadata record
 #[repr(C)]
@@ -52,7 +49,8 @@ pub struct FieldExpressionVarInfo {
     pub flag_states: Vec<bool>,
 }
 
-pub struct FieldExpressionRecordInfo {
+#[derive(Clone)]
+pub struct FieldExpressionMetadata {
     pub total_input_limbs: usize, // num_inputs * limbs_per_input
     pub num_flags: usize,
 }
@@ -63,25 +61,26 @@ pub struct FieldExpressionCoreRecordMut<'a> {
     pub flag_states: &'a mut [bool],
 }
 
-impl<'a> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressionRecordInfo> for [u8] {
-    fn custom_borrow(&'a mut self, info: FieldExpressionRecordInfo) -> FieldExpressionCoreRecordMut<'a> {
-        let (record_buf, rest) = unsafe { 
-            self.split_at_mut_unchecked(size_of::<FieldExpressionCoreRecord>()) 
-        };
-        
+impl<'a> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressionMetadata> for [u8] {
+    fn custom_borrow(
+        &'a mut self,
+        metadata: FieldExpressionMetadata,
+    ) -> FieldExpressionCoreRecordMut<'a> {
+        let (record_buf, rest) =
+            unsafe { self.split_at_mut_unchecked(size_of::<FieldExpressionCoreRecord>()) };
+
         // Split rest into input_limbs and flag_states
-        let input_limbs_size = info.total_input_limbs * size_of::<u32>();
-        let (input_limbs_buf, flag_states_buf) = unsafe {
-            rest.split_at_mut_unchecked(input_limbs_size)
-        };
-        
+        let input_limbs_size = metadata.total_input_limbs * size_of::<u32>();
+        let (input_limbs_buf, flag_states_buf) =
+            unsafe { rest.split_at_mut_unchecked(input_limbs_size) };
+
         let (_, input_limbs, _) = unsafe { input_limbs_buf.align_to_mut::<u32>() };
         let (_, flag_states, _) = unsafe { flag_states_buf.align_to_mut::<bool>() };
-        
+
         FieldExpressionCoreRecordMut {
             inner: record_buf.borrow_mut(),
-            input_limbs: &mut input_limbs[..info.total_input_limbs],
-            flag_states: &mut flag_states[..info.num_flags],
+            input_limbs: &mut input_limbs[..metadata.total_input_limbs],
+            flag_states: &mut flag_states[..metadata.num_flags],
         }
     }
 }
@@ -355,20 +354,6 @@ impl<A> FieldExpressionStep<A> {
     pub fn output_indices(&self) -> &[usize] {
         &self.expr.builder.output_indices
     }
-
-    fn fill_row_from_execution_record<F: PrimeField32>(
-        &self,
-        record: &FieldExpressionCoreRecordMut,
-        row_slice: &mut [F],
-    ) {
-        // NOTE[teokitan]: This is where GPU acceleration should happen in the future
-        let inputs = record.reconstruct_inputs(self.expr.canonical_limb_bits());
-        let flags = record.reconstruct_flags();
-
-        let range_checker = self.range_checker.as_ref();
-        self.expr
-            .generate_subrow((range_checker, inputs, flags), row_slice);
-    }
 }
 
 impl<F, CTX, A> TraceStep<F, CTX> for FieldExpressionStep<A>
@@ -382,7 +367,7 @@ where
             WriteData: From<DynArray<u8>>,
         >,
 {
-    type RecordLayout = AdapterCoreLayout<FieldExpressionRecordInfo>;
+    type RecordLayout = AdapterCoreLayout<FieldExpressionMetadata>;
     type RecordMut<'a> = (A::RecordMut<'a>, FieldExpressionCoreRecordMut<'a>);
 
     fn execute<'buf, RA>(
@@ -394,15 +379,15 @@ where
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
     {
-        let core_record_info = FieldExpressionRecordInfo {
+        let core_record_metadata = FieldExpressionMetadata {
             total_input_limbs: self.num_inputs() * self.expr.canonical_num_limbs(),
             num_flags: self.num_flags(),
         };
 
-        let (mut adapter_record, mut core_record) = arena.alloc(AdapterCoreLayout {
-            adapter_width: A::WIDTH,
-            info: core_record_info,
-        });
+        let (mut adapter_record, mut core_record) = arena.alloc(AdapterCoreLayout::with_metadata(
+            A::WIDTH,
+            core_record_metadata,
+        ));
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -457,20 +442,27 @@ where
             )
         };
 
-        let record_info = FieldExpressionRecordInfo {
+        let record_metadata = FieldExpressionMetadata {
             total_input_limbs: self.num_inputs() * self.expr.canonical_num_limbs(),
             num_flags: self.num_flags(),
         };
 
-        let record = core_bytes.custom_borrow(record_info);
-        self.fill_row_from_execution_record(&record, core_row);
+        let record: FieldExpressionCoreRecordMut = core_bytes.custom_borrow(record_metadata);
+
+        // NOTE[teokitan]: This is where GPU acceleration should happen in the future
+        let inputs = record.reconstruct_inputs(self.expr.canonical_limb_bits());
+        let flags = record.reconstruct_flags();
+
+        let range_checker = self.range_checker.as_ref();
+        self.expr
+            .generate_subrow((range_checker, inputs, flags), row_slice);
     }
 
     fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         if !self.should_finalize {
             return;
         }
-        
+
         let inputs: Vec<BigUint> = vec![BigUint::zero(); self.num_inputs()];
         let flags: Vec<bool> = vec![false; self.num_flags()];
         let core_row = &mut row_slice[A::WIDTH..];

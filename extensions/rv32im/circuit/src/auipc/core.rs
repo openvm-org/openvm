@@ -231,9 +231,7 @@ where
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
     {
-        let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
-            adapter_width: A::WIDTH,
-        });
+        let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout::new(A::WIDTH));
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
