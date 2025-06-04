@@ -13,7 +13,7 @@ use elliptic_curve::{
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
 
-use crate::{internal::P256Scalar, point::FieldBytes, ORDER_HEX, NistP256};
+use crate::{internal::P256Scalar, point::FieldBytes, NistP256, ORDER_HEX};
 
 // --- Implement elliptic_curve traits on P256Scalar ---
 
