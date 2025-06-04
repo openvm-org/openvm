@@ -272,7 +272,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
     }
 }
 
-pub struct Rv32HintStoreRecordInfo {
+pub struct Rv32HintStoreMetaData {
     num_words: usize,
 }
 
@@ -311,15 +311,19 @@ pub struct Rv32HintStoreRecordMut<'a> {
     pub var: &'a mut [Rv32HintStoreVar],
 }
 
-impl<'a> CustomBorrow<'a, Rv32HintStoreRecordMut<'a>, Rv32HintStoreRecordInfo> for [u8] {
-    fn custom_borrow(&'a mut self, info: Rv32HintStoreRecordInfo) -> Rv32HintStoreRecordMut<'a> {
+/// Custom borrowing that splits the buffer into a fixed `Rv32HintStoreRecord` header
+/// followed by a slice of `Rv32HintStoreVar`'s of length `num_words` provided at runtime.
+/// Uses `align_to_mut()` to make sure the slice is properly aligned to `Rv32HintStoreVar`.
+/// Has debug assertions to make sure the above works as expected.
+impl<'a> CustomBorrow<'a, Rv32HintStoreRecordMut<'a>, Rv32HintStoreMetaData> for [u8] {
+    fn custom_borrow(&'a mut self, metadata: Rv32HintStoreMetaData) -> Rv32HintStoreRecordMut<'a> {
         let (record_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<Rv32HintStoreRecord>()) };
 
         let (_, vars, _) = unsafe { rest.align_to_mut::<Rv32HintStoreVar>() };
         Rv32HintStoreRecordMut {
             inner: record_buf.borrow_mut(),
-            var: &mut vars[..info.num_words],
+            var: &mut vars[..metadata.num_words],
         }
     }
 }
@@ -354,7 +358,7 @@ impl<F, CTX> TraceStep<F, CTX> for Rv32HintStoreStep<F>
 where
     F: PrimeField32,
 {
-    type RecordLayout = MultiRowLayout<Rv32HintStoreRecordInfo>;
+    type RecordLayout = MultiRowLayout<Rv32HintStoreMetaData>;
     type RecordMut<'a> = Rv32HintStoreRecordMut<'a>;
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -396,7 +400,7 @@ where
 
         let record = arena.alloc(MultiRowLayout {
             num_rows: num_words,
-            info: Rv32HintStoreRecordInfo {
+            metadata: Rv32HintStoreMetaData {
                 num_words: num_words as usize,
             },
         });
@@ -511,7 +515,7 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep<F> {
                 let record = unsafe {
                     let row = chunk.as_mut_ptr() as *mut u8;
                     let row = &mut *slice_from_raw_parts_mut(row, chunk.len() * size_of::<F>());
-                    let record = row.custom_borrow(Rv32HintStoreRecordInfo { num_words });
+                    let record = row.custom_borrow(Rv32HintStoreMetaData { num_words });
                     record
                 };
 
@@ -647,7 +651,7 @@ where
         state
             .memory
             .memory
-            .set_range_generic((RV32_MEMORY_AS, mem_ptr), &data);
+            .copy_slice_nonoverlapping((RV32_MEMORY_AS, mem_ptr), &data);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

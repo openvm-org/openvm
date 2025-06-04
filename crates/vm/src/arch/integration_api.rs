@@ -280,16 +280,16 @@ impl<F: Field> RowMajorMatrixArena<F> for AdapterCoreRecordArena<F> {
     }
 }
 
-/// A trait that allows for custom implementation of `borrow` given the neccessary information
+/// A trait that allows for custom implementation of `borrow` given the necessary information
 /// This is useful for record structs that have dynamic size
-pub trait CustomBorrow<'a, T, Info> {
-    fn custom_borrow(&'a mut self, info: Info) -> T;
+pub trait CustomBorrow<'a, T, I> {
+    fn custom_borrow(&'a mut self, metadata: I) -> T;
 }
 
 /// The minimal information that [MultiRowRecordArena] needs to know to allocate a record
 pub struct MultiRowLayout<I> {
     pub num_rows: u32,
-    pub info: I,
+    pub metadata: I,
 }
 
 // TEMP[jpw]: buffer should be inside CTX
@@ -323,7 +323,7 @@ where
 {
     fn alloc(&'a mut self, layout: MultiRowLayout<I>) -> R {
         let buffer = self.alloc_buffer(layout.num_rows);
-        let record: R = buffer.custom_borrow(layout.info);
+        let record: R = buffer.custom_borrow(layout.metadata);
         record
     }
 }
