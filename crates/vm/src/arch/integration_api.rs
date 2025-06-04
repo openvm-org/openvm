@@ -334,12 +334,14 @@ where
 
     fn generate_air_proof_input_with_trace(
         self,
-        trace: RowMajorMatrix<Val<SC>>,
+        mut trace: RowMajorMatrix<Val<SC>>,
     ) -> AirProofInput<SC> {
         assert!(
             trace.height().is_power_of_two(),
             "Trace height must be a power of two"
         );
+        self.fill_trace(&mut trace.values);
+
         let public_values = self.step.generate_public_values();
         AirProofInput::simple(trace, public_values)
     }
