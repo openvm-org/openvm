@@ -39,6 +39,7 @@ derive_more = { workspace = true, features = ["from"] }
 num-bigint = { workspace = true, features = ["std", "serde"] }
 serde.workspace = true
 tracing.workspace = true
+hex.workspace = true
 
 [dev-dependencies]
 

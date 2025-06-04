@@ -13,7 +13,7 @@ use openvm_circuit::{
 };
 use openvm_ecc_circuit::{
     CurveConfig, WeierstrassExtension, WeierstrassExtensionExecutor, WeierstrassExtensionPeriphery,
-    SECP256K1_CONFIG,
+    P256_CONFIG, SECP256K1_CONFIG,
 };
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
@@ -25,6 +25,7 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
+use openvm_sdk::StdIn;
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 use openvm_stark_sdk::{bench::run_with_metric_collection, p3_baby_bear::BabyBear};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -97,7 +98,7 @@ impl Rv32ImEcRecoverConfig {
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
 
-    let config = Rv32ImEcRecoverConfig::for_curves(vec![SECP256K1_CONFIG.clone()]);
+    let config = Rv32ImEcRecoverConfig::for_curves(vec![P256_CONFIG.clone()]);
 
     let elf = args.build_bench_program("ecrecover", &config, None)?;
     let exe = VmExe::from_elf(
@@ -112,29 +113,9 @@ fn main() -> Result<()> {
     )?;
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let mut rng = ChaCha8Rng::seed_from_u64(12345);
-        let signing_key: SigningKey = SigningKey::random(&mut rng);
-        let verifying_key = VerifyingKey::from(&signing_key);
-        let mut hasher = Keccak::v256();
-        let mut expected_address = [0u8; 32];
-        hasher.update(
-            &verifying_key
-                .to_encoded_point(/* compress = */ false)
-                .as_bytes()[1..],
-        );
-        hasher.finalize(&mut expected_address);
-        expected_address[..12].fill(0); // 20 bytes as the address.
-        let mut input_stream = vec![expected_address
-            .into_iter()
-            .map(BabyBear::from_canonical_u8)
-            .collect::<Vec<_>>()];
-
-        let msg = ["Elliptic", "Curve", "Digital", "Signature", "Algorithm"];
-        input_stream.extend(
-            msg.iter()
-                .map(|s| make_input(&signing_key, s.as_bytes()))
-                .collect::<Vec<_>>(),
-        );
-        args.bench_from_exe("ecrecover_program", config, exe, input_stream.into())
+        let input = "4cee90eb86eaa050036147a12d49004b6b9c72bd725d39d4785011fe190f0b4da73bd4903f0ce3b639bbbf6e8e80d16931ff4bcf5993d58468e8fb19086e8cac36dbcd03009df8c59286b162af3bd7fcc0450c9aa81be5d10d312af6c66b1d604aebd3099c618202fcfe16ae7770b0c49ab5eadf74b754204a3bb6060e44eff37618b065f9832de4ca6ca971a7a1adc826d0f7c00181a5fb2ddf79ae00b4e10e";
+        let input = hex::decode(input)?;
+        let stdin = StdIn::from_bytes(&input);
+        args.bench_from_exe("ecrecover_program", config, exe, stdin)
     })
 }
