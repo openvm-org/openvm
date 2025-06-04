@@ -7,10 +7,10 @@ edition = "2021"
 members = []
 
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
+openvm = { git = "https://github.com/openvm-org/openvm.git", branch = "chore/ecc-cleanup", features = [
     "std",
 ] }
-openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-ruint = { git = "https://github.com/openvm-org/openvm.git", package = "ruint", branch = "chore/ecc-cleanup" }
 
 [features]
 default = []
