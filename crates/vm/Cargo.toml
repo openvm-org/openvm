@@ -9,7 +9,6 @@ repository.workspace = true
 
 [dependencies]
 p3-baby-bear = { workspace = true }
-p3-maybe-rayon = { workspace = true, features = ["parallel"] }
 
 openvm-poseidon2-air = { workspace = true }
 openvm-stark-backend = { workspace = true }
@@ -49,7 +48,7 @@ openvm-rv32im-transpiler.workspace = true
 
 [features]
 default = ["parallel", "jemalloc"]
-parallel = ["openvm-stark-backend/parallel"]
+parallel = ["openvm-stark-backend/parallel", "dashmap/rayon"]
 test-utils = ["dep:openvm-stark-sdk"]
 bench-metrics = ["dep:metrics", "openvm-stark-backend/bench-metrics"]
 function-span = ["bench-metrics"]

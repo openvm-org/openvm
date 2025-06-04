@@ -173,7 +173,6 @@ p3-baby-bear = { git = "https://github.com/Plonky3/Plonky3.git", features = [
 p3-dft = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1ba4e5c" }
 p3-fri = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1ba4e5c" }
 p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1ba4e5c" }
-p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1ba4e5c" }
 p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1ba4e5c" }
 p3-monty-31 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1ba4e5c" }
 p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1ba4e5c" }
