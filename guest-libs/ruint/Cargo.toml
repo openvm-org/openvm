@@ -1,7 +1,9 @@
 [package]
-name = "openvm-ruint"
+# for patching purposes, the name must be the same as the original `ruint` crate
+name = "ruint"
+# for patching purposes, the version must be the same as the original `ruint` crate
+version = "1.12.3"
 description = "OpenVM fork of ruint"
-version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
@@ -11,7 +13,12 @@ license.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs", "--html-in-header", ".cargo/katex-header.html"]
+rustdoc-args = [
+    "--cfg",
+    "docsrs",
+    "--html-in-header",
+    ".cargo/katex-header.html",
+]
 
 [dependencies]
 openvm-ruint-macro = { version = "1.2.1", path = "ruint-macro" }
@@ -25,7 +32,9 @@ arbitrary = { version = "1", optional = true, default-features = false }
 ark-ff-03 = { version = "0.3.0", package = "ark-ff", optional = true, default-features = false }
 ark-ff-04 = { version = "0.4.0", package = "ark-ff", optional = true, default-features = false }
 bn-rs = { version = "0.2", optional = true, default-features = true }
-fastrlp = { version = "0.3", optional = true, default-features = false, features = ["alloc"] }
+fastrlp = { version = "0.3", optional = true, default-features = false, features = [
+    "alloc",
+] }
 num-bigint = { version = "0.4", optional = true, default-features = false }
 num-traits = { version = "0.2.16", optional = true, default-features = false }
 parity-scale-codec = { version = "3", optional = true, features = [
@@ -98,7 +107,13 @@ std = [
     "zeroize?/std",
 ]
 ssz = ["std", "dep:ethereum_ssz"]
-alloc = ["proptest?/alloc", "rand?/alloc", "serde?/alloc", "valuable?/alloc", "zeroize?/alloc"]
+alloc = [
+    "proptest?/alloc",
+    "rand?/alloc",
+    "serde?/alloc",
+    "valuable?/alloc",
+    "zeroize?/alloc",
+]
 
 # nightly-only features
 nightly = []
@@ -115,7 +130,10 @@ num-bigint = ["dep:num-bigint", "alloc"]
 num-traits = ["dep:num-traits", "alloc"]
 parity-scale-codec = ["dep:parity-scale-codec", "alloc"]
 primitive-types = ["dep:primitive-types"]
-proptest = ["dep:proptest", "std"] # TODO: change to "alloc" on the next proptest release (>1.2.0)
+proptest = [
+    "dep:proptest",
+    "std",
+] # TODO: change to "alloc" on the next proptest release (>1.2.0)
 pyo3 = ["dep:pyo3", "std"]
 quickcheck = ["dep:quickcheck", "std"]
 rand = ["dep:rand"]

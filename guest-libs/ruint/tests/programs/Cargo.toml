@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 openvm = { path = "../../../../crates/toolchain/openvm" }
-openvm-ruint = { path = "../../", features = ["num-traits"] }
+openvm-ruint = { path = "../../", package = "ruint", features = ["num-traits"] }
 
 serde = { version = "1.0", default-features = false, features = [
     "alloc",

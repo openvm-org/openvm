@@ -1,7 +1,7 @@
 [package]
-# for patching purposes, the name must be the same as the original `k256` crate
+# for patching purposes, the name must be the same as the original `p256` crate
 name = "p256"
-# for patching purposes, version must match that of original `k256` crate
+# for patching purposes, version must match that of original `p256` crate
 version = "0.13.2"
 description = "OpenVM fork of p256"
 edition.workspace = true
