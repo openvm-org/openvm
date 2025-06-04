@@ -33,6 +33,7 @@ pub fn main() {
     ));
     let p2 = Secp256k1Point::from_xy_nonidentity(x2, y2).unwrap();
 
+    #[allow(clippy::op_ref)]
     let _p3 = &p1 + &p2;
 }
 // ANCHOR_END: main
