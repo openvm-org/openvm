@@ -61,10 +61,7 @@ postgres-types = { version = "0.2", optional = true }
 sqlx-core = { version = "0.7", optional = true }
 
 [dev-dependencies]
-openvm-ruint = { path = ".", package = "ruint", features = [
-    "arbitrary",
-    "proptest",
-] }
+ruint = { path = ".", features = ["arbitrary", "proptest"] }
 
 ark-bn254-03 = { version = "0.3.0", package = "ark-bn254" }
 ark-bn254-04 = { version = "0.4.0", package = "ark-bn254" }
