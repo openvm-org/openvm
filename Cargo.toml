@@ -61,7 +61,6 @@ members = [
     "extensions/ecc/tests",
     "extensions/pairing/circuit",
     "extensions/pairing/guest",
-    "guest-libs/verify_stark/guest",
     "guest-libs/ff_derive/",
     "guest-libs/k256/",
     "guest-libs/p256/",
@@ -69,6 +68,7 @@ members = [
     "guest-libs/pairing/",
     "guest-libs/ruint/",
     "guest-libs/sha2/",
+    "guest-libs/verify_stark/",
 ]
 exclude = ["crates/sdk/example"]
 resolver = "2"
@@ -165,7 +165,7 @@ openvm-ecc-sw-macros = { path = "extensions/ecc/sw-macros", default-features = f
 openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
 openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
-openvm-verify-stark = { path = "guest-libs/verify_stark/guest", default-features = false }
+openvm-verify-stark = { path = "guest-libs/verify_stark", default-features = false }
 
 # Benchmarking
 openvm-benchmarks-utils = { path = "benchmarks/utils", default-features = false }
