@@ -386,6 +386,10 @@ macro_rules! impl_sw_group_ops {
                     self.double_assign_nonidentity();
                 }
             }
+
+            fn is_identity(&self) -> bool {
+                self == &<Self as Group>::IDENTITY
+            }
         }
 
         impl core::ops::Add<&$struct_name> for $struct_name {

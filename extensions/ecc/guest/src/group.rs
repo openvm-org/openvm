@@ -24,7 +24,6 @@ pub trait Group:
 
     const IDENTITY: Self;
 
-    #[inline(always)]
     fn is_identity(&self) -> bool {
         self == &Self::IDENTITY
     }
