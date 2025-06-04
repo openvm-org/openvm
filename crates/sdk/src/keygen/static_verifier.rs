@@ -24,18 +24,14 @@ impl RootVerifierProvingKey {
         root_proof: Proof<RootSC>,
         pv_handler: &impl StaticVerifierPvHandler,
     ) -> Halo2VerifierProvingKey {
-        println!("keygen_static_verifier 1");
         let mut witness = Witness::default();
         root_proof.write(&mut witness);
-        println!("keygen_static_verifier 2");
         let special_air_ids = self.air_id_permutation().get_special_air_ids();
-        println!("keygen_static_verifier 3");
         let config = StaticVerifierConfig {
             root_verifier_fri_params: self.vm_pk.fri_params,
             special_air_ids,
             root_verifier_program_commit: self.root_committed_exe.get_program_commit().into(),
         };
-        println!("keygen_static_verifier 4");
         let dsl_operations = config.build_static_verifier_operations(
             &self.vm_pk.vm_pk.get_vk(),
             &root_proof,
