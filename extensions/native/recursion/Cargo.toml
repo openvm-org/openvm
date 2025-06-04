@@ -54,7 +54,7 @@ bench-metrics = [
     "openvm-circuit/bench-metrics",
     "openvm-native-compiler/bench-metrics",
 ]
-parallel = ["openvm-stark-backend/parallel", "openvm-circuit/parallel"]
+parallel = ["openvm-stark-backend/parallel"]
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
 nightly-features = ["openvm-circuit/nightly-features"]
