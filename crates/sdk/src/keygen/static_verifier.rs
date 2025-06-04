@@ -37,7 +37,6 @@ impl RootVerifierProvingKey {
             &root_proof,
             pv_handler,
         );
-        println!("keygen_static_verifier 5");
         Halo2VerifierProvingKey {
             pinning: Halo2Prover::keygen(params, dsl_operations.clone(), witness),
             dsl_ops: dsl_operations,
