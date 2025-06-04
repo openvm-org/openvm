@@ -7,9 +7,9 @@ use num_bigint::BigUint;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1, AdapterTraceStep,
-        DynAdapterInterface, DynArray, MinimalInstruction, RecordArena, Result, StepExecutorE1,
-        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, DynAdapterInterface, DynArray, MinimalInstruction, RecordArena, Result,
+        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -354,15 +354,15 @@ where
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
     {
-        let (mut _adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
+        let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
             adapter_width: A::WIDTH,
         });
 
-        A::start(*state.pc, state.memory, &mut _adapter_record);
+        A::start(*state.pc, state.memory, &mut adapter_record);
 
         let data: DynArray<_> = self
             .adapter
-            .read(state.memory, instruction, &mut _adapter_record)
+            .read(state.memory, instruction, &mut adapter_record)
             .into();
 
         let (writes, inputs, flags) = run_field_expression(self, &data, instruction);
@@ -381,7 +381,7 @@ where
             state.memory,
             instruction,
             &writes.into(),
-            &mut _adapter_record,
+            &mut adapter_record,
         );
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
@@ -396,11 +396,13 @@ where
 impl<F, CTX, A> TraceFiller<F, CTX> for FieldExpressionStep<A>
 where
     F: PrimeField32 + Send + Sync + Clone,
-    A: Send + Sync + AdapterTraceStep<F, CTX>,
+    A: 'static + AdapterTraceFiller<F, CTX>,
 {
-    fn fill_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         // Get the core record from the row slice
-        let (_adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
 
         let record = unsafe {
             let record_buffer = &*slice_from_raw_parts(
