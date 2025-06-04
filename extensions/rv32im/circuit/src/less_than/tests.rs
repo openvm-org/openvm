@@ -21,7 +21,7 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
-    ChipUsageGetter,
+    Chip, ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -34,8 +34,7 @@ use crate::{
     },
     less_than::LessThanCoreCols,
     test_utils::{
-        generate_air_proof_input_with_trace, generate_rv32_is_type_immediate,
-        get_verification_error, rv32_rand_write_register_or_imm,
+        generate_rv32_is_type_immediate, get_verification_error, rv32_rand_write_register_or_imm,
     },
 };
 
@@ -168,7 +167,9 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     chip.fill_trace(&mut ctx.trace_buffers[0]);
 
     let mut traces = ctx.into_matrices();
-    let (air, air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
+    let air = chip.air();
+    let air_proof_input = chip.generate_air_proof_input_with_trace(traces.remove(0));
+    drop(chip);
 
     let tester = tester
         .build()
@@ -223,7 +224,9 @@ fn run_negative_less_than_test(
     chip.fill_trace(&mut ctx.trace_buffers[0]);
 
     let mut traces = ctx.into_matrices();
-    let (air, mut air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
+    let air = chip.air();
+    let mut air_proof_input = chip.generate_air_proof_input_with_trace(traces.remove(0));
+    drop(chip);
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();

@@ -1,18 +1,6 @@
-use std::sync::Arc;
-
-use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, VmChipTestBuilder},
-    NewVmChipWrapper, TraceStep,
-};
+use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, VmOpcode};
-use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra},
-    p3_matrix::dense::RowMajorMatrix,
-    prover::types::AirProofInput,
-    verifier::VerificationError,
-};
+use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{rngs::StdRng, Rng};
 
@@ -74,22 +62,4 @@ pub fn get_verification_error(is_interaction_error: bool) -> VerificationError {
     } else {
         VerificationError::OodEvaluationMismatch
     }
-}
-
-// TODO(ayush): make this a function on Chip/NewVmChipWrapper
-pub fn generate_air_proof_input_with_trace<SC, AIR, STEP>(
-    chip: NewVmChipWrapper<Val<SC>, AIR, STEP>,
-    trace: RowMajorMatrix<Val<SC>>,
-) -> (Arc<AIR>, AirProofInput<SC>)
-where
-    SC: StarkGenericConfig,
-    Val<SC>: Field,
-    AIR: BaseAir<Val<SC>>,
-    STEP: TraceStep<Val<SC>> + Send + Sync,
-{
-    let public_values = chip.step.generate_public_values();
-    let air_proof_input = AirProofInput::simple(trace, public_values);
-    let air = Arc::new(chip.air);
-
-    (air, air_proof_input)
 }

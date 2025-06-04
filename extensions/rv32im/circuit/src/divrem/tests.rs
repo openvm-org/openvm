@@ -24,7 +24,7 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
-    ChipUsageGetter,
+    Chip, ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -37,7 +37,7 @@ use crate::{
         run_mul_carries, run_sltu_diff_idx, DivRemCoreCols, DivRemCoreSpecialCase, DivRemStep,
         Rv32DivRemChip,
     },
-    test_utils::{generate_air_proof_input_with_trace, get_verification_error},
+    test_utils::get_verification_error,
     DivRemCoreAir,
 };
 
@@ -228,7 +228,9 @@ fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     chip.fill_trace(&mut ctx.trace_buffers[0]);
 
     let mut traces = ctx.into_matrices();
-    let (air, air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
+    let air = chip.air();
+    let air_proof_input = chip.generate_air_proof_input_with_trace(traces.remove(0));
+    drop(chip);
 
     let tester = tester
         .build()
@@ -283,7 +285,9 @@ fn run_negative_divrem_test(
     chip.fill_trace(&mut ctx.trace_buffers[0]);
 
     let mut traces = ctx.into_matrices();
-    let (air, mut air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
+    let air = chip.air();
+    let mut air_proof_input = chip.generate_air_proof_input_with_trace(traces.remove(0));
+    drop(chip);
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();

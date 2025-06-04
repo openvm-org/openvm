@@ -25,16 +25,13 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
-    ChipUsageGetter,
+    Chip, ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::{Rv32HintStoreAir, Rv32HintStoreChip, Rv32HintStoreCols, Rv32HintStoreStep};
-use crate::{
-    adapters::decompose,
-    test_utils::{generate_air_proof_input_with_trace, get_verification_error},
-};
+use crate::{adapters::decompose, test_utils::get_verification_error};
 
 type F = BabyBear;
 
@@ -175,7 +172,9 @@ fn rand_hintstore_test() {
     chip.fill_trace(&mut ctx.trace_buffers[0]);
 
     let mut traces = ctx.into_matrices();
-    let (air, air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
+    let air = chip.air();
+    let air_proof_input = chip.generate_air_proof_input_with_trace(traces.remove(0));
+    drop(chip);
 
     let tester = tester
         .build()
@@ -208,7 +207,9 @@ fn run_negative_hintstore_test(
     chip.fill_trace(&mut ctx.trace_buffers[0]);
 
     let mut traces = ctx.into_matrices();
-    let (air, mut air_proof_input) = generate_air_proof_input_with_trace(chip, traces.remove(0));
+    let air = chip.air();
+    let mut air_proof_input = chip.generate_air_proof_input_with_trace(traces.remove(0));
+    drop(chip);
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
