@@ -2,10 +2,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use elliptic_curve::{group::Curve, CurveArithmetic, Group};
+use openvm_p256::NistP256;
 // clippy thinks this is unused, but it's used in the init! macro
 #[allow(unused)]
 use openvm_p256::P256Point;
-use openvm_p256::P256;
 
 openvm::init!("openvm_init_simple.rs");
 
