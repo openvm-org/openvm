@@ -24,7 +24,6 @@ impl RootVerifierProvingKey {
         root_proof: Proof<RootSC>,
         pv_handler: &impl StaticVerifierPvHandler,
     ) -> Halo2VerifierProvingKey {
-        println!("keygen_static_verifier 1");
         let mut witness = Witness::default();
         root_proof.write(&mut witness);
         let special_air_ids = self.air_id_permutation().get_special_air_ids();
@@ -38,7 +37,6 @@ impl RootVerifierProvingKey {
             &root_proof,
             pv_handler,
         );
-        println!("keygen_static_verifier 10");
         Halo2VerifierProvingKey {
             pinning: Halo2Prover::keygen(params, dsl_operations.clone(), witness),
             dsl_ops: dsl_operations,
