@@ -10,7 +10,10 @@
 /// will result in an undefined behavior.
 use core::{cmp::Ordering, mem::MaybeUninit};
 
-use crate::Uint;
+#[allow(unused_imports)]
+use openvm_bigint_guest::externs;
+
+use crate::Uint; // necessary for linking
 
 extern "C" {
     /// Add two 256-bit numbers and store in `result`.

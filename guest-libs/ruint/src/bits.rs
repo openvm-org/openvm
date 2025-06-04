@@ -1,8 +1,9 @@
-use crate::Uint;
 use core::ops::{
     BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not, Shl, ShlAssign, Shr,
     ShrAssign,
 };
+
+use crate::Uint;
 
 impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// Returns whether a specific bit is set.
@@ -851,10 +852,12 @@ impl_shift!(u64, i64);
 
 #[cfg(test)]
 mod tests {
+    use core::cmp::min;
+
+    use proptest::proptest;
+
     use super::*;
     use crate::{aliases::U128, const_for, nlimbs};
-    use core::cmp::min;
-    use proptest::proptest;
 
     #[test]
     fn test_leading_zeros() {

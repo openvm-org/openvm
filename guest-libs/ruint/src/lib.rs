@@ -1,26 +1,6 @@
 #![doc = include_str!("../README.md")]
 #![doc(issue_tracker_base_url = "https://github.com/recmo/uint/issues/")]
-#![warn(
-    clippy::all,
-    clippy::pedantic,
-    clippy::nursery,
-    clippy::missing_inline_in_public_items,
-    clippy::std_instead_of_alloc,
-    clippy::std_instead_of_core,
-    missing_docs,
-    unreachable_pub
-)]
-#![allow(
-    clippy::doc_markdown, // Unfortunately many false positives on Latex.
-    clippy::inline_always,
-    clippy::module_name_repetitions,
-    clippy::redundant_pub_crate,
-    clippy::unreadable_literal,
-    clippy::let_unit_value,
-    clippy::option_if_let_else,
-    clippy::cast_sign_loss,
-    clippy::cast_lossless,
-)]
+#![allow(clippy::all)] // this is a fork, so silence clippy
 #![cfg_attr(test, allow(clippy::wildcard_imports, clippy::cognitive_complexity))]
 #![cfg_attr(not(test), warn(unused_crate_dependencies))]
 #![cfg_attr(not(feature = "std"), no_std)]
@@ -70,6 +50,11 @@ pub mod support;
 
 #[doc(inline)]
 pub use bit_arr::Bits;
+// For documentation purposes we expose the macro directly, otherwise it is
+// wrapped in ./macros.rs.
+#[cfg(doc)]
+#[doc(inline)]
+pub use ruint_macro::uint;
 
 #[doc(inline)]
 pub use self::{
@@ -78,12 +63,6 @@ pub use self::{
     from::{FromUintError, ToFieldError, ToUintError, UintTryFrom, UintTryTo},
     string::ParseError,
 };
-
-// For documentation purposes we expose the macro directly, otherwise it is
-// wrapped in ./macros.rs.
-#[cfg(doc)]
-#[doc(inline)]
-pub use ruint_macro::uint;
 
 /// Extra features that are nightly only.
 #[cfg(feature = "generic_const_exprs")]
@@ -95,14 +74,13 @@ pub mod nightly {
     /// `generic_const_exprs`.
     ///
     /// # References
-    /// * [Working group](https://rust-lang.github.io/project-const-generics/)
-    ///   const generics working group.
-    /// * [RFC2000](https://rust-lang.github.io/rfcs/2000-const-generics.html)
-    ///   const generics.
-    /// * [#60551](https://github.com/rust-lang/rust/issues/60551) associated
-    ///   constants in const generics.
-    /// * [#76560](https://github.com/rust-lang/rust/issues/76560) tracking
-    ///   issue for `generic_const_exprs`.
+    /// * [Working group](https://rust-lang.github.io/project-const-generics/) const generics
+    ///   working group.
+    /// * [RFC2000](https://rust-lang.github.io/rfcs/2000-const-generics.html) const generics.
+    /// * [#60551](https://github.com/rust-lang/rust/issues/60551) associated constants in const
+    ///   generics.
+    /// * [#76560](https://github.com/rust-lang/rust/issues/76560) tracking issue for
+    ///   `generic_const_exprs`.
     /// * [Rust blog](https://blog.rust-lang.org/inside-rust/2021/09/06/Splitting-const-generics.html)
     ///   2021-09-06 Splitting const generics.
     pub type Uint<const BITS: usize> = crate::Uint<BITS, { crate::nlimbs(BITS) }>;
@@ -128,23 +106,21 @@ pub mod nightly {
 ///
 /// # Notable differences from `std` uint types.
 ///
-/// * The operators `+`, `-`, `*`, etc. using wrapping math by default. The std
-///   operators panic on overflow in debug, and are undefined in release, see
-///   [reference][std-overflow].
-/// * The [`Uint::checked_shl`], [`Uint::overflowing_shl`], etc return overflow
-///   when non-zero bits are shifted out. In std they return overflow when the
-///   shift amount is greater than the bit size.
-/// * Some methods like [`u64::div_euclid`] and [`u64::rem_euclid`] are left out
-///   because they are meaningless or redundant for unsigned integers. Std has
-///   them for compatibility with their signed integers.
+/// * The operators `+`, `-`, `*`, etc. using wrapping math by default. The std operators panic on
+///   overflow in debug, and are undefined in release, see [reference][std-overflow].
+/// * The [`Uint::checked_shl`], [`Uint::overflowing_shl`], etc return overflow when non-zero bits
+///   are shifted out. In std they return overflow when the shift amount is greater than the bit
+///   size.
+/// * Some methods like [`u64::div_euclid`] and [`u64::rem_euclid`] are left out because they are
+///   meaningless or redundant for unsigned integers. Std has them for compatibility with their
+///   signed integers.
 /// * Many functions that are `const` in std are not in [`Uint`].
-/// * [`Uint::to_le_bytes`] and [`Uint::to_be_bytes`] require the output size to
-///   be provided as a const-generic argument. They will runtime panic if the
-///   provided size is incorrect.
-/// * [`Uint::widening_mul`] takes as argument an [`Uint`] of arbitrary size and
-///   returns a result that is sized to fit the product without overflow (i.e.
-///   the sum of the bit sizes of self and the argument). The std version
-///   requires same-sized arguments and returns a pair of lower and higher bits.
+/// * [`Uint::to_le_bytes`] and [`Uint::to_be_bytes`] require the output size to be provided as a
+///   const-generic argument. They will runtime panic if the provided size is incorrect.
+/// * [`Uint::widening_mul`] takes as argument an [`Uint`] of arbitrary size and returns a result
+///   that is sized to fit the product without overflow (i.e. the sum of the bit sizes of self and
+///   the argument). The std version requires same-sized arguments and returns a pair of lower and
+///   higher bits.
 ///
 /// [std-overflow]: https://doc.rust-lang.org/reference/expressions/operator-expr.html#overflow
 #[cfg(not(target_os = "zkvm"))]

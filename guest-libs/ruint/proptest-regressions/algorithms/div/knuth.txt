@@ -1,7 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc e22be62275db8e1446b0e5472fd93a4975d21a4eb9b18626632e703c27dfa1d7 # shrinks to quotient = [0], (divisor, remainder) = ([498937234881812531, 5835579445955122224, 17413775600348284102, 15438789584611961255, 14883671278397014982], [0, 0, 66918335103295841, 5945933600265479135, 4443770842931387175])

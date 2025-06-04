@@ -1,6 +1,8 @@
 [package]
+# for patching purposes, the name must be the same as the original `ruint` crate
 name = "ruint"
-description = "Unsigned integer type with const-generic bit length"
+description = "OpenVM fork of ruint"
+# for patching purposes, the version must be the same as the original `ruint` crate
 version = "1.14.0"
 keywords = ["uint"]
 categories = ["mathematics"]
@@ -22,24 +24,6 @@ rustdoc-args = [
     "--html-in-header",
     ".cargo/katex-header.html",
 ]
-
-[workspace]
-members = [".", "ruint-macro"]
-resolver = "2"
-
-[workspace.package]
-edition = "2021"
-rust-version = "1.65"
-authors = ["Remco Bloemen <remco@wicked.ventures>"]
-license = "MIT"
-homepage = "https://github.com/recmo/uint"
-repository = "https://github.com/recmo/uint"
-
-[[bench]]
-name = "bench_uint"
-harness = false
-path = "benches/bench.rs"
-required-features = ["std"]
 
 [dependencies]
 ruint-macro = { version = "1.2.1", path = "ruint-macro" }
@@ -97,6 +81,11 @@ sqlx-core = { version = "0.8.2", optional = true }
 # borsh
 borsh = { version = "1.5", optional = true, default-features = false }
 
+[target.'cfg(target_os = "zkvm")'.dependencies]
+openvm-bigint-guest = { workspace = true, default-features = false, features = [
+    "export-intrinsics",
+] }
+
 [dev-dependencies]
 ruint = { path = ".", features = ["arbitrary", "proptest"] }
 
@@ -116,6 +105,17 @@ serde_json = "1.0"
 
 # borsh
 borsh = { version = "1.5", features = ["derive"] }
+
+# Dev-dependencies for integration tests
+openvm-instructions = { workspace = true }
+openvm-stark-sdk.workspace = true
+openvm-circuit = { workspace = true, features = ["test-utils", "parallel"] }
+openvm-transpiler.workspace = true
+openvm-bigint-transpiler.workspace = true
+openvm-bigint-circuit.workspace = true
+openvm-rv32im-transpiler.workspace = true
+openvm-toolchain-tests = { workspace = true }
+eyre.workspace = true
 
 [features]
 default = ["std"]
@@ -164,7 +164,7 @@ ark-ff-04 = ["dep:ark-ff-04"]
 bn-rs = ["dep:bn-rs", "std"]
 borsh = ["dep:borsh"]
 bytemuck = ["dep:bytemuck"]
-der = ["dep:der", "alloc"] # TODO: also have alloc free der impls.
+der = ["dep:der", "alloc"]                                             # TODO: also have alloc free der impls.
 diesel = ["dep:diesel", "std", "dep:thiserror"]
 fastrlp = ["dep:fastrlp-03", "alloc"]
 fastrlp-04 = ["dep:fastrlp-04", "alloc"]
@@ -180,7 +180,7 @@ quickcheck = ["dep:quickcheck", "std"]
 rand = ["dep:rand-08"]
 rand-09 = ["dep:rand-09"]
 rlp = ["dep:rlp", "alloc"]
-serde = ["dep:serde", "alloc"] # TODO: try to avoid alloc in serde impls
+serde = ["dep:serde", "alloc"]                                         # TODO: try to avoid alloc in serde impls
 sqlx = ["dep:sqlx-core", "std", "dep:thiserror"]
 subtle = ["dep:subtle"]
 valuable = ["dep:valuable"]
