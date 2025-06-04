@@ -14,3 +14,8 @@ openvm-ruint = { git = "https://github.com/openvm-org/openvm.git", package = "ru
 
 [features]
 default = []
+
+# remove this if copying example outside of monorepo
+[patch."https://github.com/openvm-org/openvm.git"]
+openvm = { path = "../../crates/toolchain/openvm" }
+ruint = { path = "../../guest-libs/ruint" }

@@ -31,18 +31,6 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Update example dependencies to current ref
-        working-directory: examples
-        run: |
-          set -e
-          for dir in */; do
-            if [ -f "${dir}Cargo.toml" ]; then
-              sed -i \
-                -e "s|\(git = \"https://github.com/openvm-org/openvm.git\"\)|\1, branch = \"${{ github.head_ref }}\"|" \
-                "${dir}Cargo.toml"
-            fi
-          done
-
       - name: Generate docs
         run: |
           cargo doc --workspace  --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test"

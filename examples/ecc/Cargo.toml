@@ -17,3 +17,10 @@ hex-literal = { version = "0.4.1", default-features = false }
 
 [features]
 default = []
+
+# remove this if copying example outside of monorepo
+[patch."https://github.com/openvm-org/openvm.git"]
+openvm = { path = "../../crates/toolchain/openvm" }
+openvm-algebra-guest = { path = "../../extensions/algebra/guest" }
+openvm-ecc-guest = { path = "../../extensions/ecc/guest" }
+k256 = { path = "../../guest-libs/k256" }

@@ -16,8 +16,11 @@ alloy-primitives = "1.1.2"
 default = []
 
 [patch.crates-io]
-ruint = { git = "https://github.com/openvm-org/openvm.git" }
+openvm = { path = "../../crates/toolchain/openvm" }
 # alloy-primitives uses ruint
+# ruint = { git = "https://github.com/openvm-org/openvm.git" }
+# Use above if outside of monorepo
+ruint = { path = "../../guest-libs/ruint" }
 
 [profile.release]
 lto = "thin"
