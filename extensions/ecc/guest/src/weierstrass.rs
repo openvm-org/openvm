@@ -479,24 +479,25 @@ macro_rules! impl_sw_group_ops {
         }
 
         impl TestTrait for $struct_name {
+            #[inline(never)]
             fn double_assign_impl<const CHECK_SETUP: bool>(&mut self) {
-                /*
                 if !self.is_identity_impl::<CHECK_SETUP>() {
                     unsafe {
                         self.double_assign_nonidentity::<CHECK_SETUP>();
                     }
                 }
-                */
+                /*
                 use openvm_ecc_guest::weierstrass::WeierstrassPoint;
                 if !self.is_identity() {
                     unsafe {
                         self.double_assign_nonidentity::<CHECK_SETUP>();
                     }
                 }
+                */
             }
 
+            #[inline(never)]
             fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
-                /*
                 use openvm_algebra_guest::IntMod;
 
                 if CHECK_SETUP {
@@ -523,7 +524,8 @@ macro_rules! impl_sw_group_ops {
                         self.add_ne_assign_nonidentity::<CHECK_SETUP>(p2);
                     }
                 }
-                */
+
+                /*
                 use openvm_ecc_guest::weierstrass::WeierstrassPoint;
                 if self.is_identity() {
                     *self = p2.clone();
@@ -542,6 +544,7 @@ macro_rules! impl_sw_group_ops {
                         self.add_ne_assign_nonidentity::<CHECK_SETUP>(p2);
                     }
                 }
+                */
             }
 
 
