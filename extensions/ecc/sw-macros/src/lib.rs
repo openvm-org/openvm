@@ -116,7 +116,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 // Below are wrapper functions for the intrinsic instructions.
                 // Should not be called directly.
                 #[inline(always)]
-                fn add_ne(p1: &#struct_name, p2: &#struct_name) -> #struct_name {
+                unsafe fn add_ne<const CHECK_SETUP: bool>(p1: &#struct_name, p2: &#struct_name) -> #struct_name {
                     #[cfg(not(target_os = "zkvm"))]
                     {
                         use openvm_algebra_guest::DivUnsafe;
@@ -127,21 +127,21 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::set_up_once();
+                        if CHECK_SETUP {
+                            Self::set_up_once();
+                        }
                         let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
-                        unsafe {
-                            #sw_add_ne_extern_func(
-                                uninit.as_mut_ptr() as usize,
-                                p1 as *const #struct_name as usize,
-                                p2 as *const #struct_name as usize
-                            )
-                        };
-                        unsafe { uninit.assume_init() }
+                        #sw_add_ne_extern_func(
+                            uninit.as_mut_ptr() as usize,
+                            p1 as *const #struct_name as usize,
+                            p2 as *const #struct_name as usize
+                        );
+                        uninit.assume_init()
                     }
                 }
 
                 #[inline(always)]
-                fn add_ne_assign(&mut self, p2: &#struct_name) {
+                unsafe fn add_ne_assign<const CHECK_SETUP: bool>(&mut self, p2: &#struct_name) {
                     #[cfg(not(target_os = "zkvm"))]
                     {
                         use openvm_algebra_guest::DivUnsafe;
@@ -153,20 +153,20 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::set_up_once();
-                        unsafe {
-                            #sw_add_ne_extern_func(
-                                self as *mut #struct_name as usize,
-                                self as *const #struct_name as usize,
-                                p2 as *const #struct_name as usize
-                            )
-                        };
+                        if CHECK_SETUP {
+                            Self::set_up_once();
+                        }
+                        #sw_add_ne_extern_func(
+                            self as *mut #struct_name as usize,
+                            self as *const #struct_name as usize,
+                            p2 as *const #struct_name as usize
+                        );
                     }
                 }
 
                 /// Assumes that `p` is not identity.
                 #[inline(always)]
-                fn double_impl(p: &#struct_name) -> #struct_name {
+                unsafe fn double_impl<const CHECK_SETUP: bool>(p: &#struct_name) -> #struct_name {
                     #[cfg(not(target_os = "zkvm"))]
                     {
                         use openvm_algebra_guest::DivUnsafe;
@@ -179,43 +179,35 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        Self::set_up_once();
+                        if CHECK_SETUP {
+                            Self::set_up_once();
+                        }
                         let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
-                        unsafe {
-                            #sw_double_extern_func(
-                                uninit.as_mut_ptr() as usize,
-                                p as *const #struct_name as usize,
-                            )
-                        };
-                        unsafe { uninit.assume_init() }
-                    }
-                }
-
-                #[inline(always)]
-                fn double_assign_impl(&mut self) {
-                    #[cfg(not(target_os = "zkvm"))]
-                    {
-                        *self = Self::double_impl(self);
-                    }
-                    #[cfg(target_os = "zkvm")]
-                    {
-                        Self::set_up_once();
-                        unsafe {
-                            #sw_double_extern_func(
-                                self as *mut #struct_name as usize,
-                                self as *const #struct_name as usize
-                            )
-                        };
+                        #sw_double_extern_func(
+                            uninit.as_mut_ptr() as usize,
+                            p as *const #struct_name as usize,
+                        );
+                        uninit.assume_init()
                     }
                 }
 
                 // Helper function to call the setup instruction on first use
+                #[cfg(target_os = "zkvm")]
                 fn set_up_once() {
                     static is_setup: ::openvm_ecc_guest::once_cell::race::OnceBool = ::openvm_ecc_guest::once_cell::race::OnceBool::new();
                     is_setup.get_or_init(|| {
                         unsafe { #sw_setup_extern_func(); }
+                        <#intmod_type as openvm_algebra_guest::IntMod>::set_up_once();
                         true
                     });
+                }
+
+                fn is_identity_impl<const CHECK_SETUP: bool>(&self) -> bool {
+                    use openvm_algebra_guest::IntMod;
+                    // Safety: Self::set_up_once() ensures IntMod::set_up_once() has been called.
+                    unsafe {
+                        self.x.eq_impl::<CHECK_SETUP>(&#intmod_type::ZERO) && self.y.eq_impl::<CHECK_SETUP>(&#intmod_type::ZERO)
+                    }
                 }
             }
 
@@ -255,28 +247,83 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     (self.x, self.y)
                 }
 
-                fn add_ne_nonidentity(&self, p2: &Self) -> Self {
-                    Self::add_ne(self, p2)
+                fn set_up_once() {
+                    Self::set_up_once();
                 }
 
-                fn add_ne_assign_nonidentity(&mut self, p2: &Self) {
-                    Self::add_ne_assign(self, p2);
+                fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
+                    use openvm_algebra_guest::IntMod;
+
+                    if CHECK_SETUP {
+                        // Call setup here so we skip it below
+                        #intmod_type::set_up_once();
+                    }
+
+                    if self.is_identity_impl::<CHECK_SETUP>() {
+                        *self = p2.clone();
+                    } else if p2.is_identity_impl::<CHECK_SETUP>() {
+                        // do nothing
+                    } else if unsafe { self.x.eq_impl::<false>(&p2.x) } { // Safety: we called IntMod setup above
+                        let sum_ys = unsafe { self.y.add_ref::<false>(&p2.y) };
+                        // Safety: we called IntMod setup above
+                        if unsafe { IntMod::eq_impl::<false>(&sum_ys, &<#intmod_type as IntMod>::ZERO) } {
+                            *self = Self::identity();
+                        } else {
+                            unsafe {
+                                self.double_assign_nonidentity::<CHECK_SETUP>();
+                            }
+                        }
+                    } else {
+                        unsafe {
+                            self.add_ne_assign_nonidentity::<CHECK_SETUP>(p2);
+                        }
+                    }
                 }
 
-                fn sub_ne_nonidentity(&self, p2: &Self) -> Self {
-                    Self::add_ne(self, &p2.clone().neg())
+                fn double_assign_impl<const CHECK_SETUP: bool>(&mut self) {
+                    if !self.is_identity_impl::<CHECK_SETUP>() {
+                        unsafe {
+                            self.double_assign_nonidentity::<CHECK_SETUP>();
+                        }
+                    }
                 }
 
-                fn sub_ne_assign_nonidentity(&mut self, p2: &Self) {
-                    Self::add_ne_assign(self, &p2.clone().neg());
+                unsafe fn add_ne_nonidentity<const CHECK_SETUP: bool>(&self, p2: &Self) -> Self {
+                    Self::add_ne::<CHECK_SETUP>(self, p2)
                 }
 
-                fn double_nonidentity(&self) -> Self {
-                    Self::double_impl(self)
+                unsafe fn add_ne_assign_nonidentity<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
+                    Self::add_ne_assign::<CHECK_SETUP>(self, p2);
                 }
 
-                fn double_assign_nonidentity(&mut self) {
-                    Self::double_assign_impl(self);
+                unsafe fn sub_ne_nonidentity<const CHECK_SETUP: bool>(&self, p2: &Self) -> Self {
+                    Self::add_ne::<CHECK_SETUP>(self, &p2.clone().neg())
+                }
+
+                unsafe fn sub_ne_assign_nonidentity<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
+                    Self::add_ne_assign::<CHECK_SETUP>(self, &p2.clone().neg());
+                }
+
+                unsafe fn double_nonidentity<const CHECK_SETUP: bool>(&self) -> Self {
+                    Self::double_impl::<CHECK_SETUP>(self)
+                }
+
+                #[inline(always)]
+                unsafe fn double_assign_nonidentity<const CHECK_SETUP: bool>(&mut self) {
+                    #[cfg(not(target_os = "zkvm"))]
+                    {
+                        *self = Self::double_impl::<CHECK_SETUP>(self);
+                    }
+                    #[cfg(target_os = "zkvm")]
+                    {
+                        if CHECK_SETUP {
+                            Self::set_up_once();
+                        }
+                        #sw_double_extern_func(
+                            self as *mut #struct_name as usize,
+                            self as *const #struct_name as usize
+                        );
+                    }
                 }
             }
 

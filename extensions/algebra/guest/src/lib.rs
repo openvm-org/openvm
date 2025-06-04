@@ -229,6 +229,26 @@ pub trait IntMod:
 
     /// Is the integer representation of `self` less than the modulus?
     fn is_reduced(&self) -> bool;
+
+    /// Calls any setup required for this modulus. The implementation should internally use
+    /// `OnceBool` to ensure that setup is only called once.
+    fn set_up_once();
+
+    /// Returns whether the two integers are congrument modulo the modulus.
+    ///
+    /// # Safety
+    /// - If `CHECK_SETUP` is true, checks if setup has been called for this curve and if not, calls
+    ///   `Self::set_up_once()`. Only set `CHECK_SETUP` to `false` if you are sure that setup has
+    ///   been called already.
+    unsafe fn eq_impl<const CHECK_SETUP: bool>(&self, other: &Self) -> bool;
+
+    /// Add two elements.
+    ///
+    /// # Safety
+    /// - If `CHECK_SETUP` is true, checks if setup has been called for this curve and if not, calls
+    ///   `Self::set_up_once()`. Only set `CHECK_SETUP` to `false` if you are sure that setup has
+    ///   been called already.
+    unsafe fn add_ref<const CHECK_SETUP: bool>(&self, other: &Self) -> Self;
 }
 
 // Ref: https://docs.rs/elliptic-curve/latest/elliptic_curve/ops/trait.Reduce.html
