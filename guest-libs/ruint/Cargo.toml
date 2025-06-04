@@ -53,7 +53,7 @@ primitive-types = { version = "0.12", optional = true, default-features = false 
 proptest = { version = "1", optional = true, default-features = false, features = [
     "no_std",
 ] }
-pyo3 = { version = "0.19", optional = true, default-features = false }
+pyo3 = { version = "0.25", optional = true, default-features = false }
 quickcheck = { version = "1", optional = true, default-features = false }
 rand-08 = { version = "0.8", package = "rand", optional = true, default-features = false }
 rand-09 = { version = "0.9", package = "rand", optional = true, default-features = false }
