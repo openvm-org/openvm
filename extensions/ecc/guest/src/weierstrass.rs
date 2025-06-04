@@ -476,6 +476,12 @@ macro_rules! impl_sw_group_ops {
             fn double_assign(&mut self) {
                 self.double_assign_impl::<true>();
             }
+
+            fn is_identity(&self) -> bool {
+                // self == &Self::IDENTITY
+                use openvm_algebra_guest::IntMod;
+                unsafe { self.x.eq_impl::<false>(&<$field as IntMod>::ZERO) && self.y.eq_impl::<false>(&<$field as IntMod>::ZERO) }
+            }
         }
 
         impl TestTrait for $struct_name {
