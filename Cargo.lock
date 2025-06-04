@@ -125,7 +125,7 @@ dependencies = [
  "derive_more 0.99.19",
  "hex-literal",
  "itoa",
- "ruint",
+ "ruint 1.12.4",
  "tiny-keccak",
 ]
 
@@ -142,7 +142,7 @@ dependencies = [
  "derive_more 0.99.19",
  "hex-literal",
  "itoa",
- "ruint",
+ "ruint 1.12.4",
  "tiny-keccak",
 ]
 
@@ -166,7 +166,7 @@ dependencies = [
  "paste",
  "proptest",
  "rand 0.8.5",
- "ruint",
+ "ruint 1.12.4",
  "rustc-hash 2.1.1",
  "serde",
  "sha3",
@@ -5022,59 +5022,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-ruint"
-version = "1.2.0"
-dependencies = [
- "alloy-rlp",
- "approx",
- "arbitrary",
- "ark-bn254 0.3.0",
- "ark-bn254 0.4.0",
- "ark-ff 0.3.0",
- "ark-ff 0.4.2",
- "bincode",
- "bn-rs",
- "bytemuck",
- "bytes",
- "ethereum_ssz",
- "eyre",
- "fastrlp 0.3.1",
- "hex-literal",
- "num-bigint 0.4.6",
- "num-traits",
- "openvm-bigint-circuit",
- "openvm-bigint-guest",
- "openvm-bigint-transpiler",
- "openvm-circuit",
- "openvm-instructions",
- "openvm-ruint",
- "openvm-ruint-macro",
- "openvm-rv32im-transpiler",
- "openvm-stark-sdk",
- "openvm-toolchain-tests",
- "openvm-transpiler",
- "parity-scale-codec",
- "postgres",
- "postgres-types",
- "primitive-types",
- "proptest",
- "pyo3",
- "quickcheck",
- "rand 0.8.5",
- "rlp",
- "serde",
- "serde_json",
- "sqlx-core",
- "thiserror 1.0.69",
- "valuable",
- "zeroize",
-]
-
-[[package]]
 name = "openvm-ruint-macro"
 version = "1.2.1"
 dependencies = [
- "openvm-ruint",
+ "ruint 1.12.3",
 ]
 
 [[package]]
@@ -6767,6 +6718,55 @@ dependencies = [
 
 [[package]]
 name = "ruint"
+version = "1.12.3"
+dependencies = [
+ "alloy-rlp",
+ "approx",
+ "arbitrary",
+ "ark-bn254 0.3.0",
+ "ark-bn254 0.4.0",
+ "ark-ff 0.3.0",
+ "ark-ff 0.4.2",
+ "bincode",
+ "bn-rs",
+ "bytemuck",
+ "bytes",
+ "ethereum_ssz",
+ "eyre",
+ "fastrlp 0.3.1",
+ "hex-literal",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "openvm-bigint-circuit",
+ "openvm-bigint-guest",
+ "openvm-bigint-transpiler",
+ "openvm-circuit",
+ "openvm-instructions",
+ "openvm-ruint-macro",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+ "parity-scale-codec",
+ "postgres",
+ "postgres-types",
+ "primitive-types",
+ "proptest",
+ "pyo3",
+ "quickcheck",
+ "rand 0.8.5",
+ "rlp",
+ "ruint 1.12.3",
+ "serde",
+ "serde_json",
+ "sqlx-core",
+ "thiserror 1.0.69",
+ "valuable",
+ "zeroize",
+]
+
+[[package]]
+name = "ruint"
 version = "1.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f5ef8fb1dd8de3870cb8400d51b4c2023854bbafd5431a3ac7e7317243e22d2f"
@@ -7327,7 +7327,7 @@ dependencies = [
  "pairing 0.23.0",
  "rand 0.8.5",
  "revm",
- "ruint",
+ "ruint 1.12.4",
  "serde",
  "sha3",
 ]

@@ -20,4 +20,4 @@ proc-macro = true
 tag = false
 
 [dev-dependencies]
-openvm-ruint = { path = ".." }
+openvm-ruint = { path = "..", package = "ruint" }
