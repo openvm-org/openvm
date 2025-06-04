@@ -67,7 +67,6 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Run ${{ matrix.crate.name }} guest library tests
-        if: hashFiles(format('guest-libs/{0}/', matrix.crate.path)) != ''
         working-directory: guest-libs/${{ matrix.crate.path }}
         run: |
           rustup component add rust-src --toolchain nightly-2025-02-14
