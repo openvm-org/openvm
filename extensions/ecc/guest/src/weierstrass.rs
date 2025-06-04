@@ -471,6 +471,10 @@ macro_rules! impl_sw_group_ops {
             fn double_assign(&mut self) {
                 self.double_assign_impl::<true>();
             }
+
+            fn is_identity(&self) -> bool {
+                self == &<Self as Group>::IDENTITY
+            }
         }
 
         impl core::ops::Add<&$struct_name> for $struct_name {
