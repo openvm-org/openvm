@@ -123,6 +123,19 @@ impl fmt::Display for ToFieldError {
 }
 
 impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
+    /// Constructs a new [`Uint`] from a u64.
+    ///
+    /// Saturates at the maximum value of the [`Uint`] if the value is too
+    /// large.
+    pub(crate) const fn const_from_u64(x: u64) -> Self {
+        if BITS == 0 || (BITS < 64 && x >= 1 << BITS) {
+            return Self::MAX;
+        }
+        let mut limbs = [0; LIMBS];
+        limbs[0] = x;
+        Self::from_limbs(limbs)
+    }
+
     /// Construct a new [`Uint`] from the value.
     ///
     /// # Panics
@@ -134,7 +147,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// # Examples
     ///
     /// ```
-    /// # use openvm_ruint::{Uint, uint, aliases::*};
+    /// # use ruint::{Uint, uint, aliases::*};
     /// # uint!{
     /// assert_eq!(U8::from(142_u16), 142_U8);
     /// assert_eq!(U64::from(0x7014b4c2d1f2_U256), 0x7014b4c2d1f2_U64);
@@ -163,7 +176,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// # Examples
     ///
     /// ```
-    /// # use openvm_ruint::{Uint, uint, aliases::*};
+    /// # use ruint::{Uint, uint, aliases::*};
     /// # uint!{
     /// assert_eq!(U8::saturating_from(300_u16), 255_U8);
     /// assert_eq!(U8::saturating_from(-10_i16), 0_U8);
@@ -192,7 +205,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// # Examples
     ///
     /// ```
-    /// # use openvm_ruint::{Uint, uint, aliases::*};
+    /// # use ruint::{Uint, uint, aliases::*};
     /// # uint!{
     /// assert_eq!(U8::wrapping_from(300_u16), 44_U8);
     /// assert_eq!(U8::wrapping_from(-10_i16), 246_U8);
@@ -219,7 +232,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// # Examples
     ///
     /// ```
-    /// # use openvm_ruint::{Uint, uint, aliases::*};
+    /// # use ruint::{Uint, uint, aliases::*};
     /// # uint!{
     /// assert_eq!(300_U12.to::<i16>(), 300_i16);
     /// assert_eq!(300_U12.to::<U256>(), 300_U256);
@@ -239,7 +252,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// # Examples
     ///
     /// ```
-    /// # use openvm_ruint::{Uint, uint, aliases::*};
+    /// # use ruint::{Uint, uint, aliases::*};
     /// # uint!{
     /// assert_eq!(300_U12.wrapping_to::<i8>(), 44_i8);
     /// assert_eq!(255_U32.wrapping_to::<i8>(), -1_i8);
@@ -260,7 +273,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// # Examples
     ///
     /// ```
-    /// # use openvm_ruint::{Uint, uint, aliases::*};
+    /// # use ruint::{Uint, uint, aliases::*};
     /// # uint!{
     /// assert_eq!(300_U12.saturating_to::<i16>(), 300_i16);
     /// assert_eq!(255_U32.saturating_to::<i8>(), 127);

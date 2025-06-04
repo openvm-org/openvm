@@ -1,31 +1,30 @@
 //! Support for the [`rand`](https://crates.io/crates/rand) crate.
 
-#![cfg(feature = "rand")]
-#![cfg_attr(docsrs, doc(cfg(feature = "rand")))]
+#![cfg(feature = "rand-09")]
+#![cfg_attr(docsrs, doc(cfg(feature = "rand-09")))]
 
 // FEATURE: Implement the Uniform distribution.
 
-use rand_08 as rand;
+use rand_09 as rand;
 
 use crate::Uint;
 use rand::{
-    distributions::{Distribution, Standard},
+    distr::{Distribution, StandardUniform},
     Rng,
 };
 
-impl<const BITS: usize, const LIMBS: usize> Distribution<Uint<BITS, LIMBS>> for Standard {
+impl<const BITS: usize, const LIMBS: usize> Distribution<Uint<BITS, LIMBS>> for StandardUniform {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Uint<BITS, LIMBS> {
-        <Uint<BITS, LIMBS>>::random_with_impl(rng)
+        <Uint<BITS, LIMBS>>::random_with(rng)
     }
 }
 
-#[cfg(not(feature = "rand-09"))]
 impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// Creates a new [`Uint`] with the default cryptographic random number
     /// generator.
     ///
-    /// This is currently [`rand::thread_rng`].
+    /// This is currently [`rand::rng()`].
     #[inline]
     #[must_use]
     #[cfg(feature = "std")]
@@ -40,7 +39,9 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     #[doc(alias = "random_using")]
     #[must_use]
     pub fn random_with<R: rand::RngCore + ?Sized>(rng: &mut R) -> Self {
-        Self::random_with_impl(rng)
+        let mut uint = Self::ZERO;
+        uint.randomize_with(rng);
+        uint
     }
 
     /// Fills this [`Uint`] with the default cryptographic random number
@@ -50,27 +51,13 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     #[inline]
     #[cfg(feature = "std")]
     pub fn randomize(&mut self) {
-        self.randomize_with(&mut rand::thread_rng());
+        self.randomize_with(&mut rand::rng());
     }
 
     /// Fills this [`Uint`] with the given random number generator.
     #[inline]
     #[doc(alias = "randomize_using")]
     pub fn randomize_with<R: rand::RngCore + ?Sized>(&mut self, rng: &mut R) {
-        self.randomize_with_impl(rng);
-    }
-}
-
-impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
-    #[inline]
-    fn random_with_impl<R: rand::RngCore + ?Sized>(rng: &mut R) -> Self {
-        let mut uint = Self::ZERO;
-        uint.randomize_with_impl(rng);
-        uint
-    }
-
-    #[inline]
-    fn randomize_with_impl<R: rand::RngCore + ?Sized>(&mut self, rng: &mut R) {
         rng.fill(&mut self.limbs[..]);
         self.apply_mask();
     }
@@ -83,11 +70,11 @@ mod tests {
 
     #[test]
     fn test_rand() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         const_for!(BITS in SIZES {
             const LIMBS: usize = nlimbs(BITS);
             for _ in 0..1000 {
-                let _: Uint<BITS, LIMBS> = rng.gen();
+                let _: Uint<BITS, LIMBS> = rng.random();
             }
         });
     }

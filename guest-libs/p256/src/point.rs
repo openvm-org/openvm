@@ -3,7 +3,6 @@ use core::{
     ops::{Mul, MulAssign},
 };
 
-use ecdsa::hazmat::VerifyPrimitive;
 use elliptic_curve::{
     bigint::{ArrayEncoding, U256},
     ops::{LinearCombination, MulByGenerator},
@@ -22,7 +21,7 @@ use openvm_ecc_guest::{
 
 use crate::{
     internal::{P256Coord, P256Point, P256Scalar},
-    EncodedPoint, P256,
+    EncodedPoint, NistP256,
 };
 
 // --- Implement elliptic_curve traits on P256Point ---
@@ -30,9 +29,9 @@ use crate::{
 /// P256 field element serialized as bytes.
 ///
 /// Byte array containing a serialized field element value (base field or scalar).
-pub type FieldBytes = elliptic_curve::FieldBytes<P256>;
+pub type FieldBytes = elliptic_curve::FieldBytes<NistP256>;
 
-impl FieldBytesEncoding<P256> for U256 {
+impl FieldBytesEncoding<NistP256> for U256 {
     fn decode_field_bytes(field_bytes: &FieldBytes) -> Self {
         U256::from_be_byte_array(*field_bytes)
     }
@@ -100,7 +99,7 @@ impl Mul<P256Scalar> for P256Point {
     type Output = P256Point;
 
     fn mul(self, other: P256Scalar) -> P256Point {
-        P256::msm(&[other], &[self])
+        NistP256::msm(&[other], &[self])
     }
 }
 
@@ -108,7 +107,7 @@ impl Mul<&P256Scalar> for &P256Point {
     type Output = P256Point;
 
     fn mul(self, other: &P256Scalar) -> P256Point {
-        P256::msm(&[*other], &[*self])
+        NistP256::msm(&[*other], &[*self])
     }
 }
 
@@ -116,19 +115,19 @@ impl Mul<&P256Scalar> for P256Point {
     type Output = P256Point;
 
     fn mul(self, other: &P256Scalar) -> P256Point {
-        P256::msm(&[*other], &[self])
+        NistP256::msm(&[*other], &[self])
     }
 }
 
 impl MulAssign<P256Scalar> for P256Point {
     fn mul_assign(&mut self, rhs: P256Scalar) {
-        *self = P256::msm(&[rhs], &[*self]);
+        *self = NistP256::msm(&[rhs], &[*self]);
     }
 }
 
 impl MulAssign<&P256Scalar> for P256Point {
     fn mul_assign(&mut self, rhs: &P256Scalar) {
-        *self = P256::msm(&[*rhs], &[*self]);
+        *self = NistP256::msm(&[*rhs], &[*self]);
     }
 }
 
@@ -168,28 +167,14 @@ impl elliptic_curve::group::Curve for P256Point {
 
 impl LinearCombination for P256Point {
     fn lincomb(x: &Self, k: &Self::Scalar, y: &Self, l: &Self::Scalar) -> Self {
-        P256::msm(&[*k, *l], &[*x, *y])
+        NistP256::msm(&[*k, *l], &[*x, *y])
     }
 }
 
 // default implementation
 impl MulByGenerator for P256Point {}
 
-/// ECDSA/secp256k1 signature (fixed-size)
-pub type Signature = ecdsa::Signature<P256>;
-
-impl VerifyPrimitive<P256> for P256Point {
-    fn verify_prehashed(&self, z: &FieldBytes, sig: &Signature) -> Result<(), ecdsa::Error> {
-        openvm_ecc_guest::ecdsa::verify_prehashed::<P256>(
-            *self,
-            z.as_slice(),
-            sig.to_bytes().as_slice(),
-        )
-        .map_err(|_| ecdsa::Error::new())
-    }
-}
-
-impl DecompressPoint<P256> for P256Point {
+impl DecompressPoint<NistP256> for P256Point {
     /// Note that this is not constant time
     fn decompress(x_bytes: &FieldBytes, y_is_odd: Choice) -> CtOption<Self> {
         use openvm_ecc_guest::weierstrass::FromCompressed;
@@ -204,20 +189,20 @@ impl DecompressPoint<P256> for P256Point {
     }
 }
 
-impl DecompactPoint<P256> for P256Point {
+impl DecompactPoint<NistP256> for P256Point {
     fn decompact(x_bytes: &FieldBytes) -> CtOption<Self> {
         Self::decompress(x_bytes, Choice::from(0))
     }
 }
 
-impl FromEncodedPoint<P256> for P256Point {
+impl FromEncodedPoint<NistP256> for P256Point {
     /// Attempts to parse the given [`EncodedPoint`] as an SEC1-encoded [`P256Point`].
     ///
     /// # Returns
     ///
     /// `None` value if `encoded_point` is not on the secp256k1 curve.
     fn from_encoded_point(encoded_point: &EncodedPoint) -> CtOption<Self> {
-        match openvm_ecc_guest::ecdsa::VerifyingKey::<P256>::from_sec1_bytes(
+        match openvm_ecc_guest::ecdsa::VerifyingKey::<NistP256>::from_sec1_bytes(
             encoded_point.as_bytes(),
         ) {
             Ok(verifying_key) => CtOption::new(*verifying_key.as_affine(), 1.into()),
@@ -226,7 +211,7 @@ impl FromEncodedPoint<P256> for P256Point {
     }
 }
 
-impl ToEncodedPoint<P256> for P256Point {
+impl ToEncodedPoint<NistP256> for P256Point {
     fn to_encoded_point(&self, compress: bool) -> EncodedPoint {
         EncodedPoint::conditional_select(
             &EncodedPoint::from_affine_coordinates(

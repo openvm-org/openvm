@@ -5,15 +5,16 @@
 #![cfg(feature = "sqlx")]
 #![cfg_attr(docsrs, doc(cfg(feature = "sqlx")))]
 
-use crate::Uint;
 use sqlx_core::{
-    database::{Database, HasArguments, HasValueRef},
+    database::Database,
     decode::Decode,
     encode::{Encode, IsNull},
     error::BoxDynError,
     types::Type,
 };
 use thiserror::Error;
+
+use crate::Uint;
 
 #[derive(Error, Debug)]
 pub enum DecodeError {
@@ -38,7 +39,10 @@ impl<'a, const BITS: usize, const LIMBS: usize, DB: Database> Encode<'a, DB> for
 where
     Vec<u8>: Encode<'a, DB>,
 {
-    fn encode_by_ref(&self, buf: &mut <DB as HasArguments<'a>>::ArgumentBuffer) -> IsNull {
+    fn encode_by_ref(
+        &self,
+        buf: &mut <DB as Database>::ArgumentBuffer<'a>,
+    ) -> Result<IsNull, BoxDynError> {
         self.to_be_bytes_vec().encode_by_ref(buf)
     }
 }
@@ -47,7 +51,7 @@ impl<'a, const BITS: usize, const LIMBS: usize, DB: Database> Decode<'a, DB> for
 where
     Vec<u8>: Decode<'a, DB>,
 {
-    fn decode(value: <DB as HasValueRef<'a>>::ValueRef) -> Result<Self, BoxDynError> {
+    fn decode(value: <DB as Database>::ValueRef<'a>) -> Result<Self, BoxDynError> {
         let bytes = Vec::<u8>::decode(value)?;
         Self::try_from_be_slice(bytes.as_slice()).ok_or_else(|| DecodeError::Overflow.into())
     }

@@ -25,7 +25,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// # Examples
     ///
     /// ```
-    /// # use openvm_ruint::{Uint, uint};
+    /// # use ruint::{Uint, uint};
     /// # uint!{
     /// assert_eq!(1_U1.overflowing_mul(1_U1), (1_U1, false));
     /// assert_eq!(
@@ -41,7 +41,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
         let mut overflow = algorithms::addmul(&mut result.limbs, self.as_limbs(), rhs.as_limbs());
         if BITS > 0 {
             overflow |= result.limbs[LIMBS - 1] > Self::MASK;
-            result.limbs[LIMBS - 1] &= Self::MASK;
+            result.apply_mask();
         }
         (result, overflow)
     }
@@ -65,7 +65,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
         let mut result = Self::ZERO;
         algorithms::addmul_n(&mut result.limbs, self.as_limbs(), rhs.as_limbs());
         if BITS > 0 {
-            result.limbs[LIMBS - 1] &= Self::MASK;
+            result.apply_mask();
         }
         result
     }
@@ -119,7 +119,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
             result *= Self::from(2) - self * result;
             correct_limbs *= 2;
         }
-        result.limbs[LIMBS - 1] &= Self::MASK;
+        result.apply_mask();
 
         Some(result)
     }
@@ -138,7 +138,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// # Examples
     ///
     /// ```
-    /// # use openvm_ruint::{Uint, uint};
+    /// # use ruint::{Uint, uint};
     /// # uint!{
     /// assert_eq!(0_U0.widening_mul(0_U0), 0_U0);
     /// assert_eq!(1_U1.widening_mul(1_U1), 1_U2);
@@ -178,7 +178,7 @@ impl<const BITS: usize, const LIMBS: usize> Product<Self> for Uint<BITS, LIMBS> 
         if BITS == 0 {
             return Self::ZERO;
         }
-        iter.fold(Self::from(1), Self::wrapping_mul)
+        iter.fold(Self::ONE, Self::wrapping_mul)
     }
 }
 
@@ -191,7 +191,7 @@ impl<'a, const BITS: usize, const LIMBS: usize> Product<&'a Self> for Uint<BITS,
         if BITS == 0 {
             return Self::ZERO;
         }
-        iter.copied().fold(Self::from(1), Self::wrapping_mul)
+        iter.copied().fold(Self::ONE, Self::wrapping_mul)
     }
 }
 

@@ -7,10 +7,10 @@ edition = "2021"
 members = []
 
 [dependencies]
-openvm = { path = "../../crates/toolchain/openvm", features = ["std"] }
-openvm-platform = { path = "../../crates/toolchain/platform" }
-openvm-algebra-guest = { path = "../../extensions/algebra/guest" }
-openvm-algebra-complex-macros = { path = "../../extensions/algebra/complex-macros" }
+openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
+    "std",
+] }
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
 
 serde = { version = "1.0.216" }
 num-bigint = { version = "0.4.6", features = ["serde"] }

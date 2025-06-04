@@ -11,7 +11,7 @@ use hex_literal::hex;
 use openvm_p256::P256Point;
 use openvm_p256::{
     ecdsa::{Signature, VerifyingKey},
-    EncodedPoint, P256,
+    EncodedPoint, NistP256,
 };
 
 openvm::init!("openvm_init_ecdsa.rs");
@@ -23,7 +23,7 @@ fn main() {
     // (P-256, SHA-384, from `SigGen.txt` in `186-4ecdsatestvectors.zip`)
     // <https://csrc.nist.gov/projects/cryptographic-algorithm-validation-program/digital-signatures>
     let verifier = VerifyingKey::from_affine(
-        <P256 as CurveArithmetic>::AffinePoint::from_encoded_point(
+        <NistP256 as CurveArithmetic>::AffinePoint::from_encoded_point(
             &EncodedPoint::from_affine_coordinates(
                 &hex!("e0e7b99bc62d8dd67883e39ed9fa0657789c5ff556cc1fd8dd1e2a55e9e3f243").into(),
                 &hex!("63fbfd0232b95578075c903a4dbf85ad58f8350516e1ec89b0ee1f5e1362da69").into(),

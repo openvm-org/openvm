@@ -10,7 +10,14 @@ members = []
 openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
     "std",
 ] }
-openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git" }
+alloy-primitives = "1.1.2"
 
 [features]
 default = []
+
+[patch.crates-io]
+ruint = { git = "https://github.com/openvm-org/openvm.git" }
+# alloy-primitives uses ruint
+
+[profile.release]
+lto = "thin"

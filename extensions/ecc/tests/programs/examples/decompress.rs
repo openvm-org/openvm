@@ -8,10 +8,10 @@ use hex_literal::hex;
 use openvm::io::read_vec;
 use openvm_ecc_guest::{
     algebra::IntMod,
-    k256::{Secp256k1Coord, Secp256k1Point},
     weierstrass::{FromCompressed, WeierstrassPoint},
     Group,
 };
+use openvm_k256::{Secp256k1Coord, Secp256k1Point};
 
 openvm::entry!(main);
 

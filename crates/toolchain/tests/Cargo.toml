@@ -18,7 +18,7 @@ openvm-bigint-circuit.workspace = true
 openvm-rv32im-circuit.workspace = true
 openvm-rv32im-transpiler.workspace = true
 openvm-algebra-circuit.workspace = true
-openvm-ecc-guest = { workspace = true, features = ["k256"] }
+openvm-ecc-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-platform = { workspace = true }
 

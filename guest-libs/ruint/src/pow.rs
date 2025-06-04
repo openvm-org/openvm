@@ -18,7 +18,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// # Examples
     ///
     /// ```
-    /// # use openvm_ruint::{Uint, uint};
+    /// # use ruint::{Uint, uint};
     /// # uint!{
     /// assert_eq!(
     ///     36_U64.overflowing_pow(12_U64),
@@ -37,7 +37,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// ```
     /// Small cases:
     /// ```
-    /// # use openvm_ruint::{Uint, uint};
+    /// # use ruint::{Uint, uint};
     /// # uint!{
     /// assert_eq!(0_U0.overflowing_pow(0_U0), (0_U0, false));
     /// assert_eq!(0_U1.overflowing_pow(0_U1), (1_U1, false));
@@ -56,8 +56,8 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
         // Exponentiation by squaring
         let mut overflow = false;
         let mut base_overflow = false;
-        let mut result = Self::from(1);
-        while exp != Self::ZERO {
+        let mut result = Self::ONE;
+        while !exp.is_zero() {
             // Multiply by base
             if exp.bit(0) {
                 let (r, o) = result.overflowing_mul(self);
@@ -100,8 +100,8 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
         }
 
         // Exponentiation by squaring
-        let mut result = Self::from(1);
-        while exp != Self::ZERO {
+        let mut result = Self::ONE;
+        while !exp.is_zero() {
             // Multiply by base
             if exp.bit(0) {
                 result = result.wrapping_mul(self);
@@ -119,7 +119,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// # Examples
     ///
     /// ```
-    /// # use openvm_ruint::{Uint, uint, aliases::*};
+    /// # use ruint::{Uint, uint, aliases::*};
     /// # uint!{
     /// assert_eq!(U64::approx_pow2(-2.0), Some(0_U64));
     /// assert_eq!(U64::approx_pow2(-1.0), Some(1_U64));

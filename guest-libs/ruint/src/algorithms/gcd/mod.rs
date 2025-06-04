@@ -1,5 +1,7 @@
 #![allow(clippy::module_name_repetitions)]
 
+// TODO: https://github.com/bitcoin-core/secp256k1/blob/master/doc/safegcd_implementation.md
+
 // TODO: Make these algorithms work on limb slices.
 mod matrix;
 
@@ -79,10 +81,10 @@ pub fn gcd_extended<const BITS: usize, const LIMBS: usize>(
     }
 
     // Initialize state matrix to identity.
-    let mut s0 = Uint::from(1);
+    let mut s0 = Uint::ONE;
     let mut s1 = Uint::ZERO;
     let mut t0 = Uint::ZERO;
-    let mut t1 = Uint::from(1);
+    let mut t1 = Uint::ONE;
     let mut even = true;
     while b != Uint::ZERO {
         debug_assert!(a >= b);
@@ -144,7 +146,7 @@ pub fn inv_mod<const BITS: usize, const LIMBS: usize>(
     num: Uint<BITS, LIMBS>,
     modulus: Uint<BITS, LIMBS>,
 ) -> Option<Uint<BITS, LIMBS>> {
-    if BITS == 0 || modulus == Uint::ZERO {
+    if BITS == 0 || modulus.is_zero() {
         return None;
     }
     let mut a = modulus;
@@ -152,12 +154,12 @@ pub fn inv_mod<const BITS: usize, const LIMBS: usize>(
     if b >= a {
         b %= a;
     }
-    if b == Uint::ZERO {
+    if b.is_zero() {
         return None;
     }
 
     let mut t0 = Uint::ZERO;
-    let mut t1 = Uint::from(1);
+    let mut t1 = Uint::ONE;
     let mut even = true;
     while b != Uint::ZERO {
         debug_assert!(a >= b);
@@ -178,7 +180,7 @@ pub fn inv_mod<const BITS: usize, const LIMBS: usize>(
             even ^= !m.4;
         }
     }
-    if a == Uint::from(1) {
+    if a == Uint::ONE {
         // When `even` t0 is negative and in twos-complement form
         Some(if even { modulus + t0 } else { t0 })
     } else {
@@ -191,7 +193,6 @@ pub fn inv_mod<const BITS: usize, const LIMBS: usize>(
 mod tests {
     use super::*;
     use crate::{const_for, nlimbs};
-    use core::cmp::min;
     use proptest::{proptest, test_runner::Config};
 
     #[test]
@@ -223,9 +224,7 @@ mod tests {
         const_for!(BITS in SIZES {
             const LIMBS: usize = nlimbs(BITS);
             type U = Uint<BITS, LIMBS>;
-            // TODO: Increase cases when perf is better.
-            let mut config = Config::default();
-            config.cases = min(config.cases, if BITS > 500 { 9 } else { 30 });
+            let config = Config { cases: 10, ..Default::default()};
             proptest!(config, |(a: U, b: U)| {
                 assert_eq!(gcd(a, b), gcd_ref(a, b));
             });
@@ -233,14 +232,11 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::absurd_extreme_comparisons)] // Generated code
     fn test_gcd_extended() {
         const_for!(BITS in SIZES {
             const LIMBS: usize = nlimbs(BITS);
             type U = Uint<BITS, LIMBS>;
-            // TODO: Increase cases when perf is better.
-            let mut config = Config::default();
-            config.cases = min(config.cases, if BITS > 500 { 3 } else { 10 });
+            let config = Config { cases: 5, ..Default::default() };
             proptest!(config, |(a: U, b: U)| {
                 let (g, x, y, sign) = gcd_extended(a, b);
                 assert_eq!(g, gcd_ref(a, b));

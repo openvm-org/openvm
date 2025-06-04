@@ -16,6 +16,12 @@ openvm-algebra-moduli-macros = { path = "../../../algebra/moduli-macros", defaul
 openvm-rv32im-guest = { path = "../../../../extensions/rv32im/guest", default-features = false }
 
 openvm-keccak256 = { path = "../../../../guest-libs/keccak256/" }
+openvm-k256 = { path = "../../../../guest-libs/k256", package = "k256", features = [
+    "ecdsa",
+], optional = true }
+openvm-p256 = { path = "../../../../guest-libs/p256", package = "p256", features = [
+    "ecdsa",
+], optional = true }
 
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
@@ -23,11 +29,6 @@ serde = { version = "1.0", default-features = false, features = [
 ] }
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 hex-literal = { version = "0.4.1", default-features = false }
-k256 = { version = "0.13.3", default-features = false, features = [
-    "ecdsa-core",
-    "ecdsa",
-], optional = true }
-signature = { version = "2.2.0", default-features = false }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint = "0.4.6"
@@ -35,8 +36,8 @@ num-bigint = "0.4.6"
 [features]
 default = []
 std = ["serde/std", "openvm/std"]
-k256 = ["openvm-ecc-guest/k256", "dep:k256"]
-p256 = ["openvm-ecc-guest/p256"]
+k256 = ["dep:openvm-k256"]
+p256 = ["dep:openvm-p256"]
 
 [profile.release]
 panic = "abort"

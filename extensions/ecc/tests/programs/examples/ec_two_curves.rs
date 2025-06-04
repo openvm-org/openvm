@@ -3,13 +3,9 @@
 
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
-use openvm_ecc_guest::{
-    k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
-    msm,
-    p256::{P256Coord, P256Point},
-    weierstrass::WeierstrassPoint,
-    Group,
-};
+use openvm_ecc_guest::{msm, weierstrass::WeierstrassPoint, Group};
+use openvm_k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar};
+use openvm_p256::{P256Coord, P256Point};
 
 openvm::init!("openvm_init_ec_two_curves_k256_p256.rs");
 

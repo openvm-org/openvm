@@ -1,7 +1,9 @@
 [package]
-name = "openvm-k256"
+# for patching purposes, the name must be the same as the original `k256` crate
+name = "k256"
+# for patching purposes, version must match that of original `k256` crate
+version = "0.13.4"
 description = "OpenVM fork of k256"
-version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
@@ -10,18 +12,19 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-openvm = { workspace = true } 
+openvm = { workspace = true }
 openvm-algebra-guest = { workspace = true }
 openvm-algebra-moduli-macros = { workspace = true }
 openvm-ecc-guest = { workspace = true }
 openvm-ecc-sw-macros = { workspace = true }
 
+once_cell = { workspace = true, optional = true }
 elliptic-curve = { workspace = true }
-ecdsa = { workspace = true }
+ecdsa-core = { workspace = true, optional = true }
 serde = { workspace = true }
 hex-literal = { workspace = true }
 ff = { workspace = true }
-k256 = { workspace = true }
+signature = { version = "2", optional = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint = { workspace = true }
@@ -48,9 +51,37 @@ derive_more = { workspace = true, features = ["from"] }
 
 [features]
 default = ["ecdsa"]
-ecdsa = ["k256/ecdsa", "ecdsa-core"]
-ecdsa-core = ["k256/ecdsa-core"]
-std = ["k256/std", "openvm-ecc-guest/std"]
+alloc = ["ecdsa-core?/alloc", "elliptic-curve/alloc"]
+std = [
+    "ecdsa-core?/std",
+    "elliptic-curve/std",
+    "once_cell?/std",
+    "openvm-ecc-guest/std",
+]
+
+arithmetic = ["elliptic-curve/arithmetic"]
+bits = ["arithmetic", "elliptic-curve/bits"]
+critical-section = ["once_cell/critical-section", "precomputed-tables"]
+digest = ["ecdsa-core/digest", "ecdsa-core/hazmat"]
+ecdh = ["arithmetic", "elliptic-curve/ecdh"]
+ecdsa = ["arithmetic", "ecdsa-core/signing", "ecdsa-core/verifying"]
+expose-field = ["arithmetic"]
+hash2curve = ["arithmetic", "elliptic-curve/hash2curve"]
+jwk = ["elliptic-curve/jwk"]
+pem = ["ecdsa-core/pem", "elliptic-curve/pem", "pkcs8"]
+pkcs8 = ["ecdsa-core/pkcs8", "elliptic-curve/pkcs8"]
+precomputed-tables = ["arithmetic", "once_cell"]
+schnorr = ["arithmetic", "signature"]
+serde = ["ecdsa-core/serde", "elliptic-curve/serde"]
+sha256 = []
+test-vectors = []
 
 [package.metadata.cargo-shear]
-ignored = ["openvm", "num-bigint", "serde", "derive_more"]
+ignored = [
+    "openvm",
+    "num-bigint",
+    "serde",
+    "derive_more",
+    "signature",
+    "once_cell",
+]

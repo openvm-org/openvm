@@ -2,7 +2,7 @@
 use core::hint::black_box;
 
 use hex::FromHex;
-use openvm_keccak256_guest::keccak256;
+use openvm_keccak256::keccak256;
 // ANCHOR_END: imports
 
 // ANCHOR: main

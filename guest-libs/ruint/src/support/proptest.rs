@@ -18,12 +18,7 @@ impl<const BITS: usize, const LIMBS: usize> Arbitrary for Uint<BITS, LIMBS> {
     }
 
     fn arbitrary_with((): Self::Parameters) -> Self::Strategy {
-        any::<[u64; LIMBS]>().prop_map(|mut limbs| {
-            if LIMBS > 0 {
-                limbs[LIMBS - 1] &= Self::MASK;
-            }
-            Self::from_limbs(limbs)
-        })
+        any::<[u64; LIMBS]>().prop_map(Self::from_limbs_unmasked)
     }
 }
 

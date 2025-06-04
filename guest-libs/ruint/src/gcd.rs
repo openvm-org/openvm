@@ -6,7 +6,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// # Examples
     ///
     /// ```
-    /// # use openvm_ruint::{Uint, uint, aliases::*};
+    /// # use ruint::{Uint, uint, aliases::*};
     /// # uint! {
     /// assert_eq!(0_U128.gcd(0_U128), 0_U128);
     /// # }
@@ -53,7 +53,6 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
 mod tests {
     use super::*;
     use crate::{const_for, nlimbs};
-    use core::cmp::min;
     use proptest::{proptest, test_runner::Config};
 
     #[test]
@@ -62,9 +61,7 @@ mod tests {
         const_for!(BITS in SIZES {
             const LIMBS: usize = nlimbs(BITS);
             type U = Uint<BITS, LIMBS>;
-            // TODO: Increase cases when perf is better.
-            let mut config = Config::default();
-            config.cases = min(config.cases, if BITS > 500 { 3 } else { 10 });
+            let config = Config { cases: 5, ..Default::default() };
             proptest!(config, |(a: U, b: U)| {
                 let g = a.gcd(b);
                 assert_eq!(b.gcd(a), g);

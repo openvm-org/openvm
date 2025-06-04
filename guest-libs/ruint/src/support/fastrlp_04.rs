@@ -1,10 +1,10 @@
 //! Support for the [`fastrlp`](https://crates.io/crates/fastrlp) crate.
 
-#![cfg(feature = "fastrlp")]
-#![cfg_attr(docsrs, doc(cfg(feature = "fastrlp")))]
+#![cfg(feature = "fastrlp-04")]
+#![cfg_attr(docsrs, doc(cfg(feature = "fastrlp-04")))]
 
 use crate::Uint;
-use fastrlp::{
+use fastrlp_04::{
     length_of_length, BufMut, Decodable, DecodeError, Encodable, Header, MaxEncodedLen,
     MaxEncodedLenAssoc, EMPTY_STRING_CODE,
 };

@@ -42,7 +42,7 @@ impl_pod! {
 #[cfg(test)]
 mod tests {
     use bytemuck::{Pod, Zeroable};
-    use openvm_ruint::Uint;
+    use ruint::Uint;
 
     #[test]
     fn test_uint_pod() {
@@ -71,10 +71,7 @@ mod tests {
         let val = Uint::<{ BITS }, { LIMBS }>::default();
         let bytes = bytemuck::bytes_of(&val);
 
-        assert_eq!(
-            bytes.len(),
-            std::mem::size_of::<Uint<{ BITS }, { LIMBS }>>()
-        );
+        assert_eq!(bytes.len(), core::mem::size_of::<Uint<BITS, LIMBS>>());
 
         let zeroed_val: Uint<{ BITS }, { LIMBS }> = Zeroable::zeroed();
         assert_eq!(zeroed_val, Uint::<{ BITS }, { LIMBS }>::default());

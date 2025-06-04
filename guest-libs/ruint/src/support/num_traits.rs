@@ -49,7 +49,7 @@ impl<const BITS: usize, const LIMBS: usize> Zero for Uint<BITS, LIMBS> {
 impl<const BITS: usize, const LIMBS: usize> One for Uint<BITS, LIMBS> {
     #[inline(always)]
     fn one() -> Self {
-        Self::from(1)
+        Self::ONE
     }
 }
 

@@ -3,7 +3,7 @@
 /// Repeats a block of code with different values assigned to a constant.
 ///
 /// ```rust
-/// # use openvm_ruint::{const_for, nlimbs, Uint};
+/// # use ruint::{const_for, nlimbs, Uint};
 /// const_for!(BITS in [0, 10, 100] {
 ///     const LIMBS: usize = nlimbs(BITS);
 ///     println!("{:?}", Uint::<BITS, LIMBS>::MAX);
@@ -13,7 +13,7 @@
 /// is equivalent to
 ///
 /// ```rust
-/// # use openvm_ruint::{const_for, Uint};
+/// # use ruint::{const_for, Uint};
 /// println!("{:?}", Uint::<0, 0>::MAX);
 /// println!("{:?}", Uint::<10, 1>::MAX);
 /// println!("{:?}", Uint::<100, 2>::MAX);
@@ -32,7 +32,7 @@
 ///
 /// ```rust
 /// # use proptest::prelude::*;
-/// # use openvm_ruint::{const_for, nlimbs, Uint};
+/// # use ruint::{const_for, nlimbs, Uint};
 /// const_for!(BITS in SIZES {
 ///    const LIMBS: usize = nlimbs(BITS);
 ///    proptest!(|(value: Uint<BITS, LIMBS>)| {

@@ -1,11 +1,10 @@
-/// Wrapper for [`openvm_ruint_macro::uint!`]. See its documentation for
-/// details.
+/// Wrapper for [`ruint_macro::uint!`]. See its documentation for details.
 #[macro_export]
 #[cfg(not(doc))] // Show the actual macro in docs.
 #[doc(hidden)]
 macro_rules! uint {
     ($($t:tt)*) => {
-        $crate::__private::openvm_ruint_macro::uint_with_path! { [$crate] $($t)* }
+        $crate::__private::ruint_macro::uint_with_path! { [$crate] $($t)* }
     }
 }
 
@@ -76,6 +75,7 @@ macro_rules! impl_bin_op {
     };
 }
 
+#[allow(unused)]
 macro_rules! assume {
     ($e:expr $(,)?) => {
         if !$e {
@@ -90,6 +90,7 @@ macro_rules! assume {
     };
 }
 
+#[allow(unused)]
 macro_rules! debug_unreachable {
     ($($t:tt)*) => {
         if cfg!(debug_assertions) {
@@ -103,7 +104,7 @@ macro_rules! debug_unreachable {
 #[cfg(test)]
 mod tests {
     // https://github.com/recmo/uint/issues/359
-    openvm_ruint_macro::uint_with_path! {
+    ruint_macro::uint_with_path! {
         [crate]
         const _A: [crate::aliases::U256; 2] = [
             0x00006f85d6f68a85ec10345351a23a3aaf07f38af8c952a7bceca70bd2af7ad5_U256,
@@ -125,13 +126,10 @@ mod tests {
         use crate as __ruint;
         let value = crate::aliases::U256::from(0x10);
         assert_eq!(value, uint!(0x10U256));
-        assert_eq!(value, openvm_ruint_macro::uint_with_path!([crate] 0x10U256));
-        assert_eq!(value, openvm_ruint_macro::uint_with_path!([aaa] 0x10U256));
-        assert_eq!(value, openvm_ruint_macro::uint_with_path!([aaa] 0x10U256));
-        assert_eq!(value, openvm_ruint_macro::uint_with_path!([ruint] 0x10U256));
-        assert_eq!(
-            value,
-            openvm_ruint_macro::uint_with_path!([__ruint] 0x10U256)
-        );
+        assert_eq!(value, ruint_macro::uint_with_path!([crate] 0x10U256));
+        assert_eq!(value, ruint_macro::uint_with_path!([aaa] 0x10U256));
+        assert_eq!(value, ruint_macro::uint_with_path!([aaa] 0x10U256));
+        assert_eq!(value, ruint_macro::uint_with_path!([ruint] 0x10U256));
+        assert_eq!(value, ruint_macro::uint_with_path!([__ruint] 0x10U256));
     }
 }

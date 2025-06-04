@@ -97,7 +97,7 @@ impl<'a, const BITS: usize, const LIMBS: usize> EncodeAsRef<'a, Uint<BITS, LIMBS
     type RefType = CompactRefUint<'a, BITS, LIMBS>;
 }
 
-impl<'a, const BITS: usize, const LIMBS: usize> EncodeLike for CompactRefUint<'a, BITS, LIMBS> {}
+impl<const BITS: usize, const LIMBS: usize> EncodeLike for CompactRefUint<'_, BITS, LIMBS> {}
 
 /// Compact/general integers are encoded with the two least significant bits
 /// denoting the mode:
@@ -112,7 +112,7 @@ impl<'a, const BITS: usize, const LIMBS: usize> EncodeLike for CompactRefUint<'a
 ///   following, plus four. The  value is contained, LE encoded, in the bytes
 ///   following. The final (most  significant) byte must be non-zero. Valid only
 ///   for values of `(2\*\*30)-(2\*\*536-1)`.
-impl<'a, const BITS: usize, const LIMBS: usize> Encode for CompactRefUint<'a, BITS, LIMBS> {
+impl<const BITS: usize, const LIMBS: usize> Encode for CompactRefUint<'_, BITS, LIMBS> {
     fn size_hint(&self) -> usize {
         match self.0.bit_len() {
             0..=6 => 1,

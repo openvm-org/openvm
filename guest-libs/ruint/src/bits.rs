@@ -1,8 +1,9 @@
-use crate::Uint;
 use core::ops::{
     BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not, Shl, ShlAssign, Shr,
     ShrAssign,
 };
+
+use crate::Uint;
 
 impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// Returns whether a specific bit is set.
@@ -37,12 +38,13 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     ///
     /// # Panics
     ///
-    /// Panics if `index` exceeds the byte width of the number.
+    /// Panics if `index` is greater than or equal to the byte width of the
+    /// number.
     ///
     /// # Examples
     ///
     /// ```
-    /// # use openvm_ruint::uint;
+    /// # use ruint::uint;
     /// let x = uint!(0x1234567890_U64);
     /// let bytes = [
     ///     x.byte(0), // 0x90
@@ -60,7 +62,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// Panics if out of range.
     ///
     /// ```should_panic
-    /// # use openvm_ruint::uint;
+    /// # use ruint::uint;
     /// let x = uint!(0x1234567890_U64);
     /// let _ = x.byte(8);
     /// ```
@@ -80,6 +82,29 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
         }
     }
 
+    /// Returns a specific byte, or `None` if `index` is out of range. The byte
+    /// at index `0` is the least significant byte (little endian).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use ruint::uint;
+    /// let x = uint!(0x1234567890_U64);
+    /// assert_eq!(x.checked_byte(0), Some(0x90));
+    /// assert_eq!(x.checked_byte(7), Some(0x00));
+    /// // Out of range
+    /// assert_eq!(x.checked_byte(8), None);
+    /// ```
+    #[inline]
+    #[must_use]
+    pub const fn checked_byte(&self, index: usize) -> Option<u8> {
+        if index < Self::BYTES {
+            Some(self.byte(index))
+        } else {
+            None
+        }
+    }
+
     /// Reverses the order of bits in the integer. The least significant bit
     /// becomes the most significant bit, second least-significant bit becomes
     /// second most-significant bit, etc.
@@ -96,29 +121,49 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
         self
     }
 
+    /// Inverts all the bits in the integer.
+    #[inline]
+    #[must_use]
+    pub const fn not(mut self) -> Self {
+        if BITS == 0 {
+            return Self::ZERO;
+        }
+
+        let mut i = 0;
+        while i < LIMBS {
+            self.limbs[i] = !self.limbs[i];
+            i += 1;
+        }
+
+        self.masked()
+    }
+
     /// Returns the number of leading zeros in the binary representation of
     /// `self`.
     #[inline]
     #[must_use]
-    pub fn leading_zeros(&self) -> usize {
-        self.as_limbs()
-            .iter()
-            .rev()
-            .position(|&limb| limb != 0)
-            .map_or(BITS, |n| {
-                let fixed = Self::MASK.leading_zeros() as usize;
+    pub const fn leading_zeros(&self) -> usize {
+        let mut i = LIMBS;
+        while i > 0 {
+            i -= 1;
+            if self.limbs[i] != 0 {
+                let n = LIMBS - 1 - i;
                 let skipped = n * 64;
-                let top = self.as_limbs()[LIMBS - n - 1].leading_zeros() as usize;
-                skipped + top - fixed
-            })
+                let fixed = Self::MASK.leading_zeros() as usize;
+                let top = self.limbs[i].leading_zeros() as usize;
+                return skipped + top - fixed;
+            }
+        }
+
+        BITS
     }
 
     /// Returns the number of leading ones in the binary representation of
     /// `self`.
     #[inline]
     #[must_use]
-    pub fn leading_ones(&self) -> usize {
-        (self.not()).leading_zeros()
+    pub const fn leading_ones(&self) -> usize {
+        Self::not(*self).leading_zeros()
     }
 
     /// Returns the number of trailing zeros in the binary representation of
@@ -150,31 +195,42 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// Returns the number of ones in the binary representation of `self`.
     #[inline]
     #[must_use]
-    pub fn count_ones(&self) -> usize {
-        self.as_limbs()
-            .iter()
-            .map(|limb| limb.count_ones() as usize)
-            .sum()
+    pub const fn count_ones(&self) -> usize {
+        let mut total = 0;
+
+        let mut i = 0;
+        while i < LIMBS {
+            total += self.limbs[i].count_ones() as usize;
+            i += 1;
+        }
+
+        total
     }
 
     /// Returns the number of zeros in the binary representation of `self`.
     #[must_use]
     #[inline]
-    pub fn count_zeros(&self) -> usize {
+    pub const fn count_zeros(&self) -> usize {
         BITS - self.count_ones()
     }
 
-    /// Length of the number in bits ignoring leading zeros.
+    /// Returns the dynamic length of this number in bits, ignoring leading
+    /// zeros.
+    ///
+    /// For the maximum length of the type, use [`Uint::BITS`](Self::BITS).
     #[must_use]
     #[inline]
-    pub fn bit_len(&self) -> usize {
+    pub const fn bit_len(&self) -> usize {
         BITS - self.leading_zeros()
     }
 
-    /// Length of the number in bytes ignoring leading zeros.
+    /// Returns the dynamic length of this number in bytes, ignoring leading
+    /// zeros.
+    ///
+    /// For the maximum length of the type, use [`Uint::BYTES`](Self::BYTES).
     #[must_use]
     #[inline]
-    pub fn byte_len(&self) -> usize {
+    pub const fn byte_len(&self) -> usize {
         (self.bit_len() + 7) / 8
     }
 
@@ -254,53 +310,22 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// the shift is larger than `BITS` (which is IMHO not very useful).
     #[inline]
     #[must_use]
-    pub fn overflowing_shl(mut self, rhs: usize) -> (Self, bool) {
+    pub fn overflowing_shl(self, rhs: usize) -> (Self, bool) {
         let (limbs, bits) = (rhs / 64, rhs % 64);
         if limbs >= LIMBS {
             return (Self::ZERO, self != Self::ZERO);
         }
-        if bits == 0 {
-            // Check for overflow
-            let mut overflow = false;
-            for i in (LIMBS - limbs)..LIMBS {
-                overflow |= self.limbs[i] != 0;
-            }
-            if self.limbs[LIMBS - limbs - 1] > Self::MASK {
-                overflow = true;
-            }
 
-            // Shift
-            for i in (limbs..LIMBS).rev() {
-                assume!(i >= limbs && i - limbs < LIMBS);
-                self.limbs[i] = self.limbs[i - limbs];
-            }
-            self.limbs[..limbs].fill(0);
-            self.limbs[LIMBS - 1] &= Self::MASK;
-            return (self, overflow);
+        let word_bits = 64;
+        let mut r = Self::ZERO;
+        let mut carry = 0;
+        for i in 0..Self::LIMBS - limbs {
+            let x = self.limbs[i];
+            r.limbs[i + limbs] = (x << bits) | carry;
+            carry = (x >> (word_bits - bits - 1)) >> 1;
         }
-
-        // Check for overflow
-        let mut overflow = false;
-        for i in (LIMBS - limbs)..LIMBS {
-            overflow |= self.limbs[i] != 0;
-        }
-        if self.limbs[LIMBS - limbs - 1] >> (64 - bits) != 0 {
-            overflow = true;
-        }
-        if self.limbs[LIMBS - limbs - 1] << bits > Self::MASK {
-            overflow = true;
-        }
-
-        // Shift
-        for i in (limbs + 1..LIMBS).rev() {
-            assume!(i - limbs < LIMBS && i - limbs - 1 < LIMBS);
-            self.limbs[i] = self.limbs[i - limbs] << bits;
-            self.limbs[i] |= self.limbs[i - limbs - 1] >> (64 - bits);
-        }
-        self.limbs[limbs] = self.limbs[0] << bits;
-        self.limbs[..limbs].fill(0);
-        self.limbs[LIMBS - 1] &= Self::MASK;
-        (self, overflow)
+        r.apply_mask();
+        (r, carry != 0)
     }
 
     /// Left shift by `rhs` bits.
@@ -379,38 +404,21 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// the shift is larger than `BITS` (which is IMHO not very useful).
     #[inline]
     #[must_use]
-    pub fn overflowing_shr(mut self, rhs: usize) -> (Self, bool) {
+    pub fn overflowing_shr(self, rhs: usize) -> (Self, bool) {
         let (limbs, bits) = (rhs / 64, rhs % 64);
         if limbs >= LIMBS {
             return (Self::ZERO, self != Self::ZERO);
         }
-        if bits == 0 {
-            // Check for overflow
-            let mut overflow = false;
-            for i in 0..limbs {
-                overflow |= self.limbs[i] != 0;
-            }
 
-            // Shift
-            for i in 0..(LIMBS - limbs) {
-                self.limbs[i] = self.limbs[i + limbs];
-            }
-            self.limbs[LIMBS - limbs..].fill(0);
-            return (self, overflow);
+        let word_bits = 64;
+        let mut r = Self::ZERO;
+        let mut carry = 0;
+        for i in 0..LIMBS - limbs {
+            let x = self.limbs[LIMBS - 1 - i];
+            r.limbs[LIMBS - 1 - i - limbs] = (x >> bits) | carry;
+            carry = (x << (word_bits - bits - 1)) << 1;
         }
-
-        // Check for overflow
-        let overflow = (self.limbs[LIMBS - limbs - 1] >> (bits - 1)) & 1 != 0;
-
-        // Shift
-        for i in 0..(LIMBS - limbs - 1) {
-            assume!(i + limbs < LIMBS && i + limbs + 1 < LIMBS);
-            self.limbs[i] = self.limbs[i + limbs] >> bits;
-            self.limbs[i] |= self.limbs[i + limbs + 1] << (64 - bits);
-        }
-        self.limbs[LIMBS - limbs - 1] = self.limbs[LIMBS - 1] >> bits;
-        self.limbs[LIMBS - limbs..].fill(0);
-        (self, overflow)
+        (r, carry != 0)
     }
 
     /// Right shift by `rhs` bits.
@@ -538,15 +546,8 @@ impl<const BITS: usize, const LIMBS: usize> Not for Uint<BITS, LIMBS> {
 
     #[cfg(not(target_os = "zkvm"))]
     #[inline]
-    fn not(mut self) -> Self::Output {
-        if BITS == 0 {
-            return Self::ZERO;
-        }
-        for limb in &mut self.limbs {
-            *limb = u64::not(*limb);
-        }
-        self.limbs[LIMBS - 1] &= Self::MASK;
-        self
+    fn not(self) -> Self::Output {
+        Self::not(self)
     }
 
     #[cfg(target_os = "zkvm")]
@@ -851,22 +852,24 @@ impl_shift!(u64, i64);
 
 #[cfg(test)]
 mod tests {
+    use core::cmp::min;
+
+    use proptest::proptest;
+
     use super::*;
     use crate::{aliases::U128, const_for, nlimbs};
-    use core::cmp::min;
-    use proptest::proptest;
 
     #[test]
     fn test_leading_zeros() {
         assert_eq!(Uint::<0, 0>::ZERO.leading_zeros(), 0);
         assert_eq!(Uint::<1, 1>::ZERO.leading_zeros(), 1);
-        assert_eq!(Uint::<1, 1>::from(1).leading_zeros(), 0);
+        assert_eq!(Uint::<1, 1>::ONE.leading_zeros(), 0);
         const_for!(BITS in NON_ZERO {
             const LIMBS: usize = nlimbs(BITS);
             type U = Uint::<BITS, LIMBS>;
             assert_eq!(U::ZERO.leading_zeros(), BITS);
             assert_eq!(U::MAX.leading_zeros(), 0);
-            assert_eq!(U::from(1).leading_zeros(), BITS - 1);
+            assert_eq!(U::ONE.leading_zeros(), BITS - 1);
             proptest!(|(value: U)| {
                 let zeros = value.leading_zeros();
                 assert!(zeros <= BITS);
@@ -890,7 +893,7 @@ mod tests {
     fn test_leading_ones() {
         assert_eq!(Uint::<0, 0>::ZERO.leading_ones(), 0);
         assert_eq!(Uint::<1, 1>::ZERO.leading_ones(), 0);
-        assert_eq!(Uint::<1, 1>::from(1).leading_ones(), 1);
+        assert_eq!(Uint::<1, 1>::ONE.leading_ones(), 1);
     }
 
     #[test]
@@ -926,7 +929,11 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cast_lossless, clippy::cast_possible_truncation)]
+    #[allow(
+        clippy::cast_lossless,
+        clippy::cast_possible_truncation,
+        clippy::cast_possible_wrap
+    )]
     fn test_small() {
         const_for!(BITS in [1, 2, 8, 16, 32, 63, 64] {
             type U = Uint::<BITS, 1>;
@@ -936,7 +943,7 @@ mod tests {
                 assert_eq!(a ^ b, U::from_limbs([a.limbs[0] ^ b.limbs[0]]));
             });
             proptest!(|(a: U, s in 0..BITS)| {
-                assert_eq!(a << s, U::from_limbs([(a.limbs[0] << s) & U::MASK]));
+                assert_eq!(a << s, U::from_limbs([a.limbs[0] << s & U::MASK]));
                 assert_eq!(a >> s, U::from_limbs([a.limbs[0] >> s]));
             });
         });
@@ -992,7 +999,6 @@ mod tests {
             type U = Uint::<BITS, LIMBS>;
             proptest!(|(value: U, shift in  0..=BITS + 2)| {
                 let shifted = value.arithmetic_shr(shift);
-                dbg!(value, shifted, shift);
                 assert_eq!(shifted.leading_ones(), match value.leading_ones() {
                     0 => 0,
                     n => min(BITS, n + shift)
@@ -1017,16 +1023,12 @@ mod tests {
             (Uint::<64, 1>::from(20), true)
         );
 
-        #[allow(clippy::unusual_byte_groupings)]
-        // creating a block to silence clippy warning
-        {
-            // Test: Two limbs right shift from 0x0010_0000_0000_0000 and 0 by 1 bit.
-            // Expects resulting limbs: [0x0080_0000_0000_000, 0] with no fractional part.
-            assert_eq!(
-                Uint::<65, 2>::from_limbs([0x0010_0000_0000_0000, 0]).overflowing_shr(1),
-                (Uint::<65, 2>::from_limbs([0x0080_0000_0000_000, 0]), false)
-            );
-        }
+        // Test: Two limbs right shift from 0x0010_0000_0000_0000 and 0 by 1 bit.
+        // Expects resulting limbs: [0x0080_0000_0000_000, 0] with no fractional part.
+        assert_eq!(
+            Uint::<65, 2>::from_limbs([0x0010_0000_0000_0000, 0]).overflowing_shr(1),
+            (Uint::<65, 2>::from_limbs([0x0008_0000_0000_0000, 0]), false)
+        );
 
         // Test: Shift beyond single limb capacity with MAX value.
         // Expects the highest possible value in 256-bit representation with a detected

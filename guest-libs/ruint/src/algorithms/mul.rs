@@ -2,46 +2,6 @@
 
 use crate::algorithms::{ops::sbb, DoubleWord};
 
-#[inline]
-#[allow(clippy::cast_possible_truncation)] // Intentional truncation.
-#[allow(dead_code)] // Used for testing
-pub fn addmul_ref(result: &mut [u64], a: &[u64], b: &[u64]) -> bool {
-    let mut overflow = 0;
-    for (i, a) in a.iter().copied().enumerate() {
-        let mut result = result.iter_mut().skip(i);
-        let mut b = b.iter().copied();
-        let mut carry = 0_u128;
-        loop {
-            match (result.next(), b.next()) {
-                // Partial product.
-                (Some(result), Some(b)) => {
-                    carry += u128::from(*result) + u128::from(a) * u128::from(b);
-                    *result = carry as u64;
-                    carry >>= 64;
-                }
-                // Carry propagation.
-                (Some(result), None) => {
-                    carry += u128::from(*result);
-                    *result = carry as u64;
-                    carry >>= 64;
-                }
-                // Excess product.
-                (None, Some(b)) => {
-                    carry += u128::from(a) * u128::from(b);
-                    overflow |= carry as u64;
-                    carry >>= 64;
-                }
-                // Fin.
-                (None, None) => {
-                    break;
-                }
-            }
-        }
-        overflow |= carry as u64;
-    }
-    overflow != 0
-}
-
 /// ⚠️ Computes `result += a * b` and checks for overflow.
 ///
 /// **Warning.** This function is not part of the stable API.
@@ -56,13 +16,13 @@ pub fn addmul_ref(result: &mut [u64], a: &[u64], b: &[u64]) -> bool {
 /// # Examples
 ///
 /// ```
-/// # use openvm_ruint::algorithms::addmul;
+/// # use ruint::algorithms::addmul;
 /// let mut result = [0];
 /// let overflow = addmul(&mut result, &[3], &[4]);
 /// assert_eq!(overflow, false);
 /// assert_eq!(result, [12]);
 /// ```
-#[inline]
+#[inline(always)]
 pub fn addmul(mut lhs: &mut [u64], mut a: &[u64], mut b: &[u64]) -> bool {
     // Trim zeros from `a`
     while let [0, rest @ ..] = a {
@@ -116,15 +76,13 @@ pub fn addmul(mut lhs: &mut [u64], mut a: &[u64], mut b: &[u64]) -> bool {
 }
 
 /// Computes `lhs += a` and returns the carry.
-#[inline]
+#[inline(always)]
 pub fn add_nx1(lhs: &mut [u64], mut a: u64) -> u64 {
     if a == 0 {
         return 0;
     }
     for lhs in lhs {
-        let sum = u128::add(*lhs, a);
-        *lhs = sum.low();
-        a = sum.high();
+        (*lhs, a) = u128::add(*lhs, a).split();
         if a == 0 {
             return 0;
         }
@@ -147,18 +105,16 @@ pub fn addmul_n(lhs: &mut [u64], a: &[u64], b: &[u64]) {
         2 => addmul_2(lhs, a, b),
         3 => addmul_3(lhs, a, b),
         4 => addmul_4(lhs, a, b),
-        _ => {
-            let _ = addmul(lhs, a, b);
-        }
+        _ => _ = addmul(lhs, a, b),
     }
 }
 
 /// Computes `lhs += a * b` for 1 limb.
 #[inline(always)]
 fn addmul_1(lhs: &mut [u64], a: &[u64], b: &[u64]) {
-    assert_eq!(lhs.len(), 1);
-    assert_eq!(a.len(), 1);
-    assert_eq!(b.len(), 1);
+    assume!(lhs.len() == 1);
+    assume!(a.len() == 1);
+    assume!(b.len() == 1);
 
     mac(&mut lhs[0], a[0], b[0], 0);
 }
@@ -166,9 +122,9 @@ fn addmul_1(lhs: &mut [u64], a: &[u64], b: &[u64]) {
 /// Computes `lhs += a * b` for 2 limbs.
 #[inline(always)]
 fn addmul_2(lhs: &mut [u64], a: &[u64], b: &[u64]) {
-    assert_eq!(lhs.len(), 2);
-    assert_eq!(a.len(), 2);
-    assert_eq!(b.len(), 2);
+    assume!(lhs.len() == 2);
+    assume!(a.len() == 2);
+    assume!(b.len() == 2);
 
     let carry = mac(&mut lhs[0], a[0], b[0], 0);
     mac(&mut lhs[1], a[0], b[1], carry);
@@ -179,9 +135,9 @@ fn addmul_2(lhs: &mut [u64], a: &[u64], b: &[u64]) {
 /// Computes `lhs += a * b` for 3 limbs.
 #[inline(always)]
 fn addmul_3(lhs: &mut [u64], a: &[u64], b: &[u64]) {
-    assert_eq!(lhs.len(), 3);
-    assert_eq!(a.len(), 3);
-    assert_eq!(b.len(), 3);
+    assume!(lhs.len() == 3);
+    assume!(a.len() == 3);
+    assume!(b.len() == 3);
 
     let carry = mac(&mut lhs[0], a[0], b[0], 0);
     let carry = mac(&mut lhs[1], a[0], b[1], carry);
@@ -196,9 +152,9 @@ fn addmul_3(lhs: &mut [u64], a: &[u64], b: &[u64]) {
 /// Computes `lhs += a * b` for 4 limbs.
 #[inline(always)]
 fn addmul_4(lhs: &mut [u64], a: &[u64], b: &[u64]) {
-    assert_eq!(lhs.len(), 4);
-    assert_eq!(a.len(), 4);
-    assert_eq!(b.len(), 4);
+    assume!(lhs.len() == 4);
+    assume!(a.len() == 4);
+    assume!(b.len() == 4);
 
     let carry = mac(&mut lhs[0], a[0], b[0], 0);
     let carry = mac(&mut lhs[1], a[0], b[1], carry);
@@ -223,13 +179,11 @@ fn mac(lhs: &mut u64, a: u64, b: u64, c: u64) -> u64 {
 }
 
 /// Computes `lhs *= a` and returns the carry.
-#[inline]
+#[inline(always)]
 pub fn mul_nx1(lhs: &mut [u64], a: u64) -> u64 {
     let mut carry = 0;
-    for lhs in &mut *lhs {
-        let product = u128::muladd(*lhs, a, carry);
-        *lhs = product.low();
-        carry = product.high();
+    for lhs in lhs {
+        (*lhs, carry) = u128::muladd(*lhs, a, carry).split();
     }
     carry
 }
@@ -244,14 +198,12 @@ pub fn mul_nx1(lhs: &mut [u64], a: u64) -> u64 {
 /// \\\\ \mathsf{carry} &= \floor{\frac{\mathsf{lhs} + \mathsf{a} ⋅ \mathsf{b}
 /// }{2^{64⋅N}}} \end{aligned}
 /// $$
-#[inline]
+#[inline(always)]
 pub fn addmul_nx1(lhs: &mut [u64], a: &[u64], b: u64) -> u64 {
-    debug_assert_eq!(lhs.len(), a.len());
+    assume!(lhs.len() == a.len());
     let mut carry = 0;
-    for (lhs, a) in lhs.iter_mut().zip(a.iter().copied()) {
-        let product = u128::muladd2(a, b, carry, *lhs);
-        *lhs = product.low();
-        carry = product.high();
+    for i in 0..a.len() {
+        (lhs[i], carry) = u128::muladd2(a[i], b, carry, lhs[i]).split();
     }
     carry
 }
@@ -267,23 +219,18 @@ pub fn addmul_nx1(lhs: &mut [u64], a: &[u64], b: u64) -> u64 {
 /// \mathsf{lhs}}{2^{64⋅N}}} \end{aligned}
 /// $$
 // OPT: `carry` and `borrow` can probably be merged into a single var.
-#[inline]
+#[inline(always)]
 pub fn submul_nx1(lhs: &mut [u64], a: &[u64], b: u64) -> u64 {
-    debug_assert_eq!(lhs.len(), a.len());
+    assume!(lhs.len() == a.len());
     let mut carry = 0;
     let mut borrow = 0;
-    for (lhs, a) in lhs.iter_mut().zip(a.iter().copied()) {
+    for i in 0..a.len() {
         // Compute product limbs
-        let limb = {
-            let product = u128::muladd(a, b, carry);
-            carry = product.high();
-            product.low()
-        };
+        let limb;
+        (limb, carry) = u128::muladd(a[i], b, carry).split();
 
         // Subtract
-        let (new, b) = sbb(*lhs, limb, borrow);
-        *lhs = new;
-        borrow = b;
+        (lhs[i], borrow) = sbb(lhs[i], limb, borrow);
     }
     borrow + carry
 }
@@ -292,6 +239,44 @@ pub fn submul_nx1(lhs: &mut [u64], a: &[u64], b: u64) -> u64 {
 mod tests {
     use super::*;
     use proptest::{collection, num::u64, proptest};
+
+    #[allow(clippy::cast_possible_truncation)] // Intentional truncation.
+    fn addmul_ref(result: &mut [u64], a: &[u64], b: &[u64]) -> bool {
+        let mut overflow = 0;
+        for (i, a) in a.iter().copied().enumerate() {
+            let mut result = result.iter_mut().skip(i);
+            let mut b = b.iter().copied();
+            let mut carry = 0_u128;
+            loop {
+                match (result.next(), b.next()) {
+                    // Partial product.
+                    (Some(result), Some(b)) => {
+                        carry += u128::from(*result) + u128::from(a) * u128::from(b);
+                        *result = carry as u64;
+                        carry >>= 64;
+                    }
+                    // Carry propagation.
+                    (Some(result), None) => {
+                        carry += u128::from(*result);
+                        *result = carry as u64;
+                        carry >>= 64;
+                    }
+                    // Excess product.
+                    (None, Some(b)) => {
+                        carry += u128::from(a) * u128::from(b);
+                        overflow |= carry as u64;
+                        carry >>= 64;
+                    }
+                    // Fin.
+                    (None, None) => {
+                        break;
+                    }
+                }
+            }
+            overflow |= carry as u64;
+        }
+        overflow != 0
+    }
 
     #[test]
     fn test_addmul() {

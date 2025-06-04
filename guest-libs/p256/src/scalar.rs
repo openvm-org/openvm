@@ -13,7 +13,7 @@ use elliptic_curve::{
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
 
-use crate::{internal::P256Scalar, point::FieldBytes, ORDER_HEX, P256};
+use crate::{internal::P256Scalar, point::FieldBytes, NistP256, ORDER_HEX};
 
 // --- Implement elliptic_curve traits on P256Scalar ---
 
@@ -198,14 +198,14 @@ impl FromUintUnchecked for P256Scalar {
     }
 }
 
-impl From<ScalarPrimitive<P256>> for P256Scalar {
-    fn from(scalar: ScalarPrimitive<P256>) -> Self {
+impl From<ScalarPrimitive<NistP256>> for P256Scalar {
+    fn from(scalar: ScalarPrimitive<NistP256>) -> Self {
         Self::from_le_bytes(&scalar.as_uint().to_le_bytes())
     }
 }
 
-impl From<P256Scalar> for ScalarPrimitive<P256> {
-    fn from(scalar: P256Scalar) -> ScalarPrimitive<P256> {
+impl From<P256Scalar> for ScalarPrimitive<NistP256> {
+    fn from(scalar: P256Scalar) -> ScalarPrimitive<NistP256> {
         ScalarPrimitive::from_slice(&scalar.to_be_bytes()).unwrap()
     }
 }

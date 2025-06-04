@@ -118,7 +118,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
 
         let mut iter = digits.into_iter();
         let mut result = Self::ZERO;
-        let mut power = Self::from(1);
+        let mut power = Self::ONE;
         for digit in iter.by_ref() {
             if digit >= base {
                 return Err(BaseConvertError::InvalidDigit(digit, base));
@@ -315,15 +315,15 @@ mod tests {
     #[test]
     fn test_from_base_be_overflow() {
         assert_eq!(
-            Uint::<0, 0>::from_base_be(10, std::iter::empty()),
+            Uint::<0, 0>::from_base_be(10, core::iter::empty()),
             Ok(Uint::<0, 0>::ZERO)
         );
         assert_eq!(
-            Uint::<0, 0>::from_base_be(10, std::iter::once(0)),
+            Uint::<0, 0>::from_base_be(10, core::iter::once(0)),
             Ok(Uint::<0, 0>::ZERO)
         );
         assert_eq!(
-            Uint::<0, 0>::from_base_be(10, std::iter::once(1)),
+            Uint::<0, 0>::from_base_be(10, core::iter::once(1)),
             Err(BaseConvertError::Overflow)
         );
         assert_eq!(

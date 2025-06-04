@@ -17,7 +17,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// # Examples
     ///
     /// ```
-    /// # use openvm_ruint::{Uint, uint, aliases::*};
+    /// # use ruint::{Uint, uint, aliases::*};
     /// # uint!{
     /// assert_eq!(0_U64.root(2), 0_U64);
     /// assert_eq!(1_U64.root(63), 1_U64);
@@ -31,13 +31,13 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
         assert!(degree > 0, "degree must be greater than zero");
 
         // Handle zero case (including BITS == 0).
-        if self == Self::ZERO {
+        if self.is_zero() {
             return Self::ZERO;
         }
 
         // Handle case where `degree > Self::BITS`.
         if degree >= Self::BITS {
-            return Self::from(1);
+            return Self::ONE;
         }
 
         // Handle case where `degree == 1`.
@@ -107,7 +107,7 @@ mod tests {
                 let lower = root.pow(U::from(degree));
                 assert!(value >= lower);
                 let upper = root
-                    .checked_add(U::from(1))
+                    .checked_add(U::ONE)
                     .and_then(|n| n.checked_pow(U::from(degree)));
                 if let Some(upper) = upper {
                    assert!(value < upper);
@@ -128,7 +128,7 @@ mod tests {
                 let lower = root.pow(U::from(degree));
                 assert!(value >= lower);
                 let upper = root
-                    .checked_add(U::from(1))
+                    .checked_add(U::ONE)
                     .and_then(|n| n.checked_pow(U::from(degree)));
                 if let Some(upper) = upper {
                    assert!(value < upper);

@@ -9,7 +9,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     #[inline]
     #[must_use]
     pub fn checked_log(self, base: Self) -> Option<usize> {
-        if base < Self::from(2) || self == Self::ZERO {
+        if base < Self::from(2) || self.is_zero() {
             return None;
         }
         Some(self.log(base))
@@ -43,7 +43,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     #[inline]
     #[must_use]
     pub fn log(self, base: Self) -> usize {
-        assert!(self != Self::ZERO);
+        assert!(!self.is_zero());
         assert!(base >= Self::from(2));
         if base == Self::from(2) {
             return self.bit_len() - 1;
@@ -64,17 +64,17 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
         loop {
             if let Some(value) = base.checked_pow(result) {
                 if value > self {
-                    assert!(result != Self::ZERO);
-                    result -= Self::from(1);
+                    assert!(!result.is_zero());
+                    result -= Self::ONE;
                     continue;
                 }
             } else {
                 // Overflow, so definitely larger than `value`
-                result -= Self::from(1);
+                result -= Self::ONE;
             }
             break;
         }
-        while let Some(trial) = result.checked_add(Self::from(1)) {
+        while let Some(trial) = result.checked_add(Self::ONE) {
             if let Some(value) = base.checked_pow(trial) {
                 if value <= self {
                     result = trial;
@@ -122,7 +122,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// # Examples
     ///
     /// ```
-    /// # use openvm_ruint::{Uint, uint, aliases::*};
+    /// # use ruint::{Uint, uint, aliases::*};
     /// # uint!{
     /// assert_eq!(0_U64.approx_log2(), f64::NEG_INFINITY);
     /// assert_eq!(1_U64.approx_log2(), 0.0);
@@ -196,7 +196,7 @@ mod tests {
                 if let Some(value) = U::from(b).checked_pow(U::from(e)) {
                     assert!(value > U::ZERO);
                     assert_eq!(value.log(U::from(b)), e);
-                    // assert_eq!(value.log(b + U::from(1)), e as u64);
+                    // assert_eq!(value.log(b + U::ONE), e as u64);
                 }
             });
         });

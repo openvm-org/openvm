@@ -11,7 +11,6 @@ mod add;
 pub mod div;
 mod gcd;
 mod mul;
-#[cfg(feature = "alloc")] // TODO: Make mul_redc alloc-free
 mod mul_redc;
 mod ops;
 mod shift;
@@ -20,12 +19,11 @@ pub use self::{
     add::{adc_n, sbb_n},
     div::div,
     gcd::{gcd, gcd_extended, inv_mod, LehmerMatrix},
-    mul::{add_nx1, addmul, addmul_n, addmul_nx1, addmul_ref, mul_nx1, submul_nx1},
+    mul::{add_nx1, addmul, addmul_n, addmul_nx1, mul_nx1, submul_nx1},
+    mul_redc::{mul_redc, square_redc},
     ops::{adc, sbb},
     shift::{shift_left_small, shift_right_small},
 };
-#[cfg(feature = "alloc")]
-pub use mul_redc::mul_redc;
 
 trait DoubleWord<T>: Sized + Copy {
     fn join(high: T, low: T) -> Self;
@@ -115,4 +113,22 @@ pub fn cmp(left: &[u64], right: &[u64]) -> Ordering {
     }
 
     left.len().cmp(&right.len())
+}
+
+// Helper while [Rust#85532](https://github.com/rust-lang/rust/issues/85532) stabilizes.
+#[inline]
+#[must_use]
+pub const fn carrying_add(lhs: u64, rhs: u64, carry: bool) -> (u64, bool) {
+    let (result, carry_1) = lhs.overflowing_add(rhs);
+    let (result, carry_2) = result.overflowing_add(carry as u64);
+    (result, carry_1 | carry_2)
+}
+
+// Helper while [Rust#85532](https://github.com/rust-lang/rust/issues/85532) stabilizes.
+#[inline]
+#[must_use]
+pub const fn borrowing_sub(lhs: u64, rhs: u64, borrow: bool) -> (u64, bool) {
+    let (result, borrow_1) = lhs.overflowing_sub(rhs);
+    let (result, borrow_2) = result.overflowing_sub(borrow as u64);
+    (result, borrow_1 | borrow_2)
 }

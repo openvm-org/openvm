@@ -1,5 +1,5 @@
-use openvm_ruint::aliases::{B256, U256};
-use openvm_ruint_macro::uint;
+use ruint::aliases::{B256, U256};
+use ruint_macro::uint;
 
 #[test]
 fn test_non_literal() {

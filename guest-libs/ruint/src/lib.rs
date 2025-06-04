@@ -1,26 +1,8 @@
 #![doc = include_str!("../README.md")]
 #![doc(issue_tracker_base_url = "https://github.com/recmo/uint/issues/")]
-// Silenced these warnings because we use our own clippy rules
-// #![warn(
-//     clippy::all,
-//     clippy::pedantic,
-//     clippy::nursery,
-//     clippy::missing_inline_in_public_items,
-//     missing_docs,
-//     unreachable_pub
-// )]
-#![allow(
-    clippy::doc_markdown, // Unfortunately many false positives on Latex.
-    clippy::inline_always,
-    clippy::module_name_repetitions,
-    clippy::redundant_pub_crate,
-    clippy::unreadable_literal,
-    clippy::let_unit_value,
-    clippy::option_if_let_else,
-    clippy::cast_sign_loss,
-    clippy::cast_lossless,
-)]
+#![allow(clippy::all)] // this is a fork, so silence clippy
 #![cfg_attr(test, allow(clippy::wildcard_imports, clippy::cognitive_complexity))]
+#![cfg_attr(not(test), warn(unused_crate_dependencies))]
 #![cfg_attr(not(feature = "std"), no_std)]
 // Unstable features
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
@@ -33,6 +15,9 @@
 )]
 
 #[cfg(feature = "alloc")]
+#[allow(unused_imports)]
+// `unused_imports` triggers on macro_use, which is required by some support
+// modules.
 #[macro_use]
 extern crate alloc;
 
@@ -65,6 +50,11 @@ pub mod support;
 
 #[doc(inline)]
 pub use bit_arr::Bits;
+// For documentation purposes we expose the macro directly, otherwise it is
+// wrapped in ./macros.rs.
+#[cfg(doc)]
+#[doc(inline)]
+pub use ruint_macro::uint;
 
 #[doc(inline)]
 pub use self::{
@@ -73,12 +63,6 @@ pub use self::{
     from::{FromUintError, ToFieldError, ToUintError, UintTryFrom, UintTryTo},
     string::ParseError,
 };
-
-// For documentation purposes we expose the macro directly, otherwise it is
-// wrapped in ./macros.rs.
-#[cfg(doc)]
-#[doc(inline)]
-pub use openvm_ruint_macro::uint;
 
 /// Extra features that are nightly only.
 #[cfg(feature = "generic_const_exprs")]
@@ -90,14 +74,13 @@ pub mod nightly {
     /// `generic_const_exprs`.
     ///
     /// # References
-    /// * [Working group](https://rust-lang.github.io/project-const-generics/)
-    ///   const generics working group.
-    /// * [RFC2000](https://rust-lang.github.io/rfcs/2000-const-generics.html)
-    ///   const generics.
-    /// * [#60551](https://github.com/rust-lang/rust/issues/60551) associated
-    ///   constants in const generics.
-    /// * [#76560](https://github.com/rust-lang/rust/issues/76560) tracking
-    ///   issue for `generic_const_exprs`.
+    /// * [Working group](https://rust-lang.github.io/project-const-generics/) const generics
+    ///   working group.
+    /// * [RFC2000](https://rust-lang.github.io/rfcs/2000-const-generics.html) const generics.
+    /// * [#60551](https://github.com/rust-lang/rust/issues/60551) associated constants in const
+    ///   generics.
+    /// * [#76560](https://github.com/rust-lang/rust/issues/76560) tracking issue for
+    ///   `generic_const_exprs`.
     /// * [Rust blog](https://blog.rust-lang.org/inside-rust/2021/09/06/Splitting-const-generics.html)
     ///   2021-09-06 Splitting const generics.
     pub type Uint<const BITS: usize> = crate::Uint<BITS, { crate::nlimbs(BITS) }>;
@@ -123,23 +106,21 @@ pub mod nightly {
 ///
 /// # Notable differences from `std` uint types.
 ///
-/// * The operators `+`, `-`, `*`, etc. using wrapping math by default. The std
-///   operators panic on overflow in debug, and are undefined in release, see
-///   [reference][std-overflow].
-/// * The [`Uint::checked_shl`], [`Uint::overflowing_shl`], etc return overflow
-///   when non-zero bits are shifted out. In std they return overflow when the
-///   shift amount is greater than the bit size.
-/// * Some methods like [`u64::div_euclid`] and [`u64::rem_euclid`] are left out
-///   because they are meaningless or redundant for unsigned integers. Std has
-///   them for compatibility with their signed integers.
+/// * The operators `+`, `-`, `*`, etc. using wrapping math by default. The std operators panic on
+///   overflow in debug, and are undefined in release, see [reference][std-overflow].
+/// * The [`Uint::checked_shl`], [`Uint::overflowing_shl`], etc return overflow when non-zero bits
+///   are shifted out. In std they return overflow when the shift amount is greater than the bit
+///   size.
+/// * Some methods like [`u64::div_euclid`] and [`u64::rem_euclid`] are left out because they are
+///   meaningless or redundant for unsigned integers. Std has them for compatibility with their
+///   signed integers.
 /// * Many functions that are `const` in std are not in [`Uint`].
-/// * [`Uint::to_le_bytes`] and [`Uint::to_be_bytes`] require the output size to
-///   be provided as a const-generic argument. They will runtime panic if the
-///   provided size is incorrect.
-/// * [`Uint::widening_mul`] takes as argument an [`Uint`] of arbitrary size and
-///   returns a result that is sized to fit the product without overflow (i.e.
-///   the sum of the bit sizes of self and the argument). The std version
-///   requires same-sized arguments and returns a pair of lower and higher bits.
+/// * [`Uint::to_le_bytes`] and [`Uint::to_be_bytes`] require the output size to be provided as a
+///   const-generic argument. They will runtime panic if the provided size is incorrect.
+/// * [`Uint::widening_mul`] takes as argument an [`Uint`] of arbitrary size and returns a result
+///   that is sized to fit the product without overflow (i.e. the sum of the bit sizes of self and
+///   the argument). The std version requires same-sized arguments and returns a pair of lower and
+///   higher bits.
 ///
 /// [std-overflow]: https://doc.rust-lang.org/reference/expressions/operator-expr.html#overflow
 #[cfg(not(target_os = "zkvm"))]
@@ -171,6 +152,8 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// Bit mask for the last limb.
     pub const MASK: u64 = mask(BITS);
 
+    const SHOULD_MASK: bool = BITS > 0 && Self::MASK != u64::MAX;
+
     /// The size of this integer type in bits.
     pub const BITS: usize = BITS;
 
@@ -178,19 +161,18 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// types.
     pub const ZERO: Self = Self::from_limbs([0; LIMBS]);
 
+    /// The value one. This is useful to have as a constant for use in const fn.
+    ///
+    /// Zero if `BITS` is zero.
+    pub const ONE: Self = Self::const_from_u64(1);
+
     /// The smallest value that can be represented by this integer type.
     /// Synonym for [`Self::ZERO`].
     pub const MIN: Self = Self::ZERO;
 
     /// The largest value that can be represented by this integer type,
     /// $2^{\mathtt{BITS}} − 1$.
-    pub const MAX: Self = {
-        let mut limbs = [u64::MAX; LIMBS];
-        if BITS > 0 {
-            limbs[LIMBS - 1] &= Self::MASK;
-        }
-        Self::from_limbs(limbs)
-    };
+    pub const MAX: Self = Self::from_limbs_unmasked([u64::MAX; LIMBS]);
 
     /// View the array of limbs.
     #[inline(always)]
@@ -226,12 +208,12 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     ///
     /// Panics it `LIMBS` is not equal to `nlimbs(BITS)`.
     ///
-    /// Panics if the value is to large for the bit-size of the Uint.
+    /// Panics if the value is too large for the bit-size of the Uint.
     #[inline(always)]
     #[must_use]
     #[track_caller]
     pub const fn from_limbs(limbs: [u64; LIMBS]) -> Self {
-        if BITS > 0 && Self::MASK != u64::MAX {
+        if Self::SHOULD_MASK {
             // FEATURE: (BLOCKED) Add `<{BITS}>` to the type when Display works in const fn.
             assert!(
                 limbs[Self::LIMBS - 1] <= Self::MASK,
@@ -241,11 +223,17 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
         Self { limbs }
     }
 
+    #[inline(always)]
+    #[must_use]
+    const fn from_limbs_unmasked(limbs: [u64; LIMBS]) -> Self {
+        Self { limbs }.masked()
+    }
+
     /// Construct a new integer from little-endian a slice of limbs.
     ///
     /// # Panics
     ///
-    /// Panics if the value is to large for the bit-size of the Uint.
+    /// Panics if the value is too large for the bit-size of the Uint.
     #[inline]
     #[must_use]
     #[track_caller]
@@ -308,6 +296,21 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
             (_, true) => Self::MAX,
         }
     }
+
+    #[inline(always)]
+    fn apply_mask(&mut self) {
+        if Self::SHOULD_MASK {
+            self.limbs[LIMBS - 1] &= Self::MASK;
+        }
+    }
+
+    #[inline(always)]
+    const fn masked(mut self) -> Self {
+        if Self::SHOULD_MASK {
+            self.limbs[LIMBS - 1] &= Self::MASK;
+        }
+        self
+    }
 }
 
 impl<const BITS: usize, const LIMBS: usize> Default for Uint<BITS, LIMBS> {
@@ -343,7 +346,7 @@ pub const fn mask(bits: usize) -> u64 {
 // Not public API.
 #[doc(hidden)]
 pub mod __private {
-    pub use openvm_ruint_macro;
+    pub use ruint_macro;
 }
 
 #[cfg(test)]

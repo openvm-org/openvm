@@ -5,18 +5,16 @@
 use core::hint::black_box;
 
 use hex_literal::hex;
-use k256::{
-    ecdsa::{self, RecoveryId, Signature},
-    Secp256k1,
-};
 use openvm_ecc_guest::{
     algebra::IntMod,
     ecdsa::{verify_prehashed, VerifyingKey},
-    k256::Secp256k1Point,
     weierstrass::WeierstrassPoint,
 };
+use openvm_k256::{
+    ecdsa::{self, signature::hazmat::PrehashVerifier, RecoveryId, Signature},
+    Secp256k1, Secp256k1Point,
+};
 use openvm_keccak256::keccak256;
-use signature::hazmat::PrehashVerifier;
 
 openvm::entry!(main);
 

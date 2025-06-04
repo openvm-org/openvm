@@ -8,12 +8,12 @@ use crate::{
     Uint,
 };
 use bytes::{BufMut, BytesMut};
-use postgres_types::{to_sql_checked, FromSql, IsNull, ToSql, Type, WrongType};
-use std::{
+use core::{
     error::Error,
     iter,
     str::{from_utf8, FromStr},
 };
+use postgres_types::{to_sql_checked, FromSql, IsNull, ToSql, Type, WrongType};
 use thiserror::Error;
 
 type BoxedError = Box<dyn Error + Sync + Send + 'static>;
@@ -167,7 +167,7 @@ impl<const BITS: usize, const LIMBS: usize> ToSql for Uint<BITS, LIMBS> {
             _ => {
                 return Err(Box::new(WrongType::new::<Self>(ty.clone())));
             }
-        };
+        }
         Ok(IsNull::No)
     }
 
@@ -221,7 +221,7 @@ impl<'a, const BITS: usize, const LIMBS: usize> FromSql<'a> for Uint<BITS, LIMBS
                 let mut raw = raw.to_owned();
                 if padding > 0 {
                     for i in (1..raw.len()).rev() {
-                        raw[i] = raw[i] >> padding | raw[i - 1] << (8 - padding);
+                        raw[i] = (raw[i] >> padding) | (raw[i - 1] << (8 - padding));
                     }
                     raw[0] >>= padding;
                 }
@@ -445,7 +445,6 @@ mod tests {
         if ty == &Type::FLOAT8 && f64::from(value).is_infinite() {
             return;
         }
-        // dbg!(hex::encode(&serialized));
 
         // Fetch ground truth value from Postgres
         let expr = match *ty {
@@ -461,12 +460,10 @@ mod tests {
             Type::JSON | Type::JSONB => format!("'\"{value:#x}\"'::{}", ty.name()),
             _ => format!("{value}::{}", ty.name()),
         };
-        // dbg!(&expr);
         let ground_truth = {
             let mut client = client.lock().unwrap();
             get_binary(&mut client, &expr)
         };
-        // dbg!(hex::encode(&ground_truth));
 
         // Compare with ground truth, for float we allow tiny rounding error
         if ty == &Type::FLOAT4 {
@@ -507,7 +504,7 @@ mod tests {
             // with the `PROPTEST_CASES` env variable.
             let mut config = ProptestConfig::default();
             // No point in running many values for small sizes
-            if BITS < 4 { config.cases = 16; };
+            if BITS < 4 { config.cases = 16; }
 
             proptest!(config, |(value: Uint<BITS, LIMBS>)| {
 

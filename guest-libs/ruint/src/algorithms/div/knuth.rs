@@ -8,14 +8,15 @@ use crate::{
 
 /// ⚠️ In-place Knuth normalized long division with reciprocals.
 ///
-/// Requires
-/// * the highest bit of the divisor to be set,
-/// * the `divisor` and `numerator` to be at least two limbs, and
-/// * `numerator` is at least as long as `divisor`.
+/// # Conditions of Use
+///
+/// * The highest (most-significant) bit of the divisor MUST be set.
+/// * The `divisor` and `numerator` MUST each be at least two limbs.
+/// * `numerator` MUST contain at at least as many elements as `divisor`.
 ///
 /// # Panics
 ///
-/// May panic if the above requirements are not met.
+/// May panic if any condition of use is violated.
 #[inline]
 #[allow(clippy::many_single_char_names)]
 pub fn div_nxm_normalized(numerator: &mut [u64], divisor: &[u64]) {
@@ -75,14 +76,16 @@ pub fn div_nxm_normalized(numerator: &mut [u64], divisor: &[u64]) {
 
 /// ⚠️ In-place Knuth long division with implicit normalization and reciprocals.
 ///
-/// Requires
-/// * the highest limb of the divisor to be non-zero,
-/// * the `divisor` and `numerator` to be at least two limbs, and
-/// * `numerator` is at least as long as `divisor`.
+/// # Conditions of use:
+///
+/// * `divisor` MUST NOT be empty.
+/// * The highest (most-significant) limb of `divisor` MUST be non-zero.
+/// * `divisor` and `numerator` MUST contain at least three limbs.
+/// * `numerator` MUST contain at at least as many elements as `divisor`.
 ///
 /// # Panics
 ///
-/// May panic if the above requirements are not met.
+/// May panic if any condition of use is violated.
 #[inline]
 #[allow(clippy::many_single_char_names)]
 pub fn div_nxm(numerator: &mut [u64], divisor: &mut [u64]) {

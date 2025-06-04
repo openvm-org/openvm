@@ -1,9 +1,9 @@
 [advisories]
-vulnerability = "deny"
-unmaintained = "warn"
-unsound = "warn"
-yanked = "warn"
-notice = "warn"
+version = 2
+ignore = [
+    { id = "RUSTSEC-2024-0388", reason = "this is an unmaintained transitive subdep of a dev dep" },
+    { id = "RUSTSEC-2024-0436", reason = "this is an unmaintained transitive subdep of a dep" },
+]
 
 [bans]
 multiple-versions = "warn"
@@ -11,10 +11,9 @@ wildcards = "warn"
 highlight = "all"
 
 [licenses]
-unlicensed = "deny"
+version = 2
 confidence-threshold = 0.9
 # copyleft = "deny"
-
 allow = [
     "MIT",
     "MIT-0",
@@ -26,7 +25,9 @@ allow = [
     "Unicode-DFS-2016",
     "Unlicense",
     "MPL-2.0",
-    "CC0-1.0"
+    "CC0-1.0",
+    "Unicode-3.0",
+    "Zlib",
 ]
 
 [sources]

@@ -8,18 +8,14 @@ members = []
 
 [dependencies]
 
-openvm = { path = "../../crates/toolchain/openvm", features = ["std"] }
-openvm-algebra-guest = { path = "../../extensions/algebra/guest" }
-openvm-algebra-moduli-macros = { path = "../../extensions/algebra/moduli-macros" }
-openvm-algebra-complex-macros = { path = "../../extensions/algebra/complex-macros" }
-openvm-ecc-guest = { path = "../../extensions/ecc/guest" }
-openvm-pairing = { path = "../../guest-libs/pairing/", features = [
+openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
+    "std",
+] }
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-pairing = { git = "https://github.com/openvm-org/openvm.git", features = [
     "bls12_381",
 ] }
-openvm-pairing-guest = { path = "../../extensions/pairing/guest", features = [
-    "bls12_381",
-] }
-openvm-platform = { path = "../../crates/toolchain/platform" }
 
 hex-literal = { version = "0.4.1", default-features = false }
 

@@ -2,10 +2,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use elliptic_curve::{CurveArithmetic, Group, PrimeField};
+use openvm_p256::NistP256;
 // clippy thinks this is unused, but it's used in the init! macro
 #[allow(unused)]
 use openvm_p256::P256Point;
-use openvm_p256::P256;
 
 openvm::init!("openvm_init_mul.rs");
 
@@ -16,20 +16,20 @@ use test_vectors::{ADD_TEST_VECTORS, MUL_TEST_VECTORS};
 
 // Taken from https://github.com/RustCrypto/elliptic-curves/blob/master/primeorder/src/dev.rs
 pub fn main() {
-    let generator = <P256 as CurveArithmetic>::ProjectivePoint::generator();
+    let generator = <NistP256 as CurveArithmetic>::ProjectivePoint::generator();
 
     for (k, coords) in ADD_TEST_VECTORS
         .iter()
         .enumerate()
         .map(|(k, coords)| {
             (
-                <P256 as CurveArithmetic>::Scalar::from(k as u64 + 1),
+                <NistP256 as CurveArithmetic>::Scalar::from(k as u64 + 1),
                 *coords,
             )
         })
         .chain(MUL_TEST_VECTORS.iter().cloned().map(|(k, x, y)| {
             (
-                <P256 as CurveArithmetic>::Scalar::from_repr(k.into()).unwrap(),
+                <NistP256 as CurveArithmetic>::Scalar::from_repr(k.into()).unwrap(),
                 (x, y),
             )
         }))

@@ -237,10 +237,9 @@ once_cell = { version = "1.20", default-features = false }
 
 # cryptography, default-features = false for no_std
 tiny-keccak = { version = "2.0.2", features = ["keccak"] }
-k256 = { version = "0.13.3", default-features = false }
-p256 = { version = "0.13.2", default-features = false }
+k256 = { version = "0.13.4", default-features = false }
 elliptic-curve = { version = "0.13.8", default-features = false }
-ecdsa = { version = "0.16.9", default-features = false }
+ecdsa-core = { version = "0.16.9", package = "ecdsa", default-features = false }
 num-bigint = { version = "0.4.6", default-features = false }
 num-integer = { version = "0.1.46", default-features = false }
 num-traits = { version = "0.2.19", default-features = false }

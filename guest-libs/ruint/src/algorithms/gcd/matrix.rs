@@ -188,7 +188,6 @@ impl Matrix {
 
         // Compute a2
         let q = a0 / a1;
-        // dbg!(q);
         let mut a2 = a0 - q * a1;
         let mut k2 = k0 + q * k1;
         if a2 < LIMIT {
@@ -205,7 +204,6 @@ impl Matrix {
 
         // Compute a3
         let q = a1 / a2;
-        // dbg!(q);
         let mut a3 = a1 - q * a2;
         let mut k3 = k1 + q * k2;
 
@@ -222,7 +220,6 @@ impl Matrix {
             debug_assert!(a2 < a3);
             debug_assert!(a2 > 0);
             let q = a3 / a2;
-            // dbg!(q);
             a3 -= q * a2;
             k3 += q * k2;
             if a3 < LIMIT {
@@ -239,7 +236,6 @@ impl Matrix {
             debug_assert!(a2 < a3);
             debug_assert!(a2 > 0);
             let q = a3 / a2;
-            // dbg!(q);
             a3 -= q * a2;
             k3 += q * k2;
         }
@@ -445,9 +441,7 @@ mod tests {
         const_for!(BITS in SIZES {
             const LIMBS: usize = nlimbs(BITS);
             type U = Uint<BITS, LIMBS>;
-            // TODO: Increase cases when perf is better.
-            let mut config = Config::default();
-            config.cases = min(config.cases, if BITS > 500 { 12 } else { 40 });
+            let config = Config { cases: 10, ..Default::default() };
             proptest!(config, |(a: U, b: U)| {
                 test_form_uint_one(a, b);
             });

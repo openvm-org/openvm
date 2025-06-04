@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::ops::{Add, AddAssign, Mul};
 
-use ecdsa::{
+use ecdsa_core::{
     self,
     hazmat::{bits2field, DigestPrimitive},
     signature::{
@@ -9,11 +9,12 @@ use ecdsa::{
         hazmat::PrehashVerifier,
         DigestVerifier, Verifier,
     },
-    Error, RecoveryId, Result, Signature, SignatureSize,
+    EncodedPoint, Error, RecoveryId, Result, Signature, SignatureSize,
 };
 use elliptic_curve::{
     generic_array::ArrayLength,
-    sec1::{ModulusSize, Tag},
+    sec1::{FromEncodedPoint, ModulusSize, Tag, ToEncodedPoint},
+    subtle::{Choice, ConditionallySelectable, CtOption},
     CurveArithmetic, FieldBytesSize, PrimeCurve,
 };
 use openvm_algebra_guest::{DivUnsafe, IntMod, Reduce};
@@ -270,6 +271,61 @@ where
 {
     fn verify(&self, msg: &[u8], signature: &Signature<C>) -> Result<()> {
         self.verify_digest(C::Digest::new_with_prefix(msg), signature)
+    }
+}
+
+//
+// copied from `ecdsa`
+//
+impl<C> VerifyingKey<C>
+where
+    C: CurveArithmetic + IntrinsicCurve,
+    AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C> + Default + ConditionallySelectable,
+    FieldBytesSize<C>: ModulusSize,
+{
+    /// Initialize [`VerifyingKey`] from an [`EncodedPoint`].
+    pub fn from_encoded_point(public_key: &EncodedPoint<C>) -> Result<Self> {
+        Option::from(PublicKey::<C>::from_encoded_point(public_key))
+            .map(|public_key| Self { inner: public_key })
+            .ok_or_else(Error::new)
+    }
+
+    /// Serialize this [`VerifyingKey`] as a SEC1 [`EncodedPoint`], optionally
+    /// applying point compression.
+    pub fn to_encoded_point(&self, compress: bool) -> EncodedPoint<C> {
+        self.inner.to_encoded_point(compress)
+    }
+}
+
+//
+// sec1 traits copied from elliptic_curve
+//
+impl<C> FromEncodedPoint<C> for PublicKey<C>
+where
+    C: CurveArithmetic + IntrinsicCurve,
+    AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C> + Default + ConditionallySelectable,
+    FieldBytesSize<C>: ModulusSize,
+{
+    /// Initialize [`PublicKey`] from an [`EncodedPoint`]
+    fn from_encoded_point(encoded_point: &EncodedPoint<C>) -> CtOption<Self> {
+        AffinePoint::<C>::from_encoded_point(encoded_point).and_then(|point| {
+            // Defeating the point of `subtle`, but the use case is specifically a public key
+            let is_identity = Choice::from(u8::from(encoded_point.is_identity()));
+            CtOption::new(PublicKey { point }, !is_identity)
+        })
+    }
+}
+
+impl<C> ToEncodedPoint<C> for PublicKey<C>
+where
+    C: CurveArithmetic + IntrinsicCurve,
+    AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
+    FieldBytesSize<C>: ModulusSize,
+{
+    /// Serialize this [`PublicKey`] as a SEC1 [`EncodedPoint`], optionally applying
+    /// point compression
+    fn to_encoded_point(&self, compress: bool) -> EncodedPoint<C> {
+        self.point.to_encoded_point(compress)
     }
 }
 

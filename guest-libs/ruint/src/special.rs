@@ -19,7 +19,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// Returns `true` if and only if `self == 2^k` for some `k`.
     #[inline]
     #[must_use]
-    pub fn is_power_of_two(self) -> bool {
+    pub const fn is_power_of_two(self) -> bool {
         self.count_ones() == 1
     }
 
@@ -42,7 +42,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// # Examples
     ///
     /// ```
-    /// # use openvm_ruint::{Uint, uint, aliases::U64};
+    /// # use ruint::{Uint, uint, aliases::U64};
     /// # uint!{
     /// assert_eq!(0_U64.checked_next_power_of_two(), Some(1_U64));
     /// assert_eq!(1_U64.checked_next_power_of_two(), Some(1_U64));
@@ -61,7 +61,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
         if exp >= BITS {
             return None;
         }
-        Some(Self::from(1) << exp)
+        Some(Self::ONE << exp)
     }
 }
 
@@ -87,7 +87,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// # Examples
     ///
     /// ```
-    /// # use openvm_ruint::{Uint, uint, aliases::U64};
+    /// # use ruint::{Uint, uint, aliases::U64};
     /// # uint!{
     /// assert_eq!(16_U64.checked_next_multiple_of(8_U64), Some(16_U64));
     /// assert_eq!(23_U64.checked_next_multiple_of(8_U64), Some(24_U64));
@@ -97,7 +97,7 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     /// ```
     ///
     /// ```
-    /// # use openvm_ruint::{Uint, uint};
+    /// # use ruint::{Uint, uint};
     /// # uint!{
     /// assert_eq!(0_U0.checked_next_multiple_of(0_U0), None);
     /// assert_eq!(0_U1.checked_next_multiple_of(0_U1), None);
@@ -109,14 +109,14 @@ impl<const BITS: usize, const LIMBS: usize> Uint<BITS, LIMBS> {
     #[inline]
     #[must_use]
     pub fn checked_next_multiple_of(self, rhs: Self) -> Option<Self> {
-        if rhs == Self::ZERO {
+        if rhs.is_zero() {
             return None;
         }
         let (q, r) = self.div_rem(rhs);
-        if r == Self::ZERO {
+        if r.is_zero() {
             return Some(self);
         }
-        let q = q.checked_add(Self::from(1))?;
+        let q = q.checked_add(Self::ONE)?;
         q.checked_mul(rhs)
     }
 }

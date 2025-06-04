@@ -65,7 +65,7 @@ alias! {
 // TODO: I0, I1, I8, ... I4096
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use super::*;
 
     #[test]

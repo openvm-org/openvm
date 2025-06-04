@@ -10,12 +10,10 @@
 /// will result in an undefined behavior.
 use core::{cmp::Ordering, mem::MaybeUninit};
 
-use crate::Uint;
-
-// clippy thinks this is unused, but its needed to link the extern functions
-// below
 #[allow(unused_imports)]
-use openvm_bigint_guest::externs::*;
+use openvm_bigint_guest::externs;
+
+use crate::Uint; // necessary for linking
 
 extern "C" {
     /// Add two 256-bit numbers and store in `result`.

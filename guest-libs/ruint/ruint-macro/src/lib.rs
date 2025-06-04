@@ -1,6 +1,6 @@
 #![doc = include_str!("../README.md")]
-// Silenced these warnings because we use our own clippy rules
-//#![warn(clippy::all, clippy::pedantic, clippy::cargo, clippy::nursery)]
+#![warn(clippy::all, clippy::pedantic, clippy::nursery)]
+
 use proc_macro::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream, TokenTree};
 use std::fmt::{self, Write};
 
@@ -185,7 +185,7 @@ struct Transformer {
 impl Transformer {
     fn new(ruint_crate: Option<TokenStream>) -> Self {
         Self {
-            ruint_crate: ruint_crate.unwrap_or_else(|| "::openvm_ruint".parse().unwrap()),
+            ruint_crate: ruint_crate.unwrap_or_else(|| "::ruint".parse().unwrap()),
         }
     }
 

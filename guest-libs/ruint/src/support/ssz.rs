@@ -44,8 +44,8 @@ impl<const BITS: usize, const LIMBS: usize> Decode for Uint<BITS, LIMBS> {
 
 #[cfg(test)]
 mod tests {
-    use openvm_ruint::{const_for, nlimbs, Uint};
     use proptest::proptest;
+    use ruint::{const_for, nlimbs, Uint};
     use ssz::DecodeError;
 
     #[test]
