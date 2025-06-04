@@ -9,7 +9,7 @@ use openvm_ecc_guest::{
 };
 use openvm_ecc_sw_macros::sw_declare;
 
-use crate::P256;
+use crate::NistP256;
 
 // --- Define the OpenVM modular arithmetic and ecc types ---
 
@@ -53,7 +53,7 @@ impl CyclicGroup for P256Point {
     };
 }
 
-impl IntrinsicCurve for P256 {
+impl IntrinsicCurve for NistP256 {
     type Scalar = P256Scalar;
     type Point = P256Point;
 
