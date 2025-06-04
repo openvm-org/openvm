@@ -509,10 +509,11 @@ macro_rules! impl_sw_group_ops {
                     *self = p2.clone();
                 } else if p2.is_identity_impl::<CHECK_SETUP>() {
                     // do nothing
-                } else if unsafe { self.x.eq_impl::<false>(&p2.x) } { // Safety: we called IntMod setup above
-                    let sum_ys = unsafe { self.y.add_ref::<false>(&p2.y) };
+                } else if unsafe { self.x() == p2.x() } { // Safety: we called IntMod setup above
+                    let sum_ys = unsafe { self.y() + p2.y() };
                     // Safety: we called IntMod setup above
-                    if unsafe { IntMod::eq_impl::<false>(&sum_ys, &<$field as IntMod>::ZERO) } {
+                    if sum_ys == <$field as IntMod>::ZERO {
+                    // if unsafe { IntMod::eq_impl::<false>(&sum_ys, &<$field as IntMod>::ZERO) } {
                         *self = Self::identity();
                     } else {
                         unsafe {

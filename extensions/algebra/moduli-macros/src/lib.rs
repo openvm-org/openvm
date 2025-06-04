@@ -553,7 +553,8 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     #[inline(always)]
                     fn add(self, other: &'a #struct_name) -> Self::Output {
                         // Safety: ensure setup
-                        unsafe { self.add_ref::<true>(other) }
+                        // unsafe { self.add_ref::<true>(other) }
+                        unsafe { self.add_ref::<false>(other) }
                     }
                 }
 
