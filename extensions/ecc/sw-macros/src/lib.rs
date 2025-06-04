@@ -251,43 +251,6 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     Self::set_up_once();
                 }
 
-                fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
-                    use openvm_algebra_guest::IntMod;
-
-                    if CHECK_SETUP {
-                        // Call setup here so we skip it below
-                        #intmod_type::set_up_once();
-                    }
-
-                    if self.is_identity_impl::<CHECK_SETUP>() {
-                        *self = p2.clone();
-                    } else if p2.is_identity_impl::<CHECK_SETUP>() {
-                        // do nothing
-                    } else if unsafe { self.x.eq_impl::<false>(&p2.x) } { // Safety: we called IntMod setup above
-                        let sum_ys = unsafe { self.y.add_ref::<false>(&p2.y) };
-                        // Safety: we called IntMod setup above
-                        if unsafe { IntMod::eq_impl::<false>(&sum_ys, &<#intmod_type as IntMod>::ZERO) } {
-                            *self = Self::identity();
-                        } else {
-                            unsafe {
-                                self.double_assign_nonidentity::<CHECK_SETUP>();
-                            }
-                        }
-                    } else {
-                        unsafe {
-                            self.add_ne_assign_nonidentity::<CHECK_SETUP>(p2);
-                        }
-                    }
-                }
-
-                fn double_assign_impl<const CHECK_SETUP: bool>(&mut self) {
-                    if !self.is_identity_impl::<CHECK_SETUP>() {
-                        unsafe {
-                            self.double_assign_nonidentity::<CHECK_SETUP>();
-                        }
-                    }
-                }
-
                 unsafe fn add_ne_nonidentity<const CHECK_SETUP: bool>(&self, p2: &Self) -> Self {
                     Self::add_ne::<CHECK_SETUP>(self, p2)
                 }
@@ -350,7 +313,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             }
 
             mod #group_ops_mod_name {
-                use ::openvm_ecc_guest::{weierstrass::{WeierstrassPoint, FromCompressed}, impl_sw_group_ops, algebra::IntMod};
+                use ::openvm_ecc_guest::{weierstrass::{WeierstrassPoint, TestTrait, FromCompressed}, impl_sw_group_ops, algebra::IntMod};
                 use super::*;
 
                 impl_sw_group_ops!(#struct_name, #intmod_type);

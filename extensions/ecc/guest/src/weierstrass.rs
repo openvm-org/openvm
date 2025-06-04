@@ -40,7 +40,7 @@ pub trait WeierstrassPoint: Clone + Sized {
     /// - If `CHECK_SETUP` is true, checks if setup has been called for this curve and if not, calls
     ///   `Self::set_up_once()`. Only set `CHECK_SETUP` to `false` if you are sure that setup has
     ///   been called already.
-    fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self);
+    // fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self);
 
     /// Double implementation that handles identity.
     ///
@@ -48,7 +48,7 @@ pub trait WeierstrassPoint: Clone + Sized {
     /// - If `CHECK_SETUP` is true, checks if setup has been called for this curve and if not, calls
     ///   `Self::set_up_once()`. Only set `CHECK_SETUP` to `false` if you are sure that setup has
     ///   been called already.
-    fn double_assign_impl<const CHECK_SETUP: bool>(&mut self);
+    // fn double_assign_impl<const CHECK_SETUP: bool>(&mut self);
 
     /// # Safety
     /// - Assumes self != +- p2 and self != identity and p2 != identity.
@@ -111,6 +111,11 @@ pub trait WeierstrassPoint: Clone + Sized {
     }
 }
 
+pub trait TestTrait {
+    fn double_assign_impl<const CHECK_SETUP: bool>(&mut self);
+    fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self);
+}
+
 // Hint for a decompression
 // if possible is true, then `sqrt` is the decompressed y-coordinate
 // if possible is false, then `sqrt` is such that
@@ -169,7 +174,7 @@ pub struct CachedMulTable<'a, C: IntrinsicCurve> {
 
 impl<'a, C: IntrinsicCurve> CachedMulTable<'a, C>
 where
-    C::Point: WeierstrassPoint + Group,
+    C::Point: WeierstrassPoint + Group + TestTrait,
     C::Scalar: IntMod,
 {
     /// Constructor when each element of `bases` has prime torsion or is identity.
@@ -471,6 +476,47 @@ macro_rules! impl_sw_group_ops {
             fn double_assign(&mut self) {
                 self.double_assign_impl::<true>();
             }
+        }
+
+        impl TestTrait for $struct_name {
+            fn double_assign_impl<const CHECK_SETUP: bool>(&mut self) {
+                if !self.is_identity_impl::<CHECK_SETUP>() {
+                    unsafe {
+                        self.double_assign_nonidentity::<CHECK_SETUP>();
+                    }
+                }
+            }
+
+            fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
+                use openvm_algebra_guest::IntMod;
+
+                if CHECK_SETUP {
+                    // Call setup here so we skip it below
+                    <$field>::set_up_once();
+                }
+
+                if self.is_identity_impl::<CHECK_SETUP>() {
+                    *self = p2.clone();
+                } else if p2.is_identity_impl::<CHECK_SETUP>() {
+                    // do nothing
+                } else if unsafe { self.x.eq_impl::<false>(&p2.x) } { // Safety: we called IntMod setup above
+                    let sum_ys = unsafe { self.y.add_ref::<false>(&p2.y) };
+                    // Safety: we called IntMod setup above
+                    if unsafe { IntMod::eq_impl::<false>(&sum_ys, &<$field as IntMod>::ZERO) } {
+                        *self = Self::identity();
+                    } else {
+                        unsafe {
+                            self.double_assign_nonidentity::<CHECK_SETUP>();
+                        }
+                    }
+                } else {
+                    unsafe {
+                        self.add_ne_assign_nonidentity::<CHECK_SETUP>(p2);
+                    }
+                }
+            }
+
+
         }
 
         impl core::ops::Add<&$struct_name> for $struct_name {
