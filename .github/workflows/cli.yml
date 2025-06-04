@@ -45,14 +45,6 @@ jobs:
         run: |
           cargo install --force --locked --path .
 
-      - name: check build consistency
-        working-directory: examples/ecc
-        run: |
-          cargo openvm build
-          mv target/openvm/release/ecc-example.vmexe app1.vmexe
-          cargo openvm build
-          cmp app1.vmexe target/openvm/release/ecc-example.vmexe || (echo "Build is not deterministic!" && exit 1)
-
       - name: Build and run book examples
         working-directory: examples
         run: |
@@ -71,6 +63,14 @@ jobs:
               cd ..
             fi
           done
+
+      - name: check build consistency
+        working-directory: examples/ecc
+        run: |
+          cargo openvm build
+          mv target/openvm/release/ecc-example.vmexe app1.vmexe
+          cargo openvm build
+          cmp app1.vmexe target/openvm/release/ecc-example.vmexe || (echo "Build is not deterministic!" && exit 1)
 
       - name: Run app-level CLI commands
         working-directory: crates/cli
