@@ -9,3 +9,14 @@ path = "src/lib.rs"
 [dependencies]
 cuda-utils = { workspace = true }
 cuda_kernels = { package = "cuda-kernels-tracegen", path = "../../cuda/kernels/tracegen" }
+stark-backend-gpu = { workspace = true }
+openvm-stark-backend = { workspace = true }
+openvm-stark-sdk = { workspace = true }
+
+# openvm
+openvm-circuit-primitives = { workspace = true }
+
+[dev-dependencies]
+rand = { version = "0.8.5", default-features = false }
+p3-field = { workspace = true }
+p3-baby-bear = { workspace = true }
