@@ -35,30 +35,17 @@ use std::{borrow::BorrowMut, mem::size_of};
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct FieldExpressionCoreRecord {
-    pub from_pc: u32,
-    pub from_timestamp: u32,
     pub opcode: u8,
-    pub num_inputs: u8,
-    pub limbs_per_input: u8,
-    pub num_flags: u8,
-}
-
-#[repr(C)]
-pub struct FieldExpressionVarInfo {
-    pub input_limbs: Vec<u32>,
-    pub flag_states: Vec<bool>,
 }
 
 #[derive(Clone)]
 pub struct FieldExpressionMetadata {
     pub total_input_limbs: usize, // num_inputs * limbs_per_input
-    pub num_flags: usize,
 }
 
 pub struct FieldExpressionCoreRecordMut<'a> {
     pub inner: &'a mut FieldExpressionCoreRecord,
-    pub input_limbs: &'a mut [u32],
-    pub flag_states: &'a mut [bool],
+    pub input_limbs: &'a mut [u8],
 }
 
 impl<'a> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressionMetadata> for [u8] {
@@ -66,91 +53,101 @@ impl<'a> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressionMetad
         &'a mut self,
         metadata: FieldExpressionMetadata,
     ) -> FieldExpressionCoreRecordMut<'a> {
-        let (record_buf, rest) =
+        let (record_buf, input_limbs_buf) =
             unsafe { self.split_at_mut_unchecked(size_of::<FieldExpressionCoreRecord>()) };
 
-        // Split rest into input_limbs and flag_states
-        let input_limbs_size = metadata.total_input_limbs * size_of::<u32>();
-        let (input_limbs_buf, flag_states_buf) =
-            unsafe { rest.split_at_mut_unchecked(input_limbs_size) };
+        // The buffer might be larger than we need - just take what we need
+        let required_input_bytes = metadata.total_input_limbs * 4; // 4 bytes per u32
+        assert!(
+            input_limbs_buf.len() >= required_input_bytes,
+            "Buffer too small: {} bytes available, {} bytes required",
+            input_limbs_buf.len(),
+            required_input_bytes
+        );
 
-        let (_, input_limbs, _) = unsafe { input_limbs_buf.align_to_mut::<u32>() };
-        let (_, flag_states, _) = unsafe { flag_states_buf.align_to_mut::<bool>() };
+        let input_limbs = &mut input_limbs_buf[..required_input_bytes];
 
         FieldExpressionCoreRecordMut {
             inner: record_buf.borrow_mut(),
-            input_limbs: &mut input_limbs[..metadata.total_input_limbs],
-            flag_states: &mut flag_states[..metadata.num_flags],
+            input_limbs,
         }
     }
 }
 
 impl<'a> FieldExpressionCoreRecordMut<'a> {
-    pub fn reconstruct_inputs(&self, limb_bits: usize) -> Vec<BigUint> {
-        let mut inputs = Vec::with_capacity(self.inner.num_inputs as usize);
+    pub fn new_from_execution_data(
+        buffer: &'a mut [u8],
+        opcode: u8,
+        inputs: &[BigUint],
+        limb_bits: usize,
+        limbs_per_input: usize,
+    ) -> Self {
+        let record_info = FieldExpressionMetadata {
+            total_input_limbs: inputs.len() * limbs_per_input,
+        };
 
-        for i in 0..self.inner.num_inputs as usize {
-            let limb_start = i * self.inner.limbs_per_input as usize;
-            let limb_end = limb_start + self.inner.limbs_per_input as usize;
+        let mut record: Self = buffer.custom_borrow(record_info);
+        record.fill_from_execution_data(opcode, inputs, limb_bits, limbs_per_input);
+        record
+    }
 
-            let limbs = &self.input_limbs[limb_start..limb_end];
+    pub fn reconstruct_inputs(
+        &self,
+        limb_bits: usize,
+        num_inputs: usize,
+        limbs_per_input: usize,
+    ) -> Vec<BigUint> {
+        let mut inputs = Vec::with_capacity(num_inputs);
 
-            let value = limbs_to_biguint(limbs, limb_bits);
+        for i in 0..num_inputs {
+            let limb_start = i * limbs_per_input;
+            let limb_end = limb_start + limbs_per_input;
+
+            // Convert bytes back to u32s (4 bytes per u32)
+            let byte_start = limb_start * 4;
+            let byte_end = limb_end * 4;
+            let limb_bytes = &self.input_limbs[byte_start..byte_end];
+
+            let mut limbs = Vec::with_capacity(limbs_per_input);
+            for chunk in limb_bytes.chunks_exact(4) {
+                let limb = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                limbs.push(limb);
+            }
+
+            let value = limbs_to_biguint(&limbs, limb_bits);
             inputs.push(value);
         }
 
         inputs
     }
 
-    pub fn reconstruct_flags(&self) -> Vec<bool> {
-        self.flag_states[..self.inner.num_flags as usize].to_vec()
-    }
-
     pub fn fill_from_execution_data(
         &mut self,
-        pc: u32,
-        timestamp: u32,
         opcode: u8,
         inputs: &[BigUint],
-        flags: Vec<bool>,
         limb_bits: usize,
         limbs_per_input: usize,
     ) {
-        assert!(inputs.len() <= 32, "Too many inputs: {} > 32", inputs.len());
-        assert!(
-            flags.len() <= self.flag_states.len(),
-            "Too many flags: {} > {}",
-            flags.len(),
-            self.flag_states.len()
-        );
         assert!(
             inputs.len() * limbs_per_input <= self.input_limbs.len(),
             "Too many input limbs: {} > {}",
             inputs.len() * limbs_per_input,
             self.input_limbs.len()
         );
-
-        // Fill the metadata
-        self.inner.from_pc = pc;
-        self.inner.from_timestamp = timestamp;
         self.inner.opcode = opcode;
-        self.inner.num_inputs = inputs.len() as u8;
-        self.inner.limbs_per_input = limbs_per_input as u8;
-        self.inner.num_flags = flags.len() as u8;
 
-        // Fill variable data
         for (i, input) in inputs.iter().enumerate() {
             let limbs = biguint_to_limbs_vec(input.clone(), limb_bits, limbs_per_input);
-            let start = i * limbs_per_input;
-            self.input_limbs[start..start + limbs_per_input].copy_from_slice(&limbs);
+            let byte_start = i * limbs_per_input * 4; // 4 bytes per u32
+
+            // Convert u32 limbs to bytes
+            for (j, &limb) in limbs.iter().enumerate() {
+                let bytes = limb.to_le_bytes();
+                let byte_offset = byte_start + j * 4;
+                self.input_limbs[byte_offset..byte_offset + 4].copy_from_slice(&bytes);
+            }
         }
-
-        self.flag_states[..flags.len()].copy_from_slice(&flags);
     }
-}
-
-impl FieldExpressionCoreRecord {
-    // Remove the old methods - they're now in FieldExpressionCoreRecordMut
 }
 
 #[derive(Clone)]
@@ -381,7 +378,6 @@ where
     {
         let core_record_metadata = FieldExpressionMetadata {
             total_input_limbs: self.num_inputs() * self.expr.canonical_num_limbs(),
-            num_flags: self.num_flags(),
         };
 
         let (mut adapter_record, mut core_record) = arena.alloc(AdapterCoreLayout::with_metadata(
@@ -396,14 +392,11 @@ where
             .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        let (writes, inputs, flags) = run_field_expression(self, &data, instruction);
+        let (writes, inputs) = run_field_expression(self, &data, instruction);
 
         core_record.fill_from_execution_data(
-            *state.pc,
-            state.memory.timestamp(),
             instruction.opcode.local_opcode_idx(self.offset) as u8,
             &inputs,
-            flags.clone(),
             self.expr.canonical_limb_bits(),
             self.expr.canonical_num_limbs(),
         );
@@ -430,6 +423,8 @@ where
     A: 'static + AdapterTraceFiller<F, CTX>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        // NOTE[teokitan]: This is where GPU acceleration should happen in the future
+
         // Get the core record from the row slice
         let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
@@ -444,18 +439,40 @@ where
 
         let record_metadata = FieldExpressionMetadata {
             total_input_limbs: self.num_inputs() * self.expr.canonical_num_limbs(),
-            num_flags: self.num_flags(),
         };
 
         let record: FieldExpressionCoreRecordMut = core_bytes.custom_borrow(record_metadata);
 
-        // NOTE[teokitan]: This is where GPU acceleration should happen in the future
-        let inputs = record.reconstruct_inputs(self.expr.canonical_limb_bits());
-        let flags = record.reconstruct_flags();
+        let inputs = record.reconstruct_inputs(
+            self.expr.canonical_limb_bits(),
+            self.num_inputs(),
+            self.expr.canonical_num_limbs(),
+        );
+
+        // Reconstruct flags from opcode
+        let local_opcode_idx = record.inner.opcode as usize;
+        let mut flags = vec![];
+        if self.expr.needs_setup() {
+            flags = vec![false; self.num_flags()];
+
+            if let Some(opcode_position) = self
+                .local_opcode_idx
+                .iter()
+                .position(|&idx| idx == local_opcode_idx)
+            {
+                // If this is NOT the last opcode (setup), set the corresponding flag
+                if opcode_position < self.opcode_flag_idx.len() {
+                    let flag_idx = self.opcode_flag_idx[opcode_position];
+                    flags[flag_idx] = true;
+                }
+                // If opcode_position == self.opcode_flag_idx.len(), it's the setup operation
+                // and all flags should remain false (which they already are)
+            }
+        }
 
         let range_checker = self.range_checker.as_ref();
         self.expr
-            .generate_subrow((range_checker, inputs, flags), row_slice);
+            .generate_subrow((range_checker, inputs, flags), core_row);
     }
 
     fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
@@ -514,7 +531,7 @@ fn run_field_expression<F: PrimeField32, A>(
     step: &FieldExpressionStep<A>,
     data: &DynArray<u8>,
     instruction: &Instruction<F>,
-) -> (DynArray<u8>, Vec<BigUint>, Vec<bool>) {
+) -> (DynArray<u8>, Vec<BigUint>) {
     let field_element_limbs = step.expr.canonical_num_limbs();
     let limb_bits = step.expr.canonical_limb_bits();
 
@@ -533,22 +550,29 @@ fn run_field_expression<F: PrimeField32, A>(
 
     let Instruction { opcode, .. } = instruction;
     let local_opcode_idx = opcode.local_opcode_idx(step.offset);
-    let mut flags = vec![];
 
-    // If the chip doesn't need setup, (right now) it must be single op chip and thus no flag is
-    // needed. Otherwise, there is a flag for each opcode and will be derived by
-    // is_valid - sum(flags).
+    // Reconstruct flags from opcode
+    let mut flags = vec![];
     if step.expr.needs_setup() {
         flags = vec![false; step.num_flags()];
-        step.opcode_flag_idx
+
+        // Find which opcode this is in our local_opcode_idx list
+        if let Some(opcode_position) = step
+            .local_opcode_idx
             .iter()
-            .enumerate()
-            .for_each(|(i, &flag_idx)| {
-                flags[flag_idx] = local_opcode_idx == step.local_opcode_idx[i]
-            });
+            .position(|&idx| idx == local_opcode_idx)
+        {
+            // If this is NOT the last opcode (setup), set the corresponding flag
+            if opcode_position < step.opcode_flag_idx.len() {
+                let flag_idx = step.opcode_flag_idx[opcode_position];
+                flags[flag_idx] = true;
+            }
+            // If opcode_position == step.opcode_flag_idx.len(), it's the setup operation
+            // and all flags should remain false (which they already are)
+        }
     }
 
-    let vars = step.expr.execute(inputs.clone(), flags.clone());
+    let vars = step.expr.execute(inputs.clone(), flags);
     assert_eq!(vars.len(), step.num_vars());
 
     let outputs: Vec<BigUint> = step
@@ -565,5 +589,5 @@ fn run_field_expression<F: PrimeField32, A>(
         .collect::<Vec<_>>()
         .into();
 
-    (writes, inputs, flags)
+    (writes, inputs)
 }

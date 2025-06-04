@@ -518,7 +518,8 @@ impl<
             .for_each(|(reads, cols_reads)| {
                 reads
                     .iter()
-                    .zip(cols_reads.iter_mut())
+                    .rev()
+                    .zip(cols_reads.iter_mut().rev())
                     .for_each(|(read, cols_read)| {
                         mem_helper.fill(read.prev_timestamp, timestamp_mm(), cols_read.as_mut());
                     });
