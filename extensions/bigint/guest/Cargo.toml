@@ -13,4 +13,6 @@ strum_macros = { workspace = true }
 
 [features]
 default = []
-export-intrinsics = [] # export extern no_mangle functions for external linkage
+export-intrinsics = [
+    "openvm-platform/rust-runtime",
+] # export extern no_mangle functions for external linkage
