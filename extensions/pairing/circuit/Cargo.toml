@@ -11,7 +11,7 @@ repository.workspace = true
 openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit-derive = { workspace = true }
-openvm-circuit = { workspace = true }
+openvm-circuit = { workspace = true, features = ["parallel"] }
 openvm-ecc-guest = { workspace = true }
 openvm-pairing-guest = { workspace = true, features = [
     "halo2curves",
