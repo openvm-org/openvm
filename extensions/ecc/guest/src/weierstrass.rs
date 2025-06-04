@@ -481,7 +481,7 @@ macro_rules! impl_sw_group_ops {
         impl TestTrait for $struct_name {
             #[inline(never)]
             fn double_assign_impl<const CHECK_SETUP: bool>(&mut self) {
-                if !self.is_identity_impl::<CHECK_SETUP>() {
+                if !self.is_identity() {
                     unsafe {
                         self.double_assign_nonidentity::<CHECK_SETUP>();
                     }
@@ -505,9 +505,9 @@ macro_rules! impl_sw_group_ops {
                     <$field>::set_up_once();
                 }
 
-                if self.is_identity_impl::<CHECK_SETUP>() {
+                if self.is_identity() {
                     *self = p2.clone();
-                } else if p2.is_identity_impl::<CHECK_SETUP>() {
+                } else if p2.is_identity() {
                     // do nothing
                 } else if unsafe { self.x() == p2.x() } { // Safety: we called IntMod setup above
                     let sum_ys = unsafe { self.y() + p2.y() };
