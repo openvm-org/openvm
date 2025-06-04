@@ -1,8 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use openvm_ecc_guest::CyclicGroup;
 #[allow(unused_imports)]
-use openvm_ecc_guest::{k256::Secp256k1Point, p256::P256Point, CyclicGroup};
+use {openvm_k256::Secp256k1Point, openvm_p256::P256Point};
 
 openvm_algebra_moduli_macros::moduli_init! {
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",

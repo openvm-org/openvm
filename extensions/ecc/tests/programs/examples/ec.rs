@@ -3,12 +3,8 @@
 
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
-use openvm_ecc_guest::{
-    k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
-    msm,
-    weierstrass::WeierstrassPoint,
-    Group,
-};
+use openvm_ecc_guest::{msm, weierstrass::WeierstrassPoint, Group};
+use openvm_k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar};
 
 openvm::init!("openvm_init_ec_k256.rs");
 

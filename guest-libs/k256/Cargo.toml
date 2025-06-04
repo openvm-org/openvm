@@ -20,7 +20,7 @@ openvm-ecc-sw-macros = { workspace = true }
 
 once_cell = { workspace = true, optional = true }
 elliptic-curve = { workspace = true }
-ecdsa-core = { version = "0.16.9", package = "ecdsa", optional = true }
+ecdsa-core = { workspace = true, optional = true }
 serde = { workspace = true }
 hex-literal = { workspace = true }
 ff = { workspace = true }

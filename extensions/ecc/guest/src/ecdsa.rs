@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::ops::{Add, AddAssign, Mul};
 
-use ecdsa::{
+use ecdsa_core::{
     self,
     hazmat::{bits2field, DigestPrimitive},
     signature::{

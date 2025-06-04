@@ -3,7 +3,12 @@
 // Use these types instead of unpatched k256::ecdsa::{Signature, VerifyingKey}
 // because those are type aliases that use non-zkvm implementations
 
-pub use ecdsa_core::{Error, RecoveryId};
+#[cfg(any(feature = "ecdsa", feature = "sha256"))]
+pub use ecdsa_core::hazmat;
+pub use ecdsa_core::{
+    signature::{self, Error},
+    RecoveryId,
+};
 
 /// ECDSA/secp256k1 signature (fixed-size)
 pub type Signature = ecdsa_core::Signature<crate::Secp256k1>;
