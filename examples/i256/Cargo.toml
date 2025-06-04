@@ -7,10 +7,20 @@ edition = "2021"
 members = []
 
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
+openvm = { git = "https://github.com/openvm-org/openvm.git", branch = "chore/ecc-cleanup", features = [
     "std",
 ] }
-openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "chore/ecc-cleanup", features = [
+    "export-intrinsics",
+] }
+alloy-primitives = "1.1.2"
 
 [features]
 default = []
+
+[patch.crates-io]
+ruint = { git = "https://github.com/openvm-org/openvm.git", branch = "chore/ecc-cleanup" }
+# alloy-primitives uses ruint
+
+[profile.release]
+lto = "thin"

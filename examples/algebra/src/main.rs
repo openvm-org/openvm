@@ -12,7 +12,7 @@ moduli_declare! {
 // This macro will create two structs, `Complex1` and `Complex2`,
 // one for arithmetic in the field $\mathbb{F}_{998244353}[x]/(x^2 + 1)$,
 // and the other for arithmetic in the field $\mathbb{F}_{1000000007}[x]/(x^2 + 1)$.
-openvm_algebra_complex_macros::complex_declare! {
+openvm_algebra_guest::complex_macros::complex_declare! {
     Complex1 { mod_type = Mod1 },
     Complex2 { mod_type = Mod2 },
 }
