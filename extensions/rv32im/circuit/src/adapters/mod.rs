@@ -211,7 +211,6 @@ where
     imm_le
 }
 
-
 /// Writes `reg_ptr, reg_val` into memory and records the memory access in mutable buffer.
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
 #[inline(always)]
@@ -270,6 +269,11 @@ where
     Ctx: E1E2ExecutionCtx,
 {
     u32::from_le_bytes(memory_read_from_state(state, address_space, ptr))
+}
+
+#[inline(always)]
+pub fn new_read_rv32_register(memory: &GuestMemory, address_space: u32, ptr: u32) -> u32 {
+    u32::from_le_bytes(memory_read(memory, address_space, ptr))
 }
 
 pub fn abstract_compose<T: FieldAlgebra, V: Mul<T, Output = T>>(

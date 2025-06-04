@@ -274,7 +274,10 @@ where
 }
 
 pub struct PublicValuesRecordArena<F> {
-    inner: MatrixRecordArena<F>,
+    pub trace_buffer: Vec<F>,
+    // TODO(ayush): width should be a constant?
+    pub width: usize,
+    pub trace_offset: usize,
 }
 
 impl<'a, F: PrimeField32> RecordArena<'a, EmptyLayout, ()> for PublicValuesRecordArena<F> {
@@ -285,21 +288,24 @@ impl<'a, F: PrimeField32> RecordArena<'a, EmptyLayout, ()> for PublicValuesRecor
 
 impl<F: Field> RowMajorMatrixArena<F> for PublicValuesRecordArena<F> {
     fn with_capacity(height: usize, width: usize) -> Self {
+        let trace_buffer = F::zero_vec(height * width);
         Self {
-            inner: MatrixRecordArena::with_capacity(height, width),
+            trace_buffer,
+            width,
+            trace_offset: 0,
         }
     }
 
     fn width(&self) -> usize {
-        self.inner.width()
+        self.width
     }
 
     fn trace_offset(&self) -> usize {
-        self.inner.trace_offset()
+        self.trace_offset
     }
 
     fn into_matrix(self) -> RowMajorMatrix<F> {
-        self.inner.into_matrix()
+        RowMajorMatrix::new(self.trace_buffer, self.width)
     }
 }
 

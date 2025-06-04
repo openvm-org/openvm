@@ -498,14 +498,19 @@ impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32LoadStoreAdapterSt
         };
         let adapter_row: &mut Rv32LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
 
+        let needs_write = record.rd_rs2_ptr != u32::MAX;
         // Writing in reverse order
-        adapter_row.needs_write = F::from_bool(record.rd_rs2_ptr != u32::MAX);
+        adapter_row.needs_write = F::from_bool(needs_write);
 
-        mem_helper.fill(
-            record.write_prev_timestamp,
-            record.from_timestamp + 2,
-            &mut adapter_row.write_base_aux,
-        );
+        if needs_write {
+            mem_helper.fill(
+                record.write_prev_timestamp,
+                record.from_timestamp + 2,
+                &mut adapter_row.write_base_aux,
+            );
+        } else {
+            mem_helper.fill_zero(&mut adapter_row.write_base_aux);
+        }
 
         adapter_row.mem_as = F::from_canonical_u8(record.mem_as);
         let ptr = record
@@ -610,8 +615,7 @@ where
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
-    )
-    where
+    ) where
         Ctx: E1E2ExecutionCtx,
     {
         let &Instruction {
