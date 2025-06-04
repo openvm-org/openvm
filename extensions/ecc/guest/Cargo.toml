@@ -13,21 +13,15 @@ serde = { workspace = true }
 strum_macros.workspace = true
 ecdsa-core = { workspace = true, features = ["verifying"] }
 elliptic-curve = { workspace = true, features = ["arithmetic", "sec1"] }
-hex-literal = { workspace = true }
 openvm-custom-insn = { workspace = true }
 openvm-rv32im-guest = { workspace = true }
 openvm-algebra-guest = { workspace = true }
 openvm-ecc-sw-macros = { workspace = true }
-openvm-algebra-moduli-macros = { workspace = true }
 once_cell = { workspace = true, features = ["race", "alloc"] }
 
 # Used for `halo2curves` feature
 halo2curves-axiom = { workspace = true, optional = true }
 group = "0.13.0"
-
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
-num-bigint.workspace = true
-lazy_static.workspace = true
 
 [features]
 default = []

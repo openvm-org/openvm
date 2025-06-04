@@ -185,3 +185,6 @@ sqlx = ["dep:sqlx-core", "std", "dep:thiserror"]
 subtle = ["dep:subtle"]
 valuable = ["dep:valuable"]
 zeroize = ["dep:zeroize"]
+
+[package.metadata.cargo-shear]
+ignored = ["criterion", "hex"]
