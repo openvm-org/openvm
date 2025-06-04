@@ -388,7 +388,7 @@ macro_rules! impl_sw_group_ops {
             }
 
             fn is_identity(&self) -> bool {
-                self.x.eq_impl(&<$field as IntMod>::ZERO) && self.y.eq_impl(&<$field as IntMod>::ZERO)
+                self == &<Self as Group>::IDENTITY
             }
         }
 
