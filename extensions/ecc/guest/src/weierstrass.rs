@@ -386,6 +386,10 @@ macro_rules! impl_sw_group_ops {
                     self.double_assign_nonidentity();
                 }
             }
+
+            fn is_identity(&self) -> bool {
+                self.x.eq_impl(&<$field as IntMod>::ZERO) && self.y.eq_impl(&<$field as IntMod>::ZERO)
+            }
         }
 
         impl core::ops::Add<&$struct_name> for $struct_name {
