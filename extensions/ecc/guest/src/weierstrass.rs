@@ -480,7 +480,15 @@ macro_rules! impl_sw_group_ops {
 
         impl TestTrait for $struct_name {
             fn double_assign_impl<const CHECK_SETUP: bool>(&mut self) {
+                /*
                 if !self.is_identity_impl::<CHECK_SETUP>() {
+                    unsafe {
+                        self.double_assign_nonidentity::<CHECK_SETUP>();
+                    }
+                }
+                */
+                use openvm_ecc_guest::weierstrass::WeierstrassPoint;
+                if !self.is_identity() {
                     unsafe {
                         self.double_assign_nonidentity::<CHECK_SETUP>();
                     }
@@ -488,6 +496,7 @@ macro_rules! impl_sw_group_ops {
             }
 
             fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
+                /*
                 use openvm_algebra_guest::IntMod;
 
                 if CHECK_SETUP {
@@ -504,6 +513,25 @@ macro_rules! impl_sw_group_ops {
                     // Safety: we called IntMod setup above
                     if unsafe { IntMod::eq_impl::<false>(&sum_ys, &<$field as IntMod>::ZERO) } {
                         *self = Self::identity();
+                    } else {
+                        unsafe {
+                            self.double_assign_nonidentity::<CHECK_SETUP>();
+                        }
+                    }
+                } else {
+                    unsafe {
+                        self.add_ne_assign_nonidentity::<CHECK_SETUP>(p2);
+                    }
+                }
+                */
+                use openvm_ecc_guest::weierstrass::WeierstrassPoint;
+                if self.is_identity() {
+                    *self = p2.clone();
+                } else if p2.is_identity() {
+                    // do nothing
+                } else if WeierstrassPoint::x(self) == WeierstrassPoint::x(p2) {
+                    if self.y() + p2.y() == <$field as openvm_algebra_guest::Field>::ZERO {
+                        *self = <$struct_name as WeierstrassPoint>::IDENTITY;
                     } else {
                         unsafe {
                             self.double_assign_nonidentity::<CHECK_SETUP>();

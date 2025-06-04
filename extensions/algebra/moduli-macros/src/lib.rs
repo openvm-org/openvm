@@ -694,7 +694,8 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                     #[inline(always)]
                     fn eq(&self, other: &Self) -> bool {
                         // Safety: must check setup
-                        unsafe { self.eq_impl::<true>(other) }
+                        // unsafe { self.eq_impl::<true>(other) }
+                        unsafe { self.eq_impl::<false>(other) }
                     }
                 }
 
