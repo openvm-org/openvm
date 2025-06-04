@@ -1,8 +1,9 @@
 use derive_more::derive::From;
+use hex_literal::hex;
+use lazy_static::lazy_static;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use once_cell::sync::Lazy;
-use openvm_algebra_guest::IntMod;
 use openvm_circuit::{
     arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
     system::phantom::PhantomChip,
@@ -12,10 +13,6 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
-use openvm_ecc_guest::{
-    k256::{SECP256K1_ECC_STRUCT_NAME, SECP256K1_MODULUS, SECP256K1_ORDER},
-    p256::{CURVE_A as P256_A, CURVE_B as P256_B, P256_ECC_STRUCT_NAME, P256_MODULUS, P256_ORDER},
-};
 use openvm_ecc_transpiler::{EccPhantom, Rv32WeierstrassOpcode};
 use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
@@ -58,8 +55,8 @@ pub static P256_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
     struct_name: P256_ECC_STRUCT_NAME.to_string(),
     modulus: P256_MODULUS.clone(),
     scalar: P256_ORDER.clone(),
-    a: BigUint::from_bytes_le(P256_A.as_le_bytes()),
-    b: BigUint::from_bytes_le(P256_B.as_le_bytes()),
+    a: BigUint::from_bytes_le(&P256_A),
+    b: BigUint::from_bytes_le(&P256_B),
 });
 
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
@@ -256,12 +253,20 @@ pub(crate) mod phantom {
         arch::{PhantomSubExecutor, Streams},
         system::memory::MemoryController,
     };
-    use openvm_ecc_guest::weierstrass::DecompressionHint;
     use openvm_instructions::{riscv::RV32_MEMORY_AS, PhantomDiscriminant};
     use openvm_rv32im_circuit::adapters::unsafe_read_rv32_register;
     use openvm_stark_backend::p3_field::PrimeField32;
 
     use super::CurveConfig;
+
+    // Hint for a decompression
+    // if possible is true, then `sqrt` is the decompressed y-coordinate
+    // if possible is false, then `sqrt` is such that
+    // `sqrt^2 = rhs * non_qr` where `rhs` is the rhs of the curve equation
+    pub struct DecompressionHint<T> {
+        pub possible: bool,
+        pub sqrt: T,
+    }
 
     #[derive(derive_new::new)]
     pub struct DecompressHintSubEx(NonQrHintSubEx);
@@ -440,3 +445,31 @@ pub(crate) mod phantom {
         }
     }
 }
+
+// Convenience constants for constructors
+lazy_static! {
+    // The constants are taken from: https://en.bitcoin.it/wiki/Secp256k1
+    pub static ref SECP256K1_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
+        "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
+    ));
+    pub static ref SECP256K1_ORDER: BigUint = BigUint::from_bytes_be(&hex!(
+        "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
+    ));
+}
+
+lazy_static! {
+    // The constants are taken from: https://neuromancer.sk/std/secg/secp256r1
+    pub static ref P256_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
+        "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff"
+    ));
+    pub static ref P256_ORDER: BigUint = BigUint::from_bytes_be(&hex!(
+        "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"
+    ));
+}
+// little-endian
+const P256_A: [u8; 32] = hex!("fcffffffffffffffffffffff00000000000000000000000001000000ffffffff");
+// little-endian
+const P256_B: [u8; 32] = hex!("4b60d2273e3cce3bf6b053ccb0061d65bc86987655bdebb3e7933aaad835c65a");
+
+pub const SECP256K1_ECC_STRUCT_NAME: &str = "Secp256k1Point";
+pub const P256_ECC_STRUCT_NAME: &str = "P256Point";

@@ -20,17 +20,6 @@ pub mod ecdsa;
 /// Weierstrass curve traits
 pub mod weierstrass;
 
-/// Types for Secp256k1 curve with intrinsic functions. Implements traits necessary for ECDSA.
-#[cfg(feature = "k256")]
-pub mod k256;
-
-/// a.k.a. Secp256r1
-#[cfg(feature = "p256")]
-pub mod p256;
-
-#[cfg(all(test, feature = "k256", feature = "p256", not(target_os = "zkvm")))]
-mod tests;
-
 /// This is custom-1 defined in RISC-V spec document
 pub const OPCODE: u8 = 0x2b;
 pub const SW_FUNCT3: u8 = 0b001;

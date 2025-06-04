@@ -111,15 +111,6 @@ pub trait WeierstrassPoint: Clone + Sized {
     }
 }
 
-// Hint for a decompression
-// if possible is true, then `sqrt` is the decompressed y-coordinate
-// if possible is false, then `sqrt` is such that
-// `sqrt^2 = rhs * non_qr` where `rhs` is the rhs of the curve equation
-pub struct DecompressionHint<T> {
-    pub possible: bool,
-    pub sqrt: T,
-}
-
 pub trait FromCompressed<Coordinate> {
     /// Given `x`-coordinate,
     ///
