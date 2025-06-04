@@ -106,7 +106,6 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         offset: usize,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         range_checker: SharedVariableRangeCheckerChip,
-        height: usize,
     ) -> Self {
         let (expr, is_mul_flag, is_div_flag) = fp2_muldiv_expr(config, range_checker.bus());
 
@@ -141,7 +140,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             "Fp2MulDiv",
             false,
         );
-        Self(Fp2Chip::new(air, step, height, mem_helper))
+        Self(Fp2Chip::new(air, step, mem_helper))
     }
 
     pub fn expr(&self) -> &FieldExpr {
@@ -175,7 +174,6 @@ mod tests {
     const NUM_LIMBS: usize = 32;
     const LIMB_BITS: usize = 8;
     const OFFSET: usize = Fp2Opcode::CLASS_OFFSET;
-    const MAX_INS_CAPACITY: usize = 128;
     type F = BabyBear;
 
     fn set_and_execute_rand(
@@ -261,7 +259,6 @@ mod tests {
             OFFSET,
             bitwise_chip.clone(),
             tester.range_checker(),
-            MAX_INS_CAPACITY,
         );
         assert_eq!(
             chip.expr().builder.num_variables,

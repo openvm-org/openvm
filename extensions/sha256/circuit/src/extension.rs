@@ -21,7 +21,6 @@ use strum::IntoEnumIterator;
 use crate::*;
 
 // TODO: this should be decided after e2 execution
-const MAX_INS_CAPACITY: usize = 1 << 22;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Sha256Rv32Config {
@@ -98,7 +97,6 @@ impl<F: PrimeField32> VmExtension<F> for Sha256 {
                 Rv32Sha256Opcode::CLASS_OFFSET,
                 pointer_max_bits,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(

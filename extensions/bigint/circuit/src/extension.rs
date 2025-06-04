@@ -27,7 +27,6 @@ use serde::{Deserialize, Serialize};
 use crate::*;
 
 // TODO: this should be decided after e2 execution
-const MAX_INS_CAPACITY: usize = 1 << 22;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Int256Rv32Config {
@@ -153,7 +152,6 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 bitwise_lu_chip.clone(),
                 Rv32BaseAlu256Opcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
 
@@ -177,7 +175,6 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 bitwise_lu_chip.clone(),
                 Rv32LessThan256Opcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
 
@@ -201,7 +198,6 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 Rv32BranchEqual256Opcode::CLASS_OFFSET,
                 DEFAULT_PC_STEP,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
 
@@ -228,7 +224,6 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 bitwise_lu_chip.clone(),
                 Rv32BranchLessThan256Opcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -251,7 +246,6 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 range_tuple_chip.clone(),
                 Rv32Mul256Opcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
 
@@ -280,7 +274,6 @@ impl<F: PrimeField32> VmExtension<F> for Int256 {
                 range_checker_chip.clone(),
                 Rv32Shift256Opcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
 

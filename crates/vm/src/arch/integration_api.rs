@@ -228,7 +228,6 @@ pub struct NewVmChipWrapper<F, AIR, STEP> {
     pub air: AIR,
     pub step: STEP,
     pub trace_buffer: Vec<F>,
-    // TODO(ayush): width should be a constant?
     width: usize,
     buffer_idx: usize,
     mem_helper: SharedMemoryHelper<F>,
@@ -239,18 +238,20 @@ where
     F: Field,
     AIR: BaseAir<F>,
 {
-    pub fn new(air: AIR, step: STEP, height: usize, mem_helper: SharedMemoryHelper<F>) -> Self {
-        assert!(height == 0 || height.is_power_of_two());
+    pub fn new(air: AIR, step: STEP, mem_helper: SharedMemoryHelper<F>) -> Self {
         let width = air.width();
-        let trace_buffer = F::zero_vec(height * width);
         Self {
             air,
             step,
-            trace_buffer,
+            trace_buffer: vec![],
             width,
             buffer_idx: 0,
             mem_helper,
         }
+    }
+
+    pub fn set_trace_buffer_height(&mut self, height: usize) {
+        self.trace_buffer.resize(height * self.width, F::ZERO);
     }
 }
 

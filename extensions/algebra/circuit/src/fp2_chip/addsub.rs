@@ -67,7 +67,6 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         offset: usize,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         range_checker: SharedVariableRangeCheckerChip,
-        height: usize,
     ) -> Self {
         let (expr, is_add_flag, is_sub_flag) = fp2_addsub_expr(config, range_checker.bus());
 
@@ -102,7 +101,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             "Fp2AddSub",
             false,
         );
-        Self(Fp2Chip::new(air, step, height, mem_helper))
+        Self(Fp2Chip::new(air, step, mem_helper))
     }
     pub fn expr(&self) -> &FieldExpr {
         &self.0.step.expr
@@ -134,7 +133,6 @@ mod tests {
 
     const NUM_LIMBS: usize = 32;
     const LIMB_BITS: usize = 8;
-    const MAX_INS_CAPACITY: usize = 128;
     const OFFSET: usize = Fp2Opcode::CLASS_OFFSET;
     type F = BabyBear;
 
@@ -222,7 +220,6 @@ mod tests {
             OFFSET,
             bitwise_chip.clone(),
             tester.range_checker(),
-            MAX_INS_CAPACITY,
         );
 
         let num_ops = 10;

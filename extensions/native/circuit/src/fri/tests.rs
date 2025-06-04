@@ -20,12 +20,14 @@ const MAX_INS_CAPACITY: usize = 1024;
 type F = BabyBear;
 
 fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FriReducedOpeningChip<F> {
-    FriReducedOpeningChip::<F>::new(
+    let mut chip = FriReducedOpeningChip::<F>::new(
         FriReducedOpeningAir::new(tester.execution_bridge(), tester.memory_bridge()),
         FriReducedOpeningStep::new(),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
-    )
+    );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
+    chip
 }
 
 fn compute_fri_mat_opening<F: Field>(

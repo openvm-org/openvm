@@ -22,7 +22,6 @@ use strum::IntoEnumIterator;
 use crate::*;
 
 // TODO: this should be decided after e2 execution
-const MAX_INS_CAPACITY: usize = 1 << 22;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Keccak256Rv32Config {
@@ -105,7 +104,6 @@ impl<F: PrimeField32> VmExtension<F> for Keccak256 {
                 Rv32KeccakOpcode::CLASS_OFFSET,
                 pointer_max_bits,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(

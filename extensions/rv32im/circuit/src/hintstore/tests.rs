@@ -39,7 +39,7 @@ fn create_test_chip(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let chip = Rv32HintStoreChip::<F>::new(
+    let mut chip = Rv32HintStoreChip::<F>::new(
         Rv32HintStoreAir::new(
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
             tester.memory_bridge(),
@@ -48,9 +48,10 @@ fn create_test_chip(
             tester.address_bits(),
         ),
         Rv32HintStoreStep::new(bitwise_chip.clone(), tester.address_bits(), 0),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
     (chip, bitwise_chip)
 }
 

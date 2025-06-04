@@ -35,7 +35,7 @@ fn create_test_chips(
 ) -> (KeccakVmChip<F>, SharedBitwiseOperationLookupChip<8>) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<8>::new(bitwise_bus);
-    let chip = KeccakVmChip::new(
+    let mut chip = KeccakVmChip::new(
         KeccakVmAir::new(
             tester.execution_bridge(),
             tester.memory_bridge(),
@@ -48,9 +48,10 @@ fn create_test_chips(
             Rv32KeccakOpcode::CLASS_OFFSET,
             tester.address_bits(),
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
     (chip, bitwise_chip)
 }
 

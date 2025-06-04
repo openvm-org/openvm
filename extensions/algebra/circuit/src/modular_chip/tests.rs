@@ -138,8 +138,8 @@ mod addsubtests {
             Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset,
             bitwise_chip.clone(),
             tester.range_checker(),
-            MAX_INS_CAPACITY,
         );
+        chip.0.set_trace_buffer_height(MAX_INS_CAPACITY);
 
         for i in 0..num_ops {
             set_and_execute_addsub(&mut tester, &mut chip, &modulus, i == 0);
@@ -253,8 +253,8 @@ mod muldivtests {
             Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset,
             bitwise_chip.clone(),
             tester.range_checker(),
-            MAX_INS_CAPACITY,
         );
+        chip.0.set_trace_buffer_height(MAX_INS_CAPACITY);
 
         for i in 0..num_ops {
             set_and_execute_muldiv(&mut tester, &mut chip, &modulus, i == 0);
@@ -297,7 +297,7 @@ mod is_equal_tests {
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
         let bitwise_chip = SharedBitwiseOperationLookupChip::<LIMB_BITS>::new(bitwise_bus);
 
-        let chip = ModularIsEqualChip::<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
+        let mut chip = ModularIsEqualChip::<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
             ModularIsEqualAir::new(
                 Rv32IsEqualModAdapterAir::new(
                     tester.execution_bridge(),
@@ -313,9 +313,9 @@ mod is_equal_tests {
                 offset,
                 bitwise_chip.clone(),
             ),
-            MAX_INS_CAPACITY,
             tester.memory_helper(),
         );
+        chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
         (chip, bitwise_chip)
     }

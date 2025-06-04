@@ -49,7 +49,7 @@ fn create_test_chip(
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let range_checker_chip = tester.memory_controller().range_checker.clone();
 
-    let chip = Rv32JalrChip::<F>::new(
+    let mut chip = Rv32JalrChip::<F>::new(
         VmAirWrapper::new(
             Rv32JalrAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
             Rv32JalrCoreAir::new(bitwise_bus, range_checker_chip.bus()),
@@ -59,9 +59,9 @@ fn create_test_chip(
             bitwise_chip.clone(),
             range_checker_chip.clone(),
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip)
 }

@@ -98,8 +98,8 @@ fn test_add_ne() {
         Rv32WeierstrassOpcode::CLASS_OFFSET,
         bitwise_chip.clone(),
         tester.range_checker(),
-        MAX_INS_CAPACITY,
     );
+    chip.0.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     assert_eq!(chip.0.step.expr.builder.num_variables, 3); // lambda, x3, y3
 
@@ -169,8 +169,8 @@ fn test_double() {
         bitwise_chip.clone(),
         tester.range_checker(),
         BigUint::zero(),
-        MAX_INS_CAPACITY,
     );
+    chip.0.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     let (p1_x, p1_y) = SampleEcPoints[1].clone();
     let p1_x_limbs =
@@ -235,8 +235,8 @@ fn test_p256_double() {
         bitwise_chip.clone(),
         tester.range_checker(),
         a.clone(),
-        MAX_INS_CAPACITY,
     );
+    chip.0.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     // Testing data from: http://point-at-infinity.org/ecc/nisttv
     let p1_x = BigUint::from_str_radix(

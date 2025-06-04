@@ -22,7 +22,6 @@ use strum::EnumCount;
 use crate::fp2_chip::{Fp2AddSubChip, Fp2MulDivChip};
 
 // TODO: this should be decided after e2 execution
-const MAX_INS_CAPACITY: usize = 1 << 22;
 
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
@@ -108,7 +107,6 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     start_offset,
                     bitwise_lu_chip.clone(),
                     range_checker.clone(),
-                    MAX_INS_CAPACITY,
                 );
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2AddSubRv32_32(addsub_chip),
@@ -125,7 +123,6 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     start_offset,
                     bitwise_lu_chip.clone(),
                     range_checker.clone(),
-                    MAX_INS_CAPACITY,
                 );
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2MulDivRv32_32(muldiv_chip),
@@ -143,7 +140,6 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     start_offset,
                     bitwise_lu_chip.clone(),
                     range_checker.clone(),
-                    MAX_INS_CAPACITY,
                 );
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2AddSubRv32_48(addsub_chip),
@@ -160,7 +156,6 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                     start_offset,
                     bitwise_lu_chip.clone(),
                     range_checker.clone(),
-                    MAX_INS_CAPACITY,
                 );
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2MulDivRv32_48(muldiv_chip),

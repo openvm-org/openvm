@@ -156,9 +156,9 @@ fn test<const N: usize>(cases: [Case; N]) {
         tester.system_port(),
         Poseidon2Config::default(),
         VERIFY_BATCH_BUS,
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     let mut rng = create_seeded_rng();
     for Case {
@@ -384,9 +384,9 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
         tester.system_port(),
         Poseidon2Config::default(),
         VERIFY_BATCH_BUS,
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     let mut rng = create_seeded_rng();
 

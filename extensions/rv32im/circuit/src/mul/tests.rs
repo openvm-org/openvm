@@ -41,7 +41,7 @@ fn create_test_chip(
     );
     let range_tuple_checker = SharedRangeTupleCheckerChip::new(range_tuple_bus);
 
-    let chip = Rv32MultiplicationChip::<F>::new(
+    let mut chip = Rv32MultiplicationChip::<F>::new(
         VmAirWrapper::new(
             Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
             MultiplicationCoreAir::new(range_tuple_bus, MulOpcode::CLASS_OFFSET),
@@ -51,9 +51,9 @@ fn create_test_chip(
             range_tuple_checker.clone(),
             MulOpcode::CLASS_OFFSET,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, range_tuple_checker)
 }
