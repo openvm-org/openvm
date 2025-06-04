@@ -1,0 +1,27 @@
+name: Issue Tracker
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  issue-tracker:
+    name: Issue Tracker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: issue_tracker-${{ hashFiles('.github/workflows/issue_tracker.yml') }}
+          restore-keys: issue_tracker-
+      - name: Install Python dependencies
+        run: pip install PyGithub numpy
+      - name: Update issues
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_NAME: ${{ github.repository }}
+          DRY_RUN: false
+        run: .github/scripts/issue_tracker.py
