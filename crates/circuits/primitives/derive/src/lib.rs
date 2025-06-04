@@ -117,6 +117,9 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
                     fn generate_air_proof_input_with_id(self, air_id: usize) -> (usize, openvm_stark_backend::prover::types::AirProofInput<SC>) {
                         self.0.generate_air_proof_input_with_id(air_id)
                     }
+                    fn generate_air_proof_input_with_trace(self, trace: openvm_stark_backend::p3_matrix::dense::RowMajorMatrix<openvm_stark_backend::config::Val<SC>>) -> openvm_stark_backend::prover::types::AirProofInput<SC> {
+                        self.0.generate_air_proof_input_with_trace(trace)
+                    }
                 }
             }.into()
         }
@@ -134,7 +137,7 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
                 })
                 .collect::<Vec<_>>();
 
-            let (air_arms, generate_air_proof_input_arms, generate_air_proof_input_with_id_arms): (Vec<_>, Vec<_>, Vec<_>) =
+            let (air_arms, generate_air_proof_input_arms, generate_air_proof_input_with_id_arms, generate_air_proof_input_with_trace_arms): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
                 multiunzip(variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 let air_arm = quote! {
@@ -146,7 +149,10 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
                 let generate_air_proof_input_with_id_arm = quote! {
                     #name::#variant_name(x) => <#field_ty as openvm_stark_backend::Chip<SC>>::generate_air_proof_input_with_id(x, air_id)
                 };
-                (air_arm, generate_air_proof_input_arm, generate_air_proof_input_with_id_arm)
+                let generate_air_proof_input_with_trace_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as openvm_stark_backend::Chip<SC>>::generate_air_proof_input_with_trace(x, trace)
+                };
+                (air_arm, generate_air_proof_input_arm, generate_air_proof_input_with_id_arm, generate_air_proof_input_with_trace_arm)
             }));
 
             // Attach an extra generic SC: StarkGenericConfig to the impl_generics
@@ -209,6 +215,11 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
                     fn generate_air_proof_input_with_id(self, air_id: usize) -> (usize, openvm_stark_backend::prover::types::AirProofInput<SC>) {
                         match self {
                             #(#generate_air_proof_input_with_id_arms,)*
+                        }
+                    }
+                    fn generate_air_proof_input_with_trace(self, trace: openvm_stark_backend::p3_matrix::dense::RowMajorMatrix<openvm_stark_backend::config::Val<SC>>) -> openvm_stark_backend::prover::types::AirProofInput<SC> {
+                        match self {
+                            #(#generate_air_proof_input_with_trace_arms,)*
                         }
                     }
                 }

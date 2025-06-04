@@ -4,7 +4,7 @@ use openvm_instructions::{
     instruction::{DebugInfo, Instruction},
 };
 use openvm_stark_backend::{
-    config::{Domain, StarkGenericConfig},
+    config::{Domain, StarkGenericConfig, Val},
     keygen::types::LinearConstraint,
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
@@ -14,8 +14,8 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    execution_control::ExecutionControl, ExecutionError, GenerationError, InsExecutorE1,
-    SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
+    execution_control::ExecutionControl, execution_mode::tracegen::TracegenCtx, ExecutionError,
+    GenerationError, InsExecutorE1, SystemConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -231,6 +231,30 @@ where
     {
         metrics_span("trace_gen_time_ms", || {
             self.chip_complex.generate_proof_input(
+                cached_program,
+                &self.trace_height_constraints,
+                #[cfg(feature = "bench-metrics")]
+                &mut self.metrics,
+            )
+        })
+    }
+
+    // TODO(ayush): this is not relevant for e1/e2 execution
+    /// Generate ProofInput to prove the segment. Should be called after ::execute
+    pub fn generate_proof_input_with_ctx<SC>(
+        #[allow(unused_mut)] mut self,
+        ctx: TracegenCtx<Val<SC>>,
+        cached_program: Option<CommittedTraceData<SC>>,
+    ) -> Result<ProofInput<SC>, GenerationError>
+    where
+        SC: StarkGenericConfig,
+        Domain<SC>: PolynomialSpace<Val = F>,
+        VC::Executor: Chip<SC>,
+        VC::Periphery: Chip<SC>,
+    {
+        metrics_span("trace_gen_time_ms", || {
+            self.chip_complex.generate_proof_input_with_ctx(
+                ctx,
                 cached_program,
                 &self.trace_height_constraints,
                 #[cfg(feature = "bench-metrics")]

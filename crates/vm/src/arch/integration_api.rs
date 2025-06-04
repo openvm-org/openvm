@@ -4,8 +4,9 @@ use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{Domain, StarkGenericConfig, Val},
     p3_air::{Air, AirBuilder, BaseAir},
+    p3_commit::PolynomialSpace,
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
@@ -329,6 +330,18 @@ where
         // // self.inner.finalize(&mut trace, num_records);
 
         // AirProofInput::simple(trace, self.step.generate_public_values())
+    }
+
+    fn generate_air_proof_input_with_trace(
+        self,
+        trace: RowMajorMatrix<Val<SC>>,
+    ) -> AirProofInput<SC> {
+        assert!(
+            trace.height().is_power_of_two(),
+            "Trace height must be a power of two"
+        );
+        let public_values = self.step.generate_public_values();
+        AirProofInput::simple(trace, public_values)
     }
 }
 

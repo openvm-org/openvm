@@ -141,7 +141,6 @@ fn rand_jal_lui_test(opcode: Rv32JalLuiOpcode, num_ops: usize) {
     let mut traces = ctx.into_matrices();
     let air = chip.air();
     let air_proof_input = chip.generate_air_proof_input_with_trace(traces.remove(0));
-    drop(chip);
 
     let tester = tester
         .build()
@@ -196,7 +195,6 @@ fn run_negative_jal_lui_test(
     let mut traces = ctx.into_matrices();
     let air = chip.air();
     let mut air_proof_input = chip.generate_air_proof_input_with_trace(traces.remove(0));
-    drop(chip);
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();

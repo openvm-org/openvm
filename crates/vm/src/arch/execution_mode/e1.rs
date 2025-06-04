@@ -69,13 +69,13 @@ where
     {
         let &Instruction { opcode, .. } = instruction;
 
-        if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
+        if let Some(chip) = chip_complex.inventory.get_mut_executor(&opcode) {
             let mut vm_state = VmStateMut {
                 pc: &mut state.pc,
                 memory: state.memory.as_mut().unwrap(),
                 ctx: &mut state.ctx,
             };
-            executor.execute_e1(&mut vm_state, instruction)?;
+            chip.execute_e1(&mut vm_state, instruction)?;
         } else {
             return Err(ExecutionError::DisabledOperation {
                 pc: state.pc,

@@ -25,6 +25,7 @@ impl<F: Field> TracegenCtx<F> {
         }
     }
 
+    // TODO(ayush): this should also handle all the overriden heights stuff
     pub fn new_with_capacity(main_widths: &[usize], trace_heights: Vec<usize>) -> Self {
         let main_widths = main_widths.to_vec();
         let trace_buffers = main_widths
@@ -71,7 +72,12 @@ impl<F: Field> TracegenCtx<F> {
         self.trace_buffers
             .into_iter()
             .zip(self.main_widths.iter())
-            .map(|(buffer, &width)| RowMajorMatrix::new(buffer, width))
+            .map(|(mut buffer, &width)| {
+                let current_height = buffer.len() / width;
+                let next_power_of_two_height = current_height.next_power_of_two();
+                buffer.resize(width * next_power_of_two_height, F::ZERO);
+                RowMajorMatrix::new(buffer, width)
+            })
             .collect()
     }
 }

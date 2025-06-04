@@ -179,6 +179,13 @@ impl<SC: StarkGenericConfig, const M: usize> Chip<SC> for XorLookupChip<M> {
         let trace = self.generate_trace::<Val<SC>>();
         AirProofInput::simple_no_pis(trace)
     }
+
+    fn generate_air_proof_input_with_trace(
+        self,
+        _trace: RowMajorMatrix<Val<SC>>,
+    ) -> AirProofInput<SC> {
+        unimplemented!()
+    }
 }
 
 impl<const M: usize> ChipUsageGetter for XorLookupChip<M> {

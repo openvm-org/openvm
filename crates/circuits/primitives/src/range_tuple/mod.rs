@@ -197,6 +197,13 @@ where
         let trace = self.generate_trace::<Val<SC>>();
         AirProofInput::simple_no_pis(trace)
     }
+
+    fn generate_air_proof_input_with_trace(
+        self,
+        _trace: RowMajorMatrix<Val<SC>>,
+    ) -> AirProofInput<SC> {
+        unimplemented!()
+    }
 }
 
 impl<SC: StarkGenericConfig, const N: usize> Chip<SC> for SharedRangeTupleCheckerChip<N>
@@ -209,6 +216,13 @@ where
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
         self.0.generate_air_proof_input()
+    }
+
+    fn generate_air_proof_input_with_trace(
+        self,
+        trace: RowMajorMatrix<Val<SC>>,
+    ) -> AirProofInput<SC> {
+        self.0.generate_air_proof_input_with_trace(trace)
     }
 }
 

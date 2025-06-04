@@ -272,6 +272,13 @@ where
         };
         AirProofInput::simple(trace, public_values)
     }
+
+    fn generate_air_proof_input_with_trace(
+        self,
+        _trace: RowMajorMatrix<Val<SC>>,
+    ) -> AirProofInput<SC> {
+        unimplemented!()
+    }
 }
 
 impl<F: PrimeField32> ChipUsageGetter for VmConnectorChip<F> {

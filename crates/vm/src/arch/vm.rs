@@ -13,7 +13,7 @@ use openvm_stark_backend::{
     prover::types::{CommittedTraceData, ProofInput},
     utils::metrics_span,
     verifier::VerificationError,
-    Chip,
+    AirRef, Chip,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -556,67 +556,141 @@ where
         self.execute_and_generate_impl(exe.into(), None, input)
     }
 
-    pub fn execute_and_generate_segment<SC: StarkGenericConfig>(
+    pub fn execute_and_generate_new<SC>(
         &self,
         exe: impl Into<VmExe<F>>,
-        state: VmState<F>,
-        trace_heights: Vec<usize>,
-        num_cycles: u64,
+        input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, GenerationError>
     where
+        SC: StarkGenericConfig,
         Domain<SC>: PolynomialSpace<Val = F>,
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let _span = info_span!("execute_and_generate_segment").entered();
-
         let exe = exe.into();
-        let chip_complex = create_and_initialize_chip_complex(
-            &self.config,
-            exe.program.clone(),
-            state.input,
-            Some(state.memory),
-        )
-        .unwrap();
-        let ctrl = TracegenExecutionControl::new(state.clk + num_cycles);
-        let mut segment = VmSegmentExecutor::<_, VC, _>::new(
-            chip_complex,
-            self.trace_height_constraints.clone(),
-            exe.fn_bounds.clone(),
-            ctrl,
-        );
+        let mut state = {
+            let mem_config = self.config.system().memory_config;
+            let memory = AddressMap::from_sparse(
+                mem_config.as_offset,
+                1 << mem_config.as_height,
+                1 << mem_config.pointer_max_bits,
+                exe.init_memory.clone(),
+            );
+            let mut state = VmState::new(0, exe.pc_start, memory, input);
 
-        // TODO(ayush): do i need this?
-        if let Some(overridden_heights) = self.overridden_heights.as_ref() {
-            segment.set_override_trace_heights(overridden_heights.clone());
+            #[cfg(feature = "bench-metrics")]
+            {
+                state.metrics.fn_bounds = exe.fn_bounds.clone();
+            }
+
+            state
+        };
+
+        let mut segment_results = Vec::new();
+        let mut final_memory: Option<MemoryImage> = None;
+
+        for segment_idx in 0.. {
+            let _span = info_span!("execute_segment", segment = segment_idx).entered();
+
+            // Execute segment
+            let chip_complex = create_and_initialize_chip_complex(
+                &self.config,
+                exe.program.clone(),
+                state.input,
+                Some(state.memory),
+            )
+            .unwrap();
+
+            let ctrl = TracegenExecutionControlWithSegmentation::new(chip_complex.air_names());
+            let ctx = TracegenCtx::new(&self.main_widths);
+
+            let mut segment: VmSegmentExecutor<F, VC, TracegenExecutionControlWithSegmentation> =
+                VmSegmentExecutor::new(
+                    chip_complex,
+                    self.trace_height_constraints.clone(),
+                    exe.fn_bounds.clone(),
+                    ctrl,
+                );
+
+            #[cfg(feature = "bench-metrics")]
+            {
+                segment.metrics = state.metrics;
+            }
+
+            if let Some(ref overridden_heights) = self.overridden_heights {
+                segment.set_override_trace_heights(overridden_heights.clone());
+            }
+
+            let mut exec_state = VmSegmentState::new(state.clk, state.pc, None, ctx);
+            metrics_span("execute_time_ms", || {
+                segment.execute_from_state(&mut exec_state)
+            })
+            .map_err(GenerationError::Execution)?;
+
+            // Prepare next state or terminate
+            let next_state = match exec_state.exit_code {
+                Some(_) => None,
+                None => {
+                    assert!(
+                        self.continuation_enabled(),
+                        "multiple segments require to enable continuations"
+                    );
+                    assert_eq!(
+                        exec_state.pc,
+                        segment.chip_complex.connector_chip().boundary_states[1]
+                            .unwrap()
+                            .pc
+                    );
+
+                    let streams = segment.chip_complex.take_streams();
+                    let memory = segment
+                        .chip_complex
+                        .base
+                        .memory_controller
+                        .memory_image()
+                        .clone();
+
+                    #[cfg(feature = "bench-metrics")]
+                    let metrics = segment.metrics.partial_take();
+
+                    Some(VmState {
+                        clk: exec_state.clk,
+                        pc: exec_state.pc,
+                        memory,
+                        input: streams,
+                        #[cfg(feature = "bench-metrics")]
+                        metrics,
+                    })
+                }
+            };
+
+            // Store final memory state (will be overwritten if not last segment)
+            final_memory = Some(
+                segment
+                    .chip_complex
+                    .memory_controller()
+                    .memory_image()
+                    .clone(),
+            );
+
+            // Generate proof input
+            let proof_input = tracing::info_span!("trace_gen", segment = segment_idx)
+                .in_scope(|| segment.generate_proof_input_with_ctx(exec_state.ctx, None))?;
+            segment_results.push(proof_input);
+
+            // Continue to next segment or break
+            match next_state {
+                Some(next) => state = next,
+                None => break,
+            }
         }
 
-        let ctx = TracegenCtx::new_with_capacity(&self.main_widths, trace_heights);
-        let mut exec_state = VmSegmentState::new(state.clk, state.pc, None, ctx);
-        metrics_span("execute_from_state", || {
-            segment.execute_from_state(&mut exec_state)
-        })?;
-
-        assert_eq!(
-            exec_state.pc,
-            segment.chip_complex.connector_chip().boundary_states[1]
-                .unwrap()
-                .pc
-        );
-
-        let final_memory = Some(
-            segment
-                .chip_complex
-                .base
-                .memory_controller
-                .memory_image()
-                .clone(),
-        );
-        let proof_input = tracing::info_span!("generate_proof_input")
-            .in_scope(|| segment.generate_proof_input(None))?;
+        tracing::debug!("Number of continuation segments: {}", segment_results.len());
+        #[cfg(feature = "bench-metrics")]
+        metrics::counter!("num_segments").absolute(segment_results.len() as u64);
 
         Ok(VmExecutorResult {
-            per_segment: vec![proof_input],
+            per_segment: segment_results,
             final_memory,
         })
     }
@@ -955,6 +1029,24 @@ where
                     .in_scope(|| self.engine.prove(pk, proof_input))
             })
             .collect()
+    }
+
+    pub fn debug(&self, pk: &MultiStarkProvingKey<SC>, results: &VmExecutorResult<SC>) {
+        let chip_complex = self.config().create_chip_complex().unwrap();
+        let airs = chip_complex.airs();
+        for (seg_idx, proof_input) in results.per_segment.iter().enumerate() {
+            tracing::info_span!("prove_segment", segment = seg_idx).in_scope(|| {
+                self.engine.debug(
+                    &airs,
+                    &pk.per_air,
+                    &proof_input
+                        .per_air
+                        .iter()
+                        .map(|x| x.1.clone())
+                        .collect::<Vec<_>>(),
+                );
+            })
+        }
     }
 
     /// Verify segment proofs, checking continuation boundary conditions between segments if VM

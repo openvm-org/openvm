@@ -1,5 +1,5 @@
 use openvm_instructions::instruction::Instruction;
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 
 use super::TracegenCtx;
 use crate::{
@@ -99,13 +99,13 @@ where
         offset += chip_complex.memory_controller().num_airs();
 
         let &Instruction { opcode, .. } = instruction;
-        if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode) {
+        if let Some((chip, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode) {
             let mut vm_state = VmStateMut {
                 pc: &mut state.pc,
                 memory: &mut chip_complex.base.memory_controller.memory,
                 ctx: &mut state.ctx,
             };
-            executor.execute_tracegen(&mut vm_state, instruction, offset + i)?;
+            chip.execute_tracegen(&mut vm_state, instruction, offset + i)?;
         } else {
             return Err(ExecutionError::DisabledOperation {
                 pc: state.pc,

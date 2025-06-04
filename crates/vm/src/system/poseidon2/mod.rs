@@ -66,6 +66,20 @@ where
             Poseidon2PeripheryChip::Register1(chip) => chip.generate_air_proof_input(),
         }
     }
+
+    fn generate_air_proof_input_with_trace(
+        self,
+        trace: openvm_stark_backend::p3_matrix::dense::RowMajorMatrix<Val<SC>>,
+    ) -> AirProofInput<SC> {
+        match self {
+            Poseidon2PeripheryChip::Register0(chip) => {
+                chip.generate_air_proof_input_with_trace(trace)
+            }
+            Poseidon2PeripheryChip::Register1(chip) => {
+                chip.generate_air_proof_input_with_trace(trace)
+            }
+        }
+    }
 }
 
 impl<F: PrimeField32> ChipUsageGetter for Poseidon2PeripheryChip<F> {

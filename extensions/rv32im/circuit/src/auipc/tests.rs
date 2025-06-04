@@ -111,7 +111,6 @@ fn rand_auipc_test() {
     let mut traces = ctx.into_matrices();
     let air = chip.air();
     let air_proof_input = chip.generate_air_proof_input_with_trace(traces.remove(0));
-    drop(chip);
 
     let tester = tester
         .build()
@@ -164,7 +163,6 @@ fn run_negative_auipc_test(
     let mut traces = ctx.into_matrices();
     let air = chip.air();
     let mut air_proof_input = chip.generate_air_proof_input_with_trace(traces.remove(0));
-    drop(chip);
 
     let modify_trace = |trace: &mut DenseMatrix<F>| {
         let mut trace_row = trace.row_slice(0).to_vec();

@@ -292,4 +292,12 @@ where
 
         AirProofInput::simple(trace, vec![])
     }
+
+    fn generate_air_proof_input_with_trace(
+        self,
+        _trace: RowMajorMatrix<Val<SC>>,
+    ) -> AirProofInput<SC> {
+        // TODO(ayush): fix this
+        self.generate_air_proof_input()
+    }
 }

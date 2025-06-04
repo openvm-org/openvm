@@ -463,6 +463,13 @@ where
         let trace = self.generate_trace();
         AirProofInput::simple_no_pis(trace)
     }
+
+    fn generate_air_proof_input_with_trace(
+        self,
+        _trace: RowMajorMatrix<Val<SC>>,
+    ) -> AirProofInput<SC> {
+        unimplemented!()
+    }
 }
 
 impl<F, const N: usize> ChipUsageGetter for AccessAdapterChip<F, N> {

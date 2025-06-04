@@ -56,6 +56,13 @@ where
 
         AirProofInput::simple_no_pis(RowMajorMatrix::new(values, width))
     }
+
+    fn generate_air_proof_input_with_trace(
+        self,
+        _trace: RowMajorMatrix<Val<SC>>,
+    ) -> AirProofInput<SC> {
+        unimplemented!()
+    }
 }
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> ChipUsageGetter

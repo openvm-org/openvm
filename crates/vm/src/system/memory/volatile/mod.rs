@@ -313,6 +313,13 @@ where
         let trace = RowMajorMatrix::new(rows, width);
         AirProofInput::simple_no_pis(trace)
     }
+
+    fn generate_air_proof_input_with_trace(
+        self,
+        _trace: RowMajorMatrix<Val<SC>>,
+    ) -> AirProofInput<SC> {
+        unimplemented!()
+    }
 }
 
 impl<F: PrimeField32> ChipUsageGetter for VolatileBoundaryChip<F> {
