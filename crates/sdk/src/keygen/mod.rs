@@ -419,27 +419,36 @@ impl AggProvingKey {
             agg_stark_config,
             halo2_config,
         } = config;
+        println!("agg keygen 1");
         let (agg_stark_pk, dummy_internal_proof) =
             AggStarkProvingKey::dummy_proof_and_keygen(agg_stark_config);
+        println!("agg keygen 2");
         let dummy_root_proof = agg_stark_pk
             .root_verifier_pk
             .generate_dummy_root_proof(dummy_internal_proof);
+        println!("agg keygen 3");
         let verifier = agg_stark_pk.root_verifier_pk.keygen_static_verifier(
             &reader.read_params(halo2_config.verifier_k),
             dummy_root_proof,
             pv_handler,
         );
+        println!("agg keygen 4");
         let dummy_snark = verifier.generate_dummy_snark(reader);
+        println!("agg keygen 5");
         let wrapper = if let Some(wrapper_k) = halo2_config.wrapper_k {
+            println!("agg keygen 6");
             Halo2WrapperProvingKey::keygen(&reader.read_params(wrapper_k), dummy_snark)
         } else {
+            println!("agg keygen 7");
             Halo2WrapperProvingKey::keygen_auto_tune(reader, dummy_snark)
         };
+        println!("agg keygen 8");
         let halo2_pk = Halo2ProvingKey {
             verifier,
             wrapper,
             profiling: halo2_config.profiling,
         };
+        println!("agg keygen 9");
         Self {
             agg_stark_pk,
             halo2_pk,
