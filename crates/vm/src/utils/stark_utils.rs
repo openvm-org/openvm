@@ -2,7 +2,8 @@ use itertools::multiunzip;
 use openvm_instructions::{exe::VmExe, program::Program};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_field::PrimeField32,
+    keygen::types::MultiStarkVerifyingKey,
+    p3_field::{FieldExtensionAlgebra, PrimeField32},
     verifier::VerificationError,
     Chip,
 };
@@ -170,4 +171,25 @@ where
     let vparams = test_proof_input.run_test(engine)?;
     span.exit();
     Ok(vparams)
+}
+
+// TODO(ayush): move to stark-backend vkey
+pub fn get_widths_and_interactions_from_vkey<SC>(
+    vk: MultiStarkVerifyingKey<SC>,
+) -> (Vec<usize>, Vec<usize>)
+where
+    SC: StarkGenericConfig,
+{
+    vk.inner
+        .per_air
+        .iter()
+        .map(|vk| {
+            let total_width = vk.params.width.preprocessed.unwrap_or(0)
+                + vk.params.width.cached_mains.iter().sum::<usize>()
+                + vk.params.width.common_main
+                + vk.params.width.after_challenge.iter().sum::<usize>()
+                    * <SC::Challenge as FieldExtensionAlgebra<Val<SC>>>::D;
+            (total_width, vk.symbolic_constraints.interactions.len())
+        })
+        .unzip()
 }

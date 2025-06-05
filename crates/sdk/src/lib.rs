@@ -12,13 +12,14 @@ use openvm_build::{
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, verify_segments,
-        ContinuationVmProof, ExecutionError, InsExecutorE1, VerifiedExecutionPayload, VmConfig,
-        VmExecutor, VmVerificationError,
+        ContinuationVmProof, ExecutionError, GenerationError, InsExecutorE1,
+        VerifiedExecutionPayload, VmConfig, VmExecutor, VmExecutorResult, VmVerificationError,
     },
     system::{
         memory::{tree::public_values::extract_public_values, CHUNK},
         program::trace::VmCommittedExe,
     },
+    utils::get_widths_and_interactions_from_vkey,
 };
 use openvm_continuations::verifier::root::types::RootVmVerifierInput;
 pub use openvm_continuations::{
@@ -38,6 +39,7 @@ use openvm_transpiler::{
     transpiler::{Transpiler, TranspilerError},
     FromElf,
 };
+use prover::vm::types::VmProvingKey;
 #[cfg(feature = "evm-verify")]
 use snark_verifier_sdk::{evm::gen_evm_verifier_sol_code, halo2::aggregation::AggregationCircuit};
 
@@ -167,6 +169,26 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
             final_memory.as_ref().unwrap(),
         );
         Ok(public_values)
+    }
+
+    pub fn execute_and_generate<VC: VmConfig<F>>(
+        &self,
+        exe: VmExe<F>,
+        app_vm_pk: &VmProvingKey<SC, VC>,
+        inputs: StdIn,
+    ) -> Result<VmExecutorResult<SC>, GenerationError>
+    where
+        VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
+        VC::Periphery: Chip<SC>,
+    {
+        let (widths, interactions) =
+            get_widths_and_interactions_from_vkey(app_vm_pk.vm_pk.get_vk());
+        let executor = VmExecutor::new(app_vm_pk.vm_config.clone());
+        let segments = executor
+            .execute_metered(exe.clone(), inputs.clone(), widths, interactions)
+            .expect("execute_metered failed");
+        let result = executor.execute_with_segments_and_generate(exe, inputs, &segments)?;
+        Ok(result)
     }
 
     pub fn commit_app_exe(

@@ -7,11 +7,11 @@ use openvm_circuit::{
         SingleSegmentVmExecutor, Streams, VirtualMachine, VmComplexTraceHeights, VmConfig,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
+    utils::get_widths_and_interactions_from_vkey,
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    keygen::types::MultiStarkVerifyingKey,
-    p3_field::{FieldExtensionAlgebra, PrimeField32},
+    p3_field::PrimeField32,
     proof::Proof,
     Chip,
 };
@@ -190,25 +190,4 @@ where
     async fn prove(&self, input: impl Into<Streams<Val<SC>>> + Send + Sync) -> Proof<SC> {
         SingleSegmentVmProver::prove(self, input)
     }
-}
-
-// TODO(ayush): move to stark-backend vkey
-fn get_widths_and_interactions_from_vkey<SC>(
-    vk: MultiStarkVerifyingKey<SC>,
-) -> (Vec<usize>, Vec<usize>)
-where
-    SC: StarkGenericConfig,
-{
-    vk.inner
-        .per_air
-        .iter()
-        .map(|vk| {
-            let total_width = vk.params.width.preprocessed.unwrap_or(0)
-                + vk.params.width.cached_mains.iter().sum::<usize>()
-                + vk.params.width.common_main
-                + vk.params.width.after_challenge.iter().sum::<usize>()
-                    * <SC::Challenge as FieldExtensionAlgebra<Val<SC>>>::D;
-            (total_width, vk.symbolic_constraints.interactions.len())
-        })
-        .unzip()
 }
