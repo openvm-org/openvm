@@ -30,126 +30,6 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use std::{borrow::BorrowMut, mem::size_of};
-
-// Metadata record
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct FieldExpressionCoreRecord {
-    pub opcode: u8,
-}
-
-#[derive(Clone)]
-pub struct FieldExpressionMetadata {
-    pub total_input_limbs: usize, // num_inputs * limbs_per_input
-}
-
-pub struct FieldExpressionCoreRecordMut<'a> {
-    pub inner: &'a mut FieldExpressionCoreRecord,
-    pub input_limbs: &'a mut [u8],
-}
-
-impl<'a> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressionMetadata> for [u8] {
-    fn custom_borrow(
-        &'a mut self,
-        metadata: FieldExpressionMetadata,
-    ) -> FieldExpressionCoreRecordMut<'a> {
-        let (record_buf, input_limbs_buf) =
-            unsafe { self.split_at_mut_unchecked(size_of::<FieldExpressionCoreRecord>()) };
-
-        // The buffer might be larger than we need - just take what we need
-        let required_input_bytes = metadata.total_input_limbs * 4; // 4 bytes per u32
-        assert!(
-            input_limbs_buf.len() >= required_input_bytes,
-            "Buffer too small: {} bytes available, {} bytes required",
-            input_limbs_buf.len(),
-            required_input_bytes
-        );
-
-        let input_limbs = &mut input_limbs_buf[..required_input_bytes];
-
-        FieldExpressionCoreRecordMut {
-            inner: record_buf.borrow_mut(),
-            input_limbs,
-        }
-    }
-}
-
-impl<'a> FieldExpressionCoreRecordMut<'a> {
-    pub fn new_from_execution_data(
-        buffer: &'a mut [u8],
-        opcode: u8,
-        inputs: &[BigUint],
-        limb_bits: usize,
-        limbs_per_input: usize,
-    ) -> Self {
-        let record_info = FieldExpressionMetadata {
-            total_input_limbs: inputs.len() * limbs_per_input,
-        };
-
-        let mut record: Self = buffer.custom_borrow(record_info);
-        record.fill_from_execution_data(opcode, inputs, limb_bits, limbs_per_input);
-        record
-    }
-
-    pub fn reconstruct_inputs(
-        &self,
-        limb_bits: usize,
-        num_inputs: usize,
-        limbs_per_input: usize,
-    ) -> Vec<BigUint> {
-        let mut inputs = Vec::with_capacity(num_inputs);
-
-        for i in 0..num_inputs {
-            let limb_start = i * limbs_per_input;
-            let limb_end = limb_start + limbs_per_input;
-
-            // Convert bytes back to u32s (4 bytes per u32)
-            let byte_start = limb_start * 4;
-            let byte_end = limb_end * 4;
-            let limb_bytes = &self.input_limbs[byte_start..byte_end];
-
-            let mut limbs = Vec::with_capacity(limbs_per_input);
-            for chunk in limb_bytes.chunks_exact(4) {
-                let limb = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-                limbs.push(limb);
-            }
-
-            let value = limbs_to_biguint(&limbs, limb_bits);
-            inputs.push(value);
-        }
-
-        inputs
-    }
-
-    pub fn fill_from_execution_data(
-        &mut self,
-        opcode: u8,
-        inputs: &[BigUint],
-        limb_bits: usize,
-        limbs_per_input: usize,
-    ) {
-        assert!(
-            inputs.len() * limbs_per_input <= self.input_limbs.len(),
-            "Too many input limbs: {} > {}",
-            inputs.len() * limbs_per_input,
-            self.input_limbs.len()
-        );
-        self.inner.opcode = opcode;
-
-        for (i, input) in inputs.iter().enumerate() {
-            let limbs = biguint_to_limbs_vec(input.clone(), limb_bits, limbs_per_input);
-            let byte_start = i * limbs_per_input * 4; // 4 bytes per u32
-
-            // Convert u32 limbs to bytes
-            for (j, &limb) in limbs.iter().enumerate() {
-                let bytes = limb.to_le_bytes();
-                let byte_offset = byte_start + j * 4;
-                self.input_limbs[byte_offset..byte_offset + 4].copy_from_slice(&bytes);
-            }
-        }
-    }
-}
-
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {
     pub expr: FieldExpr,
@@ -290,6 +170,66 @@ where
     }
 }
 
+// Metadata record
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct FieldExpressionCoreRecord {
+    pub opcode: u8,
+}
+
+#[derive(Clone)]
+pub struct FieldExpressionMetadata {
+    pub total_input_limbs: usize, // num_inputs * limbs_per_input
+}
+
+pub struct FieldExpressionCoreRecordMut<'a> {
+    pub inner: &'a mut FieldExpressionCoreRecord,
+    pub input_limbs: &'a mut [u8],
+}
+
+impl<'a> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressionMetadata> for [u8] {
+    fn custom_borrow(
+        &'a mut self,
+        metadata: FieldExpressionMetadata,
+    ) -> FieldExpressionCoreRecordMut<'a> {
+        let (record_buf, input_limbs_buf) =
+            unsafe { self.split_at_mut_unchecked(size_of::<FieldExpressionCoreRecord>()) };
+
+        let required_input_bytes = metadata.total_input_limbs; // 4 bytes per u32
+
+        FieldExpressionCoreRecordMut {
+            inner: record_buf.borrow_mut(),
+            input_limbs: &mut input_limbs_buf[..required_input_bytes],
+        }
+    }
+}
+
+impl<'a> FieldExpressionCoreRecordMut<'a> {
+    pub fn new_from_execution_data(
+        buffer: &'a mut [u8],
+        _opcode: u8,
+        inputs: &[BigUint],
+        _limb_bits: usize,
+        limbs_per_input: usize,
+    ) -> Self {
+        let record_info = FieldExpressionMetadata {
+            total_input_limbs: inputs.len() * limbs_per_input,
+        };
+
+        let record: Self = buffer.custom_borrow(record_info);
+        // record.fill_from_execution_data(opcode, );
+        record
+    }
+
+    #[inline(always)]
+    pub fn fill_from_execution_data(&mut self, opcode: u8, data: &[u8]) {
+        // Rust will assert that that length of `data` and `self.input_limbs` are the same
+        // That is `data.len() == num_inputs * limbs_per_input`
+        self.inner.opcode = opcode;
+        self.input_limbs.copy_from_slice(data);
+    }
+}
+
 // TODO(arayi): use lifetimes and references for fields
 pub struct FieldExpressionStep<A> {
     adapter: A,
@@ -380,7 +320,7 @@ where
             total_input_limbs: self.num_inputs() * self.expr.canonical_num_limbs(),
         };
 
-        let (mut adapter_record, mut core_record) = arena.alloc(AdapterCoreLayout::with_metadata(
+        let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout::with_metadata(
             A::WIDTH,
             core_record_metadata,
         ));
@@ -392,14 +332,10 @@ where
             .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        let (writes, inputs) = run_field_expression(self, &data, instruction);
+        core_record.inner.opcode = instruction.opcode.local_opcode_idx(self.offset) as u8;
+        core_record.input_limbs.copy_from_slice(&data.0);
 
-        core_record.fill_from_execution_data(
-            instruction.opcode.local_opcode_idx(self.offset) as u8,
-            &inputs,
-            self.expr.canonical_limb_bits(),
-            self.expr.canonical_num_limbs(),
-        );
+        let (writes, _, _) = run_field_expression(self, &data.0, core_record.inner.opcode as usize);
 
         self.adapter.write(
             state.memory,
@@ -443,32 +379,8 @@ where
 
         let record: FieldExpressionCoreRecordMut = core_bytes.custom_borrow(record_metadata);
 
-        let inputs = record.reconstruct_inputs(
-            self.expr.canonical_limb_bits(),
-            self.num_inputs(),
-            self.expr.canonical_num_limbs(),
-        );
-
-        // Reconstruct flags from opcode
-        let local_opcode_idx = record.inner.opcode as usize;
-        let mut flags = vec![];
-        if self.expr.needs_setup() {
-            flags = vec![false; self.num_flags()];
-
-            if let Some(opcode_position) = self
-                .local_opcode_idx
-                .iter()
-                .position(|&idx| idx == local_opcode_idx)
-            {
-                // If this is NOT the last opcode (setup), set the corresponding flag
-                if opcode_position < self.opcode_flag_idx.len() {
-                    let flag_idx = self.opcode_flag_idx[opcode_position];
-                    flags[flag_idx] = true;
-                }
-                // If opcode_position == self.opcode_flag_idx.len(), it's the setup operation
-                // and all flags should remain false (which they already are)
-            }
-        }
+        let (_, inputs, flags) =
+            run_field_expression(self, &record.input_limbs, record.inner.opcode as usize);
 
         let range_checker = self.range_checker.as_ref();
         self.expr
@@ -508,7 +420,12 @@ where
     {
         let data: DynArray<_> = self.adapter.read(state, instruction).into();
 
-        let writes = run_field_expression(self, &data, instruction).0;
+        let writes = run_field_expression(
+            self,
+            &data.0,
+            instruction.opcode.local_opcode_idx(self.offset) as usize,
+        )
+        .0;
         self.adapter.write(state, instruction, &writes.into());
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         Ok(())
@@ -527,15 +444,15 @@ where
     }
 }
 
-fn run_field_expression<F: PrimeField32, A>(
+fn run_field_expression<A>(
     step: &FieldExpressionStep<A>,
-    data: &DynArray<u8>,
-    instruction: &Instruction<F>,
-) -> (DynArray<u8>, Vec<BigUint>) {
+    data: &[u8],
+    local_opcode_idx: usize,
+) -> (DynArray<u8>, Vec<BigUint>, Vec<bool>) {
     let field_element_limbs = step.expr.canonical_num_limbs();
     let limb_bits = step.expr.canonical_limb_bits();
 
-    let data = data.0.iter().map(|&x| x as u32).collect_vec();
+    let data = data.iter().map(|&x| x as u32).collect_vec();
 
     assert_eq!(data.len(), step.num_inputs() * field_element_limbs);
 
@@ -547,9 +464,6 @@ fn run_field_expression<F: PrimeField32, A>(
         let input = limbs_to_biguint(limb_slice, limb_bits);
         inputs.push(input);
     }
-
-    let Instruction { opcode, .. } = instruction;
-    let local_opcode_idx = opcode.local_opcode_idx(step.offset);
 
     // Reconstruct flags from opcode
     let mut flags = vec![];
@@ -572,7 +486,7 @@ fn run_field_expression<F: PrimeField32, A>(
         }
     }
 
-    let vars = step.expr.execute(inputs.clone(), flags);
+    let vars = step.expr.execute(inputs.clone(), flags.clone());
     assert_eq!(vars.len(), step.num_vars());
 
     let outputs: Vec<BigUint> = step
@@ -589,5 +503,5 @@ fn run_field_expression<F: PrimeField32, A>(
         .collect::<Vec<_>>()
         .into();
 
-    (writes, inputs)
+    (writes, inputs, flags)
 }
