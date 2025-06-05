@@ -15,7 +15,7 @@ use stark_backend_gpu::{
     types::{DeviceAirProofRawInput, DeviceProofInput},
 };
 use tracegen_gpu::{
-    dummy::DummyInteractionChipGPU, primitives::var_range::VariableRangeCheckerChipGPU,
+    dummy::var_range::DummyInteractionChipGPU, primitives::var_range::VariableRangeCheckerChipGPU,
 };
 
 const LOG_BLOWUP: usize = 2;
