@@ -318,7 +318,7 @@ where
             total_input_limbs: self.num_inputs() * self.expr.canonical_num_limbs(),
         };
 
-        let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout::with_metadata(
+        let (mut adapter_record, mut core_record) = arena.alloc(AdapterCoreLayout::with_metadata(
             A::WIDTH,
             core_record_metadata,
         ));
@@ -330,8 +330,10 @@ where
             .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        core_record.inner.opcode = instruction.opcode.local_opcode_idx(self.offset) as u8;
-        core_record.input_limbs.copy_from_slice(&data.0);
+        core_record.fill_from_execution_data(
+            instruction.opcode.local_opcode_idx(self.offset) as u8,
+            &data.0,
+        );
 
         let (writes, _, _) = run_field_expression(self, &data.0, core_record.inner.opcode as usize);
 
