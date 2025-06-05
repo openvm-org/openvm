@@ -202,6 +202,11 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     });
                 }
 
+                #[cfg(not(target_os = "zkvm"))]
+                fn set_up_once() {
+                    // No-op for non-ZKVM targets
+                }
+
                 fn is_identity_impl<const CHECK_SETUP: bool>(&self) -> bool {
                     use openvm_algebra_guest::IntMod;
                     // Safety: Self::set_up_once() ensures IntMod::set_up_once() has been called.
