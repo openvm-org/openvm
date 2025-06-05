@@ -5,7 +5,7 @@ use super::{controller::dimensions::MemoryDimensions, Equipartition, MemoryImage
 mod air;
 mod columns;
 mod trace;
-mod tree;
+pub(crate) mod tree;
 
 pub use air::*;
 pub use columns::*;

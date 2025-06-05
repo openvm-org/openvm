@@ -16,7 +16,7 @@ use crate::{
     system::{
         memory::{
             merkle::{tree::MerkleTree, FinalState, MemoryMerkleChip, MemoryMerkleCols},
-            Equipartition, MemoryImage,
+            Equipartition,
         },
         poseidon2::{
             Poseidon2PeripheryBaseChip, Poseidon2PeripheryChip, PERIPHERY_POSEIDON2_WIDTH,
@@ -27,12 +27,11 @@ use crate::{
 impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     pub fn finalize(
         &mut self,
-        initial_memory: MemoryImage,
+        tree: &mut MerkleTree<F, CHUNK>,
         final_memory: &Equipartition<F, CHUNK>,
         hasher: &mut impl HasherChip<CHUNK, F>,
     ) {
         assert!(self.final_state.is_none(), "Merkle chip already finalized");
-        let mut tree = MerkleTree::from_memory(initial_memory, &self.air.memory_dimensions, hasher);
         self.final_state = Some(tree.finalize(hasher, final_memory, &self.air.memory_dimensions));
         self.trace_height = Some(self.final_state.as_ref().unwrap().rows.len());
     }

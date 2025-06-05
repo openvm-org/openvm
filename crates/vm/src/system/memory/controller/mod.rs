@@ -32,7 +32,7 @@ use crate::{
     arch::{hasher::HasherChip, MemoryConfig},
     system::memory::{
         dimensions::MemoryDimensions,
-        merkle::{MemoryMerkleChip, SerialReceiver},
+        merkle::{tree::MerkleTree, MemoryMerkleChip, SerialReceiver},
         offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
         online::{AccessMetadata, TracingMemory},
         persistent::PersistentBoundaryChip,
@@ -225,11 +225,7 @@ impl<F: PrimeField32> MemoryController<F> {
         compression_bus: PermutationCheckBus,
     ) -> Self {
         assert_eq!(mem_config.as_offset, 1);
-        let memory_dims = MemoryDimensions {
-            as_height: mem_config.as_height,
-            address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
-            as_offset: 1,
-        };
+        let memory_dims = Self::dimensions_from_config(&mem_config);
         let range_checker_bus = range_checker.bus();
         let interface_chip = MemoryInterface::Persistent {
             boundary_chip: PersistentBoundaryChip::new(
@@ -239,6 +235,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 compression_bus,
             ),
             merkle_chip: MemoryMerkleChip::new(memory_dims, merkle_bus, compression_bus),
+            merkle_tree: None,
             initial_memory: AddressMap::from_mem_config(&mem_config),
         };
         Self {
@@ -249,6 +246,14 @@ impl<F: PrimeField32> MemoryController<F> {
                                                                                                 * set later */
             range_checker,
             range_checker_bus,
+        }
+    }
+
+    fn dimensions_from_config(mem_config: &MemoryConfig) -> MemoryDimensions {
+        MemoryDimensions {
+            as_height: mem_config.as_height,
+            address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
+            as_offset: 1,
         }
     }
 
@@ -518,17 +523,25 @@ impl<F: PrimeField32> MemoryController<F> {
             MemoryInterface::Persistent {
                 boundary_chip,
                 merkle_chip,
+                merkle_tree,
                 initial_memory,
             } => {
                 let final_memory = final_memory_persistent.unwrap();
 
                 let hasher = hasher.unwrap();
+                if merkle_tree.is_none() {
+                    *merkle_tree = Some(MerkleTree::from_memory(
+                        initial_memory.clone(),
+                        &Self::dimensions_from_config(&self.mem_config),
+                        hasher,
+                    ));
+                }
                 boundary_chip.finalize(initial_memory, &final_memory, hasher);
                 let final_memory_values = final_memory
                     .into_par_iter()
                     .map(|(key, value)| (key, value.values))
                     .collect();
-                merkle_chip.finalize(initial_memory.clone(), &final_memory_values, hasher);
+                merkle_chip.finalize(merkle_tree.as_mut().unwrap(), &final_memory_values, hasher);
             }
         }
     }
