@@ -197,12 +197,13 @@ pub trait TraceFiller<F, CTX> {
     }
 }
 
-/// A trait that allows for custom implementation of `borrow` given the neccessary information
+/// A trait that allows for custom implementation of `borrow` given the necessary information
 /// This is useful for record structs that have dynamic size
 pub trait CustomBorrow<'a, T, I> {
     fn custom_borrow(&'a mut self, metadata: I) -> T;
 }
 
+/// If a struct implements `BorrowMut<T>`, then the same implementation can be used for `CustomBorrow`
 impl<'a, T, I> CustomBorrow<'a, &'a mut T, I> for [u8]
 where
     [u8]: BorrowMut<T>,
@@ -312,6 +313,8 @@ pub struct MultiRowLayout<I> {
     pub metadata: I,
 }
 
+/// A record arena struct that can be used by chips that
+/// use multiple rows per instruction
 // TEMP[jpw]: buffer should be inside CTX
 pub struct MultiRowRecordArena<F> {
     pub trace_buffer: Vec<F>,
