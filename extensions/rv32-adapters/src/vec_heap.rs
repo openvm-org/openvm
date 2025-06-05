@@ -33,7 +33,7 @@ use openvm_instructions::{
 };
 use openvm_rv32im_circuit::adapters::{
     abstract_compose, memory_read_from_state, memory_write_from_state,
-    new_read_rv32_register_from_state, tracing_read, tracing_write, RV32_CELL_BITS,
+    read_rv32_register_from_state, tracing_read, tracing_write, RV32_CELL_BITS,
     RV32_REGISTER_NUM_LIMBS,
 };
 use openvm_stark_backend::{
@@ -584,15 +584,13 @@ impl<
     {
         let Instruction { b, c, d, e, .. } = *instruction;
 
-        let d = d.as_canonical_u32();
-        let e = e.as_canonical_u32();
-        debug_assert_eq!(d, RV32_REGISTER_AS);
-        debug_assert_eq!(e, RV32_MEMORY_AS);
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
         // Read register values
         let rs_vals = from_fn(|i| {
             let addr = if i == 0 { b } else { c };
-            new_read_rv32_register_from_state(state, d, addr.as_canonical_u32())
+            read_rv32_register_from_state(state, addr.as_canonical_u32())
         });
 
         // Read memory values
@@ -600,7 +598,9 @@ impl<
             assert!(
                 address as usize + READ_SIZE * BLOCKS_PER_READ - 1 < (1 << self.pointer_max_bits)
             );
-            from_fn(|i| memory_read_from_state(state, e, address + (i * READ_SIZE) as u32))
+            from_fn(|i| {
+                memory_read_from_state(state, RV32_MEMORY_AS, address + (i * READ_SIZE) as u32)
+            })
         })
     }
 
@@ -612,15 +612,14 @@ impl<
     ) where
         Ctx: E1E2ExecutionCtx,
     {
-        let Instruction { a, d, e, .. } = *instruction;
-        let rd_val =
-            new_read_rv32_register_from_state(state, d.as_canonical_u32(), a.as_canonical_u32());
+        let Instruction { a, .. } = *instruction;
+        let rd_val = read_rv32_register_from_state(state, a.as_canonical_u32());
         assert!(rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1 < (1 << self.pointer_max_bits));
 
         for (i, block) in data.iter().enumerate() {
             memory_write_from_state(
                 state,
-                e.as_canonical_u32(),
+                RV32_MEMORY_AS,
                 rd_val + (i * WRITE_SIZE) as u32,
                 block,
             );

@@ -33,7 +33,7 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::Rv32KeccakOpcode;
 use openvm_rv32im_circuit::adapters::{
-    memory_read_from_state, memory_write_from_state, new_read_rv32_register_from_state,
+    memory_read_from_state, memory_write_from_state, read_rv32_register_from_state,
 };
 use utils::num_keccak_f;
 
@@ -116,9 +116,9 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
         debug_assert_eq!(d, RV32_REGISTER_AS);
         debug_assert_eq!(e, RV32_MEMORY_AS);
 
-        let dst = new_read_rv32_register_from_state(state, d, a.as_canonical_u32());
-        let src = new_read_rv32_register_from_state(state, d, b.as_canonical_u32());
-        let len = new_read_rv32_register_from_state(state, d, c.as_canonical_u32());
+        let dst = read_rv32_register_from_state(state, d, a.as_canonical_u32());
+        let src = read_rv32_register_from_state(state, d, b.as_canonical_u32());
+        let len = read_rv32_register_from_state(state, d, c.as_canonical_u32());
 
         let mut hasher = Keccak::v256();
 
@@ -162,9 +162,9 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
         debug_assert_eq!(d, RV32_REGISTER_AS);
         debug_assert_eq!(e, RV32_MEMORY_AS);
 
-        let dst = new_read_rv32_register_from_state(state, d, a.as_canonical_u32());
-        let src = new_read_rv32_register_from_state(state, d, b.as_canonical_u32());
-        let len = new_read_rv32_register_from_state(state, d, c.as_canonical_u32());
+        let dst = read_rv32_register_from_state(state, d, a.as_canonical_u32());
+        let src = read_rv32_register_from_state(state, d, b.as_canonical_u32());
+        let len = read_rv32_register_from_state(state, d, c.as_canonical_u32());
 
         let num_blocks = num_keccak_f(len as usize);
 

@@ -4,7 +4,6 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
 };
 
-use arbitrary_chunks::ArbitraryChunks;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
@@ -50,7 +49,7 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    new_read_rv32_register, new_read_rv32_register_from_state, tracing_read, tracing_write,
+    read_rv32_register, read_rv32_register_from_state, tracing_read, tracing_write,
 };
 
 #[cfg(test)]
@@ -395,7 +394,7 @@ where
         let num_words = if local_opcode == HINT_STOREW {
             1
         } else {
-            new_read_rv32_register(state.memory.data(), RV32_REGISTER_AS, a)
+            read_rv32_register(state.memory.data(), a)
         };
 
         let record = arena.alloc(MultiRowLayout {
@@ -473,50 +472,42 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep<F> {
         mem_helper: &MemoryAuxColsFactory<F>,
         trace: &mut RowMajorMatrix<F>,
         rows_used: usize,
-    ) where
-        Self: Send + Sync,
-        F: Send + Sync + Clone,
-    {
+    ) {
         if rows_used == 0 {
             return;
         }
 
+        let width = trace.width;
+        let mut trace = &mut trace.values[..width * rows_used];
         let mut sizes = Vec::with_capacity(rows_used);
-        let mut row_iter = trace.values[..trace.width * rows_used].chunks_exact(trace.width);
+        let mut chunks = Vec::with_capacity(rows_used);
 
-        while let Some(row) = row_iter.next() {
+        while !trace.is_empty() {
             let record = unsafe {
-                let row = row.as_ptr() as *const u8;
+                let row = trace.as_ptr() as *const u8;
                 let row = &*slice_from_raw_parts(row, size_of::<Rv32HintStoreRecord>());
                 let record: &Rv32HintStoreRecord = row.borrow();
                 record
             };
-            sizes.push(trace.width * record.num_words as usize);
-
-            if record.num_words > 1 {
-                if row_iter.nth(record.num_words as usize - 2).is_none() {
-                    break;
-                }
-            }
+            sizes.push(width * record.num_words as usize);
+            let (chunk, rest) = trace.split_at_mut(width * record.num_words as usize);
+            chunks.push(chunk);
+            trace = rest;
         }
-
-        let mut chunks = trace.values[..trace.width * rows_used]
-            .arbitrary_chunks_exact_mut(&sizes)
-            .collect::<Vec<_>>();
 
         let msl_rshift: u32 = ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS) as u32;
         let msl_lshift: u32 =
             (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits) as u32;
+
         chunks
             .par_iter_mut()
             .zip(sizes.par_iter())
             .for_each(|(chunk, &num_words)| {
-                let num_words = num_words / trace.width;
+                let num_words = num_words / width;
                 let record = unsafe {
                     let row = chunk.as_mut_ptr() as *mut u8;
                     let row = &mut *slice_from_raw_parts_mut(row, chunk.len() * size_of::<F>());
-                    let record: Rv32HintStoreRecordMut =
-                        row.custom_borrow(Rv32HintStoreMetadata { num_words });
+                    let record = row.custom_borrow(Rv32HintStoreMetadata { num_words });
                     record
                 };
 
@@ -530,10 +521,10 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep<F> {
                     record.inner.mem_ptr + (num_words * RV32_REGISTER_NUM_LIMBS) as u32;
 
                 // Assuming that `num_words` is usually small (e.g. 1 for `HINT_STOREW`)
-                // it is better to do a serial pass of the rows per instructon (going from the last row to the first row)
+                // it is better to do a serial pass of the rows per instruction (going from the last row to the first row)
                 // instead of a parallel pass, since need to copy the record to a new buffer in parallel case.
                 chunk
-                    .rchunks_exact_mut(trace.width)
+                    .rchunks_exact_mut(width)
                     .zip(record.var.iter().enumerate().rev())
                     .for_each(|(row, (idx, var))| {
                         for pair in var.data.chunks_exact(2) {
@@ -620,13 +611,12 @@ where
 
         let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let mem_ptr =
-            new_read_rv32_register_from_state(state, RV32_REGISTER_AS, b.as_canonical_u32());
+        let mem_ptr = read_rv32_register_from_state(state, b.as_canonical_u32());
 
         let num_words = if local_opcode == HINT_STOREW {
             1
         } else {
-            new_read_rv32_register_from_state(state, RV32_REGISTER_AS, a.as_canonical_u32())
+            read_rv32_register_from_state(state, a.as_canonical_u32())
         };
 
         debug_assert!(mem_ptr <= (1 << self.pointer_max_bits));
@@ -649,10 +639,12 @@ where
             mem_ptr,
             RV32_REGISTER_NUM_LIMBS as u32 * num_words,
         );
-        state
-            .memory
-            .memory
-            .copy_slice_nonoverlapping((RV32_MEMORY_AS, mem_ptr), &data);
+        unsafe {
+            state
+                .memory
+                .memory
+                .copy_slice_nonoverlapping((RV32_MEMORY_AS, mem_ptr), &data);
+        }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -676,11 +668,7 @@ where
         let num_words = if local_opcode == HINT_STOREW {
             1
         } else {
-            new_read_rv32_register(
-                state.memory,
-                RV32_REGISTER_AS,
-                num_words_ptr.as_canonical_u32(),
-            )
+            read_rv32_register(state.memory, num_words_ptr.as_canonical_u32())
         };
 
         self.execute_e1(state, instruction)?;

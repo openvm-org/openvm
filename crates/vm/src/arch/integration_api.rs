@@ -306,6 +306,12 @@ impl<F: Field> RowMajorMatrixArena<F> for AdapterCoreRecordArena<F> {
     }
 }
 
+/// A trait that allows for custom implementation of `borrow` given the necessary information
+/// This is useful for record structs that have dynamic size
+pub trait CustomBorrow<'a, T, I> {
+    fn custom_borrow(&'a mut self, metadata: I) -> T;
+}
+
 /// The minimal information that [MultiRowRecordArena] needs to know to allocate a record
 pub struct MultiRowLayout<I> {
     pub num_rows: u32,
