@@ -306,12 +306,6 @@ impl<F: Field> RowMajorMatrixArena<F> for AdapterCoreRecordArena<F> {
     }
 }
 
-/// A trait that allows for custom implementation of `borrow` given the necessary information
-/// This is useful for record structs that have dynamic size
-pub trait CustomBorrow<'a, T, I> {
-    fn custom_borrow(&'a mut self, metadata: I) -> T;
-}
-
 /// The minimal information that [MultiRowRecordArena] needs to know to allocate a record
 pub struct MultiRowLayout<I> {
     pub num_rows: u32,
@@ -504,13 +498,6 @@ pub trait AdapterTraceStep<F, CTX> {
     type RecordMut<'a>
     where
         Self: 'a;
-
-    // /// The minimal amount of information needed to generate the sub-row of the trace matrix.
-    // /// This type has a lifetime so other context, such as references to other chips, can be
-    // /// provided.
-    // type TraceContext<'a>
-    // where
-    //     Self: 'a;
 
     fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>);
 

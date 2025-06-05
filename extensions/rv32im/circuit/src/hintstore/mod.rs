@@ -507,7 +507,8 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep<F> {
                 let record = unsafe {
                     let row = chunk.as_mut_ptr() as *mut u8;
                     let row = &mut *slice_from_raw_parts_mut(row, chunk.len() * size_of::<F>());
-                    let record = row.custom_borrow(Rv32HintStoreMetadata { num_words });
+                    let record: Rv32HintStoreRecordMut =
+                        row.custom_borrow(Rv32HintStoreMetadata { num_words });
                     record
                 };
 
