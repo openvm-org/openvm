@@ -271,7 +271,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
     }
 }
 
-pub struct Rv32HintStoreMetaData {
+pub struct Rv32HintStoreMetadata {
     num_words: usize,
 }
 
@@ -314,8 +314,8 @@ pub struct Rv32HintStoreRecordMut<'a> {
 /// followed by a slice of `Rv32HintStoreVar`'s of length `num_words` provided at runtime.
 /// Uses `align_to_mut()` to make sure the slice is properly aligned to `Rv32HintStoreVar`.
 /// Has debug assertions to make sure the above works as expected.
-impl<'a> CustomBorrow<'a, Rv32HintStoreRecordMut<'a>, Rv32HintStoreMetaData> for [u8] {
-    fn custom_borrow(&'a mut self, metadata: Rv32HintStoreMetaData) -> Rv32HintStoreRecordMut<'a> {
+impl<'a> CustomBorrow<'a, Rv32HintStoreRecordMut<'a>, Rv32HintStoreMetadata> for [u8] {
+    fn custom_borrow(&'a mut self, metadata: Rv32HintStoreMetadata) -> Rv32HintStoreRecordMut<'a> {
         let (record_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<Rv32HintStoreRecord>()) };
 
@@ -357,7 +357,7 @@ impl<F, CTX> TraceStep<F, CTX> for Rv32HintStoreStep<F>
 where
     F: PrimeField32,
 {
-    type RecordLayout = MultiRowLayout<Rv32HintStoreMetaData>;
+    type RecordLayout = MultiRowLayout<Rv32HintStoreMetadata>;
     type RecordMut<'a> = Rv32HintStoreRecordMut<'a>;
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -399,7 +399,7 @@ where
 
         let record = arena.alloc(MultiRowLayout {
             num_rows: num_words,
-            metadata: Rv32HintStoreMetaData {
+            metadata: Rv32HintStoreMetadata {
                 num_words: num_words as usize,
             },
         });
@@ -507,7 +507,7 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep<F> {
                 let record = unsafe {
                     let row = chunk.as_mut_ptr() as *mut u8;
                     let row = &mut *slice_from_raw_parts_mut(row, chunk.len() * size_of::<F>());
-                    let record = row.custom_borrow(Rv32HintStoreMetaData { num_words });
+                    let record = row.custom_borrow(Rv32HintStoreMetadata { num_words });
                     record
                 };
 
