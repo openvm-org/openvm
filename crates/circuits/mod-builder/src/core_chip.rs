@@ -170,7 +170,6 @@ where
     }
 }
 
-// Metadata record
 #[derive(Clone)]
 pub struct FieldExpressionMetadata {
     pub total_input_limbs: usize, // num_inputs * limbs_per_input

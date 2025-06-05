@@ -3,8 +3,8 @@ mod core_chip;
 mod field_variable;
 mod symbolic_expr;
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 pub use builder::*;
 pub use core_chip::*;
