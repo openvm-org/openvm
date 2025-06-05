@@ -956,6 +956,32 @@ where
         })?;
         Ok(proof_input)
     }
+
+    /// Executes a program, compute the trace heights, and returns the public values.
+    pub fn execute_with_segment_and_compute_heights(
+        &self,
+        exe: impl Into<VmExe<F>>,
+        input: impl Into<Streams<F>>,
+        segment: &Segment,
+    ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
+        let executor = {
+            let mut executor = self.execute_impl(exe.into(), input.into(), Some(segment))?;
+            executor.chip_complex.finalize_memory();
+            executor
+        };
+        let air_heights = executor.chip_complex.current_trace_heights();
+        let vm_heights = executor.chip_complex.get_internal_trace_heights();
+        let public_values = if let Some(pv_chip) = executor.chip_complex.public_values_chip() {
+            pv_chip.step.get_custom_public_values()
+        } else {
+            vec![]
+        };
+        Ok(SingleSegmentVmExecutionResult {
+            public_values,
+            air_heights,
+            vm_heights,
+        })
+    }
 }
 
 #[derive(Error, Debug)]

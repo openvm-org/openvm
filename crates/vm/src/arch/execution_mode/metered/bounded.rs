@@ -152,7 +152,11 @@ impl E1E2ExecutionCtx for MeteredCtxBounded {
             address_space != RV32_IMM_AS,
             "address space must not be immediate"
         );
-        debug_assert!(size.is_power_of_two(), "size must be a power of 2");
+        debug_assert!(
+            size.is_power_of_two(),
+            "size must be a power of 2, got {}",
+            size
+        );
 
         // Handle access adapter updates
         let align_bits = self.as_byte_alignment_bits[address_space as usize];

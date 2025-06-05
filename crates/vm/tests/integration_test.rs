@@ -134,9 +134,18 @@ fn test_vm_override_executor_height() {
     // Test getting heights.
     let vm_config = NativeConfig::aggregation(8, 3);
 
+    let vm = VirtualMachine::new(e, vm_config.clone());
+    let pk = vm.keygen();
+
     let executor = SingleSegmentVmExecutor::new(vm_config.clone());
+
+    let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+    let segment = executor
+        .execute_metered(committed_exe.exe.clone(), vec![], widths, interactions)
+        .unwrap();
+
     let res = executor
-        .execute_and_compute_heights(committed_exe.exe.clone(), vec![])
+        .execute_with_segment_and_compute_heights(committed_exe.exe.clone(), vec![], &segment)
         .unwrap();
     // Memory trace heights are not computed during execution.
     assert_eq!(
@@ -243,8 +252,15 @@ fn test_vm_1_optional_air() {
         ];
 
         let program = Program::from_instructions(&instructions);
+
+        let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+        let segments = vm
+            .executor
+            .execute_metered(program.clone(), vec![], widths, interactions)
+            .unwrap();
+
         let result = vm
-            .execute_and_generate(program, vec![])
+            .execute_with_segments_and_generate(program, vec![], &segments)
             .expect("Failed to execute VM");
         assert_eq!(result.per_segment.len(), 1);
         let proof_input = result.per_segment.last().unwrap();
@@ -281,8 +297,14 @@ fn test_vm_public_values() {
             vm.engine.config.pcs(),
         ));
         let single_vm = SingleSegmentVmExecutor::new(config);
+
+        let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+        let segment = single_vm
+            .execute_metered(program.clone().into(), vec![], widths, interactions)
+            .unwrap();
+
         let exe_result = single_vm
-            .execute_and_compute_heights(program, vec![])
+            .execute_with_segment_and_compute_heights(program, vec![], &segment)
             .unwrap();
         assert_eq!(
             exe_result.public_values,
@@ -367,7 +389,15 @@ fn test_vm_1_persistent() {
 
     let program = Program::from_instructions(&instructions);
 
-    let result = vm.execute_and_generate(program.clone(), vec![]).unwrap();
+    let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+    let segments = vm
+        .executor
+        .execute_metered(program.clone(), vec![], widths, interactions)
+        .unwrap();
+
+    let result = vm
+        .execute_with_segments_and_generate(program.clone(), vec![], &segments)
+        .unwrap();
     {
         let proof_input = result.per_segment.into_iter().next().unwrap();
 
