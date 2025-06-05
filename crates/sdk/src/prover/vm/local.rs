@@ -3,11 +3,11 @@ use std::{marker::PhantomData, sync::Arc};
 use async_trait::async_trait;
 use openvm_circuit::{
     arch::{
+        execution_mode::metered::get_widths_and_interactions_from_vkey,
         hasher::poseidon2::vm_poseidon2_hasher, GenerationError, InsExecutorE1,
         SingleSegmentVmExecutor, Streams, VirtualMachine, VmComplexTraceHeights, VmConfig,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
-    utils::get_widths_and_interactions_from_vkey,
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},

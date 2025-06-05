@@ -11,6 +11,7 @@ use openvm_build::{
 };
 use openvm_circuit::{
     arch::{
+        execution_mode::metered::get_widths_and_interactions_from_vkey,
         hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, verify_segments,
         ContinuationVmProof, ExecutionError, GenerationError, InsExecutorE1,
         VerifiedExecutionPayload, VmConfig, VmExecutor, VmExecutorResult, VmVerificationError,
@@ -19,7 +20,6 @@ use openvm_circuit::{
         memory::{tree::public_values::extract_public_values, CHUNK},
         program::trace::VmCommittedExe,
     },
-    utils::get_widths_and_interactions_from_vkey,
 };
 use openvm_continuations::verifier::root::types::RootVmVerifierInput;
 pub use openvm_continuations::{
