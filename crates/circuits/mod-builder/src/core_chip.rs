@@ -171,15 +171,15 @@ where
 }
 
 // Metadata record
+#[derive(Clone)]
+pub struct FieldExpressionMetadata {
+    pub total_input_limbs: usize, // num_inputs * limbs_per_input
+}
+
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct FieldExpressionCoreRecord {
     pub opcode: u8,
-}
-
-#[derive(Clone)]
-pub struct FieldExpressionMetadata {
-    pub total_input_limbs: usize, // num_inputs * limbs_per_input
 }
 
 pub struct FieldExpressionCoreRecordMut<'a> {
@@ -195,11 +195,9 @@ impl<'a> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressionMetad
         let (record_buf, input_limbs_buf) =
             unsafe { self.split_at_mut_unchecked(size_of::<FieldExpressionCoreRecord>()) };
 
-        let required_input_bytes = metadata.total_input_limbs; // 4 bytes per u32
-
         FieldExpressionCoreRecordMut {
             inner: record_buf.borrow_mut(),
-            input_limbs: &mut input_limbs_buf[..required_input_bytes],
+            input_limbs: &mut input_limbs_buf[..metadata.total_input_limbs],
         }
     }
 }
