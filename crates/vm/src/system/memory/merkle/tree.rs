@@ -4,10 +4,13 @@ use openvm_stark_backend::{
 };
 use rustc_hash::FxHashMap;
 
-use super::{memory_to_partition, FinalState, MemoryMerkleCols};
+use super::{FinalState, MemoryMerkleCols};
 use crate::{
     arch::hasher::HasherChip,
-    system::memory::{dimensions::MemoryDimensions, AddressMap, Equipartition, PAGE_SIZE},
+    system::memory::{
+        dimensions::MemoryDimensions, merkle::memory_to_vec_partition, AddressMap, Equipartition,
+        PAGE_SIZE,
+    },
 };
 
 #[derive(Debug)]
@@ -196,14 +199,9 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
         hasher: &impl HasherChip<CHUNK, F>,
     ) -> Self {
         let mut tree = Self::new(md.overall_height(), hasher);
-        let layer: Vec<_> = memory_to_partition(&initial_memory)
+        let layer: Vec<_> = memory_to_vec_partition(&initial_memory, md)
             .iter()
-            .map(|((addr_sp, ptr), v)| {
-                (
-                    (1 << tree.height) + md.label_to_index((*addr_sp, *ptr)),
-                    hasher.hash(v),
-                )
-            })
+            .map(|(idx, v)| ((1 << tree.height) + idx, hasher.hash(v)))
             .collect();
         tree.process_layers(layer, md, None, |left, right| hasher.compress(left, right));
         tree
