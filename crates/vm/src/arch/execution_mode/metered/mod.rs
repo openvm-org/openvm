@@ -175,7 +175,7 @@ impl<'a> MeteredExecutionControl<'a> {
             let segment = Segment {
                 clk_start,
                 num_cycles: state.ctx.clk_last_segment_check - clk_start,
-                // TODO(ayush): this is trace heights after overflow so an overestimate
+                // NOTE: this is trace heights after overflow so an overestimate
                 trace_heights: state.ctx.trace_heights.clone(),
             };
             state.ctx.segments.push(segment);
@@ -236,7 +236,7 @@ where
         let segment = Segment {
             clk_start,
             num_cycles: state.clk - clk_start,
-            // TODO(ayush): this is trace heights after overflow so an overestimate
+            // NOTE: this is trace heights after overflow so an overestimate
             trace_heights: state.ctx.trace_heights.clone(),
         };
         state.ctx.segments.push(segment);

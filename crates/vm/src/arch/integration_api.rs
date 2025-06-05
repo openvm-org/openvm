@@ -432,6 +432,7 @@ impl<F, A, S> InsExecutorE1<F> for NewVmChipWrapper<F, A, S>
 where
     F: PrimeField32,
     S: StepExecutorE1<F>,
+    A: BaseAir<F>,
 {
     fn execute_e1<Ctx>(
         &self,
@@ -454,6 +455,10 @@ where
         F: PrimeField32,
     {
         self.step.execute_metered(state, instruction, chip_index)
+    }
+
+    fn set_trace_height(&mut self, height: usize) {
+        self.set_trace_buffer_height(height);
     }
 }
 
