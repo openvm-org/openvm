@@ -5,7 +5,7 @@ use openvm_bigint_transpiler::{
 use openvm_circuit::{
     arch::{
         testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS},
-        InstructionExecutor, VmAirWrapper,
+        InsExecutorE1, InstructionExecutor, VmAirWrapper,
     },
     utils::generate_long_number,
 };
@@ -45,6 +45,7 @@ use crate::{
 };
 
 type F = BabyBear;
+const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_BRANCH: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
 
 #[allow(clippy::type_complexity)]
@@ -120,6 +121,7 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
         ),
         tester.memory_helper(),
     );
+    chip.set_trace_height(MAX_INS_CAPACITY);
 
     for _ in 0..num_ops {
         set_and_execute_rand(
@@ -160,6 +162,7 @@ fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
         ),
         tester.memory_helper(),
     );
+    chip.set_trace_height(MAX_INS_CAPACITY);
 
     for _ in 0..num_ops {
         set_and_execute_rand(
@@ -208,6 +211,7 @@ fn run_mul_256_rand_test(opcode: MulOpcode, num_ops: usize) {
         ),
         tester.memory_helper(),
     );
+    chip.set_trace_height(MAX_INS_CAPACITY);
 
     for _ in 0..num_ops {
         set_and_execute_rand(
@@ -257,6 +261,7 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
         ),
         tester.memory_helper(),
     );
+    chip.set_trace_height(MAX_INS_CAPACITY);
 
     for _ in 0..num_ops {
         set_and_execute_rand(
@@ -299,6 +304,7 @@ fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
         ),
         tester.memory_helper(),
     );
+    chip.set_trace_height(MAX_INS_CAPACITY);
 
     let branch_fn = |opcode: usize, x: &[u32; INT256_NUM_LIMBS], y: &[u32; INT256_NUM_LIMBS]| {
         x.iter()
@@ -350,6 +356,8 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
         ),
         tester.memory_helper(),
     );
+    chip.set_trace_height(MAX_INS_CAPACITY);
+
     let branch_fn =
         |opcode: usize, x: &[u32; INT256_NUM_LIMBS], y: &[u32; INT256_NUM_LIMBS]| -> bool {
             let opcode = BranchLessThanOpcode::from_usize(

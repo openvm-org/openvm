@@ -115,7 +115,10 @@ mod tests {
     use itertools::Itertools;
     use num_bigint::BigUint;
     use openvm_algebra_transpiler::Fp2Opcode;
-    use openvm_circuit::arch::testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+    use openvm_circuit::arch::{
+        testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        InsExecutorE1,
+    };
     use openvm_circuit_primitives::bitwise_op_lookup::{
         BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
     };
@@ -133,6 +136,7 @@ mod tests {
 
     const NUM_LIMBS: usize = 32;
     const LIMB_BITS: usize = 8;
+    const MAX_INS_CAPACITY: usize = 128;
     const OFFSET: usize = Fp2Opcode::CLASS_OFFSET;
     type F = BabyBear;
 
@@ -221,6 +225,7 @@ mod tests {
             bitwise_chip.clone(),
             tester.range_checker(),
         );
+        chip.set_trace_height(MAX_INS_CAPACITY);
 
         let num_ops = 10;
         for _ in 0..num_ops {

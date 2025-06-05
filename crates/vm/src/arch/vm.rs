@@ -256,6 +256,7 @@ where
             &self.config,
             exe.program.clone(),
             Some(from_state.memory),
+            None,
         )
         .unwrap();
         let ctrl = TracegenExecutionControlWithSegmentation::new(chip_complex.air_names());
@@ -376,7 +377,8 @@ where
         let _span = info_span!("execute_e1_until_cycle").entered();
 
         let chip_complex =
-            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
+            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
+                .unwrap();
         let mut segment = VmSegmentExecutor::<F, VC, _>::new(
             chip_complex,
             self.trace_height_constraints.clone(),
@@ -440,7 +442,8 @@ where
         let _span = info_span!("execute_metered").entered();
 
         let chip_complex =
-            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
+            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
+                .unwrap();
         let air_names = chip_complex.air_names();
         let ctrl = MeteredExecutionControl::new(&air_names, &widths, &interactions);
         let mut executor = VmSegmentExecutor::<F, VC, _>::new(
@@ -568,8 +571,28 @@ where
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
         segments: &[Segment],
-    ) -> Result<Vec<VmSegmentExecutor<F, VC, TracegenExecutionControl>>, ExecutionError> {
-        self.execute_with_segments_and_then(exe, input, segments, |_, seg| Ok(seg), |err| err)
+    ) -> Result<Option<MemoryImage>, ExecutionError> {
+        let executors =
+            self.execute_with_segments_and_then(exe, input, segments, |_, seg| Ok(seg), |err| err)?;
+        let last = executors
+            .last()
+            .expect("at least one segment must be executed");
+        let final_memory = Some(
+            last.chip_complex
+                .base
+                .memory_controller
+                .memory_image()
+                .clone(),
+        );
+        let end_state =
+            last.chip_complex.connector_chip().boundary_states[1].expect("end state must be set");
+        if end_state.is_terminate != 1 {
+            return Err(ExecutionError::DidNotTerminate);
+        }
+        if end_state.exit_code != ExitCode::Success as u32 {
+            return Err(ExecutionError::FailedWithExitCode(end_state.exit_code));
+        }
+        Ok(final_memory)
     }
 
     pub fn execute_with_segments_and_then<R, E>(
@@ -612,13 +635,13 @@ where
             },
         ) in segments.iter().enumerate()
         {
-            let mut chip_complex = create_and_initialize_chip_complex(
+            let chip_complex = create_and_initialize_chip_complex(
                 &self.config,
                 exe.program.clone(),
                 Some(state.memory),
+                Some(trace_heights),
             )
             .unwrap();
-            set_chip_trace_heights(&mut chip_complex, trace_heights);
 
             let ctrl = TracegenExecutionControl::new(state.clk + num_cycles);
             let mut segment = VmSegmentExecutor::<_, VC, _>::new(
@@ -806,12 +829,13 @@ where
         segment: Option<&Segment>,
     ) -> Result<VmSegmentExecutor<F, VC, TracegenExecutionControlWithSegmentation>, ExecutionError>
     {
-        let mut chip_complex =
-            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
-
-        if let Some(segment) = segment {
-            set_chip_trace_heights(&mut chip_complex, &segment.trace_heights);
-        }
+        let chip_complex = create_and_initialize_chip_complex(
+            &self.config,
+            exe.program.clone(),
+            None,
+            segment.map(|s| s.trace_heights.as_slice()),
+        )
+        .unwrap();
 
         let ctrl = TracegenExecutionControlWithSegmentation::new(chip_complex.air_names());
         let mut segment = VmSegmentExecutor::new(
@@ -858,7 +882,8 @@ where
         };
 
         let chip_complex =
-            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
+            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
+                .unwrap();
         let air_names = chip_complex.air_names();
         let ctrl = MeteredExecutionControl::new(&air_names, &widths, &interactions);
         let mut executor = VmSegmentExecutor::<F, VC, _>::new(
@@ -1057,6 +1082,15 @@ where
         input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, GenerationError> {
         self.executor.execute_and_generate(exe, input)
+    }
+
+    pub fn execute_with_segments(
+        &self,
+        exe: impl Into<VmExe<F>>,
+        input: impl Into<Streams<F>>,
+        segments: &[Segment],
+    ) -> Result<Option<MemoryImage>, ExecutionError> {
+        self.executor.execute_with_segments(exe, input, segments)
     }
 
     pub fn execute_with_segments_and_generate(
@@ -1330,15 +1364,17 @@ where
     }
 }
 
-/// Create and initialize a chip complex with program, streams, and optional memory
+/// Create and initialize a chip complex with program, streams, optional memory, and optional trace heights
 pub fn create_and_initialize_chip_complex<F, VC>(
     config: &VC,
     program: Program<F>,
     initial_memory: Option<MemoryImage>,
+    trace_heights: Option<&[u32]>,
 ) -> Result<VmChipComplex<F, VC::Executor, VC::Periphery>, VmInventoryError>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
+    VC::Executor: InsExecutorE1<F>,
 {
     let mut chip_complex = config.create_chip_complex()?;
 
@@ -1355,38 +1391,32 @@ where
         chip_complex.set_initial_memory(initial_memory);
     }
 
-    Ok(chip_complex)
-}
+    if let Some(trace_heights) = trace_heights {
+        let executor_chip_offset = if chip_complex.config().has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
+        } else {
+            PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
+        };
 
-pub fn set_chip_trace_heights<F, E, P>(
-    chip_complex: &mut VmChipComplex<F, E, P>,
-    trace_heights: &[u32],
-) where
-    F: PrimeField32,
-    E: InsExecutorE1<F>,
-{
-    let executor_chip_offset = if chip_complex.config().has_public_values_chip() {
-        PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
-    } else {
-        PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
-    };
-
-    for (i, chip_id) in chip_complex
-        .inventory
-        .insertion_order
-        .iter()
-        .rev()
-        .enumerate()
-    {
-        if let ChipId::Executor(exec_id) = chip_id {
-            if let Some(height_index) = executor_chip_offset.checked_add(i) {
-                if let Some(&height) = trace_heights.get(height_index) {
-                    if let Some(executor) = chip_complex.inventory.executors.get_mut(*exec_id) {
-                        // TODO(ayush): remove conversion
-                        executor.set_trace_height(height.next_power_of_two() as usize);
+        for (i, chip_id) in chip_complex
+            .inventory
+            .insertion_order
+            .iter()
+            .rev()
+            .enumerate()
+        {
+            if let ChipId::Executor(exec_id) = chip_id {
+                if let Some(height_index) = executor_chip_offset.checked_add(i) {
+                    if let Some(&height) = trace_heights.get(height_index) {
+                        if let Some(executor) = chip_complex.inventory.executors.get_mut(*exec_id) {
+                            // TODO(ayush): remove conversion
+                            executor.set_trace_height(height.next_power_of_two() as usize);
+                        }
                     }
                 }
             }
         }
     }
+
+    Ok(chip_complex)
 }
