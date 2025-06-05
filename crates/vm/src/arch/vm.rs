@@ -192,18 +192,19 @@ where
         ) -> Result<R, E>,
         map_err: impl Fn(ExecutionError) -> E,
     ) -> Result<Vec<R>, E> {
-        let mem_config = self.config.system().memory_config;
         let exe = exe.into();
-        let memory = AddressMap::from_sparse(
-            mem_config.as_offset,
-            1 << mem_config.as_height,
-            1 << mem_config.pointer_max_bits,
-            exe.init_memory.clone(),
-        );
-
-        let pc = exe.pc_start;
-        let mut state = VmState::new(0, pc, memory, input);
-
+        let mut state = {
+            let memory = {
+                let mem_config = self.config.system().memory_config;
+                AddressMap::from_sparse(
+                    mem_config.as_offset,
+                    1 << mem_config.as_height,
+                    1 << mem_config.pointer_max_bits,
+                    exe.init_memory.clone(),
+                )
+            };
+            VmState::new(0, exe.pc_start, memory, input)
+        };
         #[cfg(feature = "bench-metrics")]
         {
             state.metrics.fn_bounds = exe.fn_bounds.clone();
@@ -361,14 +362,16 @@ where
         input: impl Into<Streams<F>>,
         num_cycles: Option<u64>,
     ) -> Result<VmState<F>, ExecutionError> {
-        let mem_config = self.config.system().memory_config;
         let exe = exe.into();
-        let memory = Some(GuestMemory::new(AddressMap::from_sparse(
-            mem_config.as_offset,
-            1 << mem_config.as_height,
-            1 << mem_config.pointer_max_bits,
-            exe.init_memory.clone(),
-        )));
+        let memory = {
+            let mem_config = self.config.system().memory_config;
+            GuestMemory::new(AddressMap::from_sparse(
+                mem_config.as_offset,
+                1 << mem_config.as_height,
+                1 << mem_config.pointer_max_bits,
+                exe.init_memory.clone(),
+            ))
+        };
 
         let _span = info_span!("execute_e1_until_cycle").entered();
 
@@ -385,7 +388,7 @@ where
             segment.metrics = Default::default();
         }
 
-        let mut exec_state = VmSegmentState::new(0, exe.pc_start, memory, input.into(), ());
+        let mut exec_state = VmSegmentState::new(0, exe.pc_start, Some(memory), input.into(), ());
         metrics_span("execute_time_ms", || {
             segment.execute_from_state(&mut exec_state)
         })?;
@@ -422,15 +425,17 @@ where
         widths: Vec<usize>,
         interactions: Vec<usize>,
     ) -> Result<Vec<Segment>, ExecutionError> {
-        let mem_config = self.config.system().memory_config;
         let exe = exe.into();
 
-        let memory = Some(GuestMemory::new(AddressMap::from_sparse(
-            mem_config.as_offset,
-            1 << mem_config.as_height,
-            1 << mem_config.pointer_max_bits,
-            exe.init_memory.clone(),
-        )));
+        let memory = {
+            let mem_config = self.config.system().memory_config;
+            GuestMemory::new(AddressMap::from_sparse(
+                mem_config.as_offset,
+                1 << mem_config.as_height,
+                1 << mem_config.pointer_max_bits,
+                exe.init_memory.clone(),
+            ))
+        };
 
         let _span = info_span!("execute_metered").entered();
 
@@ -479,7 +484,7 @@ where
                 .memory_dimensions(),
         );
 
-        let mut exec_state = VmSegmentState::new(0, exe.pc_start, memory, input.into(), ctx);
+        let mut exec_state = VmSegmentState::new(0, exe.pc_start, Some(memory), input.into(), ctx);
         metrics_span("execute_time_ms", || {
             executor.execute_from_state(&mut exec_state)
         })?;
@@ -584,17 +589,12 @@ where
                 1 << mem_config.pointer_max_bits,
                 exe.init_memory.clone(),
             );
-
-            let pc = exe.pc_start;
-            let mut state = VmState::new(0, pc, memory, input);
-
-            #[cfg(feature = "bench-metrics")]
-            {
-                state.metrics.fn_bounds = exe.fn_bounds.clone();
-            }
-
-            state
+            VmState::new(0, exe.pc_start, memory, input)
         };
+        #[cfg(feature = "bench-metrics")]
+        {
+            state.metrics.fn_bounds = exe.fn_bounds.clone();
+        }
 
         // assert that segments are valid
         assert_eq!(segments.first().unwrap().clk_start, 0);
@@ -763,7 +763,7 @@ where
         input: impl Into<Streams<F>>,
     ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
         let segment = {
-            let mut segment = self.execute_impl(exe.into(), input.into())?;
+            let mut segment = self.execute_impl(exe.into(), input.into(), None)?;
             segment.chip_complex.finalize_memory();
             segment
         };
@@ -792,7 +792,7 @@ where
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let segment = self.execute_impl(committed_exe.exe.clone(), input)?;
+        let segment = self.execute_impl(committed_exe.exe.clone(), input, None)?;
         let proof_input = tracing::info_span!("trace_gen").in_scope(|| {
             segment.generate_proof_input(Some(committed_exe.committed_program.clone()))
         })?;
@@ -803,10 +803,16 @@ where
         &self,
         exe: VmExe<F>,
         input: impl Into<Streams<F>>,
+        segment: Option<&Segment>,
     ) -> Result<VmSegmentExecutor<F, VC, TracegenExecutionControlWithSegmentation>, ExecutionError>
     {
-        let chip_complex =
+        let mut chip_complex =
             create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
+
+        if let Some(segment) = segment {
+            set_chip_trace_heights(&mut chip_complex, &segment.trace_heights);
+        }
+
         let ctrl = TracegenExecutionControlWithSegmentation::new(chip_complex.air_names());
         let mut segment = VmSegmentExecutor::new(
             chip_complex,
@@ -919,48 +925,11 @@ where
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let segment = self.execute_with_segment_impl(committed_exe.exe.clone(), input, segment)?;
+        let segment = self.execute_impl(committed_exe.exe.clone(), input, Some(segment))?;
         let proof_input = tracing::info_span!("trace_gen").in_scope(|| {
             segment.generate_proof_input(Some(committed_exe.committed_program.clone()))
         })?;
         Ok(proof_input)
-    }
-
-    fn execute_with_segment_impl(
-        &self,
-        exe: VmExe<F>,
-        input: impl Into<Streams<F>>,
-        segment: &Segment,
-    ) -> Result<VmSegmentExecutor<F, VC, TracegenExecutionControlWithSegmentation>, ExecutionError>
-    {
-        let mut chip_complex =
-            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
-        set_chip_trace_heights(&mut chip_complex, &segment.trace_heights);
-        let ctrl = TracegenExecutionControlWithSegmentation::new(chip_complex.air_names());
-        let mut segment = VmSegmentExecutor::new(
-            chip_complex,
-            self.trace_height_constraints.clone(),
-            exe.fn_bounds.clone(),
-            ctrl,
-        );
-
-        if let Some(overridden_heights) = self.overridden_heights.as_ref() {
-            segment.set_override_trace_heights(overridden_heights.clone());
-        }
-
-        let mut exec_state = VmSegmentState::new(
-            0,
-            exe.pc_start,
-            None,
-            input.into(),
-            TracegenCtx {
-                since_last_segment_check: 0,
-            },
-        );
-        metrics_span("execute_time_ms", || {
-            segment.execute_from_state(&mut exec_state)
-        })?;
-        Ok(segment)
     }
 }
 
@@ -1063,6 +1032,17 @@ where
         Arc::new(VmCommittedExe::commit(exe, self.engine.config().pcs()))
     }
 
+    pub fn execute_metered(
+        &self,
+        exe: impl Into<VmExe<F>>,
+        input: impl Into<Streams<F>>,
+        widths: Vec<usize>,
+        interactions: Vec<usize>,
+    ) -> Result<Vec<Segment>, ExecutionError> {
+        self.executor
+            .execute_metered(exe, input, widths, interactions)
+    }
+
     pub fn execute(
         &self,
         exe: impl Into<VmExe<F>>,
@@ -1077,6 +1057,16 @@ where
         input: impl Into<Streams<F>>,
     ) -> Result<VmExecutorResult<SC>, GenerationError> {
         self.executor.execute_and_generate(exe, input)
+    }
+
+    pub fn execute_with_segments_and_generate(
+        &self,
+        exe: impl Into<VmExe<F>>,
+        input: impl Into<Streams<F>>,
+        segments: &[Segment],
+    ) -> Result<VmExecutorResult<SC>, GenerationError> {
+        self.executor
+            .execute_with_segments_and_generate(exe, input, segments)
     }
 
     pub fn execute_and_generate_with_cached_program(

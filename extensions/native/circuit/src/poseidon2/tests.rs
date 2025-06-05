@@ -1,6 +1,7 @@
 use std::cmp::min;
 
 use openvm_circuit::arch::{
+    execution_mode::metered::get_widths_and_interactions_from_vkey,
     testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester},
     verify_single, VirtualMachine,
 };
@@ -492,7 +493,13 @@ fn air_test_with_compress_poseidon2(
     let vm = VirtualMachine::new(engine, config);
 
     let pk = vm.keygen();
-    let result = vm.execute_and_generate(program, vec![]).unwrap();
+    let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+    let segments = vm
+        .execute_metered(program.clone(), vec![], widths, interactions)
+        .unwrap();
+    let result = vm
+        .execute_with_segments_and_generate(program, vec![], &segments)
+        .unwrap();
     let proofs = vm.prove(&pk, result);
     for proof in proofs {
         verify_single(&vm.engine, &pk.get_vk(), &proof).expect("Verification failed");
