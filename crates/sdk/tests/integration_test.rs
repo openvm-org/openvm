@@ -5,7 +5,8 @@ use openvm_build::GuestOptions;
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, ContinuationVmProof, ExecutionError,
-        GenerationError, SingleSegmentVmExecutor, SystemConfig, VmConfig, VmExecutor,
+        GenerationError, InsExecutorE1, SingleSegmentVmExecutor, SystemConfig, VmConfig,
+        VmExecutor,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
@@ -87,7 +88,7 @@ fn run_leaf_verifier<VC: VmConfig<F>>(
     verifier_input: LeafVmVerifierInput<SC>,
 ) -> Result<Vec<F>, ExecutionError>
 where
-    VC::Executor: Chip<SC>,
+    VC::Executor: Chip<SC> + InsExecutorE1<F>,
     VC::Periphery: Chip<SC>,
 {
     let exe_result = leaf_vm.execute_and_compute_heights(

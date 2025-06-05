@@ -18,6 +18,7 @@ use openvm_stark_sdk::{
 
 use crate::{
     arch::{
+        execution_mode::metered::get_widths_and_interactions_from_vkey,
         vm::{VirtualMachine, VmExecutor},
         InsExecutorE1, Streams, VmConfig,
     },
@@ -70,7 +71,16 @@ where
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(log_blowup));
     let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
-    let mut result = vm.execute_and_generate(exe, input).unwrap();
+    let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+    let exe = exe.into();
+    let input = input.into();
+    let segments = vm
+        .executor
+        .execute_metered(exe.clone(), input.clone(), widths, interactions)
+        .unwrap();
+    let mut result = vm
+        .execute_with_segments_and_generate(exe, input, &segments)
+        .unwrap();
     let final_memory = Option::take(&mut result.final_memory);
     let global_airs = vm.config().create_chip_complex().unwrap().airs();
     if debug {
