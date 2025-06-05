@@ -426,12 +426,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
 
 [[package]]
-name = "arbitrary-chunks"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ad8689a486416c401ea15715a4694de30054248ec627edbf31f49cb64ee4086"
-
-[[package]]
 name = "ariadne"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5398,7 +5392,6 @@ dependencies = [
 name = "openvm-rv32im-circuit"
 version = "1.1.1-rc.0"
 dependencies = [
- "arbitrary-chunks",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",

@@ -696,8 +696,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<'_, F> {
     }
 
     pub fn fill_zero(&self, buffer: &mut MemoryBaseAuxCols<F>) {
-        buffer.timestamp_lt_aux.lower_decomp.fill(F::ZERO);
-        buffer.prev_timestamp = F::ZERO;
+        *buffer = unsafe { std::mem::zeroed() };
     }
 
     fn generate_timestamp_lt(

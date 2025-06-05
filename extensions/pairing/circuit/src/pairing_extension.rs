@@ -106,7 +106,7 @@ pub(crate) mod phantom {
         bn254::BN254_NUM_LIMBS,
         pairing::{FinalExp, MultiMillerLoop},
     };
-    use openvm_rv32im_circuit::adapters::{memory_read, new_read_rv32_register};
+    use openvm_rv32im_circuit::adapters::{memory_read, read_rv32_register};
     use openvm_stark_backend::p3_field::PrimeField32;
 
     use super::PairingCurve;
@@ -123,8 +123,8 @@ pub(crate) mod phantom {
             b: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
-            let rs1 = new_read_rv32_register(memory, 1, a);
-            let rs2 = new_read_rv32_register(memory, 1, b);
+            let rs1 = read_rv32_register(memory, 1, a);
+            let rs2 = read_rv32_register(memory, 1, b);
             hint_pairing(memory, &mut streams.hint_stream, rs1, rs2, c_upper)
         }
     }
@@ -253,7 +253,7 @@ pub(crate) mod phantom {
     {
         let repr: [u8; N] = memory
             .memory
-            .read_range_generic((RV32_MEMORY_AS, ptr), N)
+            .get_slice((RV32_MEMORY_AS, ptr), N)
             .try_into()
             .unwrap();
         Fp::from_repr(repr.into())

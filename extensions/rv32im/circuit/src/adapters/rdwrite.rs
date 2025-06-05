@@ -405,6 +405,7 @@ impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32CondRdWriteAdapter
             };
         } else {
             adapter_cols.inner.rd_ptr = F::ZERO;
+            mem_helper.fill_zero(adapter_cols.inner.rd_aux_cols.as_mut());
             adapter_cols.inner.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
             adapter_cols.inner.from_state.pc = F::from_canonical_u32(record.from_pc);
         }

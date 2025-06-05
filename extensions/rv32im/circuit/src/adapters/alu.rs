@@ -181,14 +181,12 @@ pub struct Rv32BaseAluAdapterRecord {
     pub from_pc: u32,
     pub from_timestamp: u32,
 
-    // Pack u8 together for alignment
     pub rd_ptr: u32,
     pub rs1_ptr: u32,
-    /// 1 if rs2 was a read, 0 if an immediate
-    pub rs2_as: u32,
-
     /// Pointer if rs2 was a read, immediate value otherwise
     pub rs2: u32,
+    /// 1 if rs2 was a read, 0 if an immediate
+    pub rs2_as: u8,
 
     pub reads_aux: [MemoryReadAuxRecord; 2],
     pub writes_aux: MemoryWriteAuxRecord<RV32_REGISTER_NUM_LIMBS>,
@@ -232,7 +230,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
         );
 
         let rs2 = if e.as_canonical_u32() == RV32_REGISTER_AS {
-            record.rs2_as = RV32_REGISTER_AS;
+            record.rs2_as = RV32_REGISTER_AS as u8;
             record.rs2 = c.as_canonical_u32();
 
             tracing_read(
@@ -242,7 +240,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
                 &mut record.reads_aux[1].prev_timestamp,
             )
         } else {
-            record.rs2_as = RV32_IMM_AS;
+            record.rs2_as = RV32_IMM_AS as u8;
 
             tracing_read_imm(memory, c.as_canonical_u32(), &mut record.rs2)
         };
@@ -309,14 +307,14 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceFiller<F, CTX>
         );
         timestamp -= 1;
 
-        let rs2_as = record.rs2_as;
-        if rs2_as != 0 {
+        if record.rs2_as != 0 {
             mem_helper.fill(
                 record.reads_aux[1].prev_timestamp.into(),
                 timestamp,
                 adapter_row.reads_aux[1].as_mut(),
             );
         } else {
+            mem_helper.fill_zero(adapter_row.reads_aux[1].as_mut());
             let rs2_imm = record.rs2;
             let mask = (1 << RV32_CELL_BITS) - 1;
             self.bitwise_lookup_chip
@@ -330,9 +328,8 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceFiller<F, CTX>
             adapter_row.reads_aux[0].as_mut(),
         );
 
-        // Write to rs2 first just in case since it appears later in Record
+        adapter_row.rs2_as = F::from_canonical_u8(record.rs2_as);
         adapter_row.rs2 = F::from_canonical_u32(record.rs2);
-        adapter_row.rs2_as = F::from_canonical_u32(rs2_as);
         adapter_row.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
         adapter_row.rd_ptr = F::from_canonical_u32(record.rd_ptr);
         adapter_row.from_state.timestamp = F::from_canonical_u32(timestamp);
