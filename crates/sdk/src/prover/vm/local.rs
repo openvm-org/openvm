@@ -170,9 +170,21 @@ where
             executor.set_trace_height_constraints(self.pk.vm_pk.trace_height_constraints.clone());
             executor
         };
+
+        let (widths, interactions) = get_widths_and_interactions_from_vkey(self.pk.vm_pk.get_vk());
+        let input = input.into();
+        let segment = executor
+            .execute_metered(
+                self.committed_exe.exe.clone(),
+                input.clone(),
+                widths,
+                interactions,
+            )
+            .expect("execute_metered failed");
         let proof_input = executor
-            .execute_and_generate(self.committed_exe.clone(), input)
+            .execute_with_segment_and_generate(self.committed_exe.clone(), input, &segment)
             .unwrap();
+
         let vm = VirtualMachine::new(e, executor.config);
         vm.prove_single(&self.pk.vm_pk, proof_input)
     }
