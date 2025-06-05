@@ -221,6 +221,7 @@ rrs-lib = "0.1.0"
 rand = { version = "0.8.5", default-features = false }
 hex = { version = "0.4.3", default-features = false }
 serde-big-array = "0.5.1"
+dashmap = "6.1.0"
 
 # default-features = false for no_std for use in guest programs
 itertools = { version = "0.14.0", default-features = false }
