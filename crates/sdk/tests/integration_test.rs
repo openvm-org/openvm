@@ -64,7 +64,7 @@ const LEAF_LOG_BLOWUP: usize = 2;
 const INTERNAL_LOG_BLOWUP: usize = 3;
 const ROOT_LOG_BLOWUP: usize = 4;
 
-/// `OpenVmHalo2Verifier` wraps the `snark-verifer` contract, meaning that
+/// `OpenVmHalo2Verifier` wraps the `snark-verifier` contract, meaning that
 /// the default `fallback` interface can still be used. This function uses
 /// the fallback interface as opposed to the `verify(..)` interface.
 fn verify_evm_halo2_proof_with_fallback(

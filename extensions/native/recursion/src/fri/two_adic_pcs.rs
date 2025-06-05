@@ -172,7 +172,7 @@ pub fn verify_two_adic_pcs<C: Config>(
         let index_bits = challenger.sample_bits(builder, log_max_lde_height);
 
         // We reset the reduced opening accumulator at the start of each query.
-        // We describe what `ro[log_height]` computes per query in pseduo-code, where `log_height`
+        // We describe what `ro[log_height]` computes per query in pseudo-code, where `log_height`
         // is log2 of the size of the LDE domain: ro[log_height] = 0
         // alpha_pow[log_height] = 1
         // for round in rounds:

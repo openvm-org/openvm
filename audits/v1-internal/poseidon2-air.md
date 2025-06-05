@@ -6,7 +6,7 @@ Author: https://github.com/MonkeyKing-1
 
 Scope: Plonky3 poseidon2 and poseidon2 air
 
-Understanding how the Plonky3 posiedon2 air works, make sure it is sound.
+Understanding how the Plonky3 poseidon2 air works, make sure it is sound.
 
 ## 2. Findings
 
