@@ -3,7 +3,7 @@ use std::sync::Arc;
 use derivative::Derivative;
 use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
-    arch::{VirtualMachine, VmComplexTraceHeights, VmConfig},
+    arch::{InsExecutorE1, VirtualMachine, VmComplexTraceHeights, VmConfig},
     system::{memory::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
 };
 use openvm_continuations::{
@@ -92,7 +92,7 @@ pub struct Halo2ProvingKey {
 
 impl<VC: VmConfig<F>> AppProvingKey<VC>
 where
-    VC::Executor: Chip<SC>,
+    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
     VC::Periphery: Chip<SC>,
 {
     pub fn keygen(config: AppConfig<VC>) -> Self {

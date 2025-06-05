@@ -3,7 +3,9 @@ use std::{path::PathBuf, sync::Arc};
 use clap::{command, Parser};
 use eyre::Result;
 use openvm_benchmarks_utils::{build_elf, get_programs_dir};
-use openvm_circuit::arch::{instructions::exe::VmExe, DefaultSegmentationStrategy, VmConfig};
+use openvm_circuit::arch::{
+    instructions::exe::VmExe, DefaultSegmentationStrategy, InsExecutorE1, VmConfig,
+};
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_sdk::{
@@ -17,7 +19,7 @@ use openvm_sdk::{
     prover::{vm::local::VmLocalProver, AppProver, LeafProvingController},
     Sdk, StdIn,
 };
-use openvm_stark_backend::utils::metrics_span;
+use openvm_stark_backend::{config::Val, utils::metrics_span};
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -156,7 +158,7 @@ impl BenchmarkCli {
     ) -> Result<()>
     where
         VC: VmConfig<F>,
-        VC::Executor: Chip<SC>,
+        VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
         VC::Periphery: Chip<SC>,
     {
         let app_config = self.app_config(vm_config);
@@ -190,7 +192,7 @@ pub fn bench_from_exe<VC, E: StarkFriEngine<SC>>(
 ) -> Result<()>
 where
     VC: VmConfig<F>,
-    VC::Executor: Chip<SC>,
+    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
     VC::Periphery: Chip<SC>,
 {
     let bench_name = bench_name.to_string();

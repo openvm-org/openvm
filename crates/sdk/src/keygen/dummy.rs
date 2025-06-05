@@ -6,8 +6,8 @@ use openvm_circuit::{
             exe::VmExe, instruction::Instruction, program::Program, LocalOpcode,
             SystemOpcode::TERMINATE,
         },
-        ContinuationVmProof, SingleSegmentVmExecutor, VirtualMachine, VmComplexTraceHeights,
-        VmConfig, VmExecutor,
+        ContinuationVmProof, InsExecutorE1, SingleSegmentVmExecutor, VirtualMachine,
+        VmComplexTraceHeights, VmConfig, VmExecutor,
     },
     system::program::trace::VmCommittedExe,
     utils::next_power_of_two_or_zero,
@@ -21,6 +21,7 @@ use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_native_recursion::hints::Hintable;
 use openvm_rv32im_circuit::Rv32ImConfig;
+use openvm_stark_backend::config::Val;
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
@@ -104,7 +105,7 @@ pub fn dummy_leaf_proof<VC: VmConfig<F>>(
     overridden_heights: Option<VmComplexTraceHeights>,
 ) -> Proof<SC>
 where
-    VC::Executor: Chip<SC>,
+    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
     VC::Periphery: Chip<SC>,
 {
     let app_proof = dummy_app_proof_impl(app_vm_pk.clone(), overridden_heights);
@@ -168,7 +169,7 @@ fn dummy_app_proof_impl<VC: VmConfig<F>>(
     overridden_heights: Option<VmComplexTraceHeights>,
 ) -> ContinuationVmProof<SC>
 where
-    VC::Executor: Chip<SC>,
+    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
     VC::Periphery: Chip<SC>,
 {
     let fri_params = app_vm_pk.fri_params;
