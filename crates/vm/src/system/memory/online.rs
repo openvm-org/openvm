@@ -4,7 +4,6 @@ use getset::Getters;
 use itertools::{izip, zip_eq};
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_stark_backend::p3_field::PrimeField32;
-use serde::{Deserialize, Serialize};
 
 use super::{
     adapter::AccessAdapterInventory,
@@ -143,25 +142,6 @@ impl GuestMemory {
 //     }
 // }
 
-// TO BE DELETED
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum MemoryLogEntry<T> {
-    Read {
-        address_space: u32,
-        pointer: u32,
-        len: usize,
-    },
-    Write {
-        address_space: u32,
-        pointer: u32,
-        data: Vec<T>,
-    },
-    IncrementTimestampBy(u32),
-}
-
-// perf[jpw]: since we restrict `timestamp < 2^29`, we could pack `timestamp, log2(block_size)`
-// into a single u32 to save half the memory, since `block_size` is a power of 2 and its log2
-// is less than 2^3.
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, derive_new::new)]
 pub struct AccessMetadata {
