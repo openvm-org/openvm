@@ -201,16 +201,9 @@ mod tests {
         )?;
         let config = Rv32ImConfig::default();
 
-        let vm = VirtualMachine::new(default_engine(), config);
-        let pk = vm.keygen();
-
+        let executor = VmExecutor::new(config);
         let input = vec![[0, 0, 0, 1].map(F::from_canonical_u8).to_vec()];
-
-        let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
-        match vm
-            .executor
-            .execute_metered(exe.clone(), input.clone(), widths, interactions)
-        {
+        match executor.execute_e1(exe.clone(), input.clone(), None) {
             Err(ExecutionError::FailedWithExitCode(_)) => Ok(()),
             Err(_) => panic!("should fail with `FailedWithExitCode`"),
             Ok(_) => panic!("should fail"),

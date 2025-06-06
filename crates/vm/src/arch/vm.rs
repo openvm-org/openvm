@@ -565,7 +565,6 @@ where
             final_memory,
         })
     }
-
     pub fn execute_with_segments(
         &self,
         exe: impl Into<VmExe<F>>,
@@ -712,6 +711,39 @@ where
                 final_memory = Some(seg.chip_complex.memory_controller().memory_image().clone());
                 tracing::info_span!("generate_proof_input")
                     .in_scope(|| seg.generate_proof_input(None))
+            },
+            GenerationError::Execution,
+        )?;
+
+        Ok(VmExecutorResult {
+            per_segment,
+            final_memory,
+        })
+    }
+
+    pub fn execute_with_segments_and_generate_with_cached_program<SC: StarkGenericConfig>(
+        &self,
+        committed_exe: Arc<VmCommittedExe<SC>>,
+        input: impl Into<Streams<F>>,
+        segments: &[Segment],
+    ) -> Result<VmExecutorResult<SC>, GenerationError>
+    where
+        Domain<SC>: PolynomialSpace<Val = F>,
+        VC::Executor: Chip<SC> + InsExecutorE1<F>,
+        VC::Periphery: Chip<SC>,
+    {
+        let _span = info_span!("execute_with_segments_and_generate_with_cached_program").entered();
+
+        let mut final_memory = None;
+        let per_segment = self.execute_with_segments_and_then(
+            committed_exe.exe.clone(),
+            input,
+            segments,
+            |_, seg| {
+                final_memory = Some(seg.chip_complex.memory_controller().memory_image().clone());
+                tracing::info_span!("generate_proof_input").in_scope(|| {
+                    seg.generate_proof_input(Some(committed_exe.committed_program.clone()))
+                })
             },
             GenerationError::Execution,
         )?;

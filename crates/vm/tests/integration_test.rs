@@ -209,7 +209,7 @@ fn test_vm_override_executor_height() {
         Some(overridden_heights),
     );
     let proof_input = executor
-        .execute_and_generate(committed_exe, vec![])
+        .execute_with_segment_and_generate(committed_exe, vec![], &segment)
         .unwrap();
     let air_heights: Vec<_> = proof_input
         .per_air
@@ -315,7 +315,7 @@ fn test_vm_public_values() {
             .concat(),
         );
         let proof_input = single_vm
-            .execute_and_generate(committed_exe, vec![])
+            .execute_with_segment_and_generate(committed_exe, vec![], &segment)
             .unwrap();
         vm.engine
             .prove_then_verify(&pk, proof_input)
@@ -424,7 +424,9 @@ fn test_vm_1_persistent() {
         );
     }
 
-    let result_for_proof = vm.execute_and_generate(program, vec![]).unwrap();
+    let result_for_proof = vm
+        .execute_with_segments_and_generate(program, vec![], &segments)
+        .unwrap();
     let proofs = vm.prove(&pk, result_for_proof);
     vm.verify(&pk.get_vk(), proofs)
         .expect("Verification failed");

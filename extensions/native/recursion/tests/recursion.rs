@@ -1,4 +1,7 @@
-use openvm_circuit::arch::{instructions::program::Program, SystemConfig, VmConfig, VmExecutor};
+use openvm_circuit::arch::{
+    execution_mode::metered::get_widths_and_interactions_from_vkey, instructions::program::Program,
+    SystemConfig, VirtualMachine, VmConfig,
+};
 use openvm_native_circuit::{Native, NativeConfig};
 use openvm_native_compiler::{asm::AsmBuilder, ir::Felt};
 use openvm_native_recursion::testing_utils::inner::run_recursive_test;
@@ -7,7 +10,11 @@ use openvm_stark_backend::{
     p3_commit::PolynomialSpace,
     p3_field::{extension::BinomialExtensionField, FieldAlgebra},
 };
-use openvm_stark_sdk::{config::FriParameters, p3_baby_bear::BabyBear, utils::ProofInputForTest};
+use openvm_stark_sdk::{
+    config::{baby_bear_poseidon2::default_engine, FriParameters},
+    p3_baby_bear::BabyBear,
+    utils::ProofInputForTest,
+};
 
 fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
     type F = BabyBear;
@@ -47,9 +54,18 @@ where
     let vm_config = NativeConfig::new(SystemConfig::default().with_public_values(3), Native);
     let airs = vm_config.create_chip_complex().unwrap().airs();
 
-    let executor = VmExecutor::<BabyBear, NativeConfig>::new(vm_config);
+    let vm = VirtualMachine::new(default_engine(), vm_config);
+    let pk = vm.keygen();
+    let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+    let segments = vm
+        .executor
+        .execute_metered(fib_program.clone(), vec![], widths, interactions)
+        .unwrap();
 
-    let mut result = executor.execute_and_generate(fib_program, vec![]).unwrap();
+    let mut result = vm
+        .executor
+        .execute_with_segments_and_generate(fib_program, vec![], &segments)
+        .unwrap();
     assert_eq!(result.per_segment.len(), 1, "unexpected continuation");
     let proof_input = result.per_segment.remove(0);
     // Filter out unused AIRS (where trace is empty)
