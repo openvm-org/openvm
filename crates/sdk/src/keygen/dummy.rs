@@ -49,6 +49,8 @@ pub(super) fn compute_root_proof_heights(
     root_vm_config: NativeConfig,
     root_exe: VmExe<F>,
     dummy_internal_proof: &Proof<SC>,
+    widths: Vec<usize>,
+    interactions: Vec<usize>,
 ) -> (Vec<usize>, VmComplexTraceHeights) {
     let num_user_public_values = root_vm_config.system.num_public_values - 2 * DIGEST_SIZE;
     let root_input = RootVmVerifierInput {
@@ -56,8 +58,11 @@ pub(super) fn compute_root_proof_heights(
         public_values: vec![F::ZERO; num_user_public_values],
     };
     let vm = SingleSegmentVmExecutor::new(root_vm_config);
+    let segment = vm
+        .execute_metered(root_exe.clone(), root_input.write(), widths, interactions)
+        .unwrap();
     let res = vm
-        .execute_and_compute_heights(root_exe, root_input.write())
+        .execute_with_segment_and_compute_heights(root_exe, root_input.write(), &segment)
         .unwrap();
     let air_heights: Vec<_> = res
         .air_heights
