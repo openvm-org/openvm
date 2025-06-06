@@ -3,6 +3,7 @@ use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
     marker::PhantomData,
+    ptr::{slice_from_raw_parts, slice_from_raw_parts_mut},
     sync::Arc,
 };
 
@@ -211,6 +212,21 @@ where
     fn custom_borrow(&'a mut self, _metadata: I) -> &'a mut T {
         self.borrow_mut()
     }
+}
+
+/// Converts a field element slice into a record type.
+/// This function transmutes the `&mut [F]` to raw bytes,
+/// then uses the `CustomBorrow` trait to transmute to the desired record type `T`.
+/// **SAFETY**: `slice` must satisfy the requirements of the `CustomBorrow` trait.
+pub unsafe fn get_record_from_slice<'a, T, F, I>(slice: &mut &'a mut [F], metadata: I) -> T
+where
+    [u8]: CustomBorrow<'a, T, I>,
+{
+    // The alignment of `[u8]` is always satisfiedƒ
+    let record_buffer =
+        &mut *slice_from_raw_parts_mut(slice.as_mut_ptr() as *mut u8, slice.len() * size_of::<F>());
+    let record: T = record_buffer.custom_borrow(metadata);
+    record
 }
 
 /// The minimal information that [AdapterCoreRecordArena] needs to know to allocate a row

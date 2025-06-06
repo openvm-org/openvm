@@ -8,10 +8,10 @@ use num_traits::Zero;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, CustomBorrow, DynAdapterInterface, DynArray, MinimalInstruction,
-        RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir,
-        VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1,
+        AdapterTraceFiller, AdapterTraceStep, CustomBorrow, DynAdapterInterface, DynArray,
+        MinimalInstruction, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
+        VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -361,22 +361,18 @@ where
         // NOTE[teokitan]: This is where GPU acceleration should happen in the future
 
         // Get the core record from the row slice
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        let core_bytes = unsafe {
-            std::slice::from_raw_parts_mut(
-                core_row.as_mut_ptr() as *mut u8,
-                core_row.len() * size_of::<F>(),
+        let record: FieldExpressionCoreRecordMut = unsafe {
+            get_record_from_slice(
+                &mut core_row,
+                FieldExpressionMetadata {
+                    total_input_limbs: self.num_inputs() * self.expr.canonical_num_limbs(),
+                },
             )
         };
-
-        let record_metadata = FieldExpressionMetadata {
-            total_input_limbs: self.num_inputs() * self.expr.canonical_num_limbs(),
-        };
-
-        let record: FieldExpressionCoreRecordMut = core_bytes.custom_borrow(record_metadata);
 
         let (_, inputs, flags) =
             run_field_expression(self, &record.input_limbs, record.inner.opcode as usize);

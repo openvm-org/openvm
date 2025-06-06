@@ -2,15 +2,14 @@ use std::{
     array,
     borrow::{Borrow, BorrowMut},
     iter::zip,
-    ptr::slice_from_raw_parts,
 };
 
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, MinimalInstruction, RecordArena, Result, StepExecutorE1, TraceFiller,
-        TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1,
+        AdapterTraceFiller, AdapterTraceStep, MinimalInstruction, RecordArena, Result,
+        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -251,17 +250,11 @@ where
     A: 'static + AdapterTraceFiller<F, CTX>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        let record = unsafe {
-            let record_buffer = &*slice_from_raw_parts(
-                core_row.as_ptr() as *const u8,
-                size_of::<BaseAluCoreRecord<NUM_LIMBS>>(),
-            );
-            let record: &BaseAluCoreRecord<NUM_LIMBS> = record_buffer.borrow();
-            record
-        };
+        let record: &BaseAluCoreRecord<NUM_LIMBS> =
+            unsafe { get_record_from_slice(&mut core_row, ()) };
         let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
         // SAFETY: the following is highly unsafe. We are going to cast `core_row` to a record
         // buffer, and then do an _overlapping_ write to the `core_row` as a row of field elements.

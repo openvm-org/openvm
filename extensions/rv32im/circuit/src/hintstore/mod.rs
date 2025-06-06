@@ -1,15 +1,14 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    ptr::{slice_from_raw_parts, slice_from_raw_parts_mut},
     sync::{Arc, Mutex, OnceLock},
 };
 
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        CustomBorrow, ExecutionBridge, ExecutionError, ExecutionState, MultiRowLayout,
-        MultiRowRecordArena, NewVmChipWrapper, RecordArena, Result, StepExecutorE1, Streams,
-        TraceFiller, TraceStep, VmStateMut,
+        get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionError, ExecutionState,
+        MultiRowLayout, MultiRowRecordArena, NewVmChipWrapper, RecordArena, Result, StepExecutorE1,
+        Streams, TraceFiller, TraceStep, VmStateMut,
     },
     system::memory::{
         offline_checker::{
@@ -271,6 +270,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
 pub struct Rv32HintStoreMetadata {
     num_words: usize,
 }
@@ -483,12 +483,7 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep<F> {
         let mut chunks = Vec::with_capacity(rows_used);
 
         while !trace.is_empty() {
-            let record = unsafe {
-                let row = trace.as_ptr() as *const u8;
-                let row = &*slice_from_raw_parts(row, size_of::<Rv32HintStoreRecord>());
-                let record: &Rv32HintStoreRecord = row.borrow();
-                record
-            };
+            let record: &Rv32HintStoreRecord = unsafe { get_record_from_slice(&mut trace, ()) };
             sizes.push(width * record.num_words as usize);
             let (chunk, rest) = trace.split_at_mut(width * record.num_words as usize);
             chunks.push(chunk);
@@ -504,13 +499,8 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep<F> {
             .zip(sizes.par_iter())
             .for_each(|(chunk, &num_words)| {
                 let num_words = num_words / width;
-                let record = unsafe {
-                    let row = chunk.as_mut_ptr() as *mut u8;
-                    let row = &mut *slice_from_raw_parts_mut(row, chunk.len() * size_of::<F>());
-                    let record: Rv32HintStoreRecordMut =
-                        row.custom_borrow(Rv32HintStoreMetadata { num_words });
-                    record
-                };
+                let record: Rv32HintStoreRecordMut =
+                    unsafe { get_record_from_slice(chunk, Rv32HintStoreMetadata { num_words }) };
 
                 self.bitwise_lookup_chip.request_range(
                     (record.inner.mem_ptr >> msl_rshift) << msl_lshift,

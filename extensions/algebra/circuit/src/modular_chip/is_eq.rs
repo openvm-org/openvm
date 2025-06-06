@@ -1,7 +1,6 @@
 use std::{
     array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
-    ptr::slice_from_raw_parts,
 };
 
 use num_bigint::BigUint;
@@ -9,9 +8,9 @@ use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, MinimalInstruction, RecordArena, Result, StepExecutorE1, TraceFiller,
-        TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1,
+        AdapterTraceFiller, AdapterTraceStep, MinimalInstruction, RecordArena, Result,
+        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -380,16 +379,10 @@ where
     A: 'static + AdapterTraceFiller<F, CTX>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = row_slice.split_at_mut(A::WIDTH);
+        let (adapter_row, mut core_row) = row_slice.split_at_mut(A::WIDTH);
         self.adapter.fill_trace_row(mem_helper, adapter_row);
-        let record = unsafe {
-            let record_buffer = &*slice_from_raw_parts(
-                core_row.as_ptr() as *const u8,
-                size_of::<ModularIsEqualRecord<READ_LIMBS>>(),
-            );
-            let record: &ModularIsEqualRecord<READ_LIMBS> = record_buffer.borrow();
-            record
-        };
+        let record: &ModularIsEqualRecord<READ_LIMBS> =
+            unsafe { get_record_from_slice(&mut core_row, ()) };
         let cols: &mut ModularIsEqualCoreCols<F, READ_LIMBS> = core_row.borrow_mut();
         let (b_cmp, b_diff_idx) =
             run_unsigned_less_than::<READ_LIMBS>(&record.b, &self.modulus_limbs);
