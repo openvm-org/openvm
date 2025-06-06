@@ -109,12 +109,11 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
         let mut wrapper_layers = 0;
         loop {
             if proofs.len() == 1 {
-                let actual_air_heights =
-                    self.root_prover
-                        .execute_for_air_heights(RootVmVerifierInput {
-                            proofs: vec![proofs[0].clone()],
-                            public_values: public_values.to_vec(),
-                        });
+                let input = RootVmVerifierInput {
+                    proofs: vec![proofs[0].clone()],
+                    public_values: public_values.to_vec(),
+                };
+                let actual_air_heights = self.root_prover.execute_for_air_heights(input);
                 // Root verifier can handle the internal proof. We can stop here.
                 if heights_le(
                     &actual_air_heights,

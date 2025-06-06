@@ -140,12 +140,16 @@ fn test_vm_override_executor_height() {
     let executor = SingleSegmentVmExecutor::new(vm_config.clone());
 
     let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
-    let segment = executor
+    let max_trace_heights = executor
         .execute_metered(committed_exe.exe.clone(), vec![], widths, interactions)
         .unwrap();
 
     let res = executor
-        .execute_with_segment_and_compute_heights(committed_exe.exe.clone(), vec![], &segment)
+        .execute_with_max_heights_and_compute_heights(
+            committed_exe.exe.clone(),
+            vec![],
+            &max_trace_heights,
+        )
         .unwrap();
     // Memory trace heights are not computed during execution.
     assert_eq!(
@@ -209,7 +213,7 @@ fn test_vm_override_executor_height() {
         Some(overridden_heights),
     );
     let proof_input = executor
-        .execute_with_segment_and_generate(committed_exe, vec![], &segment)
+        .execute_with_max_heights_and_generate(committed_exe, vec![], &max_trace_heights)
         .unwrap();
     let air_heights: Vec<_> = proof_input
         .per_air
@@ -299,12 +303,12 @@ fn test_vm_public_values() {
         let single_vm = SingleSegmentVmExecutor::new(config);
 
         let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
-        let segment = single_vm
+        let max_trace_heights = single_vm
             .execute_metered(program.clone().into(), vec![], widths, interactions)
             .unwrap();
 
         let exe_result = single_vm
-            .execute_with_segment_and_compute_heights(program, vec![], &segment)
+            .execute_with_max_heights_and_compute_heights(program, vec![], &max_trace_heights)
             .unwrap();
         assert_eq!(
             exe_result.public_values,
@@ -315,7 +319,7 @@ fn test_vm_public_values() {
             .concat(),
         );
         let proof_input = single_vm
-            .execute_with_segment_and_generate(committed_exe, vec![], &segment)
+            .execute_with_max_heights_and_generate(committed_exe, vec![], &max_trace_heights)
             .unwrap();
         vm.engine
             .prove_then_verify(&pk, proof_input)

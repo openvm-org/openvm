@@ -58,11 +58,15 @@ pub(super) fn compute_root_proof_heights(
         public_values: vec![F::ZERO; num_user_public_values],
     };
     let vm = SingleSegmentVmExecutor::new(root_vm_config);
-    let segment = vm
+    let max_trace_heights = vm
         .execute_metered(root_exe.clone(), root_input.write(), widths, interactions)
         .unwrap();
     let res = vm
-        .execute_with_segment_and_compute_heights(root_exe, root_input.write(), &segment)
+        .execute_with_max_heights_and_compute_heights(
+            root_exe,
+            root_input.write(),
+            &max_trace_heights,
+        )
         .unwrap();
     let air_heights: Vec<_> = res
         .air_heights

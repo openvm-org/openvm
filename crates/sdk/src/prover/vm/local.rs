@@ -173,7 +173,7 @@ where
 
         let (widths, interactions) = get_widths_and_interactions_from_vkey(self.pk.vm_pk.get_vk());
         let input = input.into();
-        let segment = executor
+        let max_trace_heights = executor
             .execute_metered(
                 self.committed_exe.exe.clone(),
                 input.clone(),
@@ -182,7 +182,11 @@ where
             )
             .expect("execute_metered failed");
         let proof_input = executor
-            .execute_with_segment_and_generate(self.committed_exe.clone(), input, &segment)
+            .execute_with_max_heights_and_generate(
+                self.committed_exe.clone(),
+                input,
+                &max_trace_heights,
+            )
             .unwrap();
 
         let vm = VirtualMachine::new(e, executor.config);

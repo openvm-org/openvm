@@ -858,14 +858,14 @@ where
         &self,
         exe: VmExe<F>,
         input: impl Into<Streams<F>>,
-        segment: Option<&Segment>,
+        trace_heights: Option<&[u32]>,
     ) -> Result<VmSegmentExecutor<F, VC, TracegenExecutionControlWithSegmentation>, ExecutionError>
     {
         let chip_complex = create_and_initialize_chip_complex(
             &self.config,
             exe.program.clone(),
             None,
-            segment.map(|s| s.trace_heights.as_slice()),
+            trace_heights,
         )
         .unwrap();
 
@@ -902,7 +902,7 @@ where
         input: impl Into<Streams<F>>,
         widths: Vec<usize>,
         interactions: Vec<usize>,
-    ) -> Result<Segment, ExecutionError> {
+    ) -> Result<Vec<u32>, ExecutionError> {
         let memory = {
             let mem_config = self.config.system().memory_config;
             Some(GuestMemory::new(AddressMap::from_sparse(
@@ -967,22 +967,24 @@ where
             "Expected exactly 1 segment, but got {}",
             exec_state.ctx.segments.len()
         );
-        Ok(exec_state.ctx.segments.into_iter().next().unwrap())
+        let segment = exec_state.ctx.segments.into_iter().next().unwrap();
+        Ok(segment.trace_heights)
     }
 
     /// Executes a program and returns its proof input.
-    pub fn execute_with_segment_and_generate<SC: StarkGenericConfig>(
+    pub fn execute_with_max_heights_and_generate<SC: StarkGenericConfig>(
         &self,
         committed_exe: Arc<VmCommittedExe<SC>>,
         input: impl Into<Streams<F>>,
-        segment: &Segment,
+        max_trace_heights: &[u32],
     ) -> Result<ProofInput<SC>, GenerationError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let segment = self.execute_impl(committed_exe.exe.clone(), input, Some(segment))?;
+        let segment =
+            self.execute_impl(committed_exe.exe.clone(), input, Some(max_trace_heights))?;
         let proof_input = tracing::info_span!("trace_gen").in_scope(|| {
             segment.generate_proof_input(Some(committed_exe.committed_program.clone()))
         })?;
@@ -990,14 +992,15 @@ where
     }
 
     /// Executes a program, compute the trace heights, and returns the public values.
-    pub fn execute_with_segment_and_compute_heights(
+    pub fn execute_with_max_heights_and_compute_heights(
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-        segment: &Segment,
+        max_trace_heights: &[u32],
     ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
         let executor = {
-            let mut executor = self.execute_impl(exe.into(), input.into(), Some(segment))?;
+            let mut executor =
+                self.execute_impl(exe.into(), input.into(), Some(max_trace_heights))?;
             executor.chip_complex.finalize_memory();
             executor
         };
@@ -1428,7 +1431,7 @@ pub fn create_and_initialize_chip_complex<F, VC>(
     config: &VC,
     program: Program<F>,
     initial_memory: Option<MemoryImage>,
-    trace_heights: Option<&[u32]>,
+    max_trace_heights: Option<&[u32]>,
 ) -> Result<VmChipComplex<F, VC::Executor, VC::Periphery>, VmInventoryError>
 where
     F: PrimeField32,
@@ -1450,7 +1453,7 @@ where
         chip_complex.set_initial_memory(initial_memory);
     }
 
-    if let Some(trace_heights) = trace_heights {
+    if let Some(max_trace_heights) = max_trace_heights {
         let executor_chip_offset = if chip_complex.config().has_public_values_chip() {
             PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
         } else {
@@ -1466,7 +1469,7 @@ where
         {
             if let ChipId::Executor(exec_id) = chip_id {
                 if let Some(height_index) = executor_chip_offset.checked_add(i) {
-                    if let Some(&height) = trace_heights.get(height_index) {
+                    if let Some(&height) = max_trace_heights.get(height_index) {
                         if let Some(executor) = chip_complex.inventory.executors.get_mut(*exec_id) {
                             // TODO(ayush): remove conversion
                             executor.set_trace_height(height.next_power_of_two() as usize);

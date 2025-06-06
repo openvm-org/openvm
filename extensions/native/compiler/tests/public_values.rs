@@ -39,12 +39,12 @@ fn test_compiler_public_values() {
 
     let executor = SingleSegmentVmExecutor::new(config);
 
-    let segment = executor
+    let max_trace_heights = executor
         .execute_metered(program.clone().into(), vec![], widths, interactions)
         .unwrap();
 
     let exe_result = executor
-        .execute_with_segment_and_compute_heights(program, vec![], &segment)
+        .execute_with_max_heights_and_compute_heights(program, vec![], &max_trace_heights)
         .unwrap();
     assert_eq!(
         exe_result
