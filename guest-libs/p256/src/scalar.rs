@@ -15,6 +15,12 @@ use openvm_algebra_guest::IntMod;
 
 use crate::{internal::P256Scalar, point::FieldBytes, NistP256, ORDER_HEX};
 
+impl P256Scalar {
+    /// Returns the SEC1 encoding of this scalar.
+    pub fn to_bytes(&self) -> FieldBytes {
+        self.to_be_bytes().into()
+    }
+}
 // --- Implement elliptic_curve traits on P256Scalar ---
 
 impl Copy for P256Scalar {}

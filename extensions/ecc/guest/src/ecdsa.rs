@@ -28,6 +28,47 @@ type Coordinate<C> = <<C as IntrinsicCurve>::Point as WeierstrassPoint>::Coordin
 type Scalar<C> = <C as IntrinsicCurve>::Scalar;
 type AffinePoint<C> = <C as IntrinsicCurve>::Point;
 
+//
+// Signing implementations are placeholders to support patching compilation
+//
+
+/// This is placeholder struct for compatibility purposes with the `ecdsa` crate.
+/// Signing from private keys is not supported yet.
+#[derive(Clone)]
+pub struct SigningKey<C: IntrinsicCurve> {
+    /// ECDSA signing keys are non-zero elements of a given curve's scalar field.
+    #[allow(dead_code)]
+    secret_scalar: NonZeroScalar<C>,
+
+    /// Verifying key which corresponds to this signing key.
+    verifying_key: VerifyingKey<C>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone)]
+pub struct NonZeroScalar<C: IntrinsicCurve> {
+    scalar: Scalar<C>,
+}
+
+impl<C: IntrinsicCurve> SigningKey<C> {
+    pub fn from_slice(_bytes: &[u8]) -> Result<Self> {
+        todo!("signing is not yet implemented")
+    }
+
+    pub fn verifying_key(&self) -> &VerifyingKey<C> {
+        &self.verifying_key
+    }
+}
+
+impl<C> SigningKey<C>
+where
+    C: IntrinsicCurve + PrimeCurve,
+{
+    pub fn sign_prehash_recoverable(&self, _prehash: &[u8]) -> Result<(Signature<C>, RecoveryId)> {
+        todo!("signing is not yet implemented")
+    }
+}
+
 // This struct is public because it is used by the VerifyPrimitive impl in the k256 and p256 guest
 // libraries.
 #[repr(C)]
@@ -442,5 +483,17 @@ where
         Ok(())
     } else {
         Err(Error::new())
+    }
+}
+
+impl<C: IntrinsicCurve> AsRef<AffinePoint<C>> for VerifyingKey<C> {
+    fn as_ref(&self) -> &AffinePoint<C> {
+        &self.inner.point
+    }
+}
+
+impl<C: IntrinsicCurve> AsRef<AffinePoint<C>> for PublicKey<C> {
+    fn as_ref(&self) -> &AffinePoint<C> {
+        &self.point
     }
 }
