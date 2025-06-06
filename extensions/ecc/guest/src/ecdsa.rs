@@ -28,6 +28,10 @@ type Coordinate<C> = <<C as IntrinsicCurve>::Point as WeierstrassPoint>::Coordin
 type Scalar<C> = <C as IntrinsicCurve>::Scalar;
 type AffinePoint<C> = <C as IntrinsicCurve>::Point;
 
+//
+// Signing implementations are placeholders to support patching compilation
+//
+
 /// This is placeholder struct for compatibility purposes with the `ecdsa` crate.
 /// Signing from private keys is not supported yet.
 #[derive(Clone)]
@@ -47,8 +51,21 @@ pub struct NonZeroScalar<C: IntrinsicCurve> {
 }
 
 impl<C: IntrinsicCurve> SigningKey<C> {
+    pub fn from_slice(_bytes: &[u8]) -> Result<Self> {
+        todo!("signing is not yet implemented")
+    }
+
     pub fn verifying_key(&self) -> &VerifyingKey<C> {
         &self.verifying_key
+    }
+}
+
+impl<C> SigningKey<C>
+where
+    C: IntrinsicCurve + PrimeCurve,
+{
+    pub fn sign_prehash_recoverable(&self, _prehash: &[u8]) -> Result<(Signature<C>, RecoveryId)> {
+        todo!("signing is not yet implemented")
     }
 }
 
