@@ -10,7 +10,11 @@ pub use ecdsa_core::{
     RecoveryId,
 };
 #[cfg(feature = "ecdsa")]
-use {super::Secp256k1Point, ecdsa_core::hazmat::VerifyPrimitive};
+use {
+    super::{Scalar, Secp256k1Point},
+    ecdsa_core::hazmat::{SignPrimitive, VerifyPrimitive},
+    elliptic_curve::{ops::Invert, subtle::CtOption},
+};
 
 use super::Secp256k1;
 
@@ -19,11 +23,27 @@ pub type Signature = ecdsa_core::Signature<Secp256k1>;
 
 /// ECDSA/secp256k1 signing key
 #[cfg(feature = "ecdsa")]
-pub type SigningKey = ecdsa_core::SigningKey<Secp256k1>;
+pub type SigningKey = openvm_ecc_guest::ecdsa::SigningKey<Secp256k1>;
 
 /// ECDSA/secp256k1 verification key (i.e. public key)
 #[cfg(feature = "ecdsa")]
 pub type VerifyingKey = openvm_ecc_guest::ecdsa::VerifyingKey<Secp256k1>;
+
+// We implement the trait so that patched libraries can compile when they only need ECDSA
+// verification and not signing
+#[cfg(feature = "ecdsa")]
+impl SignPrimitive<Secp256k1> for Scalar {
+    fn try_sign_prehashed<K>(
+        &self,
+        _k: K,
+        _z: &elliptic_curve::FieldBytes<Secp256k1>,
+    ) -> signature::Result<(Signature, Option<RecoveryId>)>
+    where
+        K: AsRef<Self> + Invert<Output = CtOption<Self>>,
+    {
+        todo!("ECDSA signing from private key is not yet implemented")
+    }
+}
 
 #[cfg(feature = "ecdsa")]
 impl VerifyPrimitive<Secp256k1> for Secp256k1Point {
