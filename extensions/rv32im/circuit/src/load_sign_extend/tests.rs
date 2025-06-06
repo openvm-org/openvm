@@ -41,7 +41,7 @@ fn into_limbs<const NUM_LIMBS: usize, const LIMB_BITS: usize>(num: u32) -> [u32;
 
 fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32LoadSignExtendChip<F> {
     let range_checker_chip = tester.memory_controller().range_checker.clone();
-    Rv32LoadSignExtendChip::<F>::new(
+    let mut chip = Rv32LoadSignExtendChip::<F>::new(
         VmAirWrapper::new(
             Rv32LoadStoreAdapterAir::new(
                 tester.memory_bridge(),
@@ -55,9 +55,11 @@ fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32LoadSignExtendChip
             Rv32LoadStoreAdapterStep::new(tester.address_bits()),
             range_checker_chip.clone(),
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
-    )
+    );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
+    chip
 }
 
 #[allow(clippy::too_many_arguments)]

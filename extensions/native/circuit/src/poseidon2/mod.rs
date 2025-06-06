@@ -30,7 +30,6 @@ pub fn new_native_poseidon2_chip<F: PrimeField32, const SBOX_REGISTERS: usize>(
     port: SystemPort,
     poseidon2_config: Poseidon2Config<F>,
     verify_batch_bus: VerifyBatchBus,
-    max_ins_capacity: usize,
     mem_helper: SharedMemoryHelper<F>,
 ) -> NativePoseidon2Chip<F, SBOX_REGISTERS> {
     NativePoseidon2Chip::<F, SBOX_REGISTERS>::new(
@@ -42,7 +41,6 @@ pub fn new_native_poseidon2_chip<F: PrimeField32, const SBOX_REGISTERS: usize>(
             address_space: F::from_canonical_u32(AS::Native as u32),
         },
         NativePoseidon2Step::new(poseidon2_config),
-        max_ins_capacity,
         mem_helper,
     )
 }

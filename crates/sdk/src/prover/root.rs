@@ -1,5 +1,9 @@
 use async_trait::async_trait;
-use openvm_circuit::arch::{SingleSegmentVmExecutor, Streams};
+use itertools::Itertools;
+use openvm_circuit::arch::{
+    execution_mode::metered::get_widths_and_interactions_from_vkey, SingleSegmentVmExecutor,
+    Streams,
+};
 use openvm_continuations::verifier::root::types::RootVmVerifierInput;
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
@@ -31,11 +35,23 @@ impl RootVerifierLocalProver {
         }
     }
     pub fn execute_for_air_heights(&self, input: RootVmVerifierInput<SC>) -> Vec<usize> {
-        let result = self
+        let (widths, interactions) =
+            get_widths_and_interactions_from_vkey(self.root_verifier_pk.vm_pk.vm_pk.get_vk());
+        let max_trace_heights = self
             .executor_for_heights
-            .execute_and_compute_heights(
+            .execute_metered(
                 self.root_verifier_pk.root_committed_exe.exe.clone(),
                 input.write(),
+                widths,
+                interactions,
+            )
+            .unwrap();
+        let result = self
+            .executor_for_heights
+            .execute_with_max_heights_and_compute_heights(
+                self.root_verifier_pk.root_committed_exe.exe.clone(),
+                input.write(),
+                &max_trace_heights,
             )
             .unwrap();
         result.air_heights
@@ -54,8 +70,18 @@ impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
         let input = input.into();
         let mut vm = SingleSegmentVmExecutor::new(self.vm_config().clone());
         vm.set_override_trace_heights(self.root_verifier_pk.vm_heights.clone());
+        let trace_heights = self
+            .root_verifier_pk
+            .air_heights
+            .iter()
+            .map(|&height| height as u32)
+            .collect_vec();
         let mut proof_input = vm
-            .execute_and_generate(self.root_verifier_pk.root_committed_exe.clone(), input)
+            .execute_with_max_heights_and_generate(
+                self.root_verifier_pk.root_committed_exe.clone(),
+                input,
+                &trace_heights,
+            )
             .unwrap();
         assert_eq!(
             proof_input.per_air.len(),

@@ -29,7 +29,6 @@ use strum::EnumCount;
 use super::{EcAddNeChip, EcDoubleChip};
 
 // TODO: this should be decided after e2 execution
-const MAX_INS_CAPACITY: usize = 1 << 22;
 
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
@@ -143,7 +142,6 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     start_offset,
                     bitwise_lu_chip.clone(),
                     range_checker.clone(),
-                    MAX_INS_CAPACITY,
                 );
 
                 inventory.add_executor(
@@ -162,7 +160,6 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     bitwise_lu_chip.clone(),
                     range_checker.clone(),
                     curve.a.clone(),
-                    MAX_INS_CAPACITY,
                 );
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcDoubleRv32_32(double_chip),
@@ -180,7 +177,6 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     start_offset,
                     bitwise_lu_chip.clone(),
                     range_checker.clone(),
-                    MAX_INS_CAPACITY,
                 );
 
                 inventory.add_executor(
@@ -199,7 +195,6 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                     bitwise_lu_chip.clone(),
                     range_checker.clone(),
                     curve.a.clone(),
-                    MAX_INS_CAPACITY,
                 );
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcDoubleRv32_48(double_chip),

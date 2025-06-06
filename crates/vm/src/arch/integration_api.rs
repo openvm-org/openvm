@@ -228,7 +228,6 @@ pub struct NewVmChipWrapper<F, AIR, STEP> {
     pub air: AIR,
     pub step: STEP,
     pub trace_buffer: Vec<F>,
-    // TODO(ayush): width should be a constant?
     width: usize,
     buffer_idx: usize,
     mem_helper: SharedMemoryHelper<F>,
@@ -239,18 +238,20 @@ where
     F: Field,
     AIR: BaseAir<F>,
 {
-    pub fn new(air: AIR, step: STEP, height: usize, mem_helper: SharedMemoryHelper<F>) -> Self {
-        assert!(height == 0 || height.is_power_of_two());
+    pub fn new(air: AIR, step: STEP, mem_helper: SharedMemoryHelper<F>) -> Self {
         let width = air.width();
-        let trace_buffer = F::zero_vec(height * width);
         Self {
             air,
             step,
-            trace_buffer,
+            trace_buffer: vec![],
             width,
             buffer_idx: 0,
             mem_helper,
         }
+    }
+
+    pub fn set_trace_buffer_height(&mut self, height: usize) {
+        self.trace_buffer.resize(height * self.width, F::ZERO);
     }
 }
 
@@ -431,6 +432,7 @@ impl<F, A, S> InsExecutorE1<F> for NewVmChipWrapper<F, A, S>
 where
     F: PrimeField32,
     S: StepExecutorE1<F>,
+    A: BaseAir<F>,
 {
     fn execute_e1<Ctx>(
         &self,
@@ -453,6 +455,10 @@ where
         F: PrimeField32,
     {
         self.step.execute_metered(state, instruction, chip_index)
+    }
+
+    fn set_trace_height(&mut self, height: usize) {
+        self.set_trace_buffer_height(height);
     }
 }
 

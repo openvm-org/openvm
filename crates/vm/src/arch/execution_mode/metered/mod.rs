@@ -4,7 +4,12 @@ pub mod exact;
 // pub use exact::MeteredCtxExact as MeteredCtx;
 pub use bounded::MeteredCtxBounded as MeteredCtx;
 use openvm_instructions::instruction::Instruction;
-use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    keygen::types::MultiStarkVerifyingKey,
+    p3_field::{FieldExtensionAlgebra, PrimeField32},
+    ChipUsageGetter,
+};
 use p3_baby_bear::BabyBear;
 
 use crate::arch::{
@@ -175,7 +180,7 @@ impl<'a> MeteredExecutionControl<'a> {
             let segment = Segment {
                 clk_start,
                 num_cycles: state.ctx.clk_last_segment_check - clk_start,
-                // TODO(ayush): this is trace heights after overflow so an overestimate
+                // NOTE: this is trace heights after overflow so an overestimate
                 trace_heights: state.ctx.trace_heights.clone(),
             };
             state.ctx.segments.push(segment);
@@ -236,7 +241,7 @@ where
         let segment = Segment {
             clk_start,
             num_cycles: state.clk - clk_start,
-            // TODO(ayush): this is trace heights after overflow so an overestimate
+            // NOTE: this is trace heights after overflow so an overestimate
             trace_heights: state.ctx.trace_heights.clone(),
         };
         state.ctx.segments.push(segment);
@@ -277,8 +282,28 @@ where
                 opcode,
             });
         };
-        state.clk += 1;
 
         Ok(())
     }
+}
+
+// TODO(ayush): move to stark-backend vkey
+pub fn get_widths_and_interactions_from_vkey<SC>(
+    vk: MultiStarkVerifyingKey<SC>,
+) -> (Vec<usize>, Vec<usize>)
+where
+    SC: StarkGenericConfig,
+{
+    vk.inner
+        .per_air
+        .iter()
+        .map(|vk| {
+            let total_width = vk.params.width.preprocessed.unwrap_or(0)
+                + vk.params.width.cached_mains.iter().sum::<usize>()
+                + vk.params.width.common_main
+                + vk.params.width.after_challenge.iter().sum::<usize>()
+                    * <SC::Challenge as FieldExtensionAlgebra<Val<SC>>>::D;
+            (total_width, vk.symbolic_constraints.interactions.len())
+        })
+        .unzip()
 }

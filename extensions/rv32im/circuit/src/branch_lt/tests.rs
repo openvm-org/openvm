@@ -51,7 +51,7 @@ fn create_test_chip(
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let chip = Rv32BranchLessThanChip::<F>::new(
+    let mut chip = Rv32BranchLessThanChip::<F>::new(
         VmAirWrapper::new(
             Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
             BranchLessThanCoreAir::new(bitwise_bus, BranchLessThanOpcode::CLASS_OFFSET),
@@ -61,9 +61,9 @@ fn create_test_chip(
             bitwise_chip.clone(),
             BranchLessThanOpcode::CLASS_OFFSET,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip)
 }

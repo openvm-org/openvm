@@ -2,7 +2,10 @@
 mod tests {
     use eyre::Result;
     use openvm_circuit::{
-        arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, VmExecutor},
+        arch::{
+            execution_mode::metered::get_widths_and_interactions_from_vkey,
+            hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, VirtualMachine, VmExecutor,
+        },
         system::memory::tree::public_values::UserPublicValuesProof,
         utils::{air_test, air_test_with_min_segments},
     };
@@ -11,7 +14,10 @@ mod tests {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_stark_sdk::{openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear};
+    use openvm_stark_sdk::{
+        config::baby_bear_poseidon2::default_engine, openvm_stark_backend::p3_field::FieldAlgebra,
+        p3_baby_bear::BabyBear,
+    };
     use openvm_toolchain_tests::{
         build_example_program_at_path, build_example_program_at_path_with_features,
         get_programs_dir,
@@ -129,8 +135,19 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
         let config = Rv32IConfig::default();
-        let executor = VmExecutor::<F, _>::new(config.clone());
-        let final_memory = executor.execute(exe, vec![])?.unwrap();
+
+        let vm = VirtualMachine::new(default_engine(), config.clone());
+        let pk = vm.keygen();
+        let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+        let segments = vm
+            .executor
+            .execute_metered(exe.clone(), vec![], widths, interactions)
+            .unwrap();
+
+        let final_memory = vm
+            .executor
+            .execute_with_segments(exe, vec![], &segments)?
+            .unwrap();
         let hasher = vm_poseidon2_hasher::<F>();
         let pv_proof = UserPublicValuesProof::compute(
             config.system.memory_config.memory_dimensions(),
@@ -184,8 +201,9 @@ mod tests {
         )?;
         let config = Rv32ImConfig::default();
 
-        let executor = VmExecutor::<F, _>::new(config.clone());
-        match executor.execute(exe, vec![[0, 0, 0, 1].map(F::from_canonical_u8).to_vec()]) {
+        let executor = VmExecutor::new(config);
+        let input = vec![[0, 0, 0, 1].map(F::from_canonical_u8).to_vec()];
+        match executor.execute_e1(exe.clone(), input.clone(), None) {
             Err(ExecutionError::FailedWithExitCode(_)) => Ok(()),
             Err(_) => panic!("should fail with `FailedWithExitCode`"),
             Ok(_) => panic!("should fail"),

@@ -179,6 +179,8 @@ where
 
         Ok(())
     }
+
+    fn set_trace_height(&mut self, _height: usize) {}
 }
 
 impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {

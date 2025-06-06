@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use openvm_circuit::arch::VmConfig;
+use openvm_circuit::arch::{InsExecutorE1, VmConfig};
 use openvm_continuations::verifier::root::types::RootVmVerifierInput;
-use openvm_stark_backend::{proof::Proof, Chip};
+use openvm_stark_backend::{config::Val, proof::Proof, Chip};
 use openvm_stark_sdk::engine::StarkFriEngine;
 
 use crate::{
@@ -52,7 +52,7 @@ impl<VC, E: StarkFriEngine<SC>> StarkProver<VC, E> {
     pub fn generate_proof_for_outer_recursion(&self, input: StdIn) -> Proof<RootSC>
     where
         VC: VmConfig<F>,
-        VC::Executor: Chip<SC>,
+        VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
         VC::Periphery: Chip<SC>,
     {
         let app_proof = self.app_prover.generate_app_proof(input);
@@ -62,7 +62,7 @@ impl<VC, E: StarkFriEngine<SC>> StarkProver<VC, E> {
     pub fn generate_root_verifier_input(&self, input: StdIn) -> RootVmVerifierInput<SC>
     where
         VC: VmConfig<F>,
-        VC::Executor: Chip<SC>,
+        VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
         VC::Periphery: Chip<SC>,
     {
         let app_proof = self.app_prover.generate_app_proof(input);

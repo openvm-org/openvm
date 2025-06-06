@@ -132,6 +132,7 @@ where
 
             // Fetch, decode and execute single instruction
             self.execute_instruction(state, &mut prev_backtrace)?;
+            state.clk += 1;
         }
         Ok(())
     }

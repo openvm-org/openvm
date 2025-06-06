@@ -44,7 +44,7 @@ fn create_test_chip(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let chip = Rv32ShiftChip::<F>::new(
+    let mut chip = Rv32ShiftChip::<F>::new(
         VmAirWrapper::new(
             Rv32BaseAluAdapterAir::new(
                 tester.execution_bridge(),
@@ -63,9 +63,9 @@ fn create_test_chip(
             tester.range_checker().clone(),
             ShiftOpcode::CLASS_OFFSET,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip)
 }

@@ -57,7 +57,7 @@ fn create_test_chip(
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let range_tuple_checker = SharedRangeTupleCheckerChip::new(range_tuple_bus);
 
-    let chip = Rv32MulHChip::<F>::new(
+    let mut chip = Rv32MulHChip::<F>::new(
         VmAirWrapper::new(
             Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
             MulHCoreAir::new(bitwise_bus, range_tuple_bus),
@@ -67,9 +67,9 @@ fn create_test_chip(
             bitwise_chip.clone(),
             range_tuple_checker.clone(),
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip, range_tuple_checker)
 }

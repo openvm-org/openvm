@@ -4,8 +4,10 @@ use eyre::Result;
 use openvm_build::GuestOptions;
 use openvm_circuit::{
     arch::{
+        execution_mode::metered::get_widths_and_interactions_from_vkey,
         hasher::poseidon2::vm_poseidon2_hasher, ContinuationVmProof, ExecutionError,
-        GenerationError, SingleSegmentVmExecutor, SystemConfig, VmConfig, VmExecutor,
+        GenerationError, InsExecutorE1, SingleSegmentVmExecutor, SystemConfig, VirtualMachine,
+        VmConfig, VmExecutor,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
@@ -87,7 +89,7 @@ fn run_leaf_verifier<VC: VmConfig<F>>(
     verifier_input: LeafVmVerifierInput<SC>,
 ) -> Result<Vec<F>, ExecutionError>
 where
-    VC::Executor: Chip<SC>,
+    VC::Executor: Chip<SC> + InsExecutorE1<F>,
     VC::Periphery: Chip<SC>,
 {
     let exe_result = leaf_vm.execute_and_compute_heights(
@@ -184,12 +186,26 @@ fn test_public_values_and_leaf_verification() {
     let leaf_committed_exe = app_pk.leaf_committed_exe.clone();
 
     let app_engine = BabyBearPoseidon2Engine::new(app_pk.app_vm_pk.fri_params);
-    let app_vm = VmExecutor::new(app_pk.app_vm_pk.vm_config.clone());
+    let app_vm = VirtualMachine::new(app_engine, app_pk.app_vm_pk.vm_config.clone());
+
+    let app_vm_pk = app_vm.keygen();
+    let (widths, interactions) = get_widths_and_interactions_from_vkey(app_vm_pk.get_vk());
+    let segments = app_vm
+        .executor
+        .execute_metered(app_committed_exe.exe.clone(), vec![], widths, interactions)
+        .unwrap();
+
     let app_vm_result = app_vm
-        .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![])
+        .executor
+        .execute_with_segments_and_generate_with_cached_program(
+            app_committed_exe.clone(),
+            vec![],
+            &segments,
+        )
         .unwrap();
     assert!(app_vm_result.per_segment.len() > 2);
 
+    let app_engine = BabyBearPoseidon2Engine::new(app_pk.app_vm_pk.fri_params);
     let mut app_vm_seg_proofs: Vec<_> = app_vm_result
         .per_segment
         .into_iter()
@@ -223,7 +239,7 @@ fn test_public_values_and_leaf_verification() {
     };
 
     let pv_proof = UserPublicValuesProof::compute(
-        app_vm.config.system.memory_config.memory_dimensions(),
+        app_vm.config().system.memory_config.memory_dimensions(),
         NUM_PUB_VALUES,
         &vm_poseidon2_hasher(),
         app_vm_result.final_memory.as_ref().unwrap(),

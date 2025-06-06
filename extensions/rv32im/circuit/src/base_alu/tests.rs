@@ -45,7 +45,7 @@ fn create_test_chip(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let chip = Rv32BaseAluChip::new(
+    let mut chip = Rv32BaseAluChip::new(
         VmAirWrapper::new(
             Rv32BaseAluAdapterAir::new(
                 tester.execution_bridge(),
@@ -59,9 +59,9 @@ fn create_test_chip(
             bitwise_chip.clone(),
             BaseAluOpcode::CLASS_OFFSET,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip)
 }

@@ -160,9 +160,12 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         state: &mut ::openvm_circuit::arch::VmStateMut<F, ::openvm_circuit::system::memory::online::GuestMemory, ::openvm_circuit::arch::execution_mode::metered::MeteredCtx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         chip_index: usize,
-                    ) -> ::openvm_circuit::arch::Result<()>
-                    where {
+                    ) -> ::openvm_circuit::arch::Result<()> {
                         self.0.execute_metered(state, instruction, chip_index)
+                    }
+
+                    fn set_trace_height(&mut self, height: usize) {
+                        self.0.set_trace_buffer_height(height);
                     }
                 }
             }
@@ -204,6 +207,12 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_metered(x, state, instruction, chip_index)
                 }
             }).collect::<Vec<_>>();
+            let set_trace_height_arms = variants.iter().map(|(variant_name, field)| {
+                let field_ty = &field.ty;
+                quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::set_trace_height(x, height)
+                }
+            }).collect::<Vec<_>>();
 
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic> for #name #ty_generics {
@@ -228,6 +237,15 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     ) -> ::openvm_circuit::arch::Result<()> {
                         match self {
                             #(#execute_metered_arms,)*
+                        }
+                    }
+
+                    fn set_trace_height(
+                        &mut self,
+                        height: usize,
+                    ) {
+                        match self {
+                            #(#set_trace_height_arms,)*
                         }
                     }
                 }
