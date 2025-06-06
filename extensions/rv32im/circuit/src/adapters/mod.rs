@@ -211,7 +211,6 @@ where
     imm_le
 }
 
-
 /// Writes `reg_ptr, reg_val` into memory and records the memory access in mutable buffer.
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
 #[inline(always)]
@@ -258,18 +257,17 @@ pub fn memory_write_from_state<Ctx, const N: usize>(
     memory_write(state.memory, address_space, ptr, data)
 }
 
-// TODO(AG): if "register", why `address_space` is not hardcoded to be 1?
-// TODO(jpw): remove new_
 #[inline(always)]
-pub fn new_read_rv32_register_from_state<Ctx>(
-    state: &mut VmStateMut<GuestMemory, Ctx>,
-    address_space: u32,
-    ptr: u32,
-) -> u32
+pub fn read_rv32_register_from_state<Ctx>(state: &mut VmStateMut<GuestMemory, Ctx>, ptr: u32) -> u32
 where
     Ctx: E1E2ExecutionCtx,
 {
-    u32::from_le_bytes(memory_read_from_state(state, address_space, ptr))
+    u32::from_le_bytes(memory_read_from_state(state, RV32_REGISTER_AS, ptr))
+}
+
+#[inline(always)]
+pub fn read_rv32_register(memory: &GuestMemory, ptr: u32) -> u32 {
+    u32::from_le_bytes(memory_read(memory, RV32_REGISTER_AS, ptr))
 }
 
 pub fn abstract_compose<T: FieldAlgebra, V: Mul<T, Output = T>>(

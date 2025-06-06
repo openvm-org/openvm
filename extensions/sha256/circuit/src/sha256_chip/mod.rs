@@ -18,7 +18,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_rv32im_circuit::adapters::{
-    memory_read_from_state, memory_write_from_state, new_read_rv32_register_from_state,
+    memory_read_from_state, memory_write_from_state, read_rv32_register_from_state,
 };
 use openvm_sha256_air::{Sha256StepHelper, SHA256_BLOCK_BITS, SHA256_ROWS_PER_BLOCK};
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
@@ -97,9 +97,9 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         debug_assert_eq!(local_opcode, Rv32Sha256Opcode::SHA256.local_usize());
         debug_assert_eq!(d, RV32_REGISTER_AS);
         debug_assert_eq!(e, RV32_MEMORY_AS);
-        let dst = new_read_rv32_register_from_state(state, d, a.as_canonical_u32());
-        let src = new_read_rv32_register_from_state(state, d, b.as_canonical_u32());
-        let len = new_read_rv32_register_from_state(state, d, c.as_canonical_u32());
+        let dst = read_rv32_register_from_state(state, d, a.as_canonical_u32());
+        let src = read_rv32_register_from_state(state, d, b.as_canonical_u32());
+        let len = read_rv32_register_from_state(state, d, c.as_canonical_u32());
 
         debug_assert!(src + len <= (1 << self.pointer_max_bits));
         let mut hasher = Sha256::new();
@@ -145,9 +145,9 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         debug_assert_eq!(d, RV32_REGISTER_AS);
         debug_assert_eq!(e, RV32_MEMORY_AS);
 
-        let dst = new_read_rv32_register_from_state(state, d, a.as_canonical_u32());
-        let src = new_read_rv32_register_from_state(state, d, b.as_canonical_u32());
-        let len = new_read_rv32_register_from_state(state, d, c.as_canonical_u32());
+        let dst = read_rv32_register_from_state(state, d, a.as_canonical_u32());
+        let src = read_rv32_register_from_state(state, d, b.as_canonical_u32());
+        let len = read_rv32_register_from_state(state, d, c.as_canonical_u32());
 
         debug_assert!(src + len <= (1 << self.pointer_max_bits));
 

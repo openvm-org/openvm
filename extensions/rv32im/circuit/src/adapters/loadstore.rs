@@ -41,8 +41,8 @@ use openvm_stark_backend::{
 use super::RV32_REGISTER_NUM_LIMBS;
 use crate::adapters::{
     memory_read, memory_read_from_state, memory_read_native, memory_write_from_state,
-    memory_write_native_from_state, new_read_rv32_register_from_state, timed_write,
-    timed_write_native, tracing_read, RV32_CELL_BITS,
+    memory_write_native_from_state, read_rv32_register_from_state, timed_write, timed_write_native,
+    tracing_read, RV32_CELL_BITS,
 };
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
@@ -498,14 +498,19 @@ impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32LoadStoreAdapterSt
         };
         let adapter_row: &mut Rv32LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
 
+        let needs_write = record.rd_rs2_ptr != u32::MAX;
         // Writing in reverse order
-        adapter_row.needs_write = F::from_bool(record.rd_rs2_ptr != u32::MAX);
+        adapter_row.needs_write = F::from_bool(needs_write);
 
-        mem_helper.fill(
-            record.write_prev_timestamp,
-            record.from_timestamp + 2,
-            &mut adapter_row.write_base_aux,
-        );
+        if needs_write {
+            mem_helper.fill(
+                record.write_prev_timestamp,
+                record.from_timestamp + 2,
+                &mut adapter_row.write_base_aux,
+            );
+        } else {
+            mem_helper.fill_zero(&mut adapter_row.write_base_aux);
+        }
 
         adapter_row.mem_as = F::from_canonical_u8(record.mem_as);
         let ptr = record
@@ -583,11 +588,7 @@ where
 
         let read_data: [u8; RV32_REGISTER_NUM_LIMBS] = match local_opcode {
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                let rs1 = new_read_rv32_register_from_state(
-                    state,
-                    RV32_REGISTER_AS,
-                    b.as_canonical_u32(),
-                );
+                let rs1 = read_rv32_register_from_state(state, b.as_canonical_u32());
                 let imm_extended = c.as_canonical_u32() + g.as_canonical_u32() * 0xffff0000;
                 let ptr_val = rs1.wrapping_add(imm_extended);
                 assert!(
@@ -610,8 +611,7 @@ where
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
-    )
-    where
+    ) where
         Ctx: E1E2ExecutionCtx,
     {
         let &Instruction {
@@ -636,11 +636,7 @@ where
         if enabled != F::ZERO {
             match local_opcode {
                 STOREW | STOREH | STOREB => {
-                    let rs1 = new_read_rv32_register_from_state(
-                        state,
-                        RV32_REGISTER_AS,
-                        b.as_canonical_u32(),
-                    );
+                    let rs1 = read_rv32_register_from_state(state, b.as_canonical_u32());
                     let imm_extended = c.as_canonical_u32() + g.as_canonical_u32() * 0xffff0000;
                     let ptr_val = rs1.wrapping_add(imm_extended);
                     assert!(

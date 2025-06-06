@@ -12,8 +12,8 @@ use openvm_rv32im_circuit::{
     ShiftCoreAir, ShiftStep,
 };
 
-// mod extension;
-// pub use extension::*;
+mod extension;
+pub use extension::*;
 
 #[cfg(test)]
 mod tests;

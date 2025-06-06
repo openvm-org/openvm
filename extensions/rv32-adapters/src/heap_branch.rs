@@ -28,7 +28,7 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
 use openvm_rv32im_circuit::adapters::{
-    memory_read_from_state, new_read_rv32_register_from_state, tracing_read, RV32_CELL_BITS,
+    memory_read_from_state, read_rv32_register_from_state, tracing_read, RV32_CELL_BITS,
     RV32_REGISTER_NUM_LIMBS,
 };
 use openvm_stark_backend::{
@@ -346,21 +346,19 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterExe
     {
         let Instruction { a, b, d, e, .. } = *instruction;
 
-        let d = d.as_canonical_u32();
-        let e = e.as_canonical_u32();
-        debug_assert_eq!(d, RV32_REGISTER_AS);
-        debug_assert_eq!(e, RV32_MEMORY_AS);
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
         // Read register values
         let rs_vals = from_fn(|i| {
             let addr = if i == 0 { a } else { b };
-            new_read_rv32_register_from_state(state, d, addr.as_canonical_u32())
+            read_rv32_register_from_state(state, addr.as_canonical_u32())
         });
 
         // Read memory values
         rs_vals.map(|address| {
             assert!(address as usize + READ_SIZE - 1 < (1 << self.pointer_max_bits));
-            memory_read_from_state(state, e, address)
+            memory_read_from_state(state, RV32_MEMORY_AS, address)
         })
     }
 
