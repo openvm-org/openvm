@@ -2,15 +2,14 @@ use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
     iter::{once, zip},
-    ptr::slice_from_raw_parts,
 };
 
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, ExecutionBridge, ExecutionState, VecHeapAdapterInterface, VmAdapterAir,
-        VmStateMut,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, ExecutionBridge, ExecutionState,
+        VecHeapAdapterInterface, VmAdapterAir, VmStateMut,
     },
     system::memory::{
         offline_checker::{
@@ -439,29 +438,15 @@ impl<
     > AdapterTraceFiller<F, CTX>
     for Rv32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
 {
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
-        let record = unsafe {
-            let record_buffer = &*slice_from_raw_parts(
-                adapter_row.as_ptr() as *const u8,
-                size_of::<
-                    Rv32VecHeapAdapterRecord<
-                        NUM_READS,
-                        BLOCKS_PER_READ,
-                        BLOCKS_PER_WRITE,
-                        READ_SIZE,
-                        WRITE_SIZE,
-                    >,
-                >(),
-            );
-            let record: &Rv32VecHeapAdapterRecord<
-                NUM_READS,
-                BLOCKS_PER_READ,
-                BLOCKS_PER_WRITE,
-                READ_SIZE,
-                WRITE_SIZE,
-            > = record_buffer.borrow();
-            record
-        };
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        let record: &Rv32VecHeapAdapterRecord<
+            NUM_READS,
+            BLOCKS_PER_READ,
+            BLOCKS_PER_WRITE,
+            READ_SIZE,
+            WRITE_SIZE,
+        > = unsafe { get_record_from_slice(&mut adapter_row, ()) };
+
         let cols: &mut Rv32VecHeapAdapterCols<
             F,
             NUM_READS,
@@ -518,7 +503,8 @@ impl<
             .for_each(|(reads, cols_reads)| {
                 reads
                     .iter()
-                    .zip(cols_reads.iter_mut())
+                    .rev()
+                    .zip(cols_reads.iter_mut().rev())
                     .for_each(|(read, cols_read)| {
                         mem_helper.fill(read.prev_timestamp, timestamp_mm(), cols_read.as_mut());
                     });

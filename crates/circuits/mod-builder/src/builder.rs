@@ -11,7 +11,7 @@ use openvm_circuit_primitives::{
         OverflowInt,
     },
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
-    AlignedBorrow, SubAir, TraceSubRowGenerator,
+    SubAir, TraceSubRowGenerator,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,

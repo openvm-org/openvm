@@ -1,12 +1,17 @@
+use crate::{
+    builder::{FieldExpr, FieldExprCols},
+    utils::{biguint_to_limbs_vec, limbs_to_biguint},
+};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, DynAdapterInterface, DynArray,
-        MinimalInstruction, Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir,
-        VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1,
+        AdapterTraceFiller, AdapterTraceStep, CustomBorrow, DynAdapterInterface, DynArray,
+        MinimalInstruction, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
+        VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -24,11 +29,6 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
-
-use crate::{
-    utils::{biguint_to_limbs_vec, limbs_to_biguint},
-    FieldExpr, FieldExprCols,
-};
 
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {
@@ -170,6 +170,53 @@ where
     }
 }
 
+#[derive(Copy, Clone)]
+pub struct FieldExpressionMetadata {
+    pub total_input_limbs: usize, // num_inputs * limbs_per_input
+}
+
+pub struct FieldExpressionCoreRecord<'a> {
+    pub opcode: &'a mut u8,
+    pub input_limbs: &'a mut [u8],
+}
+
+impl<'a> CustomBorrow<'a, FieldExpressionCoreRecord<'a>, FieldExpressionMetadata> for [u8] {
+    fn custom_borrow(
+        &'a mut self,
+        metadata: FieldExpressionMetadata,
+    ) -> FieldExpressionCoreRecord<'a> {
+        let (opcode_buf, input_limbs_buf) = unsafe { self.split_at_mut_unchecked(1) };
+
+        FieldExpressionCoreRecord {
+            opcode: &mut opcode_buf[0],
+            input_limbs: &mut input_limbs_buf[..metadata.total_input_limbs],
+        }
+    }
+}
+
+impl<'a> FieldExpressionCoreRecord<'a> {
+    pub fn new_from_execution_data(
+        buffer: &'a mut [u8],
+        inputs: &[BigUint],
+        limbs_per_input: usize,
+    ) -> Self {
+        let record_info = FieldExpressionMetadata {
+            total_input_limbs: inputs.len() * limbs_per_input,
+        };
+
+        let record: Self = buffer.custom_borrow(record_info);
+        record
+    }
+
+    #[inline(always)]
+    pub fn fill_from_execution_data(&mut self, opcode: u8, data: &[u8]) {
+        // Rust will assert that that length of `data` and `self.input_limbs` are the same
+        // That is `data.len() == num_inputs * limbs_per_input`
+        *self.opcode = opcode;
+        self.input_limbs.copy_from_slice(data);
+    }
+}
+
 // TODO(arayi): use lifetimes and references for fields
 pub struct FieldExpressionStep<A> {
     adapter: A,
@@ -242,59 +289,95 @@ where
             CTX,
             ReadData: Into<DynArray<u8>>,
             WriteData: From<DynArray<u8>>,
-            TraceContext<'a> = (),
         >,
 {
-    fn get_opcode_name(&self, _opcode: usize) -> String {
-        self.name.clone()
-    }
+    type RecordLayout = AdapterCoreLayout<FieldExpressionMetadata>;
+    type RecordMut<'a> = (A::RecordMut<'a>, FieldExpressionCoreRecord<'a>);
 
-    fn execute(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
-        let (adapter_row, core_row) = row_slice.split_at_mut(A::WIDTH);
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
+        let core_record_metadata = FieldExpressionMetadata {
+            total_input_limbs: self.num_inputs() * self.expr.canonical_num_limbs(),
+        };
 
-        A::start(*state.pc, state.memory, adapter_row);
+        let (mut adapter_record, mut core_record) = arena.alloc(AdapterCoreLayout::with_metadata(
+            A::WIDTH,
+            core_record_metadata,
+        ));
+
+        A::start(*state.pc, state.memory, &mut adapter_record);
 
         let data: DynArray<_> = self
             .adapter
-            .read(state.memory, instruction, adapter_row)
+            .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        let (writes, inputs, flags) = run_field_expression(self, &data, instruction);
+        core_record.fill_from_execution_data(
+            instruction.opcode.local_opcode_idx(self.offset) as u8,
+            &data.0,
+        );
 
-        // TODO(arayi): Should move this to fill_trace_row
-        self.expr
-            .generate_subrow((self.range_checker.as_ref(), inputs, flags), core_row);
+        let (writes, _, _) = run_field_expression(self, &data.0, *core_record.opcode as usize);
 
-        self.adapter
-            .write(state.memory, instruction, adapter_row, &writes.into());
+        self.adapter.write(
+            state.memory,
+            instruction,
+            &writes.into(),
+            &mut adapter_record,
+        );
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        *trace_offset += width;
         Ok(())
     }
 
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row: &mut [F]) {
-        let (adapter_row, _) = row.split_at_mut(A::WIDTH);
-        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
+    fn get_opcode_name(&self, _opcode: usize) -> String {
+        self.name.clone()
+    }
+}
+
+impl<F, CTX, A> TraceFiller<F, CTX> for FieldExpressionStep<A>
+where
+    F: PrimeField32 + Send + Sync + Clone,
+    A: 'static + AdapterTraceFiller<F, CTX>,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        // Get the core record from the row slice
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+
+        let record: FieldExpressionCoreRecord = unsafe {
+            get_record_from_slice(
+                &mut core_row,
+                FieldExpressionMetadata {
+                    total_input_limbs: self.num_inputs() * self.expr.canonical_num_limbs(),
+                },
+            )
+        };
+
+        let (_, inputs, flags) =
+            run_field_expression(self, &record.input_limbs, *record.opcode as usize);
+
+        let range_checker = self.range_checker.as_ref();
+        self.expr
+            .generate_subrow((range_checker, inputs, flags), core_row);
     }
 
-    // We will be setting is_valid = 0. That forces all flags be 0 (otherwise setup will be -1).
-    // We generate a dummy row with all flags set to 0, then we set is_valid = 0.
-    fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, row: &mut [F]) {
+    fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         if !self.should_finalize {
             return;
         }
+
         let inputs: Vec<BigUint> = vec![BigUint::zero(); self.num_inputs()];
         let flags: Vec<bool> = vec![false; self.num_flags()];
-        let core_row = &mut row[A::WIDTH..];
+        let core_row = &mut row_slice[A::WIDTH..];
         // We **do not** want this trace row to update the range checker
         // so we must create a temporary range checker
         let tmp_range_checker = SharedVariableRangeCheckerChip::new(self.range_checker.bus());
@@ -320,7 +403,12 @@ where
     {
         let data: DynArray<_> = self.adapter.read(state, instruction).into();
 
-        let writes = run_field_expression(self, &data, instruction).0;
+        let writes = run_field_expression(
+            self,
+            &data.0,
+            instruction.opcode.local_opcode_idx(self.offset) as usize,
+        )
+        .0;
         self.adapter.write(state, instruction, &writes.into());
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         Ok(())
@@ -339,15 +427,15 @@ where
     }
 }
 
-fn run_field_expression<F: PrimeField32, A>(
+fn run_field_expression<A>(
     step: &FieldExpressionStep<A>,
-    data: &DynArray<u8>,
-    instruction: &Instruction<F>,
+    data: &[u8],
+    local_opcode_idx: usize,
 ) -> (DynArray<u8>, Vec<BigUint>, Vec<bool>) {
     let field_element_limbs = step.expr.canonical_num_limbs();
     let limb_bits = step.expr.canonical_limb_bits();
 
-    let data = data.0.iter().map(|&x| x as u32).collect_vec();
+    let data = data.iter().map(|&x| x as u32).collect_vec();
 
     assert_eq!(data.len(), step.num_inputs() * field_element_limbs);
 
@@ -360,8 +448,6 @@ fn run_field_expression<F: PrimeField32, A>(
         inputs.push(input);
     }
 
-    let Instruction { opcode, .. } = instruction;
-    let local_opcode_idx = opcode.local_opcode_idx(step.offset);
     let mut flags = vec![];
 
     // If the chip doesn't need setup, (right now) it must be single op chip and thus no flag is

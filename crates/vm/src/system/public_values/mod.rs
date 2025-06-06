@@ -1,7 +1,7 @@
 use core::{PublicValuesCoreStep, PublicValuesRecordArena};
 
 use crate::{
-    arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper},
+    arch::{NewVmChipWrapper, VmAirWrapper},
     system::{
         native_adapter::{NativeAdapterAir, NativeAdapterStep},
         public_values::core::PublicValuesCoreAir,

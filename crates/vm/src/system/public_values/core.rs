@@ -20,8 +20,8 @@ use crate::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface, EmptyLayout,
-        MatrixRecordArena, MinimalInstruction, RecordArena, Result, RowMajorMatrixArena,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        MinimalInstruction, RecordArena, Result, RowMajorMatrixArena, StepExecutorE1, TraceFiller,
+        TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::{
         memory::online::{GuestMemory, TracingMemory},
