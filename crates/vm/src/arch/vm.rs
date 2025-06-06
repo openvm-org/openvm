@@ -1390,7 +1390,8 @@ where
     }
 }
 
-/// Create and initialize a chip complex with program, streams, optional memory, and optional trace heights
+/// Create and initialize a chip complex with program, streams, optional memory, and optional trace
+/// heights
 pub fn create_and_initialize_chip_complex<F, VC>(
     config: &VC,
     program: Program<F>,
