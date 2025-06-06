@@ -695,6 +695,8 @@ impl<F: PrimeField32> MemoryAuxColsFactory<'_, F> {
         buffer.prev_timestamp = F::from_canonical_u32(prev_timestamp);
     }
 
+    /// # Safety
+    /// We assume that `F::ZERO` has underlying memory equivalent to `mem::zeroed()`.
     pub fn fill_zero(&self, buffer: &mut MemoryBaseAuxCols<F>) {
         *buffer = unsafe { std::mem::zeroed() };
     }
