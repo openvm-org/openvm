@@ -19,7 +19,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    var_range::SharedVariableRangeCheckerChip, AlignedBytesBorrow, SubAir, TraceSubRowGenerator,
+    var_range::SharedVariableRangeCheckerChip, SubAir, TraceSubRowGenerator,
 };
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::{
@@ -29,7 +29,7 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
-use std::{borrow::BorrowMut, mem::size_of};
+
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {
     pub expr: FieldExpr,
@@ -170,43 +170,34 @@ where
     }
 }
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub struct FieldExpressionMetadata {
     pub total_input_limbs: usize, // num_inputs * limbs_per_input
 }
 
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct FieldExpressionCoreRecord {
-    pub opcode: u8,
-}
-
-pub struct FieldExpressionCoreRecordMut<'a> {
-    pub inner: &'a mut FieldExpressionCoreRecord,
+pub struct FieldExpressionCoreRecord<'a> {
+    pub opcode: &'a mut u8,
     pub input_limbs: &'a mut [u8],
 }
 
-impl<'a> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressionMetadata> for [u8] {
+impl<'a> CustomBorrow<'a, FieldExpressionCoreRecord<'a>, FieldExpressionMetadata> for [u8] {
     fn custom_borrow(
         &'a mut self,
         metadata: FieldExpressionMetadata,
-    ) -> FieldExpressionCoreRecordMut<'a> {
-        let (record_buf, input_limbs_buf) =
-            unsafe { self.split_at_mut_unchecked(size_of::<FieldExpressionCoreRecord>()) };
+    ) -> FieldExpressionCoreRecord<'a> {
+        let (opcode_buf, input_limbs_buf) = unsafe { self.split_at_mut_unchecked(1) };
 
-        FieldExpressionCoreRecordMut {
-            inner: record_buf.borrow_mut(),
+        FieldExpressionCoreRecord {
+            opcode: &mut opcode_buf[0],
             input_limbs: &mut input_limbs_buf[..metadata.total_input_limbs],
         }
     }
 }
 
-impl<'a> FieldExpressionCoreRecordMut<'a> {
+impl<'a> FieldExpressionCoreRecord<'a> {
     pub fn new_from_execution_data(
         buffer: &'a mut [u8],
-        _opcode: u8,
         inputs: &[BigUint],
-        _limb_bits: usize,
         limbs_per_input: usize,
     ) -> Self {
         let record_info = FieldExpressionMetadata {
@@ -214,7 +205,6 @@ impl<'a> FieldExpressionCoreRecordMut<'a> {
         };
 
         let record: Self = buffer.custom_borrow(record_info);
-        // record.fill_from_execution_data(opcode, );
         record
     }
 
@@ -222,7 +212,7 @@ impl<'a> FieldExpressionCoreRecordMut<'a> {
     pub fn fill_from_execution_data(&mut self, opcode: u8, data: &[u8]) {
         // Rust will assert that that length of `data` and `self.input_limbs` are the same
         // That is `data.len() == num_inputs * limbs_per_input`
-        self.inner.opcode = opcode;
+        *self.opcode = opcode;
         self.input_limbs.copy_from_slice(data);
     }
 }
@@ -302,7 +292,7 @@ where
         >,
 {
     type RecordLayout = AdapterCoreLayout<FieldExpressionMetadata>;
-    type RecordMut<'a> = (A::RecordMut<'a>, FieldExpressionCoreRecordMut<'a>);
+    type RecordMut<'a> = (A::RecordMut<'a>, FieldExpressionCoreRecord<'a>);
 
     fn execute<'buf, RA>(
         &mut self,
@@ -334,7 +324,7 @@ where
             &data.0,
         );
 
-        let (writes, _, _) = run_field_expression(self, &data.0, core_record.inner.opcode as usize);
+        let (writes, _, _) = run_field_expression(self, &data.0, *core_record.opcode as usize);
 
         self.adapter.write(
             state.memory,
@@ -358,14 +348,12 @@ where
     A: 'static + AdapterTraceFiller<F, CTX>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // NOTE[teokitan]: This is where GPU acceleration should happen in the future
-
         // Get the core record from the row slice
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        let record: FieldExpressionCoreRecordMut = unsafe {
+        let record: FieldExpressionCoreRecord = unsafe {
             get_record_from_slice(
                 &mut core_row,
                 FieldExpressionMetadata {
@@ -375,7 +363,7 @@ where
         };
 
         let (_, inputs, flags) =
-            run_field_expression(self, &record.input_limbs, record.inner.opcode as usize);
+            run_field_expression(self, &record.input_limbs, *record.opcode as usize);
 
         let range_checker = self.range_checker.as_ref();
         self.expr
@@ -460,25 +448,19 @@ fn run_field_expression<A>(
         inputs.push(input);
     }
 
-    // Reconstruct flags from opcode
     let mut flags = vec![];
+
+    // If the chip doesn't need setup, (right now) it must be single op chip and thus no flag is
+    // needed. Otherwise, there is a flag for each opcode and will be derived by
+    // is_valid - sum(flags).
     if step.expr.needs_setup() {
         flags = vec![false; step.num_flags()];
-
-        // Find which opcode this is in our local_opcode_idx list
-        if let Some(opcode_position) = step
-            .local_opcode_idx
+        step.opcode_flag_idx
             .iter()
-            .position(|&idx| idx == local_opcode_idx)
-        {
-            // If this is NOT the last opcode (setup), set the corresponding flag
-            if opcode_position < step.opcode_flag_idx.len() {
-                let flag_idx = step.opcode_flag_idx[opcode_position];
-                flags[flag_idx] = true;
-            }
-            // If opcode_position == step.opcode_flag_idx.len(), it's the setup operation
-            // and all flags should remain false (which they already are)
-        }
+            .enumerate()
+            .for_each(|(i, &flag_idx)| {
+                flags[flag_idx] = local_opcode_idx == step.local_opcode_idx[i]
+            });
     }
 
     let vars = step.expr.execute(inputs.clone(), flags.clone());

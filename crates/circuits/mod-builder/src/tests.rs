@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use num_bigint::BigUint;
-use num_traits::{One, Zero};
+use num_traits::One;
 use openvm_circuit_primitives::{bigint::utils::*, TraceSubRowGenerator};
 use openvm_stark_backend::{
     p3_air::BaseAir, p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix,
@@ -13,16 +13,134 @@ use openvm_stark_sdk::{
 
 use crate::utils::{biguint_to_limbs_vec, limbs_to_biguint};
 use crate::{
-    test_utils::*, ExprBuilder, FieldExpr, FieldExprCols, FieldExpressionCoreRecord,
-    FieldExpressionCoreRecordMut, FieldVariable, SymbolicExpr,
+    test_utils::*, ExprBuilder, FieldExpr, FieldExprCols, FieldExpressionCoreRecord, FieldVariable,
+    SymbolicExpr,
 };
 
 const LIMB_BITS: usize = 8;
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
+use std::sync::Arc;
+
+fn create_field_expr_with_setup(
+    builder: ExprBuilder,
+) -> (FieldExpr, Arc<VariableRangeCheckerChip>, usize) {
+    let prime = secp256k1_coord_prime();
+    let (range_checker, _) = setup(&prime);
+    let expr = FieldExpr::new(builder, range_checker.bus(), false);
+    let width = BaseAir::<BabyBear>::width(&expr);
+    (expr, range_checker, width)
+}
+
+fn create_field_expr_with_flags_setup(
+    builder: ExprBuilder,
+) -> (FieldExpr, Arc<VariableRangeCheckerChip>, usize) {
+    let prime = secp256k1_coord_prime();
+    let (range_checker, _) = setup(&prime);
+    let expr = FieldExpr::new(builder, range_checker.bus(), true);
+    let width = BaseAir::<BabyBear>::width(&expr);
+    (expr, range_checker, width)
+}
+
+fn generate_direct_trace(
+    expr: &FieldExpr,
+    range_checker: &Arc<VariableRangeCheckerChip>,
+    inputs: Vec<BigUint>,
+    flags: Vec<bool>,
+    width: usize,
+) -> Vec<BabyBear> {
+    let mut row = BabyBear::zero_vec(width);
+    expr.generate_subrow((range_checker, inputs, flags), &mut row);
+    row
+}
+
+fn generate_recorded_trace(
+    expr: &FieldExpr,
+    range_checker: &Arc<VariableRangeCheckerChip>,
+    inputs: &[BigUint],
+    flags: Vec<bool>,
+    width: usize,
+) -> Vec<BabyBear> {
+    let mut buffer = vec![0u8; 1024];
+    let mut record = FieldExpressionCoreRecord::new_from_execution_data(
+        &mut buffer,
+        inputs,
+        expr.canonical_num_limbs(),
+    );
+    let data: Vec<u8> = inputs
+        .iter()
+        .flat_map(|x| {
+            biguint_to_limbs_vec(
+                x.clone(),
+                expr.canonical_limb_bits(),
+                expr.canonical_num_limbs(),
+            )
+        })
+        .map(|limb| limb as u8)
+        .collect();
+    record.fill_from_execution_data(0, &data);
+
+    let reconstructed_inputs: Vec<BigUint> = record
+        .input_limbs
+        .chunks(expr.canonical_num_limbs())
+        .map(|chunk| {
+            let u32s = chunk.iter().map(|&b| b as u32).collect::<Vec<u32>>();
+            limbs_to_biguint(&u32s, expr.canonical_limb_bits())
+        })
+        .collect();
+
+    let mut row = BabyBear::zero_vec(width);
+    expr.generate_subrow((range_checker, reconstructed_inputs, flags), &mut row);
+    row
+}
+
+fn verify_stark_with_traces(
+    expr: FieldExpr,
+    range_checker: Arc<VariableRangeCheckerChip>,
+    trace: Vec<BabyBear>,
+    width: usize,
+) {
+    let trace_matrix = RowMajorMatrix::new(trace, width);
+    let range_trace = range_checker.generate_trace();
+    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+        any_rap_arc_vec![expr, range_checker.air],
+        vec![trace_matrix, range_trace],
+    )
+    .expect("Verification failed");
+}
+
+fn extract_and_verify_result(
+    expr: &FieldExpr,
+    trace: &[BabyBear],
+    expected: &BigUint,
+    var_index: usize,
+) {
+    let FieldExprCols { vars, .. } = expr.load_vars(trace);
+    assert!(var_index < vars.len(), "Variable index out of bounds");
+    let generated = evaluate_biguint(&vars[var_index], LIMB_BITS);
+    assert_eq!(generated, *expected);
+}
+
+fn test_trace_equivalence(
+    expr: &FieldExpr,
+    range_checker: &Arc<VariableRangeCheckerChip>,
+    inputs: Vec<BigUint>,
+    flags: Vec<bool>,
+    width: usize,
+) {
+    let direct_trace =
+        generate_direct_trace(expr, range_checker, inputs.clone(), flags.clone(), width);
+    let recorded_trace = generate_recorded_trace(expr, range_checker, &inputs, flags, width);
+    assert_eq!(
+        direct_trace, recorded_trace,
+        "Direct and recorded traces must be identical for inputs: {:?}",
+        inputs
+    );
+}
 
 #[test]
 fn test_add() {
     let prime = secp256k1_coord_prime();
-    let (range_checker, builder) = setup(&prime);
+    let (_, builder) = setup(&prime);
 
     let x1 = ExprBuilder::new_input(builder.clone());
     let x2 = ExprBuilder::new_input(builder.clone());
@@ -30,70 +148,45 @@ fn test_add() {
     x3.save();
     let builder = builder.borrow().clone();
 
-    let expr = FieldExpr::new(builder, range_checker.bus(), false);
-    let width = BaseAir::<BabyBear>::width(&expr);
+    let (expr, range_checker, width) = create_field_expr_with_setup(builder);
 
     let x = generate_random_biguint(&prime);
     let y = generate_random_biguint(&prime);
-    let expected = (&x + &y) % prime;
+    let expected = (&x + &y) % &prime;
     let inputs = vec![x, y];
 
-    let mut row = BabyBear::zero_vec(width);
-    expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
-    let FieldExprCols { vars, .. } = expr.load_vars(&row);
-    assert_eq!(vars.len(), 1);
-    let generated = evaluate_biguint(&vars[0], LIMB_BITS);
-    assert_eq!(generated, expected);
-
-    let trace = RowMajorMatrix::new(row, width);
-    let range_trace = range_checker.generate_trace();
-
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![expr, range_checker.air],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
+    let trace = generate_direct_trace(&expr, &range_checker, inputs, vec![], width);
+    extract_and_verify_result(&expr, &trace, &expected, 0);
+    verify_stark_with_traces(expr, range_checker, trace, width);
 }
 
 #[test]
 fn test_div() {
     let prime = secp256k1_coord_prime();
-    let (range_checker, builder) = setup(&prime);
+    let (_, builder) = setup(&prime);
 
     let x1 = ExprBuilder::new_input(builder.clone());
     let x2 = ExprBuilder::new_input(builder.clone());
     let _x3 = x1 / x2; // auto save on division.
     let builder = builder.borrow().clone();
-    let expr = FieldExpr::new(builder, range_checker.bus(), false);
-    let width = BaseAir::<BabyBear>::width(&expr);
+
+    let (expr, range_checker, width) = create_field_expr_with_setup(builder);
 
     let x = generate_random_biguint(&prime);
     let y = generate_random_biguint(&prime);
     let y_inv = y.modinv(&prime).unwrap();
-    let expected = (&x * &y_inv) % prime;
+    let expected = (&x * &y_inv) % &prime;
     let inputs = vec![x, y];
 
-    let mut row = BabyBear::zero_vec(width);
-    expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
-    let FieldExprCols { vars, .. } = expr.load_vars(&row);
-    assert_eq!(vars.len(), 1);
-    let generated = evaluate_biguint(&vars[0], LIMB_BITS);
-    assert_eq!(generated, expected);
-
-    let trace = RowMajorMatrix::new(row, width);
-    let range_trace = range_checker.generate_trace();
-
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![expr, range_checker.air],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
+    let trace = generate_direct_trace(&expr, &range_checker, inputs, vec![], width);
+    extract_and_verify_result(&expr, &trace, &expected, 0);
+    verify_stark_with_traces(expr, range_checker, trace, width);
 }
 
 #[test]
 fn test_auto_carry_mul() {
     let prime = secp256k1_coord_prime();
-    let (range_checker, builder) = setup(&prime);
+    let (_, builder) = setup(&prime);
 
     let mut x1 = ExprBuilder::new_input(builder.clone());
     let mut x2 = ExprBuilder::new_input(builder.clone());
@@ -105,36 +198,25 @@ fn test_auto_carry_mul() {
     assert_eq!(x4.expr, SymbolicExpr::Var(1));
 
     let builder = builder.borrow().clone();
+    let (expr, range_checker, width) = create_field_expr_with_setup(builder);
 
-    let expr = FieldExpr::new(builder, range_checker.bus(), false);
-    let width = BaseAir::<BabyBear>::width(&expr);
     let x = generate_random_biguint(&prime);
     let y = generate_random_biguint(&prime);
-    let expected = (&x * &x * &y) % prime; // x4 = x3 * x1 = (x1 * x2) * x1
+    let expected = (&x * &x * &y) % &prime; // x4 = x3 * x1 = (x1 * x2) * x1
     let inputs = vec![x, y];
 
-    let mut row = BabyBear::zero_vec(width);
-    expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
-    let FieldExprCols { vars, .. } = expr.load_vars(&row);
+    let trace = generate_direct_trace(&expr, &range_checker, inputs, vec![], width);
+    let FieldExprCols { vars, .. } = expr.load_vars(&trace);
     assert_eq!(vars.len(), 2);
-    let generated = evaluate_biguint(&vars[1], LIMB_BITS);
-    assert_eq!(generated, expected);
-
-    let trace = RowMajorMatrix::new(row, width);
-    let range_trace = range_checker.generate_trace();
-
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![expr, range_checker.air],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
+    extract_and_verify_result(&expr, &trace, &expected, 1);
+    verify_stark_with_traces(expr, range_checker, trace, width);
 }
 
 #[test]
 fn test_auto_carry_intmul() {
     let prime = secp256k1_coord_prime();
-    let (range_checker, builder) = setup(&prime);
-    let mut x1 = ExprBuilder::new_input(builder.clone());
+    let (_, builder) = setup(&prime);
+    let mut x1: FieldVariable = ExprBuilder::new_input(builder.clone());
     let mut x2 = ExprBuilder::new_input(builder.clone());
     let mut x3 = &mut x1 * &mut x2;
     // The int_mul below will overflow:
@@ -147,35 +229,24 @@ fn test_auto_carry_intmul() {
     assert_eq!(x4.expr, SymbolicExpr::Var(1));
 
     let builder = builder.borrow().clone();
+    let (expr, range_checker, width) = create_field_expr_with_setup(builder);
 
-    let expr = FieldExpr::new(builder, range_checker.bus(), false);
-    let width = BaseAir::<BabyBear>::width(&expr);
     let x = generate_random_biguint(&prime);
     let y = generate_random_biguint(&prime);
-    let expected = (&x * &x * BigUint::from(9u32)) % prime;
+    let expected = (&x * &x * BigUint::from(9u32)) % &prime;
     let inputs = vec![x, y];
 
-    let mut row = BabyBear::zero_vec(width);
-    expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
-    let FieldExprCols { vars, .. } = expr.load_vars(&row);
+    let trace = generate_direct_trace(&expr, &range_checker, inputs, vec![], width);
+    let FieldExprCols { vars, .. } = expr.load_vars(&trace);
     assert_eq!(vars.len(), 2);
-    let generated = evaluate_biguint(&vars[1], LIMB_BITS);
-    assert_eq!(generated, expected);
-
-    let trace = RowMajorMatrix::new(row, width);
-    let range_trace = range_checker.generate_trace();
-
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![expr, range_checker.air],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
+    extract_and_verify_result(&expr, &trace, &expected, 1);
+    verify_stark_with_traces(expr, range_checker, trace, width);
 }
 
 #[test]
 fn test_auto_carry_add() {
     let prime = secp256k1_coord_prime();
-    let (range_checker, builder) = setup(&prime);
+    let (_, builder) = setup(&prime);
 
     let mut x1 = ExprBuilder::new_input(builder.clone());
     let mut x2 = ExprBuilder::new_input(builder.clone());
@@ -198,36 +269,24 @@ fn test_auto_carry_add() {
     assert_eq!(x5.expr, SymbolicExpr::Var(1));
 
     let builder = builder.borrow().clone();
-
-    let expr = FieldExpr::new(builder, range_checker.bus(), false);
-    let width = BaseAir::<BabyBear>::width(&expr);
+    let (expr, range_checker, width) = create_field_expr_with_setup(builder);
 
     let x = generate_random_biguint(&prime);
     let y = generate_random_biguint(&prime);
-    let expected = (&x * &x * BigUint::from(10u32)) % prime;
+    let expected = (&x * &x * BigUint::from(10u32)) % &prime;
     let inputs = vec![x, y];
 
-    let mut row = BabyBear::zero_vec(width);
-    expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
-    let FieldExprCols { vars, .. } = expr.load_vars(&row);
+    let trace = generate_direct_trace(&expr, &range_checker, inputs, vec![], width);
+    let FieldExprCols { vars, .. } = expr.load_vars(&trace);
     assert_eq!(vars.len(), 2);
-    let generated = evaluate_biguint(&vars[x5_id], LIMB_BITS);
-    assert_eq!(generated, expected);
-
-    let trace = RowMajorMatrix::new(row, width);
-    let range_trace = range_checker.generate_trace();
-
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![expr, range_checker.air],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
+    extract_and_verify_result(&expr, &trace, &expected, x5_id);
+    verify_stark_with_traces(expr, range_checker, trace, width);
 }
 
 #[test]
 fn test_auto_carry_div() {
     let prime = secp256k1_coord_prime();
-    let (range_checker, builder) = setup(&prime);
+    let (_, builder) = setup(&prime);
 
     let mut x1 = ExprBuilder::new_input(builder.clone());
     let x2 = ExprBuilder::new_input(builder.clone());
@@ -241,29 +300,16 @@ fn test_auto_carry_div() {
     let builder = builder.borrow().clone();
     assert_eq!(builder.num_variables, 2); // numerator autosaved, and the final division
 
-    let expr = FieldExpr::new(builder, range_checker.bus(), false);
-    let width = BaseAir::<BabyBear>::width(&expr);
+    let (expr, range_checker, width) = create_field_expr_with_setup(builder);
 
     let x = generate_random_biguint(&prime);
     let y = generate_random_biguint(&prime);
-    // let expected = (&x * &x * BigUint::from(10u32)) % prime;
     let inputs = vec![x, y];
 
-    let mut row = BabyBear::zero_vec(width);
-    expr.generate_subrow((&range_checker, inputs, vec![]), &mut row);
-    let FieldExprCols { vars, .. } = expr.load_vars(&row);
+    let trace = generate_direct_trace(&expr, &range_checker, inputs, vec![], width);
+    let FieldExprCols { vars, .. } = expr.load_vars(&trace);
     assert_eq!(vars.len(), 2);
-    // let generated = evaluate_biguint(&vars[x5_id], LIMB_BITS);
-    // assert_eq!(generated, expected);
-
-    let trace = RowMajorMatrix::new(row, width);
-    let range_trace = range_checker.generate_trace();
-
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![expr, range_checker.air],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
+    verify_stark_with_traces(expr, range_checker, trace, width);
 }
 
 fn make_addsub_chip(builder: Rc<RefCell<ExprBuilder>>) -> ExprBuilder {
@@ -287,65 +333,39 @@ fn make_addsub_chip(builder: Rc<RefCell<ExprBuilder>>) -> ExprBuilder {
 #[test]
 fn test_select() {
     let prime = secp256k1_coord_prime();
-    let (range_checker, builder) = setup(&prime);
+    let (_, builder) = setup(&prime);
     let builder = make_addsub_chip(builder);
 
-    let expr = FieldExpr::new(builder, range_checker.bus(), true);
-    let width = BaseAir::<BabyBear>::width(&expr);
+    let (expr, range_checker, width) = create_field_expr_with_flags_setup(builder);
 
     let x = generate_random_biguint(&prime);
     let y = generate_random_biguint(&prime);
-    let expected = (&x + &prime - &y) % prime;
+    let expected = (&x + &prime - &y) % &prime;
     let inputs = vec![x, y];
     let flags: Vec<bool> = vec![false, true];
 
-    let mut row = BabyBear::zero_vec(width);
-    expr.generate_subrow((&range_checker, inputs, flags), &mut row);
-    let FieldExprCols { vars, .. } = expr.load_vars(&row);
-    assert_eq!(vars.len(), 1);
-    let generated = evaluate_biguint(&vars[0], LIMB_BITS);
-    assert_eq!(generated, expected);
-
-    let trace = RowMajorMatrix::new(row, width);
-    let range_trace = range_checker.generate_trace();
-
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![expr, range_checker.air],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
+    let trace = generate_direct_trace(&expr, &range_checker, inputs, flags, width);
+    extract_and_verify_result(&expr, &trace, &expected, 0);
+    verify_stark_with_traces(expr, range_checker, trace, width);
 }
 
 #[test]
 fn test_select2() {
     let prime = secp256k1_coord_prime();
-    let (range_checker, builder) = setup(&prime);
+    let (_, builder) = setup(&prime);
     let builder = make_addsub_chip(builder);
 
-    let expr = FieldExpr::new(builder, range_checker.bus(), true);
-    let width = BaseAir::<BabyBear>::width(&expr);
+    let (expr, range_checker, width) = create_field_expr_with_flags_setup(builder);
 
     let x = generate_random_biguint(&prime);
     let y = generate_random_biguint(&prime);
-    let expected = (&x + &y) % prime;
+    let expected = (&x + &y) % &prime;
     let inputs = vec![x, y];
     let flags: Vec<bool> = vec![true, false];
 
-    let mut row = BabyBear::zero_vec(width);
-    expr.generate_subrow((&range_checker, inputs, flags), &mut row);
-    let FieldExprCols { vars, .. } = expr.load_vars(&row);
-    assert_eq!(vars.len(), 1);
-    let generated = evaluate_biguint(&vars[0], LIMB_BITS);
-    assert_eq!(generated, expected);
-
-    let trace = RowMajorMatrix::new(row, width);
-    let range_trace = range_checker.generate_trace();
-
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![expr, range_checker.air],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
+    let trace = generate_direct_trace(&expr, &range_checker, inputs, flags, width);
+    extract_and_verify_result(&expr, &trace, &expected, 0);
+    verify_stark_with_traces(expr, range_checker, trace, width);
 }
 
 fn test_symbolic_limbs(expr: SymbolicExpr, expected_q: usize, expected_carry: usize) {
@@ -401,9 +421,9 @@ fn test_symbolic_limbs_mul() {
 }
 
 #[test]
-fn test_e4_execution_records() {
+fn test_recorded_execution_records() {
     let prime = secp256k1_coord_prime();
-    let (range_checker, builder) = setup(&prime);
+    let (_, builder) = setup(&prime);
 
     let x1 = ExprBuilder::new_input(builder.clone());
     let x2 = ExprBuilder::new_input(builder.clone());
@@ -411,8 +431,7 @@ fn test_e4_execution_records() {
     x3.save();
     let builder = builder.borrow().clone();
 
-    let expr = FieldExpr::new(builder, range_checker.bus(), false);
-    let width = BaseAir::<BabyBear>::width(&expr);
+    let (expr, range_checker, width) = create_field_expr_with_setup(builder);
 
     let x = generate_random_biguint(&prime);
     let y = generate_random_biguint(&prime);
@@ -420,12 +439,11 @@ fn test_e4_execution_records() {
     let inputs = vec![x.clone(), y.clone()];
     let flags: Vec<bool> = vec![];
 
+    // Test record creation and reconstruction
     let mut buffer = vec![0u8; 1024];
-    let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
+    let mut record = FieldExpressionCoreRecord::new_from_execution_data(
         &mut buffer,
-        0,
         &inputs,
-        expr.canonical_limb_bits(),
         expr.canonical_num_limbs(),
     );
     let data: Vec<u8> = inputs
@@ -440,10 +458,9 @@ fn test_e4_execution_records() {
         .map(|limb| limb as u8)
         .collect();
     record.fill_from_execution_data(0, &data);
+    assert_eq!(*record.opcode, 0);
 
-    assert_eq!(record.inner.opcode, 0);
-
-    // Verify E4 input reconstruction preserves data
+    // Verify input reconstruction preserves data
     let reconstructed_inputs: Vec<BigUint> = record
         .input_limbs
         .chunks(expr.canonical_num_limbs())
@@ -457,31 +474,17 @@ fn test_e4_execution_records() {
         assert_eq!(original, reconstructed);
     }
 
-    // Test standard E3 execution and verification using reconstructed inputs
-    let mut row = BabyBear::zero_vec(width);
-    expr.generate_subrow((&range_checker, reconstructed_inputs, flags), &mut row);
-    let FieldExprCols { vars, .. } = expr.load_vars(&row);
-    assert_eq!(vars.len(), 1);
-    let generated = evaluate_biguint(&vars[0], LIMB_BITS);
-    assert_eq!(generated, expected);
-
-    // Run STARK verification like other tests
-    let trace = RowMajorMatrix::new(row, width);
-    let range_trace = range_checker.generate_trace();
-
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![expr, range_checker.air],
-        vec![trace, range_trace],
-    )
-    .expect("Verification failed");
+    // Test standard execution and verification using reconstructed inputs
+    let trace = generate_direct_trace(&expr, &range_checker, reconstructed_inputs, flags, width);
+    extract_and_verify_result(&expr, &trace, &expected, 0);
+    verify_stark_with_traces(expr, range_checker, trace, width);
 }
 
 #[test]
-fn test_e3_e4_mathematical_equivalence() {
+fn test_trace_mathematical_equivalence() {
     let prime = secp256k1_coord_prime();
-    let (range_checker, builder) = setup(&prime);
+    let (_, builder) = setup(&prime);
 
-    // Create a complex expression to thoroughly test equivalence
     let x1 = ExprBuilder::new_input(builder.clone());
     let x2 = ExprBuilder::new_input(builder.clone());
     let x3 = &mut (x1.clone() * x2.clone()) + &mut (x1.clone().square());
@@ -489,8 +492,7 @@ fn test_e3_e4_mathematical_equivalence() {
     x4.save();
     let builder = builder.borrow().clone();
 
-    let expr = FieldExpr::new(builder, range_checker.bus(), false);
-    let width = BaseAir::<BabyBear>::width(&expr);
+    let (expr, range_checker, width) = create_field_expr_with_setup(builder);
 
     for _ in 0..10 {
         let x = generate_random_biguint(&prime);
@@ -505,76 +507,28 @@ fn test_e3_e4_mathematical_equivalence() {
         let inputs = vec![x.clone(), y.clone()];
         let flags: Vec<bool> = vec![];
 
-        // E3 Path: Direct trace generation
-        let mut e3_row = BabyBear::zero_vec(width);
-        expr.generate_subrow((&range_checker, inputs.clone(), flags.clone()), &mut e3_row);
-
-        // E4 Path: Record + deferred trace generation
-        let mut buffer = vec![0u8; 1024];
-        let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
-            &mut buffer,
-            0,
-            &inputs,
-            expr.canonical_limb_bits(),
-            expr.canonical_num_limbs(),
-        );
-        let data: Vec<u8> = inputs
-            .iter()
-            .flat_map(|x| {
-                biguint_to_limbs_vec(
-                    x.clone(),
-                    expr.canonical_limb_bits(),
-                    expr.canonical_num_limbs(),
-                )
-            })
-            .map(|limb| limb as u8)
-            .collect();
-        record.fill_from_execution_data(0, &data);
-
-        let mut e4_row = BabyBear::zero_vec(width);
-        // Simulate TraceFiller::fill_trace_row logic
-        let reconstructed_inputs: Vec<BigUint> = record
-            .input_limbs
-            .chunks(expr.canonical_num_limbs())
-            .map(|chunk| {
-                let u32s = chunk.iter().map(|&b| b as u32).collect::<Vec<u32>>();
-                limbs_to_biguint(&u32s, expr.canonical_limb_bits())
-            })
-            .collect();
-        expr.generate_subrow(
-            (&range_checker, reconstructed_inputs, flags.clone()),
-            &mut e4_row,
-        );
-
-        // CRITICAL: E3 and E4 must produce bit-identical traces
-        assert_eq!(
-            e3_row, e4_row,
-            "E3 and E4 traces must be mathematically equivalent for inputs: {:?}",
-            inputs
-        );
+        // Test direct/recorded equivalence
+        test_trace_equivalence(&expr, &range_checker, inputs.clone(), flags.clone(), width);
 
         // Verify the actual computation is correct
-        let FieldExprCols { vars, .. } = expr.load_vars(&e3_row);
-        let generated = evaluate_biguint(&vars[vars.len() - 1], LIMB_BITS);
-        assert_eq!(
-            generated, expected,
-            "Mathematical result incorrect for inputs: {:?}",
-            inputs
-        );
+        let direct_row = generate_direct_trace(&expr, &range_checker, inputs.clone(), flags, width);
+        let FieldExprCols { vars, .. } = expr.load_vars(&direct_row);
+        extract_and_verify_result(&expr, &direct_row, &expected, vars.len() - 1);
     }
 }
 
 #[test]
 fn test_record_arena_allocation_patterns() {
     let prime = secp256k1_coord_prime();
-    let (range_checker, builder) = setup(&prime);
+    let (_, builder) = setup(&prime);
 
     let x1 = ExprBuilder::new_input(builder.clone());
     let x2 = ExprBuilder::new_input(builder.clone());
     let mut x3 = x1 + x2;
     x3.save();
     let builder = builder.borrow().clone();
-    let expr = FieldExpr::new(builder.clone(), range_checker.bus(), false);
+
+    let (expr, _range_checker, _width) = create_field_expr_with_setup(builder);
 
     let inputs = vec![
         generate_random_biguint(&prime),
@@ -583,11 +537,9 @@ fn test_record_arena_allocation_patterns() {
 
     // Test record creation with various input sizes
     let mut buffer = vec![0u8; 1024];
-    let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
+    let mut record = FieldExpressionCoreRecord::new_from_execution_data(
         &mut buffer,
-        0,
         &inputs,
-        expr.canonical_limb_bits(),
         expr.canonical_num_limbs(),
     );
     let data: Vec<u8> = inputs
@@ -602,20 +554,16 @@ fn test_record_arena_allocation_patterns() {
         .map(|limb| limb as u8)
         .collect();
     record.fill_from_execution_data(0, &data);
+    assert_eq!(*record.opcode, 0);
 
-    assert_eq!(record.inner.opcode, 0);
-
-    let max_inputs = vec![BigUint::one(); 32]; // MAX_INPUT_LIMBS / 4
+    // Test with maximum inputs
+    let max_inputs = vec![BigUint::one(); 40]; // MAX_INPUT_LIMBS / 4
     let mut max_buffer = vec![0u8; 2048];
-    let max_record = FieldExpressionCoreRecordMut::new_from_execution_data(
-        &mut max_buffer,
-        0,
-        &max_inputs,
-        8,
-        4,
-    );
-    assert_eq!(max_record.inner.opcode, 0);
+    let max_record =
+        FieldExpressionCoreRecord::new_from_execution_data(&mut max_buffer, &max_inputs, 4);
+    assert_eq!(*max_record.opcode, 0);
 
+    // Test input reconstruction
     let reconstructed_inputs: Vec<BigUint> = record
         .input_limbs
         .chunks(expr.canonical_num_limbs())
@@ -633,7 +581,7 @@ fn test_record_arena_allocation_patterns() {
 #[test]
 fn test_tracestep_tracefiller_roundtrip() {
     let prime = secp256k1_coord_prime();
-    let (range_checker, builder) = setup(&prime);
+    let (_, builder) = setup(&prime);
 
     let x1 = ExprBuilder::new_input(builder.clone());
     let x2 = ExprBuilder::new_input(builder.clone());
@@ -643,7 +591,7 @@ fn test_tracestep_tracefiller_roundtrip() {
     x5.save();
     let builder_data = builder.borrow().clone();
 
-    let expr = FieldExpr::new(builder_data.clone(), range_checker.bus(), false);
+    let (expr, _range_checker, _width) = create_field_expr_with_setup(builder_data);
 
     let inputs = vec![
         generate_random_biguint(&prime),
@@ -652,12 +600,11 @@ fn test_tracestep_tracefiller_roundtrip() {
 
     let vars_direct = expr.execute(inputs.clone(), vec![]);
 
+    // Test record creation and reconstruction roundtrip
     let mut buffer = vec![0u8; 1024];
-    let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
+    let mut record = FieldExpressionCoreRecord::new_from_execution_data(
         &mut buffer,
-        0,
         &inputs,
-        expr.canonical_limb_bits(),
         expr.canonical_num_limbs(),
     );
     let data: Vec<u8> = inputs
@@ -691,14 +638,12 @@ fn test_tracestep_tracefiller_roundtrip() {
             "Variable preservation failed in roundtrip"
         );
     }
-
-    // Test with flags - skip since our record structure doesn't store flags anymore
 }
 
 #[test]
-fn test_e3_e4_with_complex_operations() {
+fn test_direct_recorded_with_complex_operations() {
     let prime = secp256k1_coord_prime();
-    let (range_checker, builder) = setup(&prime);
+    let (_, builder) = setup(&prime);
 
     let x1 = ExprBuilder::new_input(builder.clone());
     let x2 = ExprBuilder::new_input(builder.clone());
@@ -710,8 +655,7 @@ fn test_e3_e4_with_complex_operations() {
     result.save();
 
     let builder_data = builder.borrow().clone();
-    let expr = FieldExpr::new(builder_data, range_checker.bus(), false);
-    let width = BaseAir::<BabyBear>::width(&expr);
+    let (expr, range_checker, width) = create_field_expr_with_setup(builder_data);
 
     // Test edge cases with small and large numbers
     let test_cases = vec![
@@ -734,49 +678,10 @@ fn test_e3_e4_with_complex_operations() {
 
     for (x, y, z) in test_cases {
         let inputs = vec![x.clone(), y.clone(), z.clone()];
+        let flags = vec![];
 
-        // E3: Direct execution
-        let mut e3_row = BabyBear::zero_vec(width);
-        expr.generate_subrow((&range_checker, inputs.clone(), vec![]), &mut e3_row);
-
-        // E4: Record-based execution
-        let mut e4_buffer = vec![0u8; 1024];
-        let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
-            &mut e4_buffer,
-            0,
-            &inputs,
-            expr.canonical_limb_bits(),
-            expr.canonical_num_limbs(),
-        );
-        let data: Vec<u8> = inputs
-            .iter()
-            .flat_map(|x| {
-                biguint_to_limbs_vec(
-                    x.clone(),
-                    expr.canonical_limb_bits(),
-                    expr.canonical_num_limbs(),
-                )
-            })
-            .map(|limb| limb as u8)
-            .collect();
-        record.fill_from_execution_data(0, &data);
-
-        let mut e4_row = BabyBear::zero_vec(width);
-        let reconstructed_inputs: Vec<BigUint> = record
-            .input_limbs
-            .chunks(expr.canonical_num_limbs())
-            .map(|chunk| {
-                let u32s = chunk.iter().map(|&b| b as u32).collect::<Vec<u32>>();
-                limbs_to_biguint(&u32s, expr.canonical_limb_bits())
-            })
-            .collect();
-        expr.generate_subrow((&range_checker, reconstructed_inputs, vec![]), &mut e4_row);
-
-        assert_eq!(
-            e3_row, e4_row,
-            "Complex expression E3/E4 mismatch for inputs: {:?}",
-            inputs
-        );
+        // Test direct/recorded equivalence
+        test_trace_equivalence(&expr, &range_checker, inputs.clone(), flags.clone(), width);
 
         // Verify mathematical correctness
         let expected = {
@@ -785,17 +690,17 @@ fn test_e3_e4_with_complex_operations() {
             (num * den_inv) % &prime
         };
 
-        let FieldExprCols { vars, .. } = expr.load_vars(&e3_row);
-        let computed = evaluate_biguint(&vars[vars.len() - 1], LIMB_BITS);
-        assert_eq!(computed, expected, "Mathematical verification failed");
+        let direct_row = generate_direct_trace(&expr, &range_checker, inputs, flags, width);
+        let FieldExprCols { vars, .. } = expr.load_vars(&direct_row);
+        extract_and_verify_result(&expr, &direct_row, &expected, vars.len() - 1);
     }
 }
 
 #[test]
-fn test_concurrent_e3_e4_simulation() {
-    // Simulate mixed E3/E4 execution to ensure RecordArena abstraction works correctly
+fn test_concurrent_direct_recorded_simulation() {
+    // Simulate mixed direct/recorded execution to ensure RecordArena abstraction works correctly
     let prime = secp256k1_coord_prime();
-    let (range_checker, builder) = setup(&prime);
+    let (_, builder) = setup(&prime);
 
     let x1 = ExprBuilder::new_input(builder.clone());
     let x2 = ExprBuilder::new_input(builder.clone());
@@ -803,117 +708,40 @@ fn test_concurrent_e3_e4_simulation() {
     x3.save();
     let builder_data = builder.borrow().clone();
 
-    let expr = FieldExpr::new(builder_data, range_checker.bus(), false);
-    let width = BaseAir::<BabyBear>::width(&expr);
+    let (expr, range_checker, width) = create_field_expr_with_setup(builder_data);
 
     // Simulate multiple "concurrent" executions with different modes
     let execution_scenarios = vec![
-        ("e3_direct", true),
-        ("e4_deferred", false),
-        ("e3_direct", true),
-        ("e4_deferred", false),
+        ("direct", true),
+        ("recorded", false),
+        ("direct", true),
+        ("recorded", false),
     ];
 
     let mut all_traces = Vec::new();
 
-    for (name, is_e3) in execution_scenarios {
+    for (name, is_direct) in execution_scenarios {
         let inputs = vec![
             generate_random_biguint(&prime),
             generate_random_biguint(&prime),
         ];
 
-        let mut trace = BabyBear::zero_vec(width);
-
-        if is_e3 {
-            // E3: Direct trace generation
-            expr.generate_subrow((&range_checker, inputs.clone(), vec![]), &mut trace);
+        let trace = if is_direct {
+            generate_direct_trace(&expr, &range_checker, inputs.clone(), vec![], width)
         } else {
-            // E4: Record-based trace generation
-            let mut e4_record_buffer = vec![0u8; 1024];
-            let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
-                &mut e4_record_buffer,
-                0,
-                &inputs,
-                expr.canonical_limb_bits(),
-                expr.canonical_num_limbs(),
-            );
-            let data: Vec<u8> = inputs
-                .iter()
-                .flat_map(|x| {
-                    biguint_to_limbs_vec(
-                        x.clone(),
-                        expr.canonical_limb_bits(),
-                        expr.canonical_num_limbs(),
-                    )
-                })
-                .map(|limb| limb as u8)
-                .collect();
-            record.fill_from_execution_data(0, &data);
-            let reconstructed_inputs: Vec<BigUint> = record
-                .input_limbs
-                .chunks(expr.canonical_num_limbs())
-                .map(|chunk| {
-                    let u32s = chunk.iter().map(|&b| b as u32).collect::<Vec<u32>>();
-                    limbs_to_biguint(&u32s, expr.canonical_limb_bits())
-                })
-                .collect();
-            expr.generate_subrow((&range_checker, reconstructed_inputs, vec![]), &mut trace);
-        }
+            generate_recorded_trace(&expr, &range_checker, &inputs, vec![], width)
+        };
 
         all_traces.push((name, inputs, trace));
     }
 
     // Verify each trace is mathematically valid
-    for (name, inputs, trace) in &all_traces {
-        let FieldExprCols { vars, .. } = expr.load_vars(trace);
-        let generated = evaluate_biguint(&vars[0], LIMB_BITS);
+    for (_, inputs, trace) in &all_traces {
         let expected = (&inputs[0] + &inputs[1]) % &prime;
-        assert_eq!(
-            generated, expected,
-            "Concurrent execution {} failed verification",
-            name
-        );
+        extract_and_verify_result(&expr, trace, &expected, 0);
     }
 
-    // Verify that E3 and E4 with same inputs produce same results
+    // Verify that direct and recorded with same inputs produce same results
     let same_inputs = vec![BigUint::from(123u32), BigUint::from(456u32)];
-
-    let mut e3_trace = BabyBear::zero_vec(width);
-    expr.generate_subrow((&range_checker, same_inputs.clone(), vec![]), &mut e3_trace);
-
-    let mut final_record_buffer = vec![0u8; 1024];
-    let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
-        &mut final_record_buffer,
-        0,
-        &same_inputs,
-        expr.canonical_limb_bits(),
-        expr.canonical_num_limbs(),
-    );
-    let mut e4_trace = BabyBear::zero_vec(width);
-    let data: Vec<u8> = same_inputs
-        .iter()
-        .flat_map(|x| {
-            biguint_to_limbs_vec(
-                x.clone(),
-                expr.canonical_limb_bits(),
-                expr.canonical_num_limbs(),
-            )
-        })
-        .map(|limb| limb as u8)
-        .collect();
-    record.fill_from_execution_data(0, &data);
-    let reconstructed: Vec<BigUint> = record
-        .input_limbs
-        .chunks(expr.canonical_num_limbs())
-        .map(|chunk| {
-            let u32s = chunk.iter().map(|&b| b as u32).collect::<Vec<u32>>();
-            limbs_to_biguint(&u32s, expr.canonical_limb_bits())
-        })
-        .collect();
-    expr.generate_subrow((&range_checker, reconstructed, vec![]), &mut e4_trace);
-
-    assert_eq!(
-        e3_trace, e4_trace,
-        "Concurrent E3/E4 with same inputs must produce identical traces"
-    );
+    test_trace_equivalence(&expr, &range_checker, same_inputs, vec![], width);
 }
