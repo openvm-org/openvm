@@ -207,12 +207,10 @@ mod tests {
         let input = vec![[0, 0, 0, 1].map(F::from_canonical_u8).to_vec()];
 
         let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
-        let segments = vm
+        match vm
             .executor
             .execute_metered(exe.clone(), input.clone(), widths, interactions)
-            .unwrap();
-
-        match vm.executor.execute_with_segments(exe, input, &segments) {
+        {
             Err(ExecutionError::FailedWithExitCode(_)) => Ok(()),
             Err(_) => panic!("should fail with `FailedWithExitCode`"),
             Ok(_) => panic!("should fail"),
