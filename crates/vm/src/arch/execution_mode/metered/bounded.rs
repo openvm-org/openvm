@@ -11,6 +11,7 @@ const NATIVE_MEMORY_AS: u32 = 4;
 #[derive(Debug)]
 pub struct MeteredCtxBounded {
     pub trace_heights: Vec<u32>,
+    pub is_trace_height_constant: Vec<bool>,
 
     continuations_enabled: bool,
     num_access_adapters: u8,
@@ -33,6 +34,7 @@ impl MeteredCtxBounded {
     ) -> Self {
         Self {
             trace_heights: vec![0; num_traces],
+            is_trace_height_constant: vec![false; num_traces],
             continuations_enabled,
             num_access_adapters,
             as_byte_alignment_bits,

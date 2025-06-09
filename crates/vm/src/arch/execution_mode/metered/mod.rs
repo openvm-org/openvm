@@ -83,7 +83,8 @@ impl<'a> MeteredExecutionControl<'a> {
     fn should_segment<F>(&self, state: &mut VmSegmentState<F, MeteredCtx>) -> bool {
         let trace_heights = state.ctx.trace_heights_if_finalized();
         for (i, &height) in trace_heights.iter().enumerate() {
-            if height > self.max_trace_height {
+            // Only segment if the height is not constant and exceeds the maximum height
+            if !state.ctx.is_trace_height_constant[i] && height > self.max_trace_height {
                 tracing::info!(
                     "Segment {:2} | clk {:9} | chip {} ({}) height ({:8}) > max ({:8})",
                     state.ctx.segments.len(),
@@ -134,24 +135,12 @@ impl<'a> MeteredExecutionControl<'a> {
     {
         state.ctx.leaf_indices.clear();
 
-        // TODO(ayush): only reset trace heights for chips that are not constant height instead
-        // of refilling again
-        state.ctx.trace_heights.fill(0);
-
-        // Program | Connector | Public Values | Memory ... | Executors (except Public Values) |
-        // Range Checker
-        state.ctx.trace_heights[PROGRAM_AIR_ID] =
-            chip_complex.program_chip().true_program_length as u32;
-        state.ctx.trace_heights[CONNECTOR_AIR_ID] = 2;
-
-        let mut offset = if chip_complex.config().has_public_values_chip() {
-            PUBLIC_VALUES_AIR_ID + 1
+        // Only reset trace heights for chips that are not constant height
+        let offset = if chip_complex.config().has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
         } else {
-            PUBLIC_VALUES_AIR_ID
+            PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
         };
-        offset += chip_complex.memory_controller().num_airs();
-
-        // Periphery chips with constant heights
         for (i, chip_id) in chip_complex
             .inventory
             .insertion_order
@@ -159,21 +148,31 @@ impl<'a> MeteredExecutionControl<'a> {
             .rev()
             .enumerate()
         {
-            if let &ChipId::Periphery(id) = chip_id {
-                if let Some(constant_height) =
-                    chip_complex.inventory.periphery[id].constant_trace_height()
-                {
-                    state.ctx.trace_heights[offset + i] = constant_height as u32;
+            match chip_id {
+                &ChipId::Periphery(id) => {
+                    if chip_complex.inventory.periphery[id]
+                        .constant_trace_height()
+                        .is_none()
+                    {
+                        state.ctx.trace_heights[offset + i] = 0;
+                    }
+                }
+                ChipId::Executor(_) => {
+                    // Executor chips don't have constant height, so reset them
+                    state.ctx.trace_heights[offset + i] = 0;
                 }
             }
         }
 
         // Range checker chip
-        if let (Some(range_checker_height), Some(last_height)) = (
-            chip_complex.range_checker_chip().constant_trace_height(),
-            state.ctx.trace_heights.last_mut(),
-        ) {
-            *last_height = range_checker_height as u32;
+        if chip_complex
+            .range_checker_chip()
+            .constant_trace_height()
+            .is_none()
+        {
+            if let Some(last_height) = state.ctx.trace_heights.last_mut() {
+                *last_height = 0;
+            }
         }
     }
 
@@ -236,7 +235,46 @@ where
         state: &mut VmSegmentState<F, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
-        self.reset_segment::<F, VC>(state, chip_complex);
+        // Program | Connector | Public Values | Memory ... | Executors (except Public Values) |
+        // Range Checker
+        state.ctx.trace_heights[PROGRAM_AIR_ID] =
+            chip_complex.program_chip().true_program_length as u32;
+        state.ctx.is_trace_height_constant[PROGRAM_AIR_ID] = true;
+        state.ctx.trace_heights[CONNECTOR_AIR_ID] = 2;
+        state.ctx.is_trace_height_constant[CONNECTOR_AIR_ID] = true;
+
+        let offset = if chip_complex.config().has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
+        } else {
+            PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
+        };
+        // Periphery chips with constant heights
+        for (i, chip_id) in chip_complex
+            .inventory
+            .insertion_order
+            .iter()
+            .rev()
+            .enumerate()
+        {
+            if let &ChipId::Periphery(id) = chip_id {
+                if let Some(constant_height) =
+                    chip_complex.inventory.periphery[id].constant_trace_height()
+                {
+                    state.ctx.trace_heights[offset + i] = constant_height as u32;
+                    state.ctx.is_trace_height_constant[offset + i] = true;
+                }
+            }
+        }
+
+        // Range checker chip
+        if let (Some(range_checker_height), Some(last_height), Some(last_is_height_constant)) = (
+            chip_complex.range_checker_chip().constant_trace_height(),
+            state.ctx.trace_heights.last_mut(),
+            state.ctx.is_trace_height_constant.last_mut(),
+        ) {
+            *last_height = range_checker_height as u32;
+            *last_is_height_constant = true;
+        }
     }
 
     fn on_suspend_or_terminate(
@@ -279,13 +317,11 @@ where
         // Check if segmentation needs to happen
         self.check_segment_limits::<F, VC>(state, chip_complex);
 
-        let mut offset = if chip_complex.config().has_public_values_chip() {
-            PUBLIC_VALUES_AIR_ID + 1
+        let offset = if chip_complex.config().has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
         } else {
-            PUBLIC_VALUES_AIR_ID
+            PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
         };
-        offset += chip_complex.memory_controller().num_airs();
-
         let &Instruction { opcode, .. } = instruction;
         if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode) {
             let mut vm_state = VmStateMut {

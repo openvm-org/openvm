@@ -7,7 +7,6 @@ use openvm_circuit::{
         execution_mode::metered::get_widths_and_interactions_from_vkey,
         hasher::poseidon2::vm_poseidon2_hasher, ContinuationVmProof, ExecutionError,
         GenerationError, SingleSegmentVmExecutor, SystemConfig, VirtualMachine, VmConfig,
-        VmExecutor,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
@@ -558,9 +557,28 @@ fn test_segmentation_retry() {
     let app_pk = AppProvingKey::keygen(app_config);
     let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
 
-    let app_vm = VmExecutor::new(app_pk.app_vm_pk.vm_config.clone());
+    let app_engine = BabyBearPoseidon2Engine::new(app_pk.app_vm_pk.fri_params);
+    let mut app_vm = VirtualMachine::new(app_engine, app_pk.app_vm_pk.vm_config.clone());
+
+    let app_vm_pk = app_vm.keygen();
+    let (widths, interactions) = get_widths_and_interactions_from_vkey(app_vm_pk.get_vk());
+    let segments = app_vm
+        .executor
+        .execute_metered(
+            app_committed_exe.exe.clone(),
+            vec![],
+            widths.clone(),
+            interactions.clone(),
+        )
+        .unwrap();
+
     let app_vm_result = app_vm
-        .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![])
+        .executor
+        .execute_with_segments_and_generate_with_cached_program(
+            app_committed_exe.clone(),
+            vec![],
+            &segments,
+        )
         .unwrap();
     assert!(app_vm_result.per_segment.len() > 2);
 
@@ -574,24 +592,41 @@ fn test_segmentation_retry() {
         .sum();
 
     // Re-run with a threshold that will be violated.
-    let mut app_vm = VmExecutor::new(app_pk.app_vm_pk.vm_config.clone());
     let num_airs = app_pk.app_vm_pk.vm_pk.per_air.len();
-    app_vm.set_trace_height_constraints(vec![LinearConstraint {
-        coefficients: vec![1; num_airs],
-        threshold: total_height as u32 - 1,
-    }]);
-    let app_vm_result =
-        app_vm.execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![]);
+    app_vm
+        .executor
+        .set_trace_height_constraints(vec![LinearConstraint {
+            coefficients: vec![1; num_airs],
+            threshold: total_height as u32 - 1,
+        }]);
+    let app_vm_result = app_vm
+        .executor
+        .execute_with_segments_and_generate_with_cached_program(
+            app_committed_exe.clone(),
+            vec![],
+            &segments,
+        );
     assert!(matches!(
         app_vm_result,
         Err(GenerationError::TraceHeightsLimitExceeded)
     ));
 
     // Try lowering segmentation threshold.
-    let config = VmConfig::<BabyBear>::system_mut(&mut app_vm.config);
+    let config = VmConfig::<BabyBear>::system_mut(&mut app_vm.executor.config);
     config.set_segmentation_strategy(config.segmentation_strategy.stricter_strategy());
+
+    app_vm.executor.set_trace_height_constraints(vec![]);
+    let segments = app_vm
+        .executor
+        .execute_metered(app_committed_exe.exe.clone(), vec![], widths, interactions)
+        .unwrap();
     let app_vm_result = app_vm
-        .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![])
+        .executor
+        .execute_with_segments_and_generate_with_cached_program(
+            app_committed_exe.clone(),
+            vec![],
+            &segments,
+        )
         .unwrap();
 
     // New max height should indeed by smaller.
