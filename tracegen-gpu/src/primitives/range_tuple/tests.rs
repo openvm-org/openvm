@@ -1,10 +1,16 @@
-use std::sync::Arc;
 use core::array;
+use std::sync::Arc;
 
 // use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use crate::{
+    dummy::range_tuple::DummyInteractionChipGPU, primitives::range_tuple::RangeTupleCheckerChipGPU,
+};
 use openvm_circuit_primitives::range_tuple::RangeTupleCheckerBus;
 use openvm_stark_sdk::{
-    config::{setup_tracing, FriParameters}, engine::{StarkEngine, StarkFriEngine}, openvm_stark_backend::prover::hal::{DeviceDataTransporter},
+    config::{setup_tracing, FriParameters},
+    engine::{StarkEngine, StarkFriEngine},
+    openvm_stark_backend::prover::hal::DeviceDataTransporter,
+    utils::create_seeded_rng,
 };
 use rand::Rng;
 use stark_backend_gpu::{
@@ -12,7 +18,6 @@ use stark_backend_gpu::{
     prover_backend::GpuBackend,
     types::{DeviceAirProofRawInput, DeviceProofInput},
 };
-use tracegen_gpu::{primitives::range_tuple::RangeTupleCheckerChipGPU, dummy::range_tuple::DummyInteractionChipGPU};
 
 const LOG_BLOWUP: usize = 2;
 const LIST_LEN: usize = 16;
@@ -21,10 +26,10 @@ const LIST_LEN: usize = 16;
 fn range_tuple_test() {
     setup_tracing();
 
-    let mut rng = rand::thread_rng();
+    let mut rng = create_seeded_rng();
 
-    let bus_index  = 0;
-    let sizes : [u32; 3] = array::from_fn(|_| 1 << rng.gen_range(1..5));
+    let bus_index = 0;
+    let sizes: [u32; 3] = array::from_fn(|_| 1 << rng.gen_range(1..5));
 
     let mut gen_tuple = || {
         sizes
@@ -38,7 +43,8 @@ fn range_tuple_test() {
     let bus = RangeTupleCheckerBus::new(bus_index, sizes);
     let range_tuple_checker = Arc::new(RangeTupleCheckerChipGPU::new(bus));
 
-    let dummy_chip = DummyInteractionChipGPU::new(range_tuple_checker.clone(), vals.concat().to_vec());
+    let dummy_chip =
+        DummyInteractionChipGPU::new(range_tuple_checker.clone(), vals.concat().to_vec());
     let dummy_trace = dummy_chip.generate_trace();
     let range_tuple_trace = range_tuple_checker.generate_trace();
 
@@ -53,16 +59,22 @@ fn range_tuple_test() {
 
     let proof_input = DeviceProofInput::<GpuBackend> {
         per_air: vec![
-            (dummy_air_id, DeviceAirProofRawInput::<GpuBackend> {
-                cached_mains: vec![],
-                common_main: Some(dummy_trace),
-                public_values: vec![],
-            }),
-            (range_tuple_checker_id, DeviceAirProofRawInput::<GpuBackend> {
-                cached_mains: vec![],
-                common_main: Some(range_tuple_trace),
-                public_values: vec![],
-            }),
+            (
+                dummy_air_id,
+                DeviceAirProofRawInput::<GpuBackend> {
+                    cached_mains: vec![],
+                    common_main: Some(dummy_trace),
+                    public_values: vec![],
+                },
+            ),
+            (
+                range_tuple_checker_id,
+                DeviceAirProofRawInput::<GpuBackend> {
+                    cached_mains: vec![],
+                    common_main: Some(range_tuple_trace),
+                    public_values: vec![],
+                },
+            ),
         ],
     };
 
@@ -72,5 +84,4 @@ fn range_tuple_test() {
     let gpu_proof = engine.gpu_prove(mpk_view, proof_input);
 
     engine.verify(&pk.get_vk(), &gpu_proof).unwrap();
-
 }

@@ -7,6 +7,9 @@ use openvm_circuit_primitives::range_tuple::{
 };
 use stark_backend_gpu::{base::DeviceMatrix, prelude::F};
 
+#[cfg(test)]
+mod tests;
+
 pub struct RangeTupleCheckerChipGPU<const N: usize> {
     pub air: RangeTupleCheckerAir<N>,
     pub count: Arc<DeviceBuffer<F>>,
@@ -21,13 +24,10 @@ impl<const N: usize> RangeTupleCheckerChipGPU<N> {
             count,
         }
     }
-    
+
     pub fn generate_trace(&self) -> DeviceMatrix<F> {
-        let trace = DeviceMatrix::<F>::new(
-            self.count.clone(),
-            self.count.len(),
-            NUM_RANGE_TUPLE_COLS,
-        );
+        let trace =
+            DeviceMatrix::<F>::new(self.count.clone(), self.count.len(), NUM_RANGE_TUPLE_COLS);
         unsafe {
             tracegen(&self.count, trace.buffer()).unwrap();
         }
