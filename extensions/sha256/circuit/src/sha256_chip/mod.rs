@@ -4,7 +4,7 @@
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        MultiRowRecordArena, NewVmChipWrapper, Result, StepExecutorE1, VmStateMut,
+        MatrixRecordArena, NewVmChipWrapper, Result, StepExecutorE1, VmStateMut,
     },
     system::memory::online::GuestMemory,
 };
@@ -45,7 +45,7 @@ pub const SHA256_BLOCK_CELLS: usize = SHA256_BLOCK_BITS / RV32_CELL_BITS;
 /// Number of rows we will do a read on for each SHA256 block
 pub const SHA256_NUM_READ_ROWS: usize = SHA256_BLOCK_CELLS / SHA256_READ_SIZE;
 
-pub type Sha256VmChip<F> = NewVmChipWrapper<F, Sha256VmAir, Sha256VmStep, MultiRowRecordArena<F>>;
+pub type Sha256VmChip<F> = NewVmChipWrapper<F, Sha256VmAir, Sha256VmStep, MatrixRecordArena<F>>;
 
 pub struct Sha256VmStep {
     pub inner: Sha256StepHelper,

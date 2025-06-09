@@ -8,9 +8,9 @@ use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1,
-        AdapterTraceFiller, AdapterTraceStep, MinimalInstruction, RecordArena, Result,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, EmptyLayout, MinimalInstruction, RecordArena, Result, StepExecutorE1,
+        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -317,7 +317,7 @@ where
             WriteData: From<[u8; WRITE_LIMBS]>,
         >,
 {
-    type RecordLayout = AdapterCoreLayout;
+    type RecordLayout = EmptyLayout<A>;
     type RecordMut<'a> = (A::RecordMut<'a>, &'a mut ModularIsEqualRecord<READ_LIMBS>);
 
     fn execute<'buf, RA>(
@@ -338,7 +338,7 @@ where
             Rv32ModularArithmeticOpcode::IS_EQ | Rv32ModularArithmeticOpcode::SETUP_ISEQ
         );
 
-        let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout::new(A::WIDTH));
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
         [core_record.b, core_record.c] = self
