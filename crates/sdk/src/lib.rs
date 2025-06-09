@@ -162,11 +162,11 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         VC::Periphery: Chip<SC>,
     {
         let vm = VmExecutor::new(vm_config);
-        let final_memory = vm.execute(exe, inputs)?;
+        let final_memory = vm.execute_e1(exe, inputs, None)?.memory;
         let public_values = extract_public_values(
             &vm.config.system().memory_config.memory_dimensions(),
             vm.config.system().num_public_values,
-            final_memory.as_ref().unwrap(),
+            &final_memory,
         );
         Ok(public_values)
     }
