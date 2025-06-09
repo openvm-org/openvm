@@ -128,6 +128,8 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {
+        // Note: doing `read_rv32_register` here instead of `read_rv32_register_from_state`
+        // because we don't want this read to be metered
         let len = read_rv32_register(state.memory, instruction.c.as_canonical_u32());
 
         self.execute_e1(state, instruction)?;

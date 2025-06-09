@@ -45,7 +45,7 @@ use crate::{
     SHA256_NUM_READ_ROWS,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Sha256VmMetadata {
     pub num_blocks: u32,
 }
