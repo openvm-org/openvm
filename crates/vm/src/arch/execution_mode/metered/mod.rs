@@ -128,69 +128,15 @@ impl<'a> MeteredExecutionControl<'a> {
     fn reset_segment<F, VC>(
         &self,
         state: &mut VmSegmentState<F, MeteredCtx>,
-        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) where
         F: PrimeField32,
         VC: VmConfig<F>,
     {
         state.ctx.leaf_indices.clear();
-
-        // Reset trace heights
-        let mut offset = if chip_complex.config().has_public_values_chip() {
-            PUBLIC_VALUES_AIR_ID
-        } else {
-            PUBLIC_VALUES_AIR_ID + 1
-        };
-
-        // Boundary chip
-        state.ctx.trace_heights[offset] = 0;
-        offset += 1;
-
-        // Merkle chip
-        state.ctx.trace_heights[offset] = 0;
-        offset += 1;
-
-        // Access adapters
-        let num_access_adapters = chip_complex
-            .memory_controller()
-            .memory
-            .access_adapter_inventory
-            .num_access_adapters();
-        for _ in 0..num_access_adapters {
-            state.ctx.trace_heights[offset] = 0;
-            offset += 1;
-        }
-
-        // Only reset trace heights for chips that are not constant height
-        for chip_id in chip_complex.inventory.insertion_order.iter().rev() {
-            match chip_id {
-                &ChipId::Periphery(id) => {
-                    if chip_complex.inventory.periphery[id]
-                        .constant_trace_height()
-                        .is_none()
-                    {
-                        state.ctx.trace_heights[offset] = 0;
-                    }
-                }
-                ChipId::Executor(_) => {
-                    state.ctx.trace_heights[offset] = 0;
-                }
-            }
-            offset += 1;
-        }
-
-        // Poseidon2
-        let poseidon2_idx = state.ctx.trace_heights.len() - 2;
-        state.ctx.trace_heights[poseidon2_idx] = 0;
-
-        // Range checker chip
-        if chip_complex
-            .range_checker_chip()
-            .constant_trace_height()
-            .is_none()
-        {
-            if let Some(last_height) = state.ctx.trace_heights.last_mut() {
-                *last_height = 0;
+        for (i, &is_constant) in state.ctx.is_trace_height_constant.iter().enumerate() {
+            if !is_constant {
+                state.ctx.trace_heights[i] = 0;
             }
         }
     }
