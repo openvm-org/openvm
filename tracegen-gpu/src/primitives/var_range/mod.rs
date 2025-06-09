@@ -7,6 +7,9 @@ use openvm_circuit_primitives::var_range::{
 };
 use stark_backend_gpu::{base::DeviceMatrix, prelude::F};
 
+#[cfg(test)]
+mod tests;
+
 pub struct VariableRangeCheckerChipGPU {
     pub air: VariableRangeCheckerAir,
     pub count: Arc<DeviceBuffer<F>>,
@@ -26,6 +29,7 @@ impl VariableRangeCheckerChipGPU {
 
     /// Inplace generates the trace.
     pub fn generate_trace(&self) -> DeviceMatrix<F> {
+        assert_eq!(size_of::<F>(), size_of::<u32>());
         let trace = DeviceMatrix::<F>::new(
             self.count.clone(),
             self.count.len(),

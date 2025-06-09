@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+use crate::{
+    dummy::var_range::DummyInteractionChipGPU, primitives::var_range::VariableRangeCheckerChipGPU,
+};
 use cuda_utils::copy::MemCopyD2H;
 use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use openvm_stark_sdk::{
@@ -13,9 +16,6 @@ use stark_backend_gpu::{
     engine::GpuBabyBearPoseidon2Engine,
     prover_backend::GpuBackend,
     types::{DeviceAirProofRawInput, DeviceProofInput},
-};
-use tracegen_gpu::{
-    dummy::var_range::DummyInteractionChipGPU, primitives::var_range::VariableRangeCheckerChipGPU,
 };
 
 const LOG_BLOWUP: usize = 2;
