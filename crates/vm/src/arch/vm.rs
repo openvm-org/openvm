@@ -443,7 +443,14 @@ where
             create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
                 .unwrap();
         let air_names = chip_complex.air_names();
-        let ctrl = MeteredExecutionControl::new(&air_names, &widths, &interactions);
+        let ctrl = MeteredExecutionControl::new(&air_names, &widths, &interactions)
+            .with_max_trace_height(
+                self.config
+                    .system()
+                    .segmentation_strategy
+                    .max_trace_height() as u32,
+            )
+            .with_max_cells(self.config.system().segmentation_strategy.max_cells());
         let mut executor = VmSegmentExecutor::<F, VC, _>::new(
             chip_complex,
             self.trace_height_constraints.clone(),
@@ -961,7 +968,14 @@ where
             create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
                 .unwrap();
         let air_names = chip_complex.air_names();
-        let ctrl = MeteredExecutionControl::new(&air_names, &widths, &interactions);
+        let ctrl = MeteredExecutionControl::new(&air_names, &widths, &interactions)
+            .with_max_trace_height(
+                self.config
+                    .system()
+                    .segmentation_strategy
+                    .max_trace_height() as u32,
+            )
+            .with_max_cells(self.config.system().segmentation_strategy.max_cells());
         let mut executor = VmSegmentExecutor::<F, VC, _>::new(
             chip_complex,
             self.trace_height_constraints.clone(),

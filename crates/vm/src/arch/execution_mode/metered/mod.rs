@@ -21,16 +21,17 @@ use crate::arch::{
 /// Check segment every 100 instructions.
 const SEGMENT_CHECK_INTERVAL: u64 = 100;
 
-// TODO(ayush): fix these values
-const MAX_TRACE_HEIGHT: u32 = (1 << 23) - 100;
-const MAX_TRACE_CELLS: usize = 2_000_000_000; // 2B
-const MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
+const DEFAULT_MAX_TRACE_HEIGHT: u32 = (1 << 23) - 100;
+const DEFAULT_MAX_CELLS: usize = 2_000_000_000; // 2B
+const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 
 pub struct MeteredExecutionControl<'a> {
-    // Constants
     air_names: &'a [String],
     pub widths: &'a [usize],
     pub interactions: &'a [usize],
+    max_trace_height: u32,
+    max_cells: usize,
+    max_interactions: usize,
 }
 
 impl<'a> MeteredExecutionControl<'a> {
@@ -39,7 +40,25 @@ impl<'a> MeteredExecutionControl<'a> {
             air_names,
             widths,
             interactions,
+            max_trace_height: DEFAULT_MAX_TRACE_HEIGHT,
+            max_cells: DEFAULT_MAX_CELLS,
+            max_interactions: DEFAULT_MAX_INTERACTIONS,
         }
+    }
+
+    pub fn with_max_trace_height(mut self, max_trace_height: u32) -> Self {
+        self.max_trace_height = max_trace_height;
+        self
+    }
+
+    pub fn with_max_cells(mut self, max_cells: usize) -> Self {
+        self.max_cells = max_cells;
+        self
+    }
+
+    pub fn with_max_interactions(mut self, max_interactions: usize) -> Self {
+        self.max_interactions = max_interactions;
+        self
     }
 
     /// Calculate the total cells used based on trace heights and widths
@@ -64,40 +83,40 @@ impl<'a> MeteredExecutionControl<'a> {
     fn should_segment<F>(&self, state: &mut VmSegmentState<F, MeteredCtx>) -> bool {
         let trace_heights = state.ctx.trace_heights_if_finalized();
         for (i, &height) in trace_heights.iter().enumerate() {
-            if height > MAX_TRACE_HEIGHT {
+            if height > self.max_trace_height {
                 tracing::info!(
                     "Segment {:2} | clk {:9} | chip {} ({}) height ({:8}) > max ({:8})",
                     state.ctx.segments.len(),
-                    state.ctx.clk_last_segment_check,
+                    state.clk,
                     i,
                     self.air_names[i],
                     height,
-                    MAX_TRACE_HEIGHT
+                    self.max_trace_height
                 );
                 return true;
             }
         }
 
         let total_cells = self.calculate_total_cells(&trace_heights);
-        if total_cells > MAX_TRACE_CELLS {
+        if total_cells > self.max_cells {
             tracing::info!(
                 "Segment {:2} | clk {:9} | total cells ({:10}) > max ({:10})",
                 state.ctx.segments.len(),
-                state.ctx.clk_last_segment_check,
+                state.clk,
                 total_cells,
-                MAX_TRACE_CELLS
+                self.max_cells
             );
             return true;
         }
 
         let total_interactions = self.calculate_total_interactions(&trace_heights);
-        if total_interactions > MAX_INTERACTIONS {
+        if total_interactions > self.max_interactions {
             tracing::info!(
                 "Segment {:2} | clk {:9} | total interactions ({:11}) > max ({:11})",
                 state.ctx.segments.len(),
-                state.ctx.clk_last_segment_check,
+                state.clk,
                 total_interactions,
-                MAX_INTERACTIONS
+                self.max_interactions
             );
             return true;
         }
@@ -171,16 +190,17 @@ impl<'a> MeteredExecutionControl<'a> {
             return;
         }
 
-        if self.should_segment(state) {
-            let clk_start = state
-                .ctx
-                .segments
-                .last()
-                .map_or(0, |s| s.clk_start + s.num_cycles);
+        let clk_start = state
+            .ctx
+            .segments
+            .last()
+            .map_or(0, |s| s.clk_start + s.num_cycles);
+        let num_cycles = state.clk - clk_start;
+        // Segment should contain at least one cycle
+        if num_cycles > 0 && self.should_segment(state) {
             let segment = Segment {
                 clk_start,
-                num_cycles: state.ctx.clk_last_segment_check - clk_start,
-                // NOTE: this is trace heights after overflow so an overestimate
+                num_cycles,
                 trace_heights: state.ctx.trace_heights.clone(),
             };
             state.ctx.segments.push(segment);
@@ -241,7 +261,6 @@ where
         let segment = Segment {
             clk_start,
             num_cycles: state.clk - clk_start,
-            // NOTE: this is trace heights after overflow so an overestimate
             trace_heights: state.ctx.trace_heights.clone(),
         };
         state.ctx.segments.push(segment);

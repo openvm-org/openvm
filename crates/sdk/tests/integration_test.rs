@@ -212,9 +212,7 @@ fn test_public_values_and_leaf_verification() {
             &segments,
         )
         .unwrap();
-    // TODO(ayush): add it back when execute_metered takes SegmentationStrategy
-    //              into account
-    // assert!(app_vm_result.per_segment.len() > 2);
+    assert!(app_vm_result.per_segment.len() > 2);
 
     let app_engine = BabyBearPoseidon2Engine::new(app_pk.app_vm_pk.fri_params);
     let mut app_vm_seg_proofs: Vec<_> = app_vm_result
