@@ -391,7 +391,7 @@ where
         }
 
         let mut exec_state = VmSegmentState::new(0, exe.pc_start, Some(memory), input.into(), ());
-        metrics_span("execute_time_ms", || {
+        metrics_span("execute_e1_time_ms", || {
             segment.execute_from_state(&mut exec_state)
         })?;
 
@@ -488,7 +488,7 @@ where
         );
 
         let mut exec_state = VmSegmentState::new(0, exe.pc_start, Some(memory), input.into(), ctx);
-        metrics_span("execute_time_ms", || {
+        metrics_span("execute_metered_time_ms", || {
             executor.execute_from_state(&mut exec_state)
         })?;
 
@@ -947,7 +947,7 @@ where
         );
 
         let mut exec_state = VmSegmentState::new(0, exe.pc_start, memory, input.into(), ctx);
-        metrics_span("execute_time_ms", || {
+        metrics_span("execute_metered_time_ms", || {
             executor.execute_from_state(&mut exec_state)
         })?;
 

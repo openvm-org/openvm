@@ -364,6 +364,8 @@ impl BenchmarkOutput {
 pub const PROOF_TIME_LABEL: &str = "total_proof_time_ms";
 pub const CELLS_USED_LABEL: &str = "main_cells_used";
 pub const CYCLES_LABEL: &str = "total_cycles";
+pub const EXECUTE_E1_TIME_LABEL: &str = "execute_e1_time_ms";
+pub const EXECUTE_METERED_TIME_LABEL: &str = "execute_metered_time_ms";
 pub const EXECUTE_TIME_LABEL: &str = "execute_time_ms";
 pub const TRACE_GEN_TIME_LABEL: &str = "trace_gen_time_ms";
 pub const PROVE_EXCL_TRACE_TIME_LABEL: &str = "stark_prove_excluding_trace_time_ms";
@@ -372,6 +374,8 @@ pub const VM_METRIC_NAMES: &[&str] = &[
     PROOF_TIME_LABEL,
     CELLS_USED_LABEL,
     CYCLES_LABEL,
+    EXECUTE_E1_TIME_LABEL,
+    EXECUTE_METERED_TIME_LABEL,
     EXECUTE_TIME_LABEL,
     TRACE_GEN_TIME_LABEL,
     PROVE_EXCL_TRACE_TIME_LABEL,
