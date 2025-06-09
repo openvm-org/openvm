@@ -281,7 +281,8 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceFiller<F, CTX>
         // elements. This requires:
         // - Cols struct should be repr(C) and we write in reverse order (to ensure non-overlapping)
         // - Do not overwrite any reference in `record` before it has already been used or moved
-        // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic otherwise)
+        // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic
+        //   otherwise)
         let record = unsafe {
             let record_buffer = &*slice_from_raw_parts(
                 adapter_row.as_ptr() as *const u8,
