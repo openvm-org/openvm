@@ -667,14 +667,11 @@ impl<AdapterRecord, CoreRecord> DenseAdapterCoreRecordArena<AdapterRecord, CoreR
     }
 }
 
-impl<'a, AdapterRecord, CoreRecord>
-    RecordArena<'a, AdapterCoreLayout, (&'a mut AdapterRecord, &'a mut CoreRecord)>
+impl<'a, Layout, AdapterRecord, CoreRecord>
+    RecordArena<'a, Layout, (&'a mut AdapterRecord, &'a mut CoreRecord)>
     for DenseAdapterCoreRecordArena<AdapterRecord, CoreRecord>
 {
-    fn alloc(
-        &'a mut self,
-        _layout: AdapterCoreLayout,
-    ) -> (&'a mut AdapterRecord, &'a mut CoreRecord) {
+    fn alloc(&'a mut self, _layout: Layout) -> (&'a mut AdapterRecord, &'a mut CoreRecord) {
         let adapter_record = self.arena.alloc_one();
         let core_record = self.arena.alloc_one();
         (adapter_record, core_record)
