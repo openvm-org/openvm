@@ -197,7 +197,7 @@ where
 }
 
 #[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
+#[derive(AlignedBytesBorrow, Debug, Clone)]
 pub struct Rv32AuipcCoreRecord {
     pub from_pc: u32,
     pub imm: u32,

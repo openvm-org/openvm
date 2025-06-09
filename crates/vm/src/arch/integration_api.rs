@@ -307,14 +307,6 @@ impl SimpleRecordArena {
     }
 }
 
-impl<'a, T> RecordArena<'a, EmptyLayout, &'a mut T> for SimpleRecordArena {
-    fn alloc(&'a mut self, _layout: EmptyLayout) -> &'a mut T {
-        self.alloc_one()
-    }
-}
-
-// TODO: create a new chip wrapper on [SimpleRecordArena] that would be convenient to use
-
 impl<F: Field> RowMajorMatrixArena<F> for AdapterCoreRecordArena<F> {
     fn with_capacity(height: usize, width: usize) -> Self {
         let trace_buffer = F::zero_vec(height * width);
@@ -614,6 +606,197 @@ pub trait StepExecutorE1<F> {
 const DEFAULT_RECORDS_CAPACITY: usize = 1 << 20;
 
 impl<F, A, S, RA> InsExecutorE1<F> for NewVmChipWrapper<F, A, S, RA>
+where
+    F: PrimeField32,
+    S: StepExecutorE1<F>,
+{
+    fn execute_e1<Ctx>(
+        &self,
+        state: &mut VmStateMut<GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+        self.step.execute_e1(state, instruction)
+    }
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()>
+    where
+        F: PrimeField32,
+    {
+        self.step.execute_metered(state, instruction, chip_index)
+    }
+}
+
+pub struct DenseAdapterCoreRecordArena<AdapterRecord, CoreRecord> {
+    pub arena: SimpleRecordArena,
+    _adapter_record: PhantomData<AdapterRecord>,
+    _core_record: PhantomData<CoreRecord>,
+}
+
+impl<AdapterRecord, CoreRecord> DenseAdapterCoreRecordArena<AdapterRecord, CoreRecord> {
+    pub fn with_capacity(size_bytes: usize) -> Self {
+        Self {
+            arena: SimpleRecordArena::with_capacity(size_bytes),
+            _adapter_record: PhantomData,
+            _core_record: PhantomData,
+        }
+    }
+
+    pub fn extract_records(&self) -> Vec<(AdapterRecord, CoreRecord)>
+    where
+        AdapterRecord: Clone,
+        CoreRecord: Clone,
+    {
+        let position = self.arena.records_buffer.position() as usize;
+        assert_eq!(position % size_of::<(AdapterRecord, CoreRecord)>(), 0);
+        let num_records = position / size_of::<(AdapterRecord, CoreRecord)>();
+        let records = unsafe {
+            std::slice::from_raw_parts(
+                self.arena.records_buffer.get_ref().as_ptr() as *const (AdapterRecord, CoreRecord),
+                num_records,
+            )
+        };
+        records.to_vec()
+    }
+}
+
+impl<'a, AdapterRecord, CoreRecord>
+    RecordArena<'a, AdapterCoreLayout, (&'a mut AdapterRecord, &'a mut CoreRecord)>
+    for DenseAdapterCoreRecordArena<AdapterRecord, CoreRecord>
+{
+    fn alloc(
+        &'a mut self,
+        _layout: AdapterCoreLayout,
+    ) -> (&'a mut AdapterRecord, &'a mut CoreRecord) {
+        let adapter_record = self.arena.alloc_one();
+        let core_record = self.arena.alloc_one();
+        (adapter_record, core_record)
+    }
+}
+
+// DenseVmChipWrapper implementation
+pub struct DenseVmChipWrapper<F, AIR, STEP, AdapterRecord, CoreRecord> {
+    pub air: AIR,
+    pub step: STEP,
+    pub arena: DenseAdapterCoreRecordArena<AdapterRecord, CoreRecord>,
+    // TODO: make private
+    pub mem_helper: SharedMemoryHelper<F>,
+}
+
+impl<F, AIR, STEP, AdapterRecord, CoreRecord>
+    DenseVmChipWrapper<F, AIR, STEP, AdapterRecord, CoreRecord>
+where
+    F: Field,
+    AIR: BaseAir<F>,
+{
+    pub fn new(air: AIR, step: STEP, height: usize, mem_helper: SharedMemoryHelper<F>) -> Self {
+        let width = size_of::<AdapterRecord>() + size_of::<CoreRecord>();
+        assert!(height == 0 || height.is_power_of_two());
+        assert!(
+            align_of::<F>() >= align_of::<u32>(),
+            "type {} should have at least alignment of u32",
+            type_name::<F>()
+        );
+        let arena = DenseAdapterCoreRecordArena::with_capacity(height * width);
+        Self {
+            air,
+            step,
+            arena,
+            mem_helper,
+        }
+    }
+}
+
+impl<F, AIR, STEP, AdapterRecord, CoreRecord> InstructionExecutor<F>
+    for DenseVmChipWrapper<F, AIR, STEP, AdapterRecord, CoreRecord>
+where
+    F: PrimeField32,
+    STEP: TraceStep<F, ()> // TODO: CTX?
+        + StepExecutorE1<F>,
+    for<'buf> DenseAdapterCoreRecordArena<AdapterRecord, CoreRecord>:
+        RecordArena<'buf, STEP::RecordLayout, STEP::RecordMut<'buf>>,
+{
+    fn execute(
+        &mut self,
+        memory: &mut MemoryController<F>,
+        instruction: &Instruction<F>,
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
+        let mut pc = from_state.pc;
+        let state = VmStateMut {
+            pc: &mut pc,
+            memory: &mut memory.memory,
+            ctx: &mut (),
+        };
+        self.step.execute(state, instruction, &mut self.arena)?;
+
+        Ok(ExecutionState {
+            pc,
+            timestamp: memory.memory.timestamp,
+        })
+    }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        self.step.get_opcode_name(opcode)
+    }
+}
+
+impl<SC, AIR, STEP, AdapterRecord, CoreRecord> Chip<SC>
+    for DenseVmChipWrapper<Val<SC>, AIR, STEP, AdapterRecord, CoreRecord>
+where
+    SC: StarkGenericConfig,
+    Val<SC>: PrimeField32,
+    STEP: TraceStep<Val<SC>, ()> + TraceFiller<Val<SC>, ()> + Send + Sync,
+    AIR: Clone + AnyRap<SC> + 'static,
+{
+    fn air(&self) -> AirRef<SC> {
+        Arc::new(self.air.clone())
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        todo!()
+        // let width = self.arena.width();
+        // assert_eq!(self.arena.trace_offset() % width, 0);
+        // let rows_used = self.arena.trace_offset() / width;
+        // let height = next_power_of_two_or_zero(rows_used);
+        // let mut trace = self.arena.into_matrix();
+        // // This should be automatic since trace_buffer's height is a power of two:
+        // assert!(height.checked_mul(width).unwrap() <= trace.values.len());
+        // trace.values.truncate(height * width);
+        // let mem_helper = self.mem_helper.as_borrowed();
+        // self.step.fill_trace(&mem_helper, &mut trace, rows_used);
+        // drop(self.mem_helper);
+
+        // AirProofInput::simple(trace, self.step.generate_public_values())
+    }
+}
+
+impl<F, AIR, C, AdapterRecord, CoreRecord> ChipUsageGetter
+    for DenseVmChipWrapper<F, AIR, C, AdapterRecord, CoreRecord>
+where
+    C: Sync,
+{
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+    fn current_trace_height(&self) -> usize {
+        self.arena.arena.records_buffer.position() as usize
+            / (size_of::<AdapterRecord>() + size_of::<CoreRecord>())
+    }
+    fn trace_width(&self) -> usize {
+        size_of::<AdapterRecord>() + size_of::<CoreRecord>()
+    }
+}
+
+impl<F, A, S, AdapterRecord, CoreRecord> InsExecutorE1<F>
+    for DenseVmChipWrapper<F, A, S, AdapterRecord, CoreRecord>
 where
     F: PrimeField32,
     S: StepExecutorE1<F>,

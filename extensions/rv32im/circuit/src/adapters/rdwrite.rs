@@ -193,7 +193,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32CondRdWriteAdapterAir {
 
 /// This adapter doesn't read anything, and writes to \[a:4\]_d, where d == 1
 #[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
+#[derive(AlignedBytesBorrow, Debug, Clone)]
 pub struct Rv32RdWriteAdapterRecord {
     pub from_pc: u32,
     pub from_timestamp: u32,
