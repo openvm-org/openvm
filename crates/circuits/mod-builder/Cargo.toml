@@ -12,7 +12,7 @@ license.workspace = true
 openvm-stark-backend = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-stark-sdk = { workspace = true }
-openvm-circuit = { workspace = true }
+openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-instructions = { workspace = true }
 halo2curves-axiom = { workspace = true, optional = true }
 openvm-pairing-guest = { workspace = true, optional = true }
