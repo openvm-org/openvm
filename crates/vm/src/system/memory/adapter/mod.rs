@@ -22,6 +22,7 @@ use crate::system::memory::{offline_checker::MemoryBus, MemoryAddress};
 
 mod air;
 mod columns;
+mod records;
 #[cfg(test)]
 mod tests;
 
