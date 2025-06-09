@@ -135,34 +135,53 @@ impl<'a> MeteredExecutionControl<'a> {
     {
         state.ctx.leaf_indices.clear();
 
-        // Only reset trace heights for chips that are not constant height
-        let offset = if chip_complex.config().has_public_values_chip() {
-            PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
+        // Reset trace heights
+        let mut offset = if chip_complex.config().has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID
         } else {
-            PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
+            PUBLIC_VALUES_AIR_ID + 1
         };
-        for (i, chip_id) in chip_complex
-            .inventory
-            .insertion_order
-            .iter()
-            .rev()
-            .enumerate()
-        {
+
+        // Boundary chip
+        state.ctx.trace_heights[offset] = 0;
+        offset += 1;
+
+        // Merkle chip
+        state.ctx.trace_heights[offset] = 0;
+        offset += 1;
+
+        // Access adapters
+        let num_access_adapters = chip_complex
+            .memory_controller()
+            .memory
+            .access_adapter_inventory
+            .num_access_adapters();
+        for _ in 0..num_access_adapters {
+            state.ctx.trace_heights[offset] = 0;
+            offset += 1;
+        }
+
+        // Only reset trace heights for chips that are not constant height
+        for chip_id in chip_complex.inventory.insertion_order.iter().rev() {
             match chip_id {
                 &ChipId::Periphery(id) => {
                     if chip_complex.inventory.periphery[id]
                         .constant_trace_height()
                         .is_none()
                     {
-                        state.ctx.trace_heights[offset + i] = 0;
+                        state.ctx.trace_heights[offset] = 0;
                     }
                 }
                 ChipId::Executor(_) => {
-                    // Executor chips don't have constant height, so reset them
-                    state.ctx.trace_heights[offset + i] = 0;
+                    state.ctx.trace_heights[offset] = 0;
                 }
             }
+            offset += 1;
         }
+
+        // Poseidon2
+        let poseidon2_idx = state.ctx.trace_heights.len() - 2;
+        state.ctx.trace_heights[poseidon2_idx] = 0;
 
         // Range checker chip
         if chip_complex
