@@ -229,13 +229,14 @@ where
 /// in scenarios involving chips that:
 /// - have a single row per instruction
 /// - have trace row = [adapter_row, core_row]
-/// **WARNING**: `ADAPTER_WIDTH` is number of field elements, not the size in bytes
-pub struct AdapterCoreLayout<A, I = ()> {
+/// **NOTE**: `AS` is the adapter type that implements `AdapterTraceStep`
+/// **WARNING**: `AS::WIDTH` is the number of field elements, not the size in bytes
+pub struct AdapterCoreLayout<AS, I = ()> {
     pub metadata: I,
-    _phantom: PhantomData<A>,
+    _phantom: PhantomData<AS>,
 }
 
-impl<A, I> AdapterCoreLayout<A, I> {
+impl<AS, I> AdapterCoreLayout<AS, I> {
     pub fn new() -> Self
     where
         I: Default,
@@ -257,7 +258,7 @@ impl<A, I> AdapterCoreLayout<A, I> {
 /// Type alias for empty layout. Used by Adapter+Core chips when no metadata is needed.
 pub type EmptyLayout<A> = AdapterCoreLayout<A, ()>;
 
-/// Minimal layout information that [MatrixRecordArena] requires for row allocation
+/// Minimal layout information that [MatrixRecordArena] requires for record allocation
 /// in scenarios involving chips that:
 /// - can have multiple rows per instruction
 pub struct MultiRowLayout<I> {
@@ -298,18 +299,18 @@ impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
 
 /// RecordArena implementation for [MatrixRecordArena], with [AdapterCoreLayout]
 /// `A` is the adapter record type and `C` is the core record type
-/// `ADW` is the adapter type, so the width of the adapter is `ADW::WIDTH`
-impl<'a, F: Field, A, C, I: Clone, ADW> RecordArena<'a, AdapterCoreLayout<ADW, I>, (A, C)>
+/// `AS` is a type that implements `AdapterTraceStep`, so the width of the adapter is `AS::WIDTH`
+impl<'a, F: Field, A, C, I: Clone, AS> RecordArena<'a, AdapterCoreLayout<AS, I>, (A, C)>
     for MatrixRecordArena<F>
 where
     [u8]: CustomBorrow<'a, A, I> + CustomBorrow<'a, C, I>,
-    ADW: 'static + AdapterTraceStep<F, ()>,
+    AS: 'static + AdapterTraceStep<F, ()>,
 {
-    fn alloc(&'a mut self, layout: AdapterCoreLayout<ADW, I>) -> (A, C) {
+    fn alloc(&'a mut self, layout: AdapterCoreLayout<AS, I>) -> (A, C) {
         let buffer = self.alloc_single_row();
-        // Doing a raw split_at_mut_unchecked here for perf
+        // Doing a unchecked split here for perf
         let (adapter_buffer, core_buffer) =
-            unsafe { buffer.split_at_mut_unchecked(ADW::WIDTH * size_of::<F>()) };
+            unsafe { buffer.split_at_mut_unchecked(AS::WIDTH * size_of::<F>()) };
 
         let adapter_record: A = adapter_buffer.custom_borrow(layout.metadata.clone());
         let core_record: C = core_buffer.custom_borrow(layout.metadata);
