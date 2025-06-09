@@ -258,7 +258,7 @@ impl<F: Field> AdapterCoreRecordArena<F> {
     }
 }
 
-/// A struct implementing [RecordArena] for a single record type.
+/// An auxiliary struct for implementing [RecordArena] for a single record type.
 /// This is useful for chips that have a single row per instruction,
 /// and where we only want to allocate a row with compressed information,
 /// not a trace row to be filled later.
@@ -278,7 +278,7 @@ impl SimpleRecordArena {
     pub fn alloc_one<'a, T>(&mut self) -> &'a mut T {
         let begin = self.records_buffer.position();
         let width = size_of::<T>();
-        assert!(begin as usize + width <= self.records_buffer.get_ref().len());
+        debug_assert!(begin as usize + width <= self.records_buffer.get_ref().len());
         self.records_buffer.set_position(begin + width as u64);
         unsafe {
             &mut *(self
@@ -293,7 +293,7 @@ impl SimpleRecordArena {
     pub fn alloc_many<'a, T>(&mut self, count: usize) -> &'a mut [T] {
         let begin = self.records_buffer.position();
         let width = size_of::<T>() * count;
-        assert!(begin as usize + width <= self.records_buffer.get_ref().len());
+        debug_assert!(begin as usize + width <= self.records_buffer.get_ref().len());
         self.records_buffer.set_position(begin + width as u64);
         unsafe {
             std::slice::from_raw_parts_mut(
@@ -634,18 +634,18 @@ where
     }
 }
 
+/// A struct implementing [RecordArena] for a pair of records.
+/// Will implement [RecordArena] for `RecordMut = (&mut AdapterRecord, &mut CoreRecord)`.
 pub struct DenseAdapterCoreRecordArena<AdapterRecord, CoreRecord> {
     pub arena: SimpleRecordArena,
-    _adapter_record: PhantomData<AdapterRecord>,
-    _core_record: PhantomData<CoreRecord>,
+    _record: PhantomData<(AdapterRecord, CoreRecord)>,
 }
 
 impl<AdapterRecord, CoreRecord> DenseAdapterCoreRecordArena<AdapterRecord, CoreRecord> {
     pub fn with_capacity(size_bytes: usize) -> Self {
         Self {
             arena: SimpleRecordArena::with_capacity(size_bytes),
-            _adapter_record: PhantomData,
-            _core_record: PhantomData,
+            _record: PhantomData,
         }
     }
 
@@ -686,8 +686,7 @@ pub struct DenseVmChipWrapper<F, AIR, STEP, AdapterRecord, CoreRecord> {
     pub air: AIR,
     pub step: STEP,
     pub arena: DenseAdapterCoreRecordArena<AdapterRecord, CoreRecord>,
-    // TODO: make private
-    pub mem_helper: SharedMemoryHelper<F>,
+    mem_helper: SharedMemoryHelper<F>,
 }
 
 impl<F, AIR, STEP, AdapterRecord, CoreRecord>
@@ -698,7 +697,8 @@ where
 {
     pub fn new(air: AIR, step: STEP, height: usize, mem_helper: SharedMemoryHelper<F>) -> Self {
         let width = size_of::<AdapterRecord>() + size_of::<CoreRecord>();
-        assert!(height == 0 || height.is_power_of_two());
+        // We don't have to check that `height` is a power of two,
+        // because this is the number of records, not the trace height.
         assert!(
             align_of::<F>() >= align_of::<u32>(),
             "type {} should have at least alignment of u32",
@@ -761,20 +761,7 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        todo!()
-        // let width = self.arena.width();
-        // assert_eq!(self.arena.trace_offset() % width, 0);
-        // let rows_used = self.arena.trace_offset() / width;
-        // let height = next_power_of_two_or_zero(rows_used);
-        // let mut trace = self.arena.into_matrix();
-        // // This should be automatic since trace_buffer's height is a power of two:
-        // assert!(height.checked_mul(width).unwrap() <= trace.values.len());
-        // trace.values.truncate(height * width);
-        // let mem_helper = self.mem_helper.as_borrowed();
-        // self.step.fill_trace(&mem_helper, &mut trace, rows_used);
-        // drop(self.mem_helper);
-
-        // AirProofInput::simple(trace, self.step.generate_public_values())
+        todo!("send to gpu and do the work there")
     }
 }
 
