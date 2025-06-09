@@ -2,6 +2,7 @@ use std::{
     any::type_name,
     array::from_fn,
     borrow::{Borrow, BorrowMut},
+    io::Cursor,
     marker::PhantomData,
     sync::Arc,
 };
@@ -256,6 +257,63 @@ impl<F: Field> AdapterCoreRecordArena<F> {
         unsafe { &mut *std::ptr::slice_from_raw_parts_mut(ptr, size) }
     }
 }
+
+/// A struct implementing [RecordArena] for a single record type.
+/// This is useful for chips that have a single row per instruction,
+/// and where we only want to allocate a row with compressed information,
+/// not a trace row to be filled later.
+pub struct SimpleRecordArena {
+    pub records_buffer: Cursor<Vec<u8>>,
+}
+
+impl SimpleRecordArena {
+    /// Creates a new [SimpleRecordArena] with the given capacity in bytes.
+    pub fn with_capacity(size_bytes: usize) -> Self {
+        Self {
+            records_buffer: Cursor::new(vec![0; size_bytes]),
+        }
+    }
+
+    /// Allocates a single record of the given type and returns a mutable reference to it.
+    pub fn alloc_one<'a, T>(&mut self) -> &'a mut T {
+        let begin = self.records_buffer.position();
+        let width = size_of::<T>();
+        assert!(begin as usize + width <= self.records_buffer.get_ref().len());
+        self.records_buffer.set_position(begin + width as u64);
+        unsafe {
+            &mut *(self
+                .records_buffer
+                .get_mut()
+                .as_mut_ptr()
+                .add(begin as usize) as *mut T)
+        }
+    }
+
+    /// Allocates a slice of records of the given type and returns a mutable reference to it.
+    pub fn alloc_many<'a, T>(&mut self, count: usize) -> &'a mut [T] {
+        let begin = self.records_buffer.position();
+        let width = size_of::<T>() * count;
+        assert!(begin as usize + width <= self.records_buffer.get_ref().len());
+        self.records_buffer.set_position(begin + width as u64);
+        unsafe {
+            std::slice::from_raw_parts_mut(
+                self.records_buffer
+                    .get_mut()
+                    .as_mut_ptr()
+                    .add(begin as usize) as *mut T,
+                count,
+            )
+        }
+    }
+}
+
+impl<'a, T> RecordArena<'a, EmptyLayout, &'a mut T> for SimpleRecordArena {
+    fn alloc(&'a mut self, _layout: EmptyLayout) -> &'a mut T {
+        self.alloc_one()
+    }
+}
+
+// TODO: create a new chip wrapper on [SimpleRecordArena] that would be convenient to use
 
 impl<F: Field> RowMajorMatrixArena<F> for AdapterCoreRecordArena<F> {
     fn with_capacity(height: usize, width: usize) -> Self {
