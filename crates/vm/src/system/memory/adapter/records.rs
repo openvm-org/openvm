@@ -10,19 +10,19 @@ struct AccessRecordMut<'a, F, const N: usize> {
     pub pointer: &'a mut u32,
     pub data: &'a mut [F; N],
     /// If `Some`, contains references to previous values and timestamps.
-    pub merge_before: Option<(&'a mut [u32], &'a mut [u32])>,
+    pub merge_before: Option<(&'a mut [u32; N], &'a mut [u32])>,
     pub split_after: &'a mut bool,
 }
 
 /// If `None`, we don't need to merge before.
-/// If `Some(cell_size)`, this defined the length of the timestamps reference.
+/// If `Some(cell_size)`, this defines the length of the corresponding timestamps.
 type AccessLayout = Option<usize>;
 
-struct AccessAdapterRecordArena<const N: usize> {
+pub(crate) struct AccessAdapterRecordArena {
     pub cursor: Cursor<Vec<u8>>,
 }
 
-impl<const N: usize> AccessAdapterRecordArena<N> {
+impl AccessAdapterRecordArena {
     pub fn with_capacity(size_bytes: usize) -> Self {
         Self {
             cursor: Cursor::new(vec![0; size_bytes]),
@@ -63,10 +63,18 @@ impl<const N: usize> AccessAdapterRecordArena<N> {
         }
         self.cursor.set_position(begin + width as u64);
     }
+
+    pub fn extract_bytes(&self) -> Vec<u8> {
+        self.cursor.get_ref()[..self.cursor.position() as usize].to_vec()
+    }
+
+    pub fn current_len(&self) -> usize {
+        self.cursor.position() as usize
+    }
 }
 
 impl<'a, F: PrimeField32, const N: usize> RecordArena<'a, AccessLayout, AccessRecordMut<'a, F, N>>
-    for AccessAdapterRecordArena<N>
+    for AccessAdapterRecordArena
 {
     fn alloc(&'a mut self, layout: AccessLayout) -> AccessRecordMut<'a, F, N> {
         let timestamp = self.alloc_one();
@@ -75,7 +83,7 @@ impl<'a, F: PrimeField32, const N: usize> RecordArena<'a, AccessLayout, AccessRe
         let data = self.alloc_one();
         let merge_before = if let Some(cell_size) = layout {
             self.push(1u8);
-            let values = self.alloc_many(N);
+            let values = self.alloc_one();
             let timestamps = self.alloc_many(N / cell_size);
             Some((values, timestamps))
         } else {
