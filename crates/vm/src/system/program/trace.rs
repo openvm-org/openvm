@@ -23,7 +23,7 @@ use crate::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         MemoryConfig,
     },
-    system::memory::{tree::MemoryNode, AddressMap, CHUNK},
+    system::memory::{memmap::AddressMap, tree::MemoryNode, CHUNK},
 };
 
 #[derive(Serialize, Deserialize, Derivative)]

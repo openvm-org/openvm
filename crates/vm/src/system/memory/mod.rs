@@ -6,7 +6,6 @@ pub mod memmap;
 pub mod merkle;
 pub mod offline_checker;
 pub mod online;
-pub mod paged_vec;
 mod persistent;
 // TODO: add back
 // #[cfg(test)]
@@ -15,7 +14,6 @@ pub mod tree;
 mod volatile;
 
 pub use controller::*;
-// pub use paged_vec::*;
 pub use memmap::*;
 pub use online::INITIAL_TIMESTAMP;
 

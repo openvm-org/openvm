@@ -6,7 +6,7 @@ use crate::{
         execution_control::ExecutionControl, execution_mode::E1E2ExecutionCtx, ExecutionError,
         Streams, VmConfig, VmSegmentState,
     },
-    system::memory::{online::GuestMemory, AddressMap},
+    system::memory::{memmap::AddressMap, online::GuestMemory},
 };
 
 /// VM pure executor(E1/E2 executor) which doesn't consider trace generation.

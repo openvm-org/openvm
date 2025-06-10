@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use self::interface::MemoryInterface;
 use super::{
     online::INITIAL_TIMESTAMP,
-    paged_vec::{AddressMap, PAGE_SIZE},
+    memmap::AddressMap,
     volatile::VolatileBoundaryChip,
     MemoryAddress,
 };
@@ -50,7 +50,7 @@ pub const MERKLE_AIR_OFFSET: usize = 1;
 /// The offset of the boundary AIR in AIRs of MemoryController.
 pub const BOUNDARY_AIR_OFFSET: usize = 0;
 
-pub type MemoryImage = AddressMap<PAGE_SIZE>;
+pub type MemoryImage = AddressMap;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

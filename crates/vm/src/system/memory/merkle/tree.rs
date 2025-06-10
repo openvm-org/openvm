@@ -8,8 +8,8 @@ use super::{FinalState, MemoryMerkleCols};
 use crate::{
     arch::hasher::HasherChip,
     system::memory::{
-        dimensions::MemoryDimensions, merkle::memory_to_vec_partition, AddressMap, Equipartition,
-        PAGE_SIZE,
+        dimensions::MemoryDimensions, merkle::memory_to_vec_partition, memmap::AddressMap,
+        Equipartition,
     },
 };
 
@@ -194,7 +194,7 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
     }
 
     pub fn from_memory(
-        initial_memory: AddressMap<PAGE_SIZE>,
+        initial_memory: AddressMap,
         md: &MemoryDimensions,
         hasher: &impl HasherChip<CHUNK, F>,
     ) -> Self {
