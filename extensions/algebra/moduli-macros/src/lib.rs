@@ -419,10 +419,12 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         Self(bytes)
                     }
 
+                    #[inline(always)]
                     fn as_le_bytes(&self) -> &[u8] {
                         &(self.0)
                     }
 
+                    #[inline(always)]
                     fn to_be_bytes(&self) -> [u8; #limbs] {
                         core::array::from_fn(|i| self.0[#limbs - 1 - i])
                     }
@@ -442,6 +444,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         num_bigint::BigUint::from_bytes_le(self.as_le_bytes())
                     }
 
+                    #[inline(always)]
                     fn neg_assign(&mut self) {
                         unsafe {
                             // SAFETY: we borrow self as &Self and as *mut Self but
@@ -450,6 +453,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         }
                     }
 
+                    #[inline(always)]
                     fn double_assign(&mut self) {
                         unsafe {
                             // SAFETY: we borrow self as &Self and as *mut Self but
@@ -458,6 +462,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         }
                     }
 
+                    #[inline(always)]
                     fn square_assign(&mut self) {
                         unsafe {
                             // SAFETY: we borrow self as &Self and as *mut Self but
@@ -466,10 +471,12 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         }
                     }
 
+                    #[inline(always)]
                     fn double(&self) -> Self {
                         self + self
                     }
 
+                    #[inline(always)]
                     fn square(&self) -> Self {
                         self * self
                     }
@@ -504,6 +511,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         Self::set_up_once();
                     }
 
+                    #[inline(always)]
                     unsafe fn eq_impl<const CHECK_SETUP: bool>(&self, other: &Self) -> bool {
                         Self::eq_impl::<CHECK_SETUP>(self, other)
                     }
@@ -724,6 +732,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
                 impl core::ops::Neg for #struct_name {
                     type Output = #struct_name;
+                    #[inline(always)]
                     fn neg(self) -> Self::Output {
                         #struct_name::ZERO - &self
                     }
@@ -731,6 +740,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
 
                 impl<'a> core::ops::Neg for &'a #struct_name {
                     type Output = #struct_name;
+                    #[inline(always)]
                     fn neg(self) -> Self::Output {
                         #struct_name::ZERO - self
                     }
