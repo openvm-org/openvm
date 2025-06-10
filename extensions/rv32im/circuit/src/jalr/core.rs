@@ -6,9 +6,9 @@ use std::{
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1,
-        AdapterTraceFiller, AdapterTraceStep, RecordArena, Result, SignedImmInstruction,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, EmptyLayout, RecordArena, Result, SignedImmInstruction, StepExecutorE1,
+        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -217,7 +217,7 @@ where
             WriteData = [u8; RV32_REGISTER_NUM_LIMBS],
         >,
 {
-    type RecordLayout = AdapterCoreLayout;
+    type RecordLayout = EmptyLayout<A>;
     type RecordMut<'a> = (A::RecordMut<'a>, &'a mut Rv32JalrCoreRecord);
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -243,7 +243,7 @@ where
             JALR as usize
         );
 
-        let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout::new(A::WIDTH));
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 

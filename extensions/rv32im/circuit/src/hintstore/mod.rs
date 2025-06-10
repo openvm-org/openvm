@@ -7,7 +7,7 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionError, ExecutionState,
-        MultiRowLayout, MultiRowRecordArena, NewVmChipWrapper, RecordArena, Result, StepExecutorE1,
+        MatrixRecordArena, MultiRowLayout, NewVmChipWrapper, RecordArena, Result, StepExecutorE1,
         Streams, TraceFiller, TraceStep, VmStateMut,
     },
     system::memory::{
@@ -674,4 +674,4 @@ where
 }
 
 pub type Rv32HintStoreChip<F> =
-    NewVmChipWrapper<F, Rv32HintStoreAir, Rv32HintStoreStep<F>, MultiRowRecordArena<F>>;
+    NewVmChipWrapper<F, Rv32HintStoreAir, Rv32HintStoreStep<F>, MatrixRecordArena<F>>;
