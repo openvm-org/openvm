@@ -30,7 +30,7 @@ use strum::IntoEnumIterator;
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct DivRemCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    // b = c * q + r for some 0 <= |r| < |c| and sign(r) = sign(b).
+    // b = c * q + r for some 0 <= |r| < |c| and sign(r) = sign(b) or r = 0.
     pub b: [T; NUM_LIMBS],
     pub c: [T; NUM_LIMBS],
     pub q: [T; NUM_LIMBS],
