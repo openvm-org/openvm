@@ -125,3 +125,9 @@ impl<T> AsMut<MemoryBaseAuxCols<T>> for MemoryReadAuxCols<T> {
         &mut self.base
     }
 }
+
+impl<T> AsMut<MemoryBaseAuxCols<T>> for MemoryReadOrImmediateAuxCols<T> {
+    fn as_mut(&mut self) -> &mut MemoryBaseAuxCols<T> {
+        &mut self.base
+    }
+}

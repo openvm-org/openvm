@@ -2,6 +2,8 @@ mod bridge;
 mod bus;
 mod columns;
 
+use std::fmt::Debug;
+
 pub use bridge::*;
 pub use bus::*;
 pub use columns::*;
@@ -17,4 +19,11 @@ pub struct MemoryReadAuxRecord {
 pub struct MemoryWriteAuxRecord<const NUM_LIMBS: usize> {
     pub prev_timestamp: u32,
     pub prev_data: [u8; NUM_LIMBS],
+}
+
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct MemoryNativeWriteAuxRecord<F, const NUM_LIMBS: usize> {
+    pub prev_timestamp: u32,
+    pub prev_data: [F; NUM_LIMBS],
 }
