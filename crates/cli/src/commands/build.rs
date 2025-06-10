@@ -345,6 +345,17 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
         }
     }
 
+    // Write to init file
+    let app_config = read_config_toml_or_default(
+        build_args
+            .config
+            .to_owned()
+            .unwrap_or_else(|| manifest_dir.join("openvm.toml")),
+    )?;
+    app_config
+        .app_vm_config
+        .write_to_init_file(&manifest_dir, Some(&build_args.init_file_name))?;
+
     // Build (allowing passed options to decide what gets built)
     let elf_target_dir = match build_generic(&guest_options) {
         Ok(raw_target_dir) => raw_target_dir,
@@ -364,17 +375,6 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
         }
         return Ok(elf_target_dir);
     }
-
-    // Write to init file
-    let app_config = read_config_toml_or_default(
-        build_args
-            .config
-            .to_owned()
-            .unwrap_or_else(|| manifest_dir.join("openvm.toml")),
-    )?;
-    app_config
-        .app_vm_config
-        .write_to_init_file(&manifest_dir, Some(&build_args.init_file_name))?;
 
     // Get all built packages
     let workspace_root = get_workspace_root(&manifest_path);

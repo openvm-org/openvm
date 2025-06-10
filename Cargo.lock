@@ -4342,7 +4342,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-algebra-complex-macros"
-version = "0.1.0"
+version = "1.2.1-rc.0"
 dependencies = [
  "openvm-macros-common",
  "quote",
