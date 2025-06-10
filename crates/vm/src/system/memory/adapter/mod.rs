@@ -149,24 +149,6 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AccessAdapterRecordKind {
-    Split,
-    Merge {
-        left_timestamp: u32,
-        right_timestamp: u32,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AccessAdapterRecord<T> {
-    pub timestamp: u32,
-    pub address_space: T,
-    pub start_index: T,
-    pub data: Vec<T>,
-    pub kind: AccessAdapterRecordKind,
-}
-
 #[enum_dispatch]
 pub trait GenericAccessAdapterChipTrait<F> {
     fn set_override_trace_heights(&mut self, overridden_height: usize);
