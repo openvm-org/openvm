@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, io::Cursor, sync::Arc};
+use std::{borrow::BorrowMut, io::Cursor, marker::PhantomData, sync::Arc};
 
 pub use air::*;
 pub use columns::*;
@@ -18,7 +18,9 @@ use openvm_stark_backend::{
     AirRef, Chip, ChipUsageGetter,
 };
 
-use crate::system::memory::{offline_checker::MemoryBus, MemoryAddress};
+use crate::system::memory::{
+    adapter::records::AccessAdapterRecordArena, offline_checker::MemoryBus, MemoryAddress,
+};
 
 mod air;
 mod columns;
@@ -205,9 +207,12 @@ impl<F: Clone + Send + Sync> GenericAccessAdapterChip<F> {
 pub struct AccessAdapterChip<F, const N: usize> {
     air: AccessAdapterAir<N>,
     range_checker: SharedVariableRangeCheckerChip,
-    trace_cursor: Cursor<Vec<F>>,
+    arena: AccessAdapterRecordArena,
     overridden_height: Option<usize>,
+    _marker: PhantomData<F>,
 }
+
+const MAX_ARENA_SIZE: usize = 1 << 22;
 
 impl<F: Clone + Send + Sync, const N: usize> AccessAdapterChip<F, N> {
     pub fn new(
@@ -219,8 +224,11 @@ impl<F: Clone + Send + Sync, const N: usize> AccessAdapterChip<F, N> {
         Self {
             air: AccessAdapterAir::<N> { memory_bus, lt_air },
             range_checker,
-            trace_cursor: Cursor::new(Vec::new()),
+            arena: AccessAdapterRecordArena::with_capacity(
+                MAX_ARENA_SIZE * size_of::<AccessAdapterCols<F, N>>(),
+            ),
             overridden_height: None,
+            _marker: PhantomData,
         }
     }
 }
@@ -236,7 +244,12 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
         F: PrimeField32,
     {
         let width = self.trace_width();
-        let mut trace = RowMajorMatrix::new(self.trace_cursor.into_inner(), width);
+        let records = self.arena.extract_bytes();
+        let trace: Vec<F> = records
+            .chunks_exact(size_of::<F>())
+            .map(|chunk| unsafe { std::ptr::read(chunk.as_ptr() as *const F) })
+            .collect();
+        let mut trace = RowMajorMatrix::new(trace, width);
         let height = trace.height();
         let padded_height = if let Some(oh) = self.overridden_height {
             assert!(
@@ -258,13 +271,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
     where
         F: PrimeField32,
     {
-        let row_slice = {
-            let begin = self.trace_cursor.position() as usize;
-            let end = begin + self.trace_width();
-            self.trace_cursor.get_mut().resize(end, F::ZERO);
-            self.trace_cursor.set_position(end as u64);
-            &mut self.trace_cursor.get_mut()[begin..end]
-        };
+        let row_slice = self.arena.alloc_one::<AccessAdapterCols<F, N>>();
         let row: &mut AccessAdapterCols<F, N> = row_slice.borrow_mut();
         row.is_valid = F::ONE;
         row.is_split = F::ONE;
@@ -303,13 +310,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
     ) where
         F: PrimeField32,
     {
-        let row_slice = {
-            let begin = self.trace_cursor.position() as usize;
-            let end = begin + self.trace_width();
-            self.trace_cursor.get_mut().resize(end, F::ZERO);
-            self.trace_cursor.set_position(end as u64);
-            &mut self.trace_cursor.get_mut()[begin..end]
-        };
+        let row_slice = self.arena.alloc_one::<AccessAdapterCols<F, N>>();
         let row: &mut AccessAdapterCols<F, N> = row_slice.borrow_mut();
         row.is_valid = F::ONE;
         row.is_split = F::ZERO;
@@ -359,7 +360,7 @@ impl<F, const N: usize> ChipUsageGetter for AccessAdapterChip<F, N> {
     }
 
     fn current_trace_height(&self) -> usize {
-        self.trace_cursor.position() as usize / self.trace_width()
+        self.arena.current_len() / self.trace_width() / size_of::<AccessAdapterCols<F, N>>()
     }
 
     fn trace_width(&self) -> usize {
