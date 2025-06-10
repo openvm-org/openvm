@@ -2,7 +2,6 @@ use std::fmt::Debug;
 
 use getset::Getters;
 use itertools::{izip, zip_eq};
-use memmap2::MmapMut;
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
@@ -10,8 +9,7 @@ use serde::{Deserialize, Serialize};
 use super::{
     adapter::AccessAdapterInventory,
     offline_checker::MemoryBus,
-    paged_vec::{AddressMap, PAGE_SIZE},
-    Address, MemoryAddress, MmapMutExt,
+    AddressMap, Address, MemoryAddress, MmapWrapper,
 };
 use crate::{arch::MemoryConfig, system::memory::MemoryImage};
 
@@ -19,7 +17,7 @@ pub const INITIAL_TIMESTAMP: u32 = 0;
 
 #[derive(Debug, Clone, derive_new::new)]
 pub struct GuestMemory {
-    pub memory: AddressMap<PAGE_SIZE>,
+    pub memory: AddressMap,
 }
 
 impl GuestMemory {
@@ -44,7 +42,7 @@ impl GuestMemory {
         );
         let read = self
             .memory
-            .paged_vecs
+            .mem
             .get_unchecked((addr_space - self.memory.as_offset) as usize)
             .get((ptr as usize) * size_of::<T>());
         read
@@ -68,7 +66,7 @@ impl GuestMemory {
             "addr_space={addr_space}"
         );
         self.memory
-            .paged_vecs
+            .mem
             .get_unchecked_mut((addr_space - self.memory.as_offset) as usize)
             .set((ptr as usize) * size_of::<T>(), values);
     }
@@ -188,7 +186,7 @@ pub struct TracingMemory<F> {
     pub data: GuestMemory,
     /// A map of `addr_space -> (ptr / min_block_size[addr_space] -> (timestamp: u32, block_size:
     /// u32))` for the timestamp and block size of the latest access.
-    pub(super) meta: Vec<MmapMut>,
+    pub(super) meta: Vec<MmapWrapper>,
     /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
     /// all memory accesses in `addr_space` must be aligned to this block size.
     pub min_block_size: Vec<u32>,
@@ -214,13 +212,12 @@ impl<F: PrimeField32> TracingMemory<F> {
         let meta = min_block_size
             .iter()
             .map(|&min_block_size| {
-                MmapMut::map_anon(
+                MmapWrapper::new(
                     num_cells
                         .checked_mul(size_of::<AccessMetadata>())
                         .unwrap()
-                        .div_ceil(PAGE_SIZE * min_block_size as usize),
+                        .div_ceil(min_block_size as usize),
                 )
-                .unwrap()
             })
             .collect();
         Self {
@@ -240,16 +237,15 @@ impl<F: PrimeField32> TracingMemory<F> {
 
     /// Instantiates a new `Memory` data structure from an image.
     pub fn with_image(mut self, image: MemoryImage, _access_capacity: usize) -> Self {
-        for (i, (paged_vec, cell_size)) in izip!(&image.paged_vecs, &image.cell_size).enumerate() {
-            let num_cells = paged_vec.bytes_capacity() / cell_size;
+        for (i, (mem, cell_size)) in izip!(&image.mem, &image.cell_size).enumerate() {
+            let num_cells = mem.len() / cell_size;
 
-            self.meta[i] = MmapMut::map_anon(
+            self.meta[i] = MmapWrapper::new(
                 num_cells
                     .checked_mul(size_of::<AccessMetadata>())
                     .unwrap()
-                    .div_ceil(PAGE_SIZE * self.min_block_size[i] as usize),
-            )
-            .unwrap();
+                    .div_ceil(self.min_block_size[i] as usize),
+            );
         }
         self.data = GuestMemory::new(image);
         self
@@ -593,8 +589,8 @@ impl<F: PrimeField32> TracingMemory<F> {
     pub fn touched_blocks(&self) -> impl Iterator<Item = (Address, AccessMetadata)> + '_ {
         zip_eq(&self.meta, &self.min_block_size)
             .enumerate()
-            .flat_map(move |(addr_space, (page, &align))| {
-                page.iter::<AccessMetadata>()
+            .flat_map(move |(addr_space, (mem, &align))| {
+                mem.iter::<AccessMetadata>()
                     .filter_map(move |(idx, metadata)| {
                         (metadata.block_size != 0
                             && metadata.block_size != AccessMetadata::OCCUPIED)

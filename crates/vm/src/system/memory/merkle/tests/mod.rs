@@ -27,7 +27,7 @@ use crate::{
             columns::MemoryMerkleCols, tests::util::HashTestChip, MemoryDimensions,
             MemoryMerkleChip,
         },
-        paged_vec::{AddressMap, PAGE_SIZE},
+        memmap::AddressMap,
         tree::MemoryNode,
         Equipartition, MemoryImage,
     },
@@ -55,7 +55,7 @@ fn test<const CHUNK: usize>(
     for ((address_space, pointer), value) in final_memory.items::<BabyBear>() {
         let label = pointer / CHUNK as u32;
         assert!(address_space - as_offset < (1 << as_height));
-        assert!(pointer < ((CHUNK << address_height).div_ceil(PAGE_SIZE) * PAGE_SIZE) as u32);
+        assert!(pointer < (CHUNK << address_height) as u32);
         if unsafe { initial_memory.get::<BabyBear>((address_space, pointer)) } != value {
             assert!(touched_labels.contains(&(address_space, label)));
         }
