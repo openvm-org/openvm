@@ -87,6 +87,7 @@ pub trait WeierstrassPoint: Clone + Sized {
     ///   been called already.
     unsafe fn double_assign_nonidentity<const CHECK_SETUP: bool>(&mut self);
 
+    #[inline(always)]
     fn from_xy(x: Self::Coordinate, y: Self::Coordinate) -> Option<Self>
     where
         for<'a> &'a Self::Coordinate: Mul<&'a Self::Coordinate, Output = Self::Coordinate>,
@@ -98,6 +99,7 @@ pub trait WeierstrassPoint: Clone + Sized {
         }
     }
 
+    #[inline(always)]
     fn from_xy_nonidentity(x: Self::Coordinate, y: Self::Coordinate) -> Option<Self>
     where
         for<'a> &'a Self::Coordinate: Mul<&'a Self::Coordinate, Output = Self::Coordinate>,

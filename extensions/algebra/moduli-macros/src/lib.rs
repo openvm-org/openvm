@@ -353,6 +353,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                 }
 
                 // Helper function to call the setup instruction on first use
+                #[inline(always)]
                 #[cfg(target_os = "zkvm")]
                 fn set_up_once() {
                     static is_setup: ::openvm_algebra_guest::once_cell::race::OnceBool = ::openvm_algebra_guest::once_cell::race::OnceBool::new();
@@ -361,6 +362,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         true
                     });
                 }
+                #[inline(always)]
                 #[cfg(not(target_os = "zkvm"))]
                 fn set_up_once() {
                     // No-op for non-ZKVM targets
@@ -481,6 +483,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         self * self
                     }
 
+                    #[inline(always)]
                     fn cube(&self) -> Self {
                         &self.square() * self
                     }
@@ -507,6 +510,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         false
                     }
 
+                    #[inline(always)]
                     fn set_up_once() {
                         Self::set_up_once();
                     }

@@ -192,6 +192,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 }
 
                 // Helper function to call the setup instruction on first use
+                #[inline(always)]
                 #[cfg(target_os = "zkvm")]
                 fn set_up_once() {
                     static is_setup: ::openvm_ecc_guest::once_cell::race::OnceBool = ::openvm_ecc_guest::once_cell::race::OnceBool::new();
@@ -202,11 +203,13 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     });
                 }
 
+                #[inline(always)]
                 #[cfg(not(target_os = "zkvm"))]
                 fn set_up_once() {
                     // No-op for non-ZKVM targets
                 }
 
+                #[inline(always)]
                 fn is_identity_impl<const CHECK_SETUP: bool>(&self) -> bool {
                     use openvm_algebra_guest::IntMod;
                     // Safety: Self::set_up_once() ensures IntMod::set_up_once() has been called.
@@ -224,38 +227,47 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
 
                 /// SAFETY: assumes that #intmod_type has a memory representation
                 /// such that with repr(C), two coordinates are packed contiguously.
+                #[inline(always)]
                 fn as_le_bytes(&self) -> &[u8] {
                     unsafe { &*core::ptr::slice_from_raw_parts(self as *const Self as *const u8, <#intmod_type as openvm_algebra_guest::IntMod>::NUM_LIMBS * 2) }
                 }
 
+                #[inline(always)]
                 fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self {
                     Self { x, y }
                 }
 
+                #[inline(always)]
                 fn x(&self) -> &Self::Coordinate {
                     &self.x
                 }
 
+                #[inline(always)]
                 fn y(&self) -> &Self::Coordinate {
                     &self.y
                 }
 
+                #[inline(always)]
                 fn x_mut(&mut self) -> &mut Self::Coordinate {
                     &mut self.x
                 }
 
+                #[inline(always)]
                 fn y_mut(&mut self) -> &mut Self::Coordinate {
                     &mut self.y
                 }
 
+                #[inline(always)]
                 fn into_coords(self) -> (Self::Coordinate, Self::Coordinate) {
                     (self.x, self.y)
                 }
 
+                #[inline(always)]
                 fn set_up_once() {
                     Self::set_up_once();
                 }
 
+                #[inline]
                 fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
                     use openvm_algebra_guest::IntMod;
 
@@ -285,6 +297,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                 }
 
+                #[inline(always)]
                 fn double_assign_impl<const CHECK_SETUP: bool>(&mut self) {
                     if !self.is_identity_impl::<CHECK_SETUP>() {
                         unsafe {
@@ -293,22 +306,27 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                 }
 
+                #[inline(always)]
                 unsafe fn add_ne_nonidentity<const CHECK_SETUP: bool>(&self, p2: &Self) -> Self {
                     Self::add_ne::<CHECK_SETUP>(self, p2)
                 }
 
+                #[inline(always)]
                 unsafe fn add_ne_assign_nonidentity<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
                     Self::add_ne_assign::<CHECK_SETUP>(self, p2);
                 }
 
+                #[inline(always)]
                 unsafe fn sub_ne_nonidentity<const CHECK_SETUP: bool>(&self, p2: &Self) -> Self {
                     Self::add_ne::<CHECK_SETUP>(self, &p2.clone().neg())
                 }
 
+                #[inline(always)]
                 unsafe fn sub_ne_assign_nonidentity<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
                     Self::add_ne_assign::<CHECK_SETUP>(self, &p2.clone().neg());
                 }
 
+                #[inline(always)]
                 unsafe fn double_nonidentity<const CHECK_SETUP: bool>(&self) -> Self {
                     Self::double_impl::<CHECK_SETUP>(self)
                 }
