@@ -1,8 +1,8 @@
 | group | app.proof_time_ms | app.cycles | app.cells_used | leaf.proof_time_ms | leaf.cycles | leaf.cells_used |
 | -- | -- | -- | -- | -- | -- | -- |
-| [ecrecover](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/avaneesh/test-2/ecrecover-95a958c8dc8cf976cd04caf5c54b30d5ab4e7e0b.md) |<span style='color: red'>(+1023 [+73.7%])</span> 2,412 | <span style='color: red'>(+21554 [+7.4%])</span> 311,001 | <span style='color: red'>(+731972 [+5.1%])</span> 15,202,158 |- | - | - |
+| [ecrecover](https://github.com/openvm-org/openvm/blob/benchmark-results/benchmarks-dispatch/refs/heads/avaneesh/test-2/ecrecover-8080dcde6b47e9223777f3530cc3c9d2b5f909e9.md) |<span style='color: red'>(+235 [+18.0%])</span> 1,538 | <span style='color: green'>(-87031 [-42.1%])</span> 119,527 | <span style='color: green'>(-3186598 [-30.1%])</span> 7,390,928 |- | - | - |
 
 
-Commit: https://github.com/openvm-org/openvm/commit/95a958c8dc8cf976cd04caf5c54b30d5ab4e7e0b
+Commit: https://github.com/openvm-org/openvm/commit/8080dcde6b47e9223777f3530cc3c9d2b5f909e9
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/15378201898)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/15571682797)
