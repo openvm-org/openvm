@@ -99,7 +99,6 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
 
         debug_assert!(src + len <= (1 << self.pointer_max_bits));
         debug_assert!(dst < (1 << self.pointer_max_bits));
-        let mut hasher = Sha256::new();
 
         state
             .ctx
@@ -110,10 +109,9 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
                 .memory
                 .get_slice::<u8>((RV32_MEMORY_AS, src), len as usize)
         };
-        hasher.update(&message);
 
-        let output = hasher.finalize();
-        memory_write_from_state(state, RV32_MEMORY_AS, dst, output.as_ref());
+        let output = sha256_solve(&message);
+        memory_write_from_state(state, RV32_MEMORY_AS, dst, &output);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

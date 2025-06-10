@@ -1,9 +1,4 @@
-use std::{
-    array,
-    borrow::{Borrow, BorrowMut},
-    cmp::min,
-    ptr::slice_from_raw_parts,
-};
+use std::{array, borrow::BorrowMut, cmp::min};
 
 use openvm_circuit::{
     arch::{
@@ -33,7 +28,6 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
 };
-use sha2::{Digest, Sha256};
 
 use super::{
     Sha256VmDigestCols, Sha256VmRoundCols, Sha256VmStep, SHA256VM_CONTROL_WIDTH,
@@ -41,7 +35,7 @@ use super::{
 };
 use crate::{
     sha256_chip::{PaddingFlags, SHA256_READ_SIZE, SHA256_REGISTER_READS, SHA256_WRITE_SIZE},
-    Sha256VmControlCols, SHA256VM_ROUND_WIDTH, SHA256VM_WIDTH, SHA256_BLOCK_CELLS,
+    sha256_solve, Sha256VmControlCols, SHA256VM_ROUND_WIDTH, SHA256VM_WIDTH, SHA256_BLOCK_CELLS,
     SHA256_NUM_READ_ROWS,
 };
 
@@ -172,8 +166,6 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
         // We don't support messages longer than 2^29 bytes
         debug_assert!(record.inner.len < 1 << 29);
 
-        let mut hasher = Sha256::new();
-
         for block_idx in 0..num_blocks as usize {
             // Reads happen on the first 4 rows of each block
             for row in 0..SHA256_NUM_READ_ROWS {
@@ -189,8 +181,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
             }
         }
 
-        hasher.update(&record.input[..len as usize]);
-        let output = hasher.finalize().try_into().unwrap();
+        let output = sha256_solve(&record.input[..len as usize]);
         tracing_write(
             state.memory,
             RV32_MEMORY_AS,
@@ -231,12 +222,7 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Sha256VmStep {
                 sizes.push((0, num_blocks_so_far));
                 break;
             } else {
-                let record = unsafe {
-                    let row = trace.as_ptr() as *const u8;
-                    let row = &*slice_from_raw_parts(row, size_of::<Sha256VmRecord>());
-                    let record: &Sha256VmRecord = row.borrow();
-                    record
-                };
+                let record: &Sha256VmRecord = unsafe { get_record_from_slice(&mut trace, ()) };
                 let num_blocks = ((record.len << 3) as usize + 1 + 64).div_ceil(SHA256_BLOCK_BITS);
                 let (chunk, rest) =
                     trace.split_at_mut(SHA256VM_WIDTH * SHA256_ROWS_PER_BLOCK * num_blocks);
