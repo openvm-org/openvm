@@ -466,6 +466,7 @@ where
         Ok(())
     }
 }
+
 impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep<F> {
     fn fill_trace(
         &self,
