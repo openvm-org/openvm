@@ -20,7 +20,7 @@ pub use air::KeccakVmAir;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        ExecutionBridge, MultiRowRecordArena, NewVmChipWrapper, Result, StepExecutorE1, VmStateMut,
+        ExecutionBridge, MatrixRecordArena, NewVmChipWrapper, Result, StepExecutorE1, VmStateMut,
     },
     system::memory::online::GuestMemory,
 };
@@ -69,7 +69,7 @@ pub const KECCAK_DIGEST_BYTES: usize = 32;
 /// Number of 64-bit digest limbs.
 pub const KECCAK_DIGEST_U64S: usize = KECCAK_DIGEST_BYTES / 8;
 
-pub type KeccakVmChip<F> = NewVmChipWrapper<F, KeccakVmAir, KeccakVmStep, MultiRowRecordArena<F>>;
+pub type KeccakVmChip<F> = NewVmChipWrapper<F, KeccakVmAir, KeccakVmStep, MatrixRecordArena<F>>;
 
 //#[derive(derive_new::new)]
 pub struct KeccakVmStep {
