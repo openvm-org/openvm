@@ -1,6 +1,6 @@
 use openvm_circuit::{
     self,
-    arch::{AdapterCoreRecordArena, NewVmChipWrapper, VmAirWrapper},
+    arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper},
 };
 use openvm_rv32_adapters::{
     Rv32HeapAdapterAir, Rv32HeapAdapterStep, Rv32HeapBranchAdapterAir, Rv32HeapBranchAdapterStep,
@@ -29,7 +29,7 @@ pub type Rv32BaseAlu256Step = BaseAluStep<
     RV32_CELL_BITS,
 >;
 pub type Rv32BaseAlu256Chip<F> =
-    NewVmChipWrapper<F, Rv32BaseAlu256Air, Rv32BaseAlu256Step, AdapterCoreRecordArena<F>>;
+    NewVmChipWrapper<F, Rv32BaseAlu256Air, Rv32BaseAlu256Step, MatrixRecordArena<F>>;
 
 /// LessThan256
 pub type Rv32LessThan256Air = VmAirWrapper<
@@ -42,7 +42,7 @@ pub type Rv32LessThan256Step = LessThanStep<
     RV32_CELL_BITS,
 >;
 pub type Rv32LessThan256Chip<F> =
-    NewVmChipWrapper<F, Rv32LessThan256Air, Rv32LessThan256Step, AdapterCoreRecordArena<F>>;
+    NewVmChipWrapper<F, Rv32LessThan256Air, Rv32LessThan256Step, MatrixRecordArena<F>>;
 
 /// Multiplication256
 pub type Rv32Multiplication256Air = VmAirWrapper<
@@ -54,12 +54,8 @@ pub type Rv32Multiplication256Step = MultiplicationStep<
     INT256_NUM_LIMBS,
     RV32_CELL_BITS,
 >;
-pub type Rv32Multiplication256Chip<F> = NewVmChipWrapper<
-    F,
-    Rv32Multiplication256Air,
-    Rv32Multiplication256Step,
-    AdapterCoreRecordArena<F>,
->;
+pub type Rv32Multiplication256Chip<F> =
+    NewVmChipWrapper<F, Rv32Multiplication256Air, Rv32Multiplication256Step, MatrixRecordArena<F>>;
 
 /// Shift256
 pub type Rv32Shift256Air = VmAirWrapper<
@@ -72,7 +68,7 @@ pub type Rv32Shift256Step = ShiftStep<
     RV32_CELL_BITS,
 >;
 pub type Rv32Shift256Chip<F> =
-    NewVmChipWrapper<F, Rv32Shift256Air, Rv32Shift256Step, AdapterCoreRecordArena<F>>;
+    NewVmChipWrapper<F, Rv32Shift256Air, Rv32Shift256Step, MatrixRecordArena<F>>;
 
 /// BranchEqual256
 pub type Rv32BranchEqual256Air = VmAirWrapper<
@@ -82,7 +78,7 @@ pub type Rv32BranchEqual256Air = VmAirWrapper<
 pub type Rv32BranchEqual256Step =
     BranchEqualStep<Rv32HeapBranchAdapterStep<2, INT256_NUM_LIMBS>, INT256_NUM_LIMBS>;
 pub type Rv32BranchEqual256Chip<F> =
-    NewVmChipWrapper<F, Rv32BranchEqual256Air, Rv32BranchEqual256Step, AdapterCoreRecordArena<F>>;
+    NewVmChipWrapper<F, Rv32BranchEqual256Air, Rv32BranchEqual256Step, MatrixRecordArena<F>>;
 
 /// BranchLessThan256
 pub type Rv32BranchLessThan256Air = VmAirWrapper<
@@ -94,9 +90,5 @@ pub type Rv32BranchLessThan256Step = BranchLessThanStep<
     INT256_NUM_LIMBS,
     RV32_CELL_BITS,
 >;
-pub type Rv32BranchLessThan256Chip<F> = NewVmChipWrapper<
-    F,
-    Rv32BranchLessThan256Air,
-    Rv32BranchLessThan256Step,
-    AdapterCoreRecordArena<F>,
->;
+pub type Rv32BranchLessThan256Chip<F> =
+    NewVmChipWrapper<F, Rv32BranchLessThan256Air, Rv32BranchLessThan256Step, MatrixRecordArena<F>>;

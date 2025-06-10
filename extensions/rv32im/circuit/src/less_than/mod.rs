@@ -1,4 +1,4 @@
-use openvm_circuit::arch::{AdapterCoreRecordArena, NewVmChipWrapper, VmAirWrapper};
+use openvm_circuit::arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper};
 
 use super::adapters::{
     Rv32BaseAluAdapterAir, Rv32BaseAluAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
@@ -15,4 +15,4 @@ pub type Rv32LessThanAir =
 pub type Rv32LessThanStep =
     LessThanStep<Rv32BaseAluAdapterStep<RV32_CELL_BITS>, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>;
 pub type Rv32LessThanChip<F> =
-    NewVmChipWrapper<F, Rv32LessThanAir, Rv32LessThanStep, AdapterCoreRecordArena<F>>;
+    NewVmChipWrapper<F, Rv32LessThanAir, Rv32LessThanStep, MatrixRecordArena<F>>;
