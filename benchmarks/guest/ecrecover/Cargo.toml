@@ -9,9 +9,9 @@ openvm = { path = "../../../crates/toolchain/openvm", features = ["std"] }
 openvm-algebra-guest = { path = "../../../extensions/algebra/guest", default-features = false }
 openvm-ecc-guest = { path = "../../../extensions/ecc/guest", default-features = false }
 openvm-keccak256 = { path = "../../../guest-libs/keccak256/", default-features = false }
-revm-precompile = { version = "21.0.0", default-features = false }
+revm-precompile = { git = "https://github.com/bluealloy/revm.git", tag = "v75", default-features = false }
 # IMPORTANT: must be same version as used by revm; revm does not re-export this feature so we enable it here
-alloy-primitives = { version = "1.0", default-features = false, features = [
+alloy-primitives = { version = "1.2.0", default-features = false, features = [
     "native-keccak",
 ] }
 k256 = { version = "0.13.3", default-features = false }
