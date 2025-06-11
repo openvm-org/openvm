@@ -548,6 +548,11 @@ fn elem_to_ext<F: Field>(elem: F) -> [F; EXT_DEG] {
     ret
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct FriReducedOpeningMetadata {
+    length: usize,
+}
+
 // Header of record that is common for all trace rows for an instruction
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
@@ -611,25 +616,29 @@ pub struct FriReducedOpeningRecordMut<'a, F> {
     pub common: &'a mut FriReducedOpeningCommonRecord<F>,
 }
 
-impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, ()> for [u8] {
-    fn custom_borrow(&'a mut self, _metadata: ()) -> FriReducedOpeningRecordMut<'a, F> {
+impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpeningMetadata>
+    for [u8]
+{
+    fn custom_borrow(
+        &'a mut self,
+        metadata: FriReducedOpeningMetadata,
+    ) -> FriReducedOpeningRecordMut<'a, F> {
         let (header_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<FriReducedOpeningHeaderRecord>()) };
         let header: &mut FriReducedOpeningHeaderRecord = header_buf.borrow_mut();
-        let length = header.length as usize;
 
-        let workload_size = length * size_of::<FriReducedOpeningWorkloadRowRecord<F>>();
+        let workload_size = metadata.length * size_of::<FriReducedOpeningWorkloadRowRecord<F>>();
         let (workload_buf, common_buf) = unsafe { rest.split_at_mut_unchecked(workload_size) };
 
         let (_, workload_records, _) =
             unsafe { workload_buf.align_to_mut::<FriReducedOpeningWorkloadRowRecord<F>>() };
-        debug_assert!(workload_records.len() >= length);
+        debug_assert!(workload_records.len() >= metadata.length);
 
         let common: &mut FriReducedOpeningCommonRecord<F> = common_buf.borrow_mut();
 
         FriReducedOpeningRecordMut {
             header,
-            workload: &mut workload_records[..length],
+            workload: &mut workload_records[..metadata.length],
             common,
         }
     }
@@ -649,7 +658,7 @@ impl<F, CTX> TraceStep<F, CTX> for FriReducedOpeningStep<F>
 where
     F: PrimeField32,
 {
-    type RecordLayout = MultiRowLayout<()>;
+    type RecordLayout = MultiRowLayout<FriReducedOpeningMetadata>;
     type RecordMut<'a> = FriReducedOpeningRecordMut<'a, F>;
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -684,10 +693,13 @@ where
         let [length]: [F; 1] = memory_read_native(&state.memory.data, length_ptr);
         let length = length.as_canonical_u32();
 
+        let metadata = FriReducedOpeningMetadata {
+            length: length as usize,
+        };
         let record = arena.alloc(MultiRowLayout {
             // Allocates `length` workload rows + 1 Instruction1 row + 1 Instruction2 row
             num_rows: length + 2,
-            metadata: (),
+            metadata,
         });
 
         record.common.from_pc = *state.pc;
@@ -856,8 +868,11 @@ where
         }
 
         chunks.into_par_iter().for_each(|mut chunk| {
+            let metadata = FriReducedOpeningMetadata {
+                length: chunk.len() / OVERALL_WIDTH - 2,
+            };
             let record: FriReducedOpeningRecordMut<F> =
-                unsafe { get_record_from_slice(&mut chunk, ()) };
+                unsafe { get_record_from_slice(&mut chunk, metadata) };
 
             let length = record.header.length as usize;
             let alpha = record.common.alpha;
@@ -870,35 +885,17 @@ where
                 let cols: &mut Instruction2Cols<F> =
                     chunk[offset..offset + INS_2_WIDTH].borrow_mut();
 
-                cols.general.is_workload_row = F::ZERO;
-                cols.general.is_ins_row = F::ONE;
-                cols.general.timestamp = F::from_canonical_u32(record.common.timestamp);
-                cols.is_first = F::ZERO;
-                cols.hint_id_ptr = record.common.hint_id_ptr;
                 cols.write_a_x_is_first = F::ZERO;
 
-                cols.alpha_ptr = record.common.alpha_ptr;
-                mem_helper.fill(
-                    record.common.alpha_aux.prev_timestamp,
-                    record.common.timestamp,
-                    cols.alpha_aux.as_mut(),
-                );
-
-                cols.length_ptr = record.common.length_ptr;
-                mem_helper.fill(
-                    record.common.length_aux.prev_timestamp,
-                    record.common.timestamp + 1,
-                    cols.length_aux.as_mut(),
-                );
-
-                cols.is_init_ptr = record.common.is_init_ptr;
                 mem_helper.fill(
                     record.common.is_init_aux.prev_timestamp,
                     record.common.timestamp + 4,
                     cols.is_init_aux.as_mut(),
                 );
+                cols.is_init_ptr = record.common.is_init_ptr;
 
-                cols.result_ptr = record.common.result_ptr;
+                cols.hint_id_ptr = record.common.hint_id_ptr;
+
                 cols.result_aux
                     .set_prev_data(record.common.result_aux.prev_data);
                 mem_helper.fill(
@@ -906,6 +903,27 @@ where
                     record.common.timestamp + 5 + 2 * length as u32,
                     cols.result_aux.as_mut(),
                 );
+                cols.result_ptr = record.common.result_ptr;
+
+                mem_helper.fill(
+                    record.common.alpha_aux.prev_timestamp,
+                    record.common.timestamp,
+                    cols.alpha_aux.as_mut(),
+                );
+                cols.alpha_ptr = record.common.alpha_ptr;
+
+                mem_helper.fill(
+                    record.common.length_aux.prev_timestamp,
+                    record.common.timestamp + 1,
+                    cols.length_aux.as_mut(),
+                );
+                cols.length_ptr = record.common.length_ptr;
+
+                cols.is_first = F::ZERO;
+
+                cols.general.timestamp = F::from_canonical_u32(record.common.timestamp);
+                cols.general.is_ins_row = F::ONE;
+                cols.general.is_workload_row = F::ZERO;
 
                 chunk[offset + INS_2_WIDTH..offset + OVERALL_WIDTH].fill(F::ZERO);
             }
@@ -915,32 +933,36 @@ where
                 let cols: &mut Instruction1Cols<F> =
                     chunk[offset..offset + INS_1_WIDTH].borrow_mut();
 
-                cols.prefix.general.is_workload_row = F::ZERO;
-                cols.prefix.general.is_ins_row = F::ONE;
-                cols.prefix.general.timestamp = F::from_canonical_u32(record.common.timestamp);
-                cols.prefix.a_or_is_first = F::ONE;
-                cols.prefix.data.write_a = write_a;
-                cols.prefix.data.idx = F::from_canonical_usize(length);
-                cols.prefix.data.result = record.common.result;
-                cols.prefix.data.alpha = alpha;
-                cols.pc = F::from_canonical_u32(record.common.from_pc);
                 cols.write_a_x_is_first = write_a;
 
-                cols.a_ptr_ptr = record.common.a_ptr_ptr;
-                cols.prefix.data.a_ptr = record.common.a_ptr;
-                mem_helper.fill(
-                    record.common.a_ptr_aux.prev_timestamp,
-                    record.common.timestamp + 2,
-                    cols.a_ptr_aux.as_mut(),
-                );
-
-                cols.b_ptr_ptr = record.common.b_ptr_ptr;
-                cols.prefix.data.b_ptr = record.common.b_ptr;
                 mem_helper.fill(
                     record.common.b_ptr_aux.prev_timestamp,
                     record.common.timestamp + 3,
                     cols.b_ptr_aux.as_mut(),
                 );
+                cols.b_ptr_ptr = record.common.b_ptr_ptr;
+
+                mem_helper.fill(
+                    record.common.a_ptr_aux.prev_timestamp,
+                    record.common.timestamp + 2,
+                    cols.a_ptr_aux.as_mut(),
+                );
+                cols.a_ptr_ptr = record.common.a_ptr_ptr;
+
+                cols.pc = F::from_canonical_u32(record.common.from_pc);
+
+                cols.prefix.data.alpha = alpha;
+                cols.prefix.data.result = record.common.result;
+                cols.prefix.data.idx = F::from_canonical_usize(length);
+                cols.prefix.data.b_ptr = record.common.b_ptr;
+                cols.prefix.data.write_a = write_a;
+                cols.prefix.data.a_ptr = record.common.a_ptr;
+
+                cols.prefix.a_or_is_first = F::ONE;
+
+                cols.prefix.general.timestamp = F::from_canonical_u32(record.common.timestamp);
+                cols.prefix.general.is_ins_row = F::ONE;
+                cols.prefix.general.is_workload_row = F::ZERO;
 
                 chunk[offset + INS_1_WIDTH..offset + OVERALL_WIDTH].fill(F::ZERO);
             }
@@ -948,30 +970,32 @@ where
                 let offset = i * OVERALL_WIDTH;
                 let cols: &mut WorkloadCols<F> = chunk[offset..offset + WL_WIDTH].borrow_mut();
 
-                cols.prefix.general.is_workload_row = F::ONE;
-                cols.prefix.general.is_ins_row = F::ZERO;
-                cols.prefix.general.timestamp = F::from_canonical_u32(workload_row.timestamp);
+                // fill in reverse order
+                mem_helper.fill(
+                    workload_row.b_aux.prev_timestamp,
+                    workload_row.timestamp + 4,
+                    cols.b_aux.as_mut(),
+                );
+                cols.b = workload_row.b;
 
-                cols.prefix.data.write_a = write_a;
-                cols.prefix.data.idx = F::from_canonical_u32(workload_row.idx);
-                cols.prefix.data.result = workload_row.result;
-                cols.prefix.data.alpha = alpha;
-
-                cols.prefix.data.a_ptr = workload_row.a_ptr;
-                cols.prefix.a_or_is_first = workload_row.a;
                 mem_helper.fill(
                     workload_row.a_aux.prev_timestamp,
                     workload_row.timestamp + 3,
                     cols.a_aux.as_mut(),
                 );
 
+                cols.prefix.data.alpha = alpha;
+                cols.prefix.data.result = workload_row.result;
+                cols.prefix.data.idx = F::from_canonical_u32(workload_row.idx);
                 cols.prefix.data.b_ptr = workload_row.b_ptr;
-                cols.b = workload_row.b;
-                mem_helper.fill(
-                    workload_row.b_aux.prev_timestamp,
-                    workload_row.timestamp + 4,
-                    cols.b_aux.as_mut(),
-                );
+                cols.prefix.data.write_a = write_a;
+                cols.prefix.data.a_ptr = workload_row.a_ptr;
+
+                cols.prefix.a_or_is_first = workload_row.a;
+
+                cols.prefix.general.timestamp = F::from_canonical_u32(workload_row.timestamp);
+                cols.prefix.general.is_ins_row = F::ZERO;
+                cols.prefix.general.is_workload_row = F::ONE;
 
                 chunk[offset + WL_WIDTH..offset + OVERALL_WIDTH].fill(F::ZERO);
             }
