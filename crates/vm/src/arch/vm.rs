@@ -1260,9 +1260,7 @@ pub fn create_memory_image(
     init_memory: SparseMemoryImage,
 ) -> MemoryImage {
     AddressMap::from_sparse(
-        memory_config.as_offset,
-        1 << memory_config.as_height,
-        1 << memory_config.pointer_max_bits,
+        memory_config.as_sizes.clone(),
         init_memory,
     )
 }

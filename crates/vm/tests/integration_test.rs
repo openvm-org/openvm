@@ -61,7 +61,7 @@ where
 
 fn test_native_config() -> NativeConfig {
     NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 29, 15, 32, 1024), 0),
+        system: SystemConfig::new(3, MemoryConfig::new(2, vec![0, 1 << 16, 1 << 16, 1 << 16, 1 << 16], 16, 29, 15, 32, 1024), 0),
         native: Default::default(),
     }
 }

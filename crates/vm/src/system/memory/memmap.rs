@@ -179,7 +179,6 @@ impl MmapWrapper {
 pub struct AddressMap {
     pub mem: Vec<MmapWrapper>,
     pub cell_size: Vec<usize>,
-    pub as_offset: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -187,7 +186,6 @@ struct AddressMapSerializeHelper {
     compressed: Vec<Vec<(usize, Vec<u8>)>>,
     lengths: Vec<usize>,
     cell_size: Vec<usize>,
-    as_offset: u32,
 }
 
 impl AddressMapSerializeHelper {
@@ -219,7 +217,6 @@ impl AddressMapSerializeHelper {
             compressed,
             lengths,
             cell_size: map.cell_size.clone(),
-            as_offset: map.as_offset,
         }
     }
 
@@ -237,7 +234,6 @@ impl AddressMapSerializeHelper {
         AddressMap {
             mem,
             cell_size: self.cell_size.clone(),
-            as_offset: self.as_offset,
         }
     }
 }
@@ -270,26 +266,24 @@ impl Default for AddressMap {
 }
 
 impl AddressMap {
-    pub fn new(as_offset: u32, as_cnt: usize, mem_size: usize) -> Self {
+    pub fn new(mem_size: Vec<usize>) -> Self {
         // TMP: hardcoding for now
-        let mut cell_size = vec![1, 1, 1];
-        cell_size.resize(as_cnt, 4);
-        let mem = cell_size
-            .iter()
-            .map(|&cell_size| MmapWrapper::new(mem_size.checked_mul(cell_size).unwrap()))
+        let mut cell_size = vec![1; 4];
+        cell_size.resize(mem_size.len(), 4);
+        let mem = zip_eq(&cell_size, &mem_size)
+            .map(|(cell_size, mem_size)| {
+                MmapWrapper::new(mem_size.checked_mul(*cell_size).unwrap())
+            })
             .collect();
         Self {
             mem,
             cell_size,
-            as_offset,
         }
     }
 
     pub fn from_mem_config(mem_config: &MemoryConfig) -> Self {
         Self::new(
-            mem_config.as_offset,
-            1 << mem_config.as_height,
-            1 << mem_config.pointer_max_bits,
+            mem_config.as_sizes.clone(),
         )
     }
 
@@ -302,7 +296,7 @@ impl AddressMap {
                         .iter::<u8>()
                         .map(move |(ptr_idx, x)| {
                             (
-                                (as_idx as u32 + self.as_offset, ptr_idx as u32),
+                                (as_idx as u32, ptr_idx as u32),
                                 F::from_canonical_u8(x),
                             )
                         })
@@ -313,7 +307,7 @@ impl AddressMap {
                     space_mem
                         .iter::<F>()
                         .map(move |(ptr_idx, x)| {
-                            ((as_idx as u32 + self.as_offset, ptr_idx as u32), x)
+                            ((as_idx as u32, ptr_idx as u32), x)
                         })
                         .collect_vec()
                 }
@@ -325,10 +319,10 @@ impl AddressMap {
         debug_assert_ne!(addr_space, 0);
         // TODO: fix this
         unsafe {
-            if self.cell_size[(addr_space - self.as_offset) as usize] == 1 {
+            if self.cell_size[addr_space as usize] == 1 {
                 F::from_canonical_u8(self.get::<u8>((addr_space, ptr)))
             } else {
-                debug_assert_eq!(self.cell_size[(addr_space - self.as_offset) as usize], 4);
+                debug_assert_eq!(self.cell_size[addr_space as usize], 4);
                 self.get::<F>((addr_space, ptr))
             }
         }
@@ -340,9 +334,9 @@ impl AddressMap {
     pub unsafe fn get<T: Copy>(&self, (addr_space, ptr): Address) -> T {
         debug_assert_eq!(
             std::mem::size_of::<T>(),
-            self.cell_size[(addr_space - self.as_offset) as usize]
+            self.cell_size[addr_space as usize]
         );
-        self.mem[(addr_space - self.as_offset) as usize].get(ptr as usize)
+        self.mem[addr_space as usize].get(ptr as usize)
     }
 
     /// # Safety
@@ -351,9 +345,9 @@ impl AddressMap {
     pub unsafe fn insert<T: Copy>(&mut self, (addr_space, ptr): Address, data: T) -> T {
         debug_assert_eq!(
             std::mem::size_of::<T>(),
-            self.cell_size[(addr_space - self.as_offset) as usize]
+            self.cell_size[addr_space as usize]
         );
-        self.mem[(addr_space - self.as_offset) as usize].replace(ptr as usize, &data)
+        self.mem[addr_space as usize].replace(ptr as usize, &data)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -367,7 +361,7 @@ impl AddressMap {
     ) -> Vec<T> {
         let mut block: Vec<T> = Vec::with_capacity(len);
         unsafe {
-            self.mem[(addr_space - self.as_offset) as usize].read_range_generic(
+            self.mem[addr_space as usize].read_range_generic(
                 ptr as usize,
                 len,
                 block.as_mut_ptr() as *mut u8,
@@ -382,14 +376,12 @@ impl AddressMap {
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
     pub fn from_sparse(
-        as_offset: u32,
-        as_cnt: usize,
-        mem_size: usize,
+        mem_size: Vec<usize>,
         sparse_map: SparseMemoryImage,
     ) -> Self {
-        let mut vec = Self::new(as_offset, as_cnt, mem_size);
+        let mut vec = Self::new(mem_size);
         for ((addr_space, index), data_byte) in sparse_map.into_iter() {
-            vec.mem[(addr_space - as_offset) as usize].set(index as usize, &data_byte);
+            vec.mem[addr_space as usize].set(index as usize, &data_byte);
         }
         vec
     }

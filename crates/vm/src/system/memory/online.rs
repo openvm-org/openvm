@@ -38,12 +38,12 @@ impl GuestMemory {
     {
         debug_assert_eq!(
             size_of::<T>(),
-            self.memory.cell_size[(addr_space - self.memory.as_offset) as usize]
+            self.memory.cell_size[addr_space as usize]
         );
         let read = self
             .memory
             .mem
-            .get_unchecked((addr_space - self.memory.as_offset) as usize)
+            .get_unchecked(addr_space as usize)
             .get((ptr as usize) * size_of::<T>());
         read
     }
@@ -62,12 +62,12 @@ impl GuestMemory {
     {
         debug_assert_eq!(
             size_of::<T>(),
-            self.memory.cell_size[(addr_space - self.memory.as_offset) as usize],
+            self.memory.cell_size[addr_space as usize],
             "addr_space={addr_space}"
         );
         self.memory
             .mem
-            .get_unchecked_mut((addr_space - self.memory.as_offset) as usize)
+            .get_unchecked_mut(addr_space as usize)
             .set((ptr as usize) * size_of::<T>(), values);
     }
 
@@ -201,22 +201,20 @@ impl<F: PrimeField32> TracingMemory<F> {
         memory_bus: MemoryBus,
         initial_block_size: usize,
     ) -> Self {
-        assert_eq!(mem_config.as_offset, 1);
-        let num_cells = 1usize << mem_config.pointer_max_bits; // max cells per address space
+        let num_cells = mem_config.as_sizes.clone();
         let num_addr_sp = 1 + (1 << mem_config.as_height);
         let mut min_block_size = vec![1; num_addr_sp];
         // TMP: hardcoding for now
         min_block_size[1] = 4;
         min_block_size[2] = 4;
         min_block_size[3] = 4;
-        let meta = min_block_size
-            .iter()
-            .map(|&min_block_size| {
+        let meta = zip_eq(&min_block_size, &num_cells)
+            .map(|(min_block_size, num_cells)| {
                 MmapWrapper::new(
                     num_cells
                         .checked_mul(size_of::<AccessMetadata>())
                         .unwrap()
-                        .div_ceil(min_block_size as usize),
+                        .div_ceil(*min_block_size as usize),
                 )
             })
             .collect();

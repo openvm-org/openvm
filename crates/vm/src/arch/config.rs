@@ -68,16 +68,15 @@ pub trait InitFileGenerator {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, new, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, new)]
 pub struct MemoryConfig {
     /// The maximum height of the address space. This means the trie has `as_height` layers for
-    /// searching the address space. The allowed address spaces are those in the range `[as_offset,
-    /// as_offset + 2^as_height)` where `as_offset` is currently fixed to `1` to not allow address
-    /// space `0` in memory.
+    /// searching the address space. The allowed address spaces are those in the range `[1,
+    /// 1 + 2^as_height)` where it starts from `1` to not allow address space `0` in memory.
     pub as_height: usize,
-    /// The offset of the address space. Should be fixed to equal `1`.
-    // TODO[jpw]: remove this and make constant
-    pub as_offset: u32,
+    /// The number of cells in each address space. It is expected that the size of the list is
+    /// `1 << as_height + 1` and the first element is 0, which means no address space.
+    pub as_sizes: Vec<usize>,
     pub pointer_max_bits: usize,
     /// All timestamps must be in the range `[0, 2^clk_max_bits)`. Maximum allowed: 29.
     pub clk_max_bits: usize,
@@ -91,7 +90,9 @@ pub struct MemoryConfig {
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self::new(3, 1, 29, 29, 17, 32, 1 << 24)
+        let mut as_sizes = vec![1 << 29; (1 << 3) + 1];
+        as_sizes[0] = 0;
+        Self::new(3, as_sizes, 29, 29, 17, 32, 1 << 24)
     }
 }
 

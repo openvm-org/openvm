@@ -556,7 +556,7 @@ impl<F: PrimeField32> SystemComplex<F> {
         let memory_controller = if config.continuation_enabled {
             MemoryController::with_persistent_memory(
                 memory_bus,
-                config.memory_config,
+                config.memory_config.clone(),
                 range_checker.clone(),
                 PermutationCheckBus::new(bus_idx_mgr.new_bus_idx()),
                 PermutationCheckBus::new(bus_idx_mgr.new_bus_idx()),
@@ -564,7 +564,7 @@ impl<F: PrimeField32> SystemComplex<F> {
         } else {
             MemoryController::with_volatile_memory(
                 memory_bus,
-                config.memory_config,
+                config.memory_config.clone(),
                 range_checker.clone(),
             )
         };

@@ -61,7 +61,7 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
             final_memory,
         );
         let public_values =
-            extract_public_values(&memory_dimensions, num_public_values, final_memory);
+            extract_public_values(num_public_values, final_memory);
         let public_values_commit = hasher.merkle_root(&public_values);
         UserPublicValuesProof {
             proof,
@@ -82,7 +82,7 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
         // 2. Compare user public values commitment with Merkle root of user public values.
         let pv_commit = self.public_values_commit;
         // 0.
-        let pv_as = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset;
+        let pv_as = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + 1;
         let pv_start_idx = memory_dimensions.label_to_index((pv_as, 0));
         let pvs = &self.public_values;
         if pvs.len() % CHUNK != 0 || !(pvs.len() / CHUNK).is_power_of_two() {
@@ -168,13 +168,12 @@ fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeF
 }
 
 pub fn extract_public_values<F: PrimeField32>(
-    memory_dimensions: &MemoryDimensions,
     num_public_values: usize,
     final_memory: &MemoryImage,
 ) -> Vec<F> {
     // All (addr, value) pairs in the public value address space.
-    let f_as_start = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset;
-    let f_as_end = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset + 1;
+    let f_as_start = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + 1;
+    let f_as_end = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + 2;
 
     // This clones the entire memory. Ideally this should run in time proportional to
     // the size of the PV address space, not entire memory.
