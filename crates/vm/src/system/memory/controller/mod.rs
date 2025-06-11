@@ -193,13 +193,17 @@ impl<F: PrimeField32> MemoryController<F> {
     ) -> Self {
         let range_checker_bus = range_checker.bus();
         assert!(mem_config.pointer_max_bits <= F::bits() - 2);
+        assert!(mem_config
+            .as_sizes
+            .iter()
+            .all(|&x| x <= (1 << mem_config.pointer_max_bits)));
         assert!(mem_config.as_height < F::bits() - 2);
         let addr_space_max_bits = log2_ceil_usize(
-            (mem_config.as_offset + 2u32.pow(mem_config.as_height as u32)) as usize,
+            (1 + 2u32.pow(mem_config.as_height as u32)) as usize,
         );
         Self {
             memory_bus,
-            mem_config,
+            mem_config: mem_config.clone(),
             interface_chip: MemoryInterface::Volatile {
                 boundary_chip: VolatileBoundaryChip::new(
                     memory_bus,
@@ -224,11 +228,9 @@ impl<F: PrimeField32> MemoryController<F> {
         merkle_bus: PermutationCheckBus,
         compression_bus: PermutationCheckBus,
     ) -> Self {
-        assert_eq!(mem_config.as_offset, 1);
         let memory_dims = MemoryDimensions {
             as_height: mem_config.as_height,
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
-            as_offset: 1,
         };
         let range_checker_bus = range_checker.bus();
         let interface_chip = MemoryInterface::Persistent {
@@ -243,7 +245,7 @@ impl<F: PrimeField32> MemoryController<F> {
         };
         Self {
             memory_bus,
-            mem_config,
+            mem_config: mem_config.clone(),
             interface_chip,
             memory: TracingMemory::new(&mem_config, range_checker.clone(), memory_bus, CHUNK), /* it is expected that the memory will be
                                                                                                 * set later */
@@ -748,7 +750,7 @@ mod tests {
 
         let mut memory_controller = MemoryController::<F>::with_volatile_memory(
             memory_bus,
-            memory_config,
+            memory_config.clone(),
             range_checker.clone(),
         );
 

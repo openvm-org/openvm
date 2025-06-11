@@ -244,7 +244,6 @@ pub struct AddressMap<const PAGE_SIZE: usize> {
     pub paged_vecs: Vec<PagedVec<PAGE_SIZE>>,
     /// byte size of cells per address space
     pub cell_size: Vec<usize>,
-    pub as_offset: u32,
 }
 
 impl<const PAGE_SIZE: usize> Default for AddressMap<PAGE_SIZE> {
@@ -254,27 +253,23 @@ impl<const PAGE_SIZE: usize> Default for AddressMap<PAGE_SIZE> {
 }
 
 impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
-    pub fn new(as_offset: u32, as_cnt: usize, mem_size: usize) -> Self {
+    pub fn new(mem_size: Vec<usize>) -> Self {
         // TMP: hardcoding for now
-        let mut cell_size = vec![1, 1, 1];
-        cell_size.resize(as_cnt, 4);
-        let paged_vecs = cell_size
-            .iter()
-            .map(|&cell_size| {
-                PagedVec::new(mem_size.checked_mul(cell_size).unwrap().div_ceil(PAGE_SIZE))
+        let mut cell_size = vec![1; 4];
+        cell_size.resize(mem_sizes.len(), 4);
+        let paged_vecs = zip_eq(&cell_size, &mem_size)
+            .map(|(cell_size, mem_size)| {
+                PagedVec::new(mem_size.checked_mul(*cell_size).unwrap().div_ceil(PAGE_SIZE))
             })
             .collect();
         Self {
             paged_vecs,
             cell_size,
-            as_offset,
         }
     }
     pub fn from_mem_config(mem_config: &MemoryConfig) -> Self {
         Self::new(
-            mem_config.as_offset,
-            1 << mem_config.as_height,
-            1 << mem_config.pointer_max_bits,
+            mem_config.as_sizes.clone(),
         )
     }
     pub fn items<F: PrimeField32>(&self) -> impl Iterator<Item = (Address, F)> + '_ {
@@ -286,7 +281,7 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
                     page.iter::<u8>()
                         .map(move |(ptr_idx, x)| {
                             (
-                                (as_idx as u32 + self.as_offset, ptr_idx as u32),
+                                (as_idx as u32, ptr_idx as u32),
                                 F::from_canonical_u8(x),
                             )
                         })
@@ -296,7 +291,7 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
                     assert_eq!(cell_size, 4);
                     page.iter::<F>()
                         .map(move |(ptr_idx, x)| {
-                            ((as_idx as u32 + self.as_offset, ptr_idx as u32), x)
+                            ((as_idx as u32, ptr_idx as u32), x)
                         })
                         .collect_vec()
                 }
@@ -321,10 +316,10 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
     pub unsafe fn get<T: Copy>(&self, (addr_space, ptr): Address) -> T {
         debug_assert_eq!(
             size_of::<T>(),
-            self.cell_size[(addr_space - self.as_offset) as usize]
+            self.cell_size[addr_space as usize]
         );
         self.paged_vecs
-            .get_unchecked((addr_space - self.as_offset) as usize)
+            .get_unchecked(addr_space as usize)
             .get((ptr as usize) * size_of::<T>())
     }
 
@@ -339,7 +334,7 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
         let mut block: Vec<T> = Vec::with_capacity(len);
         unsafe {
             self.paged_vecs
-                .get_unchecked((addr_space - self.as_offset) as usize)
+                .get_unchecked(addr_space as usize)
                 .read_range_generic(
                     (ptr as usize) * size_of::<T>(),
                     len * size_of::<T>(),
@@ -356,10 +351,10 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
     pub unsafe fn insert<T: Copy>(&mut self, (addr_space, ptr): Address, data: T) -> T {
         debug_assert_eq!(
             size_of::<T>(),
-            self.cell_size[(addr_space - self.as_offset) as usize]
+            self.cell_size[addr_space as usize]
         );
         self.paged_vecs
-            .get_unchecked_mut((addr_space - self.as_offset) as usize)
+            .get_unchecked_mut(addr_space as usize)
             .replace((ptr as usize) * size_of::<T>(), &data)
     }
     pub fn is_empty(&self) -> bool {
@@ -371,14 +366,12 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
     pub fn from_sparse(
-        as_offset: u32,
-        as_cnt: usize,
         mem_size: usize,
         sparse_map: SparseMemoryImage,
     ) -> Self {
-        let mut vec = Self::new(as_offset, as_cnt, mem_size);
+        let mut vec = Self::new(mem_size);
         for ((addr_space, index), data_byte) in sparse_map.into_iter() {
-            vec.paged_vecs[(addr_space - as_offset) as usize].set(index as usize, &data_byte);
+            vec.paged_vecs[addr_space as usize].set(index as usize, &data_byte);
         }
         vec
     }
@@ -391,11 +384,11 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
 //     {
 //         debug_assert_eq!(
 //             size_of::<T>(),
-//             self.cell_size[(addr_space - self.as_offset) as usize]
+//             self.cell_size[addr_space as usize]
 //         );
 //         let read = self
 //             .paged_vecs
-//             .get_unchecked((addr_space - self.as_offset) as usize)
+//             .get_unchecked(addr_space as usize)
 //             .get((ptr as usize) * size_of::<T>());
 //         read
 //     }
@@ -410,11 +403,11 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
 //     {
 //         debug_assert_eq!(
 //             size_of::<T>(),
-//             self.cell_size[(addr_space - self.as_offset) as usize],
+//             self.cell_size[addr_space as usize],
 //             "addr_space={addr_space}"
 //         );
 //         self.paged_vecs
-//             .get_unchecked_mut((addr_space - self.as_offset) as usize)
+//             .get_unchecked_mut(addr_space as usize)
 //             .set((ptr as usize) * size_of::<T>(), values);
 //     }
 // }
