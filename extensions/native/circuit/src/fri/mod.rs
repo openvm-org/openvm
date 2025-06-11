@@ -882,7 +882,6 @@ where
             {
                 // ins2 row
                 let offset = (length + 1) * OVERALL_WIDTH;
-                // todo: add assert that this doesn't intersect with workload records
                 let cols: &mut Instruction2Cols<F> =
                     chunk[offset..offset + INS_2_WIDTH].borrow_mut();
 
