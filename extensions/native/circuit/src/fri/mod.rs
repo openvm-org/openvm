@@ -877,7 +877,8 @@ where
 
             let length = record.header.length as usize;
             let alpha = record.common.alpha;
-            let write_a = F::from_bool(!record.common.is_init);
+            let is_init = record.common.is_init;
+            let write_a = F::from_bool(!is_init);
 
             {
                 // ins2 row
@@ -979,7 +980,9 @@ where
                 );
                 cols.b = workload_row.b;
 
-                cols.a_aux.set_prev_data(workload_row.a_aux.prev_data);
+                if !is_init {
+                    cols.a_aux.set_prev_data(workload_row.a_aux.prev_data);
+                }
                 mem_helper.fill(
                     workload_row.a_aux.prev_timestamp,
                     workload_row.timestamp + 3,
