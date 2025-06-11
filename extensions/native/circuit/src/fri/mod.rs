@@ -868,8 +868,9 @@ where
         }
 
         chunks.into_par_iter().for_each(|mut chunk| {
+            let num_rows = chunk.len() / OVERALL_WIDTH;
             let metadata = FriReducedOpeningMetadata {
-                length: chunk.len() / OVERALL_WIDTH - 2,
+                length: num_rows - 2,
             };
             let record: FriReducedOpeningRecordMut<F> =
                 unsafe { get_record_from_slice(&mut chunk, metadata) };
