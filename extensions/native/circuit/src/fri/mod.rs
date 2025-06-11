@@ -594,21 +594,22 @@ pub struct FriReducedOpeningCommonRecord<F> {
 }
 
 // Part of record for each workload row that calculates the partial `result`
+// NOTE: Order for fields is important here to prevent overwriting.
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct FriReducedOpeningWorkloadRowRecord<F> {
     pub timestamp: u32,
-    pub idx: u32,
-    pub a_ptr: F,
     pub a: F,
-    pub a_aux: MemoryWriteAuxRecord<F, 1>,
+    pub a_ptr: F,
     pub b_ptr: F,
+    pub idx: u32,
+    pub result: [F; EXT_DEG],
+    pub a_aux: MemoryWriteAuxRecord<F, 1>,
     pub b: [F; EXT_DEG],
     pub b_aux: MemoryReadAuxRecord,
-    pub result: [F; EXT_DEG],
 }
 
-// NOTE: Order for fields is important here.
+// NOTE: Order for fields is important here to prevent overwriting.
 #[derive(Debug)]
 pub struct FriReducedOpeningRecordMut<'a, F> {
     pub header: &'a mut FriReducedOpeningHeaderRecord,
@@ -978,6 +979,7 @@ where
                 );
                 cols.b = workload_row.b;
 
+                cols.a_aux.set_prev_data(workload_row.a_aux.prev_data);
                 mem_helper.fill(
                     workload_row.a_aux.prev_timestamp,
                     workload_row.timestamp + 3,
