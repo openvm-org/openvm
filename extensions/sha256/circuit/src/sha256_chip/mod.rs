@@ -17,7 +17,9 @@ use openvm_instructions::{
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32im_circuit::adapters::{memory_write_from_state, read_rv32_register_from_state};
+use openvm_rv32im_circuit::adapters::{
+    memory_write_from_state, read_rv32_register, read_rv32_register_from_state,
+};
 use openvm_sha256_air::{Sha256StepHelper, SHA256_BLOCK_BITS, SHA256_ROWS_PER_BLOCK};
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -99,7 +101,6 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
 
         debug_assert!(src + len <= (1 << self.pointer_max_bits));
         debug_assert!(dst < (1 << self.pointer_max_bits));
-        let mut hasher = Sha256::new();
 
         state
             .ctx
@@ -110,10 +111,9 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
                 .memory
                 .get_slice::<u8>((RV32_MEMORY_AS, src), len as usize)
         };
-        hasher.update(&message);
 
-        let output = hasher.finalize();
-        memory_write_from_state(state, RV32_MEMORY_AS, dst, output.as_ref());
+        let output = sha256_solve(&message);
+        memory_write_from_state(state, RV32_MEMORY_AS, dst, &output);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -126,7 +126,9 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {
-        let len = read_rv32_register_from_state(state, instruction.c.as_canonical_u32());
+        // Note: doing `read_rv32_register` here instead of `read_rv32_register_from_state`
+        // because we don't want this read to be metered
+        let len = read_rv32_register(state.memory, instruction.c.as_canonical_u32());
 
         self.execute_e1(state, instruction)?;
 

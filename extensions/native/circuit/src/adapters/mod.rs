@@ -1,21 +1,24 @@
 use openvm_circuit::{
     arch::{execution_mode::E1E2ExecutionCtx, VmStateMut},
-    system::memory::{
-        offline_checker::{MemoryBaseAuxCols, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
-        online::{GuestMemory, TracingMemory},
-    },
+    system::memory::online::{GuestMemory, TracingMemory},
 };
 use openvm_native_compiler::conversion::AS;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-pub mod alu_native_adapter;
+mod alu_native_adapter;
+mod branch_native_adapter;
+// mod convert_adapter;
+// mod loadstore_native_adapter;
+// mod native_vectorized_adapter;
+
+pub use alu_native_adapter::*;
 // 2 reads, 0 writes, imm support, jump support
-pub mod branch_native_adapter;
-// 1 read, 1 write, arbitrary read size, arbitrary write size, no imm support
-pub mod convert_adapter;
-pub mod loadstore_native_adapter;
-// 2 reads, 1 write, read size = write size = N, no imm support, read/write to address space d
-pub mod native_vectorized_adapter;
+pub use branch_native_adapter::*;
+// // 1 read, 1 write, arbitrary read size, arbitrary write size, no imm support
+// pub use convert_adapter::*;
+// pub use loadstore_native_adapter::*;
+// // 2 reads, 1 write, read size = write size = N, no imm support, read/write to address space d
+// pub use native_vectorized_adapter::*;
 
 #[inline(always)]
 pub fn memory_read_native<F, const N: usize>(memory: &GuestMemory, ptr: u32) -> [F; N]
@@ -132,46 +135,45 @@ where
     unsafe { memory.write::<F, BLOCK_SIZE, 1>(AS::Native as u32, ptr, vals) }
 }
 
-/// Reads register value at `ptr` from memory and records the memory access in mutable buffer.
-/// Trace generation relevant to this memory access can be done fully from the recorded buffer.
+/// Reads register value at `ptr` from memory and records the previous timestamp.
 #[inline(always)]
 pub fn tracing_read_native<F, const BLOCK_SIZE: usize>(
     memory: &mut TracingMemory<F>,
     ptr: u32,
-    aux_cols: &mut MemoryBaseAuxCols<F>,
+    prev_timestamp: &mut u32,
 ) -> [F; BLOCK_SIZE]
 where
     F: PrimeField32,
 {
     let (t_prev, data) = timed_read(memory, ptr);
-    aux_cols.set_prev(F::from_canonical_u32(t_prev));
+    *prev_timestamp = t_prev.into();
     data
 }
 
-/// Writes `ptr, vals` into memory and records the memory access in mutable buffer.
-/// Trace generation relevant to this memory access can be done fully from the recorded buffer.
+/// Writes `ptr, vals` into memory and records the previous timestamp and data.
 #[inline(always)]
 pub fn tracing_write_native<F, const BLOCK_SIZE: usize>(
     memory: &mut TracingMemory<F>,
     ptr: u32,
     vals: &[F; BLOCK_SIZE],
-    aux_cols: &mut MemoryWriteAuxCols<F, BLOCK_SIZE>,
+    prev_timestamp: &mut u32,
+    prev_data: &mut [F; BLOCK_SIZE],
 ) where
     F: PrimeField32,
 {
     let (t_prev, data_prev) = timed_write(memory, ptr, vals);
-    aux_cols.set_prev(F::from_canonical_u32(t_prev), data_prev);
+    *prev_timestamp = t_prev.into();
+    *prev_data = data_prev;
 }
 
-/// Reads value at `_ptr` from memory and records the memory access in mutable buffer.
-/// Trace generation relevant to this memory access can be done fully from the recorded buffer.
+/// Reads value at `_ptr` from memory and records the previous timestamp.
+/// If the read is an immediate, the previous timestamp will be set to `u32::MAX`.
 #[inline(always)]
 pub fn tracing_read_or_imm_native<F>(
     memory: &mut TracingMemory<F>,
     addr_space: u32,
     ptr_or_imm: F,
-    addr_space_mut: &mut F,
-    aux_cols: &mut MemoryReadOrImmediateAuxCols<F>,
+    prev_timestamp: &mut u32,
 ) -> F
 where
     F: PrimeField32,
@@ -183,13 +185,12 @@ where
     );
 
     if addr_space == AS::Immediate as u32 {
-        *addr_space_mut = F::ZERO;
+        *prev_timestamp = u32::MAX;
         memory.increment_timestamp();
         ptr_or_imm
     } else {
-        *addr_space_mut = F::from_canonical_u32(AS::Native as u32);
         let data: [F; 1] =
-            tracing_read_native(memory, ptr_or_imm.as_canonical_u32(), &mut aux_cols.base);
+            tracing_read_native(memory, ptr_or_imm.as_canonical_u32(), prev_timestamp);
         data[0]
     }
 }
