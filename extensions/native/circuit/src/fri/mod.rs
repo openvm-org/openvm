@@ -22,7 +22,7 @@ use openvm_circuit::{
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::is_less_than::LessThanAuxCols;
+use openvm_circuit_primitives::{is_less_than::LessThanAuxCols, AlignedBytesBorrow};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, FriOpcode::FRI_REDUCED_OPENING};
@@ -31,6 +31,7 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_maybe_rayon::prelude::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use static_assertions::const_assert_eq;
@@ -550,7 +551,7 @@ fn elem_to_ext<F: Field>(elem: F) -> [F; EXT_DEG] {
 // Part of record that is common for all trace rows for an instruction
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct FriReducedOpeningCommonRecord {
+pub struct FriReducedOpeningCommonRecord<F> {
     from_pc: u32,
     timestamp: u32,
 
@@ -559,7 +560,6 @@ pub struct FriReducedOpeningCommonRecord {
     alpha_aux: MemoryReadAuxRecord,
 
     length_ptr: u32,
-    length: u32,
     length_aux: MemoryReadAuxRecord,
 
     a_ptr_ptr: u32,
@@ -584,7 +584,7 @@ pub struct FriReducedOpeningCommonRecord {
 // Part of record for each workload row that calculates the partial `result`
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct FriReducedOpeningWorkloadRowRecord {
+pub struct FriReducedOpeningWorkloadRowRecord<F> {
     timestamp: u32,
     idx: u32,
     a_ptr: u32,
@@ -596,26 +596,32 @@ pub struct FriReducedOpeningWorkloadRowRecord {
     result: [F; EXT_DEG],
 }
 
-// NOTE: Order for fields is important here. The common record must be first.
+// NOTE: Order for fields is important here.
 #[derive(Debug)]
-pub struct FriReducedOpeningRecordMut<'a> {
-    pub common: &'a mut FriReducedOpeningCommonRecord,
-    pub workload: &'a mut [FriReducedOpeningWorkloadRowRecord],
+pub struct FriReducedOpeningRecordMut<'a, F> {
+    pub length: &'a mut u32,
+    pub workload: &'a mut [FriReducedOpeningWorkloadRowRecord<F>],
+    pub common: &'a mut FriReducedOpeningCommonRecord<F>,
 }
 
-impl<'a> CustomBorrow<'a, FriReducedOpeningRecordMut<'a>, ()> for [u8] {
-    fn custom_borrow(&'a mut self, metadata: ()) -> FriReducedOpeningRecordMut<'a> {
-        let (common_buf, rest) =
-            unsafe { self.split_at_mut_unchecked(size_of::<FriReducedOpeningCommonRecord>()) };
-        let common: &mut FriReducedOpeningCommonRecord = common_buf.borrow_mut();
+impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, ()> for [u8] {
+    fn custom_borrow(&'a mut self, metadata: ()) -> FriReducedOpeningRecordMut<'a, F> {
+        let (length_buf, rest) = unsafe { self.split_at_mut_unchecked(size_of::<u32>()) };
+        let length: &mut u32 = length_buf.borrow_mut();
+
+        let workload_size = (*length as usize) * size_of::<FriReducedOpeningWorkloadRowRecord<F>>();
+        let (workload_buf, common_buf) = unsafe { rest.split_at_mut_unchecked(workload_size) };
 
         let (_, workload_records, _) =
-            unsafe { rest.align_to_mut::<FriReducedOpeningWorkloadRowRecord>() };
-        let length = common.length;
+            unsafe { workload_buf.align_to_mut::<FriReducedOpeningWorkloadRowRecord<F>>() };
+        debug_assert!(workload_records.len() >= *length as usize);
+
+        let common: &mut FriReducedOpeningCommonRecord = common_buf.borrow_mut();
 
         FriReducedOpeningRecordMut {
+            length,
+            workload: &mut workload_records[..*length as usize],
             common,
-            workload: &mut workload_records[..length],
         }
     }
 }
@@ -691,7 +697,7 @@ where
 
         tracing_read_native(state.memory, length_ptr, record.common.length_aux.as_mut());
         record.common.length_ptr = length_ptr;
-        record.common.length = length;
+        *record.length = length;
 
         let [a_ptr]: [F; 1] =
             tracing_read_native(state.memory, a_ptr_ptr, record.common.a_ptr_aux.as_mut());
@@ -802,23 +808,26 @@ where
         let mut remaining_trace = &mut trace.values[..OVERALL_WIDTH * rows_used];
         let mut chunks = Vec::with_capacity(rows_used);
         while !remaining_trace.is_empty() {
-            let record: &FriReducedOpeningCommonRecord =
-                unsafe { get_record_from_slice(&mut remaining_trace, ()) };
-            let num_rows = record.length as usize + 2;
+            let length = u32::from_ne_bytes(remaining_trace[..4].try_into().unwrap());
+            let num_rows = length as usize + 2;
             let chunk_size = OVERALL_WIDTH * num_rows;
             let (chunk, rest) = remaining_trace.split_at_mut(chunk_size);
             chunks.push(chunk);
             remaining_trace = rest;
         }
 
-        chunks.par_iter_mut().for_each(|chunk| {
-            let length = chunk.len() / OVERALL_WIDTH - 2;
-            let record: FriReducedOpeningRecordMut = unsafe { get_record_from_slice(chunk, ()) };
+        chunks.into_par_iter().for_each(|chunk| {
+            let record: FriReducedOpeningRecordMut =
+                unsafe { get_record_from_slice(&mut chunk, ()) };
+
+            let length = *record.length;
+            let alpha = record.common.alpha;
+            let write_a = F::from_bool(!record.common.is_init);
 
             {
-                // todo: fill remaining columns to 0
                 // ins2 row
-                let offset = (length + 1) * width;
+                let offset = (length + 1) * OVERALL_WIDTH;
+                // todo: add assert that this doesn't intersect with workload records
                 let cols: &mut Instruction2Cols<F> =
                     chunk[offset..offset + INS_2_WIDTH].borrow_mut();
 
@@ -844,26 +853,22 @@ where
                 );
 
                 cols.is_init_ptr = F::from_canonical_u32(record.common.is_init_ptr);
-                mem_helper.fill(
-                    record.common.is_init_aux.prev_timestamp,
-                    record.common.timestamp + 4,
-                    cols.is_init_aux.as_mut(),
-                );
+                mem_helper.fill(record.common.timestamp + 4, cols.is_init_aux.as_mut());
 
                 cols.result_ptr = F::from_canonical_u32(record.common.result_ptr);
                 cols.result_aux
                     .set_prev_data(record.common.result_aux.prev_data);
                 mem_helper.fill(
                     record.common.result_aux.prev_timestamp,
-                    timestamp + 5 + 2 * length,
+                    record.common.timestamp + 5 + 2 * length as u32,
                     cols.result_aux.as_mut(),
                 );
-            }
 
+                chunk[offset + INS_2_WIDTH..offset + OVERALL_WIDTH].fill(F::ZERO);
+            }
             {
-                // todo: fill remaining columns to 0
                 // ins 1 row
-                let offset = length * width;
+                let offset = length * OVERALL_WIDTH;
                 let cols: &mut Instruction1Cols<F> =
                     chunk[offset..offset + INS_1_WIDTH].borrow_mut();
 
@@ -871,12 +876,12 @@ where
                 cols.prefix.general.is_ins_row = F::ONE;
                 cols.prefix.general.timestamp = F::from_canonical_u32(record.common.timestamp);
                 cols.prefix.a_or_is_first = F::ONE;
-                cols.prefix.data.write_a = F::from_bool(!record.common.is_init);
-                cols.prefix.data.idx = F::from_canonical_u32(record.common.length);
+                cols.prefix.data.write_a = write_a;
+                cols.prefix.data.idx = F::from_canonical_u32(length);
                 cols.prefix.data.result = record.common.result;
-                cols.prefix.data.alpha = record.common.alpha;
+                cols.prefix.data.alpha = alpha;
                 cols.pc = F::from_canonical_u32(record.common.from_pc);
-                cols.write_a_x_is_first = F::from_bool(!record.common.is_init);
+                cols.write_a_x_is_first = write_a;
 
                 cols.a_ptr_ptr = F::from_canonical_u32(record.common.a_ptr_ptr);
                 cols.prefix.data.a_ptr = F::from_canonical_u32(record.common.a_ptr);
@@ -893,9 +898,10 @@ where
                     record.common.timestamp + 3,
                     cols.b_ptr_aux.as_mut(),
                 );
+
+                chunk[offset + INS_1_WIDTH..offset + OVERALL_WIDTH].fill(F::ZERO);
             }
-            for (i, workload_row) in record.workload.iter().enumerate() {
-                // todo: fill remaining columns to 0
+            for (i, workload_row) in record.workload.iter().enumerate().rev() {
                 let offset = i * OVERALL_WIDTH;
                 let cols: &mut WorkloadCols<F> = chunk[offset..offset + WL_WIDTH].borrow_mut();
 
@@ -903,10 +909,10 @@ where
                 cols.prefix.general.is_ins_row = F::ZERO;
                 cols.prefix.general.timestamp = F::from_canonical_u32(workload_row.timestamp);
 
-                cols.prefix.data.write_a = F::from_bool(!record.common.is_init);
+                cols.prefix.data.write_a = write_a;
                 cols.prefix.data.idx = F::from_canonical_u32(workload_row.idx);
                 cols.prefix.data.result = workload_row.result;
-                cols.prefix.data.alpha = record.common.alpha;
+                cols.prefix.data.alpha = alpha;
 
                 cols.prefix.data.a_ptr = F::from_canonical_u32(workload_row.a_ptr);
                 cols.prefix.a_or_is_first = workload_row.a;
@@ -923,6 +929,8 @@ where
                     workload_row.timestamp + 4,
                     cols.b_aux.as_mut(),
                 );
+
+                chunk[offset + WL_WIDTH..offset + OVERALL_WIDTH].fill(F::ZERO);
             }
         });
     }
