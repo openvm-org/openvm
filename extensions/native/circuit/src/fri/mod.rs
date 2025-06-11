@@ -601,7 +601,6 @@ pub struct FriReducedOpeningWorkloadRowRecord<F> {
     pub a: F,
     pub a_ptr: F,
     pub b_ptr: F,
-    pub idx: u32,
     pub result: [F; EXT_DEG],
     pub a_aux: MemoryWriteAuxRecord<F, 1>,
     pub b: [F; EXT_DEG],
@@ -802,7 +801,6 @@ where
             let workload_row = &mut record.workload[i];
 
             workload_row.timestamp = timestamp_start + ((length - i) * 2) as u32;
-            workload_row.idx = i as u32;
             workload_row.a_ptr = a_ptr + F::from_canonical_usize(length - i);
             workload_row.a = a;
             workload_row.b_ptr = b_ptr + F::from_canonical_usize((length - i) * EXT_DEG);
@@ -990,7 +988,7 @@ where
 
                 cols.prefix.data.alpha = alpha;
                 cols.prefix.data.result = workload_row.result;
-                cols.prefix.data.idx = F::from_canonical_u32(workload_row.idx);
+                cols.prefix.data.idx = F::from_canonical_usize(i);
                 cols.prefix.data.b_ptr = workload_row.b_ptr;
                 cols.prefix.data.write_a = write_a;
                 cols.prefix.data.a_ptr = workload_row.a_ptr;
