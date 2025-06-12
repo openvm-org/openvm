@@ -14,14 +14,14 @@ pub type Address = (u32, u32);
 /// A wrapper around MmapMut that implements Clone and provides memory operations
 #[derive(Debug)]
 pub struct MmapWrapper {
-    mem: MmapMut,
+    mmap: MmapMut,
 }
 
 impl Clone for MmapWrapper {
     fn clone(&self) -> Self {
-        let mut new_mem = MmapMut::map_anon(self.mem.len()).unwrap();
-        new_mem.copy_from_slice(&self.mem);
-        Self { mem: new_mem }
+        let mut new_mmap = MmapMut::map_anon(self.mmap.len()).unwrap();
+        new_mmap.copy_from_slice(&self.mmap);
+        Self { mmap: new_mmap }
     }
 }
 
@@ -63,32 +63,32 @@ impl MmapWrapper {
 
     pub fn new(len: usize) -> Self {
         Self {
-            mem: MmapMut::map_anon(len).unwrap(),
+            mmap: MmapMut::map_anon(len).unwrap(),
         }
     }
 
     pub fn len(&self) -> usize {
-        self.mem.len()
+        self.mmap.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.mem.is_empty()
+        self.mmap.is_empty()
     }
 
     pub fn as_ptr(&self) -> *const u8 {
-        self.mem.as_ptr()
+        self.mmap.as_ptr()
     }
 
     pub fn as_mut_ptr(&mut self) -> *mut u8 {
-        self.mem.as_mut_ptr()
+        self.mmap.as_mut_ptr()
     }
 
     pub fn as_slice(&self) -> &[u8] {
-        &self.mem
+        &self.mmap
     }
 
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
-        &mut self.mem
+        &mut self.mmap
     }
 
     /// Iterate over MmapWrapper as iterator of elements of type `T`.
@@ -151,7 +151,8 @@ impl MmapWrapper {
         }
     }
 
-    /// memcpy of new `values` into from..from + size_of<BLOCK>(), memcpy of old existing values into new returned value.
+    /// memcpy of new `values` into from..from + size_of<BLOCK>(), memcpy of old existing values
+    /// into new returned value.
     /// # Panics
     /// If `from..from + size_of<BLOCK>()` is out of bounds.
     #[inline(always)]
@@ -263,7 +264,7 @@ impl<'de> Deserialize<'de> for AddressMap {
 
 impl Default for AddressMap {
     fn default() -> Self {
-        unimplemented!()
+        Self::from_mem_config(&MemoryConfig::default())
     }
 }
 
@@ -277,10 +278,7 @@ impl AddressMap {
                 MmapWrapper::new(mem_size.checked_mul(*cell_size).unwrap())
             })
             .collect();
-        Self {
-            mem,
-            cell_size,
-        }
+        Self { mem, cell_size }
     }
 
     pub fn from_mem_config(mem_config: &MemoryConfig) -> Self {
@@ -299,10 +297,7 @@ impl AddressMap {
                     space_mem
                         .iter::<u8>()
                         .map(move |(ptr_idx, x)| {
-                            (
-                                (as_idx as u32, ptr_idx as u32),
-                                F::from_canonical_u8(x),
-                            )
+                            ((as_idx as u32, ptr_idx as u32), F::from_canonical_u8(x))
                         })
                         .collect_vec()
                 } else {
@@ -310,9 +305,7 @@ impl AddressMap {
                     assert_eq!(cell_size, 4);
                     space_mem
                         .iter::<F>()
-                        .map(move |(ptr_idx, x)| {
-                            ((as_idx as u32, ptr_idx as u32), x)
-                        })
+                        .map(move |(ptr_idx, x)| ((as_idx as u32, ptr_idx as u32), x))
                         .collect_vec()
                 }
             },
@@ -361,7 +354,7 @@ impl AddressMap {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.mem.is_empty()
+        self.mem.iter().all(|mem| mem.is_empty())
     }
 
     pub fn read_range_generic<T: Copy + Debug>(
@@ -385,10 +378,7 @@ impl AddressMap {
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    pub fn from_sparse(
-        mem_size: Vec<usize>,
-        sparse_map: SparseMemoryImage,
-    ) -> Self {
+    pub fn from_sparse(mem_size: Vec<usize>, sparse_map: SparseMemoryImage) -> Self {
         let mut vec = Self::new(mem_size);
         for ((addr_space, index), data_byte) in sparse_map.into_iter() {
             vec.mem[addr_space as usize].set(index as usize, &data_byte);
