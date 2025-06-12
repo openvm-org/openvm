@@ -29,17 +29,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Library Interfaces
 
-- **Guest bindings refactor**: This is a major breaking change. Guest library components have been removed from this repository and moved to a separate repository as part of a guest library reorganization. This affects:
-  - Benchmarks that depend on guest libraries
-  - Examples that use guest library functions
-  - Any user code that imports guest library modules directly
+- **Guest bindings refactor**: Major breaking changes to guest library interfaces. The `setup_*` functions have been removed from guest bindings and are now called on-demand within relevant binding functions. Additionally, custom opcode initialization is now simplified through the inclusion of `openvm_init.rs` files and the `openvm::init!()` macro. This affects:
+  - Code that previously called `setup_*` functions explicitly
+  - Projects that need custom opcode initialization (now use `openvm::init!()`)
+  - Benchmarks and examples that depend on the old guest library interface
 
 ### Migration Guide
 
 #### CLI Migration
-- Update any scripts that call CLI commands to use the new command names
-- Expect hexadecimal output format from commit commands and update parsing logic accordingly
-- Update references from `EvmProvingSetupCmd` to `SetupCmd` in configuration or documentation
+- **New commands**: Use `cargo openvm init <directory>` to create new OpenVM projects with proper structure
+- **Output format changes**: Update scripts parsing `cargo openvm commit` and `cargo openvm prove stark` output to handle hexadecimal format
+- **Prove command paths**: Update automation expecting proof files at `app.proof` to look for `${binary_name}.app.proof` instead
 
 #### SDK Migration
 - Update import statements:
@@ -52,8 +52,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ```
 
 #### Library Migration
-- **Guest Libraries**: Migrate to the new guest library repository. The exact migration path depends on which guest library components your code uses. Consult the new guest library repository documentation for specific migration instructions.
-- **Benchmarks and Examples**: These will need to be redesigned to use the new guest library structure.
+- **Remove explicit setup calls**: Remove any explicit calls to `setup_*` functions in your guest code, as these are now called automatically on-demand
+- **Add initialization macro**: Include `openvm::init!();` in your guest program's main function to initialize custom opcodes
+- **Update build process**: The build process now generates `openvm_init.rs` files automatically based on your `openvm.toml` configuration
 
 ## v1.1.2 (2025-05-08)
 
