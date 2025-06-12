@@ -7,7 +7,7 @@ use thiserror::Error;
 use crate::{
     arch::hasher::Hasher,
     system::memory::{
-        dimensions::MemoryDimensions, memmap::Address, tree::MemoryNode, MemoryImage,
+        dimensions::MemoryDimensions, tree::MemoryNode, Address, MemoryImage
     },
 };
 
@@ -208,7 +208,7 @@ mod tests {
     use super::{UserPublicValuesProof, PUBLIC_VALUES_ADDRESS_SPACE_OFFSET};
     use crate::{
         arch::{hasher::poseidon2::vm_poseidon2_hasher, SystemConfig},
-        system::memory::{online::GuestMemory, memmap::AddressMap, tree::MemoryNode, CHUNK},
+        system::memory::{online::GuestMemory, AddressMap, tree::MemoryNode, CHUNK},
     };
 
     type F = BabyBear;

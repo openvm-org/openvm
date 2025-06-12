@@ -42,7 +42,7 @@ Added constraints for `is_load` and `is_valid` in `LoadSignExtendCoreChip` and `
 
 **Description:** The current implementation only asserts the start pointer is less than `2^pointer_max_bits`. When `N > 1`, it doesn't check the entire range is in bounds. 
 
-However it is not possible to access an address greater than `2^pointer_max_bits` in this way. The lower level `Memory` uses `PagedVec`, which will do array indexing checks.
+However it is not possible to access an address greater than `2^pointer_max_bits` in this way. The lower level `Memory` uses `Memmap/PagedVec`, which will do array indexing checks.
 Array out of bounds will still panic.
 
 **Proof of concept:** N/A

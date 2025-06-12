@@ -270,8 +270,8 @@ multiple accesses.
 
 Persistent memory requires three chips: the `PersistentBoundaryChip`, the `MemoryMerkleChip`, and a chip to assist in
 hashing, which is by default the `Poseidon2Chip`. To simplify the discussion, define constants `C` equal to the number
-of field elements in a hash value, `L` where the addresses in an address space are $0..2^L$, `M` and `AS_OFFSET` where
-the address spaces are `AS_OFFSET..AS_OFFSET + 2^M`, and `H = M + L - log2(C)`. `H` is the height of the Merkle tree in
+of field elements in a hash value, `L` where the addresses in an address space are $0..2^L$, `M` where
+the address spaces are $1..1 + 2^M$, and `H = M + L - log2(C)`. `H` is the height of the Merkle tree in
 the sense that the leaves are at distance `H` from the root. We define the following interactions:
 
 On the <span style="color:green">MERKLE_BUS</span>, we have interactions of the form
@@ -309,8 +309,8 @@ The `PersistentBoundaryChip` has rows of the form
 `(expand_direction, address_space, leaf_label, values, hash, timestamp)`
 and has the following interactions on the <span style="color:green">MERKLE_BUS</span>:
 
-- Send <span style="color:green">**(1, 0, (as - AS_OFFSET) \* 2^L, node\*label, hash_initial)**</span>
-- Receive <span style="color:green">**(-1, 0, (as - AS_OFFSET) \* 2^L, node_label, hash_final)**</span>
+- Send <span style="color:green">**(1, 0, (as - 1) \* 2^L, node\*label, hash_initial)**</span>
+- Receive <span style="color:green">**(-1, 0, (as - 1) \* 2^L, node_label, hash_final)**</span>
 
 It receives `values` from the `MEMORY_BUS` and constrains `hash = compress(values, 0)` via the `POSEIDON2_DIRECT_BUS`.
 The aggregation program takes a variable number of consecutive segment proofs and consolidates them into a single proof

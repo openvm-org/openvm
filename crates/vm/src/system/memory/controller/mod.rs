@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use self::interface::MemoryInterface;
 use super::{
     online::INITIAL_TIMESTAMP,
-    memmap::AddressMap,
+    AddressMap,
     volatile::VolatileBoundaryChip,
     MemoryAddress,
 };
