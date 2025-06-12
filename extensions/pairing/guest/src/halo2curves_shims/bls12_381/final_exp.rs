@@ -68,7 +68,7 @@ impl FinalExp for Bls12_381 {
 
         root = f.exp_bytes(true, &exp.to_bytes_be());
         let three_be = three.to_bytes_be();
-        // NOTE[yj]: we can probably remove this first check as an optimization since we initizlize
+        // NOTE[yj]: we can probably remove this first check as an optimization since we initialize
         // order_3rd_power to 0
         if root == Fq12::ONE {
             order_3rd_power = 0;
