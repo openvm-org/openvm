@@ -11,8 +11,8 @@ use openvm_circuit::{
     },
     system::memory::{
         offline_checker::{
-            MemoryBridge, MemoryNativeWriteAuxRecord, MemoryReadAuxRecord,
-            MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols,
+            MemoryBridge, MemoryReadAuxRecord, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols,
+            MemoryWriteRecord,
         },
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
@@ -143,7 +143,7 @@ pub struct AluNativeAdapterRecord<F> {
 
     // Will set prev_timestamp to `u32::MAX` if the read is an immediate
     pub reads_aux: [MemoryReadAuxRecord; 2],
-    pub write_aux: MemoryNativeWriteAuxRecord<F, 1>,
+    pub write_aux: MemoryWriteRecord<F, 1>,
 }
 
 #[derive(derive_new::new)]

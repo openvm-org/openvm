@@ -11,8 +11,8 @@ use openvm_circuit::{
     },
     system::memory::{
         offline_checker::{
-            MemoryBridge, MemoryNativeWriteAuxRecord, MemoryReadAuxCols, MemoryReadAuxRecord,
-            MemoryWriteAuxCols,
+            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+            MemoryWriteRecord,
         },
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
@@ -134,7 +134,7 @@ pub struct NativeVectorizedAdapterRecord<F, const N: usize> {
     pub b_ptr: F,
     pub c_ptr: F,
     pub reads_aux: [MemoryReadAuxRecord; 2],
-    pub write_aux: MemoryNativeWriteAuxRecord<F, N>,
+    pub write_aux: MemoryWriteRecord<F, N>,
 }
 
 #[derive(derive_new::new)]

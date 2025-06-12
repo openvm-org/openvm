@@ -34,7 +34,7 @@ use crate::{
     },
     system::{
         memory::{
-            offline_checker::{MemoryNativeWriteAuxRecord, MemoryReadAuxRecord},
+            offline_checker::{MemoryReadAuxRecord, MemoryWriteRecord},
             online::GuestMemory,
         },
         native_adapter::util::{
@@ -173,7 +173,7 @@ pub struct NativeAdapterRecord<F, const R: usize, const W: usize> {
     // Will set prev_timestamp to `u32::MAX` if the read is from AS_IMMEDIATE
     pub reads_aux: [MemoryReadAuxRecord; R],
     pub write_ptr: [F; W],
-    pub writes_aux: [MemoryNativeWriteAuxRecord<F, 1>; W],
+    pub writes_aux: [MemoryWriteRecord<F, 1>; W],
 }
 
 /// R reads(R<=2), W writes(W<=1).
