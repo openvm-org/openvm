@@ -5,8 +5,7 @@ use std::{
 
 use eyre::Result;
 use openvm_build::{get_in_scope_packages, get_workspace_packages};
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
-use openvm_sdk::fs::read_agg_halo2_pk_from_file;
+
 use openvm_sdk::{
     config::{AppConfig, SdkVmConfig},
     fs::read_agg_stark_pk_from_file,
@@ -43,7 +42,7 @@ pub fn read_config_toml_or_default(config: impl AsRef<Path>) -> Result<AppConfig
 #[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 pub fn read_default_agg_pk() -> Result<AggProvingKey> {
     let agg_stark_pk = read_agg_stark_pk_from_file(default_agg_stark_pk_path())?;
-    let halo2_pk = read_agg_halo2_pk_from_file(default_agg_halo2_pk_path())?;
+    let halo2_pk = openvm_sdk::fs::read_agg_halo2_pk_from_file(default_agg_halo2_pk_path())?;
     Ok(AggProvingKey {
         agg_stark_pk,
         halo2_pk,
