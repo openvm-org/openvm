@@ -42,9 +42,8 @@ use crate::{
         memory::{
             merkle::MemoryMerklePvs,
             online::GuestMemory,
-            AddressMap,
             tree::public_values::{UserPublicValuesProof, UserPublicValuesProofError},
-            MemoryImage, CHUNK,
+            AddressMap, MemoryImage, CHUNK,
         },
         program::trace::VmCommittedExe,
     },
@@ -192,10 +191,7 @@ where
     ) -> Result<Vec<R>, E> {
         let mem_config = self.config.system().memory_config.clone();
         let exe = exe.into();
-        let memory = AddressMap::from_sparse(
-            mem_config.as_sizes.clone(),
-            exe.init_memory.clone(),
-        );
+        let memory = AddressMap::from_sparse(mem_config.as_sizes.clone(), exe.init_memory.clone());
 
         let pc = exe.pc_start;
         let mut state = VmState::new(0, pc, memory, input);

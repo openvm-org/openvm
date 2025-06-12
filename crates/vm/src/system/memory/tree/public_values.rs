@@ -6,9 +6,7 @@ use thiserror::Error;
 
 use crate::{
     arch::hasher::Hasher,
-    system::memory::{
-        dimensions::MemoryDimensions, tree::MemoryNode, Address, MemoryImage
-    },
+    system::memory::{dimensions::MemoryDimensions, tree::MemoryNode, Address, MemoryImage},
 };
 
 pub const PUBLIC_VALUES_AS: u32 = 3;
@@ -60,8 +58,7 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
             hasher,
             final_memory,
         );
-        let public_values =
-            extract_public_values(num_public_values, final_memory);
+        let public_values = extract_public_values(num_public_values, final_memory);
         let public_values_commit = hasher.merkle_root(&public_values);
         UserPublicValuesProof {
             proof,

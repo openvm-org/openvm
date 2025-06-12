@@ -8,8 +8,7 @@ use super::{FinalState, MemoryMerkleCols};
 use crate::{
     arch::hasher::HasherChip,
     system::memory::{
-        dimensions::MemoryDimensions, merkle::memory_to_vec_partition, AddressMap,
-        Equipartition,
+        dimensions::MemoryDimensions, merkle::memory_to_vec_partition, AddressMap, Equipartition,
     },
 };
 
