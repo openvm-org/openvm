@@ -14,6 +14,7 @@ use openvm_continuations::{
 };
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::ir::DIGEST_SIZE;
+#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 use openvm_native_recursion::halo2::{
     utils::Halo2ParamsReader, verifier::Halo2VerifierProvingKey, wrapper::Halo2WrapperProvingKey,
 };
@@ -68,6 +69,7 @@ pub struct AppVerifyingKey {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AggProvingKey {
     pub agg_stark_pk: AggStarkProvingKey,
+    #[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
     pub halo2_pk: Halo2ProvingKey,
 }
 
@@ -80,6 +82,7 @@ pub struct AggStarkProvingKey {
 }
 
 /// Attention: the size of this struct is VERY large, usually >10GB.
+#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Halo2ProvingKey {
     /// Static verifier to verify a stark proof of the root verifier.
@@ -410,6 +413,7 @@ impl AggProvingKey {
     /// Attention:
     /// - This function is very expensive. Usually it requires >64GB memory and takes >10 minutes.
     /// - Please make sure SRS(KZG parameters) is already downloaded.
+    #[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
     #[tracing::instrument(level = "info", fields(group = "agg_keygen"), skip_all)]
     pub fn keygen(
         config: AggConfig,

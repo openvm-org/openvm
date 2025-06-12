@@ -6,14 +6,21 @@ use std::{
 use eyre::{Report, Result};
 use openvm_circuit::arch::{instructions::exe::VmExe, ContinuationVmProof, VmConfig};
 use openvm_continuations::verifier::root::types::RootVmVerifierInput;
+#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 use openvm_native_recursion::halo2::wrapper::EvmVerifierByteCode;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
     codec::{Decode, Encode},
-    keygen::{AggStarkProvingKey, AppProvingKey, AppVerifyingKey, Halo2ProvingKey},
+    keygen::{AggStarkProvingKey, AppProvingKey, AppVerifyingKey},
+    F, SC,
+};
+
+#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
+use crate::{
+    keygen::Halo2ProvingKey,
     types::{EvmHalo2Verifier, EvmProof},
-    F, OPENVM_VERSION, SC,
+    OPENVM_VERSION,
 };
 
 pub const EVM_HALO2_VERIFIER_INTERFACE_NAME: &str = "IOpenVmHalo2Verifier.sol";
@@ -82,22 +89,27 @@ pub fn write_agg_stark_pk_to_file<P: AsRef<Path>>(pk: &AggStarkProvingKey, path:
     write_to_file_bitcode(&path, pk)
 }
 
+#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 pub fn read_agg_halo2_pk_from_file<P: AsRef<Path>>(path: P) -> Result<Halo2ProvingKey> {
     read_from_file_bitcode(&path)
 }
 
+#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 pub fn write_agg_halo2_pk_to_file<P: AsRef<Path>>(pk: &Halo2ProvingKey, path: P) -> Result<()> {
     write_to_file_bitcode(&path, pk)
 }
 
+#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 pub fn read_evm_proof_from_file<P: AsRef<Path>>(path: P) -> Result<EvmProof> {
     read_from_file_json(&path)
 }
 
+#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 pub fn write_evm_proof_to_file<P: AsRef<Path>>(proof: EvmProof, path: P) -> Result<()> {
     write_to_file_json(&path, proof)
 }
 
+#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 pub fn read_evm_halo2_verifier_from_folder<P: AsRef<Path>>(folder: P) -> Result<EvmHalo2Verifier> {
     let folder = folder
         .as_ref()
@@ -136,6 +148,7 @@ pub fn read_evm_halo2_verifier_from_folder<P: AsRef<Path>>(folder: P) -> Result<
 /// ```
 ///
 /// If the relevant directories do not exist, they will be created.
+#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 pub fn write_evm_halo2_verifier_to_folder<P: AsRef<Path>>(
     verifier: EvmHalo2Verifier,
     folder: P,

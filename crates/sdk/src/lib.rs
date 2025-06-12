@@ -31,6 +31,7 @@ pub use openvm_continuations::{
     static_verifier::{DefaultStaticVerifierPvHandler, StaticVerifierPvHandler},
     RootSC, C, F, SC,
 };
+#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 use openvm_native_recursion::halo2::utils::Halo2ParamsReader;
 use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::{
@@ -260,6 +261,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         Ok(())
     }
 
+    #[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
     pub fn agg_keygen(
         &self,
         config: AggConfig,
