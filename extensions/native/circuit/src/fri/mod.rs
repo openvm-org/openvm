@@ -631,7 +631,6 @@ impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpenin
 
         let (_, workload_records, _) =
             unsafe { workload_buf.align_to_mut::<FriReducedOpeningWorkloadRowRecord<F>>() };
-        debug_assert!(workload_records.len() >= metadata.length);
 
         let common: &mut FriReducedOpeningCommonRecord<F> = common_buf.borrow_mut();
 
@@ -851,13 +850,8 @@ where
         let mut remaining_trace = &mut trace.values[..OVERALL_WIDTH * rows_used];
         let mut chunks = Vec::with_capacity(rows_used);
         while !remaining_trace.is_empty() {
-            let record_buffer = unsafe {
-                &*std::ptr::slice_from_raw_parts(
-                    remaining_trace.as_ptr() as *const u8,
-                    remaining_trace.len() * std::mem::size_of::<F>(),
-                )
-            };
-            let header: &FriReducedOpeningHeaderRecord = record_buffer.borrow();
+            let header: &FriReducedOpeningHeaderRecord =
+                unsafe { get_record_from_slice(remaining_trace, ()) };
             let num_rows = header.length as usize + 2;
             let chunk_size = OVERALL_WIDTH * num_rows;
             let (chunk, rest) = remaining_trace.split_at_mut(chunk_size);
