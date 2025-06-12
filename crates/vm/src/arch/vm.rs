@@ -42,7 +42,7 @@ use crate::{
         memory::{
             merkle::MemoryMerklePvs,
             online::GuestMemory,
-            memmap::AddressMap,
+            AddressMap,
             tree::public_values::{UserPublicValuesProof, UserPublicValuesProofError},
             MemoryImage, CHUNK,
         },

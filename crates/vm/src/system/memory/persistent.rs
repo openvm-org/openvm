@@ -92,7 +92,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             // direction = -1 => is_final = 1
             local.expand_direction.into(),
             AB::Expr::ZERO,
-            local.address_space.into() - AB::F::ONE,
+            local.address_space - AB::F::ONE,
             local.leaf_label.into(),
         ];
         expand_fields.extend(local.hash.map(Into::into));

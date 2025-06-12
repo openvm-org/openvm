@@ -27,7 +27,7 @@ use crate::{
             columns::MemoryMerkleCols, tests::util::HashTestChip, MemoryDimensions,
             MemoryMerkleChip,
         },
-        memmap::AddressMap,
+        AddressMap,
         tree::MemoryNode,
         Equipartition, MemoryImage,
     },

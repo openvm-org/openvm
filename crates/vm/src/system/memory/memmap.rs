@@ -59,6 +59,8 @@ impl<T: Copy> Iterator for MmapWrapperIter<'_, T> {
 }
 
 impl MmapWrapper {
+    pub const CELL_STRIDE: usize = 1;
+
     pub fn new(len: usize) -> Self {
         Self {
             mem: MmapMut::map_anon(len).unwrap(),
@@ -128,7 +130,7 @@ impl MmapWrapper {
             self.read_range_generic(from, size_of::<BLOCK>(), result.as_mut_ptr() as *mut u8);
         }
         // SAFETY:
-        // - All elements have been initialized (zero-initialized if page didn't exist).
+        // - All elements have been initialized (zero-initialized if didn't exist).
         // - `result` is aligned to `BLOCK`
         unsafe { result.assume_init() }
     }
@@ -282,9 +284,11 @@ impl AddressMap {
     }
 
     pub fn from_mem_config(mem_config: &MemoryConfig) -> Self {
-        Self::new(
-            mem_config.as_sizes.clone(),
-        )
+        Self::new(mem_config.as_sizes.clone())
+    }
+
+    pub fn get_memory(&self) -> &Vec<MmapWrapper> {
+        &self.mem
     }
 
     pub fn items<F: PrimeField32>(&self) -> impl Iterator<Item = (Address, F)> + '_ {
@@ -332,21 +336,27 @@ impl AddressMap {
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
     pub unsafe fn get<T: Copy>(&self, (addr_space, ptr): Address) -> T {
-        debug_assert_eq!(
-            std::mem::size_of::<T>(),
-            self.cell_size[addr_space as usize]
-        );
-        self.mem[addr_space as usize].get(ptr as usize)
+        debug_assert_eq!(size_of::<T>(), self.cell_size[addr_space as usize]);
+        self.mem
+            .get_unchecked(addr_space as usize)
+            .get((ptr as usize) * size_of::<T>())
+    }
+
+    /// # Safety
+    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
+    /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    pub unsafe fn set<T: Copy>(&mut self, (addr_space, ptr): Address, data: T) {
+        debug_assert_eq!(size_of::<T>(), self.cell_size[addr_space as usize]);
+        self.mem
+            .get_unchecked_mut(addr_space as usize)
+            .set((ptr as usize) * size_of::<T>(), &data);
     }
 
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
     pub unsafe fn insert<T: Copy>(&mut self, (addr_space, ptr): Address, data: T) -> T {
-        debug_assert_eq!(
-            std::mem::size_of::<T>(),
-            self.cell_size[addr_space as usize]
-        );
+        debug_assert_eq!(size_of::<T>(), self.cell_size[addr_space as usize]);
         self.mem[addr_space as usize].replace(ptr as usize, &data)
     }
 

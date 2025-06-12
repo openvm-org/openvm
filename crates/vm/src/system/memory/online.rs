@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use super::{
     adapter::AccessAdapterInventory,
     offline_checker::MemoryBus,
-    AddressMap, Address, MemoryAddress, MmapWrapper,
+    Address, AddressMap, MemoryAddress, MemoryBackend,
 };
 use crate::{arch::MemoryConfig, system::memory::MemoryImage};
 
@@ -36,16 +36,7 @@ impl GuestMemory {
     where
         T: Copy + Debug,
     {
-        debug_assert_eq!(
-            size_of::<T>(),
-            self.memory.cell_size[addr_space as usize]
-        );
-        let read = self
-            .memory
-            .mem
-            .get_unchecked(addr_space as usize)
-            .get((ptr as usize) * size_of::<T>());
-        read
+        std::array::from_fn(|i| self.memory.get::<T>((addr_space, ptr + i as u32)))
     }
 
     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}`
@@ -60,15 +51,9 @@ impl GuestMemory {
     ) where
         T: Copy + Debug,
     {
-        debug_assert_eq!(
-            size_of::<T>(),
-            self.memory.cell_size[addr_space as usize],
-            "addr_space={addr_space}"
-        );
-        self.memory
-            .mem
-            .get_unchecked_mut(addr_space as usize)
-            .set((ptr as usize) * size_of::<T>(), values);
+        values.iter().enumerate().for_each(|(i, value)| {
+            self.memory.set::<T>((addr_space, ptr + i as u32), *value);
+        });
     }
 
     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}` and returns
@@ -186,7 +171,7 @@ pub struct TracingMemory<F> {
     pub data: GuestMemory,
     /// A map of `addr_space -> (ptr / min_block_size[addr_space] -> (timestamp: u32, block_size:
     /// u32))` for the timestamp and block size of the latest access.
-    pub(super) meta: Vec<MmapWrapper>,
+    pub(super) meta: Vec<MemoryBackend>,
     /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
     /// all memory accesses in `addr_space` must be aligned to this block size.
     pub min_block_size: Vec<u32>,
@@ -210,11 +195,11 @@ impl<F: PrimeField32> TracingMemory<F> {
         min_block_size[3] = 4;
         let meta = zip_eq(&min_block_size, &num_cells)
             .map(|(min_block_size, num_cells)| {
-                MmapWrapper::new(
+                MemoryBackend::new(
                     num_cells
                         .checked_mul(size_of::<AccessMetadata>())
                         .unwrap()
-                        .div_ceil(*min_block_size as usize),
+                        .div_ceil(MemoryBackend::CELL_STRIDE * *min_block_size as usize),
                 )
             })
             .collect();
@@ -235,10 +220,10 @@ impl<F: PrimeField32> TracingMemory<F> {
 
     /// Instantiates a new `Memory` data structure from an image.
     pub fn with_image(mut self, image: MemoryImage, _access_capacity: usize) -> Self {
-        for (i, (mem, cell_size)) in izip!(&image.mem, &image.cell_size).enumerate() {
+        for (i, (mem, cell_size)) in izip!(image.get_memory(), &image.cell_size).enumerate() {
             let num_cells = mem.len() / cell_size;
 
-            self.meta[i] = MmapWrapper::new(
+            self.meta[i] = MemoryBackend::new(
                 num_cells
                     .checked_mul(size_of::<AccessMetadata>())
                     .unwrap()
