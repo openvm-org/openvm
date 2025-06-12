@@ -267,7 +267,7 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for KeccakVmStep {
                             );
 
                             // Need to get rid of the accidental garbage data that might overflow the
-                            // F's prime field. Unfortunatley, there is no good way around this
+                            // F's prime field. Unfortunately, there is no good way around this
                             unsafe {
                                 std::ptr::write_bytes(
                                     row.as_mut_ptr().add(NUM_KECCAK_PERM_COLS) as *mut u8,
