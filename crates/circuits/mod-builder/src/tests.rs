@@ -12,9 +12,8 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    test_utils::*,
-    utils::{biguint_to_limbs_vec, limbs_to_biguint},
-    ExprBuilder, FieldExpr, FieldExprCols, FieldExpressionCoreRecord, FieldVariable, SymbolicExpr,
+    test_utils::*, utils::biguint_to_limbs_vec, ExprBuilder, FieldExpr, FieldExprCols,
+    FieldExpressionCoreRecord, FieldVariable, SymbolicExpr,
 };
 
 const LIMB_BITS: usize = 8;
@@ -69,24 +68,14 @@ fn generate_recorded_trace(
     );
     let data: Vec<u8> = inputs
         .iter()
-        .flat_map(|x| {
-            biguint_to_limbs_vec(
-                x.clone(),
-                expr.canonical_limb_bits(),
-                expr.canonical_num_limbs(),
-            )
-        })
-        .map(|limb| limb as u8)
+        .flat_map(|x| biguint_to_limbs_vec(x, expr.canonical_num_limbs() * 4))
         .collect();
     record.fill_from_execution_data(0, &data);
 
     let reconstructed_inputs: Vec<BigUint> = record
         .input_limbs
         .chunks(expr.canonical_num_limbs())
-        .map(|chunk| {
-            let u32s = chunk.iter().map(|&b| b as u32).collect::<Vec<u32>>();
-            limbs_to_biguint(&u32s, expr.canonical_limb_bits())
-        })
+        .map(|chunk| BigUint::from_slice(&chunk))
         .collect();
 
     let mut row = BabyBear::zero_vec(width);
@@ -449,14 +438,7 @@ fn test_recorded_execution_records() {
     );
     let data: Vec<u8> = inputs
         .iter()
-        .flat_map(|x| {
-            biguint_to_limbs_vec(
-                x.clone(),
-                expr.canonical_limb_bits(),
-                expr.canonical_num_limbs(),
-            )
-        })
-        .map(|limb| limb as u8)
+        .flat_map(|x| biguint_to_limbs_vec(x, expr.canonical_num_limbs() * 4))
         .collect();
     record.fill_from_execution_data(0, &data);
     assert_eq!(*record.opcode, 0);
@@ -465,10 +447,7 @@ fn test_recorded_execution_records() {
     let reconstructed_inputs: Vec<BigUint> = record
         .input_limbs
         .chunks(expr.canonical_num_limbs())
-        .map(|chunk| {
-            let u32s = chunk.iter().map(|&b| b as u32).collect::<Vec<u32>>();
-            limbs_to_biguint(&u32s, expr.canonical_limb_bits())
-        })
+        .map(|chunk| BigUint::from_slice(&chunk))
         .collect();
     assert_eq!(reconstructed_inputs.len(), inputs.len());
     for (original, reconstructed) in inputs.iter().zip(reconstructed_inputs.iter()) {
@@ -545,14 +524,7 @@ fn test_record_arena_allocation_patterns() {
     );
     let data: Vec<u8> = inputs
         .iter()
-        .flat_map(|x| {
-            biguint_to_limbs_vec(
-                x.clone(),
-                expr.canonical_limb_bits(),
-                expr.canonical_num_limbs(),
-            )
-        })
-        .map(|limb| limb as u8)
+        .flat_map(|x| biguint_to_limbs_vec(x, expr.canonical_num_limbs() * 4))
         .collect();
     record.fill_from_execution_data(0, &data);
     assert_eq!(*record.opcode, 0);
@@ -568,10 +540,7 @@ fn test_record_arena_allocation_patterns() {
     let reconstructed_inputs: Vec<BigUint> = record
         .input_limbs
         .chunks(expr.canonical_num_limbs())
-        .map(|chunk| {
-            let u32s = chunk.iter().map(|&b| b as u32).collect::<Vec<u32>>();
-            limbs_to_biguint(&u32s, expr.canonical_limb_bits())
-        })
+        .map(|chunk| BigUint::from_slice(&chunk))
         .collect();
     assert_eq!(reconstructed_inputs.len(), inputs.len());
     for (original, reconstructed) in inputs.iter().zip(reconstructed_inputs.iter()) {
@@ -610,24 +579,14 @@ fn test_tracestep_tracefiller_roundtrip() {
     );
     let data: Vec<u8> = inputs
         .iter()
-        .flat_map(|x| {
-            biguint_to_limbs_vec(
-                x.clone(),
-                expr.canonical_limb_bits(),
-                expr.canonical_num_limbs(),
-            )
-        })
-        .map(|limb| limb as u8)
+        .flat_map(|x| biguint_to_limbs_vec(x, expr.canonical_num_limbs() * 4))
         .collect();
     record.fill_from_execution_data(0, &data);
 
     let reconstructed_inputs: Vec<BigUint> = record
         .input_limbs
         .chunks(expr.canonical_num_limbs())
-        .map(|chunk| {
-            let u32s = chunk.iter().map(|&b| b as u32).collect::<Vec<u32>>();
-            limbs_to_biguint(&u32s, expr.canonical_limb_bits())
-        })
+        .map(|chunk| BigUint::from_slice(&chunk))
         .collect();
     let vars_reconstructed = expr.execute(reconstructed_inputs, vec![]);
 

@@ -1,3 +1,5 @@
+use std::ptr::slice_from_raw_parts;
+
 use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::Zero;
@@ -28,7 +30,7 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{
     builder::{FieldExpr, FieldExprCols},
-    utils::{biguint_to_limbs_vec, limbs_to_biguint},
+    utils::biguint_to_limbs_vec,
 };
 
 #[derive(Clone)]
@@ -178,7 +180,7 @@ pub struct FieldExpressionMetadata {
 
 pub struct FieldExpressionCoreRecord<'a> {
     pub opcode: &'a mut u8,
-    pub input_limbs: &'a mut [u8],
+    pub input_limbs: &'a mut [u32],
 }
 
 impl<'a> CustomBorrow<'a, FieldExpressionCoreRecord<'a>, FieldExpressionMetadata> for [u8] {
@@ -186,11 +188,12 @@ impl<'a> CustomBorrow<'a, FieldExpressionCoreRecord<'a>, FieldExpressionMetadata
         &'a mut self,
         metadata: FieldExpressionMetadata,
     ) -> FieldExpressionCoreRecord<'a> {
-        let (opcode_buf, input_limbs_buf) = unsafe { self.split_at_mut_unchecked(1) };
+        let (opcode_buf, rest) = unsafe { self.split_at_mut_unchecked(1) };
 
+        let (_, input_limbs_buff, _) = unsafe { rest.align_to_mut::<u32>() };
         FieldExpressionCoreRecord {
             opcode: &mut opcode_buf[0],
-            input_limbs: &mut input_limbs_buf[..metadata.total_input_limbs],
+            input_limbs: &mut input_limbs_buff[..metadata.total_input_limbs],
         }
     }
 }
@@ -214,7 +217,12 @@ impl<'a> FieldExpressionCoreRecord<'a> {
         // Rust will assert that that length of `data` and `self.input_limbs` are the same
         // That is `data.len() == num_inputs * limbs_per_input`
         *self.opcode = opcode;
-        self.input_limbs.copy_from_slice(data);
+
+        let input = self.input_limbs as *mut _ as *mut u8;
+        unsafe {
+            // Copying bytes to u32s, assuming everything is in little endian
+            std::ptr::copy_nonoverlapping(data.as_ptr(), input, data.len());
+        }
     }
 }
 
@@ -325,7 +333,8 @@ where
             &data.0,
         );
 
-        let (writes, _, _) = run_field_expression(self, &data.0, *core_record.opcode as usize);
+        let (writes, _, _) =
+            run_field_expression(self, &core_record.input_limbs, *core_record.opcode as usize);
 
         self.adapter.write(
             state.memory,
@@ -402,14 +411,32 @@ where
     where
         Ctx: E1E2ExecutionCtx,
     {
-        let data: DynArray<_> = self.adapter.read(state, instruction).into();
+        let data: &[u8] = &self.adapter.read(state, instruction).into().0;
+        let data_ptr = data.as_ptr();
+        let writes = if data_ptr as usize % align_of::<u32>() != 0 {
+            // Can't safely transmute bytes to u32s, because `data` is not guaranteed to be aligned
+            let data_u32s = data
+                .chunks(4)
+                .map(|chunk| u32::from_le_bytes(chunk.try_into().unwrap()))
+                .collect_vec();
+            run_field_expression(
+                self,
+                &data_u32s,
+                instruction.opcode.local_opcode_idx(self.offset) as usize,
+            )
+            .0
+        } else {
+            let data_u32s = unsafe {
+                &*slice_from_raw_parts(data_ptr as *const u32, self.expr.canonical_num_limbs())
+            };
+            run_field_expression(
+                self,
+                data_u32s,
+                instruction.opcode.local_opcode_idx(self.offset) as usize,
+            )
+            .0
+        };
 
-        let writes = run_field_expression(
-            self,
-            &data.0,
-            instruction.opcode.local_opcode_idx(self.offset) as usize,
-        )
-        .0;
         self.adapter.write(state, instruction, &writes.into());
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         Ok(())
@@ -430,14 +457,10 @@ where
 
 fn run_field_expression<A>(
     step: &FieldExpressionStep<A>,
-    data: &[u8],
+    data: &[u32],
     local_opcode_idx: usize,
 ) -> (DynArray<u8>, Vec<BigUint>, Vec<bool>) {
     let field_element_limbs = step.expr.canonical_num_limbs();
-    let limb_bits = step.expr.canonical_limb_bits();
-
-    let data = data.iter().map(|&x| x as u32).collect_vec();
-
     assert_eq!(data.len(), step.num_inputs() * field_element_limbs);
 
     let mut inputs = Vec::with_capacity(step.num_inputs());
@@ -445,7 +468,7 @@ fn run_field_expression<A>(
         let start = i * field_element_limbs;
         let end = start + field_element_limbs;
         let limb_slice = &data[start..end];
-        let input = limbs_to_biguint(limb_slice, limb_bits);
+        let input = BigUint::from_slice(limb_slice);
         inputs.push(input);
     }
 
@@ -474,10 +497,9 @@ fn run_field_expression<A>(
         .collect();
     let writes: DynArray<_> = outputs
         .iter()
-        .map(|x| biguint_to_limbs_vec(x.clone(), limb_bits, field_element_limbs))
+        .map(|x| biguint_to_limbs_vec(x, field_element_limbs * 4))
         .concat()
         .into_iter()
-        .map(|x| x as u8)
         .collect::<Vec<_>>()
         .into();
 
