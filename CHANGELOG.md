@@ -15,17 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **New `commit` command**: Added `cargo openvm commit` command for viewing the Bn254 commit of an OpenVM executable. This command generates and displays commitment information for built executables.
 
-- **Setup command renamed**: The `EvmProvingSetupCmd` has been renamed to `SetupCmd`. Scripts and automation that reference the old command structure will need to be updated.
+- **Build command output changes**: The `cargo openvm build` command now outputs `AppExecutionCommit` in JSON format and stores ELF and vmexe files in updated locations. The old output (`exe_commit.bytes`) was incorrect.
 
-- **Hex output format**: All CLI commit outputs are now consistently formatted in hexadecimal. Previously, some outputs used different formats, which could cause parsing issues in downstream tools.
+- **Setup command enhancements**: The `cargo openvm setup` command now supports skipping halo2 proving keys and outputs halo2 PK and STARK PK as separate files.
 
-- **Prove command improvements**: The `prove` command now uses the binary name for default output file paths instead of generic names. This provides better organization when working with multiple executables.
+- **Hex output format**: The `cargo openvm commit` and `cargo openvm prove stark` commands now consistently output commit values in hexadecimal format. Previously, some outputs used different formats, which could cause parsing issues in downstream tools.
+
+- **Prove command output paths**: The `cargo openvm prove` command now outputs proofs to `${bin_name}.app.proof` instead of `app.proof`, where `bin_name` is the file stem of the executable. For example, if your binary is `my_program`, the proof will be saved as `my_program.app.proof` instead of the generic `app.proof`. This applies to both `stark` and `evm` proof types.
 
 #### SDK
 
-- **Import path change**: The import path for `DEFAULT_MAX_NUM_PUBLIC_VALUES` has changed from `openvm_circuit::arch::instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES` to `openvm_circuit::arch::DEFAULT_MAX_NUM_PUBLIC_VALUES`. Code using the old import path will fail to compile.
-
-- **Configuration structure updates**: The `AggregationTreeConfig` struct now includes additional CLI help text and argument groupings with `help_heading = "Aggregation Tree Options"`. While this doesn't break functionality, it may affect tools that parse CLI help output.
+- No breaking changes to the SDK public API in this release.
 
 #### Library Interfaces
 
