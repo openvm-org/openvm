@@ -3,12 +3,15 @@ use std::sync::Arc;
 use cuda_kernels::dummy::{
     encoder,
     fibair::fibair_tracegen,
-    is_zero,
+    is_equal, is_zero,
     less_than::{assert_less_than_tracegen, less_than_array_tracegen, less_than_tracegen},
 };
 use cuda_utils::copy::MemCopyD2H;
 use cuda_utils::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
-use openvm_circuit_primitives::{encoder::Encoder, is_zero::IsZeroSubAir, TraceSubRowGenerator};
+use openvm_circuit_primitives::{
+    encoder::Encoder, is_equal::IsEqSubAir, is_equal_array::IsEqArraySubAir, is_zero::IsZeroSubAir,
+    TraceSubRowGenerator,
+};
 use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
 use openvm_stark_sdk::{dummy_airs::fib_air::chip::FibonacciChip, utils::create_seeded_rng};
 use p3_baby_bear::BabyBear;
@@ -194,7 +197,7 @@ fn test_is_zero_against_cpu_full() {
     let mut rng = create_seeded_rng();
     for log_height in 1..=16 {
         let n = 1 << log_height;
-        let vec_x = (0..n)
+        let vec_x: Vec<F> = (0..n)
             .map(|_| {
                 if rng.gen_bool(0.5) {
                     0 // 50% chance to be zero
@@ -202,7 +205,8 @@ fn test_is_zero_against_cpu_full() {
                     rng.gen_range(0..F::ORDER_U32) // 50% chance to be random
                 }
             })
-            .collect::<Vec<_>>();
+            .map(F::from_canonical_u32)
+            .collect();
 
         let input_buffer = vec_x.as_slice().to_device().unwrap();
         let output = DeviceMatrix::<F>::with_capacity(n, 2);
@@ -210,15 +214,156 @@ fn test_is_zero_against_cpu_full() {
             is_zero::tracegen(output.buffer(), &input_buffer).unwrap();
         };
 
-        let results = output.to_host().unwrap();
-        for i in 0..n {
-            let cur_x = BabyBear::from_canonical_u32(vec_x[i]);
-            let mut cur_inv = BabyBear::ZERO;
-            let mut cur_out = BabyBear::ONE;
-            IsZeroSubAir.generate_subrow(cur_x, (&mut cur_inv, &mut cur_out));
-            assert_eq!(results[i], cur_inv);
-            assert_eq!(results[n + i], cur_out);
+        let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
+            vec_x
+                .iter()
+                .flat_map(|x| {
+                    let cur_x = *x;
+                    let mut cur_inv = F::ZERO;
+                    let mut cur_out = F::ONE;
+                    IsZeroSubAir.generate_subrow(cur_x, (&mut cur_inv, &mut cur_out));
+                    [cur_inv, cur_out]
+                })
+                .collect::<Vec<_>>(),
+            2,
+        ));
+
+        assert_eq_cpu_and_gpu_matrix(cpu_matrix, &output);
+    }
+}
+
+#[test]
+fn test_is_equal_against_cpu_full() {
+    let mut rng = create_seeded_rng();
+
+    for log_height in 1..=16 {
+        let n = 1 << log_height;
+
+        let vec_x: Vec<F> = (0..n)
+            .map(|_| F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32)))
+            .collect();
+
+        let vec_y: Vec<F> = (0..n)
+            .map(|i| {
+                if rng.gen_bool(0.5) {
+                    vec_x[i] // 50 % chance: equal to x
+                } else {
+                    F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32)) // 50% chance to be random
+                }
+            })
+            .collect();
+
+        let inputs_x = vec_x.as_slice().to_device().unwrap();
+        let inputs_y = vec_y.as_slice().to_device().unwrap();
+
+        let gpu_matrix = DeviceMatrix::<F>::with_capacity(n, 2);
+        unsafe {
+            is_equal::tracegen(gpu_matrix.buffer(), &inputs_x, &inputs_y);
         }
+
+        let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
+            (0..n)
+                .flat_map(|i| {
+                    let cur_x = vec_x[i];
+                    let cur_y = vec_y[i];
+
+                    let mut cur_inv = F::ONE;
+                    let mut cur_out = F::ONE;
+                    IsEqSubAir.generate_subrow((cur_x, cur_y), (&mut cur_inv, &mut cur_out));
+
+                    [cur_inv, cur_out]
+                })
+                .collect::<Vec<_>>(),
+            2,
+        ));
+
+        assert_eq_cpu_and_gpu_matrix(cpu_matrix, &gpu_matrix);
+    }
+}
+
+#[test]
+fn test_simple_is_equal_array_tracegen() {
+    const ARRAY_LEN: usize = 4;
+    let n = 4;
+    let trace = DeviceMatrix::<F>::with_capacity(n, ARRAY_LEN + 1);
+
+    let vec_x: Vec<F> = vec![1u32, 2, 3, 4, 5, 6, 7, 8, 9u32, 10, 11, 12, 13, 14, 15, 16]
+        .into_iter()
+        .map(F::from_canonical_u32)
+        .collect();
+
+    let vec_y: Vec<F> = vec![
+        1u32, 3, 3, 4, 5, 6, 10, 8, 9u32, 10, 11, 12, 13, 200, 15, 16,
+    ]
+    .into_iter()
+    .map(F::from_canonical_u32)
+    .collect();
+
+    let inputs_x = vec_x.as_slice().to_device().unwrap();
+    let inputs_y = vec_y.as_slice().to_device().unwrap();
+
+    unsafe { is_equal::tracegen_array(trace.buffer(), &inputs_x, &inputs_y, ARRAY_LEN) };
+
+    let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
+        (0..n)
+            .flat_map(|i| {
+                let cur_x: [F; ARRAY_LEN] = std::array::from_fn(|k| vec_x[i + k * n]);
+                let cur_y: [F; ARRAY_LEN] = std::array::from_fn(|k| vec_y[i + k * n]);
+
+                let mut cur_inv: [F; ARRAY_LEN] = [F::ONE; ARRAY_LEN];
+                let mut cur_out = F::ONE;
+                IsEqArraySubAir.generate_subrow((&cur_x, &cur_y), (&mut cur_inv, &mut cur_out));
+
+                cur_inv.into_iter().chain(std::iter::once(cur_out))
+            })
+            .collect::<Vec<_>>(),
+        ARRAY_LEN + 1,
+    ));
+
+    assert_eq_cpu_and_gpu_matrix(cpu_matrix, &trace);
+}
+
+#[test]
+fn test_random_is_equal_array_tracegen() {
+    let mut rng = create_seeded_rng();
+    const ARRAY_LEN: usize = 64;
+
+    for log_height in 1..=16 {
+        let n = 1 << log_height;
+
+        let vec_x: Vec<F> = (0..n * ARRAY_LEN)
+            .map(|_| F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32)))
+            .collect();
+
+        let vec_y: Vec<F> = (0..n * ARRAY_LEN)
+            .map(|_| F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32)))
+            .collect();
+
+        let inputs_x = vec_x.as_slice().to_device().unwrap();
+        let inputs_y = vec_y.as_slice().to_device().unwrap();
+
+        let gpu_matrix = DeviceMatrix::<F>::with_capacity(n, ARRAY_LEN + 1);
+        unsafe {
+            is_equal::tracegen_array(gpu_matrix.buffer(), &inputs_x, &inputs_y, ARRAY_LEN);
+        }
+
+        let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
+            (0..n)
+                .flat_map(|i| {
+                    let cur_x: [F; ARRAY_LEN] = std::array::from_fn(|k| vec_x[i + k * n]);
+                    let cur_y: [F; ARRAY_LEN] = std::array::from_fn(|k| vec_y[i + k * n]);
+
+                    let mut cur_inv: [F; ARRAY_LEN] = [F::ONE; ARRAY_LEN];
+                    let mut cur_out = F::ONE;
+                    IsEqArraySubAir.generate_subrow((&cur_x, &cur_y), (&mut cur_inv, &mut cur_out));
+
+                    cur_inv.into_iter().chain(std::iter::once(cur_out))
+                })
+                .collect::<Vec<_>>(),
+            ARRAY_LEN + 1,
+        ));
+
+        assert_eq_cpu_and_gpu_matrix(cpu_matrix, &gpu_matrix);
     }
 }
 
