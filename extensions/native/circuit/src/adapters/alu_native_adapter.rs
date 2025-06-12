@@ -246,6 +246,7 @@ impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for AluNativeAdapterStep {
                 *as_col = F::ZERO;
             } else {
                 read_cols.is_zero_aux = native_as.inverse();
+                read_cols.is_immediate = F::ZERO;
                 mem_helper.fill(
                     read_record.prev_timestamp,
                     record.from_timestamp + i as u32,

@@ -2,8 +2,6 @@ mod bridge;
 mod bus;
 mod columns;
 
-use std::fmt::Debug;
-
 pub use bridge::*;
 pub use bus::*;
 pub use columns::*;
