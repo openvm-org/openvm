@@ -334,12 +334,18 @@ impl DenseRecordArena {
         self.records_buffer = cursor;
     }
 
-    /// Allocates a single record of the given type and returns a mutable reference to it.
-    pub fn alloc_one<'a, T>(&mut self) -> &'a mut T {
-        let begin = self.records_buffer.position();
+    /// Returns the current size of the allocated buffer so far.
+    pub fn current_size(&self) -> usize {
+        self.records_buffer.position() as usize
+    }
+
+    /// Transmutes a single record of the given type from some offset and returns a mutable
+    /// reference to it.
+    // TODO(AG): remove this, replace with the record-based read we have in the near future
+    pub fn transmute_from<'a, T>(&mut self, offset_bytes: usize) -> &'a mut T {
+        let begin = self.records_buffer.position() + offset_bytes as u64;
         let width = size_of::<T>();
         debug_assert!(begin as usize + width <= self.records_buffer.get_ref().len());
-        self.records_buffer.set_position(begin + width as u64);
         unsafe {
             &mut *(self
                 .records_buffer
@@ -349,10 +355,9 @@ impl DenseRecordArena {
         }
     }
 
-    /// Allocates a slice of records of the given type and returns a mutable reference to it.
-    pub fn alloc_many<'a, T>(&mut self, count: usize) -> &'a mut [T] {
+    pub fn alloc_bytes<'a>(&mut self, count: usize) -> &'a mut [u8] {
         let begin = self.records_buffer.position();
-        let width = size_of::<T>() * count;
+        let width = count;
         debug_assert!(begin as usize + width <= self.records_buffer.get_ref().len());
         self.records_buffer.set_position(begin + width as u64);
         unsafe {
@@ -360,14 +365,10 @@ impl DenseRecordArena {
                 self.records_buffer
                     .get_mut()
                     .as_mut_ptr()
-                    .add(begin as usize) as *mut T,
+                    .add(begin as usize),
                 count,
             )
         }
-    }
-
-    pub fn alloc_bytes<'a>(&mut self, count: usize) -> &'a mut [u8] {
-        self.alloc_many::<u8>(count)
     }
 
     pub fn allocated(&self) -> &[u8] {
