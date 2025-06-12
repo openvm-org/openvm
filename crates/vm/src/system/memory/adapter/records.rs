@@ -33,7 +33,8 @@ impl AccessAdapterRecordArena {
         let begin = self.cursor.position();
         let width = size_of::<T>();
         debug_assert!(begin as usize + width <= self.cursor.get_ref().len());
-        // It is important here not to resize the vector, as the reference can be invalidated in that case.
+        // It is important here not to resize the vector, as the reference can be invalidated in
+        // that case.
         self.cursor.set_position(begin + width as u64);
         unsafe { &mut *(self.cursor.get_mut().as_mut_ptr().add(begin as usize) as *mut T) }
     }
