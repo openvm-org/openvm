@@ -256,7 +256,7 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Sha256VmStep {
                     // Fill in the invalid rows
                     slice.par_chunks_mut(SHA256VM_WIDTH).for_each(|row| {
                         // Need to get rid of the accidental garbage data that might overflow the
-                        // F's prime field. Unfortunatley, there is no good way around this
+                        // F's prime field. Unfortunately, there is no good way around this
                         unsafe {
                             std::ptr::write_bytes(
                                 row.as_mut_ptr() as *mut u8,
@@ -311,7 +311,7 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Sha256VmStep {
                     .enumerate()
                     .for_each(|(block_idx, block_slice)| {
                         // Need to get rid of the accidental garbage data that might overflow the
-                        // F's prime field. Unfortunatley, there is no good way around this
+                        // F's prime field. Unfortunately, there is no good way around this
                         unsafe {
                             std::ptr::write_bytes(
                                 block_slice.as_mut_ptr() as *mut u8,
@@ -384,8 +384,8 @@ impl Sha256VmStep {
             (record.len - read_cells) as usize
         };
 
-        // -1 means that padding occured before the start of the block
-        // 18 means that no padding occured on this block
+        // -1 means that padding occurred before the start of the block
+        // 18 means that no padding occurred on this block
         let first_padding_row = if record.len < read_cells {
             -1
         } else if message_left < SHA256_BLOCK_CELLS {
