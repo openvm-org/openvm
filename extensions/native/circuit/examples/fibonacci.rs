@@ -1,4 +1,4 @@
-use openvm_native_circuit::execute_program;
+// use openvm_native_circuit::execute_program;
 use openvm_native_compiler::{
     asm::AsmBuilder,
     ir::{Felt, Var},
@@ -48,5 +48,5 @@ fn main() {
 
     let program = builder.compile_isa();
     println!("{}", program);
-    execute_program(program, vec![]);
+    // execute_program(program, vec![]);
 }

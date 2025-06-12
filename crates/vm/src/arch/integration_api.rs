@@ -261,9 +261,18 @@ pub type EmptyLayout<A> = AdapterCoreLayout<A, ()>;
 /// Minimal layout information that [MatrixRecordArena] requires for record allocation
 /// in scenarios involving chips that:
 /// - can have multiple rows per instruction
-pub struct MultiRowLayout<I> {
+pub struct MultiRowLayout<I = ()> {
     pub num_rows: u32,
     pub metadata: I,
+}
+
+impl<I: Default> Default for MultiRowLayout<I> {
+    fn default() -> Self {
+        Self {
+            num_rows: 1,
+            metadata: I::default(),
+        }
+    }
 }
 
 // TEMP[jpw]: buffer should be inside CTX

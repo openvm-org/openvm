@@ -11,8 +11,8 @@ use openvm_circuit::{
     },
     system::memory::{
         offline_checker::{
-            MemoryBridge, MemoryNativeWriteAuxRecord, MemoryReadAuxRecord,
-            MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols,
+            MemoryBridge, MemoryReadAuxRecord, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols,
+            MemoryWriteRecord,
         },
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
@@ -143,7 +143,7 @@ pub struct AluNativeAdapterRecord<F> {
 
     // Will set prev_timestamp to `u32::MAX` if the read is an immediate
     pub reads_aux: [MemoryReadAuxRecord; 2],
-    pub write_aux: MemoryNativeWriteAuxRecord<F, 1>,
+    pub write_aux: MemoryWriteRecord<F, 1>,
 }
 
 #[derive(derive_new::new)]
@@ -242,10 +242,11 @@ impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for AluNativeAdapterStep {
             if read_record.prev_timestamp == u32::MAX {
                 read_cols.is_zero_aux = F::ZERO;
                 read_cols.is_immediate = F::ONE;
-                mem_helper.fill_zero(read_cols.as_mut());
+                mem_helper.fill(0, record.from_timestamp + i as u32, read_cols.as_mut());
                 *as_col = F::ZERO;
             } else {
                 read_cols.is_zero_aux = native_as.inverse();
+                read_cols.is_immediate = F::ZERO;
                 mem_helper.fill(
                     read_record.prev_timestamp,
                     record.from_timestamp + i as u32,

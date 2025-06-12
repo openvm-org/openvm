@@ -132,7 +132,7 @@ fn run_negative_branch_eq_test(
     b: F,
     prank_cmp_result: Option<bool>,
     prank_diff_inv_marker: Option<F>,
-    interaction_error: bool,
+    error: VerificationError,
 ) {
     let imm = 16i32;
     let mut rng = create_seeded_rng();
@@ -168,11 +168,6 @@ fn run_negative_branch_eq_test(
         .build()
         .load_and_prank_trace(chip, modify_trace)
         .finalize();
-    let error = if interaction_error {
-        VerificationError::ChallengePhaseError
-    } else {
-        VerificationError::OodEvaluationMismatch
-    };
     tester.simple_test_with_expected_error(error);
 }
 
@@ -184,7 +179,7 @@ fn rv32_beq_wrong_cmp_negative_test() {
         F::from_canonical_u32(7 << 24),
         Some(true),
         None,
-        false,
+        VerificationError::OodEvaluationMismatch,
     );
 
     run_negative_branch_eq_test(
@@ -193,7 +188,7 @@ fn rv32_beq_wrong_cmp_negative_test() {
         F::from_canonical_u32(7 << 16),
         Some(false),
         None,
-        false,
+        VerificationError::OodEvaluationMismatch,
     );
 }
 
@@ -205,7 +200,7 @@ fn rv32_beq_zero_inv_marker_negative_test() {
         F::from_canonical_u32(7 << 24),
         Some(true),
         Some(F::ZERO),
-        false,
+        VerificationError::OodEvaluationMismatch,
     );
 }
 
@@ -217,7 +212,7 @@ fn rv32_beq_invalid_inv_marker_negative_test() {
         F::from_canonical_u32(7 << 24),
         Some(false),
         Some(F::from_canonical_u32(1 << 16)),
-        false,
+        VerificationError::OodEvaluationMismatch,
     );
 }
 
@@ -229,7 +224,7 @@ fn rv32_bne_wrong_cmp_negative_test() {
         F::from_canonical_u32(7 << 24),
         Some(false),
         None,
-        false,
+        VerificationError::OodEvaluationMismatch,
     );
 
     run_negative_branch_eq_test(
@@ -238,7 +233,7 @@ fn rv32_bne_wrong_cmp_negative_test() {
         F::from_canonical_u32(7 << 16),
         Some(true),
         None,
-        false,
+        VerificationError::OodEvaluationMismatch,
     );
 }
 
@@ -250,7 +245,7 @@ fn rv32_bne_zero_inv_marker_negative_test() {
         F::from_canonical_u32(7 << 24),
         Some(false),
         Some(F::ZERO),
-        false,
+        VerificationError::OodEvaluationMismatch,
     );
 }
 
@@ -262,7 +257,7 @@ fn rv32_bne_invalid_inv_marker_negative_test() {
         F::from_canonical_u32(7 << 24),
         Some(true),
         Some(F::from_canonical_u32(1 << 16)),
-        false,
+        VerificationError::OodEvaluationMismatch,
     );
 }
 
