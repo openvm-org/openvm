@@ -66,10 +66,10 @@ pub struct AppVerifyingKey {
     pub memory_dimensions: MemoryDimensions,
 }
 
+#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AggProvingKey {
     pub agg_stark_pk: AggStarkProvingKey,
-    #[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
     pub halo2_pk: Halo2ProvingKey,
 }
 
@@ -413,7 +413,6 @@ impl AggProvingKey {
     /// Attention:
     /// - This function is very expensive. Usually it requires >64GB memory and takes >10 minutes.
     /// - Please make sure SRS(KZG parameters) is already downloaded.
-    #[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
     #[tracing::instrument(level = "info", fields(group = "agg_keygen"), skip_all)]
     pub fn keygen(
         config: AggConfig,
