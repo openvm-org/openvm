@@ -1,27 +1,21 @@
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 use openvm_continuations::{
     static_verifier::{StaticVerifierConfig, StaticVerifierPvHandler},
     verifier::root::types::RootVmVerifierInput,
 };
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 use openvm_native_compiler::prelude::*;
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 use openvm_native_recursion::{
     halo2::{verifier::Halo2VerifierProvingKey, Halo2Params, Halo2Prover},
     hints::Hintable,
     witness::Witnessable,
 };
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 use openvm_stark_sdk::openvm_stark_backend::{p3_field::FieldAlgebra, proof::Proof};
 
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 use crate::{
     keygen::RootVerifierProvingKey,
     prover::{vm::SingleSegmentVmProver, RootVerifierLocalProver},
     RootSC, F, SC,
 };
 
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 impl RootVerifierProvingKey {
     /// Keygen the static verifier for this root verifier.
     pub fn keygen_static_verifier(
@@ -49,7 +43,6 @@ impl RootVerifierProvingKey {
         }
     }
 
-    #[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
     pub fn generate_dummy_root_proof(&self, dummy_internal_proof: Proof<SC>) -> Proof<RootSC> {
         let prover = RootVerifierLocalProver::new(self.clone());
         // 2 * DIGEST_SIZE for exe_commit and leaf_commit

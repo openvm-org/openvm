@@ -50,6 +50,7 @@ use crate::{
 pub mod asm;
 pub(crate) mod dummy;
 pub mod perm;
+#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 pub mod static_verifier;
 
 #[derive(Clone, Serialize, Deserialize)]
