@@ -15,7 +15,6 @@ use crate::{
     keygen::{AggStarkProvingKey, AppProvingKey, AppVerifyingKey},
     F, SC,
 };
-
 #[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
 use crate::{
     keygen::Halo2ProvingKey,

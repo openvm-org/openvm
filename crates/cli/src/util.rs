@@ -5,14 +5,13 @@ use std::{
 
 use eyre::Result;
 use openvm_build::{get_in_scope_packages, get_workspace_packages};
+#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
+use openvm_sdk::fs::read_agg_halo2_pk_from_file;
 use openvm_sdk::{
     config::{AppConfig, SdkVmConfig},
     fs::read_agg_stark_pk_from_file,
     keygen::AggProvingKey,
 };
-
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
-use openvm_sdk::fs::read_agg_halo2_pk_from_file;
 use serde::de::DeserializeOwned;
 
 use crate::{
