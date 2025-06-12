@@ -17,6 +17,7 @@ openvm-custom-insn = { workspace = true }
 openvm-rv32im-guest = { workspace = true }
 openvm-algebra-guest = { workspace = true }
 openvm-ecc-sw-macros = { workspace = true }
+openvm-ecc-te-macros = { workspace = true }
 once_cell = { workspace = true, features = ["race", "alloc"] }
 
 # Used for `halo2curves` feature
@@ -25,6 +26,7 @@ group = "0.13.0"
 
 [features]
 default = []
+ed25519 = []
 halo2curves = ["dep:halo2curves-axiom", "openvm-algebra-guest/halo2curves"]
 std = ["alloc"]
 alloc = []

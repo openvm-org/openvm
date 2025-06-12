@@ -15,7 +15,7 @@ mod bn254 {
         arch::SystemConfig,
         utils::{air_test, air_test_impl, air_test_with_min_segments},
     };
-    use openvm_ecc_circuit::{Rv32WeierstrassConfig, WeierstrassExtension};
+    use openvm_ecc_circuit::{EccExtension, Rv32WeierstrassConfig};
     use openvm_ecc_guest::{
         algebra::{field::FieldExtension, IntMod},
         AffinePoint,
@@ -54,7 +54,7 @@ mod bn254 {
             io: Default::default(),
             modular: ModularExtension::new(primes.to_vec()),
             fp2: Fp2Extension::new(primes_with_names),
-            weierstrass: WeierstrassExtension::new(vec![]),
+            weierstrass: EccExtension::new(vec![], vec![]),
             pairing: PairingExtension::new(vec![PairingCurve::Bn254]),
         }
     }
@@ -462,7 +462,7 @@ mod bls12_381 {
         arch::{instructions::exe::VmExe, SystemConfig},
         utils::{air_test, air_test_impl, air_test_with_min_segments},
     };
-    use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension};
+    use openvm_ecc_circuit::{CurveConfig, EccExtension, Rv32EccConfig, SwCurveCoeffs};
     use openvm_ecc_guest::{
         algebra::{field::FieldExtension, IntMod},
         AffinePoint,
@@ -503,7 +503,7 @@ mod bls12_381 {
             io: Default::default(),
             modular: ModularExtension::new(primes.to_vec()),
             fp2: Fp2Extension::new(primes_with_names),
-            weierstrass: WeierstrassExtension::new(vec![]),
+            weierstrass: EccExtension::new(vec![], vec![]),
             pairing: PairingExtension::new(vec![PairingCurve::Bls12_381]),
         }
     }
@@ -514,10 +514,12 @@ mod bls12_381 {
             struct_name: BLS12_381_ECC_STRUCT_NAME.to_string(),
             modulus: BLS12_381_MODULUS.clone(),
             scalar: BLS12_381_ORDER.clone(),
-            a: BigUint::ZERO,
-            b: BigUint::from_u8(4).unwrap(),
+            coeffs: SwCurveCoeffs {
+                a: BigUint::ZERO,
+                b: BigUint::from_u8(4).unwrap(),
+            },
         };
-        let config = Rv32WeierstrassConfig::new(vec![curve]);
+        let config = Rv32EccConfig::new(vec![curve], vec![]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!("tests/programs"),
             "bls_ec",

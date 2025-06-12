@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use super::*;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
-pub struct Rv32WeierstrassConfig {
+pub struct Rv32EccConfig {
     #[system]
     pub system: SystemConfig,
     #[extension]
@@ -20,22 +20,30 @@ pub struct Rv32WeierstrassConfig {
     #[extension]
     pub modular: ModularExtension,
     #[extension]
-    pub weierstrass: WeierstrassExtension,
+    pub ecc: EccExtension,
 }
 
-impl Rv32WeierstrassConfig {
-    pub fn new(curves: Vec<CurveConfig>) -> Self {
-        let primes: Vec<_> = curves
+impl Rv32EccConfig {
+    pub fn new(
+        sw_curves: Vec<CurveConfig<SwCurveCoeffs>>,
+        te_curves: Vec<CurveConfig<TeCurveCoeffs>>,
+    ) -> Self {
+        let sw_primes: Vec<_> = sw_curves
             .iter()
             .flat_map(|c| [c.modulus.clone(), c.scalar.clone()])
             .collect();
+        let te_primes: Vec<_> = te_curves
+            .iter()
+            .flat_map(|c| [c.modulus.clone(), c.scalar.clone()])
+            .collect();
+        let primes = sw_primes.into_iter().chain(te_primes).collect();
         Self {
             system: SystemConfig::default().with_continuations(),
             base: Default::default(),
             mul: Default::default(),
             io: Default::default(),
             modular: ModularExtension::new(primes),
-            weierstrass: WeierstrassExtension::new(curves),
+            ecc: EccExtension::new(sw_curves, te_curves),
         }
     }
 }

@@ -14,7 +14,7 @@ use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use super::{EcAddNeChip, EcDoubleChip};
+use super::{SwAddNeChip, SwDoubleChip};
 
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
@@ -94,7 +94,7 @@ fn test_add_ne() {
         tester.address_bits(),
         bitwise_chip.clone(),
     );
-    let mut chip = EcAddNeChip::new(
+    let mut chip = SwAddNeChip::new(
         adapter,
         config,
         Rv32WeierstrassOpcode::CLASS_OFFSET,
@@ -131,7 +131,7 @@ fn test_add_ne() {
         &mut tester,
         vec![prime_limbs, one_limbs], // inputs[0] = prime, others doesn't matter
         vec![one_limbs, one_limbs],
-        chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+        chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_SW_ADD_NE as usize,
     );
     tester.execute(&mut chip, &setup_instruction);
 
@@ -139,7 +139,7 @@ fn test_add_ne() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![p2_x_limbs, p2_y_limbs],
-        chip.0.core.air.offset + Rv32WeierstrassOpcode::EC_ADD_NE as usize,
+        chip.0.core.air.offset + Rv32WeierstrassOpcode::SW_ADD_NE as usize,
     );
 
     tester.execute(&mut chip, &instruction);
@@ -173,7 +173,7 @@ fn test_double() {
     let p1_y_limbs =
         biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
 
-    let mut chip = EcDoubleChip::new(
+    let mut chip = SwDoubleChip::new(
         adapter,
         tester.memory_controller().borrow().range_checker.clone(),
         config,
@@ -195,7 +195,7 @@ fn test_double() {
         vec![prime_limbs, a_limbs], /* inputs[0] = prime, inputs[1] = a coeff of weierstrass
                                      * equation */
         vec![],
-        chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+        chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize,
     );
     tester.execute(&mut chip, &setup_instruction);
 
@@ -203,7 +203,7 @@ fn test_double() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![],
-        chip.0.core.air.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
+        chip.0.core.air.offset + Rv32WeierstrassOpcode::SW_DOUBLE as usize,
     );
 
     tester.execute(&mut chip, &instruction);
@@ -251,7 +251,7 @@ fn test_p256_double() {
     let p1_y_limbs =
         biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
 
-    let mut chip = EcDoubleChip::new(
+    let mut chip = SwDoubleChip::new(
         adapter,
         tester.memory_controller().borrow().range_checker.clone(),
         config,
@@ -284,7 +284,7 @@ fn test_p256_double() {
         vec![prime_limbs, a_limbs], /* inputs[0] = prime, inputs[1] = a coeff of weierstrass
                                      * equation */
         vec![],
-        chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+        chip.0.core.air.offset + Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize,
     );
     tester.execute(&mut chip, &setup_instruction);
 
@@ -292,7 +292,7 @@ fn test_p256_double() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![],
-        chip.0.core.air.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
+        chip.0.core.air.offset + Rv32WeierstrassOpcode::SW_DOUBLE as usize,
     );
 
     tester.execute(&mut chip, &instruction);
