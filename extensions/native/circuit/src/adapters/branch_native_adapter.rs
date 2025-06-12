@@ -220,6 +220,7 @@ impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for BranchNativeAdapterSte
                 read_cols.address.address_space = F::ZERO;
             } else {
                 read_cols.read_aux.is_zero_aux = native_as.inverse();
+                read_cols.read_aux.is_immediate = F::ZERO;
                 mem_helper.fill(
                     read_record.prev_timestamp,
                     record.from_timestamp + i as u32,
