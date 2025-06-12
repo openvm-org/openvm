@@ -1,7 +1,3 @@
-use crate::{
-    builder::{FieldExpr, FieldExprCols},
-    utils::{biguint_to_limbs_vec, limbs_to_biguint},
-};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::Zero;
@@ -29,6 +25,11 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
+
+use crate::{
+    builder::{FieldExpr, FieldExprCols},
+    utils::{biguint_to_limbs_vec, limbs_to_biguint},
+};
 
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {

@@ -204,7 +204,8 @@ pub trait CustomBorrow<'a, T, I> {
     fn custom_borrow(&'a mut self, metadata: I) -> T;
 }
 
-/// If a struct implements `BorrowMut<T>`, then the same implementation can be used for `CustomBorrow`
+/// If a struct implements `BorrowMut<T>`, then the same implementation can be used for
+/// `CustomBorrow`
 impl<'a, T, I> CustomBorrow<'a, &'a mut T, I> for [u8]
 where
     [u8]: BorrowMut<T>,

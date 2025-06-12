@@ -11,15 +11,16 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 
-use crate::utils::{biguint_to_limbs_vec, limbs_to_biguint};
 use crate::{
-    test_utils::*, ExprBuilder, FieldExpr, FieldExprCols, FieldExpressionCoreRecord, FieldVariable,
-    SymbolicExpr,
+    test_utils::*,
+    utils::{biguint_to_limbs_vec, limbs_to_biguint},
+    ExprBuilder, FieldExpr, FieldExprCols, FieldExpressionCoreRecord, FieldVariable, SymbolicExpr,
 };
 
 const LIMB_BITS: usize = 8;
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use std::sync::Arc;
+
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 
 fn create_field_expr_with_setup(
     builder: ExprBuilder,
