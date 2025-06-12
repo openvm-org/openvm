@@ -263,8 +263,8 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for JalRangeCheckStep {
             let a_val = record.write.prev_data[0].as_canonical_u32();
             let b = record.b.as_canonical_u32();
             let c = record.c.as_canonical_u32();
+            let x = a_val & 0xffff;
             let y = a_val >> 16;
-            let x = a_val & ((1 << 16) - 1);
             #[cfg(debug_assertions)]
             {
                 assert!(b <= 16);
@@ -333,8 +333,7 @@ where
                 let a_val = a_val.as_canonical_u32();
                 let b = instruction.b.as_canonical_u32();
                 let c = instruction.c.as_canonical_u32();
-
-                let x = a_val & ((1 << 16) - 1);
+                let x = a_val & 0xffff;
                 let y = a_val >> 16;
 
                 assert!(b <= 16);
