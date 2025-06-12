@@ -22,12 +22,7 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
-use super::{
-    online::INITIAL_TIMESTAMP,
-    AddressMap,
-    volatile::VolatileBoundaryChip,
-    MemoryAddress,
-};
+use super::{online::INITIAL_TIMESTAMP, volatile::VolatileBoundaryChip, AddressMap, MemoryAddress};
 use crate::{
     arch::{hasher::HasherChip, MemoryConfig},
     system::memory::{
@@ -198,9 +193,8 @@ impl<F: PrimeField32> MemoryController<F> {
             .iter()
             .all(|&x| x <= (1 << mem_config.pointer_max_bits)));
         assert!(mem_config.as_height < F::bits() - 2);
-        let addr_space_max_bits = log2_ceil_usize(
-            (1 + 2u32.pow(mem_config.as_height as u32)) as usize,
-        );
+        let addr_space_max_bits =
+            log2_ceil_usize((1 + 2u32.pow(mem_config.as_height as u32)) as usize);
         Self {
             memory_bus,
             mem_config: mem_config.clone(),

@@ -7,9 +7,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    adapter::AccessAdapterInventory,
-    offline_checker::MemoryBus,
-    Address, AddressMap, MemoryAddress, MemoryBackend,
+    adapter::AccessAdapterInventory, offline_checker::MemoryBus, Address, AddressMap,
+    MemoryAddress, MemoryBackend,
 };
 use crate::{arch::MemoryConfig, system::memory::MemoryImage};
 

@@ -49,9 +49,8 @@ use crate::{
         memory::{
             merkle::MemoryMerklePvs,
             online::GuestMemory,
-            AddressMap,
             tree::public_values::{UserPublicValuesProof, UserPublicValuesProofError},
-            MemoryImage, CHUNK,
+            AddressMap, MemoryImage, CHUNK,
         },
         program::trace::VmCommittedExe,
     },

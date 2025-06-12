@@ -264,7 +264,12 @@ impl AddressMap {
         cell_size.resize(mem_size.len(), 4);
         let paged_vecs = zip_eq(&cell_size, &mem_size)
             .map(|(cell_size, mem_size)| {
-                PagedVec::new(mem_size.checked_mul(*cell_size).unwrap().div_ceil(PAGE_SIZE))
+                PagedVec::new(
+                    mem_size
+                        .checked_mul(*cell_size)
+                        .unwrap()
+                        .div_ceil(PAGE_SIZE),
+                )
             })
             .collect();
         Self {
@@ -288,19 +293,14 @@ impl AddressMap {
                 if cell_size == 1 {
                     page.iter::<u8>()
                         .map(move |(ptr_idx, x)| {
-                            (
-                                (as_idx as u32, ptr_idx as u32),
-                                F::from_canonical_u8(x),
-                            )
+                            ((as_idx as u32, ptr_idx as u32), F::from_canonical_u8(x))
                         })
                         .collect_vec()
                 } else {
                     // TEMP
                     assert_eq!(cell_size, 4);
                     page.iter::<F>()
-                        .map(move |(ptr_idx, x)| {
-                            ((as_idx as u32, ptr_idx as u32), x)
-                        })
+                        .map(move |(ptr_idx, x)| ((as_idx as u32, ptr_idx as u32), x))
                         .collect_vec()
                 }
             })
@@ -377,10 +377,7 @@ impl AddressMap {
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    pub fn from_sparse(
-        mem_size: Vec<usize>,
-        sparse_map: SparseMemoryImage,
-    ) -> Self {
+    pub fn from_sparse(mem_size: Vec<usize>, sparse_map: SparseMemoryImage) -> Self {
         let mut vec = Self::new(mem_size);
         for ((addr_space, index), data_byte) in sparse_map.into_iter() {
             vec.paged_vecs[addr_space as usize].set(index as usize, &data_byte);
