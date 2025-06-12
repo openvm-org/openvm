@@ -1,18 +1,22 @@
+mod util;
+
 use std::{
+    array,
     borrow::{Borrow, BorrowMut},
     marker::PhantomData,
 };
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, BasicAdapterInterface, ExecutionBridge, ExecutionBus, ExecutionState,
-        MinimalInstruction, Result, VmAdapterAir, VmAdapterInterface,
+        AdapterAirContext, BasicAdapterInterface, ExecutionBridge, ExecutionState,
+        MinimalInstruction, VmAdapterAir,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols, MemoryWriteAuxCols},
-        MemoryAddress, MemoryController,
+        MemoryAddress,
     },
 };
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::{
@@ -20,11 +24,23 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
+use util::{tracing_read_or_imm_native, tracing_write_native, AS_NATIVE};
 
-use super::memory::online::TracingMemory;
+use super::memory::{online::TracingMemory, MemoryAuxColsFactory};
 use crate::{
-    arch::{execution_mode::E1E2ExecutionCtx, AdapterExecutorE1, AdapterTraceStep, VmStateMut},
-    system::memory::online::GuestMemory,
+    arch::{
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterExecutorE1,
+        AdapterTraceFiller, AdapterTraceStep, VmStateMut,
+    },
+    system::{
+        memory::{
+            offline_checker::{MemoryNativeWriteAuxRecord, MemoryReadAuxRecord},
+            online::GuestMemory,
+        },
+        native_adapter::util::{
+            memory_read_or_imm_native_from_state, memory_write_native_from_state, AS_IMMEDIATE,
+        },
+    },
 };
 
 #[repr(C)]
@@ -146,6 +162,20 @@ impl<AB: InteractionBuilder, const R: usize, const W: usize> VmAdapterAir<AB>
     }
 }
 
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct NativeAdapterRecord<F, const R: usize, const W: usize> {
+    pub from_pc: u32,
+    pub from_timestamp: u32,
+
+    // These are either a pointer to native memory or an immediate value
+    pub read_ptr_or_imm: [F; R],
+    // Will set prev_timestamp to `u32::MAX` if the read is from AS_IMMEDIATE
+    pub reads_aux: [MemoryReadAuxRecord; R],
+    pub write_ptr: [F; W],
+    pub writes_aux: [MemoryNativeWriteAuxRecord<F, 1>; W],
+}
+
 /// R reads(R<=2), W writes(W<=1).
 /// Operands: b for the first read, c for the second read, a for the first write.
 /// If an operand is not used, its address space and pointer should be all 0.
@@ -158,14 +188,15 @@ impl<F, CTX, const R: usize, const W: usize> AdapterTraceStep<F, CTX> for Native
 where
     F: PrimeField32,
 {
-    const WIDTH: usize = size_of::<NativeAdapterCols<F, R, W>>();
+    const WIDTH: usize = size_of::<NativeAdapterCols<u8, R, W>>();
     type ReadData = [[F; 1]; R];
     type WriteData = [[F; 1]; W];
-    type RecordMut<'a> = (); // TODO
+    type RecordMut<'a> = &'a mut NativeAdapterRecord<F, R, W>;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut ()) {
-        todo!()
+    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+        record.from_pc = pc;
+        record.from_timestamp = memory.timestamp;
     }
 
     #[inline(always)]
@@ -173,9 +204,28 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        record: &mut (),
+        record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
-        todo!("Implement read operation");
+        debug_assert!(R <= 2);
+        let &Instruction { b, c, e, f, .. } = instruction;
+
+        let mut reads = [[F::ZERO; 1]; R];
+        record
+            .read_ptr_or_imm
+            .iter_mut()
+            .enumerate()
+            .zip(record.reads_aux.iter_mut())
+            .for_each(|((i, ptr_or_imm), read_aux)| {
+                *ptr_or_imm = if i == 0 { b } else { c };
+                let addr_space = if i == 0 { e } else { f };
+                reads[i][0] = tracing_read_or_imm_native(
+                    memory,
+                    addr_space.as_canonical_u32(),
+                    *ptr_or_imm,
+                    &mut read_aux.prev_timestamp,
+                );
+            });
+        reads
     }
 
     #[inline(always)]
@@ -184,9 +234,79 @@ where
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
-        record: &mut (),
+        record: &mut Self::RecordMut<'_>,
     ) {
-        todo!("Implement write operation");
+        let &Instruction { a, d, .. } = instruction;
+        debug_assert!(W <= 1);
+        debug_assert_eq!(d.as_canonical_u32(), AS_NATIVE);
+
+        if W >= 1 {
+            record.write_ptr[0] = a;
+            tracing_write_native(
+                memory,
+                a.as_canonical_u32(),
+                &data[0],
+                &mut record.writes_aux[0].prev_timestamp,
+                &mut record.writes_aux[0].prev_data,
+            );
+        }
+    }
+}
+
+impl<F: PrimeField32, CTX, const R: usize, const W: usize> AdapterTraceFiller<F, CTX>
+    for NativeAdapterStep<F, R, W>
+{
+    #[inline(always)]
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        let record: &NativeAdapterRecord<F, R, W> =
+            unsafe { get_record_from_slice(&mut adapter_row, ()) };
+        let adapter_row: &mut NativeAdapterCols<_, R, W> = adapter_row.borrow_mut();
+        // Writing in reverse order to avoid overwriting the `record`
+        if W >= 1 {
+            adapter_row.writes_aux[0]
+                .write_aux
+                .set_prev_data(record.writes_aux[0].prev_data);
+            mem_helper.fill(
+                record.writes_aux[0].prev_timestamp,
+                record.from_timestamp + R as u32,
+                adapter_row.writes_aux[0].write_aux.as_mut(),
+            );
+            adapter_row.writes_aux[0].address.pointer = record.write_ptr[0];
+            adapter_row.writes_aux[0].address.address_space = F::from_canonical_u32(AS_NATIVE);
+        }
+
+        adapter_row
+            .reads_aux
+            .iter_mut()
+            .enumerate()
+            .zip(record.reads_aux.iter().zip(record.read_ptr_or_imm.iter()))
+            .rev()
+            .for_each(|((i, read_cols), (read_record, ptr_or_imm))| {
+                if read_record.prev_timestamp == u32::MAX {
+                    read_cols.read_aux.is_zero_aux = F::ZERO;
+                    read_cols.read_aux.is_immediate = F::ONE;
+                    mem_helper.fill(
+                        0,
+                        record.from_timestamp + i as u32,
+                        read_cols.read_aux.as_mut(),
+                    );
+                    read_cols.address.pointer = *ptr_or_imm;
+                    read_cols.address.address_space = F::from_canonical_u32(AS_IMMEDIATE);
+                } else {
+                    read_cols.read_aux.is_zero_aux = F::from_canonical_u32(AS_NATIVE).inverse();
+                    read_cols.read_aux.is_immediate = F::ZERO;
+                    mem_helper.fill(
+                        read_record.prev_timestamp,
+                        record.from_timestamp + i as u32,
+                        read_cols.read_aux.as_mut(),
+                    );
+                    read_cols.address.pointer = *ptr_or_imm;
+                    read_cols.address.address_space = F::from_canonical_u32(AS_NATIVE);
+                }
+            });
+
+        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
+        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
     }
 }
 
@@ -206,27 +326,14 @@ where
     where
         Ctx: E1E2ExecutionCtx,
     {
-        assert!(R <= 2);
-
+        debug_assert!(R <= 2);
         let &Instruction { b, c, e, f, .. } = instruction;
 
-        let mut reads = [F::ZERO; R];
-        if R >= 1 {
-            let [value] = unsafe {
-                state
-                    .memory
-                    .read::<F, 1>(e.as_canonical_u32(), b.as_canonical_u32())
-            };
-            reads[0] = value;
-        }
-        if R >= 2 {
-            let [value] = unsafe {
-                state
-                    .memory
-                    .read::<F, 1>(f.as_canonical_u32(), c.as_canonical_u32())
-            };
-            reads[1] = value;
-        }
+        let reads = array::from_fn(|i| {
+            let ptr_or_imm = if i == 0 { b } else { c };
+            let addr_space = if i == 0 { e } else { f };
+            memory_read_or_imm_native_from_state(state, addr_space.as_canonical_u32(), ptr_or_imm)
+        });
         reads
     }
 
@@ -239,119 +346,12 @@ where
     ) where
         Ctx: E1E2ExecutionCtx,
     {
-        assert!(W <= 1);
-
         let &Instruction { a, d, .. } = instruction;
+        debug_assert!(W <= 1);
+        debug_assert_eq!(d.as_canonical_u32(), AS_NATIVE);
+
         if W >= 1 {
-            unsafe {
-                state
-                    .memory
-                    .write(d.as_canonical_u32(), a.as_canonical_u32(), data)
-            };
+            memory_write_native_from_state(state, a.as_canonical_u32(), data);
         }
     }
 }
-// impl<F, const R: usize, const W: usize> VmAdapterChip<F> for NativeAdapterStep<F, R, W>
-// where
-//     F: PrimeField32,
-// {
-//     type ReadRecord = NativeReadRecord<F, R>;
-//     type WriteRecord = NativeWriteRecord<F, W>;
-//     type Air = NativeAdapterAir<R, W>;
-//     type Interface = BasicAdapterInterface<F, MinimalInstruction<F>, R, W, 1, 1>;
-
-//     fn preprocess(
-//         &mut self,
-//         memory: &mut MemoryController<F>,
-//         instruction: &Instruction<F>,
-//     ) -> Result<(
-//         <Self::Interface as VmAdapterInterface<F>>::Reads,
-//         Self::ReadRecord,
-//     )> {
-//         assert!(R <= 2);
-//         let Instruction { b, c, e, f, .. } = *instruction;
-
-//         let mut reads = Vec::with_capacity(R);
-//         if R >= 1 {
-//             reads.push(unsafe {
-//                 memory
-//                     .memory_image()
-//                     .read::<F, 1>(e.as_canonical_u32(), b.as_canonical_u32())
-//             });
-//         }
-//         if R >= 2 {
-//             reads.push(unsafe {
-//                 memory
-//                     .memory_image()
-//                     .read::<F, 1>(f.as_canonical_u32(), c.as_canonical_u32())
-//             });
-//         }
-//         Ok((
-//             reads.try_into().unwrap(),
-//             Self::ReadRecord { reads: todo!() },
-//         ))
-//     }
-
-//     fn postprocess(
-//         &mut self,
-//         memory: &mut MemoryController<F>,
-//         instruction: &Instruction<F>,
-//         from_state: ExecutionState<u32>,
-//         output: AdapterRuntimeContext<F, Self::Interface>,
-//         _read_record: &Self::ReadRecord,
-//     ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
-//         assert!(W <= 1);
-//         let Instruction { a, d, .. } = *instruction;
-//         let mut writes = Vec::with_capacity(W);
-//         if W >= 1 {
-//             todo!();
-//             // let (record_id, _) = memory.write(d, a, &output.writes[0]);
-//             // writes.push((record_id, output.writes[0]));
-//         }
-
-//         Ok((
-//             ExecutionState {
-//                 pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),
-//                 timestamp: memory.timestamp(),
-//             },
-//             Self::WriteRecord {
-//                 from_state,
-//                 writes: writes.try_into().unwrap(),
-//             },
-//         ))
-//     }
-
-//     fn generate_trace_row(
-//         &self,
-//         row_slice: &mut [F],
-//         read_record: Self::ReadRecord,
-//         write_record: Self::WriteRecord,
-//         memory: &OfflineMemory<F>,
-//     ) {
-//         let row_slice: &mut NativeAdapterCols<_, R, W> = row_slice.borrow_mut();
-//         let aux_cols_factory = memory.aux_cols_factory();
-
-//         row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-
-//         for (i, read) in read_record.reads.iter().enumerate() {
-//             let (id, _) = read;
-//             let record = memory.record_by_id(*id);
-//             aux_cols_factory
-//                 .generate_read_or_immediate_aux(record, &mut row_slice.reads_aux[i].read_aux);
-//             row_slice.reads_aux[i].address =
-//                 MemoryAddress::new(record.address_space, record.pointer);
-//         }
-
-//         for (i, write) in write_record.writes.iter().enumerate() {
-//             let (id, _) = write;
-//             let record = memory.record_by_id(*id);
-//             aux_cols_factory.generate_write_aux(record, &mut row_slice.writes_aux[i].write_aux);
-//             row_slice.writes_aux[i].address =
-//                 MemoryAddress::new(record.address_space, record.pointer);
-//         }
-//     }
-
-//     fn air(&self) -> &Self::Air {
-//         &self.air
-//     }
-// }
