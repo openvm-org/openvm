@@ -5,7 +5,6 @@ use std::{
 
 use eyre::Result;
 use openvm_build::{get_in_scope_packages, get_workspace_packages};
-
 use openvm_sdk::{
     config::{AppConfig, SdkVmConfig},
     fs::read_agg_stark_pk_from_file,
