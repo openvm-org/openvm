@@ -31,7 +31,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        let config = Rv32IConfig::default();
+        let config = Rv32ImConfig::default();
         air_test_with_min_segments(config, exe, vec![], min_segments);
         Ok(())
     }
@@ -81,7 +81,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        let config = Rv32IConfig::default();
+        let config = Rv32ImConfig::default();
         let input = vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()];
         air_test_with_min_segments(config, exe, input, 1);
         Ok(())
@@ -97,7 +97,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        let config = Rv32IConfig::default();
+        let config = Rv32ImConfig::default();
 
         #[derive(serde::Serialize)]
         struct Foo {
@@ -167,7 +167,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        let config = Rv32IConfig::default();
+        let config = Rv32ImConfig::default();
         air_test(config, exe);
         Ok(())
     }

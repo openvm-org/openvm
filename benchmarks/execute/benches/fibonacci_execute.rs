@@ -1,6 +1,9 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use openvm_benchmarks_utils::{build_elf, get_programs_dir};
-use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
+use openvm_circuit::arch::{
+    execution_mode::e1::E1ExecutionControl, instructions::exe::VmExe,
+    interpreter::InterpretedInstance, VmExecutor,
+};
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -25,7 +28,7 @@ fn benchmark_function(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("fibonacci");
     let config = Rv32ImConfig::default();
-    let executor = VmExecutor::<BabyBear, Rv32ImConfig>::new(config);
+    let interpreter = InterpretedInstance::new(config, exe.clone());
 
     group.bench_function("execute", |b| {
         b.iter(|| {
@@ -33,7 +36,10 @@ fn benchmark_function(c: &mut Criterion) {
             // let n = 100_000u64;
             // let mut stdin = StdIn::default();
             // stdin.write(&n);
-            executor.execute(exe.clone(), vec![]).unwrap();
+            // executor.execute(exe.clone(), vec![]).unwrap();
+            interpreter
+                .execute(E1ExecutionControl::new(None), vec![])
+                .expect("Failed to execute program in interpreted mode");
         })
     });
 

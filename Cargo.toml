@@ -97,7 +97,7 @@ codegen-units = 1
 [profile.dev]
 opt-level = 1
 
-# For O1 optimization but still fast(ish) compile times
+# For O1 optimization but still fast(ish) cgit ompile times
 [profile.fast]
 inherits = "dev"
 debug-assertions = true

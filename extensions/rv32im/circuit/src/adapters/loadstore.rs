@@ -674,14 +674,10 @@ where
 
         let ptr_val = ptr_val - shift_amount; // aligned ptr
 
-        let mem_ptr_limbs: [u32; 2] =
-            array::from_fn(|i| ((ptr_val >> (i * (RV32_CELL_BITS * 2))) & 0xffff));
-
         if enabled != F::ZERO {
             match local_opcode {
                 STOREW | STOREH | STOREB => {
-                    let ptr = mem_ptr_limbs[0] + mem_ptr_limbs[1] * (1 << (RV32_CELL_BITS * 2));
-                    memory_write_from_state(state, e.as_canonical_u32(), ptr & 0xfffffffc, data);
+                    memory_write_from_state(state, e.as_canonical_u32(), ptr_val, data);
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => {
                     memory_write_from_state(state, RV32_REGISTER_AS, a.as_canonical_u32(), data);
