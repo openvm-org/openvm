@@ -15,13 +15,17 @@ pub type Address = (u32, u32);
 #[derive(Debug)]
 pub struct MmapWrapper {
     mmap: MmapMut,
+    accessed: Vec<bool>, // Track which regions have been accessed
 }
 
 impl Clone for MmapWrapper {
     fn clone(&self) -> Self {
         let mut new_mmap = MmapMut::map_anon(self.mmap.len()).unwrap();
         new_mmap.copy_from_slice(&self.mmap);
-        Self { mmap: new_mmap }
+        Self {
+            mmap: new_mmap,
+            accessed: self.accessed.clone(),
+        }
     }
 }
 
@@ -47,14 +51,22 @@ impl<T: Copy> Iterator for MmapWrapperIter<'_, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let size = std::mem::size_of::<T>();
-        if self.current_index + size > self.wrapper.len() {
-            return None;
-        }
+        while self.current_index + size <= self.wrapper.len() {
+            // Check if any byte in this region has been accessed
+            let region_accessed = self.wrapper.accessed
+                [self.current_index..self.current_index + size]
+                .iter()
+                .any(|&x| x);
 
-        let value = self.wrapper.get::<T>(self.current_index);
-        let index = self.current_index / size;
-        self.current_index += size;
-        Some((index, value))
+            let value = self.wrapper.get::<T>(self.current_index);
+            let index = self.current_index / size;
+            self.current_index += size;
+
+            if region_accessed {
+                return Some((index, value));
+            }
+        }
+        None
     }
 }
 
@@ -64,6 +76,7 @@ impl MmapWrapper {
     pub fn new(len: usize) -> Self {
         Self {
             mmap: MmapMut::map_anon(len).unwrap(),
+            accessed: vec![false; len], // TODO: can reduce length to len/cell_size if having a cell_size field
         }
     }
 
@@ -142,11 +155,16 @@ impl MmapWrapper {
     // onto the stack in the function call.
     #[inline(always)]
     pub fn set<BLOCK: Copy>(&mut self, start: usize, values: &BLOCK) {
+        let size = std::mem::size_of::<BLOCK>();
+        // Mark the region as accessed
+        for i in start..start + size {
+            self.accessed[i] = true;
+        }
         unsafe {
             copy_nonoverlapping(
                 values as *const _ as *const u8,
                 self.as_mut_ptr().add(start),
-                std::mem::size_of::<BLOCK>(),
+                size,
             );
         }
     }
@@ -157,18 +175,23 @@ impl MmapWrapper {
     /// If `from..from + size_of<BLOCK>()` is out of bounds.
     #[inline(always)]
     pub fn replace<BLOCK: Copy>(&mut self, from: usize, values: &BLOCK) -> BLOCK {
+        let size = std::mem::size_of::<BLOCK>();
+        // Mark the region as accessed
+        for i in from..from + size {
+            self.accessed[i] = true;
+        }
         // Create an uninitialized array of MaybeUninit<BLOCK>
         let mut result: MaybeUninit<BLOCK> = MaybeUninit::uninit();
         unsafe {
             copy_nonoverlapping(
                 self.as_ptr().add(from),
                 result.as_mut_ptr() as *mut u8,
-                std::mem::size_of::<BLOCK>(),
+                size,
             );
             copy_nonoverlapping(
                 values as *const _ as *const u8,
                 self.as_mut_ptr().add(from),
-                std::mem::size_of::<BLOCK>(),
+                size,
             );
         }
         // SAFETY:
@@ -181,7 +204,7 @@ impl MmapWrapper {
 #[derive(Debug, Clone)]
 pub struct AddressMap {
     pub mem: Vec<MmapWrapper>,
-    pub cell_size: Vec<usize>,
+    pub cell_size: Vec<usize>, // TODO: move to MmapWrapper
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -301,7 +324,6 @@ impl AddressMap {
                         })
                         .collect_vec()
                 } else {
-                    // TEMP
                     assert_eq!(cell_size, 4);
                     space_mem
                         .iter::<F>()
