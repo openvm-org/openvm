@@ -35,4 +35,8 @@ openvm-circuit = { workspace = true, features = ["test-utils"] }
 [features]
 default = []
 parallel = ["openvm-stark-backend/parallel"]
-test-utils = ["dep:halo2curves-axiom", "dep:openvm-pairing-guest"]
+test-utils = [
+    "dep:halo2curves-axiom",
+    "dep:openvm-pairing-guest",
+    "openvm-circuit/test-utils",
+]

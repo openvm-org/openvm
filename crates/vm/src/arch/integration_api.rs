@@ -3,7 +3,7 @@ use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
     marker::PhantomData,
-    ptr::slice_from_raw_parts_mut,
+    ptr::{slice_from_raw_parts, slice_from_raw_parts_mut},
     sync::Arc,
 };
 
