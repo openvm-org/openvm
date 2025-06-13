@@ -2,13 +2,14 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        ExecutionBridge, ExecutionError, ExecutionState, NewVmChipWrapper, Result, StepExecutorE1,
-        TraceStep, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, ExecuteFunc, ExecutionBridge, ExecutionError,
+        ExecutionState, NewVmChipWrapper, PreComputeInstruction, Result, StepExecutorE1, TraceStep,
+        VmSegmentState, VmStateMut,
     },
+    next_instruction,
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-        online::{GuestMemory, TracingMemory},
+        online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
@@ -16,7 +17,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
 };
-use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -24,7 +25,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_rv32im_transpiler::{
-    Rv32HintStoreOpcode,
+    DivRemOpcode, Rv32HintStoreOpcode,
     Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW},
 };
 use openvm_stark_backend::{
@@ -35,10 +36,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 
-use crate::adapters::{
-    decompose, memory_read, memory_read_from_state, memory_write_from_state, tracing_read,
-    tracing_write,
-};
+use crate::adapters::{decompose, tracing_read, tracing_write};
 
 #[cfg(test)]
 mod tests;
@@ -428,103 +426,130 @@ where
     }
 }
 
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct HintStorePreCompute {
+    local_opcode: Rv32HintStoreOpcode,
+    c: u32,
+    a: u8,
+    b: u8,
+}
+
 impl<F> StepExecutorE1<F> for Rv32HintStoreStep
 where
     F: PrimeField32,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+    #[inline(always)]
+    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
     where
         Ctx: E1E2ExecutionCtx,
     {
+        execute_e1_impl
+    }
+
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<HintStorePreCompute>()
+    }
+
+    #[inline(always)]
+    fn pre_compute(&self, inst: &Instruction<F>, data: &mut [u8]) {
         let &Instruction {
             opcode,
-            a: num_words_ptr,
-            b: mem_ptr_ptr,
+            a,
+            b,
+            c,
             d,
             e,
             ..
-        } = instruction;
-
+        } = inst;
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
-
-        let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-
-        let mem_ptr_limbs =
-            memory_read_from_state(state, RV32_REGISTER_AS, mem_ptr_ptr.as_canonical_u32());
-        let mem_ptr = u32::from_le_bytes(mem_ptr_limbs);
-        debug_assert!(mem_ptr <= (1 << self.pointer_max_bits));
-
-        let num_words = if local_opcode == HINT_STOREW {
-            1
-        } else {
-            let num_words_limbs =
-                memory_read_from_state(state, RV32_REGISTER_AS, num_words_ptr.as_canonical_u32());
-            u32::from_le_bytes(num_words_limbs)
+        let pre_compute: &mut HintStorePreCompute = data.borrow_mut();
+        *pre_compute = {
+            HintStorePreCompute {
+                local_opcode: Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset)),
+                c: c.as_canonical_u32(),
+                a: a.as_canonical_u32() as u8,
+                b: b.as_canonical_u32() as u8,
+            }
         };
-        debug_assert_ne!(num_words, 0);
-        debug_assert!(num_words <= (1 << self.pointer_max_bits));
-
-        if state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
-            return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
-        }
-
-        for word_index in 0..num_words {
-            let data: [u8; RV32_REGISTER_NUM_LIMBS] = std::array::from_fn(|_| {
-                state
-                    .streams
-                    .hint_stream
-                    .pop_front()
-                    .unwrap()
-                    .as_canonical_u32() as u8
-            });
-            memory_write_from_state(
-                state,
-                RV32_MEMORY_AS,
-                mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index),
-                &data,
-            );
-        }
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
     }
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        let &Instruction {
-            opcode,
-            a: num_words_ptr,
-            ..
-        } = instruction;
+    // fn execute_metered(
+    //     &self,
+    //     state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+    //     instruction: &Instruction<F>,
+    //     chip_index: usize,
+    // ) -> Result<()> {
+    //     let &Instruction {
+    //         opcode,
+    //         a: num_words_ptr,
+    //         ..
+    //     } = instruction;
+    //
+    //     let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+    //
+    //     let num_words = if local_opcode == HINT_STOREW {
+    //         1
+    //     } else {
+    //         let num_words_limbs = memory_read(
+    //             state.memory,
+    //             RV32_REGISTER_AS,
+    //             num_words_ptr.as_canonical_u32(),
+    //         );
+    //         u32::from_le_bytes(num_words_limbs)
+    //     };
+    //
+    //     self.execute_e1(state, instruction)?;
+    //     state.ctx.trace_heights[chip_index] += num_words;
+    //
+    //     Ok(())
+    // }
+}
 
-        let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+    inst: *const PreComputeInstruction<F, CTX>,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) -> Result<()> {
+    let next_inst = inst.offset(1);
+    let inst = &*inst;
+    let pre_compute: &HintStorePreCompute = inst.pre_compute.borrow();
+    let local_opcode = pre_compute.local_opcode;
+    let mem_ptr_limbs = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let mem_ptr = u32::from_le_bytes(mem_ptr_limbs);
 
-        let num_words = if local_opcode == HINT_STOREW {
-            1
-        } else {
-            let num_words_limbs = memory_read(
-                state.memory,
-                RV32_REGISTER_AS,
-                num_words_ptr.as_canonical_u32(),
-            );
-            u32::from_le_bytes(num_words_limbs)
-        };
+    let num_words = if local_opcode == HINT_STOREW {
+        1
+    } else {
+        let num_words_limbs = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
+        u32::from_le_bytes(num_words_limbs)
+    };
+    debug_assert_ne!(num_words, 0);
 
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += num_words;
-
-        Ok(())
+    if vm_state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
+        return Err(ExecutionError::HintOutOfBounds { pc: vm_state.pc });
     }
+
+    for word_index in 0..num_words {
+        let data: [u8; RV32_REGISTER_NUM_LIMBS] = std::array::from_fn(|_| {
+            vm_state
+                .streams
+                .hint_stream
+                .pop_front()
+                .unwrap()
+                .as_canonical_u32() as u8
+        });
+        vm_state.vm_write(
+            RV32_MEMORY_AS,
+            mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index),
+            &data,
+        );
+    }
+
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
+    next_instruction!(next_inst, vm_state)
 }
 
 pub type Rv32HintStoreChip<F> = NewVmChipWrapper<F, Rv32HintStoreAir, Rv32HintStoreStep>;

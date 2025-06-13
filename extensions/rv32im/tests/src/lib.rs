@@ -41,6 +41,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
+        let config = Rv32ImConfig::default();
         air_test_with_min_segments(config, exe, vec![], min_segments);
         Ok(())
     }
@@ -83,7 +84,7 @@ mod tests {
 
     #[test]
     fn test_read_vec() -> Result<()> {
-        let config = Rv32IConfig::default();
+        let config = Rv32ImConfig::default();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -99,7 +100,7 @@ mod tests {
 
     #[test]
     fn test_hint_load_by_key() -> Result<()> {
-        let config = Rv32IConfig::default();
+        let config = Rv32ImConfig::default();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint_load_by_key", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -122,7 +123,7 @@ mod tests {
 
     #[test]
     fn test_read() -> Result<()> {
-        let config = Rv32IConfig::default();
+        let config = Rv32ImConfig::default();
         let elf = build_example_program_at_path(get_programs_dir!(), "read", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -215,6 +216,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
+        let config = Rv32ImConfig::default();
         air_test(config, exe);
         Ok(())
     }

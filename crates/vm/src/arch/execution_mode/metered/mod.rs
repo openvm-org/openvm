@@ -297,29 +297,30 @@ where
         F: PrimeField32,
     {
         // Check if segmentation needs to happen
-        self.check_segment_limits::<F, VC>(state, chip_complex);
+        todo!()
+        // self.check_segment_limits::<F, VC>(state, chip_complex);
+        //
+        // let offset = if chip_complex.config().has_public_values_chip() {
+        //     PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
+        // } else {
+        //     PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
+        // };
+        // let &Instruction { opcode, .. } = instruction;
+        // if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode) {
+        //     let mut vm_state = VmStateMut {
+        //         pc: &mut state.pc,
+        //         memory: &mut state.memory,
+        //         streams: &mut state.streams,
+        //         ctx: &mut state.ctx,
+        //     };
+        //     executor.execute_metered(&mut vm_state, instruction, offset + i)?;
+        // } else {
+        //     return Err(ExecutionError::DisabledOperation {
+        //         pc: state.pc,
+        //         opcode,
+        //     });
+        // };
 
-        let offset = if chip_complex.config().has_public_values_chip() {
-            PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
-        } else {
-            PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
-        };
-        let &Instruction { opcode, .. } = instruction;
-        if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode) {
-            let mut vm_state = VmStateMut {
-                pc: &mut state.pc,
-                memory: state.memory.as_mut().unwrap(),
-                streams: &mut state.streams,
-                ctx: &mut state.ctx,
-            };
-            executor.execute_metered(&mut vm_state, instruction, offset + i)?;
-        } else {
-            return Err(ExecutionError::DisabledOperation {
-                pc: state.pc,
-                opcode,
-            });
-        };
-
-        Ok(())
+        // Ok(())
     }
 }

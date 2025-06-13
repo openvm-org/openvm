@@ -7,23 +7,26 @@ use num_bigint::BigUint;
 use num_integer::Integer;
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterTraceStep, ExecuteFunc,
+        MinimalInstruction, PreComputeInstruction, Result, StepExecutorE1, TraceStep,
+        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    next_instruction,
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
     utils::{not, select},
 };
-use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_rv32im_transpiler::DivRemOpcode;
+use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_CELL_BITS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
+use openvm_rv32im_transpiler::{BranchLessThanOpcode, DivRemOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -532,65 +535,105 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
-    for DivRemStep<A, NUM_LIMBS, LIMB_BITS>
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct DivRemPreCompute {
+    local_opcode: DivRemOpcode,
+    a: u8,
+    b: u8,
+    c: u8,
+}
+
+impl<F, A, const LIMB_BITS: usize> StepExecutorE1<F>
+    for DivRemStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<
-            F,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-        >,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+    #[inline(always)]
+    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
     where
         Ctx: E1E2ExecutionCtx,
     {
-        let Instruction { opcode, .. } = *instruction;
-
-        // Determine opcode and operation type
-        let divrem_opcode = DivRemOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-
-        let [rs1, rs2] = self.adapter.read(state, instruction).into();
-        let rs1 = rs1.map(u32::from);
-        let rs2 = rs2.map(u32::from);
-
-        let is_div = divrem_opcode == DivRemOpcode::DIV || divrem_opcode == DivRemOpcode::DIVU;
-        let is_signed = divrem_opcode == DivRemOpcode::DIV || divrem_opcode == DivRemOpcode::REM;
-
-        // Perform division/remainder computation
-        let (q, r, _, _, _, _) = run_divrem::<NUM_LIMBS, LIMB_BITS>(is_signed, &rs1, &rs2);
-
-        // Determine result based on operation type (DIV or REM)
-        let rd = if is_div {
-            q.map(|x| x as u8)
-        } else {
-            r.map(|x| x as u8)
-        };
-
-        self.adapter.write(state, instruction, &[rd].into());
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
+        execute_e1_impl
     }
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
+    // fn execute_metered(
+    //     &self,
+    //     state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+    //     instruction: &Instruction<F>,
+    //     chip_index: usize,
+    // ) -> Result<()> {
+    //     self.execute_e1(state, instruction)?;
+    //     state.ctx.trace_heights[chip_index] += 1;
+    //
+    //     Ok(())
+    // }
 
-        Ok(())
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<DivRemPreCompute>()
     }
+
+    #[inline(always)]
+    fn pre_compute(&self, inst: &Instruction<F>, data: &mut [u8]) {
+        let &Instruction {
+            opcode, a, b, c, d, ..
+        } = inst;
+        let local_opcode = DivRemOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        let pre_compute: &mut DivRemPreCompute = data.borrow_mut();
+        *pre_compute = DivRemPreCompute {
+            local_opcode,
+            a: a.as_canonical_u32() as u8,
+            b: b.as_canonical_u32() as u8,
+            c: c.as_canonical_u32() as u8,
+        }
+    }
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+    inst: *const PreComputeInstruction<F, CTX>,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) -> Result<()> {
+    let next_inst = inst.offset(1);
+    let inst = &*inst;
+    let pre_compute: &DivRemPreCompute = inst.pre_compute.borrow();
+    let rs1 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs2 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
+    let result = if rs2 == [0; 4] {
+        // TODO: Should we panic here?
+        match pre_compute.local_opcode {
+            DivRemOpcode::DIV | DivRemOpcode::DIVU => [(1 << (RV32_CELL_BITS - 1)) - 1; 4],
+            DivRemOpcode::REM | DivRemOpcode::REMU => rs1,
+        }
+    } else {
+        match pre_compute.local_opcode {
+            DivRemOpcode::DIV => {
+                let rs1 = i32::from_le_bytes(rs1);
+                let rs2 = i32::from_le_bytes(rs2);
+                (rs1 / rs2).to_le_bytes()
+            }
+            DivRemOpcode::DIVU => {
+                let rs1 = u32::from_le_bytes(rs1);
+                let rs2 = u32::from_le_bytes(rs2);
+                (rs1 / rs2).to_le_bytes()
+            }
+            DivRemOpcode::REM => {
+                let rs1 = i32::from_le_bytes(rs1);
+                let rs2 = i32::from_le_bytes(rs2);
+                (rs1 % rs2).to_le_bytes()
+            }
+            DivRemOpcode::REMU => {
+                let rs1 = u32::from_le_bytes(rs1);
+                let rs2 = u32::from_le_bytes(rs2);
+                (rs1 % rs2).to_le_bytes()
+            }
+        }
+    };
+    vm_state.vm_write::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32, &result);
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
+    next_instruction!(next_inst, vm_state)
 }
 
 // Returns (quotient, remainder, x_sign, y_sign, q_sign, case) where case = 0 for normal, 1

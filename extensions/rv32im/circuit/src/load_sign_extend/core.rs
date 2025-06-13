@@ -5,21 +5,24 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, Result, StepExecutorE1, TraceStep,
-        VmAdapterInterface, VmCoreAir, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterTraceStep, ExecuteFunc,
+        PreComputeInstruction, Result, StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir,
+        VmSegmentState, VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    next_instruction,
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
     utils::select,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
-use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_CELL_BITS, RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -304,61 +307,139 @@ where
     }
 }
 
-impl<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
-    for LoadSignExtendStep<A, NUM_CELLS, LIMB_BITS>
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct LoadSignExtendPreCompute {
+    local_opcode: Rv32LoadStoreOpcode,
+    imm_extended: u32,
+    a: u8,
+    b: u8,
+    e: u8,
+    enabled: bool,
+}
+
+impl<F, A, const LIMB_BITS: usize> StepExecutorE1<F>
+    for LoadSignExtendStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<
-            F,
-            ReadData = (([u8; NUM_CELLS], [u8; NUM_CELLS]), u32),
-            WriteData = [u8; NUM_CELLS],
-        >,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+    #[inline(always)]
+    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
     where
         Ctx: E1E2ExecutionCtx,
     {
-        let Instruction { opcode, .. } = instruction;
+        execute_e1_impl
+    }
+
+    // fn execute_metered(
+    //     &self,
+    //     state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+    //     instruction: &Instruction<F>,
+    //     chip_index: usize,
+    // ) -> Result<()> {
+    //     self.execute_e1(state, instruction)?;
+    //     state.ctx.trace_heights[chip_index] += 1;
+    //
+    //     Ok(())
+    // }
+
+    fn pre_compute_size(&self) -> usize {
+        size_of::<LoadSignExtendPreCompute>()
+    }
+
+    fn pre_compute(&self, inst: &Instruction<F>, data: &mut [u8]) {
+        let pre_compute: &mut LoadSignExtendPreCompute = data.borrow_mut();
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
+            ..
+        } = inst;
+
+        let e_u32 = e.as_canonical_u32();
+        assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        assert_ne!(e_u32, RV32_IMM_AS);
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
+        match local_opcode {
+            LOADB | LOADH => {}
+            _ => unreachable!("LoadSignExtendStep should only handle LOADB/LOADH opcodes"),
+        }
 
-        let ((_, read_data), shift_amount) = self.adapter.read(state, instruction);
-        let read_data = read_data.map(F::from_canonical_u8);
+        let imm = c.as_canonical_u32();
+        let imm_sign = g.as_canonical_u32();
+        let imm_extended = imm + imm_sign * 0xffff0000;
 
-        // TODO(ayush): clean this up for e1
-        let write_data = run_write_data_sign_extend::<_, NUM_CELLS, LIMB_BITS>(
+        *pre_compute = LoadSignExtendPreCompute {
             local_opcode,
-            read_data,
-            [F::ZERO; NUM_CELLS],
-            shift_amount,
-        );
-        let write_data = write_data.map(|x| x.as_canonical_u32() as u8);
+            imm_extended,
+            a: a.as_canonical_u32() as u8,
+            b: b.as_canonical_u32() as u8,
+            e: e_u32 as u8,
+            enabled: !f.is_zero(),
+        };
+    }
+}
 
-        self.adapter.write(state, instruction, &write_data);
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+    inst: *const PreComputeInstruction<F, CTX>,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) -> Result<()> {
+    let next_inst = unsafe { inst.offset(1) };
+    let curr_inst = unsafe { &*inst };
+    let pre_compute: &LoadSignExtendPreCompute = curr_inst.pre_compute.borrow();
 
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+    let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
+        vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs1_val = u32::from_le_bytes(rs1_bytes);
+    let ptr_val = rs1_val.wrapping_add(pre_compute.imm_extended);
+    // sign_extend([r32{c,g}(b):2]_e)`
+    // assert!(
+    //     ptr_val < (1 << self.pointer_max_bits),
+    //     "ptr_val: {ptr_val} = rs1_val: {rs1_val} + imm_extended: {imm_extended} >= 2 ** {}",
+    //     self.pointer_max_bits
+    // );
+    let shift_amount = ptr_val % 4;
+    let ptr_val = ptr_val - shift_amount; // aligned ptr
 
-        Ok(())
+    let read_data: [u8; RV32_REGISTER_NUM_LIMBS] = match pre_compute.local_opcode {
+        LOADB | LOADH => vm_state.vm_read(pre_compute.e as u32, ptr_val),
+        _ => unreachable!("LoadSignExtendStep should only handle LOADB/LOADH opcodes"),
+    };
+
+    let write_data = match (pre_compute.local_opcode, shift_amount) {
+        (LOADH, 0) | (LOADH, 2) => {
+            let half: [u8; 2] = array::from_fn(|i| read_data[shift_amount as usize + i]);
+            (i16::from_le_bytes(half) as i32).to_le_bytes()
+        }
+        (LOADB, 0) | (LOADB, 1) | (LOADB, 2) | (LOADB, 3) => {
+            let byte = read_data[shift_amount as usize];
+            let sign_extended = (byte as i8) as i32;
+            sign_extended.to_le_bytes()
+        }
+        _ => unreachable!("LoadSignExtendStep should only handle LOADB/LOADH opcodes"),
+    };
+
+    if pre_compute.enabled {
+        match pre_compute.local_opcode {
+            LOADB | LOADH => {
+                vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &write_data);
+            }
+            _ => unreachable!("LoadSignExtendStep should only handle LOADB/LOADH opcodes"),
+        }
     }
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
+    vm_state.pc += DEFAULT_PC_STEP;
+    vm_state.instret += 1;
 
-        Ok(())
-    }
+    next_instruction!(next_inst, vm_state)
 }
 
 // TODO(ayush): remove _prev_data

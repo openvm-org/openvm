@@ -56,28 +56,13 @@ where
     fn execute_instruction(
         &self,
         state: &mut VmSegmentState<F, Self::Ctx>,
-        instruction: &Instruction<F>,
-        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        _instruction: &Instruction<F>,
+        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
     {
-        let &Instruction { opcode, .. } = instruction;
-
-        if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
-            let mut vm_state = VmStateMut {
-                pc: &mut state.pc,
-                memory: state.memory.as_mut().unwrap(),
-                streams: &mut state.streams,
-                ctx: &mut state.ctx,
-            };
-            executor.execute_e1(&mut vm_state, instruction)?;
-        } else {
-            return Err(ExecutionError::DisabledOperation {
-                pc: state.pc,
-                opcode,
-            });
-        };
+        state.instret += 1;
 
         Ok(())
     }

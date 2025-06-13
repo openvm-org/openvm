@@ -38,8 +38,8 @@ use crate::{
     arch::{
         execution_mode::{
             e1::E1ExecutionControl,
-            metered::{bounded::Segment, MeteredCtx, MeteredExecutionControl},
-            tracegen::TracegenExecutionControl,
+            // metered::{bounded::Segment, MeteredCtx, MeteredExecutionControl},
+            tracegen::{TracegenCtx, TracegenExecutionControl},
         },
         hasher::poseidon2::vm_poseidon2_hasher,
         VmSegmentExecutor, VmSegmentState,
@@ -56,6 +56,8 @@ use crate::{
         program::trace::VmCommittedExe,
     },
 };
+use crate::arch::execution_mode::metered::bounded::Segment;
+use crate::arch::execution_mode::metered::{MeteredCtx, MeteredExecutionControl};
 
 #[derive(Error, Debug)]
 pub enum GenerationError {
@@ -246,7 +248,7 @@ where
         let state = VmState {
             instret: exec_state.instret,
             pc: exec_state.pc,
-            memory: exec_state.memory.unwrap().memory,
+            memory: exec_state.memory.memory,
             input: exec_state.streams,
             #[cfg(feature = "bench-metrics")]
             metrics: segment.metrics.partial_take(),

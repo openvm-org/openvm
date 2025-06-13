@@ -5,22 +5,25 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
+        ExecuteFunc, MinimalInstruction, PreComputeInstruction, Result, StepExecutorE1, TraceStep,
+        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    next_instruction,
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
-use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_rv32im_transpiler::ShiftOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -29,6 +32,8 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
+
+use crate::adapters::imm_to_bytes;
 
 #[repr(C)]
 #[derive(AlignedBorrow, Clone, Copy, Debug)]
@@ -387,51 +392,114 @@ where
     }
 }
 
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct ShiftPreCompute {
+    local_opcode: ShiftOpcode,
+    c: u32,
+    a: u8,
+    b: u8,
+    is_imm: bool,
+}
+
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
     for ShiftStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<
-            F,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-        >,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+    #[inline(always)]
+    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
     where
         Ctx: E1E2ExecutionCtx,
     {
-        let Instruction { opcode, .. } = instruction;
+        execute_e1_impl
+    }
 
+    // fn execute_metered(
+    //     &self,
+    //     state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+    //     instruction: &Instruction<F>,
+    //     chip_index: usize,
+    // ) -> Result<()> {
+    //     self.execute_e1(state, instruction)?;
+    //     state.ctx.trace_heights[chip_index] += 1;
+    //
+    //     Ok(())
+    // }
+
+    fn pre_compute_size(&self) -> usize {
+        size_of::<ShiftPreCompute>()
+    }
+
+    fn pre_compute(&self, inst: &Instruction<F>, data: &mut [u8]) {
+        let data: &mut ShiftPreCompute = data.borrow_mut();
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
+        } = inst;
         let shift_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-
-        let [rs1, rs2] = self.adapter.read(state, instruction).into();
-
-        let (rd, _, _) = run_shift::<NUM_LIMBS, LIMB_BITS>(shift_opcode, &rs1, &rs2);
-
-        self.adapter.write(state, instruction, &[rd].into());
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
+        let e_u32 = e.as_canonical_u32();
+        assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        assert!(e_u32 == RV32_IMM_AS || e_u32 == RV32_REGISTER_AS);
+        let is_imm = e_u32 == RV32_IMM_AS;
+        let c_u32 = c.as_canonical_u32();
+        *data = ShiftPreCompute {
+            local_opcode: shift_opcode,
+            c: if is_imm {
+                u32::from_le_bytes(imm_to_bytes(c_u32))
+            } else {
+                c_u32
+            },
+            a: a.as_canonical_u32() as u8,
+            b: b.as_canonical_u32() as u8,
+            is_imm,
+        };
+        // `d` is always expected to be RV32_REGISTER_AS.
     }
+}
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+    inst: *const PreComputeInstruction<F, CTX>,
+    state: &mut VmSegmentState<F, CTX>,
+) -> Result<()> {
+    let next_inst = unsafe { inst.offset(1) };
+    let inst = unsafe { &*inst };
+    let pre_compute: &ShiftPreCompute = inst.pre_compute.borrow();
+    let rs1 = state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs2 = if pre_compute.is_imm {
+        pre_compute.c.to_le_bytes()
+    } else {
+        state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c)
+    };
+    let rs2 = u32::from_le_bytes(rs2);
 
-        Ok(())
-    }
+    // Execute the shift operation
+    let rd = match pre_compute.local_opcode {
+        ShiftOpcode::SLL => {
+            let rs1 = u32::from_le_bytes(rs1);
+            (rs1 << rs2).to_le_bytes()
+        }
+        ShiftOpcode::SRL => {
+            let rs1 = u32::from_le_bytes(rs1);
+            (rs1 >> rs2).to_le_bytes()
+        }
+        ShiftOpcode::SRA => {
+            let rs1 = i32::from_le_bytes(rs1);
+            (rs1 >> rs2).to_le_bytes()
+        }
+    };
+
+    // Write the result back to memory
+    state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
+
+    state.instret += 1;
+    state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+    next_instruction!(next_inst, state)
 }
 
 // Returns (result, limb_shift, bit_shift)

@@ -612,19 +612,19 @@ mod phantom {
     };
     use openvm_instructions::PhantomDiscriminant;
     use openvm_stark_backend::p3_field::{Field, PrimeField32};
-    use rand::{rngs::OsRng, Rng};
+    use rand::{rngs::StdRng, Rng, SeedableRng};
 
     use crate::adapters::{memory_read, new_read_rv32_register};
 
     pub struct Rv32HintInputSubEx;
     pub struct Rv32HintRandomSubEx {
         // TODO: this should be moved to VmState in order to be reproducible.
-        rng: Arc<Mutex<OsRng>>,
+        rng: Arc<Mutex<StdRng>>,
     }
     impl Rv32HintRandomSubEx {
         pub fn new() -> Self {
             Self {
-                rng: Default::default(),
+                rng: Arc::new(Mutex::new(StdRng::from_seed([42; 32]))),
             }
         }
     }
