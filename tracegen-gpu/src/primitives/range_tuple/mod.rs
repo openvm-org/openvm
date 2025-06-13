@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use cuda_kernels::primitives::range_tuple::*;
-use cuda_utils::d_buffer::DeviceBuffer;
 use openvm_circuit_primitives::range_tuple::{
     RangeTupleCheckerAir, RangeTupleCheckerBus, NUM_RANGE_TUPLE_COLS,
 };
-use stark_backend_gpu::{base::DeviceMatrix, prelude::F};
+use stark_backend_gpu::{base::DeviceMatrix, cuda::d_buffer::DeviceBuffer, prelude::F};
+
+use crate::primitives::cuda::range_tuple::tracegen;
 
 #[cfg(test)]
 mod tests;

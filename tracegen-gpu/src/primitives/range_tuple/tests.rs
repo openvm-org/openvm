@@ -1,10 +1,6 @@
 use core::array;
 use std::sync::Arc;
 
-// use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
-use crate::{
-    dummy::range_tuple::DummyInteractionChipGPU, primitives::range_tuple::RangeTupleCheckerChipGPU,
-};
 use openvm_circuit_primitives::range_tuple::RangeTupleCheckerBus;
 use openvm_stark_sdk::{
     config::{setup_tracing, FriParameters},
@@ -17,6 +13,10 @@ use stark_backend_gpu::{
     engine::GpuBabyBearPoseidon2Engine,
     prover_backend::GpuBackend,
     types::{DeviceAirProofRawInput, DeviceProofInput},
+};
+
+use crate::{
+    dummy::range_tuple::DummyInteractionChipGPU, primitives::range_tuple::RangeTupleCheckerChipGPU,
 };
 
 const LOG_BLOWUP: usize = 2;
