@@ -371,7 +371,11 @@ impl<F, A, const NUM_CELLS: usize> StepExecutorE1<F> for LoadStoreStep<A, NUM_CE
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterExecutorE1<F, ReadData = [u8; NUM_CELLS], WriteData = [u8; NUM_CELLS]>,
+        + AdapterExecutorE1<
+            F,
+            ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
+            WriteData = [u32; NUM_CELLS],
+        >,
 {
     fn execute_e1<Ctx>(
         &self,
@@ -383,22 +387,11 @@ where
     {
         let Instruction { opcode, .. } = instruction;
 
-        let mut data = self.adapter.read(state, instruction);
-        let local_opcode = opcode.local_opcode_idx(self.offset);
+        let ((prev_data, read_data), shift_amount) = self.adapter.read(state, instruction);
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let write_data = run_write_data(local_opcode, read_data, prev_data, shift_amount as usize);
 
-        // Need to zero extend the data for loadbu and loadhu
-        if local_opcode == LOADBU as usize {
-            data.iter_mut().skip(1).for_each(|x| {
-                *x = 0;
-            });
-        } else if local_opcode == LOADHU as usize {
-            data.iter_mut().skip(NUM_CELLS / 2).for_each(|x| {
-                *x = 0;
-            });
-        }
-
-        self.adapter.write(state, instruction, &data);
-
+        self.adapter.write(state, instruction, &write_data);
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
