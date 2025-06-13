@@ -17,7 +17,8 @@ pub use branch_native_adapter::*;
 // // 1 read, 1 write, arbitrary read size, arbitrary write size, no imm support
 pub use convert_adapter::*;
 pub use loadstore_native_adapter::*;
-// // 2 reads, 1 write, read size = write size = N, no imm support, read/write to address space d
+// // 2 reads, 1 write, read size = write size = N, no imm support, read/write to address space
+// d
 pub use native_vectorized_adapter::*;
 
 #[inline(always)]

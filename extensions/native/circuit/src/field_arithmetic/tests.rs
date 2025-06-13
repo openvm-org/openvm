@@ -15,17 +15,15 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
-
 use test_case::test_case;
 
+use super::{
+    FieldArithmeticChip, FieldArithmeticCoreAir, FieldArithmeticCoreCols, FieldArithmeticStep,
+};
 use crate::{
     adapters::{AluNativeAdapterAir, AluNativeAdapterStep},
     field_arithmetic::{run_field_arithmetic, FieldArithmeticAir},
     write_native_or_imm,
-};
-
-use super::{
-    FieldArithmeticChip, FieldArithmeticCoreAir, FieldArithmeticCoreCols, FieldArithmeticStep,
 };
 
 const MAX_INS_CAPACITY: usize = 128;

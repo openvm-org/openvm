@@ -28,8 +28,8 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
     [a, b][(a < b) as usize]
 }
 
-// If immediate, returns (value, AS::Immediate). Otherwise, writes to native memory and returns (ptr, AS::Native).
-// If is_imm is None, randomizes it.
+// If immediate, returns (value, AS::Immediate). Otherwise, writes to native memory and returns
+// (ptr, AS::Native). If is_imm is None, randomizes it.
 pub fn write_native_or_imm<F: PrimeField32>(
     tester: &mut VmChipTestBuilder<F>,
     rng: &mut StdRng,
