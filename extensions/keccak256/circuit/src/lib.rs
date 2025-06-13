@@ -32,7 +32,7 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::Rv32KeccakOpcode;
 use openvm_rv32im_circuit::adapters::{
-    memory_write_from_state, read_rv32_register, read_rv32_register_from_state,
+    memory_read_from_state, memory_write_from_state, read_rv32_register_from_state,
 };
 use utils::num_keccak_f;
 
@@ -143,12 +143,50 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {
-        // Note: doing `read_rv32_register` here instead of `read_rv32_register_from_state`
-        // because we don't want this read to be metered
-        let len = read_rv32_register(state.memory, instruction.c.as_canonical_u32());
-        let num_blocks = num_keccak_f(len as usize);
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
+        } = instruction;
+        debug_assert_eq!(*opcode, Rv32KeccakOpcode::KECCAK256.global_opcode());
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
-        self.execute_e1(state, instruction)?;
+        let dst = read_rv32_register_from_state(state, a.as_canonical_u32());
+        let src = read_rv32_register_from_state(state, b.as_canonical_u32());
+        let len = read_rv32_register_from_state(state, c.as_canonical_u32()) as usize;
+
+        let num_blocks = num_keccak_f(len);
+
+        debug_assert!(src as usize + len <= (1 << self.pointer_max_bits));
+        debug_assert!(dst as usize + KECCAK_DIGEST_BYTES <= (1 << self.pointer_max_bits));
+        // We don't support messages longer than 2^[pointer_max_bits] bytes
+        debug_assert!(len < (1 << self.pointer_max_bits));
+
+        let mut input = Vec::with_capacity(len);
+        let num_reads = len.div_ceil(KECCAK_WORD_SIZE);
+        for idx in 0..num_reads {
+            let read: [u8; KECCAK_WORD_SIZE] = memory_read_from_state(
+                state,
+                RV32_MEMORY_AS,
+                src + (idx * KECCAK_WORD_SIZE) as u32,
+            );
+            if idx < num_reads - 1 {
+                input.extend_from_slice(&read);
+            } else {
+                let remaining_bytes = len - idx * KECCAK_WORD_SIZE;
+                input.extend_from_slice(&read[..remaining_bytes]);
+            }
+        }
+
+        let output = keccak256(&input);
+        memory_write_from_state(state, RV32_MEMORY_AS, dst, &output);
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         state.ctx.trace_heights[chip_index] += (num_blocks * NUM_ROUNDS) as u32;
 
         Ok(())
