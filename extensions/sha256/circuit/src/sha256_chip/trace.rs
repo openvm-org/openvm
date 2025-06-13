@@ -42,7 +42,7 @@ use super::{
 use crate::{
     sha256_chip::{PaddingFlags, SHA256_READ_SIZE, SHA256_REGISTER_READS, SHA256_WRITE_SIZE},
     Sha256VmControlCols, SHA256VM_ROUND_WIDTH, SHA256VM_WIDTH, SHA256_BLOCK_CELLS,
-    SHA256_NUM_READ_ROWS,
+    SHA256_MAX_MESSAGE_LEN, SHA256_NUM_READ_ROWS,
 };
 
 #[derive(Clone, Copy)]
@@ -74,10 +74,11 @@ pub struct Sha256VmRecordMut<'a> {
 }
 
 /// Custom borrowing that splits the buffer into a fixed `Sha256VmRecord` header
-/// followed by a slice of `u8`'s of length `SHA256_BLOCK_CELLS * num_blocks` where `num_blocks` is provided at runtime,
-/// followed by a slice of `MemoryReadAuxRecord`'s of length `SHA256_NUM_READ_ROWS * num_blocks`.
-/// Uses `align_to_mut()` to make sure the slice is properly aligned to `MemoryReadAuxRecord`.
-/// Has debug assertions that check the size and alignment of the slices.
+/// followed by a slice of `u8`'s of length `SHA256_BLOCK_CELLS * num_blocks` where `num_blocks` is
+/// provided at runtime, followed by a slice of `MemoryReadAuxRecord`'s of length
+/// `SHA256_NUM_READ_ROWS * num_blocks`. Uses `align_to_mut()` to make sure the slice is properly
+/// aligned to `MemoryReadAuxRecord`. Has debug assertions that check the size and alignment of the
+/// slices.
 impl<'a> CustomBorrow<'a, Sha256VmRecordMut<'a>, Sha256VmMetadata> for [u8] {
     fn custom_borrow(&'a mut self, metadata: Sha256VmMetadata) -> Sha256VmRecordMut<'a> {
         let (record_buf, rest) =
@@ -170,7 +171,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
             record.inner.dst_ptr as usize + SHA256_WRITE_SIZE <= (1 << self.pointer_max_bits)
         );
         // We don't support messages longer than 2^29 bytes
-        debug_assert!(record.inner.len < 1 << 29);
+        debug_assert!(record.inner.len < SHA256_MAX_MESSAGE_LEN as u32);
 
         let mut hasher = Sha256::new();
 
@@ -300,8 +301,8 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Sha256VmStep {
                             .unwrap(),
                     ));
                 }
-                // Copy the read aux records and input to another place to safely fill in the trace matrix
-                // without overwriting the record
+                // Copy the read aux records and input to another place to safely fill in the trace
+                // matrix without overwriting the record
                 let mut read_aux_records = Vec::with_capacity(SHA256_NUM_READ_ROWS * num_blocks);
                 read_aux_records.extend_from_slice(record.read_aux);
                 let vm_record = record.inner.clone();
@@ -428,8 +429,9 @@ impl Sha256VmStep {
                         digest_cols
                             .writes_aux
                             .set_prev_data(record.write_aux.prev_data.map(F::from_canonical_u8));
-                        // In the last block we do `SHA256_NUM_READ_ROWS` reads and then write the result
-                        // thus the timestamp of the write is `block_start_timestamp + SHA256_NUM_READ_ROWS`
+                        // In the last block we do `SHA256_NUM_READ_ROWS` reads and then write the
+                        // result thus the timestamp of the write is
+                        // `block_start_timestamp + SHA256_NUM_READ_ROWS`
                         mem_helper.fill(
                             record.write_aux.prev_timestamp,
                             block_start_timestamp + SHA256_NUM_READ_ROWS as u32,
@@ -446,7 +448,8 @@ impl Sha256VmStep {
                             (record.src_ptr >> msl_rshift) << msl_lshift,
                         );
                     } else {
-                        // Filling in zeros to make sure the accidental garbage data doesn't overflow the prime
+                        // Filling in zeros to make sure the accidental garbage data doesn't
+                        // overflow the prime
                         digest_cols.register_reads_aux.iter_mut().for_each(|aux| {
                             mem_helper.fill_zero(aux.as_mut());
                         });
