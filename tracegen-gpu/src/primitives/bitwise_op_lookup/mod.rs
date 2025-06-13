@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use cuda_kernels::primitives::bitwise_op_lookup::tracegen;
-use cuda_utils::d_buffer::DeviceBuffer;
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, NUM_BITWISE_OP_LOOKUP_COLS,
 };
-use stark_backend_gpu::{base::DeviceMatrix, prelude::F};
+use stark_backend_gpu::{base::DeviceMatrix, cuda::d_buffer::DeviceBuffer, prelude::F};
+
+use crate::primitives::cuda::bitwise_op_lookup::tracegen;
 
 #[cfg(test)]
 mod tests;

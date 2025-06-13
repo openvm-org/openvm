@@ -1,10 +1,10 @@
 use core::fmt::Debug;
 use std::sync::Arc;
 
-use cuda_utils::copy::MemCopyD2H;
 use openvm_stark_backend::{p3_matrix::dense::RowMajorMatrix, prover::hal::MatrixDimensions, Chip};
 use stark_backend_gpu::{
     base::DeviceMatrix,
+    cuda::copy::MemCopyD2H,
     prelude::{F, SC},
 };
 

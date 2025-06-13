@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
-use cuda_kernels::dummy::utils::send_bitwise_operation_lookups;
-use cuda_utils::copy::MemCopyH2D;
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use openvm_stark_sdk::utils::create_seeded_rng;
 use rand::Rng;
+use stark_backend_gpu::cuda::copy::MemCopyH2D;
 
 use crate::{
+    dummy::cuda::utils::send_bitwise_operation_lookups,
     primitives::bitwise_op_lookup::BitwiseOperationLookupChipGPU,
     utils::assert_eq_cpu_and_gpu_matrix,
 };

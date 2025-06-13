@@ -1,24 +1,27 @@
 use std::sync::Arc;
 
-use cuda_kernels::dummy::{
-    encoder,
-    fibair::fibair_tracegen,
-    is_equal, is_zero,
-    less_than::{assert_less_than_tracegen, less_than_array_tracegen, less_than_tracegen},
-};
-use cuda_utils::copy::MemCopyD2H;
-use cuda_utils::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_circuit_primitives::{
     encoder::Encoder, is_equal::IsEqSubAir, is_equal_array::IsEqArraySubAir, is_zero::IsZeroSubAir,
     TraceSubRowGenerator,
 };
 use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
 use openvm_stark_sdk::{dummy_airs::fib_air::chip::FibonacciChip, utils::create_seeded_rng};
-use p3_baby_bear::BabyBear;
 use p3_field::{FieldAlgebra, PrimeField32};
 use rand::Rng;
-use stark_backend_gpu::{base::DeviceMatrix, prelude::F};
-use tracegen_gpu::utils::{assert_eq_cpu_and_gpu_matrix, test_chip_whole_trace_output};
+use stark_backend_gpu::{
+    base::DeviceMatrix,
+    cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer},
+    prelude::F,
+};
+use tracegen_gpu::{
+    dummy::cuda::{
+        encoder,
+        fibair::fibair_tracegen,
+        is_equal, is_zero,
+        less_than::{assert_less_than_tracegen, less_than_array_tracegen, less_than_tracegen},
+    },
+    utils::{assert_eq_cpu_and_gpu_matrix, test_chip_whole_trace_output},
+};
 
 #[test]
 fn test_fibair_tracegen() {
@@ -258,7 +261,7 @@ fn test_is_equal_against_cpu_full() {
 
         let gpu_matrix = DeviceMatrix::<F>::with_capacity(n, 2);
         unsafe {
-            is_equal::tracegen(gpu_matrix.buffer(), &inputs_x, &inputs_y);
+            is_equal::tracegen(gpu_matrix.buffer(), &inputs_x, &inputs_y).unwrap();
         }
 
         let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
@@ -302,7 +305,7 @@ fn test_simple_is_equal_array_tracegen() {
     let inputs_x = vec_x.as_slice().to_device().unwrap();
     let inputs_y = vec_y.as_slice().to_device().unwrap();
 
-    unsafe { is_equal::tracegen_array(trace.buffer(), &inputs_x, &inputs_y, ARRAY_LEN) };
+    unsafe { is_equal::tracegen_array(trace.buffer(), &inputs_x, &inputs_y, ARRAY_LEN).unwrap() };
 
     let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
         (0..n)
@@ -344,7 +347,7 @@ fn test_random_is_equal_array_tracegen() {
 
         let gpu_matrix = DeviceMatrix::<F>::with_capacity(n, ARRAY_LEN + 1);
         unsafe {
-            is_equal::tracegen_array(gpu_matrix.buffer(), &inputs_x, &inputs_y, ARRAY_LEN);
+            is_equal::tracegen_array(gpu_matrix.buffer(), &inputs_x, &inputs_y, ARRAY_LEN).unwrap();
         }
 
         let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(

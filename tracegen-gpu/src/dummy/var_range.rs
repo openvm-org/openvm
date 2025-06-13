@@ -1,12 +1,16 @@
 use std::sync::Arc;
 
-use cuda_kernels::dummy::dummy_chip::tracegen;
-use cuda_utils::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_circuit_primitives::var_range::NUM_VARIABLE_RANGE_PREPROCESSED_COLS;
 use openvm_stark_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
-use stark_backend_gpu::{base::DeviceMatrix, prelude::F};
+use stark_backend_gpu::{
+    base::DeviceMatrix,
+    cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer},
+    prelude::F,
+};
 
-use crate::primitives::{var_range::VariableRangeCheckerChipGPU,};
+use crate::{
+    dummy::cuda::dummy_chip::tracegen, primitives::var_range::VariableRangeCheckerChipGPU,
+};
 
 pub struct DummyInteractionChipGPU {
     pub air: DummyInteractionAir,
@@ -36,4 +40,3 @@ impl DummyInteractionChipGPU {
         trace
     }
 }
-

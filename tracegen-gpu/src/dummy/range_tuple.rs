@@ -1,11 +1,15 @@
 use std::sync::Arc;
 
-use cuda_kernels::dummy::range_tuple_dummy::tracegen;
-use cuda_utils::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_stark_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
-use stark_backend_gpu::{base::DeviceMatrix, prelude::F};
+use stark_backend_gpu::{
+    base::DeviceMatrix,
+    cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer},
+    prelude::F,
+};
 
-use crate::primitives::range_tuple::RangeTupleCheckerChipGPU;
+use crate::{
+    dummy::cuda::range_tuple_dummy::tracegen, primitives::range_tuple::RangeTupleCheckerChipGPU,
+};
 
 pub struct DummyInteractionChipGPU<const N: usize> {
     pub air: DummyInteractionAir,
@@ -14,14 +18,10 @@ pub struct DummyInteractionChipGPU<const N: usize> {
 }
 
 /// Expects trace to be: [1, tuple...]
-impl<const N : usize> DummyInteractionChipGPU<N> {
+impl<const N: usize> DummyInteractionChipGPU<N> {
     pub fn new(range_tuple_checker: Arc<RangeTupleCheckerChipGPU<N>>, data: Vec<u32>) -> Self {
         Self {
-            air: DummyInteractionAir::new(
-                N,
-                true,
-                range_tuple_checker.air.bus.inner.index,
-            ),
+            air: DummyInteractionAir::new(N, true, range_tuple_checker.air.bus.inner.index),
             range_tuple_checker,
             data: data.to_device().unwrap(),
         }
@@ -31,7 +31,13 @@ impl<const N : usize> DummyInteractionChipGPU<N> {
         let trace = DeviceMatrix::<F>::with_capacity(self.data.len() / N, N + 1);
         let sizes = self.range_tuple_checker.air.bus.sizes.to_device().unwrap();
         unsafe {
-            tracegen(&self.data, trace.buffer(), &self.range_tuple_checker.count, &sizes).unwrap();
+            tracegen(
+                &self.data,
+                trace.buffer(),
+                &self.range_tuple_checker.count,
+                &sizes,
+            )
+            .unwrap();
         }
         trace
     }

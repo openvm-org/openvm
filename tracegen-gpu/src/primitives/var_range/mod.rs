@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use cuda_kernels::primitives::var_range::tracegen;
-use cuda_utils::d_buffer::DeviceBuffer;
 use openvm_circuit_primitives::var_range::{
     VariableRangeCheckerAir, VariableRangeCheckerBus, NUM_VARIABLE_RANGE_COLS,
 };
-use stark_backend_gpu::{base::DeviceMatrix, prelude::F};
+use stark_backend_gpu::{base::DeviceMatrix, cuda::d_buffer::DeviceBuffer, prelude::F};
+
+use crate::primitives::cuda::var_range::tracegen;
 
 #[cfg(test)]
 mod tests;
