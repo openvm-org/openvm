@@ -119,9 +119,6 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
         let src = read_rv32_register_from_state(state, b.as_canonical_u32());
         let len = read_rv32_register_from_state(state, c.as_canonical_u32());
 
-        state
-            .ctx
-            .on_memory_operation(RV32_MEMORY_AS, src, len as u32);
         let message = unsafe {
             state
                 .memory
