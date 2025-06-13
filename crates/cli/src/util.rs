@@ -38,7 +38,7 @@ pub fn read_config_toml_or_default(config: impl AsRef<Path>) -> Result<AppConfig
     }
 }
 
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
+#[cfg(feature = "evm-prove")]
 pub fn read_default_agg_pk() -> Result<AggProvingKey> {
     let agg_stark_pk = read_agg_stark_pk_from_file(default_agg_stark_pk_path())?;
     let halo2_pk = openvm_sdk::fs::read_agg_halo2_pk_from_file(default_agg_halo2_pk_path())?;

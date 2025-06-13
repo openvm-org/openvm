@@ -6,7 +6,7 @@ use std::{
 use eyre::Result;
 use itertools::Itertools;
 use openvm_continuations::{verifier::internal::types::VmStarkProof, SC};
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
+#[cfg(feature = "evm-prove")]
 use openvm_native_recursion::halo2::{wrapper::EvmVerifierByteCode, Fr, RawEvmProof};
 use openvm_stark_backend::proof::Proof;
 use serde::{Deserialize, Serialize};
@@ -25,7 +25,7 @@ pub const NUM_BN254_ACCUMULATOR: usize = 12;
 /// Number of Bn254Fr in `proof` field for a circuit with only 1 advice column.
 const NUM_BN254_PROOF: usize = 43;
 
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
+#[cfg(feature = "evm-prove")]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EvmHalo2Verifier {
     pub halo2_verifier_code: String,
@@ -46,7 +46,7 @@ pub struct ProofData {
     pub proof: Vec<u8>,
 }
 
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
+#[cfg(feature = "evm-prove")]
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EvmProof {
@@ -60,7 +60,7 @@ pub struct EvmProof {
     pub proof_data: ProofData,
 }
 
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
+#[cfg(feature = "evm-prove")]
 #[derive(Debug, Error)]
 pub enum EvmProofConversionError {
     #[error("Invalid length of proof")]
@@ -73,7 +73,7 @@ pub enum EvmProofConversionError {
     InvalidLengthAccumulator,
 }
 
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
+#[cfg(feature = "evm-prove")]
 impl EvmProof {
     #[cfg(feature = "evm-verify")]
     /// Return bytes calldata to be passed to the verifier contract.
@@ -109,7 +109,7 @@ impl EvmProof {
     }
 }
 
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
+#[cfg(feature = "evm-prove")]
 impl TryFrom<RawEvmProof> for EvmProof {
     type Error = EvmProofConversionError;
 
@@ -159,7 +159,7 @@ impl TryFrom<RawEvmProof> for EvmProof {
     }
 }
 
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
+#[cfg(feature = "evm-prove")]
 impl TryFrom<EvmProof> for RawEvmProof {
     type Error = EvmProofConversionError;
     fn try_from(evm_openvm_proof: EvmProof) -> Result<Self, Self::Error> {

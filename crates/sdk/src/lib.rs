@@ -31,7 +31,7 @@ pub use openvm_continuations::{
     static_verifier::{DefaultStaticVerifierPvHandler, StaticVerifierPvHandler},
     RootSC, C, F, SC,
 };
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
+#[cfg(feature = "evm-prove")]
 use openvm_native_recursion::halo2::utils::Halo2ParamsReader;
 use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::{
@@ -51,11 +51,11 @@ use snark_verifier_sdk::{evm::gen_evm_verifier_sol_code, halo2::aggregation::Agg
 
 use crate::{
     config::{AggConfig, SdkVmConfig},
-    keygen::{AggProvingKey, AggStarkProvingKey},
+    keygen::AggStarkProvingKey,
     prover::{AppProver, StarkProver},
 };
 #[cfg(feature = "evm-prove")]
-use crate::{prover::EvmHalo2Prover, types::EvmProof};
+use crate::{keygen::AggProvingKey, prover::EvmHalo2Prover, types::EvmProof};
 
 pub mod codec;
 pub mod commit;
@@ -261,7 +261,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         Ok(())
     }
 
-    #[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
+    #[cfg(feature = "evm-prove")]
     pub fn agg_keygen(
         &self,
         config: AggConfig,

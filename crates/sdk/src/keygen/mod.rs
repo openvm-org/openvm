@@ -14,7 +14,7 @@ use openvm_continuations::{
 };
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::ir::DIGEST_SIZE;
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
+#[cfg(feature = "evm-prove")]
 use openvm_native_recursion::halo2::{
     utils::Halo2ParamsReader, verifier::Halo2VerifierProvingKey, wrapper::Halo2WrapperProvingKey,
 };
@@ -50,7 +50,7 @@ use crate::{
 pub mod asm;
 pub(crate) mod dummy;
 pub mod perm;
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
+#[cfg(feature = "evm-prove")]
 pub mod static_verifier;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -67,7 +67,7 @@ pub struct AppVerifyingKey {
     pub memory_dimensions: MemoryDimensions,
 }
 
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
+#[cfg(feature = "evm-prove")]
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AggProvingKey {
     pub agg_stark_pk: AggStarkProvingKey,
@@ -83,7 +83,7 @@ pub struct AggStarkProvingKey {
 }
 
 /// Attention: the size of this struct is VERY large, usually >10GB.
-#[cfg(any(feature = "evm-prove", feature = "evm-verify"))]
+#[cfg(feature = "evm-prove")]
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Halo2ProvingKey {
     /// Static verifier to verify a stark proof of the root verifier.
@@ -410,6 +410,7 @@ impl RootVerifierProvingKey {
     }
 }
 
+#[cfg(feature = "evm-prove")]
 impl AggProvingKey {
     /// Attention:
     /// - This function is very expensive. Usually it requires >64GB memory and takes >10 minutes.
