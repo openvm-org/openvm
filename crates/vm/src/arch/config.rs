@@ -90,9 +90,9 @@ pub struct MemoryConfig {
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        let mut as_sizes = vec![1 << 25; (1 << 3) + 1];
+        let mut as_sizes = vec![1 << 29; (1 << 3) + 1];
         as_sizes[0] = 0;
-        Self::new(3, as_sizes, 25, 25, 17, 32, 1 << 24)
+        Self::new(3, as_sizes, 29, 29, 17, 32, 1 << 24)
     }
 }
 

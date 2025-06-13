@@ -63,11 +63,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - uses: taiki-e/install-action@nextest
 
       - name: Run ${{ matrix.extension.name }} circuit crate tests
         working-directory: extensions/${{ matrix.extension.path }}/circuit
-        run: cargo nextest run --cargo-profile=fast
+        run: cargo test --profile=fast
 
       - name: Run ${{ matrix.extension.name }} guest crate tests
         if: hashFiles(format('extensions/{0}/guest', matrix.extension.path)) != ''
@@ -77,11 +76,11 @@ jobs:
           if [[ "${{ matrix.extension.name }}" == "pairing" ]]; then
             FEATURE_ARGS="--features=bn254,bls12_381,halo2curves"
           fi
-          cargo nextest run --cargo-profile=fast $FEATURE_ARGS --no-tests=pass
+          cargo test --profile=fast $FEATURE_ARGS --no-tests=pass
 
       - name: Run ${{ matrix.extension.name }} integration tests
         if: hashFiles(format('extensions/{0}/tests', matrix.extension.path)) != ''
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
           rustup component add rust-src --toolchain nightly-2025-02-14
-          cargo nextest run --cargo-profile=fast --no-tests=pass
+          cargo test --profile=fast --no-tests=pass
