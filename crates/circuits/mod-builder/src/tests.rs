@@ -12,8 +12,10 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    test_utils::*, utils::biguint_to_limbs_vec, ExprBuilder, FieldExpr, FieldExprCols,
-    FieldExpressionCoreRecordMut, FieldVariable, SymbolicExpr,
+    test_utils::*,
+    utils::{biguint_to_limbs_vec, limbs_to_biguint},
+    ExprBuilder, FieldExpr, FieldExprCols, FieldExpressionCoreRecord, FieldExpressionCoreRecordMut,
+    FieldVariable, SymbolicExpr,
 };
 
 const LIMB_BITS: usize = 8;
