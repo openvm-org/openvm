@@ -231,13 +231,6 @@ pub(crate) fn small_sig1_field<F: FieldAlgebra + Clone>(
     xor(&rotr::<F>(x, 17), &rotr::<F>(x, 19), &shr::<F>(x, 10))
 }
 
-/// Generate a random message of a given length
-pub fn get_random_message(rng: &mut StdRng, len: usize) -> Vec<u8> {
-    let mut random_message: Vec<u8> = vec![0u8; len];
-    rng.fill(&mut random_message[..]);
-    random_message
-}
-
 /// Wrapper of `get_flag_pt` to get the flag pointer as an array
 pub fn get_flag_pt_array<const N: usize>(encoder: &Encoder, flag_idx: usize) -> [u32; N] {
     encoder.get_flag_pt(flag_idx).try_into().unwrap()
