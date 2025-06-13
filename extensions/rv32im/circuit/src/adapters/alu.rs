@@ -1,13 +1,10 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    ptr::slice_from_raw_parts,
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, BasicAdapterInterface, ExecutionBridge, ExecutionState,
-        MinimalInstruction, VmAdapterAir, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, BasicAdapterInterface,
+        ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir, VmStateMut,
     },
     system::memory::{
         offline_checker::{
@@ -275,21 +272,16 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
 impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceFiller<F, CTX>
     for Rv32BaseAluAdapterStep<LIMB_BITS>
 {
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY: the following is highly unsafe. We are going to cast `adapter_row` to a record
         // buffer, and then do an _overlapping_ write to the `adapter_row` as a row of field
         // elements. This requires:
         // - Cols struct should be repr(C) and we write in reverse order (to ensure non-overlapping)
         // - Do not overwrite any reference in `record` before it has already been used or moved
-        // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic otherwise)
-        let record = unsafe {
-            let record_buffer = &*slice_from_raw_parts(
-                adapter_row.as_ptr() as *const u8,
-                size_of::<Rv32BaseAluAdapterRecord>(),
-            );
-            let record: &Rv32BaseAluAdapterRecord = record_buffer.borrow();
-            record
-        };
+        // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic
+        //   otherwise)
+        let record: &Rv32BaseAluAdapterRecord =
+            unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv32BaseAluAdapterCols<F> = adapter_row.borrow_mut();
 
         // We must assign in reverse

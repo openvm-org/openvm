@@ -1,15 +1,14 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    ptr::slice_from_raw_parts,
 };
 
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
-        VmAdapterInterface, VmCoreAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1,
+        AdapterTraceFiller, AdapterTraceStep, RecordArena, Result, StepExecutorE1, TraceFiller,
+        TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -292,9 +291,7 @@ where
     {
         let Instruction { opcode, .. } = instruction;
 
-        let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout {
-            adapter_width: A::WIDTH,
-        });
+        let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout::new(A::WIDTH));
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -329,17 +326,11 @@ where
     A: 'static + AdapterTraceFiller<F, CTX>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        let record = unsafe {
-            let record_buffer = &*slice_from_raw_parts(
-                core_row.as_ptr() as *const u8,
-                size_of::<LoadStoreCoreRecord<NUM_CELLS>>(),
-            );
-            let record: &LoadStoreCoreRecord<NUM_CELLS> = record_buffer.borrow();
-            record
-        };
+        let record: &LoadStoreCoreRecord<NUM_CELLS> =
+            unsafe { get_record_from_slice(&mut core_row, ()) };
         let core_row: &mut LoadStoreCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
 
         let opcode = Rv32LoadStoreOpcode::from_usize(record.local_opcode as usize);

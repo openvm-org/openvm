@@ -3,6 +3,7 @@ use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
     marker::PhantomData,
+    ptr::{slice_from_raw_parts, slice_from_raw_parts_mut},
     sync::Arc,
 };
 
@@ -197,17 +198,62 @@ pub trait TraceFiller<F, CTX> {
     }
 }
 
-pub struct MatrixRecordArena<F> {
-    pub trace_buffer: Vec<F>,
-    // TODO(ayush): width should be a constant?
-    pub width: usize,
-    pub trace_offset: usize,
+/// A trait that allows for custom implementation of `borrow` given the necessary information
+/// This is useful for record structs that have dynamic size
+pub trait CustomBorrow<'a, T, I> {
+    fn custom_borrow(&'a mut self, metadata: I) -> T;
+}
+
+/// If a struct implements `BorrowMut<T>`, then the same implementation can be used for
+/// `CustomBorrow`
+impl<'a, T, I> CustomBorrow<'a, &'a mut T, I> for [u8]
+where
+    [u8]: BorrowMut<T>,
+{
+    fn custom_borrow(&'a mut self, _metadata: I) -> &'a mut T {
+        self.borrow_mut()
+    }
+}
+
+/// Converts a field element slice into a record type.
+/// This function transmutes the `&mut [F]` to raw bytes,
+/// then uses the `CustomBorrow` trait to transmute to the desired record type `T`.
+/// **SAFETY**: `slice` must satisfy the requirements of the `CustomBorrow` trait.
+pub unsafe fn get_record_from_slice<'a, T, F, I>(slice: &mut &'a mut [F], metadata: I) -> T
+where
+    [u8]: CustomBorrow<'a, T, I>,
+{
+    // The alignment of `[u8]` is always satisfiedƒ
+    let record_buffer =
+        &mut *slice_from_raw_parts_mut(slice.as_mut_ptr() as *mut u8, slice.len() * size_of::<F>());
+    let record: T = record_buffer.custom_borrow(metadata);
+    record
 }
 
 /// The minimal information that [AdapterCoreRecordArena] needs to know to allocate a row
 /// **WARNING**: `adapter_width` is number of field elements, not in bytes
-pub struct AdapterCoreLayout {
+pub struct AdapterCoreLayout<I = ()> {
     pub adapter_width: usize,
+    pub metadata: I,
+}
+
+impl<I> AdapterCoreLayout<I> {
+    pub fn new(adapter_width: usize) -> Self
+    where
+        I: Default,
+    {
+        Self {
+            adapter_width,
+            metadata: I::default(),
+        }
+    }
+
+    pub fn with_metadata(adapter_width: usize, metadata: I) -> Self {
+        Self {
+            adapter_width,
+            metadata,
+        }
+    }
 }
 
 /// A record arena struct that can be used by chips that
@@ -223,20 +269,18 @@ pub struct AdapterCoreRecordArena<F> {
 
 /// RecordArena implementation for [AdapterCoreRecordArena]
 /// A is the adapter record type and C is the core record type
-impl<'a, F: Field, A, C> RecordArena<'a, AdapterCoreLayout, (&'a mut A, &'a mut C)>
+impl<'a, F: Field, A, C, I: Clone> RecordArena<'a, AdapterCoreLayout<I>, (A, C)>
     for AdapterCoreRecordArena<F>
 where
-    A: Sized,
-    C: Sized,
-    [u8]: BorrowMut<A> + BorrowMut<C>,
+    [u8]: CustomBorrow<'a, A, I> + CustomBorrow<'a, C, I>,
 {
-    fn alloc(&'a mut self, layout: AdapterCoreLayout) -> (&'a mut A, &'a mut C) {
+    fn alloc(&'a mut self, layout: AdapterCoreLayout<I>) -> (A, C) {
         let buffer = self.alloc_single_row();
         let (adapter_buffer, core_buffer) =
             buffer.split_at_mut(layout.adapter_width * size_of::<F>());
 
-        let adapter_record: &mut A = adapter_buffer.borrow_mut();
-        let core_record: &mut C = core_buffer.borrow_mut();
+        let adapter_record: A = adapter_buffer.custom_borrow(layout.metadata.clone());
+        let core_record: C = core_buffer.custom_borrow(layout.metadata);
 
         (adapter_record, core_record)
     }
@@ -280,18 +324,14 @@ impl<F: Field> RowMajorMatrixArena<F> for AdapterCoreRecordArena<F> {
     }
 }
 
-/// A trait that allows for custom implementation of `borrow` given the necessary information
-/// This is useful for record structs that have dynamic size
-pub trait CustomBorrow<'a, T, I> {
-    fn custom_borrow(&'a mut self, metadata: I) -> T;
-}
-
 /// The minimal information that [MultiRowRecordArena] needs to know to allocate a record
 pub struct MultiRowLayout<I> {
     pub num_rows: u32,
     pub metadata: I,
 }
 
+/// A record arena struct that can be used by chips that
+/// use multiple rows per instruction
 // TEMP[jpw]: buffer should be inside CTX
 pub struct MultiRowRecordArena<F> {
     pub trace_buffer: Vec<F>,
@@ -478,13 +518,6 @@ pub trait AdapterTraceStep<F, CTX> {
     type RecordMut<'a>
     where
         Self: 'a;
-
-    // /// The minimal amount of information needed to generate the sub-row of the trace matrix.
-    // /// This type has a lifetime so other context, such as references to other chips, can be
-    // /// provided.
-    // type TraceContext<'a>
-    // where
-    //     Self: 'a;
 
     fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>);
 

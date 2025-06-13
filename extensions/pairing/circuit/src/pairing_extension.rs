@@ -123,8 +123,8 @@ pub(crate) mod phantom {
             b: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
-            let rs1 = read_rv32_register(memory, 1, a);
-            let rs2 = read_rv32_register(memory, 1, b);
+            let rs1 = read_rv32_register(memory, a);
+            let rs2 = read_rv32_register(memory, b);
             hint_pairing(memory, &mut streams.hint_stream, rs1, rs2, c_upper)
         }
     }

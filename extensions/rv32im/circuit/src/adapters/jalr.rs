@@ -1,13 +1,10 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    ptr::slice_from_raw_parts,
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, BasicAdapterInterface, ExecutionBridge, ExecutionState,
-        SignedImmInstruction, VmAdapterAir, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, BasicAdapterInterface,
+        ExecutionBridge, ExecutionState, SignedImmInstruction, VmAdapterAir, VmStateMut,
     },
     system::memory::{
         offline_checker::{
@@ -233,15 +230,8 @@ where
 }
 impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32JalrAdapterStep {
     #[inline(always)]
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
-        let record = unsafe {
-            let record_buffer = &*slice_from_raw_parts(
-                adapter_row.as_ptr() as *const u8,
-                size_of::<Rv32JalrAdapterRecord>(),
-            );
-            let record: &Rv32JalrAdapterRecord = record_buffer.borrow();
-            record
-        };
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        let record: &Rv32JalrAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv32JalrAdapterCols<F> = adapter_row.borrow_mut();
 
         // We must assign in reverse
