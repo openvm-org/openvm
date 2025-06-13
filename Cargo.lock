@@ -4864,6 +4864,7 @@ dependencies = [
  "eyre",
  "getset",
  "itertools 0.14.0",
+ "memmap2",
  "metrics",
  "openvm-circuit",
  "openvm-circuit-derive",

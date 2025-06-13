@@ -67,7 +67,7 @@ jobs:
 
       - name: Run ${{ matrix.extension.name }} circuit crate tests
         working-directory: extensions/${{ matrix.extension.path }}/circuit
-        run: cargo nextest run --cargo-profile=fast
+        run: cargo nextest run --cargo-profile=fast --test-threads=1 --no-fail-fast
 
       - name: Run ${{ matrix.extension.name }} guest crate tests
         if: hashFiles(format('extensions/{0}/guest', matrix.extension.path)) != ''
@@ -79,11 +79,11 @@ jobs:
           elif [[ "${{ matrix.extension.name }}" == "ecc" ]]; then
             FEATURE_ARGS="--features=k256,p256"
           fi
-          cargo nextest run --cargo-profile=fast $FEATURE_ARGS --no-tests=pass
+          cargo nextest run --cargo-profile=fast $FEATURE_ARGS --no-tests=pass --test-threads=1 --no-fail-fast
 
       - name: Run ${{ matrix.extension.name }} integration tests
         if: hashFiles(format('extensions/{0}/tests', matrix.extension.path)) != ''
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
           rustup component add rust-src --toolchain nightly-2025-02-14
-          cargo nextest run --cargo-profile=fast --no-tests=pass
+          cargo nextest run --cargo-profile=fast --no-tests=pass --test-threads=1 --no-fail-fast

@@ -42,9 +42,8 @@ use crate::{
         memory::{
             merkle::MemoryMerklePvs,
             online::GuestMemory,
-            paged_vec::AddressMap,
             tree::public_values::{UserPublicValuesProof, UserPublicValuesProofError},
-            MemoryImage, CHUNK,
+            AddressMap, MemoryImage, CHUNK,
         },
         program::trace::VmCommittedExe,
     },
@@ -190,14 +189,9 @@ where
         ) -> Result<R, E>,
         map_err: impl Fn(ExecutionError) -> E,
     ) -> Result<Vec<R>, E> {
-        let mem_config = self.config.system().memory_config;
+        let mem_config = self.config.system().memory_config.clone();
         let exe = exe.into();
-        let memory = AddressMap::from_sparse(
-            mem_config.as_offset,
-            1 << mem_config.as_height,
-            1 << mem_config.pointer_max_bits,
-            exe.init_memory.clone(),
-        );
+        let memory = AddressMap::from_sparse(mem_config.as_sizes.clone(), exe.init_memory.clone());
 
         let pc = exe.pc_start;
         let mut state = VmState::new(0, pc, memory, input);
@@ -362,12 +356,10 @@ where
     where
         VC::Executor: InsExecutorE1<F>,
     {
-        let mem_config = self.config.system().memory_config;
+        let mem_config = self.config.system().memory_config.clone();
         let exe = exe.into();
         let memory = Some(GuestMemory::new(AddressMap::from_sparse(
-            mem_config.as_offset,
-            1 << mem_config.as_height,
-            1 << mem_config.pointer_max_bits,
+            mem_config.as_sizes.clone(),
             exe.init_memory.clone(),
         )));
 
@@ -426,13 +418,11 @@ where
     where
         VC::Executor: InsExecutorE1<F>,
     {
-        let mem_config = self.config.system().memory_config;
+        let mem_config = self.config.system().memory_config.clone();
         let exe = exe.into();
 
         let memory = Some(GuestMemory::new(AddressMap::from_sparse(
-            mem_config.as_offset,
-            1 << mem_config.as_height,
-            1 << mem_config.pointer_max_bits,
+            mem_config.as_sizes.clone(),
             exe.init_memory.clone(),
         )));
 

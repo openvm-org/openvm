@@ -7,10 +7,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    adapter::AccessAdapterInventory,
-    offline_checker::MemoryBus,
-    paged_vec::{AddressMap, PAGE_SIZE},
-    Address, MemoryAddress, PagedVec,
+    adapter::AccessAdapterInventory, offline_checker::MemoryBus, Address, AddressMap,
+    MemoryAddress, MemoryBackend,
 };
 use crate::{arch::MemoryConfig, system::memory::MemoryImage};
 
@@ -18,7 +16,7 @@ pub const INITIAL_TIMESTAMP: u32 = 0;
 
 #[derive(Debug, Clone, derive_new::new)]
 pub struct GuestMemory {
-    pub memory: AddressMap<PAGE_SIZE>,
+    pub memory: AddressMap,
 }
 
 impl GuestMemory {
@@ -37,16 +35,7 @@ impl GuestMemory {
     where
         T: Copy + Debug,
     {
-        debug_assert_eq!(
-            size_of::<T>(),
-            self.memory.cell_size[(addr_space - self.memory.as_offset) as usize]
-        );
-        let read = self
-            .memory
-            .paged_vecs
-            .get_unchecked((addr_space - self.memory.as_offset) as usize)
-            .get((ptr as usize) * size_of::<T>());
-        read
+        std::array::from_fn(|i| self.memory.get::<T>((addr_space, ptr + i as u32)))
     }
 
     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}`
@@ -61,15 +50,9 @@ impl GuestMemory {
     ) where
         T: Copy + Debug,
     {
-        debug_assert_eq!(
-            size_of::<T>(),
-            self.memory.cell_size[(addr_space - self.memory.as_offset) as usize],
-            "addr_space={addr_space}"
-        );
-        self.memory
-            .paged_vecs
-            .get_unchecked_mut((addr_space - self.memory.as_offset) as usize)
-            .set((ptr as usize) * size_of::<T>(), values);
+        values.iter().enumerate().for_each(|(i, value)| {
+            self.memory.set::<T>((addr_space, ptr + i as u32), *value);
+        });
     }
 
     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}` and returns
@@ -187,7 +170,7 @@ pub struct TracingMemory<F> {
     pub data: GuestMemory,
     /// A map of `addr_space -> (ptr / min_block_size[addr_space] -> (timestamp: u32, block_size:
     /// u32))` for the timestamp and block size of the latest access.
-    pub(super) meta: Vec<PagedVec<PAGE_SIZE>>,
+    pub(super) meta: Vec<MemoryBackend>,
     /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
     /// all memory accesses in `addr_space` must be aligned to this block size.
     pub min_block_size: Vec<u32>,
@@ -202,22 +185,20 @@ impl<F: PrimeField32> TracingMemory<F> {
         memory_bus: MemoryBus,
         initial_block_size: usize,
     ) -> Self {
-        assert_eq!(mem_config.as_offset, 1);
-        let num_cells = 1usize << mem_config.pointer_max_bits; // max cells per address space
+        let num_cells = mem_config.as_sizes.clone();
         let num_addr_sp = 1 + (1 << mem_config.as_height);
         let mut min_block_size = vec![1; num_addr_sp];
         // TMP: hardcoding for now
         min_block_size[1] = 4;
         min_block_size[2] = 4;
         min_block_size[3] = 4;
-        let meta = min_block_size
-            .iter()
-            .map(|&min_block_size| {
-                PagedVec::new(
+        let meta = zip_eq(&min_block_size, &num_cells)
+            .map(|(min_block_size, num_cells)| {
+                MemoryBackend::new(
                     num_cells
                         .checked_mul(size_of::<AccessMetadata>())
                         .unwrap()
-                        .div_ceil(PAGE_SIZE * min_block_size as usize),
+                        .div_ceil(MemoryBackend::CELL_STRIDE * *min_block_size as usize),
                 )
             })
             .collect();
@@ -238,14 +219,14 @@ impl<F: PrimeField32> TracingMemory<F> {
 
     /// Instantiates a new `Memory` data structure from an image.
     pub fn with_image(mut self, image: MemoryImage, _access_capacity: usize) -> Self {
-        for (i, (paged_vec, cell_size)) in izip!(&image.paged_vecs, &image.cell_size).enumerate() {
-            let num_cells = paged_vec.bytes_capacity() / cell_size;
+        for (i, (mem, cell_size)) in izip!(image.get_memory(), &image.cell_size).enumerate() {
+            let num_cells = mem.len() / cell_size;
 
-            self.meta[i] = PagedVec::new(
+            self.meta[i] = MemoryBackend::new(
                 num_cells
                     .checked_mul(size_of::<AccessMetadata>())
                     .unwrap()
-                    .div_ceil(PAGE_SIZE * self.min_block_size[i] as usize),
+                    .div_ceil(self.min_block_size[i] as usize),
             );
         }
         self.data = GuestMemory::new(image);
@@ -590,8 +571,8 @@ impl<F: PrimeField32> TracingMemory<F> {
     pub fn touched_blocks(&self) -> impl Iterator<Item = (Address, AccessMetadata)> + '_ {
         zip_eq(&self.meta, &self.min_block_size)
             .enumerate()
-            .flat_map(move |(addr_space, (page, &align))| {
-                page.iter::<AccessMetadata>()
+            .flat_map(move |(addr_space, (mem, &align))| {
+                mem.iter::<AccessMetadata>()
                     .filter_map(move |(idx, metadata)| {
                         (metadata.block_size != 0
                             && metadata.block_size != AccessMetadata::OCCUPIED)
