@@ -1,5 +1,5 @@
 pub mod e1;
-pub mod metered;
+// pub mod metered;
 pub mod tracegen;
 
 // TODO(ayush): better name

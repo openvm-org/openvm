@@ -18,6 +18,8 @@ use openvm_stark_sdk::{
 
 use crate::{
     arch::{
+        execution_mode::e1::E1ExecutionControl,
+        interpreter::InterpretedInstance,
         vm::{VirtualMachine, VmExecutor},
         Streams, VmConfig,
     },
@@ -63,6 +65,15 @@ where
     VC::Periphery: Chip<BabyBearPoseidon2Config>,
 {
     setup_tracing();
+    let exe = exe.into();
+    let input = input.into();
+    {
+        let executor = InterpretedInstance::<BabyBear, _>::new(config.clone(), exe.clone());
+        executor
+            .execute(E1ExecutionControl::new(None), input.clone())
+            .expect("Failed to execute");
+    }
+    return None;
     let mut log_blowup = 1;
     while config.system().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
