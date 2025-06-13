@@ -225,6 +225,7 @@ where
     record
 }
 
+
 /// Minimal layout information that [MatrixRecordArena] requires for row allocation
 /// in scenarios involving chips that:
 /// - have a single row per instruction
