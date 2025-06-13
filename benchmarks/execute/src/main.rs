@@ -1,14 +1,17 @@
 use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
-use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
-use openvm_bigint_transpiler::Int256TranspilerExtension;
+use openvm_circuit::arch::{
+    execution_mode::e1::E1ExecutionControl, interpreter::InterpretedInstance,
+};
+// use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
+// use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
     arch::{instructions::exe::VmExe, InitFileGenerator, SystemConfig, VirtualMachine},
     derive::VmConfig,
 };
-use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
-use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
+// use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
+// use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
@@ -16,8 +19,8 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
-use openvm_sha256_transpiler::Sha256TranspilerExtension;
+// use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
+// use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_sdk::{
     bench::run_with_metric_collection,
     config::baby_bear_poseidon2::default_engine,
@@ -26,7 +29,6 @@ use openvm_stark_sdk::{
 };
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
-
 // const DEFAULT_APP_CONFIG_PATH: &str = "./openvm.toml";
 
 static AVAILABLE_PROGRAMS: &[&str] = &[
@@ -34,13 +36,13 @@ static AVAILABLE_PROGRAMS: &[&str] = &[
     "fibonacci_iterative",
     "quicksort",
     "bubblesort",
-    "factorial_iterative_u256",
-    "revm_snailtracer",
-    "keccak256",
-    "keccak256_iter",
-    "sha256",
-    "sha256_iter",
-    "revm_transfer",
+    // "factorial_iterative_u256",
+    // "revm_snailtracer",
+    // "keccak256",
+    // "keccak256_iter",
+    // "sha256",
+    // "sha256_iter",
+    // "revm_transfer",
     // "pairing",
 ];
 
@@ -78,12 +80,12 @@ pub struct ExecuteConfig {
     pub rv32m: Rv32M,
     #[extension]
     pub io: Rv32Io,
-    #[extension]
-    pub bigint: Int256,
-    #[extension]
-    pub keccak: Keccak256,
-    #[extension]
-    pub sha256: Sha256,
+    // #[extension]
+    // pub bigint: Int256,
+    // #[extension]
+    // pub keccak: Keccak256,
+    // #[extension]
+    // pub sha256: Sha256,
 }
 
 impl Default for ExecuteConfig {
@@ -94,9 +96,9 @@ impl Default for ExecuteConfig {
             rv32i: Rv32I,
             rv32m: Rv32M::default(),
             io: Rv32Io,
-            bigint: Int256::default(),
-            keccak: Keccak256,
-            sha256: Sha256,
+            // bigint: Int256::default(),
+            // keccak: Keccak256,
+            // sha256: Sha256,
         }
     }
 }
@@ -170,19 +172,23 @@ fn main() -> Result<()> {
             let transpiler = Transpiler::<BabyBear>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(Int256TranspilerExtension)
-                .with_extension(Keccak256TranspilerExtension)
-                .with_extension(Sha256TranspilerExtension);
+                .with_extension(Rv32IoTranspilerExtension);
+            // .with_extension(Int256TranspilerExtension)
+            // .with_extension(Keccak256TranspilerExtension)
+            // .with_extension(Sha256TranspilerExtension);
 
             let exe = VmExe::from_elf(elf, transpiler)?;
 
-            let vm = VirtualMachine::new(default_engine(), vm_config.clone());
-            vm.executor
-                .execute_e1(exe.clone(), vec![], None)
-                // .execute(exe.clone(), vec![])
-                // .execute_metered(exe.clone(), vec![], widths, interactions)
-                .expect("Failed to execute program");
+            let interpreter = InterpretedInstance::new(vm_config, exe.clone());
+            interpreter
+                .execute(E1ExecutionControl::new(None), vec![])
+                .expect("Failed to execute program in interpreted mode");
+            // let executor = VmExecutor::new(vm_config);
+            // executor
+            //     .execute_e1(exe.clone(), vec![], None)
+            //     // .execute(exe.clone(), vec![])
+            //     // .execute_metered(exe.clone(), vec![], widths, interactions)
+            //     .expect("Failed to execute program");
 
             // let pk = vm.keygen();
             // let vk = pk.get_vk();
