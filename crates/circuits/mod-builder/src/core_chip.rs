@@ -214,7 +214,7 @@ impl<'a> FieldExpressionCoreRecord<'a> {
 
     #[inline(always)]
     pub fn fill_from_execution_data(&mut self, opcode: u8, data: &[u8]) {
-        // Rust will assert that that length of `data` and `self.input_limbs` are the same
+        // Rust will assert that length of `data` and `self.input_limbs` are the same
         // That is `data.len() == num_inputs * limbs_per_input`
         *self.opcode = opcode;
 
