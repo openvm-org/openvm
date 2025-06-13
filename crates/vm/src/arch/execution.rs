@@ -12,10 +12,7 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{
-    execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-    Streams,
-};
+use super::{execution_mode::E1E2ExecutionCtx, Streams, VmSegmentState};
 use crate::system::{
     memory::{
         online::{GuestMemory, TracingMemory},
@@ -119,25 +116,35 @@ pub trait InstructionExecutor<F> {
     fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
+pub type ExecuteFunc<F, CTX> =
+    unsafe fn(*const PreComputeInstruction<F, CTX>, &mut VmSegmentState<F, CTX>) -> Result<()>;
+
+#[macro_export]
+macro_rules! next_instruction {
+    ($next_inst: expr, $vm_state: expr) => {
+        ((*$next_inst).handler)($next_inst, $vm_state)
+    };
+}
+
+pub struct PreComputeInstruction<'a, F, CTX> {
+    pub handler: ExecuteFunc<F, CTX>,
+    pub pre_compute: &'a [u8],
+}
+
 /// New trait for instruction execution
 pub trait InsExecutorE1<F> {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
     where
         F: PrimeField32,
         Ctx: E1E2ExecutionCtx;
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()>
-    where
-        F: PrimeField32;
+    // fn execute_metered(&self, chip_index: usize) -> ExecuteFunc<F, MeteredCtx>
+    // where
+    //     F: PrimeField32;
+
+    fn pre_compute_size(&self) -> usize;
+
+    fn pre_compute(&self, inst: &Instruction<F>, data: &mut [u8]);
 
     fn set_trace_height(&mut self, height: usize);
 }
@@ -146,31 +153,32 @@ impl<F, C> InsExecutorE1<F> for RefCell<C>
 where
     C: InsExecutorE1<F>,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+    #[inline(always)]
+    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
     where
         F: PrimeField32,
         Ctx: E1E2ExecutionCtx,
     {
-        self.borrow_mut().execute_e1(state, instruction)
+        self.borrow().execute_e1()
     }
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()>
-    where
-        F: PrimeField32,
-    {
-        self.borrow_mut()
-            .execute_metered(state, instruction, chip_index)
-    }
+    // #[inline(always)]
+    // fn execute_metered(&self, chip_index: usize) -> ExecuteFunc<F, MeteredCtx>
+    // where
+    //     F: PrimeField32,
+    // {
+    //     self.execute_metered(chip_index)
+    // }
 
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        self.borrow().pre_compute_size()
+    }
+    #[inline(always)]
+    fn pre_compute(&self, inst: &Instruction<F>, data: &mut [u8]) {
+        self.borrow().pre_compute(inst, data)
+    }
+    #[inline(always)]
     fn set_trace_height(&mut self, height: usize) {
         self.borrow_mut().set_trace_height(height);
     }

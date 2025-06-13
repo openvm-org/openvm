@@ -27,7 +27,7 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
-
+use openvm_circuit::arch::ExecuteFunc;
 use crate::{
     builder::{FieldExpr, FieldExprCols},
     utils::biguint_to_limbs_vec,
@@ -442,34 +442,39 @@ where
     A: 'static
         + for<'a> AdapterExecutorE1<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
     where
-        Ctx: E1E2ExecutionCtx,
+        Ctx: E1E2ExecutionCtx
     {
-        let data: &[u8] = &self.adapter.read(state, instruction).into().0;
-        let (writes, _, _) =
-            run_field_expression(self, data, instruction.opcode.local_opcode_idx(self.offset));
-
-        self.adapter.write(state, instruction, writes.into());
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        Ok(())
+        todo!()
+        // let data: &[u8] = &self.adapter.read(state, instruction).into().0;
+        // let (writes, _, _) =
+        //     run_field_expression(self, data, instruction.opcode.local_opcode_idx(self.offset));
+        //
+        // self.adapter.write(state, instruction, writes.into());
+        // *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        // Ok(())
     }
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
-
-        Ok(())
+    fn pre_compute_size(&self) -> usize {
+        todo!()
     }
+
+    fn pre_compute(&self, inst: &Instruction<F>, data: &mut [u8]) {
+        todo!()
+    }
+
+    // fn execute_metered(
+    //     &self,
+    //     state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+    //     instruction: &Instruction<F>,
+    //     chip_index: usize,
+    // ) -> Result<()> {
+    //     self.execute_e1(state, instruction)?;
+    //     state.ctx.trace_heights[chip_index] += 1;
+    //
+    //     Ok(())
+    // }
 }
 
 fn run_field_expression<A>(

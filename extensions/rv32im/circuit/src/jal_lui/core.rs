@@ -7,19 +7,18 @@ use openvm_circuit::{
         AdapterTraceStep, EmptyAdapterCoreLayout, ImmInstruction, RecordArena, Result,
         StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    next_instruction,
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     AlignedBytesBorrow,
 };
-use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_circuit_primitives_derive::{AlignedBorrow};
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
+    riscv::RV32_REGISTER_AS,
     LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32JalLuiOpcode::{self, *};
@@ -29,7 +28,7 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-
+use openvm_circuit::arch::{ExecuteFunc, PreComputeInstruction, VmSegmentState};
 use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_J_TYPE_IMM_BITS};
 
 pub(super) const ADDITIONAL_BITS: u32 = 0b11000000;
@@ -238,47 +237,108 @@ where
     }
 }
 
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct JalLuiPreCompute {
+    signed_imm: i32,
+    a: u8,
+    enabled: bool,
+    is_jal: bool,
+}
+
 impl<F, A> StepExecutorE1<F> for Rv32JalLuiStep<A>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+    #[inline(always)]
+    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
     where
         Ctx: E1E2ExecutionCtx,
     {
-        let &Instruction { opcode, c: imm, .. } = instruction;
-
-        let is_jal = opcode.local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET) == JAL as usize;
-        let signed_imm = get_signed_imm(is_jal, imm);
-        let (to_pc, rd) = run_jal_lui(is_jal, *state.pc, signed_imm);
-
-        self.adapter.write(state, instruction, rd);
-
-        *state.pc = to_pc;
-        self.adapter.write(state, instruction, rd);
-
-        *state.pc = to_pc;
-
-        Ok(())
+        execute_e1_impl
     }
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
+    // fn execute_metered(
+    //     &self,
+    //     state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+    //     instruction: &Instruction<F>,
+    //     chip_index: usize,
+    // ) -> Result<()> {
+    //     self.execute_e1(state, instruction)?;
+    //     state.ctx.trace_heights[chip_index] += 1;
+    //
+    //     Ok(())
+    // }
 
-        Ok(())
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<JalLuiPreCompute>()
     }
+
+    #[inline(always)]
+    fn pre_compute(&self, inst: &Instruction<F>, data: &mut [u8]) {
+        let data: &mut JalLuiPreCompute = data.borrow_mut();
+        let local_opcode = Rv32JalLuiOpcode::from_usize(
+            inst.opcode.local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET),
+        );
+        let is_jal = local_opcode == JAL;
+        let imm_f = inst.c.as_canonical_u32();
+        let signed_imm = if is_jal {
+            if imm_f < (1 << (RV_J_TYPE_IMM_BITS - 1)) {
+                imm_f as i32
+            } else {
+                let neg_imm_f = F::ORDER_U32 - imm_f;
+                assert!(neg_imm_f < (1 << (RV_J_TYPE_IMM_BITS - 1)));
+                -(neg_imm_f as i32)
+            }
+        } else {
+            imm_f as i32
+        };
+
+        *data = JalLuiPreCompute {
+            signed_imm,
+            a: inst.a.as_canonical_u32() as u8,
+            enabled: !inst.f.is_zero(),
+            is_jal: local_opcode == JAL,
+        };
+    }
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+    inst: *const PreComputeInstruction<F, CTX>,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) -> Result<()> {
+    let curr_inst = unsafe { &*inst };
+    let pre_compute: &JalLuiPreCompute = curr_inst.pre_compute.borrow();
+    let JalLuiPreCompute {
+        a,
+        signed_imm,
+        enabled,
+        is_jal,
+    } = *pre_compute;
+
+    let (next_inst, rd) = if is_jal {
+        let rd_data = (vm_state.pc + DEFAULT_PC_STEP).to_le_bytes();
+        let next_pc = vm_state.pc as i32 + signed_imm;
+        debug_assert!(next_pc >= 0);
+        vm_state.pc = next_pc as u32;
+        (
+            unsafe { inst.offset(signed_imm as isize / DEFAULT_PC_STEP as isize) },
+            rd_data,
+        )
+    } else {
+        let imm = signed_imm as u32;
+        let rd = imm << 12;
+        vm_state.pc += DEFAULT_PC_STEP;
+        (unsafe { inst.offset(1) }, rd.to_le_bytes())
+    };
+
+    if enabled {
+        vm_state.vm_write(RV32_REGISTER_AS, a as u32, &rd);
+    }
+
+    vm_state.instret += 1;
+    next_instruction!(next_inst, vm_state)
 }
 
 // returns the canonical signed representation of the immediate

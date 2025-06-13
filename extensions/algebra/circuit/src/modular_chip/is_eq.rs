@@ -31,7 +31,7 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-
+use openvm_circuit::arch::ExecuteFunc;
 // Given two numbers b and c, we want to prove that a) b == c or b != c, depending on
 // result of cmp_result and b) b, c < N for some modulus N that is passed into the AIR
 // at runtime (i.e. when chip is instantiated).
@@ -448,55 +448,58 @@ where
             WriteData: From<[u8; WRITE_LIMBS]>,
         >,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
     where
-        Ctx: E1E2ExecutionCtx,
+        Ctx: E1E2ExecutionCtx
     {
-        let Instruction { opcode, .. } = instruction;
-
-        let local_opcode =
-            Rv32ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        matches!(
-            local_opcode,
-            Rv32ModularArithmeticOpcode::IS_EQ | Rv32ModularArithmeticOpcode::SETUP_ISEQ
-        );
-
-        let [b, c] = self.adapter.read(state, instruction).into();
-        let (b_cmp, _) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.modulus_limbs);
-        let (c_cmp, _) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.modulus_limbs);
-        let is_setup = instruction.opcode.local_opcode_idx(self.offset)
-            == Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize;
-
-        if !is_setup {
-            assert!(b_cmp, "{:?} >= {:?}", b, self.modulus_limbs);
-        }
-        assert!(c_cmp, "{:?} >= {:?}", c, self.modulus_limbs);
-
-        let mut write_data = [0u8; WRITE_LIMBS];
-        write_data[0] = (b == c) as u8;
-
-        self.adapter.write(state, instruction, write_data.into());
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
+        todo!()
+        // let Instruction { opcode, .. } = instruction;
+        //
+        // let local_opcode =
+        //     Rv32ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        // matches!(
+        //     local_opcode,
+        //     Rv32ModularArithmeticOpcode::IS_EQ | Rv32ModularArithmeticOpcode::SETUP_ISEQ
+        // );
+        //
+        // let [b, c] = self.adapter.read(state, instruction).into();
+        // let (b_cmp, _) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.modulus_limbs);
+        // let (c_cmp, _) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.modulus_limbs);
+        // let is_setup = instruction.opcode.local_opcode_idx(self.offset)
+        //     == Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize;
+        //
+        // if !is_setup {
+        //     assert!(b_cmp, "{:?} >= {:?}", b, self.modulus_limbs);
+        // }
+        // assert!(c_cmp, "{:?} >= {:?}", c, self.modulus_limbs);
+        //
+        // let mut write_data = [0u8; WRITE_LIMBS];
+        // write_data[0] = (b == c) as u8;
+        //
+        // self.adapter.write(state, instruction, write_data.into());
+        //
+        // *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
     }
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
-
-        Ok(())
+    fn pre_compute_size(&self) -> usize {
+        todo!()
     }
+
+    fn pre_compute(&self, inst: &Instruction<F>, data: &mut [u8]) {
+        todo!()
+    }
+
+    // fn execute_metered(
+    //     &self,
+    //     state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+    //     instruction: &Instruction<F>,
+    //     chip_index: usize,
+    // ) -> Result<()> {
+    //     self.execute_e1(state, instruction)?;
+    //     state.ctx.trace_heights[chip_index] += 1;
+    //
+    //     Ok(())
+    // }
 }
 
 // Returns (cmp_result, diff_idx)

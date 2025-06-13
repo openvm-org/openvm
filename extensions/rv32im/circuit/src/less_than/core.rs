@@ -10,6 +10,7 @@ use openvm_circuit::{
         AdapterTraceStep, EmptyAdapterCoreLayout, MinimalInstruction, RecordArena, Result,
         StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
+    next_instruction,
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
@@ -20,9 +21,13 @@ use openvm_circuit_primitives::{
     utils::not,
     AlignedBytesBorrow,
 };
-use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_rv32im_transpiler::LessThanOpcode;
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
+use openvm_rv32im_transpiler::{BaseAluOpcode, LessThanOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -30,6 +35,9 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
+use openvm_circuit::arch::{ExecuteFunc, PreComputeInstruction, VmSegmentState};
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use crate::adapters::imm_to_bytes;
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
@@ -330,55 +338,99 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
-    for LessThanStep<A, NUM_LIMBS, LIMB_BITS>
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct LessThanPreCompute {
+    a: u8,
+    b: u8,
+    c: u8,
+    e_is_imm: bool,
+    is_u32: bool,
+}
+
+impl<F, A, const LIMB_BITS: usize> StepExecutorE1<F>
+    for LessThanStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<
-            F,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-        >,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+    #[inline(always)]
+    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
     where
         Ctx: E1E2ExecutionCtx,
     {
-        let Instruction { opcode, .. } = instruction;
-        let [rs1, rs2] = self.adapter.read(state, instruction).into();
-
-        // Run the comparison
-        let (cmp_result, _, _, _) = run_less_than::<NUM_LIMBS, LIMB_BITS>(
-            opcode.local_opcode_idx(self.offset) == LessThanOpcode::SLT as usize,
-            &rs1,
-            &rs2,
-        );
-        let mut rd = [0u8; NUM_LIMBS];
-        rd[0] = cmp_result as u8;
-
-        self.adapter.write(state, instruction, [rd].into());
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
+        execute_e1_impl
     }
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
+    // fn execute_metered(
+    //     &self,
+    //     state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+    //     instruction: &Instruction<F>,
+    //     chip_index: usize,
+    // ) -> Result<()> {
+    //     self.execute_e1(state, instruction)?;
+    //     state.ctx.trace_heights[chip_index] += 1;
+    //
+    //     Ok(())
+    // }
 
-        Ok(())
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<LessThanPreCompute>()
     }
+
+    #[inline(always)]
+    fn pre_compute(&self, inst: &Instruction<F>, data: &mut [u8]) {
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
+        } = inst;
+        assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        let e_u32 = e.as_canonical_u32();
+        assert!(e_u32 == RV32_IMM_AS || e_u32 == RV32_REGISTER_AS);
+        let local_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let pre_compute: &mut LessThanPreCompute = data.borrow_mut();
+        *pre_compute = LessThanPreCompute {
+            a: a.as_canonical_u32() as u8,
+            b: b.as_canonical_u32() as u8,
+            c: c.as_canonical_u32() as u8,
+            e_is_imm: e_u32 == RV32_IMM_AS,
+            is_u32: local_opcode == LessThanOpcode::SLTU,
+        };
+    }
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+    inst: *const PreComputeInstruction<F, CTX>,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) -> Result<()> {
+    let next_inst = inst.offset(1);
+    let curr_inst = &*inst;
+    let pre_compute: &LessThanPreCompute = curr_inst.pre_compute.borrow();
+
+    let rs1 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs2 = if pre_compute.e_is_imm {
+        imm_to_bytes(pre_compute.c as u32)
+    } else {
+        vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32)
+    };
+    let cmp_result = if pre_compute.is_u32 {
+        u32::from_le_bytes(rs1) < u32::from_le_bytes(rs2)
+    } else {
+        i32::from_le_bytes(rs1) < i32::from_le_bytes(rs2)
+    };
+    let mut rd = [0u8; RV32_REGISTER_NUM_LIMBS];
+    rd[0] = cmp_result as u8;
+    vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
+
+    vm_state.pc += DEFAULT_PC_STEP;
+    vm_state.instret += 1;
+
+    next_instruction!(next_inst, vm_state)
 }
 
 // Returns (cmp_result, diff_idx, x_sign, y_sign)

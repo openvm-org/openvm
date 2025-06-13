@@ -1,5 +1,6 @@
 use std::borrow::{Borrow, BorrowMut};
 
+use openvm_circuit::arch::{ExecuteFunc, PreComputeInstruction, VmSegmentState};
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
@@ -7,13 +8,13 @@ use openvm_circuit::{
         AdapterTraceStep, EmptyAdapterCoreLayout, ImmInstruction, RecordArena, Result,
         StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    next_instruction,
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
-use openvm_circuit_primitives::{utils::not, AlignedBytesBorrow};
-use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_circuit_primitives::utils::not;
+use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
+use openvm_instructions::program::DEFAULT_PC_STEP;
+use openvm_instructions::riscv::RV32_REGISTER_AS;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{
@@ -236,49 +237,84 @@ where
     }
 }
 
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct BranchEqualPreCompute {
+    imm: isize,
+    a: u8,
+    b: u8,
+    is_ne: bool,
+}
+
 impl<F, A, const NUM_LIMBS: usize> StepExecutorE1<F> for BranchEqualStep<A, NUM_LIMBS>
 where
     F: PrimeField32,
-    A: 'static + for<'a> AdapterExecutorE1<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+    #[inline(always)]
+    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
     where
         Ctx: E1E2ExecutionCtx,
     {
-        let &Instruction { opcode, c: imm, .. } = instruction;
+        execute_e1_impl
+    }
 
-        let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+    // fn execute_metered(
+    //     &self,
+    //     state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+    //     instruction: &Instruction<F>,
+    //     chip_index: usize,
+    // ) -> Result<()> {
+    //     self.execute_e1(state, instruction)?;
+    //     state.ctx.trace_heights[chip_index] += 1;
+    //
+    //     Ok(())
+    // }
 
-        let [rs1, rs2] = self.adapter.read(state, instruction).into();
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<BranchEqualPreCompute>()
+    }
 
-        let cmp_result = fast_run_eq(branch_eq_opcode, &rs1, &rs2);
-
-        if cmp_result {
-            // TODO(ayush): verify this is fine
-            // state.pc = state.pc.wrapping_add(imm.as_canonical_u32());
-            *state.pc = (F::from_canonical_u32(*state.pc) + imm).as_canonical_u32();
+    #[inline(always)]
+    fn pre_compute(&self, inst: &Instruction<F>, data: &mut [u8]) {
+        let data: &mut BranchEqualPreCompute = data.borrow_mut();
+        let &Instruction {
+            opcode, a, b, c, d, ..
+        } = inst;
+        let local_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let c = c.as_canonical_u32();
+        let imm = if F::ORDER_U32 - c < c {
+            -((F::ORDER_U32 - c) as isize)
         } else {
-            *state.pc = state.pc.wrapping_add(self.pc_step);
-        }
-
-        Ok(())
+            c as isize
+        };
+        assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        *data = BranchEqualPreCompute {
+            imm,
+            a: a.as_canonical_u32() as u8,
+            b: b.as_canonical_u32() as u8,
+            is_ne: local_opcode == BranchEqualOpcode::BNE,
+        };
     }
+}
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
-
-        Ok(())
-    }
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+    inst: *const PreComputeInstruction<F, CTX>,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) -> Result<()> {
+    let curr_inst = &*inst;
+    let pre_compute: &BranchEqualPreCompute = curr_inst.pre_compute.borrow();
+    let rs1 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
+    let rs2 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let next_inst = if (rs1 == rs2) ^ pre_compute.is_ne {
+        vm_state.pc = (vm_state.pc as isize + pre_compute.imm) as u32;
+        inst.offset(pre_compute.imm / DEFAULT_PC_STEP as isize)
+    } else {
+        vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+        inst.offset(1)
+    };
+    vm_state.instret += 1;
+    next_instruction!(next_inst, vm_state)
 }
 
 // Returns (cmp_result, diff_idx, x[diff_idx] - y[diff_idx])

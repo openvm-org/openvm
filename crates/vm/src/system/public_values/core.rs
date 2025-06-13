@@ -1,4 +1,7 @@
-use std::sync::Mutex;
+use std::{
+    borrow::{Borrow, BorrowMut},
+    sync::Mutex,
+};
 
 use openvm_circuit_primitives::{encoder::Encoder, AlignedBytesBorrow, SubAir};
 use openvm_instructions::{
@@ -21,14 +24,14 @@ use crate::{
         AdapterTraceStep, BasicAdapterInterface, EmptyAdapterCoreLayout, MinimalInstruction,
         RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep, VmCoreAir, VmStateMut,
     },
+    next_instruction,
     system::{
-        memory::{
-            online::{GuestMemory, TracingMemory},
-            MemoryAuxColsFactory,
-        },
+        memory::{online::TracingMemory, MemoryAuxColsFactory},
         public_values::columns::PublicValuesCoreColsView,
     },
 };
+use crate::arch::{ExecuteFunc, PreComputeInstruction, VmSegmentState};
+
 pub(crate) type AdapterInterface<F> = BasicAdapterInterface<F, MinimalInstruction<F>, 2, 0, 1, 1>;
 
 #[derive(Clone, Debug)]
@@ -199,6 +202,17 @@ where
             .collect()
     }
 }
+#[derive(AlignedBytesBorrow)]
+#[repr(C)]
+struct PublicValuesPreCompute<F> {
+    a: u32,
+    b: u32,
+    c: u32,
+    d: u32,
+    e: u32,
+    f: u32,
+    pvs: *const Mutex<Vec<Option<F>>>,
+}
 
 impl<F, CTX, A> TraceFiller<F, CTX> for PublicValuesCoreStep<A, F>
 where
@@ -230,45 +244,67 @@ where
 impl<F, A> StepExecutorE1<F> for PublicValuesCoreStep<A, F>
 where
     F: PrimeField32,
-    A: 'static + for<'a> AdapterExecutorE1<F, ReadData = [F; 2], WriteData = [F; 0]>,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+    #[inline(always)]
+    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
     where
         Ctx: E1E2ExecutionCtx,
     {
-        let [value, index] = self.adapter.read(state, instruction);
+        execute_e1_impl
+    }
 
-        let idx: usize = index.as_canonical_u32() as usize;
-        {
-            let mut custom_pvs = self.custom_pvs.lock().unwrap();
+    // #[inline(always)]
+    // fn execute_metered(&self, _chip_index: usize) -> ExecuteFunc<F, MeteredCtx> {
+    //     todo!()
+    // }
 
-            if custom_pvs[idx].is_none() {
-                custom_pvs[idx] = Some(value);
-            } else {
-                // Not a hard constraint violation when publishing the same value twice but the
-                // program should avoid that.
-                panic!("Custom public value {} already set", idx);
-            }
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<PublicValuesPreCompute<F>>()
+    }
+
+    #[inline(always)]
+    fn pre_compute(&self, inst: &Instruction<F>, data: &mut [u8]) {
+        let data: &mut PublicValuesPreCompute<F> = data.borrow_mut();
+        *data = PublicValuesPreCompute {
+            a: inst.a.as_canonical_u32(),
+            b: inst.b.as_canonical_u32(),
+            c: inst.c.as_canonical_u32(),
+            d: inst.d.as_canonical_u32(),
+            e: inst.e.as_canonical_u32(),
+            f: inst.f.as_canonical_u32(),
+            pvs: &self.custom_pvs,
+        };
+    }
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX>(
+    inst: *const PreComputeInstruction<F, CTX>,
+    state: &mut VmSegmentState<F, CTX>,
+) -> crate::arch::Result<()>
+where
+    CTX: E1E2ExecutionCtx,
+{
+    let next_inst = inst.offset(1);
+    let inst = &*inst;
+    let pre_compute: &PublicValuesPreCompute<F> = inst.pre_compute.borrow();
+    let [value] = state.vm_read::<F, 1>(pre_compute.e, pre_compute.b);
+    let [index] = state.vm_read::<F, 1>(pre_compute.f, pre_compute.c);
+
+    let idx: usize = index.as_canonical_u32() as usize;
+    {
+        let custom_pvs = unsafe { &*pre_compute.pvs };
+        let mut custom_pvs = custom_pvs.lock().unwrap();
+
+        if custom_pvs[idx].is_none() {
+            custom_pvs[idx] = Some(value);
+        } else {
+            // Not a hard constraint violation when publishing the same value twice but the
+            // program should avoid that.
+            panic!("Custom public value {} already set", idx);
         }
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
     }
-
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
-
-        Ok(())
-    }
+    state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+    state.instret += 1;
+    next_instruction!(next_inst, state)
 }

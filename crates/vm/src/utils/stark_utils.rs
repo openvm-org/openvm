@@ -19,7 +19,10 @@ use openvm_stark_sdk::{
 #[cfg(feature = "bench-metrics")]
 use crate::arch::vm::VmExecutor;
 use crate::{
-    arch::{vm::VirtualMachine, InsExecutorE1, Streams, VmConfig},
+    arch::{
+        execution_mode::e1::E1ExecutionControl, interpreter::InterpretedInstance,
+        vm::VirtualMachine, InsExecutorE1, Streams, VmConfig,
+    },
     system::memory::MemoryImage,
 };
 
@@ -62,6 +65,14 @@ where
     VC::Periphery: Chip<BabyBearPoseidon2Config>,
 {
     setup_tracing();
+    let exe = exe.into();
+    let input = input.into();
+    {
+        let executor = InterpretedInstance::<BabyBear, _>::new(config.clone(), exe.clone());
+        executor
+            .execute(E1ExecutionControl, input.clone())
+            .expect("Failed to execute");
+    }
     let mut log_blowup = 1;
     while config.system().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
@@ -70,8 +81,6 @@ where
     let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
     let vk = pk.get_vk();
-    let exe = exe.into();
-    let input = input.into();
     let segments = vm
         .executor
         .execute_metered(

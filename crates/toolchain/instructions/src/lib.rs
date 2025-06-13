@@ -27,8 +27,11 @@ pub trait LocalOpcode {
     fn from_usize(value: usize) -> Self;
     fn local_usize(&self) -> usize;
 
+    fn global_opcode_usize(&self) -> usize {
+        self.local_usize() + Self::CLASS_OFFSET
+    }
     fn global_opcode(&self) -> VmOpcode {
-        VmOpcode::from_usize(self.local_usize() + Self::CLASS_OFFSET)
+        VmOpcode::from_usize(self.global_opcode_usize())
     }
 }
 

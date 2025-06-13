@@ -7,19 +7,19 @@ use openvm_circuit::{
         AdapterTraceStep, EmptyAdapterCoreLayout, ImmInstruction, RecordArena, Result,
         StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    next_instruction,
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
     AlignedBytesBorrow,
 };
-use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_rv32im_transpiler::BranchLessThanOpcode;
+use openvm_circuit_primitives_derive::{AlignedBorrow};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
+};
+use openvm_rv32im_transpiler::{BranchEqualOpcode, BranchLessThanOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -27,6 +27,7 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
+use openvm_circuit::arch::{ExecuteFunc, PreComputeInstruction, VmSegmentState};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -356,47 +357,107 @@ where
     }
 }
 
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct BranchLePreCompute {
+    local_opcode: BranchLessThanOpcode,
+    imm: isize,
+    a: u8,
+    b: u8,
+}
+
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
     for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static + for<'a> AdapterExecutorE1<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+    #[inline(always)]
+    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
     where
         Ctx: E1E2ExecutionCtx,
     {
-        let &Instruction { opcode, c: imm, .. } = instruction;
-        let [rs1, rs2] = self.adapter.read(state, instruction).into();
+        execute_e1_impl
+    }
 
-        // TODO(ayush): probably don't need the other values
-        let (cmp_result, _, _, _) =
-            run_cmp::<NUM_LIMBS, LIMB_BITS>(opcode.local_opcode_idx(self.offset) as u8, &rs1, &rs2);
+    // fn execute_metered(
+    //     &self,
+    //     state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+    //     instruction: &Instruction<F>,
+    //     chip_index: usize,
+    // ) -> Result<()> {
+    //     self.execute_e1(state, instruction)?;
+    //     state.ctx.trace_heights[chip_index] += 1;
+    //
+    //     Ok(())
+    // }
 
-        if cmp_result {
-            *state.pc = (F::from_canonical_u32(*state.pc) + imm).as_canonical_u32();
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<BranchLePreCompute>()
+    }
+
+    #[inline(always)]
+    fn pre_compute(&self, inst: &Instruction<F>, data: &mut [u8]) {
+        let data: &mut BranchLePreCompute = data.borrow_mut();
+        let &Instruction {
+            opcode, a, b, c, d, ..
+        } = inst;
+        let local_opcode = BranchLessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let c = c.as_canonical_u32();
+        let imm = if F::ORDER_U32 - c < c {
+            -((F::ORDER_U32 - c) as isize)
         } else {
-            *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+            c as isize
+        };
+        assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        *data = BranchLePreCompute {
+            imm,
+            a: a.as_canonical_u32() as u8,
+            b: b.as_canonical_u32() as u8,
+            local_opcode,
+        };
+    }
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+    inst: *const PreComputeInstruction<F, CTX>,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) -> Result<()> {
+    let curr_inst = &*inst;
+    let pre_compute: &BranchLePreCompute = curr_inst.pre_compute.borrow();
+    let rs1 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
+    let rs2 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let jmp = match pre_compute.local_opcode {
+        BranchLessThanOpcode::BLT => {
+            let rs1 = i32::from_le_bytes(rs1);
+            let rs2 = i32::from_le_bytes(rs2);
+            rs1 < rs2
         }
-
-        Ok(())
-    }
-
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
-
-        Ok(())
-    }
+        BranchLessThanOpcode::BLTU => {
+            let rs1 = u32::from_le_bytes(rs1);
+            let rs2 = u32::from_le_bytes(rs2);
+            rs1 < rs2
+        }
+        BranchLessThanOpcode::BGE => {
+            let rs1 = i32::from_le_bytes(rs1);
+            let rs2 = i32::from_le_bytes(rs2);
+            rs1 >= rs2
+        }
+        BranchLessThanOpcode::BGEU => {
+            let rs1 = u32::from_le_bytes(rs1);
+            let rs2 = u32::from_le_bytes(rs2);
+            rs1 >= rs2
+        }
+    };
+    let next_inst = if jmp {
+        vm_state.pc = (vm_state.pc as isize + pre_compute.imm) as u32;
+        inst.offset(pre_compute.imm / DEFAULT_PC_STEP as isize)
+    } else {
+        vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+        inst.offset(1)
+    };
+    vm_state.instret += 1;
+    next_instruction!(next_inst, vm_state)
 }
 
 // Returns (cmp_result, diff_idx, x_sign, y_sign)

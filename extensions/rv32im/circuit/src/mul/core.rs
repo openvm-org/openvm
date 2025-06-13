@@ -10,6 +10,7 @@ use openvm_circuit::{
         AdapterTraceStep, EmptyAdapterCoreLayout, MinimalInstruction, RecordArena, Result,
         StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
+    next_instruction,
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
@@ -19,7 +20,6 @@ use openvm_circuit_primitives::{
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
     AlignedBytesBorrow,
 };
-use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::{
@@ -28,6 +28,9 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+use openvm_circuit::arch::{ExecuteFunc, PreComputeInstruction, VmSegmentState};
+use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::riscv::{RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -250,56 +253,78 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
-    for MultiplicationStep<A, NUM_LIMBS, LIMB_BITS>
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct MultiPreCompute {
+    a: u8,
+    b: u8,
+    c: u8,
+}
+
+impl<F, A, const LIMB_BITS: usize> StepExecutorE1<F>
+    for MultiplicationStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<
-            F,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-        >,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+    #[inline(always)]
+    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
     where
         Ctx: E1E2ExecutionCtx,
     {
-        let Instruction { opcode, .. } = instruction;
+        execute_e1_impl
+    }
 
-        // Verify the opcode is MUL
-        // TODO(ayush): debug_assert
+    // fn execute_metered(
+    //     &self,
+    //     state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+    //     instruction: &Instruction<F>,
+    //     chip_index: usize,
+    // ) -> Result<()> {
+    //     self.execute_e1(state, instruction)?;
+    //     state.ctx.trace_heights[chip_index] += 1;
+    //
+    //     Ok(())
+    // }
+
+    fn pre_compute_size(&self) -> usize {
+        size_of::<MultiPreCompute>()
+    }
+    fn pre_compute(&self, inst: &Instruction<F>, data: &mut [u8]) {
+        let pre_compute: &mut MultiPreCompute = data.borrow_mut();
         assert_eq!(
-            MulOpcode::from_usize(opcode.local_opcode_idx(self.offset)),
+            MulOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset)),
             MulOpcode::MUL
         );
-
-        let [rs1, rs2] = self.adapter.read(state, instruction).into();
-
-        let (rd, _) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1, &rs2);
-
-        self.adapter.write(state, instruction, [rd].into());
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
+        assert_eq!(inst.d.as_canonical_u32(), RV32_REGISTER_AS);
+        *pre_compute = MultiPreCompute {
+            a: inst.a.as_canonical_u32() as u8,
+            b: inst.b.as_canonical_u32() as u8,
+            c: inst.c.as_canonical_u32() as u8,
+        };
     }
+}
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+    inst: *const PreComputeInstruction<F, CTX>,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) -> Result<()> {
+    let next_inst = inst.offset(1);
+    let curr_inst = &*inst;
+    let pre_compute: &MultiPreCompute = curr_inst.pre_compute.borrow();
 
-        Ok(())
-    }
+    let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
+        vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
+        vm_state.vm_read(RV32_REGISTER_AS, pre_compute.c as u32);
+    let rs1 = u32::from_le_bytes(rs1);
+    let rs2 = u32::from_le_bytes(rs2);
+    let rd = rs1.wrapping_mul(rs2);
+    vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd.to_le_bytes());
+
+    vm_state.pc += DEFAULT_PC_STEP;
+    vm_state.instret += 1;
+
+    next_instruction!(next_inst, vm_state)
 }
 
 // returns mul, carry

@@ -51,7 +51,7 @@ mod tests {
 
     #[test_case("fibonacci", 1)]
     fn test_rv32i(example_name: &str, min_segments: usize) -> Result<()> {
-        let config = test_rv32i_config();
+        let config = Rv32IConfig::default();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -60,6 +60,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
+        let config = test_rv32im_config();
         air_test_with_min_segments(config, exe, vec![], min_segments);
         Ok(())
     }
@@ -102,7 +103,7 @@ mod tests {
 
     #[test]
     fn test_read_vec() -> Result<()> {
-        let config = test_rv32i_config();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -118,7 +119,7 @@ mod tests {
 
     #[test]
     fn test_hint_load_by_key() -> Result<()> {
-        let config = test_rv32i_config();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint_load_by_key", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -141,7 +142,7 @@ mod tests {
 
     #[test]
     fn test_read() -> Result<()> {
-        let config = test_rv32i_config();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "read", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -225,7 +226,6 @@ mod tests {
 
     #[test]
     fn test_print() -> Result<()> {
-        let config = test_rv32i_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "print", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -234,6 +234,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
+        let config = test_rv32im_config();
         air_test(config, exe);
         Ok(())
     }
