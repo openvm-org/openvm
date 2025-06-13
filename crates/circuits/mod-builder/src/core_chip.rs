@@ -1,7 +1,3 @@
-use crate::{
-    builder::{FieldExpr, FieldExprCols},
-    utils::biguint_to_limbs_vec,
-};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::Zero;
@@ -29,6 +25,11 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
+
+use crate::{
+    builder::{FieldExpr, FieldExprCols},
+    utils::biguint_to_limbs_vec,
+};
 
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {
@@ -443,23 +444,18 @@ fn run_field_expression<A>(
     }
 
     let mut flags = vec![];
+
+    // If the chip doesn't need setup, (right now) it must be single op chip and thus no flag is
+    // needed. Otherwise, there is a flag for each opcode and will be derived by
+    // is_valid - sum(flags).
     if step.expr.needs_setup() {
         flags = vec![false; step.num_flags()];
-
-        // Find which opcode this is in our local_opcode_idx list
-        if let Some(opcode_position) = step
-            .local_opcode_idx
+        step.opcode_flag_idx
             .iter()
-            .position(|&idx| idx == local_opcode_idx)
-        {
-            // If this is NOT the last opcode (setup), set the corresponding flag
-            if opcode_position < step.opcode_flag_idx.len() {
-                let flag_idx = step.opcode_flag_idx[opcode_position];
-                flags[flag_idx] = true;
-            }
-            // If opcode_position == step.opcode_flag_idx.len(), it's the setup operation
-            // and all flags should remain false (which they already are)
-        }
+            .enumerate()
+            .for_each(|(i, &flag_idx)| {
+                flags[flag_idx] = local_opcode_idx == step.local_opcode_idx[i]
+            });
     }
 
     let vars = step.expr.execute(inputs.clone(), flags.clone());

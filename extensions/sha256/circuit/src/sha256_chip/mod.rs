@@ -22,7 +22,9 @@ use openvm_instructions::{
 use openvm_rv32im_circuit::adapters::{
     memory_read_from_state, memory_write_from_state, read_rv32_register_from_state,
 };
-use openvm_sha256_air::{Sha256StepHelper, SHA256_BLOCK_BITS, SHA256_ROWS_PER_BLOCK};
+use openvm_sha256_air::{
+    get_sha256_num_blocks, Sha256StepHelper, SHA256_BLOCK_BITS, SHA256_ROWS_PER_BLOCK,
+};
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use sha2::{Digest, Sha256};
@@ -148,9 +150,8 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         let dst = read_rv32_register_from_state(state, a.as_canonical_u32());
         let src = read_rv32_register_from_state(state, b.as_canonical_u32());
         let len = read_rv32_register_from_state(state, c.as_canonical_u32());
-        // need to pad with one 1 bit, 64 bits for the message length and then pad until the length
-        // is divisible by [SHA256_BLOCK_BITS]
-        let num_blocks = ((len << 3) as usize + 1 + 64).div_ceil(SHA256_BLOCK_BITS);
+
+        let num_blocks = get_sha256_num_blocks(len) as usize;
 
         // we will read [num_blocks] * [SHA256_BLOCK_CELLS] cells but only [len] cells will be used
         debug_assert!(

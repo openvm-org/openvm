@@ -3,7 +3,7 @@ use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
     marker::PhantomData,
-    ptr::{slice_from_raw_parts, slice_from_raw_parts_mut},
+    ptr::slice_from_raw_parts_mut,
     sync::Arc,
 };
 
@@ -334,16 +334,7 @@ where
 
 impl<F: Field> MatrixRecordArena<F> {
     pub fn alloc_single_row(&mut self) -> &mut [u8] {
-        let start = self.trace_offset;
-        self.trace_offset += self.width;
-        let row_slice = &mut self.trace_buffer[start..self.trace_offset];
-        let size = size_of_val(row_slice);
-        let ptr = row_slice as *mut [F] as *mut u8;
-        // SAFETY:
-        // - `ptr` is non-null
-        // - `size` is correct
-        // - alignment of `u8` is always satisfied
-        unsafe { &mut *std::ptr::slice_from_raw_parts_mut(ptr, size) }
+        self.alloc_buffer(1)
     }
 
     pub fn alloc_buffer(&mut self, num_rows: u32) -> &mut [u8] {
