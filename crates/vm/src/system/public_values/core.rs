@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use openvm_circuit_primitives::{encoder::Encoder, SubAir};
+use openvm_circuit_primitives::{encoder::Encoder, AlignedBytesBorrow, SubAir};
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -11,25 +11,25 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, AirBuilderWithPublicValues, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    p3_matrix::dense::RowMajorMatrix,
     rap::BaseAirWithPublicValues,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface, EmptyLayout,
-        MinimalInstruction, RecordArena, Result, RowMajorMatrixArena, StepExecutorE1, TraceFiller,
-        TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, BasicAdapterInterface, EmptyLayout, MinimalInstruction, RecordArena,
+        Result, StepExecutorE1, TraceFiller, TraceStep, VmCoreAir, VmStateMut,
     },
     system::{
-        memory::online::{GuestMemory, TracingMemory},
+        memory::{
+            online::{GuestMemory, TracingMemory},
+            MemoryAuxColsFactory,
+        },
         public_values::columns::PublicValuesCoreColsView,
     },
 };
 pub(crate) type AdapterInterface<F> = BasicAdapterInterface<F, MinimalInstruction<F>, 2, 0, 1, 1>;
-pub(crate) type AdapterInterfaceReads<F> = <AdapterInterface<F> as VmAdapterInterface<F>>::Reads;
 
 #[derive(Clone, Debug)]
 pub struct PublicValuesCoreAir {
@@ -108,10 +108,10 @@ impl<AB: InteractionBuilder + AirBuilderWithPublicValues> VmCoreAir<AB, AdapterI
 }
 
 #[repr(C)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(AlignedBytesBorrow, Debug)]
 pub struct PublicValuesRecord<F> {
-    value: F,
-    index: F,
+    pub value: F,
+    pub index: F,
 }
 
 /// ATTENTION: If a specific public value is not provided, a default 0 will be used when generating
@@ -146,17 +146,10 @@ where
 impl<F, CTX, A> TraceStep<F, CTX> for PublicValuesCoreStep<A, F>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterTraceStep<
-            F,
-            CTX,
-            ReadData = [[F; 1]; 2],
-            WriteData = [[F; 1]; 0],
-            RecordMut<'a> = (),
-        >,
+    A: 'static + AdapterTraceStep<F, CTX, ReadData = [[F; 1]; 2], WriteData = [[F; 1]; 0]>,
 {
     type RecordLayout = EmptyLayout<A>;
-    type RecordMut<'a> = (); // TODO
+    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut PublicValuesRecord<F>);
 
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
@@ -169,37 +162,35 @@ where
         &mut self,
         state: VmStateMut<TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        arena: &mut RA,
+        arena: &'buf mut RA,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-        Self: 'buf,
     {
-        todo!()
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
+
+        A::start(*state.pc, state.memory, &mut adapter_record);
+
+        [[core_record.value], [core_record.index]] =
+            self.adapter
+                .read(state.memory, instruction, &mut adapter_record);
+        {
+            let idx: usize = core_record.index.as_canonical_u32() as usize;
+            let mut custom_pvs = self.custom_pvs.lock().unwrap();
+
+            if custom_pvs[idx].is_none() {
+                custom_pvs[idx] = Some(core_record.value);
+            } else {
+                // Not a hard constraint violation when publishing the same value twice but the
+                // program should avoid that.
+                panic!("Custom public value {} already set", idx);
+            }
+        }
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
-
-    // fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-    // let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-
-    // self.adapter.fill_trace_row(mem_helper, (), adapter_row);
-
-    // let core_row: &mut PublicValuesCoreColsView<_, F> = core_row.borrow_mut();
-
-    // // TODO(ayush): add this check
-    // // debug_assert_eq!(core_row.width(), BaseAir::<F>::width(&self.air));
-
-    // core_row.is_valid = F::ONE;
-    // core_row.value = record.value;
-    // core_row.index = record.index;
-
-    // let idx: usize = record.index.as_canonical_u32() as usize;
-
-    // let pt = self.air.encoder.get_flag_pt(idx);
-
-    // for (i, var) in core_row.custom_pv_vars.iter_mut().enumerate() {
-    //     *var = F::from_canonical_u32(pt[i]);
-    // }
-    // }
 
     fn generate_public_values(&self) -> Vec<F> {
         self.get_custom_public_values()
@@ -212,21 +203,27 @@ where
 impl<F, CTX, A> TraceFiller<F, CTX> for PublicValuesCoreStep<A, F>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterTraceStep<
-            F,
-            CTX,
-            ReadData = [[F; 1]; 2],
-            WriteData = [[F; 1]; 0],
-            RecordMut<'a> = (),
-        >,
+    A: 'static + AdapterTraceFiller<F, CTX>,
 {
-    fn fill_trace_row(
-        &self,
-        mem_helper: &crate::system::memory::MemoryAuxColsFactory<F>,
-        row_slice: &mut [F],
-    ) {
-        todo!()
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let record: &PublicValuesRecord<F> = unsafe { get_record_from_slice(&mut core_row, ()) };
+        let cols = PublicValuesCoreColsView::<_, &mut F>::borrow_mut(core_row);
+
+        let idx: usize = record.index.as_canonical_u32() as usize;
+        let pt = self.encoder.get_flag_pt(idx);
+
+        cols.custom_pv_vars
+            .into_iter()
+            .zip(pt.iter())
+            .for_each(|(var, &val)| {
+                *var = F::from_canonical_u32(val);
+            });
+
+        *cols.index = record.index;
+        *cols.value = record.value;
+        *cols.is_valid = F::ONE;
     }
 }
 
@@ -235,11 +232,14 @@ where
     F: PrimeField32,
     A: 'static + for<'a> AdapterExecutorE1<F, ReadData = [F; 2], WriteData = [F; 0]>,
 {
-    fn execute_e1<Ctx: E1E2ExecutionCtx>(
+    fn execute_e1<Ctx>(
         &self,
         state: &mut VmStateMut<GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let [value, index] = self.adapter.read(state, instruction);
 
         let idx: usize = index.as_canonical_u32() as usize;
@@ -272,126 +272,3 @@ where
         Ok(())
     }
 }
-
-pub struct PublicValuesRecordArena<F> {
-    pub trace_buffer: Vec<F>,
-    // TODO(ayush): width should be a constant?
-    pub width: usize,
-    pub trace_offset: usize,
-}
-
-impl<'a, A, F: PrimeField32> RecordArena<'a, EmptyLayout<A>, ()> for PublicValuesRecordArena<F> {
-    fn alloc(&'a mut self, layout: EmptyLayout<A>) -> () {
-        todo!()
-    }
-}
-
-impl<F: Field> RowMajorMatrixArena<F> for PublicValuesRecordArena<F> {
-    fn with_capacity(height: usize, width: usize) -> Self {
-        let trace_buffer = F::zero_vec(height * width);
-        Self {
-            trace_buffer,
-            width,
-            trace_offset: 0,
-        }
-    }
-
-    fn width(&self) -> usize {
-        self.width
-    }
-
-    fn trace_offset(&self) -> usize {
-        self.trace_offset
-    }
-
-    fn into_matrix(self) -> RowMajorMatrix<F> {
-        RowMajorMatrix::new(self.trace_buffer, self.width)
-    }
-}
-
-// /// ATTENTION: If a specific public value is not provided, a default 0 will be used when
-// generating /// the proof but in the perspective of constraints, it could be any value.
-// pub struct PublicValuesCoreChip<F> {
-//     air: PublicValuesCoreAir,
-//     // Mutex is to make the struct Sync. But it actually won't be accessed by multiple threads.
-//     pub(crate) custom_pvs: Mutex<Vec<Option<F>>>,
-// }
-
-// impl<F: PrimeField32> PublicValuesCoreChip<F> {
-//     /// **Note:** `max_degree` is the maximum degree of the constraint polynomials to represent
-// the     /// flags. If you want the overall AIR's constraint degree to be `<=
-// max_constraint_degree`,     /// then typically you should set `max_degree` to
-// `max_constraint_degree - 1`.     pub fn new(num_custom_pvs: usize, max_degree: u32) -> Self {
-//         Self {
-//             air: PublicValuesCoreAir::new(num_custom_pvs, max_degree),
-//             custom_pvs: Mutex::new(vec![None; num_custom_pvs]),
-//         }
-//     }
-//     pub fn get_custom_public_values(&self) -> Vec<Option<F>> {
-//         self.custom_pvs.lock().unwrap().clone()
-//     }
-// }
-
-// impl<F: PrimeField32> VmCoreChip<F, AdapterInterface<F>> for PublicValuesCoreChip<F> {
-//     type Record = PublicValuesRecord<F>;
-//     type Air = PublicValuesCoreAir;
-
-//     #[allow(clippy::type_complexity)]
-//     fn execute_instruction(
-//         &self,
-//         _instruction: &Instruction<F>,
-//         _from_pc: u32,
-//         reads: AdapterInterfaceReads<F>,
-//     ) -> Result<(AdapterRuntimeContext<F, AdapterInterface<F>>, Self::Record)> {
-//         let [[value], [index]] = reads;
-//         {
-//             let idx: usize = index.as_canonical_u32() as usize;
-//             let mut custom_pvs = self.custom_pvs.lock().unwrap();
-
-//             if custom_pvs[idx].is_none() {
-//                 custom_pvs[idx] = Some(value);
-//             } else {
-//                 // Not a hard constraint violation when publishing the same value twice but the
-//                 // program should avoid that.
-//                 panic!("Custom public value {} already set", idx);
-//             }
-//         }
-//         let output = AdapterRuntimeContext {
-//             to_pc: None,
-//             writes: [],
-//         };
-//         let record = Self::Record { value, index };
-//         Ok((output, record))
-//     }
-
-//     fn get_opcode_name(&self, opcode: usize) -> String {
-//         format!(
-//             "{:?}",
-//             PublishOpcode::from_usize(opcode - PublishOpcode::CLASS_OFFSET)
-//         )
-//     }
-
-//     fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-//         let mut cols = PublicValuesCoreColsView::<_, &mut F>::borrow_mut(row_slice);
-//         debug_assert_eq!(cols.width(), BaseAir::<F>::width(&self.air));
-//         *cols.is_valid = F::ONE;
-//         *cols.value = record.value;
-//         *cols.index = record.index;
-//         let idx: usize = record.index.as_canonical_u32() as usize;
-//         let pt = self.air.encoder.get_flag_pt(idx);
-//         for (i, var) in cols.custom_pv_vars.iter_mut().enumerate() {
-//             **var = F::from_canonical_u32(pt[i]);
-//         }
-//     }
-
-//     fn generate_public_values(&self) -> Vec<F> {
-//         self.get_custom_public_values()
-//             .into_iter()
-//             .map(|x| x.unwrap_or(F::ZERO))
-//             .collect()
-//     }
-
-//     fn air(&self) -> &Self::Air {
-//         &self.air
-//     }
-// }
