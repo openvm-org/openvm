@@ -559,9 +559,8 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
 }
 
 impl FieldExpr {
-    // Returns the number of limbs in `u32`s instead of `u8`s
     pub fn canonical_num_limbs(&self) -> usize {
-        self.builder.num_limbs / 4
+        self.builder.num_limbs
     }
 
     pub fn canonical_limb_bits(&self) -> usize {

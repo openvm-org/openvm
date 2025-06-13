@@ -13,7 +13,7 @@ use openvm_stark_sdk::{
 
 use crate::{
     test_utils::*, utils::biguint_to_limbs_vec, ExprBuilder, FieldExpr, FieldExprCols,
-    FieldExpressionCoreRecord, FieldVariable, SymbolicExpr,
+    FieldExpressionCoreRecordMut, FieldVariable, SymbolicExpr,
 };
 
 const LIMB_BITS: usize = 8;
@@ -61,21 +61,21 @@ fn generate_recorded_trace(
     width: usize,
 ) -> Vec<BabyBear> {
     let mut buffer = vec![0u8; 1024];
-    let mut record = FieldExpressionCoreRecord::new_from_execution_data(
+    let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
         &mut buffer,
         inputs,
         expr.canonical_num_limbs(),
     );
     let data: Vec<u8> = inputs
         .iter()
-        .flat_map(|x| biguint_to_limbs_vec(x, expr.canonical_num_limbs() * 4))
+        .flat_map(|x| biguint_to_limbs_vec(x, expr.canonical_num_limbs()))
         .collect();
     record.fill_from_execution_data(0, &data);
 
     let reconstructed_inputs: Vec<BigUint> = record
         .input_limbs
         .chunks(expr.canonical_num_limbs())
-        .map(|chunk| BigUint::from_slice(&chunk))
+        .map(|chunk| BigUint::from_bytes_le(chunk))
         .collect();
 
     let mut row = BabyBear::zero_vec(width);
@@ -431,14 +431,14 @@ fn test_recorded_execution_records() {
 
     // Test record creation and reconstruction
     let mut buffer = vec![0u8; 1024];
-    let mut record = FieldExpressionCoreRecord::new_from_execution_data(
+    let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
         &mut buffer,
         &inputs,
         expr.canonical_num_limbs(),
     );
     let data: Vec<u8> = inputs
         .iter()
-        .flat_map(|x| biguint_to_limbs_vec(x, expr.canonical_num_limbs() * 4))
+        .flat_map(|x| biguint_to_limbs_vec(x, expr.canonical_num_limbs()))
         .collect();
     record.fill_from_execution_data(0, &data);
     assert_eq!(*record.opcode, 0);
@@ -447,7 +447,7 @@ fn test_recorded_execution_records() {
     let reconstructed_inputs: Vec<BigUint> = record
         .input_limbs
         .chunks(expr.canonical_num_limbs())
-        .map(|chunk| BigUint::from_slice(&chunk))
+        .map(|chunk| BigUint::from_bytes_le(chunk))
         .collect();
     assert_eq!(reconstructed_inputs.len(), inputs.len());
     for (original, reconstructed) in inputs.iter().zip(reconstructed_inputs.iter()) {
@@ -517,14 +517,14 @@ fn test_record_arena_allocation_patterns() {
 
     // Test record creation with various input sizes
     let mut buffer = vec![0u8; 1024];
-    let mut record = FieldExpressionCoreRecord::new_from_execution_data(
+    let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
         &mut buffer,
         &inputs,
         expr.canonical_num_limbs(),
     );
     let data: Vec<u8> = inputs
         .iter()
-        .flat_map(|x| biguint_to_limbs_vec(x, expr.canonical_num_limbs() * 4))
+        .flat_map(|x| biguint_to_limbs_vec(x, expr.canonical_num_limbs()))
         .collect();
     record.fill_from_execution_data(0, &data);
     assert_eq!(*record.opcode, 0);
@@ -533,14 +533,14 @@ fn test_record_arena_allocation_patterns() {
     let max_inputs = vec![BigUint::one(); 40]; // MAX_INPUT_LIMBS / 4
     let mut max_buffer = vec![0u8; 2048];
     let max_record =
-        FieldExpressionCoreRecord::new_from_execution_data(&mut max_buffer, &max_inputs, 4);
+        FieldExpressionCoreRecordMut::new_from_execution_data(&mut max_buffer, &max_inputs, 4);
     assert_eq!(*max_record.opcode, 0);
 
     // Test input reconstruction
     let reconstructed_inputs: Vec<BigUint> = record
         .input_limbs
         .chunks(expr.canonical_num_limbs())
-        .map(|chunk| BigUint::from_slice(&chunk))
+        .map(|chunk| BigUint::from_bytes_le(chunk))
         .collect();
     assert_eq!(reconstructed_inputs.len(), inputs.len());
     for (original, reconstructed) in inputs.iter().zip(reconstructed_inputs.iter()) {
@@ -572,21 +572,21 @@ fn test_tracestep_tracefiller_roundtrip() {
 
     // Test record creation and reconstruction roundtrip
     let mut buffer = vec![0u8; 1024];
-    let mut record = FieldExpressionCoreRecord::new_from_execution_data(
+    let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
         &mut buffer,
         &inputs,
         expr.canonical_num_limbs(),
     );
     let data: Vec<u8> = inputs
         .iter()
-        .flat_map(|x| biguint_to_limbs_vec(x, expr.canonical_num_limbs() * 4))
+        .flat_map(|x| biguint_to_limbs_vec(x, expr.canonical_num_limbs()))
         .collect();
     record.fill_from_execution_data(0, &data);
 
     let reconstructed_inputs: Vec<BigUint> = record
         .input_limbs
         .chunks(expr.canonical_num_limbs())
-        .map(|chunk| BigUint::from_slice(&chunk))
+        .map(|chunk| BigUint::from_bytes_le(chunk))
         .collect();
     let vars_reconstructed = expr.execute(reconstructed_inputs, vec![]);
 
