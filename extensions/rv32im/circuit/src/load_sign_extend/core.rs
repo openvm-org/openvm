@@ -302,11 +302,7 @@ impl<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
 where
     F: PrimeField32,
     A: 'static
-        + AdapterExecutorE1<
-            F,
-            ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
-            WriteData = [u32; NUM_CELLS],
-        >,
+        + for<'a> AdapterExecutorE1<F, ReadData = [u8; NUM_CELLS], WriteData = [u8; NUM_CELLS]>,
 {
     fn execute_e1<Ctx>(
         &self,
@@ -318,14 +314,30 @@ where
     {
         let Instruction { opcode, .. } = instruction;
 
-        let ((_prev_data, read_data), shift_amount) = self.adapter.read(state, instruction);
         let local_opcode = Rv32LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
-        let write_data = run_write_data_sign_extend(local_opcode, read_data, shift_amount as usize);
 
-        self.adapter
-            .write(state, instruction, &write_data.map(u32::from));
+        let mut data = self.adapter.read(state, instruction);
+
+        match local_opcode {
+            LOADB => {
+                let ext = (data[0] >> 7) * u8::MAX;
+                for i in 1..NUM_CELLS {
+                    data[i] = ext;
+                }
+            }
+            LOADH => {
+                let ext = (data[NUM_CELLS / 2 - 1] >> 7) * u8::MAX;
+                for i in NUM_CELLS / 2..NUM_CELLS {
+                    data[i] = ext;
+                }
+            }
+            _ => unreachable!(),
+        }
+
+        self.adapter.write(state, instruction, &data);
+
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())

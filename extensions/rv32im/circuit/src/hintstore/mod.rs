@@ -48,8 +48,7 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    memory_write_from_state, read_rv32_register, read_rv32_register_from_state, tracing_read,
-    tracing_write,
+    read_rv32_register, read_rv32_register_from_state, tracing_read, tracing_write,
 };
 
 #[cfg(test)]
@@ -439,31 +438,28 @@ where
             return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
         }
 
-        let data = streams
-            .hint_stream
-            .drain(0..num_words as usize * RV32_REGISTER_NUM_LIMBS)
-            .map(|x| x.as_canonical_u32() as u8)
-            .collect::<Vec<_>>();
+        for idx in 0..(num_words as usize) {
+            if idx != 0 {
+                state.memory.increment_timestamp();
+                state.memory.increment_timestamp();
+            }
 
-        data.chunks_exact(RV32_REGISTER_NUM_LIMBS)
-            .enumerate()
-            .for_each(|(idx, chunk)| {
-                if idx != 0 {
-                    state.memory.increment_timestamp();
-                    state.memory.increment_timestamp();
-                }
+            let data_f: [F; RV32_REGISTER_NUM_LIMBS] =
+                std::array::from_fn(|_| streams.hint_stream.pop_front().unwrap());
+            let data: [u8; RV32_REGISTER_NUM_LIMBS] =
+                data_f.map(|byte| byte.as_canonical_u32() as u8);
 
-                let data = chunk.try_into().unwrap();
-                record.var[idx].data = data;
-                tracing_write(
-                    state.memory,
-                    RV32_MEMORY_AS,
-                    record.inner.mem_ptr + (RV32_REGISTER_NUM_LIMBS * idx) as u32,
-                    &data,
-                    &mut record.var[idx].data_write_aux.prev_timestamp,
-                    &mut record.var[idx].data_write_aux.prev_data,
-                );
-            });
+            record.var[idx].data = data;
+
+            tracing_write(
+                state.memory,
+                RV32_MEMORY_AS,
+                record.inner.mem_ptr + (RV32_REGISTER_NUM_LIMBS * idx) as u32,
+                &data,
+                &mut record.var[idx].data_write_aux.prev_timestamp,
+                &mut record.var[idx].data_write_aux.prev_data,
+            );
+        }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -634,6 +630,11 @@ where
             .map(|x| x.as_canonical_u32() as u8)
             .collect::<Vec<_>>();
 
+        state.ctx.on_memory_operation(
+            RV32_MEMORY_AS,
+            mem_ptr,
+            RV32_REGISTER_NUM_LIMBS as u32 * num_words,
+        );
         unsafe {
             state
                 .memory
@@ -653,47 +654,20 @@ where
         chip_index: usize,
     ) -> Result<()> {
         let &Instruction {
-            opcode, a, b, d, e, ..
+            opcode,
+            a: num_words_ptr,
+            ..
         } = instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
-
         let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        let mem_ptr = read_rv32_register_from_state(state, b.as_canonical_u32());
 
         let num_words = if local_opcode == HINT_STOREW {
             1
         } else {
-            read_rv32_register_from_state(state, a.as_canonical_u32())
+            read_rv32_register(state.memory, num_words_ptr.as_canonical_u32())
         };
 
-        debug_assert!(mem_ptr <= (1 << self.pointer_max_bits));
-        debug_assert_ne!(num_words, 0);
-        debug_assert!(num_words <= (1 << self.pointer_max_bits));
-
-        let mut streams = self.streams.get().unwrap().lock().unwrap();
-        if streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
-            return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
-        }
-
-        let data = streams
-            .hint_stream
-            .drain(0..num_words as usize * RV32_REGISTER_NUM_LIMBS)
-            .map(|x| x.as_canonical_u32() as u8)
-            .collect::<Vec<_>>();
-        data.chunks_exact(RV32_REGISTER_NUM_LIMBS)
-            .enumerate()
-            .for_each(|(idx, chunk)| {
-                memory_write_from_state::<_, RV32_REGISTER_NUM_LIMBS>(
-                    state,
-                    RV32_MEMORY_AS,
-                    mem_ptr + (idx * RV32_REGISTER_NUM_LIMBS) as u32,
-                    &chunk.try_into().unwrap(),
-                );
-            });
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        self.execute_e1(state, instruction)?;
         state.ctx.trace_heights[chip_index] += num_words;
 
         Ok(())
