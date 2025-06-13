@@ -443,6 +443,7 @@ where
             create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
                 .unwrap();
         let air_names = chip_complex.air_names();
+        // TODO(ayush): get rid of segmentation_strategy altogether
         let ctrl = MeteredExecutionControl::new(&air_names, &widths, &interactions)
             .with_max_trace_height(
                 self.config

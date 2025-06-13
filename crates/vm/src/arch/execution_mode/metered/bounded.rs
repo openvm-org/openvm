@@ -5,6 +5,7 @@ use crate::{
     system::memory::{dimensions::MemoryDimensions, CHUNK, CHUNK_BITS},
 };
 
+// TODO(ayush): move somewhere else
 const NATIVE_MEMORY_AS: u32 = 4;
 
 // TODO(ayush): can segmentation also be triggered by timestamp overflow? should that be tracked?
@@ -106,6 +107,7 @@ impl MeteredCtxBounded {
     }
 
     pub fn finalize_access_adapter_heights(&mut self) {
+        // TODO(ayush): see if there's a better way to do this
         let align_bits = if self.continuations_enabled {
             self.as_byte_alignment_bits[RV32_MEMORY_AS as usize]
         } else {

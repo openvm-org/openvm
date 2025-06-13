@@ -25,13 +25,28 @@ const DEFAULT_MAX_TRACE_HEIGHT: u32 = (1 << 23) - 100;
 const DEFAULT_MAX_CELLS: usize = 2_000_000_000; // 2B
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 
+#[derive(Debug)]
+pub struct SegmentationLimits {
+    pub max_trace_height: u32,
+    pub max_cells: usize,
+    pub max_interactions: usize,
+}
+
+impl Default for SegmentationLimits {
+    fn default() -> Self {
+        Self {
+            max_trace_height: DEFAULT_MAX_TRACE_HEIGHT,
+            max_cells: DEFAULT_MAX_CELLS,
+            max_interactions: DEFAULT_MAX_INTERACTIONS,
+        }
+    }
+}
+
 pub struct MeteredExecutionControl<'a> {
     air_names: &'a [String],
     pub widths: &'a [usize],
     pub interactions: &'a [usize],
-    max_trace_height: u32,
-    max_cells: usize,
-    max_interactions: usize,
+    segmentation_limits: SegmentationLimits,
 }
 
 impl<'a> MeteredExecutionControl<'a> {
@@ -40,24 +55,22 @@ impl<'a> MeteredExecutionControl<'a> {
             air_names,
             widths,
             interactions,
-            max_trace_height: DEFAULT_MAX_TRACE_HEIGHT,
-            max_cells: DEFAULT_MAX_CELLS,
-            max_interactions: DEFAULT_MAX_INTERACTIONS,
+            segmentation_limits: SegmentationLimits::default(),
         }
     }
 
     pub fn with_max_trace_height(mut self, max_trace_height: u32) -> Self {
-        self.max_trace_height = max_trace_height;
+        self.segmentation_limits.max_trace_height = max_trace_height;
         self
     }
 
     pub fn with_max_cells(mut self, max_cells: usize) -> Self {
-        self.max_cells = max_cells;
+        self.segmentation_limits.max_cells = max_cells;
         self
     }
 
     pub fn with_max_interactions(mut self, max_interactions: usize) -> Self {
-        self.max_interactions = max_interactions;
+        self.segmentation_limits.max_interactions = max_interactions;
         self
     }
 
@@ -84,7 +97,9 @@ impl<'a> MeteredExecutionControl<'a> {
         let trace_heights = state.ctx.trace_heights_if_finalized();
         for (i, &height) in trace_heights.iter().enumerate() {
             // Only segment if the height is not constant and exceeds the maximum height
-            if !state.ctx.is_trace_height_constant[i] && height > self.max_trace_height {
+            if !state.ctx.is_trace_height_constant[i]
+                && height > self.segmentation_limits.max_trace_height
+            {
                 tracing::info!(
                     "Segment {:2} | clk {:9} | chip {} ({}) height ({:8}) > max ({:8})",
                     state.ctx.segments.len(),
@@ -92,32 +107,32 @@ impl<'a> MeteredExecutionControl<'a> {
                     i,
                     self.air_names[i],
                     height,
-                    self.max_trace_height
+                    self.segmentation_limits.max_trace_height
                 );
                 return true;
             }
         }
 
         let total_cells = self.calculate_total_cells(&trace_heights);
-        if total_cells > self.max_cells {
+        if total_cells > self.segmentation_limits.max_cells {
             tracing::info!(
                 "Segment {:2} | clk {:9} | total cells ({:10}) > max ({:10})",
                 state.ctx.segments.len(),
                 state.clk,
                 total_cells,
-                self.max_cells
+                self.segmentation_limits.max_cells
             );
             return true;
         }
 
         let total_interactions = self.calculate_total_interactions(&trace_heights);
-        if total_interactions > self.max_interactions {
+        if total_interactions > self.segmentation_limits.max_interactions {
             tracing::info!(
                 "Segment {:2} | clk {:9} | total interactions ({:11}) > max ({:11})",
                 state.ctx.segments.len(),
                 state.clk,
                 total_interactions,
-                self.max_interactions
+                self.segmentation_limits.max_interactions
             );
             return true;
         }
