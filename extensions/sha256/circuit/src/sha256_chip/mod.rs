@@ -20,7 +20,8 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_rv32im_circuit::adapters::{
-    memory_read_from_state, memory_write_from_state, read_rv32_register_from_state,
+    memory_read_from_state, memory_write, memory_write_from_state, read_rv32_register,
+    read_rv32_register_from_state,
 };
 use openvm_sha256_air::{
     get_sha256_num_blocks, Sha256StepHelper, SHA256_BLOCK_BITS, SHA256_ROWS_PER_BLOCK,
@@ -101,27 +102,22 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         debug_assert_eq!(local_opcode, Rv32Sha256Opcode::SHA256.local_usize());
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
-        let dst = read_rv32_register_from_state(state, a.as_canonical_u32());
-        let src = read_rv32_register_from_state(state, b.as_canonical_u32());
-        let len = read_rv32_register_from_state(state, c.as_canonical_u32());
+        let dst = read_rv32_register(state.memory, a.as_canonical_u32());
+        let src = read_rv32_register(state.memory, b.as_canonical_u32());
+        let len = read_rv32_register(state.memory, c.as_canonical_u32());
 
         debug_assert!(src + len <= (1 << self.pointer_max_bits));
         debug_assert!(dst < (1 << self.pointer_max_bits));
-        let mut hasher = Sha256::new();
 
-        state
-            .ctx
-            .on_memory_operation(RV32_MEMORY_AS, src, len as u32);
         let message = unsafe {
             state
                 .memory
                 .memory
                 .get_slice::<u8>((RV32_MEMORY_AS, src), len as usize)
         };
-        hasher.update(&message);
 
-        let output = hasher.finalize();
-        memory_write_from_state(state, RV32_MEMORY_AS, dst, output.as_ref());
+        let output = sha256_solve(&message);
+        memory_write(state.memory, RV32_MEMORY_AS, dst, &output);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
