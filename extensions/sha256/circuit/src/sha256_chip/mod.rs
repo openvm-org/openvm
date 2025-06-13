@@ -1,6 +1,8 @@
 //! Sha256 hasher. Handles full sha256 hashing with padding.
 //! variable length inputs read from VM memory.
 
+use std::cmp::min;
+
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
@@ -18,7 +20,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_rv32im_circuit::adapters::{
-    memory_write_from_state, read_rv32_register, read_rv32_register_from_state,
+    memory_read_from_state, memory_write_from_state, read_rv32_register_from_state,
 };
 use openvm_sha256_air::{Sha256StepHelper, SHA256_BLOCK_BITS, SHA256_ROWS_PER_BLOCK};
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
@@ -46,6 +48,8 @@ const SHA256_WRITE_SIZE: usize = 32;
 pub const SHA256_BLOCK_CELLS: usize = SHA256_BLOCK_BITS / RV32_CELL_BITS;
 /// Number of rows we will do a read on for each SHA256 block
 pub const SHA256_NUM_READ_ROWS: usize = SHA256_BLOCK_CELLS / SHA256_READ_SIZE;
+/// Maximum message length that this chip supports in bytes
+pub const SHA256_MAX_MESSAGE_LEN: usize = 1 << 29;
 
 pub type Sha256VmChip<F> = NewVmChipWrapper<F, Sha256VmAir, Sha256VmStep, MatrixRecordArena<F>>;
 
@@ -126,15 +130,53 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {
-        // Note: doing `read_rv32_register` here instead of `read_rv32_register_from_state`
-        // because we don't want this read to be metered
-        let len = read_rv32_register(state.memory, instruction.c.as_canonical_u32());
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
+        } = instruction;
+        debug_assert_eq!(*opcode, Rv32Sha256Opcode::SHA256.global_opcode());
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
-        self.execute_e1(state, instruction)?;
-
+        let dst = read_rv32_register_from_state(state, a.as_canonical_u32());
+        let src = read_rv32_register_from_state(state, b.as_canonical_u32());
+        let len = read_rv32_register_from_state(state, c.as_canonical_u32());
+        // need to pad with one 1 bit, 64 bits for the message length and then pad until the length
+        // is divisible by [SHA256_BLOCK_BITS]
         let num_blocks = ((len << 3) as usize + 1 + 64).div_ceil(SHA256_BLOCK_BITS);
-        state.ctx.trace_heights[chip_index] += (num_blocks * SHA256_ROWS_PER_BLOCK) as u32;
 
+        // we will read [num_blocks] * [SHA256_BLOCK_CELLS] cells but only [len] cells will be used
+        debug_assert!(
+            src as usize + num_blocks * SHA256_BLOCK_CELLS <= (1 << self.pointer_max_bits)
+        );
+        debug_assert!(dst as usize + SHA256_WRITE_SIZE <= (1 << self.pointer_max_bits));
+        // We don't support messages longer than 2^29 bytes
+        debug_assert!(len < SHA256_MAX_MESSAGE_LEN as u32);
+
+        let mut input = Vec::with_capacity(len as usize);
+        for idx in 0..num_blocks * SHA256_NUM_READ_ROWS {
+            let read: [u8; SHA256_READ_SIZE] = memory_read_from_state(
+                state,
+                RV32_MEMORY_AS,
+                src + (idx * SHA256_READ_SIZE) as u32,
+            );
+            let offset = idx * SHA256_READ_SIZE;
+            if offset < len as usize {
+                let copy_len = min(len as usize - offset, SHA256_READ_SIZE);
+                input.extend_from_slice(&read[..copy_len]);
+            }
+        }
+
+        let output = sha256_solve(&input);
+        memory_write_from_state(state, RV32_MEMORY_AS, dst, &output);
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        state.ctx.trace_heights[chip_index] += (num_blocks * SHA256_ROWS_PER_BLOCK) as u32;
         Ok(())
     }
 }

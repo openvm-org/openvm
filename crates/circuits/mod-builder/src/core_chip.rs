@@ -1,6 +1,6 @@
 use crate::{
     builder::{FieldExpr, FieldExprCols},
-    utils::{biguint_to_limbs_vec, limbs_to_biguint},
+    utils::biguint_to_limbs_vec,
 };
 use itertools::Itertools;
 use num_bigint::BigUint;
@@ -19,7 +19,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    var_range::SharedVariableRangeCheckerChip, AlignedBytesBorrow, SubAir, TraceSubRowGenerator,
+    var_range::SharedVariableRangeCheckerChip, SubAir, TraceSubRowGenerator,
 };
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::{
@@ -29,7 +29,7 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
-use std::{borrow::BorrowMut, mem::size_of};
+
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {
     pub expr: FieldExpr,
@@ -170,19 +170,13 @@ where
     }
 }
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub struct FieldExpressionMetadata {
     pub total_input_limbs: usize, // num_inputs * limbs_per_input
 }
 
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct FieldExpressionCoreRecord {
-    pub opcode: u8,
-}
-
 pub struct FieldExpressionCoreRecordMut<'a> {
-    pub inner: &'a mut FieldExpressionCoreRecord,
+    pub opcode: &'a mut u8,
     pub input_limbs: &'a mut [u8],
 }
 
@@ -191,12 +185,11 @@ impl<'a> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressionMetad
         &'a mut self,
         metadata: FieldExpressionMetadata,
     ) -> FieldExpressionCoreRecordMut<'a> {
-        let (record_buf, input_limbs_buf) =
-            unsafe { self.split_at_mut_unchecked(size_of::<FieldExpressionCoreRecord>()) };
+        let (opcode_buf, input_limbs_buff) = unsafe { self.split_at_mut_unchecked(1) };
 
         FieldExpressionCoreRecordMut {
-            inner: record_buf.borrow_mut(),
-            input_limbs: &mut input_limbs_buf[..metadata.total_input_limbs],
+            opcode: &mut opcode_buf[0],
+            input_limbs: &mut input_limbs_buff[..metadata.total_input_limbs],
         }
     }
 }
@@ -204,9 +197,7 @@ impl<'a> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressionMetad
 impl<'a> FieldExpressionCoreRecordMut<'a> {
     pub fn new_from_execution_data(
         buffer: &'a mut [u8],
-        _opcode: u8,
         inputs: &[BigUint],
-        _limb_bits: usize,
         limbs_per_input: usize,
     ) -> Self {
         let record_info = FieldExpressionMetadata {
@@ -214,15 +205,14 @@ impl<'a> FieldExpressionCoreRecordMut<'a> {
         };
 
         let record: Self = buffer.custom_borrow(record_info);
-        // record.fill_from_execution_data(opcode, );
         record
     }
 
     #[inline(always)]
     pub fn fill_from_execution_data(&mut self, opcode: u8, data: &[u8]) {
-        // Rust will assert that that length of `data` and `self.input_limbs` are the same
+        // Rust will assert that length of `data` and `self.input_limbs` are the same
         // That is `data.len() == num_inputs * limbs_per_input`
-        self.inner.opcode = opcode;
+        *self.opcode = opcode;
         self.input_limbs.copy_from_slice(data);
     }
 }
@@ -332,7 +322,8 @@ where
             &data.0,
         );
 
-        let (writes, _, _) = run_field_expression(self, &data.0, core_record.inner.opcode as usize);
+        let (writes, _, _) =
+            run_field_expression(self, &core_record.input_limbs, *core_record.opcode as usize);
 
         self.adapter.write(
             state.memory,
@@ -356,8 +347,6 @@ where
     A: 'static + AdapterTraceFiller<F, CTX>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // NOTE[teokitan]: This is where GPU acceleration should happen in the future
-
         // Get the core record from the row slice
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
@@ -373,7 +362,7 @@ where
         };
 
         let (_, inputs, flags) =
-            run_field_expression(self, &record.input_limbs, record.inner.opcode as usize);
+            run_field_expression(self, &record.input_limbs, *record.opcode as usize);
 
         let range_checker = self.range_checker.as_ref();
         self.expr
@@ -411,14 +400,13 @@ where
     where
         Ctx: E1E2ExecutionCtx,
     {
-        let data: DynArray<_> = self.adapter.read(state, instruction).into();
-
-        let writes = run_field_expression(
+        let data: &[u8] = &self.adapter.read(state, instruction).into().0;
+        let (writes, _, _) = run_field_expression(
             self,
-            &data.0,
+            data,
             instruction.opcode.local_opcode_idx(self.offset) as usize,
-        )
-        .0;
+        );
+
         self.adapter.write(state, instruction, &writes.into());
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         Ok(())
@@ -443,10 +431,6 @@ fn run_field_expression<A>(
     local_opcode_idx: usize,
 ) -> (DynArray<u8>, Vec<BigUint>, Vec<bool>) {
     let field_element_limbs = step.expr.canonical_num_limbs();
-    let limb_bits = step.expr.canonical_limb_bits();
-
-    let data = data.iter().map(|&x| x as u32).collect_vec();
-
     assert_eq!(data.len(), step.num_inputs() * field_element_limbs);
 
     let mut inputs = Vec::with_capacity(step.num_inputs());
@@ -454,11 +438,10 @@ fn run_field_expression<A>(
         let start = i * field_element_limbs;
         let end = start + field_element_limbs;
         let limb_slice = &data[start..end];
-        let input = limbs_to_biguint(limb_slice, limb_bits);
+        let input = BigUint::from_bytes_le(limb_slice);
         inputs.push(input);
     }
 
-    // Reconstruct flags from opcode
     let mut flags = vec![];
     if step.expr.needs_setup() {
         flags = vec![false; step.num_flags()];
@@ -489,10 +472,9 @@ fn run_field_expression<A>(
         .collect();
     let writes: DynArray<_> = outputs
         .iter()
-        .map(|x| biguint_to_limbs_vec(x.clone(), limb_bits, field_element_limbs))
+        .map(|x| biguint_to_limbs_vec(x, field_element_limbs))
         .concat()
         .into_iter()
-        .map(|x| x as u8)
         .collect::<Vec<_>>()
         .into();
 
