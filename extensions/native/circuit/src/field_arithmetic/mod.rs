@@ -1,5 +1,6 @@
-use crate::adapters::{AluNativeAdapterAir, AluNativeAdapterStep};
 use openvm_circuit::arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper};
+
+use crate::adapters::{AluNativeAdapterAir, AluNativeAdapterStep};
 
 #[cfg(test)]
 mod tests;

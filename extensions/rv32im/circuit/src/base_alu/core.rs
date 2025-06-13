@@ -262,7 +262,8 @@ where
         // - Cols and Record structs should be repr(C) and we write in reverse order (to ensure
         //   non-overlapping)
         // - Do not overwrite any reference in `record` before it has already been used or moved
-        // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic otherwise)
+        // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic
+        //   otherwise)
 
         let local_opcode = BaseAluOpcode::from_usize(record.local_opcode as usize);
         let a = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &record.b, &record.c);

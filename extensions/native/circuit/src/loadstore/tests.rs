@@ -27,12 +27,11 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
+use super::{NativeLoadStoreChip, NativeLoadStoreCoreAir};
 use crate::{
     adapters::{NativeLoadStoreAdapterAir, NativeLoadStoreAdapterCols, NativeLoadStoreAdapterStep},
     write_native_array, NativeLoadStoreAir, NativeLoadStoreCoreCols, NativeLoadStoreStep,
 };
-
-use super::{NativeLoadStoreChip, NativeLoadStoreCoreAir};
 
 const MAX_INS_CAPACITY: usize = 128;
 const NUM_CELLS: usize = 1;
