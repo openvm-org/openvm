@@ -458,16 +458,6 @@ where
     }
 }
 
-// impl<AS, I, A, C> RecordWidthFromLayout<AdapterCoreLayout<AS, I>, (A, C)> for DenseRecordArena
-// where
-//     DenseRecordArena: RecordWidthFromLayout<I, A> + RecordWidthFromLayout<I, C>,
-// {
-//     fn width_bytes(&self, layout: &AdapterCoreLayout<AS, I>) -> usize {
-//         <Self as RecordWidthFromLayout<I, A>>::width_bytes(self, &layout.metadata)
-//             + <Self as RecordWidthFromLayout<I, C>>::width_bytes(self, &layout.metadata)
-//     }
-// }
-
 /// RecordArena implementation for [DenseRecordArena], with [AdapterCoreLayout]
 /// `A` is the adapter record type and `C` is the core record type
 /// `AS` is a type that implements `AdapterTraceStep`, so the width of the adapter is `AS::WIDTH`
