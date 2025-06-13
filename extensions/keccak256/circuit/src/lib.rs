@@ -184,7 +184,14 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
         }
 
         let output = keccak256(&input);
-        memory_write_from_state(state, RV32_MEMORY_AS, dst, &output);
+        for (i, word) in output.chunks_exact(KECCAK_WORD_SIZE).enumerate() {
+            memory_write_from_state::<_, KECCAK_WORD_SIZE>(
+                state,
+                RV32_MEMORY_AS,
+                dst + (i * KECCAK_WORD_SIZE) as u32,
+                word.try_into().unwrap(),
+            );
+        }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         state.ctx.trace_heights[chip_index] += (num_blocks * NUM_ROUNDS) as u32;
