@@ -7,7 +7,7 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionError, ExecutionState,
-        MultiRowLayout, MultiRowRecordArena, NewVmChipWrapper, RecordArena, Result, StepExecutorE1,
+        MatrixRecordArena, MultiRowLayout, NewVmChipWrapper, RecordArena, Result, StepExecutorE1,
         Streams, TraceFiller, TraceStep, VmStateMut,
     },
     system::memory::{
@@ -484,8 +484,8 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep<F> {
 
         while !trace.is_empty() {
             let record: &Rv32HintStoreRecord = unsafe { get_record_from_slice(&mut trace, ()) };
-            sizes.push(width * record.num_words as usize);
             let (chunk, rest) = trace.split_at_mut(width * record.num_words as usize);
+            sizes.push(record.num_words);
             chunks.push(chunk);
             trace = rest;
         }
@@ -498,9 +498,14 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep<F> {
             .par_iter_mut()
             .zip(sizes.par_iter())
             .for_each(|(chunk, &num_words)| {
-                let num_words = num_words / width;
-                let record: Rv32HintStoreRecordMut =
-                    unsafe { get_record_from_slice(chunk, Rv32HintStoreMetadata { num_words }) };
+                let record: Rv32HintStoreRecordMut = unsafe {
+                    get_record_from_slice(
+                        chunk,
+                        Rv32HintStoreMetadata {
+                            num_words: num_words as usize,
+                        },
+                    )
+                };
 
                 self.bitwise_lookup_chip.request_range(
                     (record.inner.mem_ptr >> msl_rshift) << msl_lshift,
@@ -508,8 +513,7 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep<F> {
                 );
 
                 let mut timestamp = record.inner.timestamp + num_words as u32 * 3;
-                let mut mem_ptr =
-                    record.inner.mem_ptr + (num_words * RV32_REGISTER_NUM_LIMBS) as u32;
+                let mut mem_ptr = record.inner.mem_ptr + num_words * RV32_REGISTER_NUM_LIMBS as u32;
 
                 // Assuming that `num_words` is usually small (e.g. 1 for `HINT_STOREW`)
                 // it is better to do a serial pass of the rows per instruction (going from the last
@@ -572,7 +576,7 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep<F> {
                         cols.from_state.timestamp = F::from_canonical_u32(timestamp.clone());
                         cols.from_state.pc = F::from_canonical_u32(record.inner.from_pc);
 
-                        cols.rem_words_limbs = ((num_words - idx) as u32)
+                        cols.rem_words_limbs = (num_words - idx as u32)
                             .to_le_bytes()
                             .map(|x| F::from_canonical_u8(x));
                         cols.is_buffer = F::from_bool(!is_single);
@@ -671,4 +675,4 @@ where
 }
 
 pub type Rv32HintStoreChip<F> =
-    NewVmChipWrapper<F, Rv32HintStoreAir, Rv32HintStoreStep<F>, MultiRowRecordArena<F>>;
+    NewVmChipWrapper<F, Rv32HintStoreAir, Rv32HintStoreStep<F>, MatrixRecordArena<F>>;

@@ -382,18 +382,20 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    pub fn get_slice<T: Copy + Debug>(&self, (addr_space, ptr): Address, len: usize) -> Vec<T> {
+    pub unsafe fn get_slice<T: Copy + Debug>(
+        &self,
+        (addr_space, ptr): Address,
+        len: usize,
+    ) -> Vec<T> {
         let mut block: Vec<T> = Vec::with_capacity(len);
-        unsafe {
-            self.paged_vecs
-                .get_unchecked((addr_space - self.as_offset) as usize)
-                .read_range_generic(
-                    (ptr as usize) * size_of::<T>(),
-                    len * size_of::<T>(),
-                    block.as_mut_ptr() as *mut u8,
-                );
-            block.set_len(len);
-        }
+        self.paged_vecs
+            .get_unchecked((addr_space - self.as_offset) as usize)
+            .read_range_generic(
+                (ptr as usize) * size_of::<T>(),
+                len * size_of::<T>(),
+                block.as_mut_ptr() as *mut u8,
+            );
+        block.set_len(len);
         block
     }
 

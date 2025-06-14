@@ -292,7 +292,7 @@ where
             WriteData: From<DynArray<u8>>,
         >,
 {
-    type RecordLayout = AdapterCoreLayout<FieldExpressionMetadata>;
+    type RecordLayout = AdapterCoreLayout<A, FieldExpressionMetadata>;
     type RecordMut<'a> = (A::RecordMut<'a>, FieldExpressionCoreRecordMut<'a>);
 
     fn execute<'buf, RA>(
@@ -308,10 +308,8 @@ where
             total_input_limbs: self.num_inputs() * self.expr.canonical_num_limbs(),
         };
 
-        let (mut adapter_record, mut core_record) = arena.alloc(AdapterCoreLayout::with_metadata(
-            A::WIDTH,
-            core_record_metadata,
-        ));
+        let (mut adapter_record, mut core_record) =
+            arena.alloc(AdapterCoreLayout::with_metadata(core_record_metadata));
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 

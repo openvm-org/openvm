@@ -155,7 +155,7 @@ where
             RecordMut<'a> = (),
         >,
 {
-    type RecordLayout = EmptyLayout;
+    type RecordLayout = EmptyLayout<A>;
     type RecordMut<'a> = (); // TODO
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -280,8 +280,8 @@ pub struct PublicValuesRecordArena<F> {
     pub trace_offset: usize,
 }
 
-impl<'a, F: PrimeField32> RecordArena<'a, EmptyLayout, ()> for PublicValuesRecordArena<F> {
-    fn alloc(&'a mut self, layout: EmptyLayout) -> () {
+impl<'a, A, F: PrimeField32> RecordArena<'a, EmptyLayout<A>, ()> for PublicValuesRecordArena<F> {
+    fn alloc(&'a mut self, layout: EmptyLayout<A>) -> () {
         todo!()
     }
 }

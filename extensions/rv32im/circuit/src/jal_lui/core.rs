@@ -3,8 +3,8 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1,
-        AdapterTraceFiller, AdapterTraceStep, ImmInstruction, RecordArena, Result, StepExecutorE1,
+        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, EmptyLayout, ImmInstruction, RecordArena, Result, StepExecutorE1,
         TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
@@ -167,7 +167,7 @@ where
     A: 'static
         + for<'a> AdapterTraceStep<F, CTX, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
 {
-    type RecordLayout = AdapterCoreLayout;
+    type RecordLayout = EmptyLayout<A>;
     type RecordMut<'a> = (A::RecordMut<'a>, &'a mut Rv32JalLuiStepRecord);
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -188,7 +188,7 @@ where
     {
         let &Instruction { opcode, c: imm, .. } = instruction;
 
-        let (mut adapter_record, core_record) = arena.alloc(AdapterCoreLayout::new(A::WIDTH));
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 

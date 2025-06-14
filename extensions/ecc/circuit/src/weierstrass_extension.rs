@@ -284,10 +284,11 @@ pub(crate) mod phantom {
             } else {
                 bail!("Modulus too large")
             };
-            let x_limbs: Vec<u8> = memory.memory.get_slice((RV32_MEMORY_AS, rs1), num_limbs);
+            let x_limbs: Vec<u8> =
+                unsafe { memory.memory.get_slice((RV32_MEMORY_AS, rs1), num_limbs) };
             let x = BigUint::from_bytes_le(&x_limbs);
             let rs2 = read_rv32_register(memory, b);
-            let rec_id = memory.memory.get_slice::<u8>((RV32_MEMORY_AS, rs2), 1)[0];
+            let rec_id = unsafe { memory.memory.get_slice::<u8>((RV32_MEMORY_AS, rs2), 1)[0] };
             let hint = self.decompress_point(x, rec_id & 1 == 1, c_idx);
             let hint_bytes = once(F::from_bool(hint.possible))
                 .chain(repeat(F::ZERO))

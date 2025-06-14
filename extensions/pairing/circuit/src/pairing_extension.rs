@@ -251,11 +251,13 @@ pub(crate) mod phantom {
     where
         Fp::Repr: From<[u8; N]>,
     {
-        let repr: [u8; N] = memory
-            .memory
-            .get_slice((RV32_MEMORY_AS, ptr), N)
-            .try_into()
-            .unwrap();
+        let repr: [u8; N] = unsafe {
+            memory
+                .memory
+                .get_slice((RV32_MEMORY_AS, ptr), N)
+                .try_into()
+                .unwrap()
+        };
         Fp::from_repr(repr.into())
             .into_option()
             .ok_or(eyre::eyre!("bad ff::PrimeField repr"))
