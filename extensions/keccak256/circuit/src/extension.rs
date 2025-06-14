@@ -3,7 +3,8 @@ use std::result::Result;
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        SystemConfig, SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+        InitFileGenerator, SystemConfig, SystemPort, VmExtension, VmInventory, VmInventoryBuilder,
+        VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
@@ -48,6 +49,9 @@ impl Default for Keccak256Rv32Config {
         }
     }
 }
+
+// Default implementation uses no init file
+impl InitFileGenerator for Keccak256Rv32Config {}
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Keccak256;

@@ -1,4 +1,9 @@
-use std::{borrow::Borrow, collections::VecDeque, marker::PhantomData, sync::Arc};
+use std::{
+    borrow::Borrow,
+    collections::{HashMap, VecDeque},
+    marker::PhantomData,
+    sync::Arc,
+};
 
 use openvm_circuit::system::program::trace::compute_exe_commit;
 use openvm_instructions::{exe::VmExe, program::Program};
@@ -61,11 +66,25 @@ pub enum GenerationError {
 
 /// VM memory state for continuations.
 
-#[derive(Clone, Default, Debug)]
+/// A trait for key-value store for `Streams`.
+pub trait KvStore: Send + Sync {
+    fn get(&self, key: &[u8]) -> Option<&[u8]>;
+}
+
+impl KvStore for HashMap<Vec<u8>, Vec<u8>> {
+    fn get(&self, key: &[u8]) -> Option<&[u8]> {
+        self.get(key).map(|v| v.as_slice())
+    }
+}
+
+#[derive(Clone)]
 pub struct Streams<F> {
     pub input_stream: VecDeque<Vec<F>>,
     pub hint_stream: VecDeque<F>,
     pub hint_space: Vec<Vec<F>>,
+    /// The key-value store for hints. Both key and value are byte arrays. Executors which
+    /// read `kv_store` need to encode the key and decode the value.
+    pub kv_store: Arc<dyn KvStore>,
 }
 
 impl<F> Streams<F> {
@@ -74,7 +93,14 @@ impl<F> Streams<F> {
             input_stream: input_stream.into(),
             hint_stream: VecDeque::default(),
             hint_space: Vec::default(),
+            kv_store: Arc::new(HashMap::new()),
         }
+    }
+}
+
+impl<F> Default for Streams<F> {
+    fn default() -> Self {
+        Self::new(VecDeque::default())
     }
 }
 

@@ -30,23 +30,25 @@ pub mod witness;
 ///
 /// Reference: <https://github.com/Plonky3/Plonky3/blob/4809fa7bedd9ba8f6f5d3267b1592618e3776c57/fri/src/verifier.rs#L101>
 #[allow(clippy::too_many_arguments)]
-#[allow(unused_variables)]
-pub fn verify_query<C: Config>(
+fn verify_query<C: Config>(
     builder: &mut Builder<C>,
     config: &FriConfigVariable<C>,
     commit_phase_commits: &Array<C, DigestVariable<C>>,
     index_bits: &Array<C, Var<C::N>>,
     proof: &FriQueryProofVariable<C>,
     betas: &Array<C, Ext<C::F, C::EF>>,
+    betas_squared: &Array<C, Ext<C::F, C::EF>>,
     reduced_openings: &Array<C, Ext<C::F, C::EF>>,
     log_max_lde_height: RVar<C::N>,
+    i_plus_one_arr: &Array<C, Usize<C::N>>,
 ) -> Ext<C::F, C::EF>
 where
     C::F: TwoAdicField,
     C::EF: TwoAdicField,
 {
     builder.cycle_tracker_start("verify-query");
-    let folded_eval: Ext<C::F, C::EF> = builder.eval(C::F::ZERO);
+    // reduced_openings.len() == MAX_TWO_ADICITY >= log_max_lde_height
+    let folded_eval: Ext<C::F, C::EF> = builder.get(reduced_openings, log_max_lde_height);
     let two_adic_generator_f = config.get_two_adic_generator(builder, log_max_lde_height);
 
     let two_adic_gen_ext = two_adic_generator_f.to_operand().symbolic();
@@ -55,84 +57,113 @@ where
     let index_bits_truncated = index_bits.slice(builder, 0, log_max_lde_height);
     let x = builder.exp_bits_big_endian(two_adic_generator_ef, &index_bits_truncated);
 
-    // proof.commit_phase_openings.len() == log_max_lde_height - log_blowup
+    // assert proof.commit_phase_openings.len() == log_max_height
+    // where
+    //   - commit_phase_commits.len() = log_max_height is compile-time constant (assuming
+    //     log_final_poly_len = 0)
+    //   - log_max_lde_height = log_max_height + log_blowup by definition in verify_two_adic_pcs
     builder.assert_usize_eq(
         proof.commit_phase_openings.len(),
         commit_phase_commits.len(),
     );
-    builder
-        .range(0, commit_phase_commits.len())
-        .for_each(|i_vec, builder| {
-            let i = i_vec[0];
-            let log_folded_height = builder.eval_expr(log_max_lde_height - i - C::N::ONE);
-            let log_folded_height_plus_one = builder.eval_expr(log_folded_height + C::N::ONE);
-            let commit = builder.get(commit_phase_commits, i);
-            let step = builder.get(&proof.commit_phase_openings, i);
-            let beta = builder.get(betas, i);
+    // By definition in verify_two_adic_pcs:
+    // - betas, betas_squared, i_plus_one_arr have length log_max_height
+    // - index_bits has length log_max_lde_height
+    iter_zip!(
+        builder,
+        commit_phase_commits,
+        proof.commit_phase_openings,
+        betas,
+        betas_squared,
+        i_plus_one_arr,
+        index_bits
+    )
+    .for_each(|ptr_vec, builder| {
+        let [comm_ptr, opening_ptr, beta_ptr, beta_sq_ptr, i_plus_one_ptr, index_bit_ptr] =
+            ptr_vec.try_into().unwrap();
 
-            // reduced_openings.len() == MAX_TWO_ADICITY >= log_max_lde_height >=
-            // log_folded_height_plus_one
-            let reduced_opening = builder.get(reduced_openings, log_folded_height_plus_one);
-            builder.assign(&folded_eval, folded_eval + reduced_opening);
+        let i_plus_one = builder.iter_ptr_get(i_plus_one_arr, i_plus_one_ptr);
+        let i_plus_one = RVar::from(i_plus_one);
+        let log_folded_height = builder.eval_expr(log_max_lde_height - i_plus_one);
+        let commit = builder.iter_ptr_get(commit_phase_commits, comm_ptr);
+        let step = builder.iter_ptr_get(&proof.commit_phase_openings, opening_ptr);
+        let beta = builder.iter_ptr_get(betas, beta_ptr);
+        let beta_sq = builder.iter_ptr_get(betas_squared, beta_sq_ptr);
 
-            let index_bit = builder.get(index_bits, i);
-            let index_sibling_mod_2: Var<C::N> =
-                builder.eval(SymbolicVar::from(C::N::ONE) - index_bit);
-            let i_plus_one = builder.eval_expr(i + RVar::one());
-            let index_pair = index_bits.shift(builder, i_plus_one);
+        let index_bit = builder.iter_ptr_get(index_bits, index_bit_ptr);
+        let index_sibling_mod_2: Var<C::N> = builder.eval(SymbolicVar::from(C::N::ONE) - index_bit);
+        let index_pair = index_bits.shift(builder, i_plus_one);
 
-            let evals: Array<C, Ext<C::F, C::EF>> = builder.array(2);
-            let eval_0: Ext<C::F, C::EF>;
-            let eval_1: Ext<C::F, C::EF>;
-            if builder.flags.static_only {
-                [eval_0, eval_1] = cond_eval(
-                    builder,
-                    index_sibling_mod_2,
-                    step.sibling_value,
-                    folded_eval,
-                );
-                builder.set_value(&evals, 0, eval_0);
-                builder.set_value(&evals, 1, eval_1);
-            } else {
-                builder.set_value(&evals, 0, folded_eval);
-                builder.set_value(&evals, 1, folded_eval);
-                // This is faster than branching.
-                builder.set_value(&evals, index_sibling_mod_2, step.sibling_value);
-                eval_0 = builder.get(&evals, 0);
-                eval_1 = builder.get(&evals, 1);
-            }
-
-            let dims = DimensionsVariable::<C> {
-                log_height: builder.eval(log_folded_height),
-            };
-            let dims_slice: Array<C, DimensionsVariable<C>> = builder.array(1);
-            builder.set_value(&dims_slice, 0, dims);
-
-            let opened_values = builder.array(1);
-            builder.set_value(&opened_values, 0, evals);
-            builder.cycle_tracker_start("verify-batch-ext");
-            verify_batch::<C>(
+        let evals: Array<C, Ext<C::F, C::EF>> = builder.array(2);
+        let eval_0: Ext<C::F, C::EF>;
+        let eval_1: Ext<C::F, C::EF>;
+        if builder.flags.static_only {
+            [eval_0, eval_1] = cond_eval(
                 builder,
-                &commit,
-                dims_slice,
-                index_pair,
-                &NestedOpenedValues::Ext(opened_values),
-                &step.opening_proof,
+                index_sibling_mod_2,
+                step.sibling_value,
+                folded_eval,
             );
-            builder.cycle_tracker_end("verify-batch-ext");
+            builder.set_value(&evals, 0, eval_0);
+            builder.set_value(&evals, 1, eval_1);
+        } else {
+            builder.set_value(&evals, 0, folded_eval);
+            builder.set_value(&evals, 1, folded_eval);
+            // This is faster than branching.
+            builder.set_value(&evals, index_sibling_mod_2, step.sibling_value);
+            eval_0 = builder.get(&evals, 0);
+            eval_1 = builder.get(&evals, 1);
+        }
 
-            let two_adic_generator_one = config.get_two_adic_generator(builder, Usize::from(1));
+        let dims = DimensionsVariable::<C> {
+            log_height: builder.eval(log_folded_height),
+        };
+        let dims_slice: Array<C, DimensionsVariable<C>> = builder.array(1);
+        builder.set_value(&dims_slice, 0, dims);
 
-            let [xs_0, xs_1]: [Ext<_, _>; 2] =
-                cond_eval(builder, index_sibling_mod_2, x * two_adic_generator_one, x);
+        let opened_values = builder.array(1);
+        builder.set_value(&opened_values, 0, evals);
+        builder.cycle_tracker_start("verify-batch-ext");
+        verify_batch::<C>(
+            builder,
+            &commit,
+            dims_slice,
+            index_pair,
+            &NestedOpenedValues::Ext(opened_values),
+            &step.opening_proof,
+        );
+        builder.cycle_tracker_end("verify-batch-ext");
 
-            builder.assign(
-                &folded_eval,
-                eval_0 + (beta - xs_0) * (eval_1 - eval_0) / (xs_1 - xs_0),
-            );
+        let two_adic_generator_one = config.get_two_adic_generator(builder, Usize::from(1));
 
-            builder.assign(&x, x * x);
-        });
+        let [xs_0, xs_1]: [Ext<_, _>; 2] =
+            cond_eval(builder, index_sibling_mod_2, x * two_adic_generator_one, x);
+
+        builder.assign(
+            &folded_eval,
+            eval_0 + (beta - xs_0) * (eval_1 - eval_0) / (xs_1 - xs_0),
+        );
+
+        builder.assign(&x, x * x);
+
+        // reduced_openings.len() == MAX_TWO_ADICITY >= log_max_lde_height >= log_folded_height
+        let reduced_opening = builder.get(reduced_openings, log_folded_height);
+        // Roll in new reduced opening polynomial at the folded height. This is 0 if there is no
+        // reduced opening at the folded height.
+        //
+        // Each `reduced_opening` is the evaluation of a reduced opening polynomial, which is itself
+        // a random linear combination `f_{i, 0}(x) + alpha f_{i, 1}(x) + ...`, but when we add it
+        // to the current folded polynomial evaluation claim, we need to multiply by a new random
+        // factor since `f_{i, 0}` has no leading coefficient.
+        //
+        // We use `beta^2` as the random factor since `beta` is already used in the folding.
+        //
+        // Note: this will include the case `reduced_opening = reduced_openings[log_blowup]` in the
+        // last iteration of the loop. Since we roll this in with the beta^2 factor, the low degree
+        // test will also include this case (corresponding to `log_height = 0`, which is not done in
+        // the Plonky3 implementation).
+        builder.assign(&folded_eval, folded_eval + beta_sq * reduced_opening);
+    });
 
     builder.cycle_tracker_end("verify-query");
     folded_eval

@@ -87,8 +87,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         }
         create_extern_func!(sw_add_ne_extern_func);
         create_extern_func!(sw_double_extern_func);
-        create_extern_func!(hint_decompress_extern_func);
-        create_extern_func!(hint_non_qr_extern_func);
+        create_extern_func!(sw_setup_extern_func);
 
         let group_ops_mod_name = format_ident!("{}_ops", struct_name.to_string().to_lowercase());
 
@@ -96,8 +95,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             extern "C" {
                 fn #sw_add_ne_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #sw_double_extern_func(rd: usize, rs1: usize);
-                fn #hint_decompress_extern_func(rs1: usize, rs2: usize);
-                fn #hint_non_qr_extern_func();
+                fn #sw_setup_extern_func();
             }
 
             #[derive(Eq, PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -118,7 +116,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 // Below are wrapper functions for the intrinsic instructions.
                 // Should not be called directly.
                 #[inline(always)]
-                fn add_ne(p1: &#struct_name, p2: &#struct_name) -> #struct_name {
+                unsafe fn add_ne<const CHECK_SETUP: bool>(p1: &#struct_name, p2: &#struct_name) -> #struct_name {
                     #[cfg(not(target_os = "zkvm"))]
                     {
                         use openvm_algebra_guest::DivUnsafe;
@@ -129,20 +127,21 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        if CHECK_SETUP {
+                            Self::set_up_once();
+                        }
                         let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
-                        unsafe {
-                            #sw_add_ne_extern_func(
-                                uninit.as_mut_ptr() as usize,
-                                p1 as *const #struct_name as usize,
-                                p2 as *const #struct_name as usize
-                            )
-                        };
-                        unsafe { uninit.assume_init() }
+                        #sw_add_ne_extern_func(
+                            uninit.as_mut_ptr() as usize,
+                            p1 as *const #struct_name as usize,
+                            p2 as *const #struct_name as usize
+                        );
+                        uninit.assume_init()
                     }
                 }
 
                 #[inline(always)]
-                fn add_ne_assign(&mut self, p2: &#struct_name) {
+                unsafe fn add_ne_assign<const CHECK_SETUP: bool>(&mut self, p2: &#struct_name) {
                     #[cfg(not(target_os = "zkvm"))]
                     {
                         use openvm_algebra_guest::DivUnsafe;
@@ -154,19 +153,20 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
-                        unsafe {
-                            #sw_add_ne_extern_func(
-                                self as *mut #struct_name as usize,
-                                self as *const #struct_name as usize,
-                                p2 as *const #struct_name as usize
-                            )
-                        };
+                        if CHECK_SETUP {
+                            Self::set_up_once();
+                        }
+                        #sw_add_ne_extern_func(
+                            self as *mut #struct_name as usize,
+                            self as *const #struct_name as usize,
+                            p2 as *const #struct_name as usize
+                        );
                     }
                 }
 
                 /// Assumes that `p` is not identity.
                 #[inline(always)]
-                fn double_impl(p: &#struct_name) -> #struct_name {
+                unsafe fn double_impl<const CHECK_SETUP: bool>(p: &#struct_name) -> #struct_name {
                     #[cfg(not(target_os = "zkvm"))]
                     {
                         use openvm_algebra_guest::DivUnsafe;
@@ -179,34 +179,44 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        if CHECK_SETUP {
+                            Self::set_up_once();
+                        }
                         let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
-                        unsafe {
-                            #sw_double_extern_func(
-                                uninit.as_mut_ptr() as usize,
-                                p as *const #struct_name as usize,
-                            )
-                        };
-                        unsafe { uninit.assume_init() }
+                        #sw_double_extern_func(
+                            uninit.as_mut_ptr() as usize,
+                            p as *const #struct_name as usize,
+                        );
+                        uninit.assume_init()
                     }
+                }
+
+                // Helper function to call the setup instruction on first use
+                #[inline(always)]
+                #[cfg(target_os = "zkvm")]
+                fn set_up_once() {
+                    static is_setup: ::openvm_ecc_guest::once_cell::race::OnceBool = ::openvm_ecc_guest::once_cell::race::OnceBool::new();
+                    is_setup.get_or_init(|| {
+                        unsafe { #sw_setup_extern_func(); }
+                        <#intmod_type as openvm_algebra_guest::IntMod>::set_up_once();
+                        true
+                    });
                 }
 
                 #[inline(always)]
-                fn double_assign_impl(&mut self) {
-                    #[cfg(not(target_os = "zkvm"))]
-                    {
-                        *self = Self::double_impl(self);
-                    }
-                    #[cfg(target_os = "zkvm")]
-                    {
-                        unsafe {
-                            #sw_double_extern_func(
-                                self as *mut #struct_name as usize,
-                                self as *const #struct_name as usize
-                            )
-                        };
-                    }
+                #[cfg(not(target_os = "zkvm"))]
+                fn set_up_once() {
+                    // No-op for non-ZKVM targets
                 }
 
+                #[inline(always)]
+                fn is_identity_impl<const CHECK_SETUP: bool>(&self) -> bool {
+                    use openvm_algebra_guest::IntMod;
+                    // Safety: Self::set_up_once() ensures IntMod::set_up_once() has been called.
+                    unsafe {
+                        self.x.eq_impl::<CHECK_SETUP>(&#intmod_type::ZERO) && self.y.eq_impl::<CHECK_SETUP>(&#intmod_type::ZERO)
+                    }
+                }
             }
 
             impl ::openvm_ecc_guest::weierstrass::WeierstrassPoint for #struct_name {
@@ -217,56 +227,126 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
 
                 /// SAFETY: assumes that #intmod_type has a memory representation
                 /// such that with repr(C), two coordinates are packed contiguously.
+                #[inline(always)]
                 fn as_le_bytes(&self) -> &[u8] {
                     unsafe { &*core::ptr::slice_from_raw_parts(self as *const Self as *const u8, <#intmod_type as openvm_algebra_guest::IntMod>::NUM_LIMBS * 2) }
                 }
 
+                #[inline(always)]
                 fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self {
                     Self { x, y }
                 }
 
+                #[inline(always)]
                 fn x(&self) -> &Self::Coordinate {
                     &self.x
                 }
 
+                #[inline(always)]
                 fn y(&self) -> &Self::Coordinate {
                     &self.y
                 }
 
+                #[inline(always)]
                 fn x_mut(&mut self) -> &mut Self::Coordinate {
                     &mut self.x
                 }
 
+                #[inline(always)]
                 fn y_mut(&mut self) -> &mut Self::Coordinate {
                     &mut self.y
                 }
 
+                #[inline(always)]
                 fn into_coords(self) -> (Self::Coordinate, Self::Coordinate) {
                     (self.x, self.y)
                 }
 
-                fn add_ne_nonidentity(&self, p2: &Self) -> Self {
-                    Self::add_ne(self, p2)
+                #[inline(always)]
+                fn set_up_once() {
+                    Self::set_up_once();
                 }
 
-                fn add_ne_assign_nonidentity(&mut self, p2: &Self) {
-                    Self::add_ne_assign(self, p2);
+                #[inline]
+                fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
+                    use openvm_algebra_guest::IntMod;
+
+                    if CHECK_SETUP {
+                        // Call setup here so we skip it below
+                        #intmod_type::set_up_once();
+                    }
+
+                    if self.is_identity_impl::<CHECK_SETUP>() {
+                        *self = p2.clone();
+                    } else if p2.is_identity_impl::<CHECK_SETUP>() {
+                        // do nothing
+                    } else if unsafe { self.x.eq_impl::<false>(&p2.x) } { // Safety: we called IntMod setup above
+                        let sum_ys = unsafe { self.y.add_ref::<false>(&p2.y) };
+                        // Safety: we called IntMod setup above
+                        if unsafe { IntMod::eq_impl::<false>(&sum_ys, &<#intmod_type as IntMod>::ZERO) } {
+                            *self = Self::identity();
+                        } else {
+                            unsafe {
+                                self.double_assign_nonidentity::<CHECK_SETUP>();
+                            }
+                        }
+                    } else {
+                        unsafe {
+                            self.add_ne_assign_nonidentity::<CHECK_SETUP>(p2);
+                        }
+                    }
                 }
 
-                fn sub_ne_nonidentity(&self, p2: &Self) -> Self {
-                    Self::add_ne(self, &p2.clone().neg())
+                #[inline(always)]
+                fn double_assign_impl<const CHECK_SETUP: bool>(&mut self) {
+                    if !self.is_identity_impl::<CHECK_SETUP>() {
+                        unsafe {
+                            self.double_assign_nonidentity::<CHECK_SETUP>();
+                        }
+                    }
                 }
 
-                fn sub_ne_assign_nonidentity(&mut self, p2: &Self) {
-                    Self::add_ne_assign(self, &p2.clone().neg());
+                #[inline(always)]
+                unsafe fn add_ne_nonidentity<const CHECK_SETUP: bool>(&self, p2: &Self) -> Self {
+                    Self::add_ne::<CHECK_SETUP>(self, p2)
                 }
 
-                fn double_nonidentity(&self) -> Self {
-                    Self::double_impl(self)
+                #[inline(always)]
+                unsafe fn add_ne_assign_nonidentity<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
+                    Self::add_ne_assign::<CHECK_SETUP>(self, p2);
                 }
 
-                fn double_assign_nonidentity(&mut self) {
-                    Self::double_assign_impl(self);
+                #[inline(always)]
+                unsafe fn sub_ne_nonidentity<const CHECK_SETUP: bool>(&self, p2: &Self) -> Self {
+                    Self::add_ne::<CHECK_SETUP>(self, &p2.clone().neg())
+                }
+
+                #[inline(always)]
+                unsafe fn sub_ne_assign_nonidentity<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
+                    Self::add_ne_assign::<CHECK_SETUP>(self, &p2.clone().neg());
+                }
+
+                #[inline(always)]
+                unsafe fn double_nonidentity<const CHECK_SETUP: bool>(&self) -> Self {
+                    Self::double_impl::<CHECK_SETUP>(self)
+                }
+
+                #[inline(always)]
+                unsafe fn double_assign_nonidentity<const CHECK_SETUP: bool>(&mut self) {
+                    #[cfg(not(target_os = "zkvm"))]
+                    {
+                        *self = Self::double_impl::<CHECK_SETUP>(self);
+                    }
+                    #[cfg(target_os = "zkvm")]
+                    {
+                        if CHECK_SETUP {
+                            Self::set_up_once();
+                        }
+                        #sw_double_extern_func(
+                            self as *mut #struct_name as usize,
+                            self as *const #struct_name as usize
+                        );
+                    }
                 }
             }
 
@@ -293,122 +373,28 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             }
 
             mod #group_ops_mod_name {
-                use ::openvm_ecc_guest::{weierstrass::{WeierstrassPoint, FromCompressed, DecompressionHint}, impl_sw_group_ops, algebra::{IntMod, DivUnsafe, DivAssignUnsafe, ExpBytes}};
+                use ::openvm_ecc_guest::{weierstrass::{WeierstrassPoint, FromCompressed}, impl_sw_group_ops, algebra::IntMod};
                 use super::*;
 
                 impl_sw_group_ops!(#struct_name, #intmod_type);
 
                 impl FromCompressed<#intmod_type> for #struct_name {
                     fn decompress(x: #intmod_type, rec_id: &u8) -> Option<Self> {
-                        match Self::honest_host_decompress(&x, rec_id) {
-                            // successfully decompressed
-                            Some(Some(ret)) => Some(ret),
-                            // successfully proved that the point cannot be decompressed
-                            Some(None) => None,
-                            None => {
-                                // host is dishonest, enter infinite loop
-                                loop {
-                                    openvm::io::println("ERROR: Decompression hint is invalid. Entering infinite loop.");
-                                }
-                            }
-                        }
-                    }
-
-                    fn hint_decompress(x: &#intmod_type, rec_id: &u8) -> Option<DecompressionHint<#intmod_type>> {
-                        #[cfg(not(target_os = "zkvm"))]
-                        {
-                            unimplemented!()
-                        }
-                        #[cfg(target_os = "zkvm")]
-                        {
-                            use openvm::platform as openvm_platform; // needed for hint_store_u32!
-
-                            let possible = core::mem::MaybeUninit::<u32>::uninit();
-                            let sqrt = core::mem::MaybeUninit::<#intmod_type>::uninit();
-                            unsafe {
-                                #hint_decompress_extern_func(x as *const _ as usize, rec_id as *const u8 as usize);
-                                let possible_ptr = possible.as_ptr() as *const u32;
-                                openvm_rv32im_guest::hint_store_u32!(possible_ptr);
-                                openvm_rv32im_guest::hint_buffer_u32!(sqrt.as_ptr() as *const u8, <#intmod_type as openvm_algebra_guest::IntMod>::NUM_LIMBS / 4);
-                                let possible = possible.assume_init();
-                                if possible == 0 || possible == 1 {
-                                    Some(DecompressionHint { possible: possible == 1, sqrt: sqrt.assume_init() })
+                        use openvm_algebra_guest::Sqrt;
+                        let y_squared = &x * &x * &x + &<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A * &x + &<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_B;
+                        let y = y_squared.sqrt();
+                        match y {
+                            None => None,
+                            Some(y) => {
+                                let correct_y = if y.as_le_bytes()[0] & 1 == *rec_id & 1 {
+                                    y
                                 } else {
-                                    None
-                                }
+                                    -y
+                                };
+                                // In order for sqrt() to return Some, we are guaranteed that y * y == y_squared, which already proves (x, correct_y) is on the curve
+                                Some(<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::from_xy_unchecked(x, correct_y))
                             }
                         }
-                    }
-                }
-
-                impl #struct_name {
-                    // Returns None if the hint is incorrect (i.e. the host is dishonest)
-                    // Returns Some(None) if the hint proves that the point cannot be decompressed
-                    fn honest_host_decompress(x: &#intmod_type, rec_id: &u8) -> Option<Option<Self>> {
-                        let hint = <#struct_name as FromCompressed<#intmod_type>>::hint_decompress(x, rec_id)?;
-
-                        if hint.possible {
-                            // ensure y < modulus
-                            hint.sqrt.assert_reduced();
-
-                            if hint.sqrt.as_le_bytes()[0] & 1 != *rec_id & 1 {
-                                None
-                            } else {
-                                let ret = <#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::from_xy_nonidentity(x.clone(), hint.sqrt)?;
-                                Some(Some(ret))
-                            }
-                        } else {
-                            // ensure sqrt < modulus
-                            hint.sqrt.assert_reduced();
-
-                            let alpha = (x * x * x) + (x * &<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A) + &<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_B;
-                            if &hint.sqrt * &hint.sqrt == alpha * Self::get_non_qr() {
-                                Some(None)
-                            } else {
-                                None
-                            }
-                        }
-                    }
-
-                    // Generate a non quadratic residue in the coordinate field by using a hint
-                    fn init_non_qr() -> alloc::boxed::Box<<Self as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate> {
-                        #[cfg(not(target_os = "zkvm"))]
-                        {
-                            unimplemented!();
-                        }
-                        #[cfg(target_os = "zkvm")]
-                        {
-                            use openvm::platform as openvm_platform; // needed for hint_buffer_u32
-                            let mut non_qr_uninit = core::mem::MaybeUninit::<#intmod_type>::uninit();
-                            let mut non_qr;
-                            unsafe {
-                                #hint_non_qr_extern_func();
-                                let ptr = non_qr_uninit.as_ptr() as *const u8;
-                                openvm_rv32im_guest::hint_buffer_u32!(ptr, <#intmod_type as openvm_algebra_guest::IntMod>::NUM_LIMBS / 4);
-                                non_qr = non_qr_uninit.assume_init();
-                            }
-                            // ensure non_qr < modulus
-                            non_qr.assert_reduced();
-
-                            // construct exp = (p-1)/2 as an integer by first constraining exp = (p-1)/2 (mod p) and then exp < p
-                            let exp = -<#intmod_type as openvm_algebra_guest::IntMod>::ONE.div_unsafe(#intmod_type::from_const_u8(2));
-                            exp.assert_reduced();
-
-                            if non_qr.exp_bytes(true, &exp.to_be_bytes()) != -<#intmod_type as openvm_algebra_guest::IntMod>::ONE
-                            {
-                                // non_qr is not a non quadratic residue, so host is dishonest
-                                loop {
-                                    openvm::io::println("ERROR: Non quadratic residue hint is invalid. Entering infinite loop.");
-                                }
-                            }
-
-                            alloc::boxed::Box::new(non_qr)
-                        }
-                    }
-
-                    pub fn get_non_qr() -> &'static #intmod_type {
-                        static non_qr: ::openvm_ecc_guest::once_cell::race::OnceBox<#intmod_type> = ::openvm_ecc_guest::once_cell::race::OnceBox::new();
-                        &non_qr.get_or_init(Self::init_non_qr)
                     }
                 }
             }
@@ -446,8 +432,6 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
     let SwDefine { items } = parse_macro_input!(input as SwDefine);
 
     let mut externs = Vec::new();
-    let mut setups = Vec::new();
-    let mut setup_all_curves = Vec::new();
 
     let span = proc_macro::Span::call_site();
 
@@ -462,14 +446,9 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             syn::Ident::new(&format!("sw_add_ne_extern_func_{}", str_path), span.into());
         let double_extern_func =
             syn::Ident::new(&format!("sw_double_extern_func_{}", str_path), span.into());
-        let hint_decompress_extern_func = syn::Ident::new(
-            &format!("hint_decompress_extern_func_{}", str_path),
-            span.into(),
-        );
-        let hint_non_qr_extern_func = syn::Ident::new(
-            &format!("hint_non_qr_extern_func_{}", str_path),
-            span.into(),
-        );
+        let setup_extern_func =
+            syn::Ident::new(&format!("sw_setup_extern_func_{}", str_path), span.into());
+
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
             extern "C" fn #add_ne_extern_func(rd: usize, rs1: usize, rs2: usize) {
@@ -498,38 +477,10 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             }
 
             #[no_mangle]
-            extern "C" fn #hint_decompress_extern_func(rs1: usize, rs2: usize) {
-                openvm::platform::custom_insn_r!(
-                    opcode = OPCODE,
-                    funct3 = SW_FUNCT3 as usize,
-                    funct7 = SwBaseFunct7::HintDecompress as usize + #ec_idx
-                        * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                    rd = Const "x0",
-                    rs1 = In rs1,
-                    rs2 = In rs2
-                );
-            }
-
-            #[no_mangle]
-            extern "C" fn #hint_non_qr_extern_func() {
-                openvm::platform::custom_insn_r!(
-                    opcode = OPCODE,
-                    funct3 = SW_FUNCT3 as usize,
-                    funct7 = SwBaseFunct7::HintNonQr as usize + #ec_idx
-                        * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                    rd = Const "x0",
-                    rs1 = Const "x0",
-                    rs2 = Const "x0"
-                );
-            }
-        });
-
-        let setup_function = syn::Ident::new(&format!("setup_sw_{}", str_path), span.into());
-        setups.push(quote::quote_spanned! { span.into() =>
-            #[allow(non_snake_case)]
-            pub fn #setup_function() {
+            extern "C" fn #setup_extern_func() {
                 #[cfg(target_os = "zkvm")]
                 {
+                    use super::#item;
                     // p1 is (x1, y1), and x1 must be the modulus.
                     // y1 can be anything for SetupEcAdd, but must equal `a` for SetupEcDouble
                     let modulus_bytes = <<#item as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
@@ -564,22 +515,15 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                 }
             }
         });
-
-        setup_all_curves.push(quote::quote_spanned! { span.into() =>
-            #setup_function();
-        });
     }
 
     TokenStream::from(quote::quote_spanned! { span.into() =>
+        #[allow(non_snake_case)]
         #[cfg(target_os = "zkvm")]
         mod openvm_intrinsics_ffi_2 {
             use ::openvm_ecc_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};
 
             #(#externs)*
-        }
-        #(#setups)*
-        pub fn setup_all_curves() {
-            #(#setup_all_curves)*
         }
     })
 }

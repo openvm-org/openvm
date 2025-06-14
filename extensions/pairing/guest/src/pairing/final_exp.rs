@@ -9,7 +9,7 @@ pub trait FinalExp {
     type Fp12: Field + FieldExtension<Self::Fp2>;
 
     /// Assert in circuit that the final exponentiation is equal to one. The actual final
-    /// exponentiaton is calculated out of circuit via final_exp_hint. Scalar coefficients
+    /// exponentiation is calculated out of circuit via final_exp_hint. Scalar coefficients
     /// to the curve points must equal to zero, which is checked in a debug_assert.
     fn assert_final_exp_is_one(
         f: &Self::Fp12,

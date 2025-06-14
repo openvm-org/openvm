@@ -24,7 +24,8 @@ openvm-pairing-circuit = { workspace = true }
 openvm-pairing-transpiler = { workspace = true }
 openvm-native-circuit = { workspace = true }
 openvm-native-compiler = { workspace = true }
-openvm-native-recursion = { workspace = true, features = ["static-verifier"] }
+openvm-native-recursion = { workspace = true }
+openvm-native-transpiler = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true }
 openvm-transpiler = { workspace = true }
@@ -50,15 +51,22 @@ clap = { workspace = true, features = ["derive"] }
 serde_with = { workspace = true, features = ["hex"] }
 serde_json.workspace = true
 thiserror.workspace = true
-snark-verifier = { workspace = true }
-snark-verifier-sdk.workspace = true
+snark-verifier = { workspace = true, optional = true }
+snark-verifier-sdk = { workspace = true, optional = true }
 tempfile.workspace = true
 hex.workspace = true
 forge-fmt = { workspace = true, optional = true }
+rrs-lib = { workspace = true }
+num-bigint = { workspace = true }
 
 [features]
-default = ["parallel", "jemalloc", "evm-verify"]
-evm-prove = ["openvm-native-recursion/evm-prove"]
+default = ["parallel", "jemalloc"]
+evm-prove = [
+    "openvm-continuations/static-verifier",
+    "openvm-native-recursion/evm-prove",
+    "dep:snark-verifier",
+    "dep:snark-verifier-sdk",
+]
 evm-verify = [
     "evm-prove",
     "openvm-native-recursion/evm-verify",
@@ -80,3 +88,8 @@ mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
 nightly-features = ["openvm-circuit/nightly-features"]
+
+[[example]]
+name = "sdk_evm"
+path = "examples/sdk_evm.rs"
+required-features = ["evm-verify"]

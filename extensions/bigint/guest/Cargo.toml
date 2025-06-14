@@ -8,16 +8,11 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-openvm = { workspace = true }
 openvm-platform = { workspace = true }
 strum_macros = { workspace = true }
-serde = { workspace = true, features = ["alloc"] }
-serde-big-array.workspace = true
-
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
-num-bigint.workspace = true
-num-traits.workspace = true
 
 [features]
 default = []
-export-intrinsics = [] # export extern no_mangle functions for external linkage
+export-intrinsics = [
+    "openvm-platform/rust-runtime",
+] # export extern no_mangle functions for external linkage

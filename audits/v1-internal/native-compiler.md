@@ -14,11 +14,11 @@ Commit: 336f1a475e5aa3513c4c5a266399f4128c119bba
 **Severity:** Medium
 **Context:** https://github.com/openvm-org/openvm/blob/336f1a475e5aa3513c4c5a266399f4128c119bba/extensions/native/compiler/src/asm/compiler.rs#L598
 
-**Description:** When allocating memory, `HEAP_PTR` and `A0` could overflow as a field element. This could lead 
-an exploit when the size of memory allocation is based on inputs. 
+**Description:** When allocating memory, `HEAP_PTR` and `A0` could overflow as a field element. This could lead
+an exploit when the size of memory allocation is based on inputs.
 
-The exploit could change `HEAP_PTR` to an arbitrary address, which could point to a loop variable or an 
-end condition. The the exploit could write an arbitrary value into the address and takes control of the 
+The exploit could change `HEAP_PTR` to an arbitrary address, which could point to a loop variable or an
+end condition. The the exploit could write an arbitrary value into the address and takes control of the
 control flow.
 
 **Proof of concept:** N/A
@@ -38,8 +38,8 @@ save columns, `RANGE_CHECK` is put into the existing `JalChip`.
 **Severity:** High
 **Context:** https://github.com/openvm-org/openvm/blob/336f1a475e5aa3513c4c5a266399f4128c119bba/extensions/native/compiler/src/conversion/mod.rs#L274
 
-**Description:** 
-ASM compiler compiles `Assert*` DSL instructions into a conditional jump + a ASM instruction `Trap`, which only results a phantom instruction. The expolit can generate a valid execution trace which ignores all assertions in the program.
+**Description:**
+ASM compiler compiles `Assert*` DSL instructions into a conditional jump + a ASM instruction `Trap`, which only results a phantom instruction. The exploit can generate a valid execution trace which ignores all assertions in the program.
 
 **Proof of concept:** N/A
 
@@ -54,11 +54,11 @@ assertions anymore.
 **Severity:** Medium
 **Context:**: https://github.com/openvm-org/openvm/blob/336f1a475e5aa3513c4c5a266399f4128c119bba/extensions/native/compiler/src/constraints/halo2/compiler.rs#L317
 
-**Description:** 
-The order of `Bn254Fr` is less than `2^254`. A number of 254 bits could overflow. Therefore the bit decomposition 
+**Description:**
+The order of `Bn254Fr` is less than `2^254`. A number of 254 bits could overflow. Therefore the bit decomposition
 of a specific `Bn254Fr` doesn't guarantee an unique representation.
 
-**Recommendation:** 
+**Recommendation:**
 Constraints the bit representation is not in `[p, 2^254)` where `p` is the order of `Bn254Fr`.
 
 **Resolution:** https://github.com/openvm-org/openvm/commit/bff6d573ce7e5304fed5a9e40df9a76647be42ea
@@ -67,7 +67,7 @@ Constraints the bit representation is not in `[p, 2^254)` where `p` is the order
 **Severity:** Low
 **Context:**: https://github.com/openvm-org/openvm/blob/336f1a475e5aa3513c4c5a266399f4128c119bba/extensions/native/compiler/src/asm/compiler.rs#L40
 
-**Description:** 
+**Description:**
 In compiled programs, frame pointers could be negative, which means stackoverflow. Usually compilers support
 recursion so they cannot check stackoverflow at compile time. But ASM compiler can determine all frame pointers
 at compile time so it has the ability to check.
@@ -75,7 +75,7 @@ at compile time so it has the ability to check.
 This exploit can happen only when users create lots of stack variables and never access stack variables in
 out of bound addresses(>=`2^29`). So it's very unlikely unless users are malicious.
 
-**Recommendation:** 
+**Recommendation:**
 Assert frame pointers cannot be negative.
 
 **Resolution:** https://github.com/openvm-org/openvm/pull/1416
@@ -98,7 +98,7 @@ Most DSL instructions are trivially converted into the corresponding ASM instruc
 Notably, immediate `Ext` DSL instructions result 5 ASM instruction - the compiler needs to write the immediate `Ext` as 4 `Felt`s first.
 
 ### 3.2 Analysis of Halo2 Compiler
-The Halo2 compiler in `src/asm` converts DSL instructions into Halo2 circuit constraints. The Halo2 compiler 
+The Halo2 compiler in `src/asm` converts DSL instructions into Halo2 circuit constraints. The Halo2 compiler
 doesn't support jump and heap allocation. So it's simpler than the ASM compiler. Almost all DSL instructions
 are simply converted into the corresponding Halo2 circuit constraints.
 

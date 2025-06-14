@@ -10,23 +10,6 @@ pub const OPCODE: u8 = 0x0b;
 pub const KECCAK256_FUNCT3: u8 = 0b100;
 pub const KECCAK256_FUNCT7: u8 = 0;
 
-/// The keccak256 cryptographic hash function.
-#[inline(always)]
-pub fn keccak256(input: &[u8]) -> [u8; 32] {
-    #[cfg(not(target_os = "zkvm"))]
-    {
-        let mut output = [0u8; 32];
-        set_keccak256(input, &mut output);
-        output
-    }
-    #[cfg(target_os = "zkvm")]
-    {
-        let mut output = MaybeUninit::<[u8; 32]>::uninit();
-        native_keccak256(input.as_ptr(), input.len(), output.as_mut_ptr() as *mut u8);
-        unsafe { output.assume_init() }
-    }
-}
-
 /// Native hook for keccak256 for use with `alloy-primitives` "native-keccak" feature.
 ///
 /// # Safety
@@ -42,7 +25,7 @@ pub fn keccak256(input: &[u8]) -> [u8; 32] {
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 #[no_mangle]
-extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
+pub extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
     // SAFETY: assuming safety assumptions of the inputs, we handle all cases where `bytes` or
     // `output` are not aligned to 4 bytes.
     const MIN_ALIGN: usize = 4;
@@ -88,17 +71,4 @@ fn __native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
         rs1 = In bytes,
         rs2 = In len
     );
-}
-
-/// Sets `output` to the keccak256 hash of `input`.
-pub fn set_keccak256(input: &[u8], output: &mut [u8; 32]) {
-    #[cfg(not(target_os = "zkvm"))]
-    {
-        use tiny_keccak::Hasher;
-        let mut hasher = tiny_keccak::Keccak::v256();
-        hasher.update(input);
-        hasher.finalize(output);
-    }
-    #[cfg(target_os = "zkvm")]
-    native_keccak256(input.as_ptr(), input.len(), output.as_mut_ptr() as *mut u8);
 }

@@ -9,17 +9,16 @@ openvm = { path = "../../../crates/toolchain/openvm", default-features = false, 
     "std",
 ] }
 openvm-algebra-guest = { path = "../../../extensions/algebra/guest", default-features = false }
-openvm-ecc-guest = { path = "../../../extensions/ecc/guest", default-features = false, features = [
-    "k256",
-    "p256",
-] }
-openvm-pairing-guest = { path = "../../../extensions/pairing/guest", default-features = false, features = [
+openvm-ecc-guest = { path = "../../../extensions/ecc/guest", default-features = false }
+openvm-pairing = { path = "../../../guest-libs/pairing/", features = [
     "bn254",
     "bls12_381",
 ] }
-openvm-keccak256-guest = { path = "../../../extensions/keccak256/guest", default-features = false }
-openvm-sha256-guest = { path = "../../../extensions/sha256/guest", default-features = false }
-openvm-bigint-guest = { path = "../../../extensions/bigint/guest", default-features = false }
+openvm-keccak256 = { path = "../../../guest-libs/keccak256/", default-features = false }
+openvm-sha2 = { path = "../../../guest-libs/sha2/", default-features = false }
+openvm-k256 = { path = "../../../guest-libs/k256/", package = "k256" }
+openvm-p256 = { path = "../../../guest-libs/p256/", package = "p256" }
+openvm-ruint = { path = "../../../guest-libs/ruint/", package = "ruint", default-features = false }
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 serde = "1.0"
 

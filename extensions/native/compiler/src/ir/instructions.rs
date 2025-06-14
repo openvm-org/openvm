@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Array, Config, Ext, Felt, MemIndex, Ptr, RVar, TracedVec, Usize, Var};
 
-/// An intermeddiate instruction set for implementing programs.
+/// An intermediate instruction set for implementing programs.
 ///
 /// Programs written in the DSL can compile both to the recursive zkVM and the R1CS or Plonk-ish
 /// circuits.

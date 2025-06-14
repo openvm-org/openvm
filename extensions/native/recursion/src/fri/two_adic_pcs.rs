@@ -51,16 +51,11 @@ pub fn verify_two_adic_pcs<C: Config>(
 {
     // Currently do not support other final poly len
     builder.assert_var_eq(RVar::from(config.log_final_poly_len), RVar::zero());
-    // The `proof.final_poly` length is in general `2^{log_final_poly_len + log_blowup}`.
-    // We require `log_final_poly_len = 0`, so `proof.final_poly` has length `2^log_blowup`.
-    // In fact, the FRI low-degree test requires that `proof.final_poly = [constant, 0, ..., 0]`.
-    builder.assert_usize_eq(proof.final_poly.len(), RVar::from(config.blowup));
+    // The `proof.final_poly` length is in general `2^{log_final_poly_len}`.
+    // We require `log_final_poly_len = 0`, so `proof.final_poly` has length `1`.
+    builder.assert_usize_eq(proof.final_poly.len(), RVar::one());
     // Constant term of final poly
     let final_poly_ct = builder.get(&proof.final_poly, 0);
-    for i in 1..config.blowup {
-        let term = builder.get(&proof.final_poly, i);
-        builder.assert_ext_eq(term, C::EF::ZERO.cons());
-    }
 
     let g = builder.generator();
 
@@ -108,13 +103,30 @@ pub fn verify_two_adic_pcs<C: Config>(
     builder.assert_usize_eq(proof.query_proofs.len(), RVar::from(config.num_queries));
     builder.assert_usize_eq(proof.commit_phase_commits.len(), log_max_height);
     let betas: Array<C, Ext<C::F, C::EF>> = builder.array(log_max_height);
-    iter_zip!(builder, proof.commit_phase_commits, betas).for_each(|ptr_vec, builder| {
-        let comm_ptr = ptr_vec[0];
-        let beta_ptr = ptr_vec[1];
+    let betas_squared: Array<C, Ext<C::F, C::EF>> = builder.array(log_max_height);
+    // `i_plus_one_arr[i] = i + 1`. This is needed to add "enumerate" to `iter_zip!`
+    // There is no risk of overflow because `log_max_height` is much less than `C::N::MODULUS`
+    let i_plus_one_arr: Array<C, Usize<C::N>> = builder.array(log_max_height);
+    let i_var: Usize<C::N> = builder.eval(C::N::ZERO);
+    iter_zip!(
+        builder,
+        proof.commit_phase_commits,
+        betas,
+        betas_squared,
+        i_plus_one_arr
+    )
+    .for_each(|ptr_vec, builder| {
+        let [comm_ptr, beta_ptr, beta_sq_ptr, i_plus_one_ptr] = ptr_vec.try_into().unwrap();
+
         let comm = builder.iter_ptr_get(&proof.commit_phase_commits, comm_ptr);
         challenger.observe_digest(builder, comm);
         let sample = challenger.sample_ext(builder);
         builder.iter_ptr_set(&betas, beta_ptr, sample);
+        builder.iter_ptr_set(&betas_squared, beta_sq_ptr, sample * sample);
+        builder.assign(&i_var, i_var.clone() + C::N::ONE);
+        // Note: this is a deep clone when `builder.flags.static == true`
+        let i_plus_one_clone: Usize<C::N> = builder.eval(i_var.clone());
+        builder.iter_ptr_set(&i_plus_one_arr, i_plus_one_ptr, i_plus_one_clone);
     });
 
     iter_zip!(builder, proof.final_poly).for_each(|ptr_vec, builder| {
@@ -160,7 +172,7 @@ pub fn verify_two_adic_pcs<C: Config>(
         let index_bits = challenger.sample_bits(builder, log_max_lde_height);
 
         // We reset the reduced opening accumulator at the start of each query.
-        // We describe what `ro[log_height]` computes per query in pseduo-code, where `log_height`
+        // We describe what `ro[log_height]` computes per query in pseudo-code, where `log_height`
         // is log2 of the size of the LDE domain: ro[log_height] = 0
         // alpha_pow[log_height] = 1
         // for round in rounds:
@@ -342,6 +354,9 @@ pub fn verify_two_adic_pcs<C: Config>(
             },
         );
 
+        // Note[jpw]: we do not need to assert `ro[log_blowup] = 0` here because we include
+        // `ro[log_blowup]` in the `verify_query` low-degree test. See comments therein.
+
         let folded_eval = verify_query(
             builder,
             config,
@@ -349,8 +364,10 @@ pub fn verify_two_adic_pcs<C: Config>(
             &index_bits,
             &query_proof,
             &betas,
+            &betas_squared,
             &ro,
             log_max_lde_height,
+            &i_plus_one_arr,
         );
 
         builder.assert_ext_eq(folded_eval, final_poly_ct);
@@ -605,6 +622,7 @@ pub mod tests {
     use openvm_circuit::arch::instructions::program::Program;
     use openvm_native_compiler::{
         asm::AsmBuilder,
+        conversion::CompilerOptions,
         ir::{Array, RVar, DIGEST_SIZE},
     };
     use openvm_stark_backend::{
@@ -631,7 +649,6 @@ pub mod tests {
         utils::const_fri_config,
     };
 
-    #[allow(dead_code)]
     pub fn build_test_fri_with_cols_and_log2_rows(
         nb_cols: usize,
         nb_log2_rows: usize,
@@ -718,7 +735,8 @@ pub mod tests {
         );
         builder.halt();
 
-        let program = builder.compile_isa();
+        let program =
+            builder.compile_isa_with_options(CompilerOptions::default().with_cycle_tracker());
         let mut witness_stream = Vec::new();
         witness_stream.extend(proof.write());
         (program, witness_stream)

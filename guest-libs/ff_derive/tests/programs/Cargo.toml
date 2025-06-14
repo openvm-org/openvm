@@ -1,0 +1,31 @@
+[workspace]
+[package]
+name = "openvm-ff-derive-test-programs"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../../crates/toolchain/openvm" }
+openvm-platform = { path = "../../../../crates/toolchain/platform" }
+openvm-algebra-guest = { path = "../../../../extensions/algebra/guest" }
+openvm-algebra-moduli-macros = { path = "../../../../extensions/algebra/moduli-macros" }
+
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+serde = { version = "1.0", default-features = false, features = [
+    "alloc",
+    "derive",
+]}
+ff = { version = "0.13.1", features = ["derive"] }
+rand = { version = "0.9.1", default-features = false }
+num-bigint = { version = "0.4.6", default-features = false }
+
+openvm-ff-derive = { path = "../../" }
+
+[features]
+default = []
+std = ["serde/std", "openvm/std", "ff/std"]
+
+[profile.release]
+panic = "abort"
+lto = "thin"    # turn on lto = fat to decrease binary size, but this optimizes out some missing extern links so we shouldn't use it for testing
+# strip = "symbols"

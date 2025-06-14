@@ -10,9 +10,9 @@ cargo openvm verify app
     --proof <path_to_proof>
 ```
 
-If you omit `--app_vk` and/or `--proof`, the command will search for those files at `./openvm/app.vk` and `./openvm/app.proof` respectively.
+Options `--manifest-path`, `--target-dir` are also available to `verify`. If you omit `--app_vk` the command will search for the verifying key at `${target_dir}/openvm/app.vk`.
 
-Once again, if you omitted `--output` and `--vk_output` in the `keygen` and `prove` commands, you can omit `--app_vk` and `--proof` in the `verify` command.
+If you omit `--proof`, the command will search the working directory for files with the `.app.proof` extension. Note that for this default case a single proof is expected to be found, and `verify` will fail otherwise.
 
 ## EVM Level
 
@@ -95,11 +95,11 @@ cargo openvm prove evm --input <path_to_input>
 cargo openvm verify evm --proof <path_to_proof>
 ```
 
-If `proof` is omitted, the `verify` command will search for the proof at `./openvm/evm.proof`.
+If `proof` is omitted, the `verify` command will search for a file with extension `.evm.proof` in the working directory.
 
 ### EVM Proof: JSON Format
 
-The EVM proof is written to `evm.proof` as a JSON of the following format:
+The EVM proof is written as a JSON of the following format:
 
 ```json
 {

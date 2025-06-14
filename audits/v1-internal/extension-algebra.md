@@ -29,7 +29,7 @@ These should fail to verify, but they currently pass.
 
 **Recommendation:** 
 On setup rows, add the constraints `c_lt_mark = 2` and `sum_i lt_marker[i] = 2`.
-This (together with the existing contsraints) will ensure `lt_marker` has one 2 and that the remaining entries are 0s.
+This (together with the existing constraints) will ensure `lt_marker` has one 2 and that the remaining entries are 0s.
 Then modify the `b[i] = N[i]` constraint to constrain `b[i] = N[i]` when `prefix_sum` is not 1 or `final_sum - is_setup` (currently it applies the constraint when `prefix_sum` is not 1 or `final_sum`).
 On setup rows, `final_sum - is_setup = 2 - 1 = 1` and `prefix_sum` is 0 or 2 for all `i` so `b[i] = N[i]` will be constrained for all `i`.
 See the [soundness proof](#31-soundness-of-is_eq-chip) below for more details.

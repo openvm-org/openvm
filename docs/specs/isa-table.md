@@ -31,55 +31,57 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 
 #### Instructions
 
-| VM Extension | `LocalOpcode` | ISA Instruction |
-| ------------- | ---------- | ------------- |
-| RV32IM | `BaseAluOpcode::ADD` | ADD_RV32 |
-| RV32IM | `BaseAluOpcode::SUB` | SUB_RV32 |
-| RV32IM | `BaseAluOpcode::XOR` | XOR_RV32 |
-| RV32IM | `BaseAluOpcode::OR` | OR_RV32 |
-| RV32IM | `BaseAluOpcode::AND` | AND_RV32 |
-| RV32IM | `ShiftOpcode::SLL` | SLL_RV32 |
-| RV32IM | `ShiftOpcode::SRL` | SRL_RV32 |
-| RV32IM | `ShiftOpcode::SRA` | SRA_RV32 |
-| RV32IM | `LessThanOpcode::SLT` | SLT_RV32 |
-| RV32IM | `LessThanOpcode::SLTU` | SLTU_RV32 |
-| RV32IM | `Rv32LoadStoreOpcode::LOADB` | LOADB_RV32 |
-| RV32IM | `Rv32LoadStoreOpcode::LOADH` | LOADH_RV32 |
-| RV32IM | `Rv32LoadStoreOpcode::LOADW` | LOADW_RV32 |
-| RV32IM | `Rv32LoadStoreOpcode::LOADBU` | LOADBU_RV32 |
-| RV32IM | `Rv32LoadStoreOpcode::LOADHU` | LOADHU_RV32 |
-| RV32IM | `Rv32LoadStoreOpcode::STOREB` | STOREB_RV32 |
-| RV32IM | `Rv32LoadStoreOpcode::STOREH` | STOREH_RV32 |
-| RV32IM | `Rv32LoadStoreOpcode::STOREW` | STOREW_RV32 |
-| RV32IM | `BranchEqualOpcode::BEQ` | BEQ_RV32 |
-| RV32IM | `BranchEqualOpcode::BNE` | BNE_RV32 |
-| RV32IM | `BranchLessThanOpcode::BLT` | BLT_RV32 |
-| RV32IM | `BranchLessThanOpcode::BGE` | BGE_RV32 |
-| RV32IM | `BranchLessThanOpcode::BLTU` | BLTU_RV32 |
-| RV32IM | `BranchLessThanOpcode::BGEU` | BGEU_RV32 |
-| RV32IM | `Rv32JalLuiOpcode::JAL` | JAL_RV32 |
-| RV32IM | `Rv32JalrOpcode::JALR` | JALR_RV32 |
-| RV32IM | `Rv32JalLuiOpcode::LUI` | LUI_RV32 |
-| RV32IM | `Rv32AuipcOpcode::AUIPC` | AUIPC_RV32 |
-| RV32IM | `MulOpcode::MUL` | MUL_RV32 |
-| RV32IM | `MulHOpcode::MULH` | MULH_RV32 |
-| RV32IM | `MulHOpcode::MULHSU` | MULHSU_RV32 |
-| RV32IM | `MulHOpcode::MULHU` | MULHU_RV32 |
-| RV32IM | `DivRemOpcode::DIV` | DIV_RV32 |
-| RV32IM | `DivRemOpcode::DIVU` | DIVU_RV32 |
-| RV32IM | `DivRemOpcode::REM` | REM_RV32 |
-| RV32IM | `DivRemOpcode::REMU` | REMU_RV32 |
+| VM Extension | `LocalOpcode` | ISA Instruction  |
+| ------------- | ---------- |------------------|
+| RV32IM | `BaseAluOpcode::ADD` | ADD_RV32         |
+| RV32IM | `BaseAluOpcode::SUB` | SUB_RV32         |
+| RV32IM | `BaseAluOpcode::XOR` | XOR_RV32         |
+| RV32IM | `BaseAluOpcode::OR` | OR_RV32          |
+| RV32IM | `BaseAluOpcode::AND` | AND_RV32         |
+| RV32IM | `ShiftOpcode::SLL` | SLL_RV32         |
+| RV32IM | `ShiftOpcode::SRL` | SRL_RV32         |
+| RV32IM | `ShiftOpcode::SRA` | SRA_RV32         |
+| RV32IM | `LessThanOpcode::SLT` | SLT_RV32         |
+| RV32IM | `LessThanOpcode::SLTU` | SLTU_RV32        |
+| RV32IM | `Rv32LoadStoreOpcode::LOADB` | LOADB_RV32       |
+| RV32IM | `Rv32LoadStoreOpcode::LOADH` | LOADH_RV32       |
+| RV32IM | `Rv32LoadStoreOpcode::LOADW` | LOADW_RV32       |
+| RV32IM | `Rv32LoadStoreOpcode::LOADBU` | LOADBU_RV32      |
+| RV32IM | `Rv32LoadStoreOpcode::LOADHU` | LOADHU_RV32      |
+| RV32IM | `Rv32LoadStoreOpcode::STOREB` | STOREB_RV32      |
+| RV32IM | `Rv32LoadStoreOpcode::STOREH` | STOREH_RV32      |
+| RV32IM | `Rv32LoadStoreOpcode::STOREW` | STOREW_RV32      |
+| RV32IM | `BranchEqualOpcode::BEQ` | BEQ_RV32         |
+| RV32IM | `BranchEqualOpcode::BNE` | BNE_RV32         |
+| RV32IM | `BranchLessThanOpcode::BLT` | BLT_RV32         |
+| RV32IM | `BranchLessThanOpcode::BGE` | BGE_RV32         |
+| RV32IM | `BranchLessThanOpcode::BLTU` | BLTU_RV32        |
+| RV32IM | `BranchLessThanOpcode::BGEU` | BGEU_RV32        |
+| RV32IM | `Rv32JalLuiOpcode::JAL` | JAL_RV32         |
+| RV32IM | `Rv32JalrOpcode::JALR` | JALR_RV32        |
+| RV32IM | `Rv32JalLuiOpcode::LUI` | LUI_RV32         |
+| RV32IM | `Rv32AuipcOpcode::AUIPC` | AUIPC_RV32       |
+| RV32IM | `MulOpcode::MUL` | MUL_RV32         |
+| RV32IM | `MulHOpcode::MULH` | MULH_RV32        |
+| RV32IM | `MulHOpcode::MULHSU` | MULHSU_RV32      |
+| RV32IM | `MulHOpcode::MULHU` | MULHU_RV32       |
+| RV32IM | `DivRemOpcode::DIV` | DIV_RV32         |
+| RV32IM | `DivRemOpcode::DIVU` | DIVU_RV32        |
+| RV32IM | `DivRemOpcode::REM` | REM_RV32         |
+| RV32IM | `DivRemOpcode::REMU` | REMU_RV32        |
 | RV32IM | `Rv32HintStoreOpcode::HINT_STOREW` | HINT_STOREW_RV32 |
 | RV32IM | `Rv32HintStoreOpcode::HINT_BUFFER` | HINT_BUFFER_RV32 |
-| RV32IM | Pseudo-instruction for `STOREW_RV32` | REVEAL_RV32 |
+| RV32IM | Pseudo-instruction for `STOREW_RV32` | REVEAL_RV32      |
+| RV32IM | Pseudo-instruction for `STOREW_RV32` | NATIVE_STOREW    |   |
 
 #### Phantom Sub-Instructions
 
-| VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
-| ------------- | ---------- | ------------- |
-| RV32IM | `Rv32Phantom::HintInput` | Rv32HintInput |
-| RV32IM | `Rv32Phantom::PrintStr` | Rv32PrintStr |
-| RV32IM | `Rv32Phantom::HintRandom` | Rv32HintRandom |
+| VM Extension | `PhantomDiscriminant`         | ISA Phantom Sub-Instruction |
+| ------------- |-------------------------------| ------------- |
+| RV32IM | `Rv32Phantom::HintInput`      | Rv32HintInput |
+| RV32IM | `Rv32Phantom::PrintStr`       | Rv32PrintStr |
+| RV32IM | `Rv32Phantom::HintRandom`     | Rv32HintRandom |
+| RV32IM | `Rv32Phantom::HintLoadByKey` | Rv32HintLoadByKey |
 
 ## Native Extension
 

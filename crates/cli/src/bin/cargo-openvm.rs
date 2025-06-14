@@ -19,13 +19,16 @@ pub struct VmCli {
 }
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)]
 pub enum VmCliCommands {
     Build(BuildCmd),
+    Commit(CommitCmd),
     Keygen(KeygenCmd),
+    Init(InitCmd),
     Prove(ProveCmd),
     Run(RunCmd),
     #[cfg(feature = "evm-verify")]
-    Setup(EvmProvingSetupCmd),
+    Setup(SetupCmd),
     Verify(VerifyCmd),
 }
 
@@ -36,9 +39,11 @@ async fn main() -> Result<()> {
     setup_tracing_with_log_level(Level::WARN);
     match command {
         VmCliCommands::Build(cmd) => cmd.run(),
-        VmCliCommands::Run(cmd) => cmd.run(),
+        VmCliCommands::Commit(cmd) => cmd.run(),
         VmCliCommands::Keygen(cmd) => cmd.run(),
+        VmCliCommands::Init(cmd) => cmd.run(),
         VmCliCommands::Prove(cmd) => cmd.run(),
+        VmCliCommands::Run(cmd) => cmd.run(),
         #[cfg(feature = "evm-verify")]
         VmCliCommands::Setup(cmd) => cmd.run().await,
         VmCliCommands::Verify(cmd) => cmd.run(),

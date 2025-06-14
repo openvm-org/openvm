@@ -17,7 +17,7 @@ def run_cargo_command(
 ):
     # Command to run (for best performance but slower builds, use --profile maxperf)
     command = [
-        "cargo", "run", "--no-default-features", "--bin", bin_name, "--profile", profile, "--features", ",".join(feature_flags), "--"
+        "cargo", "run", "--no-default-features", "-p", "openvm-benchmarks-prove", "--bin", bin_name, "--profile", profile, "--features", ",".join(feature_flags), "--"
     ]
 
     if app_log_blowup is not None:

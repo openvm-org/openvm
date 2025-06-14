@@ -22,7 +22,7 @@ cargo openvm run --input <path_to_input | hex_string>
 
 Note if your program doesn't require inputs, you can omit the `--input` flag.
 
-For more information on both commands, see the [build](./build.md) docs.
+For more information see the [build](./build.md) and [run](./run.md) docs.
 
 ### Inputs
 

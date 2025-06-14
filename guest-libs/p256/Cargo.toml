@@ -1,0 +1,73 @@
+[package]
+# for patching purposes, the name must be the same as the original `p256` crate
+name = "p256"
+# for patching purposes, version must match that of original `p256` crate
+version = "0.13.2"
+description = "OpenVM fork of p256"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+openvm = { workspace = true }
+openvm-algebra-guest = { workspace = true }
+openvm-algebra-moduli-macros = { workspace = true }
+openvm-ecc-guest = { workspace = true }
+openvm-ecc-sw-macros = { workspace = true }
+
+elliptic-curve = { workspace = true, features = ["hazmat", "sec1"] }
+ecdsa-core = { version = "0.16.9", package = "ecdsa", optional = true, default-features = false, features = [
+    "der",
+] }
+serde = { workspace = true }
+hex-literal = { workspace = true }
+ff = { workspace = true }
+
+[dev-dependencies]
+openvm-circuit = { workspace = true, features = ["test-utils", "parallel"] }
+openvm-transpiler.workspace = true
+openvm-algebra-circuit.workspace = true
+openvm-algebra-transpiler.workspace = true
+openvm-ecc-transpiler.workspace = true
+openvm-ecc-circuit.workspace = true
+openvm-sha256-circuit.workspace = true
+openvm-sha256-transpiler.workspace = true
+openvm-rv32im-circuit.workspace = true
+openvm-rv32im-transpiler.workspace = true
+openvm-toolchain-tests.workspace = true
+
+openvm-stark-backend.workspace = true
+openvm-stark-sdk.workspace = true
+
+serde.workspace = true
+eyre.workspace = true
+derive_more = { workspace = true, features = ["from"] }
+
+[features]
+default = ["ecdsa"]
+alloc = ["ecdsa-core?/alloc", "elliptic-curve/alloc"]
+std = ["alloc", "ecdsa-core?/std", "elliptic-curve/std", "openvm-ecc-guest/std"]
+
+arithmetic = ["elliptic-curve/arithmetic"]
+bits = ["arithmetic", "elliptic-curve/bits"]
+digest = ["ecdsa-core/digest", "ecdsa-core/hazmat"]
+ecdh = ["arithmetic", "elliptic-curve/ecdh"]
+ecdsa = ["arithmetic", "ecdsa-core/signing", "ecdsa-core/verifying"]
+expose-field = ["arithmetic"]
+hash2curve = ["arithmetic", "elliptic-curve/hash2curve"]
+jwk = ["elliptic-curve/jwk"]
+pem = ["elliptic-curve/pem", "ecdsa-core/pem", "pkcs8"]
+pkcs8 = ["ecdsa-core?/pkcs8", "elliptic-curve/pkcs8"]
+serde = ["ecdsa-core?/serde", "elliptic-curve/serde"]
+sha256 = []
+test-vectors = []
+voprf = ["elliptic-curve/voprf"]
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+num-bigint = { workspace = true }
+
+[package.metadata.cargo-shear]
+ignored = ["openvm", "serde", "num-bigint", "derive_more"]

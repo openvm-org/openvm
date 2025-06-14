@@ -1,5 +1,6 @@
 [package]
 name = "openvm-ecc-sw-macros"
+description = "OpenVM elliptic curve macros for short Weierstrass curves"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

@@ -11,34 +11,28 @@ repository.workspace = true
 openvm = { workspace = true }
 serde = { workspace = true }
 strum_macros.workspace = true
-ecdsa = { workspace = true, features = ["verifying"] }
+ecdsa-core = { workspace = true, features = ["verifying"] }
 elliptic-curve = { workspace = true, features = ["arithmetic", "sec1"] }
-k256 = { workspace = true, optional = true }
-p256 = { workspace = true, optional = true }
-hex-literal = { workspace = true }
 openvm-custom-insn = { workspace = true }
 openvm-rv32im-guest = { workspace = true }
 openvm-algebra-guest = { workspace = true }
 openvm-ecc-sw-macros = { workspace = true }
-openvm-algebra-moduli-macros = { workspace = true }
 once_cell = { workspace = true, features = ["race", "alloc"] }
 
 # Used for `halo2curves` feature
 halo2curves-axiom = { workspace = true, optional = true }
-# halo2curves = { version = "0.7.0", optional = true }
 group = "0.13.0"
-
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
-num-bigint.workspace = true
-lazy_static.workspace = true
 
 [features]
 default = []
-# features to enable specific curves in guest programs
-# only enable for the curves you use as it affects the init! macro
-k256 = ["dep:k256"]
-p256 = ["dep:p256"]
 halo2curves = ["dep:halo2curves-axiom", "openvm-algebra-guest/halo2curves"]
+std = ["alloc"]
+alloc = []
 
 [package.metadata.cargo-shear]
-ignored = ["openvm", "openvm-custom-insn", "openvm-rv32im-guest"]
+ignored = [
+    "openvm",
+    "openvm-custom-insn",
+    "openvm-rv32im-guest",
+    "halo2curves-axiom",
+]

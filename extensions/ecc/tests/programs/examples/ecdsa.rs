@@ -5,29 +5,23 @@
 use core::hint::black_box;
 
 use hex_literal::hex;
-use k256::{
-    ecdsa::{self, RecoveryId},
-    Secp256k1,
-};
 use openvm_ecc_guest::{
-    algebra::IntMod, ecdsa::VerifyingKey, k256::Secp256k1Point, weierstrass::WeierstrassPoint,
+    algebra::IntMod,
+    ecdsa::{verify_prehashed, VerifyingKey},
+    weierstrass::WeierstrassPoint,
 };
-use openvm_keccak256_guest::keccak256;
+use openvm_k256::{
+    ecdsa::{self, signature::hazmat::PrehashVerifier, RecoveryId, Signature},
+    Secp256k1, Secp256k1Point,
+};
+use openvm_keccak256::keccak256;
+
 openvm::entry!(main);
 
-openvm_algebra_moduli_macros::moduli_init! {
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
-}
-openvm_ecc_sw_macros::sw_init! {
-    Secp256k1Point,
-}
+openvm::init!("openvm_init_ecdsa_k256.rs");
 
 // Ref: https://docs.rs/k256/latest/k256/ecdsa/index.html
 pub fn main() {
-    setup_all_moduli();
-    setup_all_curves();
-
     let msg = b"example message";
 
     let signature = hex!(
@@ -75,8 +69,7 @@ pub fn main() {
 
     // Test verification
     recovered_key
-        .clone()
-        .verify_prehashed(&prehash, &signature)
+        .verify_prehash(&prehash, &Signature::from_slice(&signature).unwrap())
         .unwrap();
 
     // Test bad signature
@@ -93,9 +86,11 @@ pub fn main() {
             &prehash, &bad_sig, recid
         )
         .is_err());
-        assert!(recovered_key
-            .clone()
-            .verify_prehashed(&prehash, &bad_sig)
-            .is_err());
+        assert!(verify_prehashed::<Secp256k1>(
+            recovered_key.as_affine().clone(),
+            &prehash,
+            &bad_sig
+        )
+        .is_err());
     }
 }

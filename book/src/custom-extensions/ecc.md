@@ -43,21 +43,21 @@ sw_declare! {
 Each declared curve must specify the `mod_type` (implementing `IntMod`) and a constant `b` for the Weierstrass curve equation \\(y^2 = x^3 + ax + b\\). `a` is optional and defaults to 0 for short Weierstrass curves.
 This creates `Bls12_381G1Affine` and `P256Affine` structs which implement the `Group` and `WeierstrassPoint` traits. The underlying memory layout of the structs uses the memory layout of the `Bls12_381Fp` and `P256Coord` structs, respectively.
 
-2. **Init**: Called once, it enumerates these curves and allows the compiler to produce optimized instructions:
+2. **Init**: Called once, the `init!` macro produces a call to `sw_init!` that enumerates these curves and allows the compiler to produce optimized instructions:
 
 ```rust
+init!();
+/* This expands to
 sw_init! {
     Bls12_381G1Affine, P256Affine,
 }
+*/
 ```
-
-3. **Setup**: Similar to the moduli and complex extensions, runtime setup instructions ensure that the correct curve parameters are being used, guaranteeing secure operation.
 
 **Summary**:
 
 - `sw_declare!`: Declares elliptic curve structures.
-- `sw_init!`: Initializes them once, linking them to the underlying moduli.
-- `setup_sw_<i>()`/`setup_all_curves()`: Secures runtime correctness.
+- `init!`: Initializes them once, linking them to the underlying moduli.
 
 To use elliptic curve operations on a struct defined with `sw_declare!`, it is expected that the struct for the curve's coordinate field was defined using `moduli_declare!`. In particular, the coordinate field needs to be initialized and set up as described in the [algebra extension](./algebra.md) chapter.
 
@@ -86,7 +86,7 @@ One can define their own ECC structs but we will use the Secp256k1 struct from `
 {{ #include ../../../examples/ecc/src/main.rs:init }}
 ```
 
-We `moduli_init!` both the coordinate and scalar field because they were declared in the `k256` module, although we will not be using the scalar field below.
+`moduli_init!` is called for both the coordinate and scalar field because they were declared in the `k256` module, although we will not be using the scalar field below.
 
 With the above we can start doing elliptic curve operations like adding points:
 
@@ -100,15 +100,18 @@ For the guest program to build successfully, all used moduli and curves must be 
 
 ```toml
 [app_vm_config.modular]
-supported_modulus = ["115792089237316195423570985008687907853269984665640564039457584007908834671663", "115792089237316195423570985008687907852837564279074904382605163141518161494337"]
+supported_moduli = ["115792089237316195423570985008687907853269984665640564039457584007908834671663", "115792089237316195423570985008687907852837564279074904382605163141518161494337"]
 
 [[app_vm_config.ecc.supported_curves]]
+struct_name = "Secp256k1Point"
 modulus = "115792089237316195423570985008687907853269984665640564039457584007908834671663"
 scalar = "115792089237316195423570985008687907852837564279074904382605163141518161494337"
 a = "0"
 b = "7"
 ```
 
-The `supported_modulus` parameter is a list of moduli that the guest program will use. As mentioned in the [algebra extension](./algebra.md) chapter, the order of moduli in `[app_vm_config.modular]` must match the order in the `moduli_init!` macro.
+The `supported_moduli` parameter is a list of moduli that the guest program will use. As mentioned in the [algebra extension](./algebra.md) chapter, the order of moduli in `[app_vm_config.modular]` must match the order in the `moduli_init!` macro.
 
 The `ecc.supported_curves` parameter is a list of supported curves that the guest program will use. They must be provided in decimal format in the `.toml` file. For multiple curves create multiple `[[app_vm_config.ecc.supported_curves]]` sections. The order of curves in `[[app_vm_config.ecc.supported_curves]]` must match the order in the `sw_init!` macro.
+Also, the `struct_name` field must be the name of the elliptic curve struct created by `sw_declare!`.
+In this example, the `Secp256k1Point` struct is created in `openvm_ecc_guest::k256`.

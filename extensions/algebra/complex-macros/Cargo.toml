@@ -1,7 +1,11 @@
 [package]
 name = "openvm-algebra-complex-macros"
-version = "0.1.0"
-edition = "2021"
+description = "OpenVM algebra macros for complex ring extensions"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 syn = { version = "2.0", features = ["full"] }

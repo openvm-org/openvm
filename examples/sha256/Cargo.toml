@@ -10,8 +10,13 @@ members = []
 openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
     "std",
 ] }
-openvm-sha256-guest = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-sha2 = { git = "https://github.com/openvm-org/openvm.git" }
 hex = { version = "0.4.3" }
 
 [features]
 default = []
+
+# remove this if copying example outside of monorepo
+[patch."https://github.com/openvm-org/openvm.git"]
+openvm = { path = "../../crates/toolchain/openvm" }
+openvm-sha2 = { path = "../../guest-libs/sha2" }

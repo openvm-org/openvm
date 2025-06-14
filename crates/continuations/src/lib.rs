@@ -7,6 +7,7 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 
+#[cfg(feature = "static-verifier")]
 pub mod static_verifier;
 pub mod verifier;
 

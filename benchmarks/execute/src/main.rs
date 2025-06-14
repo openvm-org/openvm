@@ -4,7 +4,7 @@ use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
 use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
-    arch::{instructions::exe::VmExe, SystemConfig, VmExecutor},
+    arch::{instructions::exe::VmExe, InitFileGenerator, SystemConfig, VmExecutor},
     derive::VmConfig,
 };
 use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
@@ -100,6 +100,12 @@ impl Default for ExecuteConfig {
     }
 }
 
+impl InitFileGenerator for ExecuteConfig {
+    fn generate_init_file_contents(&self) -> Option<String> {
+        None
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -155,7 +161,7 @@ fn main() -> Result<()> {
             let elf_path = get_elf_path(&program_dir);
             let elf = read_elf_file(&elf_path)?;
 
-            // let config_path = program_dir.join(DEFAULT_APP_CONFIG_PATH);
+            // let config_path = program_dir.join("openvm.toml");
             // let vm_config = read_config_toml_or_default(&config_path)?.app_vm_config;
             // let transpiler = vm_config.transpiler;
             let vm_config = ExecuteConfig::default();

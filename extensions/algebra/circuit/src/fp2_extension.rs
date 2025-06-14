@@ -19,15 +19,47 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
 
-use crate::fp2_chip::{Fp2AddSubChip, Fp2MulDivChip};
+use crate::{
+    fp2_chip::{Fp2AddSubChip, Fp2MulDivChip},
+    ModularExtension,
+};
 
 // TODO: this should be decided after e2 execution
 
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
 pub struct Fp2Extension {
-    #[serde_as(as = "Vec<DisplayFromStr>")]
-    pub supported_modulus: Vec<BigUint>,
+    // (name, modulus)
+    // name must match the struct name defined by complex_declare
+    #[serde_as(as = "Vec<(_, DisplayFromStr)>")]
+    pub supported_moduli: Vec<(String, BigUint)>,
+}
+
+impl Fp2Extension {
+    pub fn generate_complex_init(&self, modular_config: &ModularExtension) -> String {
+        fn get_index_of_modulus(modulus: &BigUint, modular_config: &ModularExtension) -> usize {
+            modular_config
+                .supported_moduli
+                .iter()
+                .position(|m| m == modulus)
+                .expect("Modulus used in Fp2Extension not found in ModularExtension")
+        }
+
+        let supported_moduli = self
+            .supported_moduli
+            .iter()
+            .map(|(name, modulus)| {
+                format!(
+                    "{} {{ mod_idx = {} }}",
+                    name,
+                    get_index_of_modulus(modulus, modular_config)
+                )
+            })
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        format!("openvm_algebra_guest::complex_macros::complex_init! {{ {supported_moduli} }}")
+    }
 }
 
 #[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutorE1, AnyEnum, From)]
@@ -81,7 +113,7 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
         let addsub_opcodes = (Fp2Opcode::ADD as usize)..=(Fp2Opcode::SETUP_ADDSUB as usize);
         let muldiv_opcodes = (Fp2Opcode::MUL as usize)..=(Fp2Opcode::SETUP_MULDIV as usize);
 
-        for (i, modulus) in self.supported_modulus.iter().enumerate() {
+        for (i, (_, modulus)) in self.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8);
             let start_offset = Fp2Opcode::CLASS_OFFSET + i * Fp2Opcode::COUNT;

@@ -1,6 +1,9 @@
 use derive_more::derive::From;
 use openvm_circuit::{
-    arch::{SystemConfig, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
+    arch::{
+        InitFileGenerator, SystemConfig, VmExtension, VmInventory, VmInventoryBuilder,
+        VmInventoryError,
+    },
     system::phantom::PhantomChip,
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
@@ -47,6 +50,9 @@ impl Default for Sha256Rv32Config {
         }
     }
 }
+
+// Default implementation uses no init file
+impl InitFileGenerator for Sha256Rv32Config {}
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Sha256;

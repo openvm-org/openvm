@@ -10,7 +10,20 @@ members = []
 openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
     "std",
 ] }
-openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git" }
+alloy-primitives = "1.1.2"
 
 [features]
 default = []
+
+[patch.crates-io]
+# alloy-primitives uses ruint:
+# ruint = { git = "https://github.com/openvm-org/openvm.git" }
+# Use above if outside of monorepo
+ruint = { path = "../../guest-libs/ruint" }
+
+# remove this if copying example outside of monorepo
+[patch."https://github.com/openvm-org/openvm.git"]
+openvm = { path = "../../crates/toolchain/openvm" }
+
+[profile.release]
+lto = "thin"

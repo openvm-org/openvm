@@ -10,21 +10,23 @@ The workflow of this macro is very similar to the [`openvm-algebra-moduli-macros
 openvm_algebra_moduli_macros::moduli_declare! {
     Secp256k1Coord { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F" }
 }
-openvm_algebra_moduli_macros::moduli_init!(
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
-);
 
 openvm_algebra_complex_macros::complex_declare! {
     Complex { mod_type = Secp256k1Coord }
 }
 
+openvm::init!();
+/* The init! macro will expand to:
+openvm_algebra_moduli_macros::moduli_init!(
+    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
+);
+
 openvm_algebra_complex_macros::complex_init! {
     Complex { mod_idx = 0 },
 }
+*/
 
 pub fn main() {
-    setup_all_moduli();
-    setup_all_complex_extensions();
     // ...
 }
 ```
@@ -64,24 +66,23 @@ extern "C" {
 2. Again, `complex_init!` macro implements these extern functions and defines the setup functions for the complex arithmetic struct.
 
 ```rust
+#[allow(non_snake_case)]
 #[cfg(target_os = "zkvm")]
 mod openvm_intrinsics_ffi_complex {
-    fn complex_add_extern_func_Complex(rd: usize, rs1: usize, rs2: usize) {
+    #[no_mangle]
+    extern "C" fn complex_add_extern_func_Complex(rd: usize, rs1: usize, rs2: usize) {
         // send the instructions for the corresponding complex chip
         // If this struct was `init`ed k-th, these operations will be sent to the k-th complex chip
     }
-    // implement the other functions
-}
-pub fn setup_complex_0() {
-    // send the setup instructions
-}
-pub fn setup_all_complex_extensions() {
-    setup_complex_0();
-    // call all other setup_complex_* for all the items in the moduli_init! macro
+    // .. implement the other functions
+    #[no_mangle]
+    extern "C" fn complex_setup_extern_func_Complex() {
+        // send the setup instructions
+    }
 }
 ```
 
-3. Obviously, `mod_idx` in the `complex_init!` must match the position of the corresponding modulus in the `moduli_init!` macro. The order of the items in `complex_init!` affects what `setup_complex_*` function will correspond to what complex class. Also, it **must match** the order of the moduli in the chip configuration -- more specifically, in the modular extension parameters (the order of numbers in `Fp2Extension::supported_modulus`, which is usually defined with the whole `app_vm_config` in the `openvm.toml` file). However, it again imposes the restriction that we only can invoke `complex_init!` once. Again analogous to the moduli setups, we must call `setup_complex_*` for each used complex extension before doing anything with entities of that class (or one can call `setup_all_complex_extensions` to setup all of them, if all are used).
+3. Obviously, `mod_idx` in the `complex_init!` must match the position of the corresponding modulus in the `moduli_init!` macro. The order of the items in `complex_init!` affects what `setup_complex_*` function will correspond to what complex class. Also, it **must match** the order of the moduli in the chip configuration -- more specifically, in the modular extension parameters (the order of numbers in `Fp2Extension::supported_moduli`, which is usually defined with the whole `app_vm_config` in the `openvm.toml` file). However, it again imposes the restriction that we only can invoke `complex_init!` once. Again analogous to the moduli setups, the rust bindings will automatically call `complex_setup_extern_func_*` on each complex extension on first use of its intrinsics.
 
 4. Note that, due to the nature of function names, the name of the struct used in `complex_init!` must be the same as in `complex_declare!`. To illustrate, the following code will **fail** to compile:
 
@@ -100,3 +101,7 @@ complex_init! {
 ```
 
 The reason is that, for example, the function `complex_add_extern_func_Bn254Fp2` remains unimplemented, but we implement `complex_add_extern_func_Fp2` instead.
+
+5. `cargo openvm build` will automatically generate a call to `complex_init!` based on `openvm.toml`.
+Note that `openvm.toml` must list the supported moduli as pairs `(name, modulus)` where `name` is the name of the struct created by `complex_declare!` as a string (in the example at the top of this document, its `"Complex"`).
+The SDK also supports this feature.

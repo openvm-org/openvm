@@ -23,6 +23,7 @@ openvm-native-recursion = { workspace = true }
 openvm-sdk = { workspace = true }
 openvm-stark-sdk.workspace = true
 openvm-stark-backend.workspace = true
+openvm-circuit = { workspace = true }
 
 aws-sdk-s3 = "1.78"
 aws-config = "1.5"
@@ -36,7 +37,9 @@ hex = "0.4.3"
 target-lexicon = "0.12.15"
 tempfile = "3.10.1"
 toml = { workspace = true }
-bitcode.workspace = true
+itertools.workspace = true
+toml_edit = "0.22"
+include_dir = "0.7"
 
 [features]
 default = ["parallel", "jemalloc", "evm-verify", "bench-metrics"]

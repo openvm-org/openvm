@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 openvm-build.workspace = true
+openvm-circuit.workspace = true
 openvm-transpiler.workspace = true
 eyre.workspace = true
 tempfile.workspace = true
@@ -22,7 +23,7 @@ openvm-bigint-circuit.workspace = true
 openvm-rv32im-circuit.workspace = true
 openvm-rv32im-transpiler.workspace = true
 openvm-algebra-circuit.workspace = true
-openvm-ecc-guest = { workspace = true, features = ["halo2curves", "k256"] }
+openvm-ecc-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-platform = { workspace = true }
 test-case.workspace = true

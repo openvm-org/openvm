@@ -24,9 +24,7 @@ pub trait Group:
 
     const IDENTITY: Self;
 
-    fn is_identity(&self) -> bool {
-        self == &Self::IDENTITY
-    }
+    fn is_identity(&self) -> bool;
 
     fn double(&self) -> Self;
     fn double_assign(&mut self);

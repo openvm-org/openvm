@@ -23,7 +23,7 @@ jobs:
 
       - uses: codespell-project/actions-codespell@v2
         with:
-          skip: Cargo.lock,./book/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,./audits/*.pdf,
+          skip: Cargo.lock,./book/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,./audits/*.pdf,./guest-libs/ruint/*
           ignore_words_file: .codespellignore
 
       - uses: dtolnay/rust-toolchain@stable
@@ -43,9 +43,10 @@ jobs:
 
       - name: Run clippy
         run: |
-          # list of features generated using:
-          # echo -e "\033[1;32mAll unique features across workspace:\033[0m" && cargo metadata --format-version=1 --no-deps | jq -r '.packages[].features | to_entries[] | .key' | sort -u | sed 's/^/• /'
-          cargo clippy --all-targets --all --tests --features "aggregation bench-metrics bls12_381 bn254 default entrypoint evm-prove evm-verify export-getrandom export-libm function-span getrandom halo2-compiler halo2curves heap-embedded-alloc k256 jemalloc jemalloc-prof nightly-features panic-handler parallel rust-runtime static-verifier std test-utils unstable" -- -D warnings
+          # list of all unique features across workspace generated using:
+          # cargo metadata --format-version=1 --no-deps | jq -r '.packages[].features | to_entries[] | .key' | sort -u | tr '\n' ' ' && echo ""
+          # (exclude mimalloc since it conflicts with jemalloc)
+          cargo clippy --all-targets --all --tests --features "aggregation bench-metrics bls12_381 bn254 build-binaries default entrypoint evm-prove evm-verify export-intrinsics export-libm function-span getrandom-unsupported halo2-compiler halo2curves heap-embedded-alloc jemalloc jemalloc-prof nightly-features panic-handler parallel profiling rust-runtime static-verifier std test-utils" -- -D warnings
           cargo clippy --all-targets --all --tests --no-default-features --features "mimalloc" -- -D warnings
 
       - name: Run fmt, clippy for guest
@@ -56,16 +57,13 @@ jobs:
             if [ -f "$crate_path/Cargo.toml" ]; then
               echo "Running cargo fmt, clippy for $crate_path"
               cargo +nightly fmt --manifest-path "$crate_path/Cargo.toml" --all -- --check
-              if [[ "$crate_path" == *"extensions/ecc/tests/programs"* ]]; then
-                echo "Running cargo clippy with k256 and p256 features for $crate_path"
-                cargo clippy --manifest-path "$crate_path/Cargo.toml" --all-targets --features "std k256 p256" -- -D warnings
-              elif [[ "$crate_path" == *"extensions/pairing/tests/programs"* ]]; then
+              if [[ "$crate_path" == *"guest-libs/pairing/tests/programs"* ]]; then
                 echo "Running cargo clippy with openvm_pairing_guest::bn254 feature for $crate_path"
                 cargo clippy --manifest-path "$crate_path/Cargo.toml" --all-targets --features "std bn254" -- -D warnings
                 echo "Running cargo clippy with openvm_pairing_guest::bls12_381 feature for $crate_path"
                 cargo clippy --manifest-path "$crate_path/Cargo.toml" --all-targets --features "std bls12_381" -- -D warnings
-              elif [[ "$crate_path" == *"extensions/"* ]]; then
-                echo "Running cargo clippy for $crate_path"
+              elif [[ "$crate_path" == *"extensions/"* || "$crate_path" == *"guest-libs/"* ]]; then
+                echo "Running cargo clippy with std feature for $crate_path"
                 cargo clippy --manifest-path "$crate_path/Cargo.toml" --all-targets --features "std" -- -D warnings
               else
                 echo "Running cargo clippy for $crate_path"

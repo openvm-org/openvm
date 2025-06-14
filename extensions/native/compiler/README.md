@@ -207,3 +207,13 @@ Each variable is tracked by an assigned ID. Halo2 compiler keeps a mapping from 
 ## Control Flow
 Users can still use loops and branches in `Builder`. But loops and branches must be unrolled at 
 compile time.
+
+# Debug Backtraces
+When a native program terminates unexpectedly, backtraces are helpful for debugging. 
+
+Requirements to print out backtraces correctly:
+1. The binary which compiles the native program must be the binary to execute the native program. This is because the 
+backtraces depend on the symbol table of the binary.
+2. The binary must be compiled with `debug=2`, otherwise the symbol table is not complete.
+3. When the native program is compiled, `RUST_BACKTRACE=1` must be set.
+4. When the native program is executed, `profiling` flag must be set in `VmConfig`.

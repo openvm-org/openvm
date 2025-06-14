@@ -1,0 +1,27 @@
+[workspace]
+[package]
+name = "openvm-p256-test-programs"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../../crates/toolchain/openvm" }
+openvm-algebra-guest = { path = "../../../../extensions/algebra/guest" }
+openvm-algebra-moduli-macros = { path = "../../../../extensions/algebra/moduli-macros/" }
+openvm-ecc-guest = { path = "../../../../extensions/ecc/guest" }
+openvm-ecc-sw-macros = { path = "../../../../extensions/ecc/sw-macros/" }
+openvm-p256 = { path = "../../", package = "p256" }
+openvm-sha2 = { path = "../../../sha2/" }
+
+elliptic-curve = { version = "0.13.8" }
+ecdsa = { version = "0.16.9" }
+hex-literal = { version = "0.4.1", default-features = false }
+
+[features]
+default = []
+std = ["openvm/std"]
+
+[profile.release]
+panic = "abort"
+lto = "thin"    # turn on lto = fat to decrease binary size, but this optimizes out some missing extern links so we shouldn't use it for testing
+# strip = "symbols"

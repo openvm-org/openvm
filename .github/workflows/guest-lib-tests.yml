@@ -1,0 +1,77 @@
+name: Guest Library Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "crates/circuits/**"
+      - "crates/vm/**"
+      - "extensions/**"
+      - "guest-libs/**"
+      - "Cargo.toml"
+      - ".github/workflows/guest-lib-tests.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  OPENVM_FAST_TEST: "1"
+
+jobs:
+  integration-tests:
+    strategy:
+      matrix:
+        crate:
+          - { name: "sha2", path: "sha2" }
+          - { name: "keccak256", path: "keccak256" }
+          - { name: "ff_derive", path: "ff_derive" }
+          - { name: "k256", path: "k256" }
+          - { name: "p256", path: "p256" }
+          - { name: "ruint", path: "ruint" }
+          - { name: "pairing", path: "pairing" }
+      # Ensure tests run in parallel even if one fails
+      fail-fast: false
+
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=64cpu-linux-arm64
+      - tag=crate-${{ matrix.crate.name }}
+      - extras=s3-cache
+
+    steps:
+      - uses: runs-on/action@v1
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            - "crates/circuits/**"
+            - "crates/vm/**"
+            - "extensions/**"
+            - "guest-libs/${{ matrix.crate.path }}/**"
+            - ".github/workflows/guest-lib-tests.yml"
+      - name: Skip if no changes
+        if: steps.filter.outputs.matched == 'false'
+        run: |
+          echo "No relevant changes, skipping tests."
+          exit 0
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
+
+      - name: Run ${{ matrix.crate.name }} guest library tests
+        working-directory: guest-libs/${{ matrix.crate.path }}
+        run: |
+          rustup component add rust-src --toolchain nightly-2025-02-14
+          FEATURE_ARGS=""
+          if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
+            FEATURE_ARGS="--features=bn254,bls12_381"
+          fi
+          cargo nextest run --cargo-profile=fast $FEATURE_ARGS --no-tests=pass

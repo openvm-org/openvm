@@ -12,11 +12,11 @@ use openvm_algebra_circuit::{
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use openvm_circuit::{
-    arch::{SystemConfig, VmExecutor},
+    arch::{InitFileGenerator, SystemConfig, VmExecutor},
     derive::VmConfig,
     utils::air_test,
 };
-use openvm_ecc_guest::k256::{SECP256K1_MODULUS, SECP256K1_ORDER};
+use openvm_ecc_circuit::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use openvm_instructions::exe::VmExe;
 use openvm_platform::memory::MEM_SIZE;
 use openvm_rv32im_circuit::{
@@ -104,7 +104,7 @@ pub struct Rv32ModularFp2Int256Config {
 }
 
 impl Rv32ModularFp2Int256Config {
-    pub fn new(modular_moduli: Vec<BigUint>, fp2_moduli: Vec<BigUint>) -> Self {
+    pub fn new(modular_moduli: Vec<BigUint>, fp2_moduli: Vec<(String, BigUint)>) -> Self {
         Self {
             system: SystemConfig::default().with_continuations(),
             base: Default::default(),
@@ -117,11 +117,21 @@ impl Rv32ModularFp2Int256Config {
     }
 }
 
+impl InitFileGenerator for Rv32ModularFp2Int256Config {
+    fn generate_init_file_contents(&self) -> Option<String> {
+        Some(format!(
+            "{}\n{}\n",
+            self.modular.generate_moduli_init(),
+            self.fp2.generate_complex_init(&self.modular)
+        ))
+    }
+}
+
 #[test_case("tests/data/rv32im-intrin-from-as")]
 fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     let config = Rv32ModularFp2Int256Config::new(
         vec![SECP256K1_MODULUS.clone(), SECP256K1_ORDER.clone()],
-        vec![SECP256K1_MODULUS.clone()],
+        vec![("Secp256k1Coord".to_string(), SECP256K1_MODULUS.clone())],
     );
     let elf = get_elf(elf_path)?;
     let openvm_exe = VmExe::from_elf(

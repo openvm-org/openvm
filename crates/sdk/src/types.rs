@@ -1,18 +1,33 @@
-use std::iter::{once, repeat};
+use std::io::Cursor;
 
-use itertools::Itertools;
-use openvm_native_recursion::halo2::{wrapper::EvmVerifierByteCode, Fr, RawEvmProof};
+use eyre::Result;
+use openvm_continuations::{verifier::internal::types::VmStarkProof, SC};
+use openvm_stark_backend::proof::Proof;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
-use thiserror::Error;
+#[cfg(feature = "evm-prove")]
+use {
+    crate::commit::CommitBytes,
+    itertools::Itertools,
+    openvm_native_recursion::halo2::{wrapper::EvmVerifierByteCode, Fr, RawEvmProof},
+    std::iter::{once, repeat},
+    thiserror::Error,
+};
+
+use crate::{
+    codec::{decode_vec, encode_slice, Decode, Encode},
+    commit::AppExecutionCommit,
+};
 
 /// Number of bytes in a Bn254Fr.
-const BN254_BYTES: usize = 32;
+pub(crate) const BN254_BYTES: usize = 32;
 /// Number of Bn254Fr in `accumulator` field.
 pub const NUM_BN254_ACCUMULATOR: usize = 12;
 /// Number of Bn254Fr in `proof` field for a circuit with only 1 advice column.
+#[cfg(feature = "evm-prove")]
 const NUM_BN254_PROOF: usize = 43;
 
+#[cfg(feature = "evm-prove")]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EvmHalo2Verifier {
     pub halo2_verifier_code: String,
@@ -33,15 +48,13 @@ pub struct ProofData {
     pub proof: Vec<u8>,
 }
 
+#[cfg(feature = "evm-prove")]
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EvmProof {
-    #[serde_as(as = "serde_with::hex::Hex")]
-    /// 1 Bn254Fr public value for app exe commit in big-endian bytes.
-    pub app_exe_commit: [u8; BN254_BYTES],
-    #[serde_as(as = "serde_with::hex::Hex")]
-    /// 1 Bn254Fr public value for app vm commit in big-endian bytes.
-    pub app_vm_commit: [u8; BN254_BYTES],
+    #[serde(flatten)]
+    /// Bn254Fr public value app commits.
+    pub app_commit: AppExecutionCommit,
     #[serde_as(as = "serde_with::hex::Hex")]
     /// User public values packed into bytes.
     pub user_public_values: Vec<u8>,
@@ -49,6 +62,7 @@ pub struct EvmProof {
     pub proof_data: ProofData,
 }
 
+#[cfg(feature = "evm-prove")]
 #[derive(Debug, Error)]
 pub enum EvmProofConversionError {
     #[error("Invalid length of proof")]
@@ -61,6 +75,7 @@ pub enum EvmProofConversionError {
     InvalidLengthAccumulator,
 }
 
+#[cfg(feature = "evm-prove")]
 impl EvmProof {
     #[cfg(feature = "evm-verify")]
     /// Return bytes calldata to be passed to the verifier contract.
@@ -71,8 +86,7 @@ impl EvmProof {
 
         let EvmProof {
             user_public_values,
-            app_exe_commit,
-            app_vm_commit,
+            app_commit,
             proof_data,
         } = self;
 
@@ -84,8 +98,8 @@ impl EvmProof {
         IOpenVmHalo2Verifier::verifyCall {
             publicValues: user_public_values.into(),
             proofData: proof_data.into(),
-            appExeCommit: app_exe_commit.into(),
-            appVmCommit: app_vm_commit.into(),
+            appExeCommit: app_commit.app_exe_commit.as_slice().into(),
+            appVmCommit: app_commit.app_vm_commit.as_slice().into(),
         }
         .abi_encode()
     }
@@ -97,6 +111,7 @@ impl EvmProof {
     }
 }
 
+#[cfg(feature = "evm-prove")]
 impl TryFrom<RawEvmProof> for EvmProof {
     type Error = EvmProofConversionError;
 
@@ -130,10 +145,13 @@ impl TryFrom<RawEvmProof> for EvmProof {
                 acc
             },
         );
+        let app_commit = AppExecutionCommit {
+            app_exe_commit: CommitBytes::new(app_exe_commit),
+            app_vm_commit: CommitBytes::new(app_vm_commit),
+        };
 
         Ok(Self {
-            app_exe_commit,
-            app_vm_commit,
+            app_commit,
             user_public_values,
             proof_data: ProofData {
                 accumulator: evm_accumulator,
@@ -143,18 +161,18 @@ impl TryFrom<RawEvmProof> for EvmProof {
     }
 }
 
+#[cfg(feature = "evm-prove")]
 impl TryFrom<EvmProof> for RawEvmProof {
     type Error = EvmProofConversionError;
     fn try_from(evm_openvm_proof: EvmProof) -> Result<Self, Self::Error> {
         let EvmProof {
-            mut app_exe_commit,
-            mut app_vm_commit,
+            mut app_commit,
             user_public_values,
             proof_data,
         } = evm_openvm_proof;
 
-        app_exe_commit.reverse();
-        app_vm_commit.reverse();
+        app_commit.app_exe_commit.reverse();
+        app_commit.app_vm_commit.reverse();
 
         let ProofData { accumulator, proof } = proof_data;
 
@@ -183,8 +201,8 @@ impl TryFrom<EvmProof> for RawEvmProof {
             let mut ret = Vec::new();
             for chunk in &reversed_accumulator
                 .iter()
-                .chain(&app_exe_commit)
-                .chain(&app_vm_commit)
+                .chain(app_commit.app_exe_commit.as_slice())
+                .chain(app_commit.app_vm_commit.as_slice())
                 .chain(&user_public_values)
                 .chunks(BN254_BYTES)
             {
@@ -194,5 +212,45 @@ impl TryFrom<EvmProof> for RawEvmProof {
             ret
         };
         Ok(RawEvmProof { instances, proof })
+    }
+}
+
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct VmStarkProofBytes {
+    #[serde(flatten)]
+    pub app_commit: AppExecutionCommit,
+    #[serde_as(as = "serde_with::hex::Hex")]
+    pub user_public_values: Vec<u8>,
+    #[serde_as(as = "serde_with::hex::Hex")]
+    pub proof: Vec<u8>,
+}
+
+impl VmStarkProofBytes {
+    pub fn new(app_commit: AppExecutionCommit, proof: VmStarkProof<SC>) -> Result<Self> {
+        let mut user_public_values = Vec::new();
+        encode_slice(&proof.user_public_values, &mut user_public_values)?;
+        Ok(Self {
+            app_commit,
+            user_public_values,
+            proof: proof.proof.encode_to_vec()?,
+        })
+    }
+}
+
+impl TryFrom<VmStarkProofBytes> for VmStarkProof<SC> {
+    type Error = std::io::Error;
+    fn try_from(proof: VmStarkProofBytes) -> Result<Self, std::io::Error> {
+        let VmStarkProofBytes {
+            proof,
+            user_public_values,
+            ..
+        } = proof;
+        let mut reader = Cursor::new(user_public_values);
+        let user_public_values = decode_vec(&mut reader)?;
+        Ok(Self {
+            user_public_values,
+            proof: Proof::decode_from_bytes(&proof)?,
+        })
     }
 }

@@ -7,3 +7,5 @@ wrap_comments = true
 format_code_in_doc_comments = true
 doc_comment_code_block_width = 100
 use_field_init_shorthand = true
+
+ignore = ["guest-libs/ruint"]

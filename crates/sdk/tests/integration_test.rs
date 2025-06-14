@@ -10,37 +10,21 @@ use openvm_circuit::{
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
-use openvm_continuations::{
-    static_verifier::StaticVerifierPvHandler,
-    verifier::{
-        common::types::{SpecialAirIds, VmVerifierPvs},
-        leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
-        root::types::RootVmVerifierPvs,
-        utils::compress_babybear_var_to_bn254,
-    },
+use openvm_continuations::verifier::{
+    common::types::VmVerifierPvs,
+    leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
 };
 use openvm_native_circuit::{Native, NativeConfig};
 use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
-use openvm_native_recursion::{
-    config::outer::OuterConfig,
-    halo2::{
-        utils::{CacheHalo2ParamsReader, Halo2ParamsReader},
-        wrapper::Halo2WrapperProvingKey,
-        RawEvmProof,
-    },
-    types::InnerConfig,
-    vars::StarkProofVariable,
-};
+use openvm_native_recursion::types::InnerConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_sdk::{
     codec::{Decode, Encode},
-    commit::AppExecutionCommit,
-    config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config, SdkSystemConfig, SdkVmConfig},
+    config::{AggStarkConfig, AppConfig, SdkSystemConfig, SdkVmConfig},
     keygen::AppProvingKey,
-    types::{EvmHalo2Verifier, EvmProof},
-    DefaultStaticVerifierPvHandler, Sdk, StdIn,
+    Sdk, StdIn,
 };
 use openvm_stark_backend::{keygen::types::LinearConstraint, p3_matrix::Matrix};
 use openvm_stark_sdk::{
@@ -51,10 +35,35 @@ use openvm_stark_sdk::{
     engine::{StarkEngine, StarkFriEngine},
     openvm_stark_backend::p3_field::FieldAlgebra,
     p3_baby_bear::BabyBear,
-    p3_bn254_fr::Bn254Fr,
 };
 use openvm_transpiler::transpiler::Transpiler;
-use snark_verifier_sdk::evm::evm_verify;
+#[cfg(feature = "evm-verify")]
+use {
+    openvm_continuations::{
+        static_verifier::StaticVerifierPvHandler,
+        verifier::{
+            common::types::SpecialAirIds, root::types::RootVmVerifierPvs,
+            utils::compress_babybear_var_to_bn254,
+        },
+    },
+    openvm_native_recursion::{
+        config::outer::OuterConfig,
+        halo2::{
+            utils::{CacheHalo2ParamsReader, Halo2ParamsReader},
+            wrapper::Halo2WrapperProvingKey,
+            RawEvmProof,
+        },
+        vars::StarkProofVariable,
+    },
+    openvm_sdk::{
+        commit::AppExecutionCommit,
+        config::{AggConfig, Halo2Config},
+        types::{EvmHalo2Verifier, EvmProof},
+        DefaultStaticVerifierPvHandler,
+    },
+    openvm_stark_sdk::p3_bn254_fr::Bn254Fr,
+    snark_verifier_sdk::evm::evm_verify,
+};
 
 type SC = BabyBearPoseidon2Config;
 type C = InnerConfig;
@@ -65,9 +74,10 @@ const LEAF_LOG_BLOWUP: usize = 2;
 const INTERNAL_LOG_BLOWUP: usize = 3;
 const ROOT_LOG_BLOWUP: usize = 4;
 
-/// `OpenVmHalo2Verifier` wraps the `snark-verifer` contract, meaning that
+/// `OpenVmHalo2Verifier` wraps the `snark-verifier` contract, meaning that
 /// the default `fallback` interface can still be used. This function uses
 /// the fallback interface as opposed to the `verify(..)` interface.
+#[cfg(feature = "evm-verify")]
 fn verify_evm_halo2_proof_with_fallback(
     openvm_verifier: &EvmHalo2Verifier,
     evm_proof: &EvmProof,
@@ -126,9 +136,7 @@ fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<VmCommittedExe<SC>> 
             builder.assign(&b, c);
         });
         builder.halt();
-        let mut program = builder.compile_isa();
-        program.max_num_public_values = NUM_PUB_VALUES;
-        program
+        builder.compile_isa()
     };
     Sdk::new()
         .commit_app_exe(
@@ -138,6 +146,7 @@ fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<VmCommittedExe<SC>> 
         .unwrap()
 }
 
+#[cfg(feature = "evm-verify")]
 fn agg_config_for_test() -> AggConfig {
     AggConfig {
         agg_stark_config: agg_stark_config_for_test(),
@@ -367,10 +376,6 @@ fn test_static_verifier_custom_pv_handler() {
     let app_pk = sdk.app_keygen(app_config.clone()).unwrap();
     let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
     println!("app_config: {:?}", app_config.app_vm_config);
-    println!(
-        "app_committed_exe max_num_public_values: {:?}",
-        app_committed_exe.exe.program.max_num_public_values
-    );
     let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
 
     // Generate PK using custom PV handler
@@ -380,8 +385,8 @@ fn test_static_verifier_custom_pv_handler() {
         &app_committed_exe,
         &app_pk.leaf_committed_exe,
     );
-    let exe_commit = commits.exe_commit_to_bn254();
-    let leaf_verifier_commit = commits.app_config_commit_to_bn254();
+    let exe_commit = commits.app_exe_commit.to_bn254();
+    let leaf_verifier_commit = commits.app_vm_commit.to_bn254();
 
     let pv_handler = CustomPvHandler {
         exe_commit,
@@ -423,7 +428,7 @@ fn test_static_verifier_custom_pv_handler() {
 #[test]
 fn test_e2e_proof_generation_and_verification_with_pvs() {
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    pkg_dir.push("guest");
+    pkg_dir.push("guest/fib");
 
     let vm_config = SdkVmConfig::builder()
         .system(SdkSystemConfig {
@@ -440,7 +445,13 @@ fn test_e2e_proof_generation_and_verification_with_pvs() {
 
     let sdk = Sdk::new();
     let elf = sdk
-        .build(Default::default(), pkg_dir, &Default::default())
+        .build(
+            Default::default(),
+            &vm_config,
+            pkg_dir,
+            &Default::default(),
+            None,
+        )
         .unwrap();
     let exe = sdk.transpile(elf, vm_config.transpiler()).unwrap();
 
@@ -493,12 +504,38 @@ fn test_sdk_guest_build_and_transpile() {
         // .with_options(vec!["--release"]);
         ;
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    pkg_dir.push("guest");
+    pkg_dir.push("guest/fib");
+
+    let vm_config = SdkVmConfig::builder()
+        .system(SdkSystemConfig {
+            config: SystemConfig::default()
+                .with_max_segment_len(200)
+                .with_continuations()
+                .with_public_values(NUM_PUB_VALUES),
+        })
+        .rv32i(Default::default())
+        .rv32m(Default::default())
+        .io(Default::default())
+        .native(Default::default())
+        .build();
+
     let one = sdk
-        .build(guest_opts.clone(), &pkg_dir, &Default::default())
+        .build(
+            guest_opts.clone(),
+            &vm_config,
+            &pkg_dir,
+            &Default::default(),
+            None,
+        )
         .unwrap();
     let two = sdk
-        .build(guest_opts.clone(), &pkg_dir, &Default::default())
+        .build(
+            guest_opts.clone(),
+            &vm_config,
+            &pkg_dir,
+            &Default::default(),
+            None,
+        )
         .unwrap();
     assert_eq!(one.instructions, two.instructions);
     assert_eq!(one.instructions, two.instructions);
@@ -514,8 +551,7 @@ fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
     // generate a proof
     let sdk = Sdk::new();
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    pkg_dir.push("guest");
-    let elf = sdk.build(Default::default(), pkg_dir, &Default::default())?;
+    pkg_dir.push("guest/fib");
 
     let vm_config = SdkVmConfig::builder()
         .system(SdkSystemConfig {
@@ -529,6 +565,13 @@ fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
         .io(Default::default())
         .native(Default::default())
         .build();
+    let elf = sdk.build(
+        Default::default(),
+        &vm_config,
+        pkg_dir,
+        &Default::default(),
+        None,
+    )?;
     assert!(vm_config.system.config.continuation_enabled);
     let exe = sdk.transpile(elf, vm_config.transpiler())?;
     let fri_params = FriParameters::standard_fast();

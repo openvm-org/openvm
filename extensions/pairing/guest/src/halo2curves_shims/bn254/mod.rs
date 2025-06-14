@@ -9,6 +9,9 @@ pub use line::*;
 #[cfg(test)]
 pub mod tests;
 
+// Make public for use by tests in guest-libs/pairing/
+pub mod test_utils;
+
 use halo2curves_axiom::bn256::{Fq, Fq12, Fq2};
 use openvm_algebra_guest::field::FieldExtension;
 
