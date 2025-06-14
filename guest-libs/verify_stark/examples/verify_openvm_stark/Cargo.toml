@@ -1,0 +1,17 @@
+[workspace]
+[package]
+name = "openvm-verify-stark-program"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../../../crates/toolchain/openvm", features = ["std"] }
+openvm-verify-stark = { path = "../../../guest" }
+
+[features]
+default = []
+
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = false

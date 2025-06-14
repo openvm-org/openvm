@@ -7,10 +7,20 @@ edition = "2021"
 members = []
 
 [dependencies]
-openvm = { path = "../../crates/toolchain/openvm", features = ["std"] }
-openvm-algebra-guest = { path = "../../extensions/algebra/guest" }
-openvm-ecc-guest = { path = "../../extensions/ecc/guest", features = ["k256"] }
+openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
+    "std",
+] }
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-k256 = { git = "https://github.com/openvm-org/openvm.git", package = "k256" }
 hex-literal = { version = "0.4.1", default-features = false }
 
 [features]
 default = []
+
+# remove this if copying example outside of monorepo
+[patch."https://github.com/openvm-org/openvm.git"]
+openvm = { path = "../../crates/toolchain/openvm" }
+openvm-algebra-guest = { path = "../../extensions/algebra/guest" }
+openvm-ecc-guest = { path = "../../extensions/ecc/guest" }
+k256 = { path = "../../guest-libs/k256" }

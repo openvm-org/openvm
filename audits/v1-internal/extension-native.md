@@ -37,7 +37,7 @@ Add the following constraints to `NativePoseidon2Air`:
 **Resolution:** https://github.com/openvm-org/openvm/pull/1435
 https://github.com/openvm-org/openvm/commit/d768af4de1500044a49ab642915174e83eb86bcb
 
-### 2.2 NativePosiedon2Air constraints allow padding rows with `is_exhausted` cells
+### 2.2 NativePoseidon2Air constraints allow padding rows with `is_exhausted` cells
 
 **Severity:** Medium
 **Context:** https://github.com/openvm-org/openvm/blob/830053d599606fd5c7dc8f8346710f9d6854beae/extensions/native/circuit/src/poseidon2/air.rs
@@ -50,7 +50,7 @@ However, all the attacker can do is effectively repeatedly apply the Poseidon2
 permutation to the final hash, which is unlikely to be useful in an attack.
 
 **Recommendation:**
-Add a constraint that `is_exhausted[0] = 0` or simply remove the `is_exhasted[0]` variable.
+Add a constraint that `is_exhausted[0] = 0` or simply remove the `is_exhausted[0]` variable.
 
 **Resolution:** https://github.com/openvm-org/openvm/pull/1436
 https://github.com/openvm-org/openvm/commit/2514e5d371d5706d22f573746213cd062eea4142
@@ -230,7 +230,7 @@ https://github.com/openvm-org/openvm/commit/960abb0b9edb8ef8bca3d62054a20fb3edf3
 ## 3. Discussion
 
 This review included all chips under `native/circuit/src` as well as
-`native/tranpsiler`.
+`native/transpiler`.
 
 Aside from the issues found above, one observation from reviewing the AIRs is
 that the AIRs are not always consistent with whether or not they enforce if an

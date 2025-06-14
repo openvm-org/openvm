@@ -115,9 +115,7 @@ fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<VmCommittedExe<SC>> 
             builder.assign(&b, c);
         });
         builder.halt();
-        let mut program = builder.compile_isa();
-        program.max_num_public_values = NUM_PUB_VALUES;
-        program
+        builder.compile_isa()
     };
     Sdk::new()
         .commit_app_exe(
@@ -343,10 +341,6 @@ fn test_static_verifier_custom_pv_handler() {
     let app_pk = sdk.app_keygen(app_config.clone()).unwrap();
     let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
     println!("app_config: {:?}", app_config.app_vm_config);
-    println!(
-        "app_committed_exe max_num_public_values: {:?}",
-        app_committed_exe.exe.program.max_num_public_values
-    );
     let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
 
     // Generate PK using custom PV handler
@@ -356,8 +350,8 @@ fn test_static_verifier_custom_pv_handler() {
         &app_committed_exe,
         &app_pk.leaf_committed_exe,
     );
-    let exe_commit = commits.exe_commit_to_bn254();
-    let leaf_verifier_commit = commits.app_config_commit_to_bn254();
+    let exe_commit = commits.app_exe_commit.to_bn254();
+    let leaf_verifier_commit = commits.app_vm_commit.to_bn254();
 
     let pv_handler = CustomPvHandler {
         exe_commit,
@@ -399,7 +393,7 @@ fn test_static_verifier_custom_pv_handler() {
 #[test]
 fn test_e2e_proof_generation_and_verification_with_pvs() {
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    pkg_dir.push("guest");
+    pkg_dir.push("guest/fib");
 
     let vm_config = SdkVmConfig::builder()
         .system(SdkSystemConfig {
@@ -416,7 +410,13 @@ fn test_e2e_proof_generation_and_verification_with_pvs() {
 
     let sdk = Sdk::new();
     let elf = sdk
-        .build(Default::default(), pkg_dir, &Default::default())
+        .build(
+            Default::default(),
+            &vm_config,
+            pkg_dir,
+            &Default::default(),
+            None,
+        )
         .unwrap();
     let exe = sdk.transpile(elf, vm_config.transpiler()).unwrap();
 
@@ -469,12 +469,38 @@ fn test_sdk_guest_build_and_transpile() {
         // .with_options(vec!["--release"]);
         ;
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    pkg_dir.push("guest");
+    pkg_dir.push("guest/fib");
+
+    let vm_config = SdkVmConfig::builder()
+        .system(SdkSystemConfig {
+            config: SystemConfig::default()
+                .with_max_segment_len(200)
+                .with_continuations()
+                .with_public_values(NUM_PUB_VALUES),
+        })
+        .rv32i(Default::default())
+        .rv32m(Default::default())
+        .io(Default::default())
+        .native(Default::default())
+        .build();
+
     let one = sdk
-        .build(guest_opts.clone(), &pkg_dir, &Default::default())
+        .build(
+            guest_opts.clone(),
+            &vm_config,
+            &pkg_dir,
+            &Default::default(),
+            None,
+        )
         .unwrap();
     let two = sdk
-        .build(guest_opts.clone(), &pkg_dir, &Default::default())
+        .build(
+            guest_opts.clone(),
+            &vm_config,
+            &pkg_dir,
+            &Default::default(),
+            None,
+        )
         .unwrap();
     assert_eq!(one.instructions, two.instructions);
     assert_eq!(one.instructions, two.instructions);
@@ -490,8 +516,7 @@ fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
     // generate a proof
     let sdk = Sdk::new();
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    pkg_dir.push("guest");
-    let elf = sdk.build(Default::default(), pkg_dir, &Default::default())?;
+    pkg_dir.push("guest/fib");
 
     let vm_config = SdkVmConfig::builder()
         .system(SdkSystemConfig {
@@ -505,6 +530,13 @@ fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
         .io(Default::default())
         .native(Default::default())
         .build();
+    let elf = sdk.build(
+        Default::default(),
+        &vm_config,
+        pkg_dir,
+        &Default::default(),
+        None,
+    )?;
     assert!(vm_config.system.config.continuation_enabled);
     let exe = sdk.transpile(elf, vm_config.transpiler())?;
     let fri_params = FriParameters::standard_fast();

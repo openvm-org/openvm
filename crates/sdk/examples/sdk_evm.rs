@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use std::path::PathBuf;
     ///
     /// let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    /// path.push("guest");
+    /// path.push("guest/fib");
     /// let target_path = path.to_str().unwrap();
     /// ```
     // ANCHOR: build
@@ -56,7 +56,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 2a. Build the ELF with guest options and a target filter.
     let guest_opts = GuestOptions::default();
     let target_path = "your_path_project_root";
-    let elf = sdk.build(guest_opts, target_path, &Default::default())?;
+    let elf = sdk.build(
+        guest_opts,
+        &vm_config,
+        target_path,
+        &Default::default(),
+        None,
+    )?;
     // ANCHOR_END: build
 
     // ANCHOR: transpilation

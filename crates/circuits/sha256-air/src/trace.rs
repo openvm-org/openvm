@@ -27,6 +27,12 @@ pub struct Sha256StepHelper {
     pub row_idx_encoder: Encoder,
 }
 
+impl Default for Sha256StepHelper {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// The trace generation of SHA256 should be done in two passes.
 /// The first pass should do `get_block_trace` for every block and generate the invalid rows through
 /// `get_default_row` The second pass should go through all the blocks and call
@@ -110,7 +116,7 @@ impl Sha256StepHelper {
                         let w: u32 = nums.iter().fold(0, |acc, &num| acc.wrapping_add(num));
                         cols.message_schedule.w[j] = u32_into_bits_field::<F>(w);
 
-                        let nums_limbs = nums.map(|x| u32_into_u16s(x));
+                        let nums_limbs = nums.map(u32_into_u16s);
                         let w_limbs = u32_into_u16s(w);
 
                         // fill in the carrys

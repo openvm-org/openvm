@@ -10,9 +10,8 @@ members = []
 openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
     "std",
 ] }
-openvm-platform = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-algebra-complex-macros = { git = "https://github.com/openvm-org/openvm.git" }
+
 serde = { version = "1.0.216" }
 num-bigint = { version = "0.4.6", features = ["serde"] }
 

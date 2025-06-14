@@ -10,8 +10,5 @@ repository.workspace = true
 [dependencies]
 openvm-platform = { workspace = true }
 
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
-tiny-keccak.workspace = true
-
 [features]
 default = []

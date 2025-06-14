@@ -1,0 +1,66 @@
+[package]
+name = "openvm-pairing"
+description = "OpenVM library for elliptic curve pairing"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+openvm = { workspace = true }
+openvm-platform = { workspace = true }
+serde = { workspace = true }
+itertools = { workspace = true, features = ["use_alloc"] }
+rand.workspace = true
+hex-literal = { workspace = true }
+openvm-algebra-guest = { workspace = true }
+openvm-algebra-moduli-macros = { workspace = true }
+openvm-ecc-guest = { workspace = true }
+openvm-ecc-sw-macros = { workspace = true }
+openvm-algebra-complex-macros = { workspace = true }
+openvm-custom-insn = { workspace = true }
+openvm-rv32im-guest = { workspace = true }
+openvm-pairing-guest = { workspace = true }
+
+# Used for `halo2curves` feature
+halo2curves-axiom = { workspace = true, optional = true }
+group = "0.13.0"
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+num-bigint.workspace = true
+num-traits.workspace = true
+openvm-ecc-guest = { workspace = true }
+
+[dev-dependencies]
+openvm-instructions = { workspace = true }
+openvm-stark-sdk.workspace = true
+openvm-circuit = { workspace = true, features = ["test-utils", "parallel"] }
+openvm-transpiler.workspace = true
+openvm-algebra-circuit.workspace = true
+openvm-algebra-transpiler.workspace = true
+openvm-pairing-circuit.workspace = true
+openvm-pairing-transpiler.workspace = true
+openvm-pairing-guest.workspace = true
+openvm-ecc-circuit.workspace = true
+openvm-ecc-guest.workspace = true
+openvm-ecc-transpiler.workspace = true
+openvm-rv32im-transpiler.workspace = true
+openvm = { workspace = true }
+openvm-toolchain-tests = { workspace = true }
+eyre.workspace = true
+rand.workspace = true
+num-bigint.workspace = true
+num-traits.workspace = true
+halo2curves-axiom = { workspace = true }
+
+[features]
+default = []
+halo2curves = ["bls12_381", "bn254", "dep:halo2curves-axiom"]
+# features to enable specific curves in guest programs
+# only enable for the curves you use as it affects the init! macro
+bn254 = ["openvm-pairing-guest/bn254"]
+bls12_381 = ["openvm-pairing-guest/bls12_381"]
+
+[package.metadata.cargo-shear]
+ignored = ["openvm", "openvm-custom-insn"]

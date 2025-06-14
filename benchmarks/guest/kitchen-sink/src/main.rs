@@ -1,19 +1,25 @@
 use std::hint::black_box;
 
 use openvm_algebra_guest::IntMod;
-use openvm_bigint_guest::I256;
-use openvm_keccak256_guest::keccak256;
-use openvm_sha256_guest::sha256;
+use openvm_keccak256::keccak256;
+use openvm_ruint::aliases::U256;
+use openvm_sha2::sha256;
 #[allow(unused_imports)]
 use {
     openvm_ecc_guest::{
-        k256::Secp256k1Point, p256::P256Point, weierstrass::WeierstrassPoint, AffinePoint,
+        k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
+        p256::{P256Coord, P256Point, P256Scalar},
+        weierstrass::WeierstrassPoint,
+        CyclicGroup,
     },
-    openvm_pairing_guest::{
-        bls12_381::{Bls12_381G1Affine, G2Affine as Bls12_381G2Affine},
-        bn254::{Bn254, Bn254G1Affine, Fp, Fp2, G2Affine as Bn254G2Affine},
-        pairing::PairingCheck,
+    openvm_pairing::{
+        bls12_381::{
+            Bls12_381Fp, Bls12_381Fp2, Bls12_381G1Affine, Bls12_381Scalar,
+            G2Affine as Bls12_381G2Affine,
+        },
+        bn254::{Bn254, Bn254Fp, Bn254Fp2, Bn254G1Affine, Bn254Scalar, G2Affine as Bn254G2Affine},
     },
+    openvm_pairing_guest::pairing::PairingCheck,
 };
 
 // Note: these will all currently be represented as bytes32 even though they could be smaller
@@ -23,35 +29,64 @@ openvm_algebra_guest::moduli_macros::moduli_declare! {
     Mersenne61 { modulus = "0x1fffffffffffffff" },
 }
 
-openvm_algebra_guest::moduli_macros::moduli_init! {
-    "1000000000000000003", // Mod1e18
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F", // secp256k1 Coordinate field
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141", // secp256k1 Scalar field
-    "0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff", // secp256r1=p256 Coordinate field
-    "0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551", // secp256r1=p256 Scalar field
-    "0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47", // Bn254Fp Coordinate field
-    "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001", // Bn254 Scalar
-    "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab", // BLS12-381 Coordinate field
-    "0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001", // BLS12-381 Scalar field
-    "0x1fffffffffffffff",
-    "7",
+openvm::init!();
+
+fn materialize_modular_chip<T: IntMod>() {
+    // ensure the compiler doesn't optimize out the operations
+    // add/sub chip
+    black_box(T::ZERO + T::ZERO);
+    // mul/div chip
+    black_box(T::ZERO * T::ZERO);
+    // is_equal chip
+    black_box(T::ZERO.assert_reduced());
 }
 
-openvm_ecc_guest::sw_macros::sw_init! {
-    Secp256k1Point, P256Point,
-    Bn254G1Affine, Bls12_381G1Affine
+// making this a macro since there's no complex extension trait
+macro_rules! materialize_complex_chip {
+    ($complex_type:ty, $modular_type:ty) => {
+        // ensure the compiler doesn't optimize out the operations
+        let zero = <$complex_type>::new(
+            <$modular_type as IntMod>::ZERO,
+            <$modular_type as IntMod>::ZERO,
+        );
+        // add/sub chip
+        black_box(&zero + &zero);
+        // mul/div chip
+        black_box(&zero * &zero);
+    };
 }
 
-openvm_algebra_guest::complex_macros::complex_init! {
-    Bn254Fp2 { mod_idx = 5 },
-    Bls12_381Fp2 { mod_idx = 7 },
+fn materialize_ecc_chip<T: WeierstrassPoint + CyclicGroup>() {
+    // add chip
+    // it is important that neither operand is identity, otherwise the chip will not be materialized
+    black_box(T::GENERATOR + T::GENERATOR);
+    // double chip
+    // it is important that the operand is not identity, otherwise the chip will not be materialized
+    black_box(T::GENERATOR.double());
 }
 
 pub fn main() {
-    // Setup will materialize every chip
-    setup_all_moduli();
-    setup_all_complex_extensions();
-    setup_all_curves();
+    // Since we don't explicitly call setup functions anymore, we must ensure every declared modulus
+    // and curve chip is materialized.
+    materialize_modular_chip::<Mod1e18>();
+    materialize_modular_chip::<Secp256k1Coord>();
+    materialize_modular_chip::<Secp256k1Scalar>();
+    materialize_modular_chip::<P256Coord>();
+    materialize_modular_chip::<P256Scalar>();
+    materialize_modular_chip::<Bn254Fp>();
+    materialize_modular_chip::<Bn254Scalar>();
+    materialize_modular_chip::<Bls12_381Fp>();
+    materialize_modular_chip::<Bls12_381Scalar>();
+    materialize_modular_chip::<Mersenne61>();
+    materialize_modular_chip::<Seven>();
+
+    materialize_complex_chip!(Bn254Fp2, Bn254Fp);
+    materialize_complex_chip!(Bls12_381Fp2, Bls12_381Fp);
+
+    materialize_ecc_chip::<Secp256k1Point>();
+    materialize_ecc_chip::<P256Point>();
+    materialize_ecc_chip::<Bn254G1Affine>();
+    materialize_ecc_chip::<Bls12_381G1Affine>();
 
     let [one, six] = [1, 6].map(Seven::from_u32);
     assert_eq!(one + six, Seven::ZERO);
@@ -81,9 +116,9 @@ pub fn main() {
         let digest2 = sha256(&hash);
         hash.extend_from_slice(&digest2);
 
-        // SAFETY: internally I256 is represented as [u8; 32]
-        let i1 = I256::from_le_bytes(digest1);
-        let i2 = I256::from_le_bytes(digest2);
+        // SAFETY: internally U256 is represented as [u8; 32]
+        let i1 = U256::from_le_bytes(digest1);
+        let i2 = U256::from_le_bytes(digest2);
 
         black_box(&i1 + &i2);
         black_box(&i1 - &i2);
@@ -93,7 +128,7 @@ pub fn main() {
         black_box(i1 <= i2);
         black_box(&i1 & &i2);
         black_box(&i1 ^ &i2);
-        black_box(&i1 << &i2);
-        black_box(&i1 >> &i2);
+        black_box(i1 << &i2);
+        black_box(i1 >> &i2);
     }
 }

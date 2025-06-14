@@ -186,6 +186,8 @@ Each VM extension's behavior is specified below.
 | divmod\<N\>  | DIVMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2`                                                                                                                                                                          |
 | iseqmod\<N\> | ISEQMOD_RV32\<N\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                                                                                                      |
 | setup\<N\>   | SETUP_ADDSUBMOD_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 0`, SETUP_MULDIVMOD_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 1`, SETUP_ISEQMOD_RV32\<N\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 2` |
+| hint_non_qr  | PHANTOM `0, 0, phantom_c(curve_idx, HintNonQr)`                                                                                                |
+| hint_sqrt    | PHANTOM `ind(rs1), 0, phantom_c(curve_idx, HintSqrt)`                                                                                                |
 
 #### Complex Extension Field Arithmetic
 
@@ -204,8 +206,6 @@ Each VM extension's behavior is specified below.
 | sw_add_ne\<C\>  | EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`                                                                                                           |
 | sw_double\<C\>  | EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`                                                                                                                  |
 | setup\<C\>      | SETUP_EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `ind(rs2) != 0`, SETUP_EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `ind(rs2) = 0` |
-| hint_decompress | PHANTOM `ind(rs1), ind(rs2), phantom_c(curve_idx, HintDecompress)`                                                                                                |
-| hint_non_qr     | PHANTOM `0, 0, phantom_c(curve_idx, HintNonQr)`                                                                                                |
 
 ### Pairing Extension
 

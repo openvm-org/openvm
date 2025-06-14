@@ -8,12 +8,30 @@ use openvm_ecc_guest::{
 };
 
 use super::Bn254;
-use crate::{
-    bn254::{BN254_PSEUDO_BINARY_ENCODING, BN254_SEED},
-    pairing::{
-        Evaluatable, EvaluatedLine, LineMulDType, MillerStep, MultiMillerLoop, UnevaluatedLine,
-    },
+use crate::pairing::{
+    Evaluatable, EvaluatedLine, LineMulDType, MillerStep, MultiMillerLoop, UnevaluatedLine,
 };
+
+pub const BN254_SEED: u64 = 0x44e992b44a6909f1;
+// Encodes 6x+2 where x is the BN254 seed.
+// 6*x+2 = sum_i BN254_PSEUDO_BINARY_ENCODING[i] * 2^i
+// where BN254_PSEUDO_BINARY_ENCODING[i] is in {-1, 0, 1}
+pub const BN254_PSEUDO_BINARY_ENCODING: [i8; 66] = [
+    0, 0, 0, 1, 0, 1, 0, -1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, -1, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0,
+    -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 1, 0, -1, 0, 0, 0, -1, 0, -1, 0,
+    0, 0, 1, 0, -1, 0, 1,
+];
+
+#[test]
+fn test_bn254_pseudo_binary_encoding() {
+    let mut x: i128 = 0;
+    let mut power_of_2 = 1;
+    for b in BN254_PSEUDO_BINARY_ENCODING.iter() {
+        x += (*b as i128) * power_of_2;
+        power_of_2 *= 2;
+    }
+    assert_eq!(x.unsigned_abs(), 6 * (BN254_SEED as u128) + 2);
+}
 
 impl MillerStep for Bn254 {
     type Fp2 = Fq2;
