@@ -88,3 +88,8 @@ mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
 nightly-features = ["openvm-circuit/nightly-features"]
+
+[[example]]
+name = "sdk_evm"
+path = "examples/sdk_evm.rs"
+required-features = ["evm-verify"]
