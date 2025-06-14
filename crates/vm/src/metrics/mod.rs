@@ -68,7 +68,7 @@ impl VmMetrics {
     }
 
     #[cfg(feature = "function-span")]
-    fn update_current_fn(&mut self, pc: u32) {
+    pub(super) fn update_current_fn(&mut self, pc: u32) {
         if self.fn_bounds.is_empty() {
             return;
         }

@@ -6,7 +6,8 @@ mod tests {
     use openvm_circuit::{
         arch::{
             execution_mode::metered::get_widths_and_interactions_from_vkey,
-            hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, VirtualMachine, VmExecutor,
+            hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, Streams, VirtualMachine,
+            VmExecutor,
         },
         system::memory::tree::public_values::UserPublicValuesProof,
         utils::{air_test, air_test_with_min_segments},

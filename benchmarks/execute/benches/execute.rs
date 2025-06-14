@@ -1,9 +1,11 @@
+use std::path::Path;
+
 use eyre::Result;
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
 use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
-    arch::{instructions::exe::VmExe, SystemConfig, VmExecutor},
+    arch::{instructions::exe::VmExe, InitFileGenerator, SystemConfig, VmExecutor},
     derive::VmConfig,
 };
 use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
@@ -69,6 +71,16 @@ impl Default for ExecuteConfig {
             keccak: Keccak256::default(),
             sha256: Sha256::default(),
         }
+    }
+}
+
+impl InitFileGenerator for ExecuteConfig {
+    fn write_to_init_file(
+        &self,
+        _manifest_dir: &Path,
+        _init_file_name: Option<&str>,
+    ) -> eyre::Result<()> {
+        Ok(())
     }
 }
 
