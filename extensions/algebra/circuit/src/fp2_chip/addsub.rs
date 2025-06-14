@@ -67,7 +67,6 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         offset: usize,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         range_checker: SharedVariableRangeCheckerChip,
-        height: usize,
     ) -> Self {
         let (expr, is_add_flag, is_sub_flag) = fp2_addsub_expr(config, range_checker.bus());
 
@@ -102,7 +101,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             "Fp2AddSub",
             false,
         );
-        Self(Fp2Chip::new(air, step, height, mem_helper))
+        Self(Fp2Chip::new(air, step, mem_helper))
     }
     pub fn expr(&self) -> &FieldExpr {
         &self.0.step.expr
@@ -116,7 +115,10 @@ mod tests {
     use itertools::Itertools;
     use num_bigint::BigUint;
     use openvm_algebra_transpiler::Fp2Opcode;
-    use openvm_circuit::arch::testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+    use openvm_circuit::arch::{
+        testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        InsExecutorE1,
+    };
     use openvm_circuit_primitives::bitwise_op_lookup::{
         BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
     };
@@ -222,8 +224,8 @@ mod tests {
             OFFSET,
             bitwise_chip.clone(),
             tester.range_checker(),
-            MAX_INS_CAPACITY,
         );
+        chip.set_trace_height(MAX_INS_CAPACITY);
 
         let num_ops = 10;
         for _ in 0..num_ops {

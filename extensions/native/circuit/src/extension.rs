@@ -37,9 +37,6 @@ use crate::{
     *,
 };
 
-// TODO(ayush): this should be decided after e2 execution
-const MAX_INS_CAPACITY: usize = 1 << 23;
-
 #[derive(Clone, Debug, Serialize, Deserialize, VmConfig, derive_new::new)]
 pub struct NativeConfig {
     #[system]
@@ -117,7 +114,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 NativeLoadStoreAdapterStep::new(NativeLoadStoreOpcode::CLASS_OFFSET),
                 NativeLoadStoreOpcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -137,7 +133,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 NativeLoadStoreAdapterStep::new(NativeLoadStore4Opcode::CLASS_OFFSET),
                 NativeLoadStore4Opcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -158,7 +153,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 NativeBranchEqualOpcode::CLASS_OFFSET,
                 DEFAULT_PC_STEP,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -173,7 +167,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 range_checker.bus(),
             ),
             JalRangeCheckStep::new(range_checker.clone()),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -193,7 +186,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 FieldArithmeticCoreAir::new(),
             ),
             FieldArithmeticStep::new(AluNativeAdapterStep::new()),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -210,7 +202,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 FieldExtensionCoreAir::new(),
             ),
             FieldExtensionStep::new(NativeVectorizedAdapterStep::new()),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -224,7 +215,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 memory_bridge,
             ),
             FriReducedOpeningStep::new(),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
 
@@ -238,7 +228,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             Poseidon2Config::default(),
             VerifyBatchBus::new(builder.new_bus_idx()),
             // TODO: this may use too much memory.
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -446,7 +435,6 @@ impl<F: PrimeField32> VmExtension<F> for CastFExtension {
                 CastFCoreAir::new(range_checker.bus()),
             ),
             CastFStep::new(ConvertAdapterStep::<1, 4>::new(), range_checker.clone()),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(castf_chip, [CastfOpcode::CASTF.global_opcode()])?;

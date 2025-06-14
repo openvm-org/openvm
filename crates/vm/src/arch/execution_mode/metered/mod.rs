@@ -4,7 +4,12 @@ pub mod exact;
 // pub use exact::MeteredCtxExact as MeteredCtx;
 pub use bounded::MeteredCtxBounded as MeteredCtx;
 use openvm_instructions::instruction::Instruction;
-use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    keygen::types::MultiStarkVerifyingKey,
+    p3_field::{FieldExtensionAlgebra, PrimeField32},
+    ChipUsageGetter,
+};
 use p3_baby_bear::BabyBear;
 
 use crate::arch::{
@@ -16,16 +21,32 @@ use crate::arch::{
 /// Check segment every 100 instructions.
 const SEGMENT_CHECK_INTERVAL: u64 = 100;
 
-// TODO(ayush): fix these values
-const MAX_TRACE_HEIGHT: u32 = (1 << 23) - 100;
-const MAX_TRACE_CELLS: usize = 2_000_000_000; // 2B
-const MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
+const DEFAULT_MAX_TRACE_HEIGHT: u32 = (1 << 23) - 100;
+const DEFAULT_MAX_CELLS: usize = 2_000_000_000; // 2B
+const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
+
+#[derive(Debug)]
+pub struct SegmentationLimits {
+    pub max_trace_height: u32,
+    pub max_cells: usize,
+    pub max_interactions: usize,
+}
+
+impl Default for SegmentationLimits {
+    fn default() -> Self {
+        Self {
+            max_trace_height: DEFAULT_MAX_TRACE_HEIGHT,
+            max_cells: DEFAULT_MAX_CELLS,
+            max_interactions: DEFAULT_MAX_INTERACTIONS,
+        }
+    }
+}
 
 pub struct MeteredExecutionControl<'a> {
-    // Constants
     air_names: &'a [String],
     pub widths: &'a [usize],
     pub interactions: &'a [usize],
+    segmentation_limits: SegmentationLimits,
 }
 
 impl<'a> MeteredExecutionControl<'a> {
@@ -34,7 +55,23 @@ impl<'a> MeteredExecutionControl<'a> {
             air_names,
             widths,
             interactions,
+            segmentation_limits: SegmentationLimits::default(),
         }
+    }
+
+    pub fn with_max_trace_height(mut self, max_trace_height: u32) -> Self {
+        self.segmentation_limits.max_trace_height = max_trace_height;
+        self
+    }
+
+    pub fn with_max_cells(mut self, max_cells: usize) -> Self {
+        self.segmentation_limits.max_cells = max_cells;
+        self
+    }
+
+    pub fn with_max_interactions(mut self, max_interactions: usize) -> Self {
+        self.segmentation_limits.max_interactions = max_interactions;
+        self
     }
 
     /// Calculate the total cells used based on trace heights and widths
@@ -59,40 +96,43 @@ impl<'a> MeteredExecutionControl<'a> {
     fn should_segment<F>(&self, state: &mut VmSegmentState<F, MeteredCtx>) -> bool {
         let trace_heights = state.ctx.trace_heights_if_finalized();
         for (i, &height) in trace_heights.iter().enumerate() {
-            if height > MAX_TRACE_HEIGHT {
+            // Only segment if the height is not constant and exceeds the maximum height
+            if !state.ctx.is_trace_height_constant[i]
+                && height > self.segmentation_limits.max_trace_height
+            {
                 tracing::info!(
                     "Segment {:2} | clk {:9} | chip {} ({}) height ({:8}) > max ({:8})",
                     state.ctx.segments.len(),
-                    state.ctx.clk_last_segment_check,
+                    state.clk,
                     i,
                     self.air_names[i],
                     height,
-                    MAX_TRACE_HEIGHT
+                    self.segmentation_limits.max_trace_height
                 );
                 return true;
             }
         }
 
         let total_cells = self.calculate_total_cells(&trace_heights);
-        if total_cells > MAX_TRACE_CELLS {
+        if total_cells > self.segmentation_limits.max_cells {
             tracing::info!(
                 "Segment {:2} | clk {:9} | total cells ({:10}) > max ({:10})",
                 state.ctx.segments.len(),
-                state.ctx.clk_last_segment_check,
+                state.clk,
                 total_cells,
-                MAX_TRACE_CELLS
+                self.segmentation_limits.max_cells
             );
             return true;
         }
 
         let total_interactions = self.calculate_total_interactions(&trace_heights);
-        if total_interactions > MAX_INTERACTIONS {
+        if total_interactions > self.segmentation_limits.max_interactions {
             tracing::info!(
                 "Segment {:2} | clk {:9} | total interactions ({:11}) > max ({:11})",
                 state.ctx.segments.len(),
-                state.ctx.clk_last_segment_check,
+                state.clk,
                 total_interactions,
-                MAX_INTERACTIONS
+                self.segmentation_limits.max_interactions
             );
             return true;
         }
@@ -103,53 +143,16 @@ impl<'a> MeteredExecutionControl<'a> {
     fn reset_segment<F, VC>(
         &self,
         state: &mut VmSegmentState<F, MeteredCtx>,
-        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) where
         F: PrimeField32,
         VC: VmConfig<F>,
     {
         state.ctx.leaf_indices.clear();
-
-        // TODO(ayush): only reset trace heights for chips that are not constant height instead
-        // of refilling again
-        state.ctx.trace_heights.fill(0);
-
-        // Program | Connector | Public Values | Memory ... | Executors (except Public Values) |
-        // Range Checker
-        state.ctx.trace_heights[PROGRAM_AIR_ID] =
-            chip_complex.program_chip().true_program_length as u32;
-        state.ctx.trace_heights[CONNECTOR_AIR_ID] = 2;
-
-        let mut offset = if chip_complex.config().has_public_values_chip() {
-            PUBLIC_VALUES_AIR_ID + 1
-        } else {
-            PUBLIC_VALUES_AIR_ID
-        };
-        offset += chip_complex.memory_controller().num_airs();
-
-        // Periphery chips with constant heights
-        for (i, chip_id) in chip_complex
-            .inventory
-            .insertion_order
-            .iter()
-            .rev()
-            .enumerate()
-        {
-            if let &ChipId::Periphery(id) = chip_id {
-                if let Some(constant_height) =
-                    chip_complex.inventory.periphery[id].constant_trace_height()
-                {
-                    state.ctx.trace_heights[offset + i] = constant_height as u32;
-                }
+        for (i, &is_constant) in state.ctx.is_trace_height_constant.iter().enumerate() {
+            if !is_constant {
+                state.ctx.trace_heights[i] = 0;
             }
-        }
-
-        // Range checker chip
-        if let (Some(range_checker_height), Some(last_height)) = (
-            chip_complex.range_checker_chip().constant_trace_height(),
-            state.ctx.trace_heights.last_mut(),
-        ) {
-            *last_height = range_checker_height as u32;
         }
     }
 
@@ -166,16 +169,17 @@ impl<'a> MeteredExecutionControl<'a> {
             return;
         }
 
-        if self.should_segment(state) {
-            let clk_start = state
-                .ctx
-                .segments
-                .last()
-                .map_or(0, |s| s.clk_start + s.num_cycles);
+        let clk_start = state
+            .ctx
+            .segments
+            .last()
+            .map_or(0, |s| s.clk_start + s.num_cycles);
+        let num_cycles = state.clk - clk_start;
+        // Segment should contain at least one cycle
+        if num_cycles > 0 && self.should_segment(state) {
             let segment = Segment {
                 clk_start,
-                num_cycles: state.ctx.clk_last_segment_check - clk_start,
-                // TODO(ayush): this is trace heights after overflow so an overestimate
+                num_cycles,
                 trace_heights: state.ctx.trace_heights.clone(),
             };
             state.ctx.segments.push(segment);
@@ -211,7 +215,46 @@ where
         state: &mut VmSegmentState<F, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
-        self.reset_segment::<F, VC>(state, chip_complex);
+        // Program | Connector | Public Values | Memory ... | Executors (except Public Values) |
+        // Range Checker
+        state.ctx.trace_heights[PROGRAM_AIR_ID] =
+            chip_complex.program_chip().true_program_length as u32;
+        state.ctx.is_trace_height_constant[PROGRAM_AIR_ID] = true;
+        state.ctx.trace_heights[CONNECTOR_AIR_ID] = 2;
+        state.ctx.is_trace_height_constant[CONNECTOR_AIR_ID] = true;
+
+        let offset = if chip_complex.config().has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
+        } else {
+            PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
+        };
+        // Periphery chips with constant heights
+        for (i, chip_id) in chip_complex
+            .inventory
+            .insertion_order
+            .iter()
+            .rev()
+            .enumerate()
+        {
+            if let &ChipId::Periphery(id) = chip_id {
+                if let Some(constant_height) =
+                    chip_complex.inventory.periphery[id].constant_trace_height()
+                {
+                    state.ctx.trace_heights[offset + i] = constant_height as u32;
+                    state.ctx.is_trace_height_constant[offset + i] = true;
+                }
+            }
+        }
+
+        // Range checker chip
+        if let (Some(range_checker_height), Some(last_height), Some(last_is_height_constant)) = (
+            chip_complex.range_checker_chip().constant_trace_height(),
+            state.ctx.trace_heights.last_mut(),
+            state.ctx.is_trace_height_constant.last_mut(),
+        ) {
+            *last_height = range_checker_height as u32;
+            *last_is_height_constant = true;
+        }
     }
 
     fn on_suspend_or_terminate(
@@ -236,7 +279,6 @@ where
         let segment = Segment {
             clk_start,
             num_cycles: state.clk - clk_start,
-            // TODO(ayush): this is trace heights after overflow so an overestimate
             trace_heights: state.ctx.trace_heights.clone(),
         };
         state.ctx.segments.push(segment);
@@ -255,13 +297,11 @@ where
         // Check if segmentation needs to happen
         self.check_segment_limits::<F, VC>(state, chip_complex);
 
-        let mut offset = if chip_complex.config().has_public_values_chip() {
-            PUBLIC_VALUES_AIR_ID + 1
+        let offset = if chip_complex.config().has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
         } else {
-            PUBLIC_VALUES_AIR_ID
+            PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
         };
-        offset += chip_complex.memory_controller().num_airs();
-
         let &Instruction { opcode, .. } = instruction;
         if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode) {
             let mut vm_state = VmStateMut {
@@ -277,8 +317,28 @@ where
                 opcode,
             });
         };
-        state.clk += 1;
 
         Ok(())
     }
+}
+
+// TODO(ayush): move to stark-backend vkey
+pub fn get_widths_and_interactions_from_vkey<SC>(
+    vk: MultiStarkVerifyingKey<SC>,
+) -> (Vec<usize>, Vec<usize>)
+where
+    SC: StarkGenericConfig,
+{
+    vk.inner
+        .per_air
+        .iter()
+        .map(|vk| {
+            let total_width = vk.params.width.preprocessed.unwrap_or(0)
+                + vk.params.width.cached_mains.iter().sum::<usize>()
+                + vk.params.width.common_main
+                + vk.params.width.after_challenge.iter().sum::<usize>()
+                    * <SC::Challenge as FieldExtensionAlgebra<Val<SC>>>::D;
+            (total_width, vk.symbolic_constraints.interactions.len())
+        })
+        .unzip()
 }

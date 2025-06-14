@@ -32,7 +32,6 @@ use crate::modular_chip::{
 };
 
 // TODO: this should be decided after e2 execution
-const MAX_INS_CAPACITY: usize = 1 << 22;
 
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
@@ -141,7 +140,6 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     start_offset,
                     bitwise_lu_chip.clone(),
                     range_checker.clone(),
-                    MAX_INS_CAPACITY,
                 );
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularAddSubRv32_32(addsub_chip),
@@ -158,7 +156,6 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     start_offset,
                     bitwise_lu_chip.clone(),
                     range_checker.clone(),
-                    MAX_INS_CAPACITY,
                 );
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularMulDivRv32_32(muldiv_chip),
@@ -194,7 +191,6 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                         start_offset,
                         bitwise_lu_chip.clone(),
                     ),
-                    MAX_INS_CAPACITY,
                     builder.system_base().memory_controller.helper(),
                 );
                 inventory.add_executor(
@@ -213,7 +209,6 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     start_offset,
                     bitwise_lu_chip.clone(),
                     range_checker.clone(),
-                    MAX_INS_CAPACITY,
                 );
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularAddSubRv32_48(addsub_chip),
@@ -230,7 +225,6 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                     start_offset,
                     bitwise_lu_chip.clone(),
                     range_checker.clone(),
-                    MAX_INS_CAPACITY,
                 );
                 inventory.add_executor(
                     ModularExtensionExecutor::ModularMulDivRv32_48(muldiv_chip),
@@ -265,7 +259,6 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                         start_offset,
                         bitwise_lu_chip.clone(),
                     ),
-                    MAX_INS_CAPACITY,
                     builder.system_base().memory_controller.helper(),
                 );
                 inventory.add_executor(

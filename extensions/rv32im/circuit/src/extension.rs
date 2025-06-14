@@ -24,9 +24,6 @@ use strum::IntoEnumIterator;
 
 use crate::{adapters::*, *};
 
-// TODO(ayush): this should be decided after e2 execution
-const MAX_INS_CAPACITY: usize = 1 << 23;
-
 /// Config for a VM with base extension and IO extension
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Rv32IConfig {
@@ -235,7 +232,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 bitwise_lu_chip.clone(),
                 BaseAluOpcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -257,7 +253,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 bitwise_lu_chip.clone(),
                 LessThanOpcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(lt_chip, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
@@ -281,7 +276,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 range_checker.clone(),
                 ShiftOpcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(shift_chip, ShiftOpcode::iter().map(|x| x.global_opcode()))?;
@@ -301,7 +295,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 range_checker.clone(),
                 Rv32LoadStoreOpcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -325,7 +318,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 Rv32LoadStoreAdapterStep::new(pointer_max_bits),
                 range_checker.clone(),
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -346,7 +338,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 BranchEqualOpcode::CLASS_OFFSET,
                 DEFAULT_PC_STEP,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -370,7 +361,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 bitwise_lu_chip.clone(),
                 BranchLessThanOpcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -390,7 +380,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 Rv32CondRdWriteAdapterStep::new(Rv32RdWriteAdapterStep::new()),
                 bitwise_lu_chip.clone(),
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -411,7 +400,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 bitwise_lu_chip.clone(),
                 range_checker.clone(),
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(jalr_chip, Rv32JalrOpcode::iter().map(|x| x.global_opcode()))?;
@@ -425,7 +413,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 Rv32AuipcCoreAir::new(bitwise_lu_chip.bus()),
             ),
             Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_lu_chip.clone()),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -512,7 +499,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
                 range_tuple_checker.clone(),
                 MulOpcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(mul_chip, MulOpcode::iter().map(|x| x.global_opcode()))?;
@@ -530,7 +516,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
                 bitwise_lu_chip.clone(),
                 range_tuple_checker.clone(),
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(mul_h_chip, MulHOpcode::iter().map(|x| x.global_opcode()))?;
@@ -553,7 +538,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
                 range_tuple_checker.clone(),
                 DivRemOpcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -605,7 +589,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
                 builder.system_config().memory_config.pointer_max_bits,
                 Rv32HintStoreOpcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
 

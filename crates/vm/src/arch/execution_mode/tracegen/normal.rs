@@ -91,7 +91,6 @@ where
                 opcode,
             });
         };
-        state.clk += 1;
 
         Ok(())
     }

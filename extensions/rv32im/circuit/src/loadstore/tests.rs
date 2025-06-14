@@ -40,7 +40,7 @@ type F = BabyBear;
 fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32LoadStoreChip<F> {
     let range_checker_chip = tester.range_checker();
 
-    Rv32LoadStoreChip::<F>::new(
+    let mut chip = Rv32LoadStoreChip::<F>::new(
         VmAirWrapper::new(
             Rv32LoadStoreAdapterAir::new(
                 tester.memory_bridge(),
@@ -55,9 +55,11 @@ fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32LoadStoreChip<F> {
             range_checker_chip.clone(),
             Rv32LoadStoreOpcode::CLASS_OFFSET,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
-    )
+    );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
+    chip
 }
 
 #[allow(clippy::too_many_arguments)]

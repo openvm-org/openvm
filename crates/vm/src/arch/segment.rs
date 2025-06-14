@@ -132,6 +132,7 @@ where
 
             // Fetch, decode and execute single instruction
             self.execute_instruction(state, &mut prev_backtrace)?;
+            state.clk += 1;
         }
         Ok(())
     }
@@ -224,7 +225,6 @@ where
         self.ctrl.should_suspend(state, &self.chip_complex)
     }
 
-    // TODO(ayush): this is not relevant for e1/e2 execution
     /// Generate ProofInput to prove the segment. Should be called after ::execute
     pub fn generate_proof_input<SC: StarkGenericConfig>(
         #[allow(unused_mut)] mut self,

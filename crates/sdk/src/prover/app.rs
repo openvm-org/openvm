@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use getset::Getters;
-use openvm_circuit::arch::{ContinuationVmProof, VmConfig};
-use openvm_stark_backend::{proof::Proof, Chip};
+use openvm_circuit::arch::{ContinuationVmProof, InsExecutorE1, VmConfig};
+use openvm_stark_backend::{config::Val, proof::Proof, Chip};
 use openvm_stark_sdk::engine::StarkFriEngine;
 use tracing::info_span;
 
@@ -45,7 +45,7 @@ impl<VC, E: StarkFriEngine<SC>> AppProver<VC, E> {
     pub fn generate_app_proof(&self, input: StdIn) -> ContinuationVmProof<SC>
     where
         VC: VmConfig<F>,
-        VC::Executor: Chip<SC>,
+        VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
         VC::Periphery: Chip<SC>,
     {
         assert!(
@@ -70,7 +70,7 @@ impl<VC, E: StarkFriEngine<SC>> AppProver<VC, E> {
     pub fn generate_app_proof_without_continuations(&self, input: StdIn) -> Proof<SC>
     where
         VC: VmConfig<F>,
-        VC::Executor: Chip<SC>,
+        VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
         VC::Periphery: Chip<SC>,
     {
         assert!(

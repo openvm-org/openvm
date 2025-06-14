@@ -582,8 +582,6 @@ impl<F: PrimeField32> SystemComplex<F> {
         if config.has_public_values_chip() {
             assert_eq!(inventory.executors().len(), Self::PV_EXECUTOR_IDX);
 
-            // TODO(ayush): this should be decided after e2 execution
-            const MAX_INS_CAPACITY: usize = 1 << 23;
             let chip = PublicValuesChip::new(
                 VmAirWrapper::new(
                     NativeAdapterAir::new(
@@ -600,7 +598,6 @@ impl<F: PrimeField32> SystemComplex<F> {
                     config.num_public_values,
                     config.max_constraint_degree as u32 - 1,
                 ),
-                MAX_INS_CAPACITY,
                 memory_controller.helper(),
             );
 

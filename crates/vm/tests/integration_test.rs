@@ -10,7 +10,8 @@ use openvm_circuit::{
         create_and_initialize_chip_complex,
         execution_control::ExecutionControl,
         execution_mode::{
-            e1::E1ExecutionControl, tracegen::TracegenExecutionControlWithSegmentation,
+            e1::E1ExecutionControl, metered::get_widths_and_interactions_from_vkey,
+            tracegen::TracegenExecutionControl,
         },
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         interpreter::InterpretedInstance,
@@ -133,9 +134,22 @@ fn test_vm_override_executor_height() {
     // Test getting heights.
     let vm_config = NativeConfig::aggregation(8, 3);
 
+    let vm = VirtualMachine::new(e, vm_config.clone());
+    let pk = vm.keygen();
+
     let executor = SingleSegmentVmExecutor::new(vm_config.clone());
+
+    let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+    let max_trace_heights = executor
+        .execute_metered(committed_exe.exe.clone(), vec![], widths, interactions)
+        .unwrap();
+
     let res = executor
-        .execute_and_compute_heights(committed_exe.exe.clone(), vec![])
+        .execute_with_max_heights_and_compute_heights(
+            committed_exe.exe.clone(),
+            vec![],
+            &max_trace_heights,
+        )
         .unwrap();
     // Memory trace heights are not computed during execution.
     assert_eq!(
@@ -199,7 +213,7 @@ fn test_vm_override_executor_height() {
         Some(overridden_heights),
     );
     let proof_input = executor
-        .execute_and_generate(committed_exe, vec![])
+        .execute_with_max_heights_and_generate(committed_exe, vec![], &max_trace_heights)
         .unwrap();
     let air_heights: Vec<_> = proof_input
         .per_air
@@ -242,8 +256,15 @@ fn test_vm_1_optional_air() {
         ];
 
         let program = Program::from_instructions(&instructions);
+
+        let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+        let segments = vm
+            .executor
+            .execute_metered(program.clone(), vec![], widths, interactions)
+            .unwrap();
+
         let result = vm
-            .execute_and_generate(program, vec![])
+            .execute_with_segments_and_generate(program, vec![], &segments)
             .expect("Failed to execute VM");
         assert_eq!(result.per_segment.len(), 1);
         let proof_input = result.per_segment.last().unwrap();
@@ -280,8 +301,14 @@ fn test_vm_public_values() {
             vm.engine.config.pcs(),
         ));
         let single_vm = SingleSegmentVmExecutor::new(config);
+
+        let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+        let max_trace_heights = single_vm
+            .execute_metered(program.clone().into(), vec![], widths, interactions)
+            .unwrap();
+
         let exe_result = single_vm
-            .execute_and_compute_heights(program, vec![])
+            .execute_with_max_heights_and_compute_heights(program, vec![], &max_trace_heights)
             .unwrap();
         assert_eq!(
             exe_result.public_values,
@@ -292,7 +319,7 @@ fn test_vm_public_values() {
             .concat(),
         );
         let proof_input = single_vm
-            .execute_and_generate(committed_exe, vec![])
+            .execute_with_max_heights_and_generate(committed_exe, vec![], &max_trace_heights)
             .unwrap();
         vm.engine
             .prove_then_verify(&pk, proof_input)
@@ -366,7 +393,15 @@ fn test_vm_1_persistent() {
 
     let program = Program::from_instructions(&instructions);
 
-    let result = vm.execute_and_generate(program.clone(), vec![]).unwrap();
+    let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+    let segments = vm
+        .executor
+        .execute_metered(program.clone(), vec![], widths, interactions)
+        .unwrap();
+
+    let result = vm
+        .execute_with_segments_and_generate(program.clone(), vec![], &segments)
+        .unwrap();
     {
         let proof_input = result.per_segment.into_iter().next().unwrap();
 
@@ -393,7 +428,9 @@ fn test_vm_1_persistent() {
         );
     }
 
-    let result_for_proof = vm.execute_and_generate(program, vec![]).unwrap();
+    let result_for_proof = vm
+        .execute_with_segments_and_generate(program, vec![], &segments)
+        .unwrap();
     let proofs = vm.prove(&pk, result_for_proof);
     vm.verify(&pk.get_vk(), proofs)
         .expect("Verification failed");
@@ -718,10 +755,28 @@ fn test_hint_load_1() {
     ];
 
     let program = Program::from_instructions(&instructions);
+    let input = vec![vec![F::ONE, F::TWO]];
 
-    let chip_complex =
-        create_and_initialize_chip_complex(&test_native_config(), program, None).unwrap();
-    let ctrl = TracegenExecutionControlWithSegmentation::new(chip_complex.air_names());
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let vm = VirtualMachine::new(engine, test_native_config());
+    let pk = vm.keygen();
+    let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+    let mut segments = vm
+        .executor
+        .execute_metered(program.clone(), input.clone(), widths, interactions)
+        .unwrap();
+    assert_eq!(segments.len(), 1);
+    let segment = segments.pop().unwrap();
+
+    let chip_complex = create_and_initialize_chip_complex(
+        &test_native_config(),
+        program,
+        None,
+        Some(&segment.trace_heights),
+    )
+    .unwrap();
+
+    let ctrl = TracegenExecutionControl::new(segment.num_cycles);
     let ctx = ExecutionControl::<F, NativeConfig>::initialize_context(&ctrl);
     let mut segment = VmSegmentExecutor::<F, NativeConfig, _>::new(
         chip_complex,
@@ -730,7 +785,7 @@ fn test_hint_load_1() {
         ctrl,
     );
 
-    let mut exec_state = VmSegmentState::new(0, 0, None, vec![vec![F::ONE, F::TWO]].into(), ctx);
+    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), ctx);
     segment.execute_from_state(&mut exec_state).unwrap();
 
     let streams = exec_state.streams;
@@ -760,10 +815,28 @@ fn test_hint_load_2() {
     ];
 
     let program = Program::from_instructions(&instructions);
+    let input = vec![vec![F::ONE, F::TWO], vec![F::TWO, F::ONE]];
 
-    let chip_complex =
-        create_and_initialize_chip_complex(&test_native_config(), program, None).unwrap();
-    let ctrl = TracegenExecutionControlWithSegmentation::new(chip_complex.air_names());
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let vm = VirtualMachine::new(engine, test_native_config());
+    let pk = vm.keygen();
+    let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+    let mut segments = vm
+        .executor
+        .execute_metered(program.clone(), input.clone(), widths, interactions)
+        .unwrap();
+    assert_eq!(segments.len(), 1);
+    let segment = segments.pop().unwrap();
+
+    let chip_complex = create_and_initialize_chip_complex(
+        &test_native_config(),
+        program,
+        None,
+        Some(&segment.trace_heights),
+    )
+    .unwrap();
+
+    let ctrl = TracegenExecutionControl::new(segment.num_cycles);
     let ctx = ExecutionControl::<F, NativeConfig>::initialize_context(&ctrl);
     let mut segment = VmSegmentExecutor::<F, NativeConfig, _>::new(
         chip_complex,
@@ -772,13 +845,7 @@ fn test_hint_load_2() {
         ctrl,
     );
 
-    let mut exec_state = VmSegmentState::new(
-        0,
-        0,
-        None,
-        vec![vec![F::ONE, F::TWO], vec![F::TWO, F::ONE]].into(),
-        ctx,
-    );
+    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), ctx);
     segment.execute_from_state(&mut exec_state).unwrap();
 
     let [read] = unsafe {

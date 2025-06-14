@@ -28,7 +28,7 @@ struct TestData {
 }
 
 fn create_test_chip(tester: &VmChipTestBuilder<F>) -> NativeLoadStoreChip<F, 1> {
-    NativeLoadStoreChip::<F, 1>::new(
+    let mut chip = NativeLoadStoreChip::<F, 1>::new(
         VmAirWrapper::new(
             NativeLoadStoreAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
             NativeLoadStoreCoreAir::new(NativeLoadStoreOpcode::CLASS_OFFSET),
@@ -37,9 +37,11 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> NativeLoadStoreChip<F, 1> 
             NativeLoadStoreAdapterStep::new(NativeLoadStoreOpcode::CLASS_OFFSET),
             NativeLoadStoreOpcode::CLASS_OFFSET,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
-    )
+    );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
+    chip
 }
 
 fn gen_test_data(rng: &mut StdRng, opcode: NativeLoadStoreOpcode) -> TestData {

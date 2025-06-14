@@ -1,19 +1,21 @@
-use openvm_instructions::riscv::RV32_IMM_AS;
+use openvm_instructions::riscv::{RV32_IMM_AS, RV32_MEMORY_AS};
 
 use crate::{
     arch::{execution_mode::E1E2ExecutionCtx, PUBLIC_VALUES_AIR_ID},
     system::memory::{dimensions::MemoryDimensions, CHUNK, CHUNK_BITS},
 };
 
+// TODO(ayush): move somewhere else
+const NATIVE_MEMORY_AS: u32 = 4;
+
 // TODO(ayush): can segmentation also be triggered by timestamp overflow? should that be tracked?
 #[derive(Debug)]
 pub struct MeteredCtxBounded {
     pub trace_heights: Vec<u32>,
+    pub is_trace_height_constant: Vec<bool>,
 
     continuations_enabled: bool,
     num_access_adapters: u8,
-    // TODO(ayush): take alignment into account for access adapters
-    #[allow(dead_code)]
     as_byte_alignment_bits: Vec<u8>,
     pub memory_dimensions: MemoryDimensions,
 
@@ -33,6 +35,7 @@ impl MeteredCtxBounded {
     ) -> Self {
         Self {
             trace_heights: vec![0; num_traces],
+            is_trace_height_constant: vec![false; num_traces],
             continuations_enabled,
             num_access_adapters,
             as_byte_alignment_bits,
@@ -84,28 +87,49 @@ impl MeteredCtxBounded {
         }
     }
 
-    fn update_adapter_heights_batch(&mut self, size: u32, num: u32) {
+    fn update_adapter_heights_batch(&mut self, size: u32, num: u32, align_bits: u8) {
         let adapter_offset = if self.continuations_enabled {
             PUBLIC_VALUES_AIR_ID + 2
         } else {
             PUBLIC_VALUES_AIR_ID + 1
         };
 
-        apply_adapter_updates_batch(size, num, &mut self.trace_heights[adapter_offset..]);
+        apply_adapter_updates_batch(
+            size,
+            num,
+            align_bits,
+            &mut self.trace_heights[adapter_offset..],
+        );
     }
 
-    fn update_adapter_heights(&mut self, size: u32) {
-        self.update_adapter_heights_batch(size, 1);
+    fn update_adapter_heights(&mut self, size: u32, align_bits: u8) {
+        self.update_adapter_heights_batch(size, 1, align_bits);
     }
 
     pub fn finalize_access_adapter_heights(&mut self) {
-        self.update_adapter_heights_batch(CHUNK as u32, self.leaf_indices.len() as u32);
+        // TODO(ayush): see if there's a better way to do this
+        let align_bits = if self.continuations_enabled {
+            self.as_byte_alignment_bits[RV32_MEMORY_AS as usize]
+        } else {
+            self.as_byte_alignment_bits[NATIVE_MEMORY_AS as usize]
+        };
+        self.update_adapter_heights_batch(CHUNK as u32, self.leaf_indices.len() as u32, align_bits);
     }
 
     pub fn trace_heights_if_finalized(&mut self) -> Vec<u32> {
         let num_leaves = self.leaf_indices.len() as u32;
+        let align_bits = if self.continuations_enabled {
+            self.as_byte_alignment_bits[RV32_MEMORY_AS as usize]
+        } else {
+            self.as_byte_alignment_bits[NATIVE_MEMORY_AS as usize]
+        };
         let mut access_adapter_updates = vec![0; self.num_access_adapters as usize];
-        apply_adapter_updates_batch(CHUNK as u32, num_leaves, &mut access_adapter_updates);
+        apply_adapter_updates_batch(
+            CHUNK as u32,
+            num_leaves,
+            align_bits,
+            &mut access_adapter_updates,
+        );
 
         let adapter_offset = if self.continuations_enabled {
             PUBLIC_VALUES_AIR_ID + 2
@@ -132,10 +156,15 @@ impl E1E2ExecutionCtx for MeteredCtxBounded {
             address_space != RV32_IMM_AS,
             "address space must not be immediate"
         );
-        debug_assert!(size.is_power_of_two(), "size must be a power of 2");
+        debug_assert!(
+            size.is_power_of_two(),
+            "size must be a power of 2, got {}",
+            size
+        );
 
         // Handle access adapter updates
-        self.update_adapter_heights(size);
+        let align_bits = self.as_byte_alignment_bits[address_space as usize];
+        self.update_adapter_heights(size, align_bits);
 
         // Handle merkle tree updates
         // TODO(ayush): use a looser upper bound
@@ -144,9 +173,9 @@ impl E1E2ExecutionCtx for MeteredCtxBounded {
     }
 }
 
-fn apply_adapter_updates_batch(size: u32, num: u32, trace_heights: &mut [u32]) {
+fn apply_adapter_updates_batch(size: u32, num: u32, align_bits: u8, trace_heights: &mut [u32]) {
     let size_bits = size.ilog2();
-    for adapter_bits in (3..=size_bits).rev() {
+    for adapter_bits in (align_bits as u32 + 1..=size_bits).rev() {
         trace_heights[adapter_bits as usize - 1] += num << (size_bits - adapter_bits + 1);
     }
 }

@@ -22,7 +22,10 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-use util::{tracing_read_or_imm_native, tracing_write_native, AS_NATIVE};
+use util::{
+    memory_read_or_imm_native_from_state, memory_write_native_from_state,
+    tracing_read_or_imm_native, tracing_write_native, AS_NATIVE,
+};
 
 use super::memory::{online::TracingMemory, MemoryAuxColsFactory};
 use crate::{
@@ -291,20 +294,10 @@ where
 
         let mut reads = [F::ZERO; R];
         if R >= 1 {
-            let [value] = unsafe {
-                state
-                    .memory
-                    .read::<F, 1>(e.as_canonical_u32(), b.as_canonical_u32())
-            };
-            reads[0] = value;
+            reads[0] = memory_read_or_imm_native_from_state(state, e.as_canonical_u32(), b);
         }
         if R >= 2 {
-            let [value] = unsafe {
-                state
-                    .memory
-                    .read::<F, 1>(f.as_canonical_u32(), c.as_canonical_u32())
-            };
-            reads[1] = value;
+            reads[1] = memory_read_or_imm_native_from_state(state, f.as_canonical_u32(), c);
         }
         reads
     }
@@ -321,12 +314,11 @@ where
         assert!(W <= 1);
 
         let &Instruction { a, d, .. } = instruction;
+
+        debug_assert_eq!(d.as_canonical_u32(), AS_NATIVE);
+
         if W >= 1 {
-            unsafe {
-                state
-                    .memory
-                    .write(d.as_canonical_u32(), a.as_canonical_u32(), data)
-            };
+            memory_write_native_from_state(state, a.as_canonical_u32(), data);
         }
     }
 }

@@ -4,8 +4,9 @@ use eyre::Result;
 use openvm_build::GuestOptions;
 use openvm_circuit::{
     arch::{
+        execution_mode::metered::get_widths_and_interactions_from_vkey,
         hasher::poseidon2::vm_poseidon2_hasher, ContinuationVmProof, ExecutionError,
-        GenerationError, SingleSegmentVmExecutor, SystemConfig, VmConfig, VmExecutor,
+        GenerationError, SingleSegmentVmExecutor, SystemConfig, VirtualMachine, VmConfig,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
@@ -44,11 +45,11 @@ use openvm_sdk::{
 use openvm_stark_backend::{keygen::types::LinearConstraint, p3_matrix::Matrix};
 use openvm_stark_sdk::{
     config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         setup_tracing, FriParameters,
     },
     engine::{StarkEngine, StarkFriEngine},
-    openvm_stark_backend::{p3_field::FieldAlgebra, Chip},
+    openvm_stark_backend::p3_field::FieldAlgebra,
     p3_baby_bear::BabyBear,
     p3_bn254_fr::Bn254Fr,
 };
@@ -81,18 +82,28 @@ fn verify_evm_halo2_proof_with_fallback(
     Ok(gas_cost)
 }
 
-fn run_leaf_verifier<VC: VmConfig<F>>(
-    leaf_vm: &SingleSegmentVmExecutor<F, VC>,
+fn run_leaf_verifier(
+    leaf_vm_config: &NativeConfig,
     leaf_committed_exe: Arc<VmCommittedExe<SC>>,
     verifier_input: LeafVmVerifierInput<SC>,
-) -> Result<Vec<F>, ExecutionError>
-where
-    VC::Executor: Chip<SC>,
-    VC::Periphery: Chip<SC>,
-{
-    let exe_result = leaf_vm.execute_and_compute_heights(
+) -> Result<Vec<F>, ExecutionError> {
+    let leaf_vm = VirtualMachine::new(default_engine(), leaf_vm_config.clone());
+    let leaf_vm_pk = leaf_vm.keygen();
+    let (widths, interactions) = get_widths_and_interactions_from_vkey(leaf_vm_pk.get_vk());
+
+    let executor = SingleSegmentVmExecutor::new(leaf_vm.config().clone());
+
+    let max_trace_heights = executor.execute_metered(
         leaf_committed_exe.exe.clone(),
         verifier_input.write_to_stream(),
+        widths,
+        interactions,
+    )?;
+
+    let exe_result = executor.execute_with_max_heights_and_compute_heights(
+        leaf_committed_exe.exe.clone(),
+        verifier_input.write_to_stream(),
+        &max_trace_heights,
     )?;
     let runtime_pvs: Vec<_> = exe_result
         .public_values
@@ -178,16 +189,29 @@ fn test_public_values_and_leaf_verification() {
 
     let agg_stark_config = agg_stark_config_for_test();
     let leaf_vm_config = agg_stark_config.leaf_vm_config();
-    let leaf_vm = SingleSegmentVmExecutor::new(leaf_vm_config);
     let leaf_committed_exe = app_pk.leaf_committed_exe.clone();
 
     let app_engine = BabyBearPoseidon2Engine::new(app_pk.app_vm_pk.fri_params);
-    let app_vm = VmExecutor::new(app_pk.app_vm_pk.vm_config.clone());
+    let app_vm = VirtualMachine::new(app_engine, app_pk.app_vm_pk.vm_config.clone());
+
+    let app_vm_pk = app_vm.keygen();
+    let (widths, interactions) = get_widths_and_interactions_from_vkey(app_vm_pk.get_vk());
+    let segments = app_vm
+        .executor
+        .execute_metered(app_committed_exe.exe.clone(), vec![], widths, interactions)
+        .unwrap();
+
     let app_vm_result = app_vm
-        .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![])
+        .executor
+        .execute_with_segments_and_generate_with_cached_program(
+            app_committed_exe.clone(),
+            vec![],
+            &segments,
+        )
         .unwrap();
     assert!(app_vm_result.per_segment.len() > 2);
 
+    let app_engine = BabyBearPoseidon2Engine::new(app_pk.app_vm_pk.fri_params);
     let mut app_vm_seg_proofs: Vec<_> = app_vm_result
         .per_segment
         .into_iter()
@@ -200,7 +224,7 @@ fn test_public_values_and_leaf_verification() {
     // Verify all segments except the last one.
     let (first_seg_final_pc, first_seg_final_mem_root) = {
         let runtime_pvs = run_leaf_verifier(
-            &leaf_vm,
+            &leaf_vm_config,
             leaf_committed_exe.clone(),
             LeafVmVerifierInput {
                 proofs: app_vm_seg_proofs.clone(),
@@ -221,7 +245,7 @@ fn test_public_values_and_leaf_verification() {
     };
 
     let pv_proof = UserPublicValuesProof::compute(
-        app_vm.config.system.memory_config.memory_dimensions(),
+        app_vm.config().system.memory_config.memory_dimensions(),
         NUM_PUB_VALUES,
         &vm_poseidon2_hasher(),
         app_vm_result.final_memory.as_ref().unwrap(),
@@ -231,7 +255,7 @@ fn test_public_values_and_leaf_verification() {
     // Verify the last segment with the correct public values root proof.
     {
         let runtime_pvs = run_leaf_verifier(
-            &leaf_vm,
+            &leaf_vm_config,
             leaf_committed_exe.clone(),
             LeafVmVerifierInput {
                 proofs: vec![app_last_proof.clone()],
@@ -257,7 +281,7 @@ fn test_public_values_and_leaf_verification() {
         let mut wrong_pv_root_proof = pv_root_proof.clone();
         wrong_pv_root_proof.public_values_commit[0] += F::ONE;
         let execution_result = run_leaf_verifier(
-            &leaf_vm,
+            &leaf_vm_config,
             leaf_committed_exe.clone(),
             LeafVmVerifierInput {
                 proofs: vec![app_last_proof.clone()],
@@ -276,7 +300,7 @@ fn test_public_values_and_leaf_verification() {
         let mut wrong_pv_root_proof = pv_root_proof.clone();
         wrong_pv_root_proof.sibling_hashes[0][0] += F::ONE;
         let execution_result = run_leaf_verifier(
-            &leaf_vm,
+            &leaf_vm_config,
             leaf_committed_exe.clone(),
             LeafVmVerifierInput {
                 proofs: vec![app_last_proof.clone()],
@@ -565,9 +589,28 @@ fn test_segmentation_retry() {
     let app_pk = AppProvingKey::keygen(app_config);
     let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
 
-    let app_vm = VmExecutor::new(app_pk.app_vm_pk.vm_config.clone());
+    let app_engine = BabyBearPoseidon2Engine::new(app_pk.app_vm_pk.fri_params);
+    let mut app_vm = VirtualMachine::new(app_engine, app_pk.app_vm_pk.vm_config.clone());
+
+    let app_vm_pk = app_vm.keygen();
+    let (widths, interactions) = get_widths_and_interactions_from_vkey(app_vm_pk.get_vk());
+    let segments = app_vm
+        .executor
+        .execute_metered(
+            app_committed_exe.exe.clone(),
+            vec![],
+            widths.clone(),
+            interactions.clone(),
+        )
+        .unwrap();
+
     let app_vm_result = app_vm
-        .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![])
+        .executor
+        .execute_with_segments_and_generate_with_cached_program(
+            app_committed_exe.clone(),
+            vec![],
+            &segments,
+        )
         .unwrap();
     assert!(app_vm_result.per_segment.len() > 2);
 
@@ -581,24 +624,41 @@ fn test_segmentation_retry() {
         .sum();
 
     // Re-run with a threshold that will be violated.
-    let mut app_vm = VmExecutor::new(app_pk.app_vm_pk.vm_config.clone());
     let num_airs = app_pk.app_vm_pk.vm_pk.per_air.len();
-    app_vm.set_trace_height_constraints(vec![LinearConstraint {
-        coefficients: vec![1; num_airs],
-        threshold: total_height as u32 - 1,
-    }]);
-    let app_vm_result =
-        app_vm.execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![]);
+    app_vm
+        .executor
+        .set_trace_height_constraints(vec![LinearConstraint {
+            coefficients: vec![1; num_airs],
+            threshold: total_height as u32 - 1,
+        }]);
+    let app_vm_result = app_vm
+        .executor
+        .execute_with_segments_and_generate_with_cached_program(
+            app_committed_exe.clone(),
+            vec![],
+            &segments,
+        );
     assert!(matches!(
         app_vm_result,
         Err(GenerationError::TraceHeightsLimitExceeded)
     ));
 
     // Try lowering segmentation threshold.
-    let config = VmConfig::<BabyBear>::system_mut(&mut app_vm.config);
+    let config = VmConfig::<BabyBear>::system_mut(&mut app_vm.executor.config);
     config.set_segmentation_strategy(config.segmentation_strategy.stricter_strategy());
+
+    app_vm.executor.set_trace_height_constraints(vec![]);
+    let segments = app_vm
+        .executor
+        .execute_metered(app_committed_exe.exe.clone(), vec![], widths, interactions)
+        .unwrap();
     let app_vm_result = app_vm
-        .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![])
+        .executor
+        .execute_with_segments_and_generate_with_cached_program(
+            app_committed_exe.clone(),
+            vec![],
+            &segments,
+        )
         .unwrap();
 
     // New max height should indeed by smaller.
