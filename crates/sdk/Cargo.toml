@@ -60,12 +60,12 @@ rrs-lib = { workspace = true }
 num-bigint = { workspace = true }
 
 [features]
-default = ["parallel", "jemalloc", "evm-verify"]
+default = ["parallel", "jemalloc"]
 evm-prove = [
-  "openvm-native-recursion/evm-prove", 
-  "openvm-native-recursion/static-verifier",
-  "dep:snark-verifier",
-  "dep:snark-verifier-sdk"
+    "openvm-continuations/static-verifier",
+    "openvm-native-recursion/evm-prove",
+    "dep:snark-verifier",
+    "dep:snark-verifier-sdk",
 ]
 evm-verify = [
     "evm-prove",

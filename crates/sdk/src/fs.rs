@@ -1,5 +1,5 @@
 use std::{
-    fs::{create_dir_all, read, read_to_string, write, File},
+    fs::{create_dir_all, read, write, File},
     path::Path,
 };
 
@@ -110,6 +110,8 @@ pub fn write_evm_proof_to_file<P: AsRef<Path>>(proof: EvmProof, path: P) -> Resu
 
 #[cfg(feature = "evm-prove")]
 pub fn read_evm_halo2_verifier_from_folder<P: AsRef<Path>>(folder: P) -> Result<EvmHalo2Verifier> {
+    use std::fs::read_to_string;
+
     let folder = folder
         .as_ref()
         .join("src")

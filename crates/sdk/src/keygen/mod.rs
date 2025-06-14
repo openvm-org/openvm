@@ -6,18 +6,11 @@ use openvm_circuit::{
     arch::{VirtualMachine, VmComplexTraceHeights, VmConfig},
     system::{memory::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
 };
-use openvm_continuations::{
-    static_verifier::StaticVerifierPvHandler,
-    verifier::{
-        internal::InternalVmVerifierConfig, leaf::LeafVmVerifierConfig, root::RootVmVerifierConfig,
-    },
+use openvm_continuations::verifier::{
+    internal::InternalVmVerifierConfig, leaf::LeafVmVerifierConfig, root::RootVmVerifierConfig,
 };
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::ir::DIGEST_SIZE;
-#[cfg(feature = "evm-prove")]
-use openvm_native_recursion::halo2::{
-    utils::Halo2ParamsReader, verifier::Halo2VerifierProvingKey, wrapper::Halo2WrapperProvingKey,
-};
 use openvm_stark_backend::{
     config::Val,
     p3_field::{FieldExtensionAlgebra, PrimeField32, TwoAdicField},
@@ -38,10 +31,19 @@ use openvm_stark_sdk::{
 };
 use serde::{Deserialize, Serialize};
 use tracing::info_span;
+#[cfg(feature = "evm-prove")]
+use {
+    crate::config::AggConfig,
+    openvm_continuations::static_verifier::StaticVerifierPvHandler,
+    openvm_native_recursion::halo2::{
+        utils::Halo2ParamsReader, verifier::Halo2VerifierProvingKey,
+        wrapper::Halo2WrapperProvingKey,
+    },
+};
 
 use crate::{
     commit::babybear_digest_to_bn254,
-    config::{AggConfig, AggStarkConfig, AppConfig},
+    config::{AggStarkConfig, AppConfig},
     keygen::perm::AirIdPermutation,
     prover::vm::types::VmProvingKey,
     NonRootCommittedExe, RootSC, F, SC,

@@ -1,21 +1,22 @@
-use std::{
-    io::Cursor,
-    iter::{once, repeat},
-};
+use std::io::Cursor;
 
 use eyre::Result;
-use itertools::Itertools;
 use openvm_continuations::{verifier::internal::types::VmStarkProof, SC};
-#[cfg(feature = "evm-prove")]
-use openvm_native_recursion::halo2::{wrapper::EvmVerifierByteCode, Fr, RawEvmProof};
 use openvm_stark_backend::proof::Proof;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
-use thiserror::Error;
+#[cfg(feature = "evm-prove")]
+use {
+    crate::commit::CommitBytes,
+    itertools::Itertools,
+    openvm_native_recursion::halo2::{wrapper::EvmVerifierByteCode, Fr, RawEvmProof},
+    std::iter::{once, repeat},
+    thiserror::Error,
+};
 
 use crate::{
     codec::{decode_vec, encode_slice, Decode, Encode},
-    commit::{AppExecutionCommit, CommitBytes},
+    commit::AppExecutionCommit,
 };
 
 /// Number of bytes in a Bn254Fr.
@@ -23,6 +24,7 @@ pub(crate) const BN254_BYTES: usize = 32;
 /// Number of Bn254Fr in `accumulator` field.
 pub const NUM_BN254_ACCUMULATOR: usize = 12;
 /// Number of Bn254Fr in `proof` field for a circuit with only 1 advice column.
+#[cfg(feature = "evm-prove")]
 const NUM_BN254_PROOF: usize = 43;
 
 #[cfg(feature = "evm-prove")]
