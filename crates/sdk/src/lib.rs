@@ -13,24 +13,27 @@ use openvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         instructions::exe::VmExe,
-        verify_segments, ContinuationVmProof, ExecutionError, InitFileGenerator,
-        VerifiedExecutionPayload, VmConfig, VmExecutor, VmExecutorResult, VmVerificationError,
-        CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
+        verify_segments, ContinuationVmProof, ExecutionError, InitFileGenerator, InsExecutorE1,
+        VerifiedExecutionPayload, VmConfig, VmExecutor, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
+        PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
     },
     system::{
         memory::{tree::public_values::extract_public_values, CHUNK},
         program::trace::{compute_exe_commit, VmCommittedExe},
     },
 };
+#[cfg(feature = "evm-prove")]
+pub use openvm_continuations::static_verifier::{
+    DefaultStaticVerifierPvHandler, StaticVerifierPvHandler,
+};
 use openvm_continuations::verifier::{
     common::types::VmVerifierPvs,
     internal::types::{InternalVmVerifierPvs, VmStarkProof},
     root::{types::RootVmVerifierInput, RootVmVerifierConfig},
 };
-pub use openvm_continuations::{
-    static_verifier::{DefaultStaticVerifierPvHandler, StaticVerifierPvHandler},
-    RootSC, C, F, SC,
-};
+// Re-exports:
+pub use openvm_continuations::{RootSC, C, F, SC};
+#[cfg(feature = "evm-prove")]
 use openvm_native_recursion::halo2::utils::Halo2ParamsReader;
 use openvm_stark_backend::{config::Val, proof::Proof};
 use openvm_stark_sdk::{
@@ -45,17 +48,16 @@ use openvm_transpiler::{
     transpiler::{Transpiler, TranspilerError},
     FromElf,
 };
-use prover::vm::types::VmProvingKey;
 #[cfg(feature = "evm-verify")]
 use snark_verifier_sdk::{evm::gen_evm_verifier_sol_code, halo2::aggregation::AggregationCircuit};
 
+#[cfg(feature = "evm-prove")]
+use crate::{config::AggConfig, keygen::AggProvingKey, prover::EvmHalo2Prover, types::EvmProof};
 use crate::{
-    config::{AggConfig, SdkVmConfig},
-    keygen::{AggProvingKey, AggStarkProvingKey},
+    config::{AggStarkConfig, SdkVmConfig},
+    keygen::{asm::program_to_asm, AggStarkProvingKey},
     prover::{AppProver, StarkProver},
 };
-#[cfg(feature = "evm-prove")]
-use crate::{prover::EvmHalo2Prover, types::EvmProof};
 
 pub mod codec;
 pub mod commit;
@@ -65,8 +67,6 @@ pub mod prover;
 
 mod stdin;
 pub use stdin::*;
-
-use crate::{config::AggStarkConfig, keygen::asm::program_to_asm};
 
 pub mod fs;
 pub mod types;
@@ -261,6 +261,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         Ok(())
     }
 
+    #[cfg(feature = "evm-prove")]
     pub fn agg_keygen(
         &self,
         config: AggConfig,
@@ -319,7 +320,7 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         inputs: StdIn,
     ) -> Result<VmStarkProof<SC>>
     where
-        VC::Executor: Chip<SC>,
+        VC::Executor: Chip<SC> + InsExecutorE1<F>,
         VC::Periphery: Chip<SC>,
     {
         let stark_prover =

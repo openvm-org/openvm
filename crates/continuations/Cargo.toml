@@ -8,17 +8,18 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-openvm-native-compiler = { workspace = true }
-openvm-native-recursion = { workspace = true, features = ["static-verifier"] }
-openvm-stark-backend = { workspace = true }
-openvm-stark-sdk = { workspace = true }
-openvm-circuit = { workspace = true }
+openvm-native-compiler.workspace = true
+openvm-native-recursion.workspace = true
+openvm-stark-backend.workspace = true
+openvm-stark-sdk.workspace = true
+openvm-circuit.workspace = true
 
-derivative = { workspace = true }
-serde = { workspace = true }
+derivative.workspace = true
+serde.workspace = true
 static_assertions.workspace = true
 
 [features]
 default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
+static-verifier = ["openvm-native-recursion/static-verifier"]
 test-utils = ["openvm-circuit/test-utils"]

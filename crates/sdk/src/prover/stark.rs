@@ -74,7 +74,7 @@ impl<VC, E: StarkFriEngine<SC>> StarkProver<VC, E> {
     pub fn generate_e2e_stark_proof(&self, input: StdIn) -> VmStarkProof<SC>
     where
         VC: VmConfig<F>,
-        VC::Executor: Chip<SC>,
+        VC::Executor: Chip<SC> + InsExecutorE1<F>,
         VC::Periphery: Chip<SC>,
     {
         let app_proof = self.app_prover.generate_app_proof(input);
