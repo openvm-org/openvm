@@ -30,9 +30,7 @@ where
 {
     type Ctx = TracegenCtx;
 
-    fn initialize_context(&self) -> Self::Ctx {
-        ()
-    }
+    fn initialize_context(&self) -> Self::Ctx {}
 
     fn should_suspend(
         &self,

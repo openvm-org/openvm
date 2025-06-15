@@ -1,5 +1,4 @@
 use openvm_stark_backend::{interaction::PermutationCheckBus, p3_field::PrimeField32};
-use rustc_hash::FxHashSet;
 
 use super::{controller::dimensions::MemoryDimensions, Equipartition, MemoryImage};
 mod air;
@@ -17,7 +16,6 @@ pub(super) use trace::SerialReceiver;
 
 pub struct MemoryMerkleChip<const CHUNK: usize, F> {
     pub air: MemoryMerkleAir<CHUNK>,
-    touched_nodes: FxHashSet<(usize, u32, u32)>,
     final_state: Option<FinalState<CHUNK, F>>,
     // TODO(AG): how are these two different? Doesn't one just end up being copied to the other?
     trace_height: Option<usize>,
@@ -40,15 +38,12 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     ) -> Self {
         assert!(memory_dimensions.as_height > 0);
         assert!(memory_dimensions.address_height > 0);
-        let mut touched_nodes = FxHashSet::default();
-        touched_nodes.insert((memory_dimensions.overall_height(), 0, 0));
         Self {
             air: MemoryMerkleAir {
                 memory_dimensions,
                 merkle_bus,
                 compression_bus,
             },
-            touched_nodes,
             final_state: None,
             trace_height: None,
             overridden_height: None,

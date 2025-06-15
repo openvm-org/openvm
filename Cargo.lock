@@ -5157,6 +5157,7 @@ dependencies = [
  "serde-big-array",
  "static_assertions",
  "strum",
+ "test-case",
  "tracing",
 ]
 

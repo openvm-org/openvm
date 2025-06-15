@@ -14,7 +14,7 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteAuxRecord,
+            MemoryWriteBytesAuxRecord,
         },
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
@@ -306,7 +306,7 @@ pub struct Rv32VecHeapTwoReadsAdapterRecord<
 
     pub reads1_aux: [MemoryReadAuxRecord; BLOCKS_PER_READ1],
     pub reads2_aux: [MemoryReadAuxRecord; BLOCKS_PER_READ2],
-    pub writes_aux: [MemoryWriteAuxRecord<WRITE_SIZE>; BLOCKS_PER_WRITE],
+    pub writes_aux: [MemoryWriteBytesAuxRecord<WRITE_SIZE>; BLOCKS_PER_WRITE],
 }
 
 pub struct Rv32VecHeapTwoReadsAdapterStep<

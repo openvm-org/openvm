@@ -632,7 +632,7 @@ where
         let per_segment = self.execute_and_then(
             exe,
             input,
-            |seg_idx, mut seg| {
+            |seg_idx, seg| {
                 // Note: this will only be Some on the last segment; otherwise it is
                 // already moved into next segment state
                 final_memory = Some(seg.chip_complex.memory_controller().memory_image().clone());

@@ -221,7 +221,7 @@ where
 {
     // The alignment of `[u8]` is always satisfiedƒ
     let record_buffer =
-        &mut *slice_from_raw_parts_mut(slice.as_mut_ptr() as *mut u8, slice.len() * size_of::<F>());
+        &mut *slice_from_raw_parts_mut(slice.as_mut_ptr() as *mut u8, size_of_val::<[F]>(*slice));
     let record: T = record_buffer.custom_borrow(metadata);
     record
 }
@@ -237,15 +237,21 @@ pub struct AdapterCoreLayout<AS, I = ()> {
     _phantom: PhantomData<AS>,
 }
 
+impl<AS, I: Default> Default for AdapterCoreLayout<AS, I> {
+    fn default() -> Self {
+        Self {
+            metadata: I::default(),
+            _phantom: PhantomData,
+        }
+    }
+}
+
 impl<AS, I> AdapterCoreLayout<AS, I> {
     pub fn new() -> Self
     where
         I: Default,
     {
-        Self {
-            metadata: I::default(),
-            _phantom: PhantomData,
-        }
+        Self::default()
     }
 
     pub fn with_metadata(metadata: I) -> Self {
@@ -262,9 +268,18 @@ pub type EmptyLayout<A> = AdapterCoreLayout<A, ()>;
 /// Minimal layout information that [MatrixRecordArena] requires for record allocation
 /// in scenarios involving chips that:
 /// - can have multiple rows per instruction
-pub struct MultiRowLayout<I> {
+pub struct MultiRowLayout<I = ()> {
     pub num_rows: u32,
     pub metadata: I,
+}
+
+impl<I: Default> Default for MultiRowLayout<I> {
+    fn default() -> Self {
+        Self {
+            num_rows: 1,
+            metadata: I::default(),
+        }
+    }
 }
 
 // TEMP[jpw]: buffer should be inside CTX

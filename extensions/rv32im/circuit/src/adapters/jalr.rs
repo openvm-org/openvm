@@ -9,7 +9,7 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteAuxRecord,
+            MemoryWriteBytesAuxRecord,
         },
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
@@ -155,7 +155,7 @@ pub struct Rv32JalrAdapterRecord {
     pub rd_ptr: u32,
 
     pub reads_aux: MemoryReadAuxRecord,
-    pub writes_aux: MemoryWriteAuxRecord<RV32_REGISTER_NUM_LIMBS>,
+    pub writes_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
 // This adapter reads from [b:4]_d (rs1) and writes to [a:4]_d (rd)
