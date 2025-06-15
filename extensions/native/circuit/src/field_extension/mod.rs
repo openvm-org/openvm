@@ -1,5 +1,6 @@
-use crate::adapters::{NativeVectorizedAdapterAir, NativeVectorizedAdapterStep};
 use openvm_circuit::arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper};
+
+use crate::adapters::{NativeVectorizedAdapterAir, NativeVectorizedAdapterStep};
 
 mod core;
 pub use core::*;

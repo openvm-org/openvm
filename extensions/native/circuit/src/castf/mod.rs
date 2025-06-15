@@ -1,5 +1,6 @@
-use crate::adapters::{ConvertAdapterAir, ConvertAdapterStep};
 use openvm_circuit::arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper};
+
+use crate::adapters::{ConvertAdapterAir, ConvertAdapterStep};
 
 mod core;
 pub use core::*;

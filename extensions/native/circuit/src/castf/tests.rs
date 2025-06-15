@@ -6,7 +6,6 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-
 use openvm_native_compiler::{conversion::AS, CastfOpcode};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -21,13 +20,12 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
+use super::{CastFChip, CastFCoreAir, CastFCoreCols, CastFStep, LIMB_BITS};
 use crate::{
     adapters::{ConvertAdapterAir, ConvertAdapterCols, ConvertAdapterStep},
     castf::run_castf,
     write_native_array, CastFAir, CASTF_MAX_BITS,
 };
-
-use super::{CastFChip, CastFCoreAir, CastFCoreCols, CastFStep, LIMB_BITS};
 
 const MAX_INS_CAPACITY: usize = 128;
 const READ_SIZE: usize = 1;

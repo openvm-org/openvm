@@ -1,5 +1,6 @@
-use crate::adapters::{NativeLoadStoreAdapterAir, NativeLoadStoreAdapterStep};
 use openvm_circuit::arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper};
+
+use crate::adapters::{NativeLoadStoreAdapterAir, NativeLoadStoreAdapterStep};
 
 mod core;
 pub use core::*;
