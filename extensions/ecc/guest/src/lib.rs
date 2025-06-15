@@ -32,8 +32,6 @@ pub enum SwBaseFunct7 {
     SwAddNe = 0,
     SwDouble,
     SwSetup,
-    HintDecompress,
-    HintNonQr,
 }
 
 impl SwBaseFunct7 {

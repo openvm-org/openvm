@@ -1,7 +1,6 @@
 use openvm_ecc_guest::{SwBaseFunct7, OPCODE, SW_FUNCT3};
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, PhantomDiscriminant,
-    VmOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, VmOpcode,
 };
 use openvm_instructions_derive::LocalOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -20,13 +19,6 @@ pub enum Rv32WeierstrassOpcode {
     SETUP_EC_ADD_NE,
     EC_DOUBLE,
     SETUP_EC_DOUBLE,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, FromRepr)]
-#[repr(u16)]
-pub enum EccPhantom {
-    HintDecompress = 0x40,
-    HintNonQr = 0x41,
 }
 
 #[derive(Default)]
@@ -58,26 +50,6 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
             let curve_idx =
                 ((dec_insn.funct7 as u8) / SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS) as usize;
             let curve_idx_shift = curve_idx * Rv32WeierstrassOpcode::COUNT;
-            if let Some(SwBaseFunct7::HintDecompress) = SwBaseFunct7::from_repr(base_funct7) {
-                assert_eq!(dec_insn.rd, 0);
-                return Some(TranspilerOutput::one_to_one(Instruction::phantom(
-                    PhantomDiscriminant(EccPhantom::HintDecompress as u16),
-                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
-                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
-                    curve_idx as u16,
-                )));
-            }
-            if let Some(SwBaseFunct7::HintNonQr) = SwBaseFunct7::from_repr(base_funct7) {
-                assert_eq!(dec_insn.rd, 0);
-                assert_eq!(dec_insn.rs1, 0);
-                assert_eq!(dec_insn.rs2, 0);
-                return Some(TranspilerOutput::one_to_one(Instruction::phantom(
-                    PhantomDiscriminant(EccPhantom::HintNonQr as u16),
-                    F::ZERO,
-                    F::ZERO,
-                    curve_idx as u16,
-                )));
-            }
             if base_funct7 == SwBaseFunct7::SwSetup as u8 {
                 let local_opcode = match dec_insn.rs2 {
                     0 => Rv32WeierstrassOpcode::SETUP_EC_DOUBLE,
