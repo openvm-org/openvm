@@ -32,7 +32,7 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::Rv32KeccakOpcode;
 use openvm_rv32im_circuit::adapters::{
-    memory_read_from_state, memory_write_from_state, read_rv32_register_from_state,
+    memory_read_from_state, memory_write, memory_write_from_state, read_rv32_register_from_state,
 };
 use utils::num_keccak_f;
 
