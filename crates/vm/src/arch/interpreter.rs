@@ -4,7 +4,7 @@ use openvm_stark_backend::p3_field::{Field, PrimeField32};
 use crate::{
     arch::{
         execution_control::ExecutionControl, execution_mode::E1E2ExecutionCtx, ExecutionError,
-        Streams, VmChipComplex, VmConfig, VmSegmentState,
+        Streams, VmConfig, VmSegmentState,
     },
     system::memory::{online::GuestMemory, AddressMap},
 };

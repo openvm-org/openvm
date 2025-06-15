@@ -7,7 +7,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    adapter::{AccessAdapterInventory, AdapterInventoryTraceCursor},
+    adapter::AccessAdapterInventory,
     offline_checker::MemoryBus,
     paged_vec::{AddressMap, PAGE_SIZE},
     Address, MemoryAddress, PagedVec,

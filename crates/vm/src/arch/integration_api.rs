@@ -221,7 +221,7 @@ where
 {
     // The alignment of `[u8]` is always satisfiedƒ
     let record_buffer =
-        &mut *slice_from_raw_parts_mut(slice.as_mut_ptr() as *mut u8, slice.len() * size_of::<F>());
+        &mut *slice_from_raw_parts_mut(slice.as_mut_ptr() as *mut u8, size_of_val::<[F]>(*slice));
     let record: T = record_buffer.custom_borrow(metadata);
     record
 }
@@ -237,15 +237,21 @@ pub struct AdapterCoreLayout<AS, I = ()> {
     _phantom: PhantomData<AS>,
 }
 
+impl<AS, I: Default> Default for AdapterCoreLayout<AS, I> {
+    fn default() -> Self {
+        Self {
+            metadata: I::default(),
+            _phantom: PhantomData,
+        }
+    }
+}
+
 impl<AS, I> AdapterCoreLayout<AS, I> {
     pub fn new() -> Self
     where
         I: Default,
     {
-        Self {
-            metadata: I::default(),
-            _phantom: PhantomData,
-        }
+        Self::default()
     }
 
     pub fn with_metadata(metadata: I) -> Self {
