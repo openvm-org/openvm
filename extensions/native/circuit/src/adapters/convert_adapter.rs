@@ -12,7 +12,7 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteAuxRecord,
+            MemoryWriteBytesAuxRecord,
         },
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
@@ -131,7 +131,7 @@ pub struct ConvertAdapterRecord<F, const READ_SIZE: usize, const WRITE_SIZE: usi
     pub b_ptr: F,
 
     pub read_aux: MemoryReadAuxRecord,
-    pub write_aux: MemoryWriteAuxRecord<WRITE_SIZE>,
+    pub write_aux: MemoryWriteBytesAuxRecord<WRITE_SIZE>,
 }
 
 #[derive(derive_new::new)]

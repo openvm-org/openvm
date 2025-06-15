@@ -10,7 +10,7 @@ use openvm_circuit::{
         TraceStep, VmStateMut,
     },
     system::memory::{
-        offline_checker::{MemoryReadAuxRecord, MemoryWriteAuxRecord},
+        offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
         online::TracingMemory,
         MemoryAuxColsFactory,
     },
@@ -62,7 +62,7 @@ pub struct KeccakVmRecord {
     pub len: u32,
 
     pub register_reads_aux: [MemoryReadAuxRecord; KECCAK_REGISTER_READS],
-    pub write_aux: [MemoryWriteAuxRecord<KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES],
+    pub write_aux: [MemoryWriteBytesAuxRecord<KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES],
 }
 
 pub struct KeccakVmRecordMut<'a> {

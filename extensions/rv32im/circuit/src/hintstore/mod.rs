@@ -13,7 +13,7 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteAuxRecord,
+            MemoryWriteBytesAuxRecord,
         },
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
@@ -297,7 +297,7 @@ pub struct Rv32HintStoreRecord {
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct Rv32HintStoreVar {
-    pub data_write_aux: MemoryWriteAuxRecord<RV32_REGISTER_NUM_LIMBS>,
+    pub data_write_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
     pub data: [u8; RV32_REGISTER_NUM_LIMBS],
 }
 

@@ -9,7 +9,7 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteAuxRecord,
+            MemoryWriteBytesAuxRecord,
         },
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
@@ -139,7 +139,7 @@ pub struct Rv32MultAdapterRecord {
     pub rs2_ptr: u32,
 
     pub reads_aux: [MemoryReadAuxRecord; 2],
-    pub writes_aux: MemoryWriteAuxRecord<RV32_REGISTER_NUM_LIMBS>,
+    pub writes_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
 #[derive(derive_new::new)]

@@ -16,7 +16,7 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteRecord,
+            MemoryWriteAuxRecord,
         },
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
@@ -589,7 +589,7 @@ pub struct FriReducedOpeningCommonRecord<F> {
 
     pub result_ptr: F,
     pub result: [F; EXT_DEG],
-    pub result_aux: MemoryWriteRecord<F, EXT_DEG>,
+    pub result_aux: MemoryWriteAuxRecord<F, EXT_DEG>,
 }
 
 // Part of record for each workload row that calculates the partial `result`
@@ -602,7 +602,7 @@ pub struct FriReducedOpeningWorkloadRowRecord<F> {
     pub a_ptr: F,
     pub b_ptr: F,
     pub result: [F; EXT_DEG],
-    pub a_aux: MemoryWriteRecord<F, 1>,
+    pub a_aux: MemoryWriteAuxRecord<F, 1>,
     pub b: [F; EXT_DEG],
     pub b_aux: MemoryReadAuxRecord,
 }

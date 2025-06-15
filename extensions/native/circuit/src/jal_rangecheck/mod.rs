@@ -11,7 +11,7 @@ use openvm_circuit::{
         VmStateMut,
     },
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryWriteAuxCols, MemoryWriteRecord},
+        offline_checker::{MemoryBridge, MemoryWriteAuxCols, MemoryWriteAuxRecord},
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
     },
@@ -143,7 +143,7 @@ pub struct JalRangeCheckRecord<F> {
     pub a: F,
     pub from_pc: u32,
     pub from_timestamp: u32,
-    pub write: MemoryWriteRecord<F, 1>,
+    pub write: MemoryWriteAuxRecord<F, 1>,
     pub b: F,
     pub c: F,
 }

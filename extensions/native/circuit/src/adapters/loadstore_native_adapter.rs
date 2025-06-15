@@ -12,7 +12,7 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteRecord,
+            MemoryWriteAuxRecord,
         },
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
@@ -185,7 +185,7 @@ pub struct NativeLoadStoreAdapterRecord<F, const NUM_CELLS: usize> {
     pub ptr_read: MemoryReadAuxRecord,
     // Will set `prev_timestamp` to u32::MAX if `HINT_STOREW`
     pub data_read: MemoryReadAuxRecord,
-    pub data_write: MemoryWriteRecord<F, NUM_CELLS>,
+    pub data_write: MemoryWriteAuxRecord<F, NUM_CELLS>,
 }
 
 #[derive(derive_new::new)]
