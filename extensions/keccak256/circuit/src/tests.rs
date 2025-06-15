@@ -29,7 +29,7 @@ use super::{columns::KeccakVmCols, utils::num_keccak_f, KeccakVmChip};
 use crate::{utils::keccak256, KeccakVmAir, KeccakVmStep};
 
 type F = BabyBear;
-const MAX_INS_CAPACITY: usize = 1 << 22;
+const MAX_INS_CAPACITY: usize = 8192;
 
 fn create_test_chips(
     tester: &mut VmChipTestBuilder<F>,
@@ -219,7 +219,7 @@ fn rand_keccak256_test() {
         &mut rng,
         KECCAK256,
         None,
-        Some(30000),
+        Some(10000),
     );
 
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();

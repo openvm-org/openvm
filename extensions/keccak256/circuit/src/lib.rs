@@ -32,7 +32,7 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::Rv32KeccakOpcode;
 use openvm_rv32im_circuit::adapters::{
-    memory_read_from_state, memory_write_from_state, read_rv32_register_from_state,
+    memory_read_from_state, memory_write, memory_write_from_state, read_rv32_register_from_state,
 };
 use utils::num_keccak_f;
 
@@ -119,9 +119,6 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
         let src = read_rv32_register_from_state(state, b.as_canonical_u32());
         let len = read_rv32_register_from_state(state, c.as_canonical_u32());
 
-        state
-            .ctx
-            .on_memory_operation(RV32_MEMORY_AS, src, len as u32);
         let message = unsafe {
             state
                 .memory
@@ -130,7 +127,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
         };
 
         let output = keccak256(&message);
-        memory_write_from_state(state, RV32_MEMORY_AS, dst, &output);
+        memory_write(state.memory, RV32_MEMORY_AS, dst, &output);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

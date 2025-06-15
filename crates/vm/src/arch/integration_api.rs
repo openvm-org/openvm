@@ -200,7 +200,8 @@ pub trait CustomBorrow<'a, T, I> {
     fn custom_borrow(&'a mut self, metadata: I) -> T;
 }
 
-/// If a struct implements `BorrowMut<T>`, then the same implementation can be used for `CustomBorrow`
+/// If a struct implements `BorrowMut<T>`, then the same implementation can be used for
+/// `CustomBorrow`
 impl<'a, T, I> CustomBorrow<'a, &'a mut T, I> for [u8]
 where
     [u8]: BorrowMut<T>,
@@ -343,16 +344,7 @@ where
 
 impl<F: Field> MatrixRecordArena<F> {
     pub fn alloc_single_row(&mut self) -> &mut [u8] {
-        let start = self.trace_offset;
-        self.trace_offset += self.width;
-        let row_slice = &mut self.trace_buffer[start..self.trace_offset];
-        let size = size_of_val(row_slice);
-        let ptr = row_slice as *mut [F] as *mut u8;
-        // SAFETY:
-        // - `ptr` is non-null
-        // - `size` is correct
-        // - alignment of `u8` is always satisfied
-        unsafe { &mut *std::ptr::slice_from_raw_parts_mut(ptr, size) }
+        self.alloc_buffer(1)
     }
 
     pub fn alloc_buffer(&mut self, num_rows: u32) -> &mut [u8] {
@@ -563,8 +555,6 @@ pub trait StepExecutorE1<F> {
         chip_index: usize,
     ) -> Result<()>;
 }
-
-const DEFAULT_RECORDS_CAPACITY: usize = 1 << 20;
 
 impl<F, A, S, RA> InsExecutorE1<F> for NewVmChipWrapper<F, A, S, RA>
 where

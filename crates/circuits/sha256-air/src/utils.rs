@@ -74,6 +74,13 @@ pub const SHA256_H: [u32; 8] = [
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
 ];
 
+/// Returns the number of blocks required to hash a message of length `len`
+pub fn get_sha256_num_blocks(len: u32) -> u32 {
+    // need to pad with one 1 bit, 64 bits for the message length and then pad until the length
+    // is divisible by [SHA256_BLOCK_BITS]
+    ((len << 3) as usize + 1 + 64).div_ceil(SHA256_BLOCK_BITS) as u32
+}
+
 /// Convert a u32 into a list of bits in little endian then convert each bit into a field element
 pub fn u32_into_bits_field<F: FieldAlgebra + Clone>(num: u32) -> [F; SHA256_WORD_BITS] {
     array::from_fn(|i| F::from_bool((num >> i) & 1 == 1))
