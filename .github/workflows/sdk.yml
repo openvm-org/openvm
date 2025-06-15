@@ -96,5 +96,5 @@ jobs:
         working-directory: crates/sdk
         run: |
           export RUST_BACKTRACE=1
-          cargo nextest run --cargo-profile=fast --test-threads=2 --features parallel
+          cargo nextest run --cargo-profile=fast --test-threads=1 --features parallel --no-fail-fast
 

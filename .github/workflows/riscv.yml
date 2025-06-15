@@ -56,4 +56,4 @@ jobs:
         working-directory: crates/toolchain/tests
         run: |
           rustup component add rust-src --toolchain nightly-2025-02-14
-          cargo nextest run --cargo-profile=fast --run-ignored only -- test_rv32im_riscv_vector_runtime
+          cargo nextest run --cargo-profile=fast --test-threads=1 --no-fail-fast --run-ignored only -- test_rv32im_riscv_vector_runtime 
