@@ -4630,11 +4630,9 @@ version = "1.2.1-rc.0"
 dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
- "eyre",
  "hex-literal 0.4.1",
  "lazy_static",
  "num-bigint 0.4.6",
- "num-integer",
  "num-traits",
  "once_cell",
  "openvm-algebra-circuit",
