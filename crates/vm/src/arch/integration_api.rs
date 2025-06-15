@@ -200,7 +200,8 @@ pub trait CustomBorrow<'a, T, I> {
     fn custom_borrow(&'a mut self, metadata: I) -> T;
 }
 
-/// If a struct implements `BorrowMut<T>`, then the same implementation can be used for `CustomBorrow`
+/// If a struct implements `BorrowMut<T>`, then the same implementation can be used for
+/// `CustomBorrow`
 impl<'a, T, I> CustomBorrow<'a, &'a mut T, I> for [u8]
 where
     [u8]: BorrowMut<T>,
@@ -224,7 +225,6 @@ where
     let record: T = record_buffer.custom_borrow(metadata);
     record
 }
-
 
 /// Minimal layout information that [MatrixRecordArena] requires for row allocation
 /// in scenarios involving chips that:
@@ -546,8 +546,6 @@ pub trait StepExecutorE1<F> {
         chip_index: usize,
     ) -> Result<()>;
 }
-
-const DEFAULT_RECORDS_CAPACITY: usize = 1 << 20;
 
 impl<F, A, S, RA> InsExecutorE1<F> for NewVmChipWrapper<F, A, S, RA>
 where

@@ -86,9 +86,9 @@ impl<'a> CustomBorrow<'a, Sha256VmRecordMut<'a>, Sha256VmMetadata> for [u8] {
             rest.split_at_mut_unchecked((metadata.num_blocks as usize) * SHA256_BLOCK_CELLS)
         };
 
-        // Using `align_to_mut` to make sure the returned slice is properly aligned to `MemoryReadAuxRecord`
-        // Additionally, Rust's subslice operation (a few lines below) will verify that the buffer
-        // has enough capacity
+        // Using `align_to_mut` to make sure the returned slice is properly aligned to
+        // `MemoryReadAuxRecord` Additionally, Rust's subslice operation (a few lines below)
+        // will verify that the buffer has enough capacity
         let (_, read_aux_buf, _) = unsafe { rest.align_to_mut::<MemoryReadAuxRecord>() };
         Sha256VmRecordMut {
             inner: record_buf.borrow_mut(),
