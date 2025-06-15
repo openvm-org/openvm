@@ -1,5 +1,5 @@
 use alloc::vec::Vec;
-use core::ops::{Add, AddAssign, Mul};
+use core::ops::{Add, Mul};
 
 use ecdsa_core::{
     self,
@@ -12,10 +12,11 @@ use ecdsa_core::{
     EncodedPoint, Error, RecoveryId, Result, Signature, SignatureSize,
 };
 use elliptic_curve::{
-    generic_array::ArrayLength,
+    bigint::CheckedAdd,
+    generic_array::{typenum::Unsigned, ArrayLength},
     sec1::{FromEncodedPoint, ModulusSize, Tag, ToEncodedPoint},
     subtle::{Choice, ConditionallySelectable, CtOption},
-    CurveArithmetic, FieldBytesSize, PrimeCurve,
+    CurveArithmetic, FieldBytes, FieldBytesEncoding, FieldBytesSize, PrimeCurve,
 };
 use openvm_algebra_guest::{DivUnsafe, IntMod, Reduce};
 
@@ -378,12 +379,14 @@ where
     Coordinate<C>: IntMod,
     C::Scalar: IntMod + Reduce,
 {
+    /// ## Assumption
+    /// To use this implementation, the `Signature<C>`, `Coordinate<C>`, and `FieldBytes<C>` should
+    /// all be encoded in big endian bytes. The implementation also assumes that
+    /// `Scalar::<C>::NUM_LIMBS <= FieldBytesSize::<C>::USIZE <= Coordinate::<C>::NUM_LIMBS`.
+    ///
     /// Ref: <https://github.com/RustCrypto/signatures/blob/85c984bcc9927c2ce70c7e15cbfe9c6936dd3521/ecdsa/src/recovery.rs#L297>
     ///
     /// Recovery does not require additional signature verification: <https://github.com/RustCrypto/signatures/pull/831>
-    ///
-    /// ## Panics
-    /// If the signature is invalid or public key cannot be recovered from the given input.
     #[allow(non_snake_case)]
     pub fn recover_from_prehash_noverify(
         prehash: &[u8],
@@ -411,16 +414,37 @@ where
         }
 
         // Perf: don't use bits2field from ::ecdsa
-        let z = Scalar::<C>::from_be_bytes(bits2field::<C>(prehash).unwrap().as_ref());
+        let prehash_bytes = bits2field::<C>(prehash)?;
+        // If prehash is longer than Scalar::NUM_LIMBS, take leftmost bytes
+        let trim = prehash_bytes.len().saturating_sub(Scalar::<C>::NUM_LIMBS);
+        // from_be_bytes still works if len < Scalar::NUM_LIMBS
+        // we don't need to reduce because IntMod is up to modular equivalence
+        let z = Scalar::<C>::from_be_bytes(&prehash_bytes[..prehash_bytes.len() - trim]);
 
         // `r` is in the Scalar field, we now possibly add C::ORDER to it to get `x`
         // in the Coordinate field.
-        let mut x = Coordinate::<C>::from_le_bytes(r.as_le_bytes());
+        // We take some extra care for the case when FieldBytesSize<C> may be larger than
+        // Scalar::<C>::NUM_LIMBS.
+        let mut r_bytes = {
+            let mut r_bytes = FieldBytes::<C>::default();
+            assert!(FieldBytesSize::<C>::USIZE >= Scalar::<C>::NUM_LIMBS);
+            let offset = r_bytes.len().saturating_sub(r_be.len());
+            r_bytes[offset..].copy_from_slice(r_be);
+            r_bytes
+        };
         if recovery_id.is_x_reduced() {
-            // Copy from slice in case Coordinate has more bytes than Scalar
-            let order = Coordinate::<C>::from_le_bytes(Scalar::<C>::MODULUS.as_ref());
-            x.add_assign(order);
+            match Option::<C::Uint>::from(
+                C::Uint::decode_field_bytes(&r_bytes).checked_add(&C::ORDER),
+            ) {
+                Some(restored) => r_bytes = restored.encode_field_bytes(),
+                // No reduction should happen here if r was reduced
+                None => {
+                    return Err(Error::new());
+                }
+            };
         }
+        assert!(FieldBytesSize::<C>::USIZE <= Coordinate::<C>::NUM_LIMBS);
+        let x = Coordinate::<C>::from_be_bytes(&r_bytes);
         let rec_id = recovery_id.to_byte();
         // The point R decompressed from x-coordinate `r`
         let R: C::Point = FromCompressed::decompress(x, &rec_id).ok_or_else(Error::new)?;
@@ -463,8 +487,12 @@ where
     }
 
     // Perf: don't use bits2field from ::ecdsa
-    let z =
-        <C as IntrinsicCurve>::Scalar::from_be_bytes(bits2field::<C>(prehash).unwrap().as_ref());
+    let prehash_bytes = bits2field::<C>(prehash)?;
+    // If prehash is longer than Scalar::NUM_LIMBS, take leftmost bytes
+    let trim = prehash_bytes.len().saturating_sub(Scalar::<C>::NUM_LIMBS);
+    // from_be_bytes still works if len < Scalar::NUM_LIMBS
+    // we don't need to reduce because IntMod is up to modular equivalence
+    let z = Scalar::<C>::from_be_bytes(&prehash_bytes[..prehash_bytes.len() - trim]);
 
     let u1 = z.div_unsafe(&s);
     let u2 = (&r).div_unsafe(&s);

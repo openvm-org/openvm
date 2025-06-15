@@ -11,14 +11,15 @@ repository.workspace = true
 openvm-stark-sdk.workspace = true
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-transpiler.workspace = true
-openvm-algebra-circuit.workspace = true
 openvm-algebra-transpiler.workspace = true
 openvm-ecc-transpiler.workspace = true
 openvm-ecc-circuit.workspace = true
 openvm-rv32im-transpiler.workspace = true
-openvm-keccak256-transpiler.workspace = true
 openvm-toolchain-tests = { path = "../../../crates/toolchain/tests" }
 openvm-sdk.workspace = true
+serde.workspace = true
+serde_with.workspace = true
+toml.workspace = true
 eyre.workspace = true
 hex-literal.workspace = true
 num-bigint.workspace = true
