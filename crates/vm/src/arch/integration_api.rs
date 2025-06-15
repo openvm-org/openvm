@@ -221,7 +221,7 @@ where
 {
     // The alignment of `[u8]` is always satisfiedƒ
     let record_buffer =
-        &mut *slice_from_raw_parts_mut(slice.as_mut_ptr() as *mut u8, size_of_val(slice));
+        &mut *slice_from_raw_parts_mut(slice.as_mut_ptr() as *mut u8, slice.len() * size_of::<F>());
     let record: T = record_buffer.custom_borrow(metadata);
     record
 }

@@ -329,11 +329,12 @@ where
         debug_assert!(R <= 2);
         let &Instruction { b, c, e, f, .. } = instruction;
 
-        array::from_fn(|i| {
+        let reads = array::from_fn(|i| {
             let ptr_or_imm = if i == 0 { b } else { c };
             let addr_space = if i == 0 { e } else { f };
             memory_read_or_imm_native_from_state(state, addr_space.as_canonical_u32(), ptr_or_imm)
-        })
+        });
+        reads
     }
 
     #[inline(always)]

@@ -425,7 +425,7 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
         data: &[T],
     ) {
         let start = (ptr as usize) * size_of::<T>();
-        let len = size_of_val(data);
+        let len = data.len() * size_of::<T>();
 
         self.paged_vecs
             .get_unchecked_mut((addr_space - self.as_offset) as usize)

@@ -6,6 +6,7 @@ use openvm_circuit_primitives::{
     utils::{not, select},
 };
 use openvm_stark_backend::{p3_air::AirBuilder, p3_field::FieldAlgebra};
+use rand::{rngs::StdRng, Rng};
 
 use super::{Sha256DigestCols, Sha256RoundCols};
 

@@ -26,7 +26,9 @@ where
 {
     type Ctx = E1Ctx;
 
-    fn initialize_context(&self) -> Self::Ctx {}
+    fn initialize_context(&self) -> Self::Ctx {
+        ()
+    }
 
     fn should_suspend(
         &self,
