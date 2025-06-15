@@ -16,7 +16,7 @@ use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_rv32_adapters::{Rv32IsEqualModAdapterChip, Rv32VecHeapAdapterChip};
 use openvm_stark_backend::p3_field::PrimeField32;
-use rand::{rngs::StdRng, SeedableRng};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
@@ -263,6 +263,7 @@ pub(crate) mod phantom {
     use openvm_instructions::{riscv::RV32_MEMORY_AS, PhantomDiscriminant};
     use openvm_rv32im_circuit::adapters::unsafe_read_rv32_register;
     use openvm_stark_backend::p3_field::PrimeField32;
+    use rand::{rngs::StdRng, SeedableRng};
 
     use super::{find_non_qr, mod_sqrt};
 
@@ -353,7 +354,15 @@ pub(crate) mod phantom {
 
     impl NonQrHintSubEx {
         pub fn new(supported_moduli: Vec<BigUint>) -> Self {
-            let non_qrs = supported_moduli.iter().map(find_non_qr).collect();
+            // Use deterministic seed so that the non-QR are deterministic between different
+            // instances of the VM. The seed determines the runtime of Tonelli-Shanks, if the
+            // algorithm is necessary, which affects the time it takes to construct and initialize
+            // the VM but does not affect the runtime.
+            let mut rng = StdRng::from_seed([0u8; 32]);
+            let non_qrs = supported_moduli
+                .iter()
+                .map(|modulus| find_non_qr(modulus, &mut rng))
+                .collect();
             Self {
                 supported_moduli,
                 non_qrs,
@@ -457,7 +466,7 @@ pub fn mod_sqrt(x: &BigUint, modulus: &BigUint, non_qr: &BigUint) -> Option<BigU
 }
 
 // Returns a non-quadratic residue in the field
-pub fn find_non_qr(modulus: &BigUint) -> BigUint {
+pub fn find_non_qr(modulus: &BigUint, rng: &mut impl Rng) -> BigUint {
     if modulus % 4u32 == BigUint::from(3u8) {
         // p = 3 mod 4 then -1 is a quadratic residue
         modulus - BigUint::one()
@@ -466,7 +475,6 @@ pub fn find_non_qr(modulus: &BigUint) -> BigUint {
         // since 2^((p-1)/2) = (-1)^((p^2-1)/8)
         BigUint::from_u8(2u8).unwrap()
     } else {
-        let mut rng = StdRng::from_entropy();
         let mut non_qr = rng.gen_biguint_range(
             &BigUint::from_u8(2).unwrap(),
             &(modulus - BigUint::from_u8(1).unwrap()),
