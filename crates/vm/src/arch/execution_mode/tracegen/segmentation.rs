@@ -7,7 +7,7 @@ use crate::{
         execution_control::ExecutionControl, ExecutionError, ExecutionState, InstructionExecutor,
         VmChipComplex, VmConfig, VmSegmentState,
     },
-    system::memory::{MemoryImage, INITIAL_TIMESTAMP},
+    system::memory::INITIAL_TIMESTAMP,
 };
 
 /// Check segment every 100 instructions.

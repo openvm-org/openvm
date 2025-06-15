@@ -120,7 +120,7 @@ where
     F: PrimeField32,
 {
     let (t_prev, data) = timed_read(memory, ptr);
-    *prev_timestamp = t_prev.into();
+    *prev_timestamp = t_prev;
     data
 }
 
@@ -136,7 +136,7 @@ pub fn tracing_write_native<F, const BLOCK_SIZE: usize>(
     F: PrimeField32,
 {
     let (t_prev, data_prev) = timed_write(memory, ptr, vals);
-    *prev_timestamp = t_prev.into();
+    *prev_timestamp = t_prev;
     *prev_data = data_prev;
 }
 
