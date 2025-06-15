@@ -20,9 +20,12 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_rv32im_circuit::adapters::{
-    memory_read_from_state, memory_write_from_state, read_rv32_register_from_state,
+    memory_read_from_state, memory_write, memory_write_from_state, read_rv32_register,
+    read_rv32_register_from_state,
 };
-use openvm_sha256_air::{Sha256StepHelper, SHA256_BLOCK_BITS, SHA256_ROWS_PER_BLOCK};
+use openvm_sha256_air::{
+    get_sha256_num_blocks, Sha256StepHelper, SHA256_BLOCK_BITS, SHA256_ROWS_PER_BLOCK,
+};
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use sha2::{Digest, Sha256};
@@ -99,16 +102,13 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         debug_assert_eq!(local_opcode, Rv32Sha256Opcode::SHA256.local_usize());
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
-        let dst = read_rv32_register_from_state(state, a.as_canonical_u32());
-        let src = read_rv32_register_from_state(state, b.as_canonical_u32());
-        let len = read_rv32_register_from_state(state, c.as_canonical_u32());
+        let dst = read_rv32_register(state.memory, a.as_canonical_u32());
+        let src = read_rv32_register(state.memory, b.as_canonical_u32());
+        let len = read_rv32_register(state.memory, c.as_canonical_u32());
 
         debug_assert!(src + len <= (1 << self.pointer_max_bits));
         debug_assert!(dst < (1 << self.pointer_max_bits));
 
-        state
-            .ctx
-            .on_memory_operation(RV32_MEMORY_AS, src, len as u32);
         let message = unsafe {
             state
                 .memory
@@ -117,7 +117,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         };
 
         let output = sha256_solve(&message);
-        memory_write_from_state(state, RV32_MEMORY_AS, dst, &output);
+        memory_write(state.memory, RV32_MEMORY_AS, dst, &output);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -146,9 +146,8 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         let dst = read_rv32_register_from_state(state, a.as_canonical_u32());
         let src = read_rv32_register_from_state(state, b.as_canonical_u32());
         let len = read_rv32_register_from_state(state, c.as_canonical_u32());
-        // need to pad with one 1 bit, 64 bits for the message length and then pad until the length
-        // is divisible by [SHA256_BLOCK_BITS]
-        let num_blocks = ((len << 3) as usize + 1 + 64).div_ceil(SHA256_BLOCK_BITS);
+
+        let num_blocks = get_sha256_num_blocks(len) as usize;
 
         // we will read [num_blocks] * [SHA256_BLOCK_CELLS] cells but only [len] cells will be used
         debug_assert!(

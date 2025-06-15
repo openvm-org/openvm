@@ -20,7 +20,8 @@ use openvm_instructions::{
 };
 use openvm_rv32im_circuit::adapters::{read_rv32_register, tracing_read, tracing_write};
 use openvm_sha256_air::{
-    get_flag_pt_array, Sha256StepHelper, SHA256_BLOCK_BITS, SHA256_H, SHA256_ROWS_PER_BLOCK,
+    get_flag_pt_array, get_sha256_num_blocks, Sha256StepHelper, SHA256_BLOCK_BITS, SHA256_H,
+    SHA256_ROWS_PER_BLOCK,
 };
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
 use openvm_stark_backend::{
@@ -46,7 +47,7 @@ pub struct Sha256VmMetadata {
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug, Clone)]
-pub struct Sha256VmRecord {
+pub struct Sha256VmRecordHeader {
     pub from_pc: u32,
     pub timestamp: u32,
     pub rd_ptr: u32,
@@ -61,7 +62,7 @@ pub struct Sha256VmRecord {
 }
 
 pub struct Sha256VmRecordMut<'a> {
-    pub inner: &'a mut Sha256VmRecord,
+    pub inner: &'a mut Sha256VmRecordHeader,
     // Having a continuous slice of the input is useful for fast hashing in `execute`
     pub input: &'a mut [u8],
     pub read_aux: &'a mut [MemoryReadAuxRecord],
@@ -76,11 +77,18 @@ pub struct Sha256VmRecordMut<'a> {
 impl<'a> CustomBorrow<'a, Sha256VmRecordMut<'a>, Sha256VmMetadata> for [u8] {
     fn custom_borrow(&'a mut self, metadata: Sha256VmMetadata) -> Sha256VmRecordMut<'a> {
         let (record_buf, rest) =
-            unsafe { self.split_at_mut_unchecked(size_of::<Sha256VmRecord>()) };
+            unsafe { self.split_at_mut_unchecked(size_of::<Sha256VmRecordHeader>()) };
 
+        // Using `split_at_mut_unchecked` for perf reasons
+        // input is a slice of `u8`'s of length `SHA256_BLOCK_CELLS * num_blocks`, so the alignment
+        // is always satisfied
         let (input, rest) = unsafe {
             rest.split_at_mut_unchecked((metadata.num_blocks as usize) * SHA256_BLOCK_CELLS)
         };
+
+        // Using `align_to_mut` to make sure the returned slice is properly aligned to
+        // `MemoryReadAuxRecord` Additionally, Rust's subslice operation (a few lines below)
+        // will verify that the buffer has enough capacity
         let (_, read_aux_buf, _) = unsafe { rest.align_to_mut::<MemoryReadAuxRecord>() };
         Sha256VmRecordMut {
             inner: record_buf.borrow_mut(),
@@ -123,9 +131,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
         // Reading the length first to allocate a record of correct size
         let len = read_rv32_register(state.memory.data(), c.as_canonical_u32());
 
-        // need to pad with one 1 bit, 64 bits for the message length and then pad until the length
-        // is divisible by [SHA256_BLOCK_BITS]
-        let num_blocks = ((len << 3) as usize + 1 + 64).div_ceil(SHA256_BLOCK_BITS) as u32;
+        let num_blocks = get_sha256_num_blocks(len);
         let record = arena.alloc(MultiRowLayout {
             num_rows: num_blocks * SHA256_ROWS_PER_BLOCK as u32,
             metadata: Sha256VmMetadata { num_blocks },
@@ -223,7 +229,8 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Sha256VmStep {
                 sizes.push((0, num_blocks_so_far));
                 break;
             } else {
-                let record: &Sha256VmRecord = unsafe { get_record_from_slice(&mut trace, ()) };
+                let record: &Sha256VmRecordHeader =
+                    unsafe { get_record_from_slice(&mut trace, ()) };
                 let num_blocks = ((record.len << 3) as usize + 1 + 64).div_ceil(SHA256_BLOCK_BITS);
                 let (chunk, rest) =
                     trace.split_at_mut(SHA256VM_WIDTH * SHA256_ROWS_PER_BLOCK * num_blocks);
@@ -341,7 +348,7 @@ impl Sha256VmStep {
     fn fill_block_trace<F: PrimeField32>(
         &self,
         block_slice: &mut [F],
-        record: &Sha256VmRecord,
+        record: &Sha256VmRecordHeader,
         read_aux_records: &[MemoryReadAuxRecord],
         input: &[u8],
         padded_input: &[u8],
