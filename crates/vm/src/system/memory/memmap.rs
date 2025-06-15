@@ -1,3 +1,4 @@
+use bitvec::prelude::*;
 use std::{fmt::Debug, marker::PhantomData, mem::MaybeUninit, ptr::copy_nonoverlapping};
 
 use itertools::{zip_eq, Itertools};
@@ -15,7 +16,7 @@ pub type Address = (u32, u32);
 #[derive(Debug)]
 pub struct MmapWrapper {
     mmap: MmapMut,
-    accessed: Vec<bool>, // Track which regions have been accessed
+    accessed: BitVec, // Track which pages have been accessed
 }
 
 impl Clone for MmapWrapper {
@@ -52,17 +53,12 @@ impl<T: Copy> Iterator for MmapWrapperIter<'_, T> {
     fn next(&mut self) -> Option<Self::Item> {
         let size = std::mem::size_of::<T>();
         while self.current_index + size <= self.wrapper.len() {
-            // Check if any byte in this region has been accessed
-            let region_accessed = self.wrapper.accessed
-                [self.current_index..self.current_index + size]
-                .iter()
-                .any(|&x| x);
-
+            let page = self.current_index / PAGE_SIZE;
             let value = self.wrapper.get::<T>(self.current_index);
             let index = self.current_index / size;
             self.current_index += size;
 
-            if region_accessed {
+            if self.wrapper.accessed[page] {
                 return Some((index, value));
             }
         }
@@ -74,9 +70,10 @@ impl MmapWrapper {
     pub const CELL_STRIDE: usize = 1;
 
     pub fn new(len: usize) -> Self {
+        let num_pages = (len + PAGE_SIZE - 1) / PAGE_SIZE;
         Self {
             mmap: MmapMut::map_anon(len).unwrap(),
-            accessed: vec![false; len], // TODO: can reduce length to len/cell_size if having a cell_size field
+            accessed: bitvec![0; num_pages],
         }
     }
 
@@ -156,9 +153,11 @@ impl MmapWrapper {
     #[inline(always)]
     pub fn set<BLOCK: Copy>(&mut self, start: usize, values: &BLOCK) {
         let size = std::mem::size_of::<BLOCK>();
-        // Mark the region as accessed
-        for i in start..start + size {
-            self.accessed[i] = true;
+        // Mark the pages as accessed
+        let start_page = start / PAGE_SIZE;
+        let end_page = (start + size - 1) / PAGE_SIZE;
+        for page in start_page..=end_page {
+            self.accessed.set(page, true);
         }
         unsafe {
             copy_nonoverlapping(
@@ -176,9 +175,11 @@ impl MmapWrapper {
     #[inline(always)]
     pub fn replace<BLOCK: Copy>(&mut self, from: usize, values: &BLOCK) -> BLOCK {
         let size = std::mem::size_of::<BLOCK>();
-        // Mark the region as accessed
-        for i in from..from + size {
-            self.accessed[i] = true;
+        // Mark the pages as accessed
+        let start_page = from / PAGE_SIZE;
+        let end_page = (from + size - 1) / PAGE_SIZE;
+        for page in start_page..=end_page {
+            self.accessed.set(page, true);
         }
         // Create an uninitialized array of MaybeUninit<BLOCK>
         let mut result: MaybeUninit<BLOCK> = MaybeUninit::uninit();
