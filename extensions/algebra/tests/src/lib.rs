@@ -26,7 +26,9 @@ mod tests {
         config
     }
 
-    fn test_rv32modularwithfp2_config(moduli_with_names: Vec<(String, BigUint)>) -> Rv32ModularWithFp2Config {
+    fn test_rv32modularwithfp2_config(
+        moduli_with_names: Vec<(String, BigUint)>,
+    ) -> Rv32ModularWithFp2Config {
         let mut config = Rv32ModularWithFp2Config::new(moduli_with_names);
         config.system = test_system_config().with_continuations();
         config

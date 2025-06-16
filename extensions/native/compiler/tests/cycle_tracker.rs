@@ -1,4 +1,4 @@
-use openvm_native_circuit::execute_program;
+use openvm_native_circuit::test_execute_program;
 use openvm_native_compiler::{asm::AsmBuilder, conversion::CompilerOptions, ir::Var};
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -48,5 +48,5 @@ fn test_cycle_tracker() {
     }
 
     println!("{}", program);
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }

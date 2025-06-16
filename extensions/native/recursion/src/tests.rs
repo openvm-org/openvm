@@ -1,7 +1,7 @@
 use std::{panic::catch_unwind, sync::Arc};
 
 use openvm_circuit::utils::{gen_vm_program_test_proof_input, test_system_config};
-use openvm_native_circuit::{NativeConfig, Native};
+use openvm_native_circuit::{Native, NativeConfig};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::BusIndex,

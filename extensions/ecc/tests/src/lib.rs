@@ -87,7 +87,8 @@ mod tests {
 
     #[test]
     fn test_ec_two_curves() -> Result<()> {
-        let config = test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
+        let config =
+            test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "ec_two_curves",

@@ -18,7 +18,7 @@ use openvm_circuit::{
         memory::{MemoryTraceHeights, VolatileMemoryTraceHeights, CHUNK},
         program::trace::VmCommittedExe,
     },
-    utils::{air_test, air_test_with_min_segments},
+    utils::{air_test, air_test_with_min_segments, test_system_config},
 };
 use openvm_instructions::{
     exe::VmExe,
@@ -49,8 +49,6 @@ use openvm_stark_sdk::{
 };
 use rand::Rng;
 use test_log::test;
-
-use openvm_circuit::utils::test_utils::test_system_config;
 
 pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
 where

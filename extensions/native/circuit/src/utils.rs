@@ -1,7 +1,4 @@
-use openvm_circuit::{
-    arch::{Streams, SystemConfig, VirtualMachine},
-    utils::test_system_config,
-};
+use openvm_circuit::arch::{Streams, SystemConfig, VirtualMachine};
 use openvm_instructions::program::Program;
 use openvm_stark_sdk::{config::baby_bear_poseidon2::default_engine, p3_baby_bear::BabyBear};
 
@@ -32,13 +29,6 @@ pub fn execute_program_with_system_config(
 
 pub fn execute_program(program: Program<BabyBear>, input_stream: impl Into<Streams<BabyBear>>) {
     let system_config = SystemConfig::default()
-        .with_public_values(4)
-        .with_max_segment_len((1 << 25) - 100);
-    execute_program_with_system_config(program, input_stream, system_config);
-}
-
-pub fn test_execute_program(program: Program<BabyBear>, input_stream: impl Into<Streams<BabyBear>>) {
-    let system_config = test_system_config()
         .with_public_values(4)
         .with_max_segment_len((1 << 25) - 100);
     execute_program_with_system_config(program, input_stream, system_config);
