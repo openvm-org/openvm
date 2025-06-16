@@ -308,14 +308,17 @@ pub struct DenseRecordArena {
     pub records_buffer: Cursor<Vec<u8>>,
 }
 
+const ALIGNMENT: usize = 4;
+
 impl DenseRecordArena {
     /// Creates a new [DenseRecordArena] with the given capacity in bytes.
     pub fn with_capacity(size_bytes: usize) -> Self {
-        // In practice, this should always produce an aligned buffer, even though
-        // `align_of::<u8> = 1`.
-        // On the zkvm target, our allocator generates at least a 4-aligned buffer as well.
+        let buffer = vec![0; size_bytes + ALIGNMENT];
+        let offset = (ALIGNMENT - (buffer.as_ptr() as usize % ALIGNMENT)) % ALIGNMENT;
+        let mut cursor = Cursor::new(buffer);
+        cursor.set_position(offset as u64);
         Self {
-            records_buffer: Cursor::new(vec![0; size_bytes]),
+            records_buffer: cursor,
         }
     }
 
@@ -357,7 +360,9 @@ impl DenseRecordArena {
 
     pub fn allocated(&self) -> &[u8] {
         let size = self.records_buffer.position() as usize;
-        &self.records_buffer.get_ref()[..size]
+        let offset =
+            (ALIGNMENT - (self.records_buffer.get_ref().as_ptr() as usize % ALIGNMENT)) % ALIGNMENT;
+        &self.records_buffer.get_ref()[offset..offset + size]
     }
 
     /// Disclaimer: it shouldn't even be called here (only on GPU),
