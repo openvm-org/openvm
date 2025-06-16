@@ -64,8 +64,6 @@ pub enum GenerationError {
     Execution(#[from] ExecutionError),
 }
 
-/// VM memory state for continuations.
-
 /// A trait for key-value store for `Streams`.
 pub trait KvStore: Send + Sync {
     fn get(&self, key: &[u8]) -> Option<&[u8]>;
@@ -136,6 +134,7 @@ pub struct VmExecutorResult<SC: StarkGenericConfig> {
     pub final_memory: Option<MemoryImage>,
 }
 
+/// VM memory state for continuations.
 pub struct VmState<F>
 where
     F: PrimeField32,

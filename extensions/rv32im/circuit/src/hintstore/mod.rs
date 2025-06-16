@@ -42,7 +42,8 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    read_rv32_register, read_rv32_register_from_state, tracing_read, tracing_write,
+    memory_write_from_state, read_rv32_register, read_rv32_register_from_state, tracing_read,
+    tracing_write,
 };
 
 #[cfg(test)]
@@ -611,23 +612,21 @@ where
             return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
         }
 
-        let data = state
-            .streams
-            .hint_stream
-            .drain(0..num_words as usize * RV32_REGISTER_NUM_LIMBS)
-            .map(|x| x.as_canonical_u32() as u8)
-            .collect::<Vec<_>>();
-
-        state.ctx.on_memory_operation(
-            RV32_MEMORY_AS,
-            mem_ptr,
-            RV32_REGISTER_NUM_LIMBS as u32 * num_words,
-        );
-        unsafe {
-            state
-                .memory
-                .memory
-                .copy_slice_nonoverlapping((RV32_MEMORY_AS, mem_ptr), &data);
+        for word_index in 0..num_words {
+            let data: [u8; RV32_REGISTER_NUM_LIMBS] = std::array::from_fn(|_| {
+                state
+                    .streams
+                    .hint_stream
+                    .pop_front()
+                    .unwrap()
+                    .as_canonical_u32() as u8
+            });
+            memory_write_from_state(
+                state,
+                RV32_MEMORY_AS,
+                mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index),
+                &data,
+            );
         }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);

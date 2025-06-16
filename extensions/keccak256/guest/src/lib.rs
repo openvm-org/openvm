@@ -3,7 +3,7 @@
 #[cfg(target_os = "zkvm")]
 extern crate alloc;
 #[cfg(target_os = "zkvm")]
-use {core::mem::MaybeUninit, openvm_platform::alloc::AlignedBuf};
+use openvm_platform::alloc::AlignedBuf;
 
 /// This is custom-0 defined in RISC-V spec document
 pub const OPCODE: u8 = 0x0b;

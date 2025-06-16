@@ -64,6 +64,7 @@ where
     pub trace_height_constraints: Vec<LinearConstraint>,
 
     /// Air names for debug purposes only.
+    #[cfg(feature = "bench-metrics")]
     pub(crate) air_names: Vec<String>,
     /// Metrics collected for this execution segment alone.
     #[cfg(feature = "bench-metrics")]
@@ -83,11 +84,13 @@ where
         #[allow(unused_variables)] fn_bounds: FnBounds,
         ctrl: Ctrl,
     ) -> Self {
+        #[cfg(feature = "bench-metrics")]
         let air_names = chip_complex.air_names();
 
         Self {
             chip_complex,
             ctrl,
+            #[cfg(feature = "bench-metrics")]
             air_names,
             trace_height_constraints,
             #[cfg(feature = "bench-metrics")]
