@@ -608,7 +608,9 @@ where
                 let read_data = memory_read_from_state(state, e.as_canonical_u32(), ptr_val);
                 read_data
             }
-            STOREW | STOREH | STOREB => read_rv32_register_from_state(state, ptr_val).to_le_bytes(),
+            STOREW | STOREH | STOREB => {
+                read_rv32_register_from_state(state, a.as_canonical_u32()).to_le_bytes()
+            }
         };
 
         // We need to keep values of some cells to keep them unchanged when writing to those cells
