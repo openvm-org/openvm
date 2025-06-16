@@ -8,7 +8,7 @@ use num_bigint::BigUint;
 use openvm_algebra_guest::IntMod;
 
 use super::group::{CyclicGroup, Group};
-use crate::{edwards::CachedMulTable, IntrinsicCurve};
+use crate::IntrinsicCurve;
 
 #[cfg(not(target_os = "zkvm"))]
 lazy_static! {
@@ -76,7 +76,7 @@ impl IntrinsicCurve for Ed25519Point {
         for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
     {
         if coeffs.len() < 25 {
-            let table = CachedMulTable::<Self>::new(bases, 4);
+            let table = crate::edwards::CachedMulTable::<Self>::new(bases, 4);
             table.windowed_mul(coeffs)
         } else {
             crate::msm(coeffs, bases)
