@@ -605,7 +605,6 @@ where
 
         let read_data = match local_opcode {
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                
                 memory_read_from_state(state, e.as_canonical_u32(), ptr_val)
             }
             STOREW | STOREH | STOREB => {
