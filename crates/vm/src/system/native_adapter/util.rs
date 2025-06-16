@@ -94,7 +94,7 @@ pub fn memory_write_native_from_state<Ctx, F, const N: usize>(
 /// Returns `(t_prev, [ptr:BLOCK_SIZE]_4)` where `t_prev` is the timestamp of the last memory
 /// access.
 #[inline(always)]
-fn timed_read<F, const BLOCK_SIZE: usize>(
+pub fn timed_read_native<F, const BLOCK_SIZE: usize>(
     memory: &mut TracingMemory<F>,
     ptr: u32,
 ) -> (u32, [F; BLOCK_SIZE])
@@ -107,7 +107,7 @@ where
 }
 
 #[inline(always)]
-fn timed_write<F, const BLOCK_SIZE: usize>(
+pub fn timed_write_native<F, const BLOCK_SIZE: usize>(
     memory: &mut TracingMemory<F>,
     ptr: u32,
     vals: &[F; BLOCK_SIZE],
@@ -130,7 +130,7 @@ pub fn tracing_read_native<F, const BLOCK_SIZE: usize>(
 where
     F: PrimeField32,
 {
-    let (t_prev, data) = timed_read(memory, ptr);
+    let (t_prev, data) = timed_read_native(memory, ptr);
     *prev_timestamp = t_prev;
     data
 }
@@ -146,7 +146,7 @@ pub fn tracing_write_native<F, const BLOCK_SIZE: usize>(
 ) where
     F: PrimeField32,
 {
-    let (t_prev, data_prev) = timed_write(memory, ptr, vals);
+    let (t_prev, data_prev) = timed_write_native(memory, ptr, vals);
     *prev_timestamp = t_prev;
     *prev_data = data_prev;
 }
