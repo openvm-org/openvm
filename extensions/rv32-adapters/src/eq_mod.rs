@@ -483,7 +483,16 @@ impl<
         // Read memory values
         rs_vals.map(|address| {
             assert!(address as usize + TOTAL_READ_SIZE - 1 < (1 << self.pointer_max_bits));
-            memory_read_from_state(state, RV32_MEMORY_AS, address)
+            from_fn::<_, BLOCKS_PER_READ, _>(|j| {
+                memory_read_from_state::<_, _, BLOCK_SIZE>(
+                    state,
+                    RV32_MEMORY_AS,
+                    address + (j * BLOCK_SIZE) as u32,
+                )
+            })
+            .concat()
+            .try_into()
+            .unwrap()
         })
     }
 
