@@ -311,6 +311,9 @@ pub struct DenseRecordArena {
 impl DenseRecordArena {
     /// Creates a new [DenseRecordArena] with the given capacity in bytes.
     pub fn with_capacity(size_bytes: usize) -> Self {
+        // In practice, this should always produce an aligned buffer, even though
+        // `align_of::<u8> = 1`.
+        // On the zkvm target, our allocator generates at least a 4-aligned buffer as well.
         Self {
             records_buffer: Cursor::new(vec![0; size_bytes]),
         }
@@ -529,6 +532,10 @@ where
             mem_helper,
         }
     }
+
+    pub fn set_trace_buffer_height(&mut self, height: usize) {
+        self.arena.set_capacity(height);
+    }
 }
 
 // TODO(AG): more general RA
@@ -552,10 +559,6 @@ where
             arena,
             mem_helper,
         }
-    }
-
-    pub fn set_trace_buffer_height(&mut self, height: usize) {
-        self.arena.set_capacity(height);
     }
 }
 
@@ -754,8 +757,8 @@ where
         self.step.execute_metered(state, instruction, chip_index)
     }
 
-    fn set_trace_height(&mut self, height: usize) {
-        self.set_trace_buffer_height(height);
+    fn set_trace_height(&mut self, _height: usize) {
+        // do nothing?
     }
 }
 
