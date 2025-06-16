@@ -131,6 +131,7 @@ where
                 let x = Coordinate::<C>::from_be_bytes(&bytes[1..]).ok_or_else(Error::new)?;
                 let rec_id = bytes[0] & 1;
                 let point = FromCompressed::decompress(x, &rec_id).ok_or_else(Error::new)?;
+                // Decompressed point will never be identity
                 Ok(Self { point })
             }
 
@@ -139,7 +140,7 @@ where
                 let x = Coordinate::<C>::from_be_bytes(x_bytes).ok_or_else(Error::new)?;
                 let y = Coordinate::<C>::from_be_bytes(y_bytes).ok_or_else(Error::new)?;
                 let point = <C as IntrinsicCurve>::Point::from_xy(x, y).ok_or_else(Error::new)?;
-                Ok(Self { point })
+                Self::from_affine(point)
             }
 
             _ => Err(Error::new()),

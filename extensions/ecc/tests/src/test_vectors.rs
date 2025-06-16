@@ -47,5 +47,9 @@ pub fn k256_sec1_decoding_test_vectors() -> Vec<Sec1DecodingTestVector> {
         bytes: hex!("04" "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc30" "4218f20ae6c646b363db68605822fb14264ca8d2587fdd6fbc750d587e76a7ee").to_vec(),
         ok: false,
     },
+    Sec1DecodingTestVector {
+        bytes: hex!("04" "0000000000000000000000000000000000000000000000000000000000000000" "0000000000000000000000000000000000000000000000000000000000000000").to_vec(),
+        ok: false,
+    }
 ]
 }
