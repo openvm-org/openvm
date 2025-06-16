@@ -78,5 +78,9 @@ name = "ecdsa_recover_k256"
 required-features = ["k256"]
 
 [[example]]
+name = "sec1_decode"
+required-features = ["k256"]
+
+[[example]]
 name = "invalid_setup"
 required-features = ["k256", "p256"]

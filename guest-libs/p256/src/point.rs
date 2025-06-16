@@ -179,13 +179,15 @@ impl DecompressPoint<NistP256> for P256Point {
     fn decompress(x_bytes: &FieldBytes, y_is_odd: Choice) -> CtOption<Self> {
         use openvm_ecc_guest::weierstrass::FromCompressed;
 
-        let x = P256Coord::from_be_bytes(x_bytes.as_slice());
+        let x = P256Coord::from_be_bytes_unchecked(x_bytes.as_slice());
         let rec_id = y_is_odd.unwrap_u8();
-        let y = <P256Point as FromCompressed<P256Coord>>::decompress(x, &rec_id);
-        match y {
-            Some(point) => CtOption::new(point, 1.into()),
-            None => CtOption::new(P256Point::default(), 0.into()),
-        }
+        CtOption::new(x, (x.is_reduced() as u8).into()).and_then(|x| {
+            let y = <P256Point as FromCompressed<P256Coord>>::decompress(x, &rec_id);
+            match y {
+                Some(point) => CtOption::new(point, 1.into()),
+                None => CtOption::new(P256Point::default(), 0.into()),
+            }
+        })
     }
 }
 

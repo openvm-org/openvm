@@ -128,7 +128,7 @@ where
             }
 
             Tag::CompressedEvenY | Tag::CompressedOddY => {
-                let x = Coordinate::<C>::from_be_bytes(&bytes[1..]);
+                let x = Coordinate::<C>::from_be_bytes(&bytes[1..]).ok_or_else(Error::new)?;
                 let rec_id = bytes[0] & 1;
                 let point = FromCompressed::decompress(x, &rec_id).ok_or_else(Error::new)?;
                 Ok(Self { point })
@@ -136,8 +136,8 @@ where
 
             Tag::Uncompressed => {
                 let (x_bytes, y_bytes) = bytes[1..].split_at(Coordinate::<C>::NUM_LIMBS);
-                let x = Coordinate::<C>::from_be_bytes(x_bytes);
-                let y = Coordinate::<C>::from_be_bytes(y_bytes);
+                let x = Coordinate::<C>::from_be_bytes(x_bytes).ok_or_else(Error::new)?;
+                let y = Coordinate::<C>::from_be_bytes(y_bytes).ok_or_else(Error::new)?;
                 let point = <C as IntrinsicCurve>::Point::from_xy(x, y).ok_or_else(Error::new)?;
                 Ok(Self { point })
             }
@@ -441,11 +441,8 @@ where
         // Signature is default encoded in big endian bytes
         let (r_be, s_be) = sig.split_at(<C as IntrinsicCurve>::Scalar::NUM_LIMBS);
         // Note: Scalar internally stores using little endian
-        let r = Scalar::<C>::from_be_bytes(r_be);
-        let s = Scalar::<C>::from_be_bytes(s_be);
-        if !r.is_reduced() || !s.is_reduced() {
-            return Err(Error::new());
-        }
+        let r = Scalar::<C>::from_be_bytes(r_be).ok_or_else(Error::new)?;
+        let s = Scalar::<C>::from_be_bytes(s_be).ok_or_else(Error::new)?;
         if r == Scalar::<C>::ZERO || s == Scalar::<C>::ZERO {
             return Err(Error::new());
         }
@@ -456,7 +453,7 @@ where
         let trim = prehash_bytes.len().saturating_sub(Scalar::<C>::NUM_LIMBS);
         // from_be_bytes still works if len < Scalar::NUM_LIMBS
         // we don't need to reduce because IntMod is up to modular equivalence
-        let z = Scalar::<C>::from_be_bytes(&prehash_bytes[..prehash_bytes.len() - trim]);
+        let z = Scalar::<C>::from_be_bytes_unchecked(&prehash_bytes[..prehash_bytes.len() - trim]);
 
         // `r` is in the Scalar field, we now possibly add C::ORDER to it to get `x`
         // in the Coordinate field.
@@ -481,10 +478,7 @@ where
             };
         }
         assert!(FieldBytesSize::<C>::USIZE <= Coordinate::<C>::NUM_LIMBS);
-        let x = Coordinate::<C>::from_be_bytes(&r_bytes);
-        if !x.is_reduced() {
-            return Err(Error::new());
-        }
+        let x = Coordinate::<C>::from_be_bytes(&r_bytes).ok_or_else(Error::new)?;
         let rec_id = recovery_id.to_byte();
         // The point R decompressed from x-coordinate `r`
         let R: C::Point = FromCompressed::decompress(x, &rec_id).ok_or_else(Error::new)?;
@@ -518,11 +512,8 @@ where
     // Signature is default encoded in big endian bytes
     let (r_be, s_be) = sig.split_at(<C as IntrinsicCurve>::Scalar::NUM_LIMBS);
     // Note: Scalar internally stores using little endian
-    let r = Scalar::<C>::from_be_bytes(r_be);
-    let s = Scalar::<C>::from_be_bytes(s_be);
-    if !r.is_reduced() || !s.is_reduced() {
-        return Err(Error::new());
-    }
+    let r = Scalar::<C>::from_be_bytes(r_be).ok_or_else(Error::new)?;
+    let s = Scalar::<C>::from_be_bytes(s_be).ok_or_else(Error::new)?;
     if r == Scalar::<C>::ZERO || s == Scalar::<C>::ZERO {
         return Err(Error::new());
     }
@@ -533,7 +524,7 @@ where
     let trim = prehash_bytes.len().saturating_sub(Scalar::<C>::NUM_LIMBS);
     // from_be_bytes still works if len < Scalar::NUM_LIMBS
     // we don't need to reduce because IntMod is up to modular equivalence
-    let z = Scalar::<C>::from_be_bytes(&prehash_bytes[..prehash_bytes.len() - trim]);
+    let z = Scalar::<C>::from_be_bytes_unchecked(&prehash_bytes[..prehash_bytes.len() - trim]);
 
     let u1 = z.div_unsafe(&s);
     let u2 = (&r).div_unsafe(&s);

@@ -48,24 +48,24 @@ openvm::init!("openvm_init_decompress_k256.rs");
 // test decompression under an honest host
 pub fn main() {
     let bytes = read_vec();
-    let x = Secp256k1Coord::from_le_bytes(&bytes[..32]);
-    let y = Secp256k1Coord::from_le_bytes(&bytes[32..64]);
+    let x = Secp256k1Coord::from_le_bytes_unchecked(&bytes[..32]);
+    let y = Secp256k1Coord::from_le_bytes_unchecked(&bytes[32..64]);
     let rec_id = y.as_le_bytes()[0] & 1;
 
     test_possible_decompression::<Secp256k1Point>(&x, &y, rec_id);
     // x = 5 is not on the x-coordinate of any point on the Secp256k1 curve
     test_impossible_decompression::<Secp256k1Point>(&Secp256k1Coord::from_u8(5), rec_id);
 
-    let x = Fp5mod8::from_le_bytes(&bytes[64..96]);
-    let y = Fp5mod8::from_le_bytes(&bytes[96..128]);
+    let x = Fp5mod8::from_le_bytes_unchecked(&bytes[64..96]);
+    let y = Fp5mod8::from_le_bytes_unchecked(&bytes[96..128]);
     let rec_id = y.as_le_bytes()[0] & 1;
 
     test_possible_decompression::<CurvePoint5mod8>(&x, &y, rec_id);
     // x = 3 is not on the x-coordinate of any point on the CurvePoint5mod8 curve
     test_impossible_decompression::<CurvePoint5mod8>(&Fp5mod8::from_u8(3), rec_id);
 
-    let x = Fp1mod4::from_le_bytes(&bytes[128..160]);
-    let y = Fp1mod4::from_le_bytes(&bytes[160..192]);
+    let x = Fp1mod4::from_le_bytes_unchecked(&bytes[128..160]);
+    let y = Fp1mod4::from_le_bytes_unchecked(&bytes[160..192]);
     let rec_id = y.as_le_bytes()[0] & 1;
 
     test_possible_decompression::<CurvePoint1mod4>(&x, &y, rec_id);

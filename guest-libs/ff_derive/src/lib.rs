@@ -49,10 +49,10 @@ impl ReprEndianness {
     fn from_repr(&self, name: &syn::Ident, limbs: usize) -> proc_macro2::TokenStream {
         let read_repr = match self {
             ReprEndianness::Big => quote! {
-                <#name as ::openvm_algebra_guest::IntMod>::from_be_bytes(&r.as_ref())
+                <#name as ::openvm_algebra_guest::IntMod>::from_be_bytes(&r.as_ref()).unwrap()
             },
             ReprEndianness::Little => quote! {
-                <#name as ::openvm_algebra_guest::IntMod>::from_le_bytes(&r.as_ref())
+                <#name as ::openvm_algebra_guest::IntMod>::from_le_bytes(&r.as_ref()).unwrap()
             },
         };
 

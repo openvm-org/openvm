@@ -27,10 +27,14 @@ mod bn254 {
         let q0 = &io[32 * 4..32 * 8];
         let q1 = &io[32 * 8..32 * 12];
 
-        let s0_cast =
-            AffinePoint::new(Fp::from_le_bytes(&s0[..32]), Fp::from_le_bytes(&s0[32..64]));
-        let s1_cast =
-            AffinePoint::new(Fp::from_le_bytes(&s1[..32]), Fp::from_le_bytes(&s1[32..64]));
+        let s0_cast = AffinePoint::new(
+            Fp::from_le_bytes_unchecked(&s0[..32]),
+            Fp::from_le_bytes_unchecked(&s0[32..64]),
+        );
+        let s1_cast = AffinePoint::new(
+            Fp::from_le_bytes_unchecked(&s1[..32]),
+            Fp::from_le_bytes_unchecked(&s1[32..64]),
+        );
         let q0_cast = AffinePoint::new(Fp2::from_bytes(&q0[..64]), Fp2::from_bytes(&q0[64..128]));
         let q1_cast = AffinePoint::new(Fp2::from_bytes(&q1[..64]), Fp2::from_bytes(&q1[64..128]));
 
@@ -60,10 +64,14 @@ mod bls12_381 {
         let q0 = &io[48 * 4..48 * 8];
         let q1 = &io[48 * 8..48 * 12];
 
-        let s0_cast =
-            AffinePoint::new(Fp::from_le_bytes(&s0[..48]), Fp::from_le_bytes(&s0[48..96]));
-        let s1_cast =
-            AffinePoint::new(Fp::from_le_bytes(&s1[..48]), Fp::from_le_bytes(&s1[48..96]));
+        let s0_cast = AffinePoint::new(
+            Fp::from_le_bytes_unchecked(&s0[..48]),
+            Fp::from_le_bytes_unchecked(&s0[48..96]),
+        );
+        let s1_cast = AffinePoint::new(
+            Fp::from_le_bytes_unchecked(&s1[..48]),
+            Fp::from_le_bytes_unchecked(&s1[48..96]),
+        );
         let q0_cast = AffinePoint::new(Fp2::from_bytes(&q0[..96]), Fp2::from_bytes(&q0[96..192]));
         let q1_cast = AffinePoint::new(Fp2::from_bytes(&q1[..96]), Fp2::from_bytes(&q1[96..192]));
 
