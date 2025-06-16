@@ -65,6 +65,7 @@ pub struct TeCurveCoeffs {
 }
 
 pub static SECP256K1_CONFIG: Lazy<CurveConfig<SwCurveCoeffs>> = Lazy::new(|| CurveConfig {
+    struct_name: "Secp256k1".to_string(),
     modulus: SECP256K1_MODULUS.clone(),
     scalar: SECP256K1_ORDER.clone(),
     coeffs: SwCurveCoeffs {
@@ -74,6 +75,7 @@ pub static SECP256K1_CONFIG: Lazy<CurveConfig<SwCurveCoeffs>> = Lazy::new(|| Cur
 });
 
 pub static P256_CONFIG: Lazy<CurveConfig<SwCurveCoeffs>> = Lazy::new(|| CurveConfig {
+    struct_name: "P256".to_string(),
     modulus: P256_MODULUS.clone(),
     scalar: P256_ORDER.clone(),
     coeffs: SwCurveCoeffs {
@@ -83,6 +85,7 @@ pub static P256_CONFIG: Lazy<CurveConfig<SwCurveCoeffs>> = Lazy::new(|| CurveCon
 });
 
 pub static ED25519_CONFIG: Lazy<CurveConfig<TeCurveCoeffs>> = Lazy::new(|| CurveConfig {
+    struct_name: "Ed25519".to_string(),
     modulus: ED25519_MODULUS.clone(),
     scalar: ED25519_ORDER.clone(),
     coeffs: TeCurveCoeffs {
