@@ -5204,6 +5204,7 @@ dependencies = [
  "hex-literal 0.4.1",
  "lazy_static",
  "num-bigint 0.4.6",
+ "num-integer",
  "num-traits",
  "once_cell",
  "openvm-algebra-circuit",
