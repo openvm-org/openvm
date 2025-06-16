@@ -425,7 +425,7 @@ impl<F, I, R> RecordWidthFromLayout<MultiRowLayout<I>, R> for MatrixRecordArena<
 }
 
 /// RecordArena implementation for [MatrixRecordArena], with [AdapterCoreLayout]
-/// `A` is the adapter record type and `C` is the core record type
+/// `A` is the adapter RecordMut type and `C` is the core RecordMut type
 /// `AS` is a type that implements `AdapterTraceStep`, so the width of the adapter is `AS::WIDTH`
 impl<'a, F: Field, A, C, I: Clone, AS> RecordArena<'a, AdapterCoreLayout<AS, I>, (A, C)>
     for MatrixRecordArena<F>
