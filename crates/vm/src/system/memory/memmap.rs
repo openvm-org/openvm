@@ -1,6 +1,6 @@
-use bitvec::prelude::*;
 use std::{fmt::Debug, marker::PhantomData, mem::MaybeUninit, ptr::copy_nonoverlapping};
 
+use bitvec::prelude::*;
 use itertools::{zip_eq, Itertools};
 use memmap2::MmapMut;
 use openvm_instructions::exe::SparseMemoryImage;
