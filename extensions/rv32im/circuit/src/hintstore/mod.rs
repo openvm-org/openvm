@@ -37,10 +37,7 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    p3_maybe_rayon::prelude::{
-        IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator,
-        ParallelIterator,
-    },
+    p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 

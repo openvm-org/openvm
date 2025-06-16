@@ -382,6 +382,7 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    /// - Panics if accessing out of bounds memory within the address space
     pub unsafe fn get_slice<T: Copy + Debug>(
         &self,
         (addr_space, ptr): Address,

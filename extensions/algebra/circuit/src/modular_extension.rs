@@ -300,7 +300,7 @@ pub(crate) mod phantom {
         system::memory::online::GuestMemory,
     };
     use openvm_instructions::{riscv::RV32_MEMORY_AS, PhantomDiscriminant};
-    use openvm_rv32im_circuit::adapters::new_read_rv32_register;
+    use openvm_rv32im_circuit::adapters::read_rv32_register;
     use openvm_stark_backend::p3_field::PrimeField32;
     use rand::{rngs::StdRng, SeedableRng};
 
@@ -345,10 +345,12 @@ pub(crate) mod phantom {
                 bail!("Modulus too large")
             };
 
-            let rs1 = new_read_rv32_register(memory, 1, a);
-            let x_limbs: Vec<u8> = memory
-                .memory
-                .read_range_generic((RV32_MEMORY_AS, rs1), num_limbs);
+            let rs1 = read_rv32_register(memory, a);
+            // SAFETY:
+            // - MEMORY_AS consists of `u8`s
+            // - MEMORY_AS is in bounds
+            let x_limbs: Vec<u8> =
+                unsafe { memory.memory.get_slice((RV32_MEMORY_AS, rs1), num_limbs) };
             let x = BigUint::from_bytes_le(&x_limbs);
 
             let (success, sqrt) = match mod_sqrt(&x, modulus, &self.non_qrs[mod_idx]) {
