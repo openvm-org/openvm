@@ -42,8 +42,8 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    memory_write, memory_write_from_state, read_rv32_register, read_rv32_register_from_state,
-    tracing_read, tracing_write,
+    memory_write_from_state, read_rv32_register, read_rv32_register_from_state, tracing_read,
+    tracing_write,
 };
 
 #[cfg(test)]
@@ -581,7 +581,7 @@ where
 {
     fn execute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -596,24 +596,24 @@ where
 
         let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let mem_ptr = read_rv32_register(state, b.as_canonical_u32());
+        let mem_ptr = read_rv32_register(&state.memory, b.as_canonical_u32());
 
         let num_words = if local_opcode == HINT_STOREW {
             1
         } else {
-            read_rv32_register(state, a.as_canonical_u32())
+            read_rv32_register(&state.memory, a.as_canonical_u32())
         };
 
         debug_assert!(mem_ptr <= (1 << self.pointer_max_bits));
         debug_assert_ne!(num_words, 0);
         debug_assert!(num_words <= (1 << self.pointer_max_bits));
 
-        let mut streams = self.streams.get().unwrap().lock().unwrap();
-        if streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
+        if state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
             return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
         }
 
-        let data = streams
+        let data = state
+            .streams
             .hint_stream
             .drain(0..num_words as usize * RV32_REGISTER_NUM_LIMBS)
             .map(|x| x.as_canonical_u32() as u8)
@@ -633,7 +633,7 @@ where
 
     fn execute_metered(
         &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {
@@ -657,12 +657,12 @@ where
         debug_assert_ne!(num_words, 0);
         debug_assert!(num_words <= (1 << self.pointer_max_bits));
 
-        let mut streams = self.streams.get().unwrap().lock().unwrap();
-        if streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
+        if state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
             return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
         }
 
-        let data = streams
+        let data = state
+            .streams
             .hint_stream
             .drain(0..num_words as usize * RV32_REGISTER_NUM_LIMBS)
             .map(|x| x.as_canonical_u32() as u8)
@@ -670,7 +670,7 @@ where
         data.chunks_exact(RV32_REGISTER_NUM_LIMBS)
             .enumerate()
             .for_each(|(idx, chunk)| {
-                memory_write_from_state::<_, RV32_REGISTER_NUM_LIMBS>(
+                memory_write_from_state::<F, _, RV32_REGISTER_NUM_LIMBS>(
                     state,
                     RV32_MEMORY_AS,
                     mem_ptr + (idx * RV32_REGISTER_NUM_LIMBS) as u32,
