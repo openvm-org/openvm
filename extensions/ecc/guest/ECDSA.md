@@ -60,7 +60,7 @@ We refer to the steps in verification as V1-7 and the steps in recovery as R1-7.
 - V2 is the same as R5.
 - V3: We compute $u = e \cdot s^{-1} \mod n$ and $v = r \cdot s^{-1} \mod n$.
 - V4: compute $$R_1 = uG + vQ = e \cdot s^{-1} G + (r \cdot s^{-1})\cdot r^{-1} \cdot (s R - e G) = R.$$
-R7 guarantees $R_1$ is not identity.
+R4 guarantees $R_1$ is not identity.
 - V5: We set $x_R = x_1$.
 - V6: Then $r_1 = r + j n$ since R3 guarantees that $r + j n$ is in the range $[0, p-1]$.
 - V7: It is evident that $r_1 = r+jn$ is congruent to $r$ modulo $n$.
