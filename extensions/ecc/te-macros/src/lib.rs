@@ -79,16 +79,14 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
             };
         }
         create_extern_func!(te_add_extern_func);
-        create_extern_func!(te_hint_decompress_extern_func);
-        create_extern_func!(hint_non_qr_extern_func);
+        create_extern_func!(te_setup_extern_func);
 
         let group_ops_mod_name = format_ident!("{}_ops", struct_name.to_string().to_lowercase());
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
             extern "C" {
                 fn #te_add_extern_func(rd: usize, rs1: usize, rs2: usize);
-                fn #te_hint_decompress_extern_func(rs1: usize, rs2: usize);
-                fn #hint_non_qr_extern_func();
+                fn #te_setup_extern_func();
             }
 
             #[derive(Eq, PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -126,6 +124,7 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
                     }
                     #[cfg(target_os = "zkvm")]
                     {
+                        Self::set_up_once();
                         let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
                         unsafe {
                             #te_add_extern_func(
@@ -136,6 +135,22 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
                         };
                         unsafe { uninit.assume_init() }
                     }
+                }
+
+                // Helper function to call the setup instruction on first use
+                #[cfg(target_os = "zkvm")]
+                fn set_up_once() {
+                    static is_setup: ::openvm_ecc_guest::once_cell::race::OnceBool = ::openvm_ecc_guest::once_cell::race::OnceBool::new();
+                    is_setup.get_or_init(|| {
+                        unsafe { #te_setup_extern_func(); }
+                        <#intmod_type as openvm_algebra_guest::IntMod>::set_up_once();
+                        true
+                    });
+                }
+
+                #[cfg(not(target_os = "zkvm"))]
+                fn set_up_once() {
+                    // No-op for non-ZKVM targets
                 }
             }
 
@@ -263,8 +278,6 @@ pub fn te_init(input: TokenStream) -> TokenStream {
     let TeDefine { items } = parse_macro_input!(input as TeDefine);
 
     let mut externs = Vec::new();
-    let mut setups = Vec::new();
-    let mut setup_all_te_curves = Vec::new();
 
     let span = proc_macro::Span::call_site();
 
@@ -277,14 +290,8 @@ pub fn te_init(input: TokenStream) -> TokenStream {
             .join("_");
         let add_extern_func =
             syn::Ident::new(&format!("te_add_extern_func_{}", str_path), span.into());
-        let te_hint_decompress_extern_func = syn::Ident::new(
-            &format!("te_hint_decompress_extern_func_{}", str_path),
-            span.into(),
-        );
-        let hint_non_qr_extern_func = syn::Ident::new(
-            &format!("hint_non_qr_extern_func_{}", str_path),
-            span.into(),
-        );
+        let setup_extern_func =
+            syn::Ident::new(&format!("te_setup_extern_func_{}", str_path), span.into());
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
             extern "C" fn #add_extern_func(rd: usize, rs1: usize, rs2: usize) {
@@ -300,39 +307,10 @@ pub fn te_init(input: TokenStream) -> TokenStream {
             }
 
             #[no_mangle]
-            extern "C" fn #te_hint_decompress_extern_func(rs1: usize, rs2: usize) {
-                openvm::platform::custom_insn_r!(
-                    opcode = TE_OPCODE,
-                    funct3 = TE_FUNCT3 as usize,
-                    funct7 = TeBaseFunct7::TeHintDecompress as usize + #ec_idx
-                        * (TeBaseFunct7::TWISTED_EDWARDS_MAX_KINDS as usize),
-                    rd = Const "x0",
-                    rs1 = In rs1,
-                    rs2 = In rs2
-                );
-            }
-
-            #[no_mangle]
-            extern "C" fn #hint_non_qr_extern_func() {
-                openvm::platform::custom_insn_r!(
-                    opcode = TE_OPCODE,
-                    funct3 = TE_FUNCT3 as usize,
-                    funct7 = TeBaseFunct7::TeHintNonQr as usize + #ec_idx
-                        * (TeBaseFunct7::TWISTED_EDWARDS_MAX_KINDS as usize),
-                    rd = Const "x0",
-                    rs1 = Const "x0",
-                    rs2 = Const "x0"
-                );
-            }
-        });
-
-        let setup_function = syn::Ident::new(&format!("setup_te_{}", str_path), span.into());
-        setups.push(quote::quote_spanned! { span.into() =>
-
-            #[allow(non_snake_case)]
-            pub fn #setup_function() {
+            extern "C" fn #setup_extern_func() {
                 #[cfg(target_os = "zkvm")]
                 {
+                    use super::#item;
                     let modulus_bytes = <<#item as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
                     let mut zero = [0u8; <<#item as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
                     let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<#item as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::CURVE_A);
@@ -353,22 +331,15 @@ pub fn te_init(input: TokenStream) -> TokenStream {
                 }
             }
         });
-
-        setup_all_te_curves.push(quote::quote_spanned! { span.into() =>
-            #setup_function();
-        });
     }
 
     TokenStream::from(quote::quote_spanned! { span.into() =>
+        #[allow(non_snake_case)]
         #[cfg(target_os = "zkvm")]
         mod openvm_intrinsics_ffi_2_te {
             use ::openvm_ecc_guest::{TE_OPCODE, TE_FUNCT3, TeBaseFunct7};
 
             #(#externs)*
-        }
-        #(#setups)*
-        pub fn setup_all_te_curves() {
-            #(#setup_all_te_curves)*
         }
     })
 }
