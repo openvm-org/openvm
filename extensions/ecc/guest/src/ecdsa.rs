@@ -91,8 +91,17 @@ where
     C::Point: WeierstrassPoint + Group + FromCompressed<Coordinate<C>>,
     Coordinate<C>: IntMod,
 {
-    pub fn new(point: <C as IntrinsicCurve>::Point) -> Self {
-        Self { point }
+    /// Convert an [`AffinePoint`] into a [`PublicKey`].
+    /// In addition, for `Coordinate<C>` implementing `IntMod`, this function will assert that the
+    /// affine coordinates of `point` are both in canonical form.
+    pub fn from_affine(point: AffinePoint<C>) -> Result<Self> {
+        // Internally this calls `is_eq` on `x` and `y` coordinates, which will assert `x, y` are
+        // reduced.
+        if point.is_identity() {
+            Err(Error::new())
+        } else {
+            Ok(Self { point })
+        }
     }
 
     pub fn from_sec1_bytes(bytes: &[u8]) -> Result<Self>
@@ -188,7 +197,7 @@ where
     }
 
     pub fn from_affine(point: <C as IntrinsicCurve>::Point) -> Result<Self> {
-        let public_key = PublicKey::<C>::new(point);
+        let public_key = PublicKey::<C>::from_affine(point)?;
         Ok(Self::new(public_key))
     }
 
@@ -453,9 +462,9 @@ where
         let u2 = s.div_unsafe(&r);
         let NEG_G = C::Point::NEG_GENERATOR;
         let point = <C as IntrinsicCurve>::msm(&[neg_u1, u2], &[NEG_G, R]);
-        let public_key = PublicKey { point };
+        let vk = VerifyingKey::from_affine(point)?;
 
-        Ok(VerifyingKey { inner: public_key })
+        Ok(vk)
     }
 }
 
