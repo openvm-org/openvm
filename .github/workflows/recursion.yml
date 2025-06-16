@@ -42,9 +42,9 @@ jobs:
       - name: Run recursion crate tests
         working-directory: extensions/native/recursion
         run: |
-          cargo nextest run --features parallel,static-verifier --test-threads=1 --no-fail-fast
+          cargo nextest run --features parallel,static-verifier
 
       - name: Run continuations verifier crate tests
         working-directory: crates/continuations
         run: |
-          cargo nextest run --no-tests=pass --test-threads=1 --no-fail-fast
+          cargo nextest run --no-tests=pass
