@@ -31,6 +31,7 @@ pub trait TwistedEdwardsPoint: Sized {
 
     fn add_impl(&self, p2: &Self) -> Self;
 
+    #[inline(always)]
     fn from_xy(x: Self::Coordinate, y: Self::Coordinate) -> Option<Self>
     where
         for<'a> &'a Self::Coordinate: Mul<&'a Self::Coordinate, Output = Self::Coordinate>,
@@ -45,15 +46,15 @@ pub trait TwistedEdwardsPoint: Sized {
 }
 
 /// Macro to generate a newtype wrapper for [AffinePoint](crate::AffinePoint)
-/// that implements elliptic curve operations by using the underlying field operations according to the
-/// [formulas](https://en.wikipedia.org/wiki/Twisted_Edwards_curve) for twisted Edwards curves.
+/// that implements elliptic curve operations by using the underlying field operations according to
+/// the [formulas](https://en.wikipedia.org/wiki/Twisted_Edwards_curve) for twisted Edwards curves.
 ///
 /// The following imports are required:
 /// ```rust
 /// use core::ops::AddAssign;
 ///
 /// use openvm_algebra_guest::{DivUnsafe, Field};
-/// use openvm_ecc_guest::{AffinePoint, Group, edwards::TwistedEdwardsPoint};
+/// use openvm_ecc_guest::{edwards::TwistedEdwardsPoint, AffinePoint, Group};
 /// ```
 #[macro_export]
 macro_rules! impl_te_affine {
@@ -148,8 +149,8 @@ macro_rules! impl_te_affine {
     }
 }
 
-/// Implements `Group` on `$struct_name` assuming that `$struct_name` implements `TwistedEdwardsPoint`.
-/// Assumes that `Neg` is implemented for `&$struct_name`.
+/// Implements `Group` on `$struct_name` assuming that `$struct_name` implements
+/// `TwistedEdwardsPoint`. Assumes that `Neg` is implemented for `&$struct_name`.
 #[macro_export]
 macro_rules! impl_te_group_ops {
     ($struct_name:ident, $field:ty) => {
@@ -273,8 +274,8 @@ macro_rules! impl_te_group_ops {
 
 // This is the same as the Weierstrass version, but for Edwards curves we use
 // TwistedEdwardsPoint::add_impl instead of WeierstrassPoint::add_ne_nonidentity, etc.
-// Unlike the Weierstrass version, we do not require the bases to have prime order, since our addition
-// formulas are complete.
+// Unlike the Weierstrass version, we do not require the bases to have prime order, since our
+// addition formulas are complete.
 
 // MSM using preprocessed table (windowed method)
 // Reference: modified from https://github.com/arkworks-rs/algebra/blob/master/ec/src/scalar_mul/mod.rs

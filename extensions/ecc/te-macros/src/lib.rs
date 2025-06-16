@@ -139,6 +139,7 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
 
                 // Helper function to call the setup instruction on first use
                 #[cfg(target_os = "zkvm")]
+                #[inline(always)]
                 fn set_up_once() {
                     static is_setup: ::openvm_ecc_guest::once_cell::race::OnceBool = ::openvm_ecc_guest::once_cell::race::OnceBool::new();
                     is_setup.get_or_init(|| {
@@ -149,6 +150,7 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
                 }
 
                 #[cfg(not(target_os = "zkvm"))]
+                #[inline(always)]
                 fn set_up_once() {
                     // No-op for non-ZKVM targets
                 }
@@ -163,34 +165,42 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
 
                 /// SAFETY: assumes that #intmod_type has a memory representation
                 /// such that with repr(C), two coordinates are packed contiguously.
+                #[inline(always)]
                 fn as_le_bytes(&self) -> &[u8] {
                     unsafe { &*core::ptr::slice_from_raw_parts(self as *const Self as *const u8, <#intmod_type as openvm_algebra_guest::IntMod>::NUM_LIMBS * 2) }
                 }
 
+                #[inline(always)]
                 fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self {
                     Self { x, y }
                 }
 
+                #[inline(always)]
                 fn x(&self) -> &Self::Coordinate {
                     &self.x
                 }
 
+                #[inline(always)]
                 fn y(&self) -> &Self::Coordinate {
                     &self.y
                 }
 
+                #[inline(always)]
                 fn x_mut(&mut self) -> &mut Self::Coordinate {
                     &mut self.x
                 }
 
+                #[inline(always)]
                 fn y_mut(&mut self) -> &mut Self::Coordinate {
                     &mut self.y
                 }
 
+                #[inline(always)]
                 fn into_coords(self) -> (Self::Coordinate, Self::Coordinate) {
                     (self.x, self.y)
                 }
 
+                #[inline(always)]
                 fn add_impl(&self, p2: &Self) -> Self {
                     Self::add_chip(self, p2)
                 }
