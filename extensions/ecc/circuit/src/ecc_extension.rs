@@ -3,9 +3,8 @@ use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use once_cell::sync::Lazy;
 use openvm_algebra_guest::IntMod;
-use openvm_circuit::{
-    arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
-    system::phantom::PhantomChip,
+use openvm_circuit::arch::{
+    SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use openvm_circuit_primitives::bitwise_op_lookup::{
@@ -17,8 +16,8 @@ use openvm_ecc_guest::{
     k256::{SECP256K1_MODULUS, SECP256K1_ORDER},
     p256::{CURVE_A as P256_A, CURVE_B as P256_B, P256_MODULUS, P256_ORDER},
 };
-use openvm_ecc_transpiler::{EccPhantom, Rv32EdwardsOpcode, Rv32WeierstrassOpcode};
-use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
+use openvm_ecc_transpiler::{Rv32EdwardsOpcode, Rv32WeierstrassOpcode};
+use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -137,7 +136,6 @@ pub enum EccExtensionExecutor<F: PrimeField32> {
 #[derive(ChipUsageGetter, Chip, AnyEnum, From)]
 pub enum EccExtensionPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
-    Phantom(PhantomChip<F>),
 }
 
 impl<F: PrimeField32> VmExtension<F> for EccExtension {
