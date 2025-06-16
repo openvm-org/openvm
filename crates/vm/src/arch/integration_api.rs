@@ -105,7 +105,10 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 }
 
 pub trait SizedRecord<Layout, RecordMut> {
-    fn num_bytes(&self, layout: &Layout) -> usize;
+    /// The size of the record in bytes
+    fn size(&self, layout: &Layout) -> usize;
+    /// The alignment of the record in bytes
+    fn alignment(&self, layout: &Layout) -> usize;
 }
 
 /// Given some minimum metadata of type `Layout` that specifies the record size, the `RecordArena`
@@ -308,13 +311,13 @@ pub struct DenseRecordArena {
     pub records_buffer: Cursor<Vec<u8>>,
 }
 
-const ALIGNMENT: usize = 4;
+const MAX_ALIGNMENT: usize = 32;
 
 impl DenseRecordArena {
     /// Creates a new [DenseRecordArena] with the given capacity in bytes.
     pub fn with_capacity(size_bytes: usize) -> Self {
-        let buffer = vec![0; size_bytes + ALIGNMENT];
-        let offset = (ALIGNMENT - (buffer.as_ptr() as usize % ALIGNMENT)) % ALIGNMENT;
+        let buffer = vec![0; size_bytes + MAX_ALIGNMENT];
+        let offset = (MAX_ALIGNMENT - (buffer.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT;
         let mut cursor = Cursor::new(buffer);
         cursor.set_position(offset as u64);
         Self {
@@ -360,9 +363,17 @@ impl DenseRecordArena {
 
     pub fn allocated(&self) -> &[u8] {
         let size = self.records_buffer.position() as usize;
-        let offset =
-            (ALIGNMENT - (self.records_buffer.get_ref().as_ptr() as usize % ALIGNMENT)) % ALIGNMENT;
+        let offset = (MAX_ALIGNMENT
+            - (self.records_buffer.get_ref().as_ptr() as usize % MAX_ALIGNMENT))
+            % MAX_ALIGNMENT;
         &self.records_buffer.get_ref()[offset..offset + size]
+    }
+
+    pub fn align_to(&mut self, alignment: usize) {
+        debug_assert!(MAX_ALIGNMENT % alignment == 0);
+        let offset =
+            (alignment - (self.records_buffer.get_ref().as_ptr() as usize % alignment)) % alignment;
+        self.records_buffer.set_position(offset as u64);
     }
 
     /// Disclaimer: it shouldn't even be called here (only on GPU),
@@ -411,8 +422,12 @@ impl<Record> SizedRecord<(), &mut Record> for DenseRecordArena
 where
     [u8]: BorrowMut<Record>,
 {
-    fn num_bytes(&self, _layout: &()) -> usize {
+    fn size(&self, _layout: &()) -> usize {
         size_of::<Record>()
+    }
+
+    fn alignment(&self, _layout: &()) -> usize {
+        align_of::<Record>()
     }
 }
 
@@ -420,14 +435,22 @@ impl<F, AS, I, A, C> SizedRecord<AdapterCoreLayout<AS, I>, (A, C)> for MatrixRec
 where
     AS: 'static + AdapterTraceStep<F, ()>,
 {
-    fn num_bytes(&self, _layout: &AdapterCoreLayout<AS, I>) -> usize {
+    fn size(&self, _layout: &AdapterCoreLayout<AS, I>) -> usize {
         AS::WIDTH * size_of::<F>()
+    }
+
+    fn alignment(&self, _layout: &AdapterCoreLayout<AS, I>) -> usize {
+        align_of::<F>()
     }
 }
 
 impl<F, I, R> SizedRecord<MultiRowLayout<I>, R> for MatrixRecordArena<F> {
-    fn num_bytes(&self, layout: &MultiRowLayout<I>) -> usize {
+    fn size(&self, layout: &MultiRowLayout<I>) -> usize {
         (layout.num_rows as usize) * self.width * size_of::<F>()
+    }
+
+    fn alignment(&self, _layout: &MultiRowLayout<I>) -> usize {
+        align_of::<F>()
     }
 }
 
@@ -441,8 +464,7 @@ where
     AS: 'static + AdapterTraceStep<F, ()>,
 {
     fn alloc(&'a mut self, layout: AdapterCoreLayout<AS, I>) -> (A, C) {
-        let width =
-            <Self as SizedRecord<AdapterCoreLayout<AS, I>, (A, C)>>::num_bytes(self, &layout);
+        let width = <Self as SizedRecord<AdapterCoreLayout<AS, I>, (A, C)>>::size(self, &layout);
         let buffer = self.alloc_single_row();
         // Doing a unchecked split here for perf
         let (adapter_buffer, core_buffer) = unsafe { buffer.split_at_mut_unchecked(width) };
@@ -476,14 +498,24 @@ where
     DenseRecordArena: SizedRecord<I, A> + SizedRecord<I, C>,
 {
     fn alloc(&'a mut self, layout: AdapterCoreLayout<AS, I>) -> (A, C) {
-        let adapter_width = <Self as SizedRecord<I, A>>::num_bytes(self, &layout.metadata);
-        let core_width = <Self as SizedRecord<I, C>>::num_bytes(self, &layout.metadata);
-        let buffer = self.alloc_bytes(adapter_width + core_width);
-        // Doing a unchecked split here for perf
-        let (adapter_buffer, core_buffer) = unsafe { buffer.split_at_mut_unchecked(adapter_width) };
+        let adapter_alignment = <Self as SizedRecord<I, A>>::alignment(self, &layout.metadata);
+        let core_alignment = <Self as SizedRecord<I, C>>::alignment(self, &layout.metadata);
+        let adapter_width = <Self as SizedRecord<I, A>>::size(self, &layout.metadata);
+        let aligned_adapter_width = adapter_width.next_multiple_of(core_alignment);
+        let core_width = <Self as SizedRecord<I, C>>::size(self, &layout.metadata);
+        let aligned_core_width = (aligned_adapter_width + core_width)
+            .next_multiple_of(adapter_alignment)
+            - aligned_adapter_width;
+        debug_assert_eq!(MAX_ALIGNMENT % adapter_alignment, 0);
+        debug_assert_eq!(MAX_ALIGNMENT % core_alignment, 0);
+        let buffer = self.alloc_bytes(aligned_adapter_width + aligned_core_width);
+        // Doing an unchecked split here for perf
+        let (adapter_buffer, core_buffer) =
+            unsafe { buffer.split_at_mut_unchecked(aligned_adapter_width) };
 
-        let adapter_record: A = adapter_buffer.custom_borrow(layout.metadata.clone());
-        let core_record: C = core_buffer.custom_borrow(layout.metadata);
+        let adapter_record: A =
+            adapter_buffer[..adapter_width].custom_borrow(layout.metadata.clone());
+        let core_record: C = core_buffer[..core_width].custom_borrow(layout.metadata);
 
         (adapter_record, core_record)
     }
