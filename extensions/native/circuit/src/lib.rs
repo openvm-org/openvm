@@ -18,8 +18,8 @@ pub use jal_rangecheck::*;
 pub use loadstore::*;
 // pub use poseidon2::*;
 
-// mod extension;
-// pub use extension::*;
+mod extension;
+pub use extension::*;
 
 mod utils;
 pub use utils::*;

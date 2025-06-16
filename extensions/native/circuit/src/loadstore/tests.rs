@@ -30,7 +30,8 @@ use test_case::test_case;
 use super::{NativeLoadStoreChip, NativeLoadStoreCoreAir};
 use crate::{
     adapters::{NativeLoadStoreAdapterAir, NativeLoadStoreAdapterCols, NativeLoadStoreAdapterStep},
-    write_native_array, NativeLoadStoreAir, NativeLoadStoreCoreCols, NativeLoadStoreStep,
+    test_utils::write_native_array,
+    NativeLoadStoreAir, NativeLoadStoreCoreCols, NativeLoadStoreStep,
 };
 
 const MAX_INS_CAPACITY: usize = 128;

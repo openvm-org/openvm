@@ -10,10 +10,15 @@ use openvm_circuit::{
         NewVmChipWrapper, PcIncOrSet, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
         VmStateMut,
     },
-    system::memory::{
-        offline_checker::{MemoryBridge, MemoryWriteAuxCols, MemoryWriteAuxRecord},
-        online::{GuestMemory, TracingMemory},
-        MemoryAddress, MemoryAuxColsFactory,
+    system::{
+        memory::{
+            offline_checker::{MemoryBridge, MemoryWriteAuxCols, MemoryWriteAuxRecord},
+            online::{GuestMemory, TracingMemory},
+            MemoryAddress, MemoryAuxColsFactory,
+        },
+        native_adapter::util::{
+            memory_read_native, memory_write_native_from_state, tracing_write_native,
+        },
     },
 };
 use openvm_circuit_primitives::{
@@ -32,8 +37,6 @@ use openvm_stark_backend::{
 };
 use static_assertions::const_assert_eq;
 use AS::Native;
-
-use crate::adapters::{memory_read_native, memory_write_native, tracing_write_native};
 
 #[cfg(test)]
 mod tests;
@@ -314,8 +317,8 @@ where
         );
 
         if opcode == NativeJalOpcode::JAL.global_opcode() {
-            memory_write_native(
-                state.memory,
+            memory_write_native_from_state(
+                state,
                 a.as_canonical_u32(),
                 &[F::from_canonical_u32(
                     state.pc.wrapping_add(DEFAULT_PC_STEP),
@@ -323,10 +326,9 @@ where
             );
             *state.pc = (F::from_canonical_u32(*state.pc) + b).as_canonical_u32();
         } else if opcode == NativeRangeCheckOpcode::RANGE_CHECK.global_opcode() {
-            // TODO(ayush): should this not call memory callback?
             let [a_val]: [F; 1] = memory_read_native(state.memory, a.as_canonical_u32());
 
-            memory_write_native(state.memory, a.as_canonical_u32(), &[a_val]);
+            memory_write_native_from_state(state, a.as_canonical_u32(), &[a_val]);
 
             #[cfg(debug_assertions)]
             {

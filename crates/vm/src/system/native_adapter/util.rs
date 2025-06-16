@@ -1,5 +1,5 @@
-// TODO(ayush): this whole file is copied from extensions/native and shouldn't be here
 use openvm_circuit::system::memory::online::TracingMemory;
+use openvm_instructions::{riscv::RV32_IMM_AS, NATIVE_AS};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
@@ -7,18 +7,29 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
-// TODO(ayush): should be imported from somewhere
-pub(super) const AS_IMMEDIATE: u32 = 0;
-pub(super) const AS_NATIVE: u32 = 4;
-
 #[inline(always)]
 pub fn memory_read_native<F, const N: usize>(memory: &GuestMemory, ptr: u32) -> [F; N]
 where
     F: PrimeField32,
 {
     // SAFETY:
-    // - address space `AS_NATIVE` will always have cell type `F` and minimum alignment of `1`
-    unsafe { memory.read::<F, N>(AS_NATIVE, ptr) }
+    // - address space `NATIVE_AS` will always have cell type `F` and minimum alignment of `1`
+    unsafe { memory.read::<F, N>(NATIVE_AS, ptr) }
+}
+
+#[inline(always)]
+pub fn memory_read_or_imm_native<F>(memory: &GuestMemory, addr_space: u32, ptr_or_imm: F) -> F
+where
+    F: PrimeField32,
+{
+    debug_assert!(addr_space == RV32_IMM_AS || addr_space == NATIVE_AS);
+
+    if addr_space == NATIVE_AS {
+        let [result]: [F; 1] = memory_read_native(memory, ptr_or_imm.as_canonical_u32());
+        result
+    } else {
+        ptr_or_imm
+    }
 }
 
 #[inline(always)]
@@ -27,8 +38,8 @@ where
     F: PrimeField32,
 {
     // SAFETY:
-    // - address space `AS_NATIVE` will always have cell type `F` and minimum alignment of `1`
-    unsafe { memory.write::<F, N>(AS_NATIVE, ptr, data) }
+    // - address space `NATIVE_AS` will always have cell type `F` and minimum alignment of `1`
+    unsafe { memory.write::<F, N>(NATIVE_AS, ptr, data) }
 }
 
 #[inline(always)]
@@ -40,7 +51,7 @@ where
     F: PrimeField32,
     Ctx: E1E2ExecutionCtx,
 {
-    state.ctx.on_memory_operation(AS_NATIVE, ptr, N as u32);
+    state.ctx.on_memory_operation(NATIVE_AS, ptr, N as u32);
 
     memory_read_native(state.memory, ptr)
 }
@@ -55,9 +66,9 @@ where
     F: PrimeField32,
     Ctx: E1E2ExecutionCtx,
 {
-    debug_assert!(addr_space == AS_IMMEDIATE || addr_space == AS_NATIVE);
+    debug_assert!(addr_space == RV32_IMM_AS || addr_space == NATIVE_AS);
 
-    if addr_space == AS_NATIVE {
+    if addr_space == NATIVE_AS {
         let [result]: [F; 1] = memory_read_native_from_state(state, ptr_or_imm.as_canonical_u32());
         result
     } else {
@@ -74,7 +85,7 @@ pub fn memory_write_native_from_state<Ctx, F, const N: usize>(
     F: PrimeField32,
     Ctx: E1E2ExecutionCtx,
 {
-    state.ctx.on_memory_operation(AS_NATIVE, ptr, N as u32);
+    state.ctx.on_memory_operation(NATIVE_AS, ptr, N as u32);
 
     memory_write_native(state.memory, ptr, data)
 }
@@ -92,7 +103,7 @@ where
 {
     // SAFETY:
     // - address space `Native` will always have cell type `F` and minimum alignment of `1`
-    unsafe { memory.read::<F, BLOCK_SIZE, 1>(AS_NATIVE, ptr) }
+    unsafe { memory.read::<F, BLOCK_SIZE, 1>(NATIVE_AS, ptr) }
 }
 
 #[inline(always)]
@@ -106,7 +117,7 @@ where
 {
     // SAFETY:
     // - address space `Native` will always have cell type `F` and minimum alignment of `1`
-    unsafe { memory.write::<F, BLOCK_SIZE, 1>(AS_NATIVE, ptr, vals) }
+    unsafe { memory.write::<F, BLOCK_SIZE, 1>(NATIVE_AS, ptr, vals) }
 }
 
 /// Reads register value at `ptr` from memory and records the previous timestamp.
@@ -153,12 +164,12 @@ where
     F: PrimeField32,
 {
     debug_assert!(
-        addr_space == AS_IMMEDIATE || addr_space == AS_NATIVE,
+        addr_space == RV32_IMM_AS || addr_space == NATIVE_AS,
         "addr_space={} is not valid",
         addr_space
     );
 
-    if addr_space == AS_IMMEDIATE {
+    if addr_space == RV32_IMM_AS {
         *prev_timestamp = u32::MAX;
         memory.increment_timestamp();
         ptr_or_imm

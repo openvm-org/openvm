@@ -24,8 +24,9 @@ use test_case::test_case;
 use crate::{
     adapters::{NativeVectorizedAdapterAir, NativeVectorizedAdapterStep},
     field_extension::run_field_extension,
-    write_native_array, FieldExtension, FieldExtensionAir, FieldExtensionChip,
-    FieldExtensionCoreAir, FieldExtensionCoreCols, FieldExtensionStep, EXT_DEG,
+    test_utils::write_native_array,
+    FieldExtension, FieldExtensionAir, FieldExtensionChip, FieldExtensionCoreAir,
+    FieldExtensionCoreCols, FieldExtensionStep, EXT_DEG,
 };
 
 const MAX_INS_CAPACITY: usize = 128;

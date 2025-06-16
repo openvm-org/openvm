@@ -25,7 +25,7 @@ use test_case::test_case;
 use super::{JalRangeCheckAir, JalRangeCheckStep};
 use crate::{
     jal_rangecheck::{JalRangeCheckChip, JalRangeCheckCols},
-    write_native_array,
+    test_utils::write_native_array,
 };
 
 const MAX_INS_CAPACITY: usize = 128;

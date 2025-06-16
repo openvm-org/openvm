@@ -1,4 +1,4 @@
-mod util;
+pub mod util;
 
 use std::{
     array,
@@ -18,13 +18,15 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_IMM_AS, NATIVE_AS,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-use util::{tracing_read_or_imm_native, tracing_write_native, AS_NATIVE};
+use util::{tracing_read_or_imm_native, tracing_write_native};
 
 use super::memory::{online::TracingMemory, MemoryAuxColsFactory};
 use crate::{
@@ -38,7 +40,7 @@ use crate::{
             online::GuestMemory,
         },
         native_adapter::util::{
-            memory_read_or_imm_native_from_state, memory_write_native_from_state, AS_IMMEDIATE,
+            memory_read_or_imm_native_from_state, memory_write_native_from_state,
         },
     },
 };
@@ -170,7 +172,7 @@ pub struct NativeAdapterRecord<F, const R: usize, const W: usize> {
 
     // These are either a pointer to native memory or an immediate value
     pub read_ptr_or_imm: [F; R],
-    // Will set prev_timestamp to `u32::MAX` if the read is from AS_IMMEDIATE
+    // Will set prev_timestamp to `u32::MAX` if the read is from RV32_IMM_AS
     pub reads_aux: [MemoryReadAuxRecord; R],
     pub write_ptr: [F; W],
     pub writes_aux: [MemoryWriteAuxRecord<F, 1>; W],
@@ -238,7 +240,7 @@ where
     ) {
         let &Instruction { a, d, .. } = instruction;
         debug_assert!(W <= 1);
-        debug_assert_eq!(d.as_canonical_u32(), AS_NATIVE);
+        debug_assert_eq!(d.as_canonical_u32(), NATIVE_AS);
 
         if W >= 1 {
             record.write_ptr[0] = a;
@@ -272,7 +274,7 @@ impl<F: PrimeField32, CTX, const R: usize, const W: usize> AdapterTraceFiller<F,
                 adapter_row.writes_aux[0].write_aux.as_mut(),
             );
             adapter_row.writes_aux[0].address.pointer = record.write_ptr[0];
-            adapter_row.writes_aux[0].address.address_space = F::from_canonical_u32(AS_NATIVE);
+            adapter_row.writes_aux[0].address.address_space = F::from_canonical_u32(NATIVE_AS);
         }
 
         adapter_row
@@ -291,9 +293,9 @@ impl<F: PrimeField32, CTX, const R: usize, const W: usize> AdapterTraceFiller<F,
                         read_cols.read_aux.as_mut(),
                     );
                     read_cols.address.pointer = *ptr_or_imm;
-                    read_cols.address.address_space = F::from_canonical_u32(AS_IMMEDIATE);
+                    read_cols.address.address_space = F::from_canonical_u32(RV32_IMM_AS);
                 } else {
-                    read_cols.read_aux.is_zero_aux = F::from_canonical_u32(AS_NATIVE).inverse();
+                    read_cols.read_aux.is_zero_aux = F::from_canonical_u32(NATIVE_AS).inverse();
                     read_cols.read_aux.is_immediate = F::ZERO;
                     mem_helper.fill(
                         read_record.prev_timestamp,
@@ -301,7 +303,7 @@ impl<F: PrimeField32, CTX, const R: usize, const W: usize> AdapterTraceFiller<F,
                         read_cols.read_aux.as_mut(),
                     );
                     read_cols.address.pointer = *ptr_or_imm;
-                    read_cols.address.address_space = F::from_canonical_u32(AS_NATIVE);
+                    read_cols.address.address_space = F::from_canonical_u32(NATIVE_AS);
                 }
             });
 
@@ -347,7 +349,7 @@ where
     {
         let &Instruction { a, d, .. } = instruction;
         debug_assert!(W <= 1);
-        debug_assert_eq!(d.as_canonical_u32(), AS_NATIVE);
+        debug_assert_eq!(d.as_canonical_u32(), NATIVE_AS);
 
         if W >= 1 {
             memory_write_native_from_state(state, a.as_canonical_u32(), data);

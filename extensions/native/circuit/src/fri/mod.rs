@@ -13,13 +13,19 @@ use openvm_circuit::{
         MultiRowLayout, NewVmChipWrapper, RecordArena, Result, StepExecutorE1, Streams,
         TraceFiller, TraceStep, VmStateMut,
     },
-    system::memory::{
-        offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteAuxRecord,
+    system::{
+        memory::{
+            offline_checker::{
+                MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+                MemoryWriteAuxRecord,
+            },
+            online::{GuestMemory, TracingMemory},
+            MemoryAddress, MemoryAuxColsFactory,
         },
-        online::{GuestMemory, TracingMemory},
-        MemoryAddress, MemoryAuxColsFactory,
+        native_adapter::util::{
+            memory_read_native, memory_read_native_from_state, memory_write_native_from_state,
+            tracing_read_native, tracing_write_native,
+        },
     },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -37,9 +43,6 @@ use openvm_stark_backend::{
 use static_assertions::const_assert_eq;
 
 use crate::{
-    adapters::{
-        memory_read_native, memory_write_native, tracing_read_native, tracing_write_native,
-    },
     field_extension::{FieldExtension, EXT_DEG},
     utils::const_max,
 };
@@ -1030,11 +1033,11 @@ where
         let hint_id_ptr = f.as_canonical_u32();
         let is_init_ptr = g.as_canonical_u32();
 
-        let alpha = memory_read_native(state.memory, alpha_ptr);
-        let [length]: [F; 1] = memory_read_native(state.memory, length_ptr);
-        let [a_ptr]: [F; 1] = memory_read_native(state.memory, a_ptr_ptr);
-        let [b_ptr]: [F; 1] = memory_read_native(state.memory, b_ptr_ptr);
-        let [is_init_read]: [F; 1] = memory_read_native(state.memory, is_init_ptr);
+        let alpha = memory_read_native_from_state(state, alpha_ptr);
+        let [length]: [F; 1] = memory_read_native_from_state(state, length_ptr);
+        let [a_ptr]: [F; 1] = memory_read_native_from_state(state, a_ptr_ptr);
+        let [b_ptr]: [F; 1] = memory_read_native_from_state(state, b_ptr_ptr);
+        let [is_init_read]: [F; 1] = memory_read_native_from_state(state, is_init_ptr);
         let is_init = is_init_read.as_canonical_u32();
 
         let [hint_id_f]: [F; 1] = memory_read_native(state.memory, hint_id_ptr);
@@ -1055,13 +1058,13 @@ where
         for i in 0..length {
             let a_ptr_i = (a_ptr + F::from_canonical_usize(i)).as_canonical_u32();
             let [a]: [F; 1] = if is_init == 0 {
-                memory_write_native(state.memory, a_ptr_i, &[data[i]]);
+                memory_write_native_from_state(state, a_ptr_i, &[data[i]]);
                 [data[i]]
             } else {
-                memory_read_native(state.memory, a_ptr_i)
+                memory_read_native_from_state(state, a_ptr_i)
             };
             let b_ptr_i = (b_ptr + F::from_canonical_usize(EXT_DEG * i)).as_canonical_u32();
-            let b = memory_read_native::<F, EXT_DEG>(state.memory, b_ptr_i);
+            let b = memory_read_native_from_state(state, b_ptr_i);
 
             as_and_bs.push((a, b));
         }
@@ -1075,7 +1078,7 @@ where
             );
         }
 
-        memory_write_native(state.memory, result_ptr, &result);
+        memory_write_native_from_state(state, result_ptr, &result);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

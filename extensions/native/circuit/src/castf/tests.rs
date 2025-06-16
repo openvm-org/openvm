@@ -24,7 +24,8 @@ use super::{CastFChip, CastFCoreAir, CastFCoreCols, CastFStep, LIMB_BITS};
 use crate::{
     adapters::{ConvertAdapterAir, ConvertAdapterCols, ConvertAdapterStep},
     castf::run_castf,
-    write_native_array, CastFAir, CASTF_MAX_BITS,
+    test_utils::write_native_array,
+    CastFAir, CASTF_MAX_BITS,
 };
 
 const MAX_INS_CAPACITY: usize = 128;

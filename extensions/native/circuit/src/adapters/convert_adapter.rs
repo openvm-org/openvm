@@ -9,13 +9,16 @@ use openvm_circuit::{
         AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, BasicAdapterInterface,
         ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir, VmStateMut,
     },
-    system::memory::{
-        offline_checker::{
-            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteBytesAuxRecord,
+    system::{
+        memory::{
+            offline_checker::{
+                MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+                MemoryWriteBytesAuxRecord,
+            },
+            online::{GuestMemory, TracingMemory},
+            MemoryAddress, MemoryAuxColsFactory,
         },
-        online::{GuestMemory, TracingMemory},
-        MemoryAddress, MemoryAuxColsFactory,
+        native_adapter::util::{memory_read_native_from_state, tracing_read_native},
     },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -30,8 +33,6 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-
-use crate::adapters::{memory_read_native_from_state, tracing_read_native};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]

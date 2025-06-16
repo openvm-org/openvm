@@ -29,7 +29,7 @@ use test_case::test_case;
 use crate::{
     adapters::{BranchNativeAdapterAir, BranchNativeAdapterStep},
     branch_eq::{run_eq, NativeBranchEqAir, NativeBranchEqChip, NativeBranchEqStep},
-    write_native_or_imm,
+    test_utils::write_native_or_imm,
 };
 
 type F = BabyBear;
