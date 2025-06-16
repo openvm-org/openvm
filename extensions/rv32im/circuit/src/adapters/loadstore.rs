@@ -9,13 +9,18 @@ use openvm_circuit::{
         AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, ExecutionBridge, ExecutionState,
         VmAdapterAir, VmAdapterInterface, VmStateMut,
     },
-    system::memory::{
-        offline_checker::{
-            MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
-            MemoryWriteAuxCols,
+    system::{
+        memory::{
+            offline_checker::{
+                MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
+                MemoryWriteAuxCols,
+            },
+            online::{GuestMemory, TracingMemory},
+            MemoryAddress, MemoryAuxColsFactory,
         },
-        online::{GuestMemory, TracingMemory},
-        MemoryAddress, MemoryAuxColsFactory,
+        native_adapter::util::{
+            memory_read_native, memory_write_native_from_state, timed_write_native,
+        },
     },
 };
 use openvm_circuit_primitives::{
@@ -39,9 +44,8 @@ use openvm_stark_backend::{
 
 use super::RV32_REGISTER_NUM_LIMBS;
 use crate::adapters::{
-    memory_read, memory_read_from_state, memory_read_native, memory_write_from_state,
-    memory_write_native_from_state, read_rv32_register_from_state, timed_write, timed_write_native,
-    tracing_read, RV32_CELL_BITS,
+    memory_read, memory_read_from_state, memory_write_from_state, read_rv32_register_from_state,
+    timed_write, tracing_read, RV32_CELL_BITS,
 };
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware

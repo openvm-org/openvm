@@ -6,7 +6,7 @@ use openvm_circuit::{
         TraceStep, VmStateMut,
     },
     system::memory::{
-        offline_checker::{MemoryReadAuxRecord, MemoryWriteAuxRecord},
+        offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
         online::TracingMemory,
         MemoryAuxColsFactory,
     },
@@ -58,7 +58,7 @@ pub struct Sha256VmRecordHeader {
     pub len: u32,
 
     pub register_reads_aux: [MemoryReadAuxRecord; SHA256_REGISTER_READS],
-    pub write_aux: MemoryWriteAuxRecord<SHA256_WRITE_SIZE>,
+    pub write_aux: MemoryWriteBytesAuxRecord<SHA256_WRITE_SIZE>,
 }
 
 pub struct Sha256VmRecordMut<'a> {

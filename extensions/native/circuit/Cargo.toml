@@ -35,6 +35,7 @@ static_assertions.workspace = true
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
+test-case.workspace = true
 
 [features]
 default = ["parallel"]

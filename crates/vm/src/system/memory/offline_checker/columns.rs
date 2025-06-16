@@ -33,20 +33,6 @@ pub struct MemoryWriteAuxCols<T, const N: usize> {
 }
 
 impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
-    pub(in crate::system::memory) fn new(
-        prev_data: [T; N],
-        prev_timestamp: T,
-        lt_aux: LessThanAuxCols<T, AUX_LEN>,
-    ) -> Self {
-        Self {
-            base: MemoryBaseAuxCols {
-                prev_timestamp,
-                timestamp_lt_aux: lt_aux,
-            },
-            prev_data,
-        }
-    }
-
     pub fn from_base(base: MemoryBaseAuxCols<T>, prev_data: [T; N]) -> Self {
         Self { base, prev_data }
     }
@@ -121,6 +107,12 @@ impl<T, const N: usize> AsMut<MemoryBaseAuxCols<T>> for MemoryWriteAuxCols<T, N>
 }
 
 impl<T> AsMut<MemoryBaseAuxCols<T>> for MemoryReadAuxCols<T> {
+    fn as_mut(&mut self) -> &mut MemoryBaseAuxCols<T> {
+        &mut self.base
+    }
+}
+
+impl<T> AsMut<MemoryBaseAuxCols<T>> for MemoryReadOrImmediateAuxCols<T> {
     fn as_mut(&mut self) -> &mut MemoryBaseAuxCols<T> {
         &mut self.base
     }

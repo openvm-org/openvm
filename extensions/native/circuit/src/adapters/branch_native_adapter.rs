@@ -5,16 +5,20 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
-        BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
-        VmStateMut,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, BasicAdapterInterface,
+        ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir, VmStateMut,
     },
-    system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadOrImmediateAuxCols},
-        online::{GuestMemory, TracingMemory},
-        MemoryAddress, MemoryAuxColsFactory,
+    system::{
+        memory::{
+            offline_checker::{MemoryBridge, MemoryReadAuxRecord, MemoryReadOrImmediateAuxCols},
+            online::{GuestMemory, TracingMemory},
+            MemoryAddress, MemoryAuxColsFactory,
+        },
+        native_adapter::util::{memory_read_or_imm_native_from_state, tracing_read_or_imm_native},
     },
 };
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_native_compiler::conversion::AS;
@@ -24,17 +28,15 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
-use crate::adapters::{memory_read_or_imm_native_from_state, tracing_read_or_imm_native};
-
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, Debug)]
 pub struct BranchNativeAdapterReadCols<T> {
     pub address: MemoryAddress<T, T>,
     pub read_aux: MemoryReadOrImmediateAuxCols<T>,
 }
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, Debug)]
 pub struct BranchNativeAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub reads_aux: [BranchNativeAdapterReadCols<T>; 2],
@@ -122,6 +124,17 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for BranchNativeAdapterAir {
     }
 }
 
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct BranchNativeAdapterRecord<F> {
+    pub from_pc: u32,
+    pub from_timestamp: u32,
+
+    pub ptrs: [F; 2],
+    // Will set prev_timestamp to `u32::MAX` if the read is an immediate
+    pub reads_aux: [MemoryReadAuxRecord; 2],
+}
+
 #[derive(derive_new::new)]
 pub struct BranchNativeAdapterStep;
 
@@ -132,14 +145,12 @@ where
     const WIDTH: usize = size_of::<BranchNativeAdapterCols<u8>>();
     type ReadData = [F; 2];
     type WriteData = ();
-    type TraceContext<'a> = ();
+    type RecordMut<'a> = &'a mut BranchNativeAdapterRecord<F>;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]) {
-        let adapter_row: &mut BranchNativeAdapterCols<F> = adapter_row.borrow_mut();
-
-        adapter_row.from_state.pc = F::from_canonical_u32(pc);
-        adapter_row.from_state.timestamp = F::from_canonical_u32(memory.timestamp);
+    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+        record.from_pc = pc;
+        record.from_timestamp = memory.timestamp;
     }
 
     #[inline(always)]
@@ -147,26 +158,23 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        adapter_row: &mut [F],
+        record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
         let &Instruction { a, b, d, e, .. } = instruction;
-        let adapter_row: &mut BranchNativeAdapterCols<F> = adapter_row.borrow_mut();
 
-        adapter_row.reads_aux[0].address.pointer = a;
+        record.ptrs[0] = a;
         let rs1 = tracing_read_or_imm_native(
             memory,
             d.as_canonical_u32(),
             a,
-            &mut adapter_row.reads_aux[0].address.address_space,
-            &mut adapter_row.reads_aux[0].read_aux,
+            &mut record.reads_aux[0].prev_timestamp,
         );
-        adapter_row.reads_aux[1].address.pointer = b;
+        record.ptrs[1] = b;
         let rs2 = tracing_read_or_imm_native(
             memory,
             e.as_canonical_u32(),
             b,
-            &mut adapter_row.reads_aux[1].address.address_space,
-            &mut adapter_row.reads_aux[1].read_aux,
+            &mut record.reads_aux[1].prev_timestamp,
         );
         [rs1, rs2]
     }
@@ -176,44 +184,56 @@ where
         &self,
         _memory: &mut TracingMemory<F>,
         _instruction: &Instruction<F>,
-        _adapter_row: &mut [F],
         _data: &Self::WriteData,
+        _record: &mut Self::RecordMut<'_>,
     ) {
+        // This adapter doesn't write anything
     }
+}
 
+impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for BranchNativeAdapterStep {
     #[inline(always)]
-    fn fill_trace_row(
-        &self,
-        mem_helper: &MemoryAuxColsFactory<F>,
-        _trace_ctx: Self::TraceContext<'_>,
-        adapter_row: &mut [F],
-    ) {
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        let record: &BranchNativeAdapterRecord<F> =
+            unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut BranchNativeAdapterCols<F> = adapter_row.borrow_mut();
 
-        let mut timestamp = adapter_row.from_state.timestamp.as_canonical_u32();
+        // Writing in reverse order to avoid overwriting the `record`
 
-        mem_helper.fill_from_prev(timestamp, &mut adapter_row.reads_aux[0].read_aux.base);
-        timestamp += 1;
-
-        mem_helper.fill_from_prev(timestamp, &mut adapter_row.reads_aux[1].read_aux.base);
-
-        let read_aux0 = &mut adapter_row.reads_aux[0];
-        if read_aux0.address.address_space.is_zero() {
-            read_aux0.read_aux.is_immediate = F::ONE;
-            read_aux0.read_aux.is_zero_aux = F::ZERO;
-        } else {
-            read_aux0.read_aux.is_immediate = F::ZERO;
-            read_aux0.read_aux.is_zero_aux = read_aux0.address.address_space.inverse();
+        let native_as = F::from_canonical_u32(AS::Native as u32);
+        for ((i, read_record), read_cols) in record
+            .reads_aux
+            .iter()
+            .enumerate()
+            .zip(adapter_row.reads_aux.iter_mut())
+            .rev()
+        {
+            // previous timestamp is u32::MAX if the read is an immediate
+            if read_record.prev_timestamp == u32::MAX {
+                read_cols.read_aux.is_zero_aux = F::ZERO;
+                read_cols.read_aux.is_immediate = F::ONE;
+                mem_helper.fill(
+                    0,
+                    record.from_timestamp + i as u32,
+                    read_cols.read_aux.as_mut(),
+                );
+                read_cols.address.pointer = record.ptrs[i];
+                read_cols.address.address_space = F::ZERO;
+            } else {
+                read_cols.read_aux.is_zero_aux = native_as.inverse();
+                read_cols.read_aux.is_immediate = F::ZERO;
+                mem_helper.fill(
+                    read_record.prev_timestamp,
+                    record.from_timestamp + i as u32,
+                    read_cols.read_aux.as_mut(),
+                );
+                read_cols.address.pointer = record.ptrs[i];
+                read_cols.address.address_space = native_as;
+            }
         }
 
-        let read_aux1 = &mut adapter_row.reads_aux[1];
-        if read_aux1.address.address_space.is_zero() {
-            read_aux1.read_aux.is_immediate = F::ONE;
-            read_aux1.read_aux.is_zero_aux = F::ZERO;
-        } else {
-            read_aux1.read_aux.is_immediate = F::ZERO;
-            read_aux1.read_aux.is_zero_aux = read_aux1.address.address_space.inverse();
-        }
+        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
+        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
     }
 }
 

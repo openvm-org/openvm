@@ -75,7 +75,7 @@ fn generate_recorded_trace(
     let reconstructed_inputs: Vec<BigUint> = record
         .input_limbs
         .chunks(expr.canonical_num_limbs())
-        .map(|chunk| BigUint::from_bytes_le(chunk))
+        .map(BigUint::from_bytes_le)
         .collect();
 
     let mut row = BabyBear::zero_vec(width);
@@ -447,7 +447,7 @@ fn test_recorded_execution_records() {
     let reconstructed_inputs: Vec<BigUint> = record
         .input_limbs
         .chunks(expr.canonical_num_limbs())
-        .map(|chunk| BigUint::from_bytes_le(chunk))
+        .map(BigUint::from_bytes_le)
         .collect();
     assert_eq!(reconstructed_inputs.len(), inputs.len());
     for (original, reconstructed) in inputs.iter().zip(reconstructed_inputs.iter()) {
@@ -540,7 +540,7 @@ fn test_record_arena_allocation_patterns() {
     let reconstructed_inputs: Vec<BigUint> = record
         .input_limbs
         .chunks(expr.canonical_num_limbs())
-        .map(|chunk| BigUint::from_bytes_le(chunk))
+        .map(BigUint::from_bytes_le)
         .collect();
     assert_eq!(reconstructed_inputs.len(), inputs.len());
     for (original, reconstructed) in inputs.iter().zip(reconstructed_inputs.iter()) {
@@ -586,7 +586,7 @@ fn test_tracestep_tracefiller_roundtrip() {
     let reconstructed_inputs: Vec<BigUint> = record
         .input_limbs
         .chunks(expr.canonical_num_limbs())
-        .map(|chunk| BigUint::from_bytes_le(chunk))
+        .map(BigUint::from_bytes_le)
         .collect();
     let vars_reconstructed = expr.execute(reconstructed_inputs, vec![]);
 

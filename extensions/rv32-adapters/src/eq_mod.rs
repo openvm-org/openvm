@@ -13,7 +13,7 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteAuxRecord,
+            MemoryWriteBytesAuxRecord,
         },
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
@@ -243,7 +243,7 @@ pub struct Rv32IsEqualModAdapterRecord<
     pub heap_read_aux: [[MemoryReadAuxRecord; BLOCKS_PER_READ]; NUM_READS],
 
     pub rd_ptr: u32,
-    pub writes_aux: MemoryWriteAuxRecord<RV32_REGISTER_NUM_LIMBS>,
+    pub writes_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
 pub struct Rv32IsEqualModeAdapterStep<

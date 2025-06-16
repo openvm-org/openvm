@@ -5,15 +5,26 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
-        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, ExecutionBridge, ExecutionState,
+        VmAdapterAir, VmAdapterInterface, VmStateMut,
     },
-    system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-        online::{GuestMemory, TracingMemory},
-        MemoryAddress, MemoryAuxColsFactory,
+    system::{
+        memory::{
+            offline_checker::{
+                MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+                MemoryWriteAuxRecord,
+            },
+            online::{GuestMemory, TracingMemory},
+            MemoryAddress, MemoryAuxColsFactory,
+        },
+        native_adapter::util::{
+            memory_read_native, memory_read_native_from_state, memory_write_native_from_state,
+            tracing_read_native, tracing_write_native,
+        },
     },
 };
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::{
@@ -24,11 +35,6 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
-};
-
-use crate::adapters::{
-    memory_read_native, memory_read_native_from_state, memory_write_native_from_state,
-    tracing_read_native, tracing_write_native,
 };
 
 pub struct NativeLoadStoreInstruction<T> {
@@ -167,27 +173,39 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
     }
 }
 
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct NativeLoadStoreAdapterRecord<F, const NUM_CELLS: usize> {
+    pub from_pc: u32,
+    pub from_timestamp: u32,
+    pub a: F,
+    pub b: F,
+    pub c: F,
+    pub write_ptr: F,
+
+    pub ptr_read: MemoryReadAuxRecord,
+    // Will set `prev_timestamp` to u32::MAX if `HINT_STOREW`
+    pub data_read: MemoryReadAuxRecord,
+    pub data_write: MemoryWriteAuxRecord<F, NUM_CELLS>,
+}
+
 #[derive(derive_new::new)]
 pub struct NativeLoadStoreAdapterStep<const NUM_CELLS: usize> {
     offset: usize,
 }
 
-impl<F, CTX, const NUM_CELLS: usize> AdapterTraceStep<F, CTX>
+impl<F: PrimeField32, CTX, const NUM_CELLS: usize> AdapterTraceStep<F, CTX>
     for NativeLoadStoreAdapterStep<NUM_CELLS>
-where
-    F: PrimeField32,
 {
     const WIDTH: usize = std::mem::size_of::<NativeLoadStoreAdapterCols<u8, NUM_CELLS>>();
     type ReadData = (F, [F; NUM_CELLS]);
     type WriteData = [F; NUM_CELLS];
-    type TraceContext<'a> = F;
+    type RecordMut<'a> = &'a mut NativeLoadStoreAdapterRecord<F, NUM_CELLS>;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]) {
-        let adapter_row: &mut NativeLoadStoreAdapterCols<F, NUM_CELLS> = adapter_row.borrow_mut();
-
-        adapter_row.from_state.pc = F::from_canonical_u32(pc);
-        adapter_row.from_state.timestamp = F::from_canonical_u32(memory.timestamp);
+    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+        record.from_pc = pc;
+        record.from_timestamp = memory.timestamp();
     }
 
     #[inline(always)]
@@ -195,7 +213,7 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        adapter_row: &mut [F],
+        record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
         let &Instruction {
             opcode,
@@ -208,41 +226,42 @@ where
         } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
+        debug_assert_eq!(e.as_canonical_u32(), AS::Native as u32);
 
         let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let adapter_row: &mut NativeLoadStoreAdapterCols<F, NUM_CELLS> = adapter_row.borrow_mut();
-        adapter_row.a = a;
-        adapter_row.b = b;
-        adapter_row.c = c;
+        record.a = a;
+        record.b = b;
+        record.c = c;
 
         // Read the pointer value from memory
         let [read_cell] = tracing_read_native::<F, 1>(
             memory,
             c.as_canonical_u32(),
-            adapter_row.pointer_read_aux_cols.as_mut(),
+            &mut record.ptr_read.prev_timestamp,
         );
 
-        let (data_read_as, _) = match local_opcode {
-            LOADW => (e.as_canonical_u32(), d.as_canonical_u32()),
-            STOREW | HINT_STOREW => (d.as_canonical_u32(), e.as_canonical_u32()),
-        };
+        let data_read_ptr = match local_opcode {
+            LOADW => read_cell + record.b,
+            STOREW | HINT_STOREW => record.a,
+        }
+        .as_canonical_u32();
 
-        debug_assert_eq!(data_read_as, AS::Native as u32);
-
-        let (data_read_ptr, _) = match local_opcode {
-            LOADW => ((read_cell + b).as_canonical_u32(), a.as_canonical_u32()),
-            STOREW | HINT_STOREW => (a.as_canonical_u32(), (read_cell + b).as_canonical_u32()),
-        };
+        // It's easier to do this here than in `write`
+        match local_opcode {
+            LOADW => record.write_ptr = record.a,
+            STOREW | HINT_STOREW => record.write_ptr = read_cell + record.b,
+        }
 
         // Read data based on opcode
         let data_read: [F; NUM_CELLS] = match local_opcode {
-            HINT_STOREW => [F::ZERO; NUM_CELLS],
-            LOADW | STOREW => tracing_read_native::<F, NUM_CELLS>(
-                memory,
-                data_read_ptr,
-                adapter_row.data_read_aux_cols.as_mut(),
-            ),
+            HINT_STOREW => {
+                record.data_read.prev_timestamp = u32::MAX;
+                [F::ZERO; NUM_CELLS]
+            }
+            LOADW | STOREW => {
+                tracing_read_native(memory, data_read_ptr, &mut record.data_read.prev_timestamp)
+            }
         };
 
         (read_cell, data_read)
@@ -252,72 +271,67 @@ where
     fn write(
         &self,
         memory: &mut TracingMemory<F>,
-        instruction: &Instruction<F>,
-        adapter_row: &mut [F],
+        _instruction: &Instruction<F>,
         data: &Self::WriteData,
+        record: &mut Self::RecordMut<'_>,
     ) {
-        let &Instruction {
-            opcode,
-            a,
-            b,
-            c,
-            d,
-            e,
-            ..
-        } = instruction;
-
-        // TODO(ayush): remove duplication
-        debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
-
-        let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-
-        let adapter_row: &mut NativeLoadStoreAdapterCols<F, NUM_CELLS> = adapter_row.borrow_mut();
-
-        let [read_cell] = memory_read_native::<F, 1>(memory.data(), c.as_canonical_u32());
-
-        let (_, data_write_as) = match local_opcode {
-            LOADW => (e.as_canonical_u32(), d.as_canonical_u32()),
-            STOREW | HINT_STOREW => (d.as_canonical_u32(), e.as_canonical_u32()),
-        };
-
-        debug_assert_eq!(data_write_as, AS::Native as u32);
-
-        let data_write_ptr = match local_opcode {
-            LOADW => a.as_canonical_u32(),
-            STOREW | HINT_STOREW => (read_cell + b).as_canonical_u32(),
-        };
-
-        adapter_row.data_write_pointer = F::from_canonical_u32(data_write_ptr);
-
         // Write data to memory
         tracing_write_native(
             memory,
-            data_write_ptr,
+            record.write_ptr.as_canonical_u32(),
             data,
-            &mut adapter_row.data_write_aux_cols,
+            &mut record.data_write.prev_timestamp,
+            &mut record.data_write.prev_data,
         );
     }
+}
 
+impl<F: PrimeField32, CTX, const NUM_CELLS: usize> AdapterTraceFiller<F, CTX>
+    for NativeLoadStoreAdapterStep<NUM_CELLS>
+{
     #[inline(always)]
-    fn fill_trace_row(
-        &self,
-        mem_helper: &MemoryAuxColsFactory<F>,
-        is_hint_storew: Self::TraceContext<'_>,
-        adapter_row: &mut [F],
-    ) {
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        let record: &NativeLoadStoreAdapterRecord<F, NUM_CELLS> =
+            unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut NativeLoadStoreAdapterCols<F, NUM_CELLS> = adapter_row.borrow_mut();
-        let mut timestamp = adapter_row.from_state.timestamp.as_canonical_u32();
 
-        // Fill auxiliary columns for memory operations
-        mem_helper.fill_from_prev(timestamp, adapter_row.pointer_read_aux_cols.as_mut());
-        timestamp += 1;
+        // Writing in reverse order to avoid overwriting the `record`
 
-        if is_hint_storew.is_zero() {
-            mem_helper.fill_from_prev(timestamp, adapter_row.data_read_aux_cols.as_mut());
-            timestamp += 1;
+        let is_hint_storew = record.data_read.prev_timestamp == u32::MAX;
+
+        adapter_row
+            .data_write_aux_cols
+            .set_prev_data(record.data_write.prev_data);
+        // Note, if `HINT_STOREW` we didn't do a data read and we didn't update the timestamp
+        mem_helper.fill(
+            record.data_write.prev_timestamp,
+            record.from_timestamp + 2 - is_hint_storew as u32,
+            adapter_row.data_write_aux_cols.as_mut(),
+        );
+
+        if !is_hint_storew {
+            mem_helper.fill(
+                record.data_read.prev_timestamp,
+                record.from_timestamp + 1,
+                adapter_row.data_read_aux_cols.as_mut(),
+            );
+        } else {
+            mem_helper.fill_zero(adapter_row.data_read_aux_cols.as_mut());
         }
 
-        mem_helper.fill_from_prev(timestamp, adapter_row.data_write_aux_cols.as_mut());
+        mem_helper.fill(
+            record.ptr_read.prev_timestamp,
+            record.from_timestamp,
+            adapter_row.pointer_read_aux_cols.as_mut(),
+        );
+
+        adapter_row.data_write_pointer = record.write_ptr;
+        adapter_row.c = record.c;
+        adapter_row.b = record.b;
+        adapter_row.a = record.a;
+
+        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
     }
 }
 

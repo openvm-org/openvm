@@ -7,7 +7,7 @@ use openvm_circuit::{
         ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir, VmStateMut,
     },
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryWriteAuxCols, MemoryWriteAuxRecord},
+        offline_checker::{MemoryBridge, MemoryWriteAuxCols, MemoryWriteBytesAuxRecord},
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
     },
@@ -197,7 +197,7 @@ pub struct Rv32RdWriteAdapterRecord {
 
     // Will use u32::MAX to indicate no write
     pub rd_ptr: u32,
-    pub rd_aux_record: MemoryWriteAuxRecord<RV32_REGISTER_NUM_LIMBS>,
+    pub rd_aux_record: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
 #[derive(derive_new::new)]

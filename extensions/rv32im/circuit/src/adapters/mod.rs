@@ -76,16 +76,6 @@ pub fn memory_read<const N: usize>(memory: &GuestMemory, address_space: u32, ptr
     unsafe { memory.read::<u8, N>(address_space, ptr) }
 }
 
-// Memory read from native address space. Only used by loadstore adapter
-// TODO(arayi): should we support reads from native address space?
-#[inline(always)]
-pub fn memory_read_native<F: PrimeField32, const N: usize>(
-    memory: &GuestMemory,
-    ptr: u32,
-) -> [F; N] {
-    unsafe { memory.read::<F, N>(4, ptr) }
-}
-
 #[inline(always)]
 pub fn memory_write<const N: usize>(
     memory: &mut GuestMemory,
@@ -104,21 +94,6 @@ pub fn memory_write<const N: usize>(
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
     unsafe { memory.write::<u8, N>(address_space, ptr, data) }
-}
-
-// Memory write to native address space. Only used by loadstore adapter
-// TODO(arayi): should we support stores to native address space?
-#[inline(always)]
-pub fn memory_write_native_from_state<Ctx, F: PrimeField32, const N: usize>(
-    state: &mut VmStateMut<GuestMemory, Ctx>,
-    ptr: u32,
-    data: &[F; N],
-) where
-    Ctx: E1E2ExecutionCtx,
-{
-    state.ctx.on_memory_operation(4, ptr, N as u32);
-
-    unsafe { state.memory.write::<F, N>(4, ptr, data) }
 }
 
 /// Atomic read operation which increments the timestamp by 1.
@@ -162,17 +137,6 @@ pub fn timed_write<F: PrimeField32, const N: usize>(
     unsafe { memory.write::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, data) }
 }
 
-// Timed memory write to native address space. Only used by loadstore adapter
-// TODO(arayi): should we support stores to native address space?
-#[inline(always)]
-pub fn timed_write_native<F: PrimeField32, const N: usize>(
-    memory: &mut TracingMemory<F>,
-    ptr: u32,
-    data: &[F; N],
-) -> (u32, [F; N]) {
-    unsafe { memory.write::<F, N, 1>(4, ptr, data) }
-}
-
 /// Reads register value at `reg_ptr` from memory and records the memory access in mutable buffer.
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
 #[inline(always)]
@@ -186,7 +150,7 @@ where
     F: PrimeField32,
 {
     let (t_prev, data) = timed_read(memory, address_space, ptr);
-    *prev_timestamp = t_prev.into();
+    *prev_timestamp = t_prev;
     data
 }
 

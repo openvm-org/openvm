@@ -90,12 +90,12 @@ impl Default for ExecuteConfig {
     fn default() -> Self {
         Self {
             system: SystemConfig::default().with_continuations(),
-            rv32i: Rv32I::default(),
+            rv32i: Rv32I,
             rv32m: Rv32M::default(),
-            io: Rv32Io::default(),
+            io: Rv32Io,
             bigint: Int256::default(),
-            keccak: Keccak256::default(),
-            sha256: Sha256::default(),
+            keccak: Keccak256,
+            sha256: Sha256,
         }
     }
 }

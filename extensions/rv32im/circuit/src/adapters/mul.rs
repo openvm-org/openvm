@@ -9,7 +9,7 @@ use openvm_circuit::{
     system::memory::{
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-            MemoryWriteAuxRecord,
+            MemoryWriteBytesAuxRecord,
         },
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
@@ -139,7 +139,7 @@ pub struct Rv32MultAdapterRecord {
     pub rs2_ptr: u32,
 
     pub reads_aux: [MemoryReadAuxRecord; 2],
-    pub writes_aux: MemoryWriteAuxRecord<RV32_REGISTER_NUM_LIMBS>,
+    pub writes_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
 #[derive(derive_new::new)]
@@ -231,13 +231,13 @@ impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32MultAdapterStep {
         );
 
         mem_helper.fill(
-            record.reads_aux[1].prev_timestamp.into(),
+            record.reads_aux[1].prev_timestamp,
             timestamp + 1,
             adapter_row.reads_aux[1].as_mut(),
         );
 
         mem_helper.fill(
-            record.reads_aux[0].prev_timestamp.into(),
+            record.reads_aux[0].prev_timestamp,
             timestamp,
             adapter_row.reads_aux[0].as_mut(),
         );

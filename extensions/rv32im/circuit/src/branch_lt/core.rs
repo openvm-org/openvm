@@ -249,7 +249,7 @@ where
 
         core_record.a = rs1;
         core_record.b = rs2;
-        core_record.imm = imm.as_canonical_u32().into();
+        core_record.imm = imm.as_canonical_u32();
         core_record.local_opcode = opcode.local_opcode_idx(self.offset) as u8;
 
         if run_cmp::<NUM_LIMBS, LIMB_BITS>(core_record.local_opcode, &rs1, &rs2).0 {
