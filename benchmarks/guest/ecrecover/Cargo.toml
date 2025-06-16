@@ -5,23 +5,16 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-k256 = { version = "0.13.3", default-features = false, features = ["ecdsa"] }
 openvm = { path = "../../../crates/toolchain/openvm", features = ["std"] }
-openvm-platform = { path = "../../../crates/toolchain/platform", default-features = false }
 openvm-algebra-guest = { path = "../../../extensions/algebra/guest", default-features = false }
-openvm-ecc-guest = { path = "../../../extensions/ecc/guest", default-features = false, features = [
-    "k256",
-] }
-openvm-keccak256-guest = { path = "../../../extensions/keccak256/guest", default-features = false }
-# We do not patch revm-precompile so that the benchmark only depends on this repo.
-revm-precompile = { version = "14.0.0", default-features = false }
-alloy-primitives = { version = "0.8.10", default-features = false, features = [
+openvm-ecc-guest = { path = "../../../extensions/ecc/guest", default-features = false }
+openvm-keccak256 = { path = "../../../guest-libs/keccak256/", default-features = false }
+revm-precompile = { git = "https://github.com/bluealloy/revm.git", tag = "v75", default-features = false }
+# IMPORTANT: must be same version as used by revm; revm does not re-export this feature so we enable it here
+alloy-primitives = { version = "1.2.0", default-features = false, features = [
     "native-keccak",
-] } # revm does not re-export this feature so we enable it here
-derive_more = { version = "1.0.0", default-features = false, features = [
-    "from",
-    "display",
 ] }
+k256 = { version = "0.13.3", default-features = false }
 
 [features]
 default = []
@@ -34,3 +27,6 @@ lto = "thin"    # faster compile time
 inherits = "release"
 debug = 2
 strip = false
+
+[patch.crates-io]
+k256 = { path = "../../../guest-libs/k256/" }

@@ -46,17 +46,10 @@ jobs:
         run: |
           cargo install --force --locked --path .
 
-      - name: check build consistency
-        working-directory: examples/ecc
-        run: |
-          cargo openvm build
-          mv openvm/app.vmexe app1.vmexe
-          cargo openvm build
-          cmp app1.vmexe openvm/app.vmexe || (echo "Build is not deterministic!" && exit 1)
-
       - name: Build and run book examples
         working-directory: examples
         run: |
+          set -e
           for dir in */; do
             if [ -f "${dir}Cargo.toml" ]; then
               echo "Editing ${dir}Cargo.toml to use the current branch"
@@ -66,17 +59,26 @@ jobs:
 
               echo "Building ${dir%/}"
               cd "$dir"
-              cargo openvm build && cargo openvm run
+              cargo openvm build
+              cargo openvm run
               cd ..
             fi
           done
+
+      - name: check build consistency
+        working-directory: examples/ecc
+        run: |
+          cargo openvm build
+          mv target/openvm/release/ecc-example.vmexe app1.vmexe
+          cargo openvm build
+          cmp app1.vmexe target/openvm/release/ecc-example.vmexe || (echo "Build is not deterministic!" && exit 1)
 
       - name: Run app-level CLI commands
         working-directory: crates/cli
         run: |
           export RUST_BACKTRACE=1
           cargo build
-          cargo run --bin cargo-openvm -- openvm keygen --config ./example/app_config.toml --output app.pk --vk-output app.vk
+          cargo run --bin cargo-openvm -- openvm keygen --config ./example/app_config.toml --output-dir .
 
       - name: Run CLI tests
         working-directory: crates/cli

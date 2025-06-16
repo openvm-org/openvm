@@ -2,8 +2,6 @@ mod final_exp;
 mod line;
 mod miller_loop;
 mod miller_step;
-mod operations;
-mod sextic_ext_field;
 
 pub use final_exp::*;
 pub use line::*;
@@ -14,9 +12,6 @@ use openvm_algebra_guest::{
     ExpBytes, Field, IntMod,
 };
 use openvm_ecc_guest::AffinePoint;
-#[allow(unused_imports)]
-pub(crate) use operations::*;
-pub use sextic_ext_field::*;
 
 use crate::PairingBaseFunct7;
 
@@ -99,20 +94,6 @@ mod tests {
 
     moduli_init! {
         "13",
-    }
-
-    impl Field for F13 {
-        type SelfRef<'a> = &'a Self;
-        const ZERO: Self = <Self as IntMod>::ZERO;
-        const ONE: Self = <Self as IntMod>::ONE;
-
-        fn double_assign(&mut self) {
-            IntMod::double_assign(self);
-        }
-
-        fn square_assign(&mut self) {
-            IntMod::square_assign(self);
-        }
     }
 
     #[test]

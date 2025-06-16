@@ -3,8 +3,9 @@ use std::{marker::PhantomData, sync::Arc};
 use async_trait::async_trait;
 use openvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, GenerationError, SingleSegmentVmExecutor, Streams,
-        VirtualMachine, VmComplexTraceHeights, VmConfig,
+        execution_mode::metered::get_widths_and_interactions_from_vkey,
+        hasher::poseidon2::vm_poseidon2_hasher, GenerationError, InsExecutorE1,
+        SingleSegmentVmExecutor, Streams, VirtualMachine, VmComplexTraceHeights, VmConfig,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
@@ -65,13 +66,11 @@ impl<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> VmLocalProver<SC, VC, E>
     }
 }
 
-const MAX_SEGMENTATION_RETRIES: usize = 4;
-
 impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>> ContinuationVmProver<SC>
     for VmLocalProver<SC, VC, E>
 where
     Val<SC>: PrimeField32,
-    VC::Executor: Chip<SC>,
+    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
     VC::Periphery: Chip<SC>,
 {
     fn prove(&self, input: impl Into<Streams<Val<SC>>>) -> ContinuationVmProof<SC> {
@@ -84,20 +83,25 @@ where
             self.overridden_heights.clone(),
         );
         vm.set_trace_height_constraints(trace_height_constraints.clone());
-        let mut final_memory = None;
         let VmCommittedExe {
             exe,
             committed_program,
         } = self.committed_exe.as_ref();
         let input = input.into();
 
-        // This loop should typically iterate exactly once. Only in exceptional cases will the
-        // segmentation produce an invalid segment and we will have to retry.
-        let mut retries = 0;
-        let per_segment = loop {
-            match vm.executor.execute_and_then(
+        let (widths, interactions) = get_widths_and_interactions_from_vkey(self.pk.vm_pk.get_vk());
+        let segments = vm
+            .executor
+            .execute_metered(exe.clone(), input.clone(), widths, interactions)
+            .expect("execute_metered failed");
+
+        let mut final_memory = None;
+        let per_segment = vm
+            .executor
+            .execute_with_segments_and_then(
                 exe.clone(),
-                input.clone(),
+                input,
+                &segments,
                 |seg_idx, seg| {
                     final_memory = Some(
                         seg.chip_complex
@@ -118,27 +122,8 @@ where
                     })
                 },
                 GenerationError::Execution,
-            ) {
-                Ok(per_segment) => break per_segment,
-                Err(GenerationError::Execution(err)) => panic!("execution error: {err}"),
-                Err(GenerationError::TraceHeightsLimitExceeded) => {
-                    if retries >= MAX_SEGMENTATION_RETRIES {
-                        panic!(
-                            "trace heights limit exceeded after {MAX_SEGMENTATION_RETRIES} retries"
-                        );
-                    }
-                    retries += 1;
-                    tracing::info!(
-                        "trace heights limit exceeded; retrying execution (attempt {retries})"
-                    );
-                    let sys_config = vm.executor.config.system_mut();
-                    let new_seg_strat = sys_config.segmentation_strategy.stricter_strategy();
-                    sys_config.set_segmentation_strategy(new_seg_strat);
-                    // continue
-                }
-            };
-        };
-
+            )
+            .expect("execute_with_segments_and_then failed");
         let user_public_values = UserPublicValuesProof::compute(
             self.pk.vm_config.system().memory_config.memory_dimensions(),
             self.pk.vm_config.system().num_public_values,
@@ -158,7 +143,7 @@ impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>>
 where
     VmLocalProver<SC, VC, E>: Send + Sync,
     Val<SC>: PrimeField32,
-    VC::Executor: Chip<SC>,
+    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
     VC::Periphery: Chip<SC>,
 {
     async fn prove(
@@ -173,7 +158,7 @@ impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>> Singl
     for VmLocalProver<SC, VC, E>
 where
     Val<SC>: PrimeField32,
-    VC::Executor: Chip<SC>,
+    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
     VC::Periphery: Chip<SC>,
 {
     fn prove(&self, input: impl Into<Streams<Val<SC>>>) -> Proof<SC> {
@@ -185,9 +170,25 @@ where
             executor.set_trace_height_constraints(self.pk.vm_pk.trace_height_constraints.clone());
             executor
         };
+
+        let (widths, interactions) = get_widths_and_interactions_from_vkey(self.pk.vm_pk.get_vk());
+        let input = input.into();
+        let max_trace_heights = executor
+            .execute_metered(
+                self.committed_exe.exe.clone(),
+                input.clone(),
+                widths,
+                interactions,
+            )
+            .expect("execute_metered failed");
         let proof_input = executor
-            .execute_and_generate(self.committed_exe.clone(), input)
+            .execute_with_max_heights_and_generate(
+                self.committed_exe.clone(),
+                input,
+                &max_trace_heights,
+            )
             .unwrap();
+
         let vm = VirtualMachine::new(e, executor.config);
         vm.prove_single(&self.pk.vm_pk, proof_input)
     }
@@ -199,7 +200,7 @@ impl<SC: StarkGenericConfig, VC: VmConfig<Val<SC>>, E: StarkFriEngine<SC>>
 where
     VmLocalProver<SC, VC, E>: Send + Sync,
     Val<SC>: PrimeField32,
-    VC::Executor: Chip<SC>,
+    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
     VC::Periphery: Chip<SC>,
 {
     async fn prove(&self, input: impl Into<Streams<Val<SC>>> + Send + Sync) -> Proof<SC> {

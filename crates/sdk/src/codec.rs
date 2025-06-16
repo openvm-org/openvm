@@ -3,7 +3,9 @@ use std::io::{self, Cursor, Read, Result, Write};
 use openvm_circuit::{
     arch::ContinuationVmProof, system::memory::tree::public_values::UserPublicValuesProof,
 };
-use openvm_continuations::verifier::root::types::RootVmVerifierInput;
+use openvm_continuations::verifier::{
+    internal::types::VmStarkProof, root::types::RootVmVerifierInput,
+};
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_native_recursion::hints::{InnerBatchOpening, InnerFriProof, InnerQueryProof};
 use openvm_stark_backend::{
@@ -16,7 +18,7 @@ use openvm_stark_backend::{
 };
 use p3_fri::CommitPhaseProofStep;
 
-use super::{F, SC}; // BabyBearPoseidon2Config
+use super::{F, SC};
 
 type Challenge = BinomialExtensionField<F, 4>;
 
@@ -56,6 +58,13 @@ impl Encode for ContinuationVmProof<SC> {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
         encode_slice(&self.per_segment, writer)?;
         self.user_public_values.encode(writer)
+    }
+}
+
+impl Encode for VmStarkProof<SC> {
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
+        self.proof.encode(writer)?;
+        encode_slice(&self.user_public_values, writer)
     }
 }
 
@@ -289,7 +298,7 @@ impl Encode for [F; DIGEST_SIZE] {
 }
 
 /// Encodes length of slice and then each element
-fn encode_slice<T: Encode, W: Write>(slice: &[T], writer: &mut W) -> Result<()> {
+pub(crate) fn encode_slice<T: Encode, W: Write>(slice: &[T], writer: &mut W) -> Result<()> {
     slice.len().encode(writer)?;
     for elt in slice {
         elt.encode(writer)?;
@@ -318,6 +327,17 @@ impl Decode for ContinuationVmProof<SC> {
         let user_public_values = UserPublicValuesProof::decode(reader)?;
         Ok(Self {
             per_segment,
+            user_public_values,
+        })
+    }
+}
+
+impl Decode for VmStarkProof<SC> {
+    fn decode<R: Read>(reader: &mut R) -> Result<Self> {
+        let proof = Proof::decode(reader)?;
+        let user_public_values = decode_vec(reader)?;
+        Ok(Self {
+            proof,
             user_public_values,
         })
     }
@@ -590,7 +610,7 @@ impl Decode for [F; DIGEST_SIZE] {
 }
 
 /// Decodes a vector of elements
-fn decode_vec<T: Decode, R: Read>(reader: &mut R) -> Result<Vec<T>> {
+pub(crate) fn decode_vec<T: Decode, R: Read>(reader: &mut R) -> Result<Vec<T>> {
     let len = usize::decode(reader)?;
     let mut vec = Vec::with_capacity(len);
 

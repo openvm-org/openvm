@@ -83,7 +83,7 @@ impl Sha256VmStep {
 impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
     fn execute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -126,7 +126,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
 
     fn execute_metered(
         &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {

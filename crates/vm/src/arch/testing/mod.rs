@@ -30,7 +30,7 @@ use tracing::Level;
 
 use super::{ExecutionBridge, ExecutionBus, InstructionExecutor, SystemPort};
 use crate::{
-    arch::{ExecutionState, MemoryConfig},
+    arch::{ExecutionState, MemoryConfig, Streams},
     system::{
         memory::{
             interface::MemoryInterface,
@@ -62,6 +62,7 @@ const RANGE_CHECKER_BUS: BusIndex = 4;
 
 pub struct VmChipTestBuilder<F: PrimeField32> {
     pub memory: MemoryTester<F>,
+    pub streams: Streams<F>,
     pub execution: ExecutionTester<F>,
     pub program: ProgramTester<F>,
     rng: StdRng,
@@ -72,6 +73,7 @@ pub struct VmChipTestBuilder<F: PrimeField32> {
 impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn new(
         memory_controller: MemoryController<F>,
+        streams: Streams<F>,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
         rng: StdRng,
@@ -79,6 +81,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         setup_tracing_with_log_level(Level::WARN);
         Self {
             memory: MemoryTester::new(memory_controller),
+            streams,
             execution: ExecutionTester::new(execution_bus),
             program: ProgramTester::new(program_bus),
             rng,
@@ -110,7 +113,12 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         tracing::debug!(?initial_state.timestamp);
 
         let final_state = executor
-            .execute(&mut self.memory.controller, instruction, initial_state)
+            .execute(
+                &mut self.memory.controller,
+                &mut self.streams,
+                instruction,
+                initial_state,
+            )
             .expect("Expected the execution not to fail");
 
         self.program.execute(instruction, &initial_state);
@@ -280,6 +288,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         );
         Self {
             memory: MemoryTester::new(memory_controller),
+            streams: Default::default(),
             execution: ExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
             program: ProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
             rng: StdRng::seed_from_u64(0),
@@ -304,6 +313,7 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
         );
         Self {
             memory: MemoryTester::new(memory_controller),
+            streams: Default::default(),
             execution: ExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
             program: ProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
             rng: StdRng::seed_from_u64(0),

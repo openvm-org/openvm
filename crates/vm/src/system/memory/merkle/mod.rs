@@ -1,6 +1,6 @@
 use openvm_stark_backend::{interaction::PermutationCheckBus, p3_field::PrimeField32};
 
-use super::{controller::dimensions::MemoryDimensions, Equipartition, MemoryImage};
+use super::{controller::dimensions::MemoryDimensions, MemoryImage};
 mod air;
 mod columns;
 mod trace;
@@ -54,16 +54,20 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     }
 }
 
-fn memory_to_partition<F: PrimeField32, const N: usize>(
+fn memory_to_vec_partition<F: PrimeField32, const N: usize>(
     memory: &MemoryImage,
-) -> Equipartition<F, N> {
-    let mut memory_partition = Equipartition::new();
+    md: &MemoryDimensions,
+) -> Vec<(u64, [F; N])> {
+    let mut memory_partition = Vec::new();
     for ((address_space, pointer), value) in memory.items() {
-        let label = (address_space, pointer / N as u32);
-        let chunk = memory_partition
-            .entry(label)
-            .or_insert_with(|| [F::default(); N]);
-        chunk[(pointer % N as u32) as usize] = value;
+        let label = md.label_to_index((address_space, pointer / N as u32));
+        if memory_partition
+            .last()
+            .is_none_or(|(last_label, _)| *last_label < label)
+        {
+            memory_partition.push((label, [F::ZERO; N]));
+        }
+        memory_partition.last_mut().unwrap().1[(pointer % N as u32) as usize] = value;
     }
     memory_partition
 }

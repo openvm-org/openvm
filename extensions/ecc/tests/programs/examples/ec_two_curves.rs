@@ -3,32 +3,15 @@
 
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
-use openvm_ecc_guest::{
-    k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
-    msm,
-    p256::{P256Coord, P256Point},
-    weierstrass::WeierstrassPoint,
-    Group,
-};
+use openvm_ecc_guest::{msm, weierstrass::WeierstrassPoint, Group};
+use openvm_k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar};
+use openvm_p256::{P256Coord, P256Point};
 
-openvm_algebra_moduli_macros::moduli_init! {
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141",
-    "0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff",
-    "0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"
-}
-
-openvm_ecc_sw_macros::sw_init! {
-    Secp256k1Point,
-    P256Point,
-}
+openvm::init!("openvm_init_ec_two_curves_k256_p256.rs");
 
 openvm::entry!(main);
 
 pub fn main() {
-    setup_all_moduli();
-    setup_all_curves();
-
     // Sample points got from https://asecuritysite.com/ecc/ecc_points2 and
     // https://learnmeabitcoin.com/technical/cryptography/elliptic-curve/#add
     let x1 = Secp256k1Coord::from_u32(1);

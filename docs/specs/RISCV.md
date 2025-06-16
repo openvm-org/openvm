@@ -72,6 +72,13 @@ the guest must take care to validate all data and account for behavior in cases 
 | printstr    | I   | 0001011     | 011    | 0x1       | Tries to convert `[rd..rd + rs1]_2` to UTF-8 string and print to host stdout. Will print error message if conversion fails.                                                |
 | hintrandom  | I   | 0001011     | 011    | 0x2       | Resets the hint stream to `4 * rd` random bytes from `rand::rngs::OsRng` on the host.                                                                                      |
 
+| RISC-V Inst  | FMT | opcode[6:0] | funct3  | funct7 | RISC-V description and notes                                                                                                 |
+|--------------|-----|-------------|---------|--------|------------------------------------------------------------------------------------------------------------------------------|
+| nativestorew | R   | 0001011     | 111     | 0x2    | Stores the 4-byte word `rs1` at address `rd` in native address space. The address `rd` must be aligned to a 4-byte boundary. |
+
+`nativestorew` connects RV32 address space and native address space. We put it in RV32 extension because its 
+implementation is here. But we use `funct3 = 111` because the native extension has an available slot.
+
 ## Keccak Extension
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | funct7 | RISC-V description and notes                |
@@ -117,6 +124,8 @@ These use the _custom-0_ opcode prefix and funct3 = 0b111.
 | lfii        | R   | 0001011     | 111    | 0      | Long Form Instruction Indicator. `rd = rs1 = rs2 = 0`     |
 | gi          | R   | 0001011     | 111    | 1      | Gap Indicator. `rd = rs1 = rs2 = 0`                       |
 
+`nativestorew` also uses `funct3 = 111`. It's listed in the RV32 extension.
+
 ## Algebra Extension
 
 Modular arithmetic instructions depend on the modulus `N`. The ordered list of supported moduli should be saved in the `.openvm` section of the ELF file in the serialized format. This is achieved by the `moduli_declare!` macro; for example, the following code
@@ -132,7 +141,9 @@ generates classes `Bls12381` and `Bn254` that represent the elements of the corr
 
 ### Field Arithmetic
 
-For each created modular class, one must call a corresponding `setup_*` function once at the beginning of the program. For example, for the structs above this would be `setup_0()` and `setup_1()`. This function generates the `setup` intrinsics which are distinguished by the `rs2` operand that specifies the chip this instruction is passed to..
+For each created modular class, one must call a corresponding `setup_*` function before using the intrinsics.
+For example, for the structs above this would be `setup_0()` and `setup_1()`. This function generates the `setup` intrinsics which are distinguished by the `rs2` operand that specifies the chip this instruction is passed to.
+For developer convenience, in the Rust function bindings for these intrinsics, each modulus's `setup_*` function is automatically called on the first use of any of its intrinsics.
 
 We use `config.mod_idx(N)` to denote the index of `N` in this list. In the list below, `idx` denotes `config.mod_idx(N)`.
 
@@ -146,6 +157,8 @@ We use `config.mod_idx(N)` to denote the index of `N` in this list. In the list 
 | divmod\<N\>  | R   | 0101011     | 000    | `idx*8+3` | `[rd: N::NUM_LIMBS]_2 = [rs1: N::NUM_LIMBS]_2 / [rs2: N::NUM_LIMBS]_2 (mod N)` (undefined when `gcd([rs2: N::NUM_LIMBS]_2, N) != 1`)                                                                                                                                                                                                                                                                                        |
 | iseqmod\<N\> | R   | 0101011     | 000    | `idx*8+4` | `rd = [rs1: N::NUM_LIMBS]_2 == [rs2: N::NUM_LIMBS]_2 (mod N) ? 1 : 0`. If `rd != x0`, enforces that `[rs1: N::NUM_LIMBS]_2` and `[rs2: N::NUM_LIMBS]_2` are both less than `N` and then sets `rd` equal to boolean comparison value. If `rd = x0`, this is a no-op.                                                                                                                                                         |
 | setup\<N\>   | R   | 0101011     | 000    | `idx*8+5` | `assert([rs1: N::NUM_LIMBS]_2 == N)` in the chip defined by the register index of `rs2`. For the sake of implementation convenience it also writes an unconstrained value into `[rd: N::NUM_LIMBS]_2` if `ind(rs2) = 0,1` (for add_sub, mul_div) or it overwrites the register value of `rd` with an unconstrained value if `ind(rs2) = 2` (for iseq). If `ind(rs2) = 2`, then the instruction is **invalid** if `rd = x0`. |
+| hint_non_qr\<N\> | R   | 0101011     | 000    | `idx*8+6` | Reset the hint stream to equal `non_qr` where `non_qr` is a quadratic nonresidue modulo `N`. The same `non_qr` is returned in each execution of this instruction. `rd`, `rs1`, and `rs2` should be `x0`. |
+| hint_sqrt\<N\> | R   | 0101011     | 000    | `idx*8+7` | Read `x = [rs1: N::NUM_LIMBS]_2`. If `x` is a quadratic residue modulo `N` then reset the hint stream to `[1u0, 0u8, 0u8, 0u8]` concatenated with a square root of `x`. If `x` is not a quadratic residue, then reset the hint stream to `[0u8; 4]` concatenated with a square root of `x * non_qr` where `non_qr` is the quadratic nonresidue returned by `hint_non_qr<N>`. `rd` and `rs2` should be `x0`. |
 
 Since `funct7` is 7-bits, up to 16 moduli can be supported simultaneously. We use `idx*8` to leave some room for future expansion.
 
@@ -170,8 +183,6 @@ The elliptic curve extension supports arithmetic over short Weierstrass curves, 
 | sw_add_ne\<C\>  | R   | 0101011     | 001    | `idx*8`   | `EcPoint([rd:2*C::COORD_SIZE]_2) = EcPoint([rs1:2*C::COORD_SIZE]_2) + EcPoint([rs2:2*C::COORD_SIZE]_2)`. Assumes that input affine points are not identity and do not have same x-coordinate.                                                                                                                                                                                                                                                                                                                                                                  |
 | sw_double\<C\>  | R   | 0101011     | 001    | `idx*8+1` | `EcPoint([rd:2*C::COORD_SIZE]_2) = 2 * EcPoint([rs1:2*C::COORD_SIZE]_2)`. Assumes that input affine point is not identity. `rs2` is unused and must be set to `x0`.                                                                                                                                                                                                                                                                                                                                                                                            |
 | setup\<C\>      | R   | 0101011     | 001    | `idx*8+2` | `assert([rs1: C::COORD_SIZE]_2 == C::MODULUS)` in the chip defined by the register index of `rs2`. For the sake of implementation convenience it also writes an unconstrained value into `[rd: 2*C::COORD_SIZE]_2`. If `ind(rs2) != 0`, then this instruction is setup for `sw_add_ne`. Otherwise it is setup for `sw_double`. When `ind(rs2) != 0` (add_ne), it is required for proper functionality that `[rs2: C::COORD_SIZE]_2 != [rs1: C::COORD_SIZE]_2`; otherwise (double), it is required that `[rs1 + C::COORD_SIZE: C::COORD_SIZE]_2 != C::Fp::ZERO` |
-| hint_decompress | R   | 0101011     | 001    | `idx*8+3` | Read `x: C::Fp` from `[rs1: C::COORD_SIZE]_2` and `rec_id: u8` from `[rs2]_2`. If there exists a unique `y: C::Fp` such that `(x, y)` is a point on `C` and `y` has the same parity as `rec_id`, then reset the hint stream to `[1u8, 0u8, 0u8, 0u8]` concatenated with the limbs representing `y` in little-endian order; otherwise, reset it to `[0u8; 4]` concatenated the limbs representing `sqrt` where `sqrt * sqrt == (x^3 + ax + b) * non_qr` (`non_qr` is a quadratic nonresidue of `C::Fp`). `rd` should be `x0`. |
-| hint_non_qr     | R   | 0101011     | 001    | `idx*8+4` | Reset the hint stream to equal `non_qr` where `non_qr` is a quadratic nonresidue of `C::Fp`. `rd`, `rs1`, and `rs2` should be `x0`. |
 
 Since `funct7` is 7-bits, up to 16 curves can be supported simultaneously. We use `idx*8` to leave some room for future expansion.
 

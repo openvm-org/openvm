@@ -12,7 +12,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use cargo_metadata::{MetadataCommand, Package};
+use cargo_metadata::{Metadata, MetadataCommand, Package};
 use openvm_platform::memory;
 
 pub use self::config::GuestOptions;
@@ -30,25 +30,14 @@ const ALLOWED_CARGO_ENVS: &[&str] = &["CARGO_HOME"];
 /// Returns the given cargo Package from the metadata in the Cargo.toml manifest
 /// within the provided `manifest_dir`.
 pub fn get_package(manifest_dir: impl AsRef<Path>) -> Package {
-    let manifest_path = fs::canonicalize(manifest_dir.as_ref().join("Cargo.toml")).unwrap();
-    let manifest_meta = MetadataCommand::new()
-        .manifest_path(&manifest_path)
-        .no_deps()
-        .exec()
-        .unwrap_or_else(|e| {
-            panic!(
-                "cargo metadata command failed for manifest path: {}: {e:?}",
-                manifest_path.display()
-            )
-        });
-    let mut matching: Vec<Package> = manifest_meta
-        .packages
-        .into_iter()
-        .filter(|pkg| {
-            let std_path: &Path = pkg.manifest_path.as_ref();
-            std_path == manifest_path
-        })
-        .collect();
+    let manifest_path = manifest_dir
+        .as_ref()
+        .join("Cargo.toml")
+        .canonicalize()
+        .unwrap();
+    let manifest_meta = get_metadata(&manifest_path);
+    let matching = find_matching_packages(&manifest_meta, &manifest_path);
+
     if matching.is_empty() {
         eprintln!(
             "ERROR: No package found in {}",
@@ -63,7 +52,76 @@ pub fn get_package(manifest_dir: impl AsRef<Path>) -> Package {
         );
         std::process::exit(-1);
     }
-    matching.pop().unwrap()
+    matching.into_iter().next().unwrap()
+}
+
+/// Returns all packages from the Cargo.toml manifest at the given `manifest_dir`.
+pub fn get_workspace_packages(manifest_dir: impl AsRef<Path>) -> Vec<Package> {
+    let manifest_path = manifest_dir
+        .as_ref()
+        .join("Cargo.toml")
+        .canonicalize()
+        .unwrap();
+    let manifest_meta = get_metadata(&manifest_path);
+    get_workspace_member_packages(manifest_meta)
+}
+
+/// Returns a single package if the manifest path matches exactly, otherwise returns all
+/// workspace packages.
+pub fn get_in_scope_packages(manifest_dir: impl AsRef<Path>) -> Vec<Package> {
+    let manifest_path = manifest_dir
+        .as_ref()
+        .join("Cargo.toml")
+        .canonicalize()
+        .unwrap();
+    let manifest_meta = get_metadata(&manifest_path);
+
+    // Check if any package has this exact manifest path
+    let matching = find_matching_packages(&manifest_meta, &manifest_path);
+
+    // If we found a package with this exact manifest path, return it
+    if !matching.is_empty() {
+        return matching;
+    }
+
+    // Otherwise return all workspace members
+    get_workspace_member_packages(manifest_meta)
+}
+
+/// Helper function to get cargo metadata for a manifest path
+fn get_metadata(manifest_path: &Path) -> Metadata {
+    MetadataCommand::new()
+        .manifest_path(manifest_path)
+        .no_deps()
+        .exec()
+        .unwrap_or_else(|e| {
+            panic!(
+                "cargo metadata command failed for manifest path: {}: {e:?}",
+                manifest_path.display()
+            )
+        })
+}
+
+/// Helper function to get workspace members
+fn get_workspace_member_packages(manifest_meta: Metadata) -> Vec<Package> {
+    manifest_meta
+        .packages
+        .into_iter()
+        .filter(|pkg| manifest_meta.workspace_members.contains(&pkg.id))
+        .collect()
+}
+
+/// Helper function to find packages matching a manifest path
+fn find_matching_packages(manifest_meta: &Metadata, manifest_path: &Path) -> Vec<Package> {
+    manifest_meta
+        .packages
+        .iter()
+        .filter(|pkg| {
+            let std_path: &Path = pkg.manifest_path.as_ref();
+            std_path == manifest_path
+        })
+        .cloned()
+        .collect()
 }
 
 /// Determines and returns the build target directory from the Cargo manifest at
@@ -75,6 +133,18 @@ pub fn get_target_dir(manifest_path: impl AsRef<Path>) -> PathBuf {
         .exec()
         .expect("cargo metadata command failed")
         .target_directory
+        .into()
+}
+
+/// Returns the workspace root directory from the Cargo manifest at
+/// the given `manifest_path`.
+pub fn get_workspace_root(manifest_path: impl AsRef<Path>) -> PathBuf {
+    MetadataCommand::new()
+        .manifest_path(manifest_path.as_ref())
+        .no_deps()
+        .exec()
+        .expect("cargo metadata command failed")
+        .workspace_root
         .into()
 }
 
@@ -233,6 +303,9 @@ pub(crate) fn encode_rust_flags(rustc_flags: &[&str]) -> String {
             "link-arg=--fatal-warnings",
             "-C",
             "panic=abort",
+            // https://docs.rs/getrandom/0.3.2/getrandom/index.html#opt-in-backends
+            "--cfg",
+            "getrandom_backend=\"custom\"",
         ],
     ]
     .concat()
@@ -269,7 +342,41 @@ pub fn build_guest_package(
     runtime_lib: Option<&str>,
     target_filter: &Option<TargetFilter>,
 ) -> Result<PathBuf, Option<i32>> {
-    if is_skip_build() {
+    let mut new_opts = guest_opts.clone();
+
+    if new_opts.target_dir.is_none() {
+        new_opts.target_dir = Some(get_target_dir(&pkg.manifest_path));
+    }
+
+    new_opts.options.extend(vec![
+        "--manifest-path".into(),
+        pkg.manifest_path.to_string(),
+    ]);
+
+    if let Some(runtime_lib) = runtime_lib {
+        new_opts.rustc_flags.extend(vec![
+            String::from("-C"),
+            format!("link_arg={}", runtime_lib),
+        ]);
+    }
+
+    let mut example = false;
+    if let Some(target_filter) = target_filter {
+        new_opts.options.extend(vec![
+            format!("--{}", target_filter.kind),
+            target_filter.name.clone(),
+        ]);
+        example = target_filter.kind == "example";
+    }
+
+    let res = build_generic(&new_opts);
+    res.map(|path| if example { path.join("examples") } else { path })
+}
+
+/// Generic wrapper call to cargo build
+pub fn build_generic(guest_opts: &GuestOptions) -> Result<PathBuf, Option<i32>> {
+    if is_skip_build() || guest_opts.target_dir.is_none() {
+        eprintln!("Skipping build");
         return Err(None);
     }
 
@@ -280,45 +387,16 @@ pub fn build_guest_package(
         return Err(Some(code));
     }
 
-    let target_dir = guest_opts
-        .target_dir
-        .clone()
-        .unwrap_or_else(|| get_target_dir(pkg.manifest_path.clone()));
-
-    fs::create_dir_all(&target_dir).unwrap();
-
-    let runtime_rust_flags = runtime_lib
-        .map(|lib| vec![String::from("-C"), format!("link_arg={}", lib)])
-        .unwrap_or_default();
-    let rust_flags: Vec<_> = [
-        runtime_rust_flags
-            .iter()
-            .map(|s| s.as_str())
-            .collect::<Vec<_>>(),
-        guest_opts.rustc_flags.iter().map(|s| s.as_str()).collect(),
-    ]
-    .concat();
+    let target_dir = guest_opts.target_dir.as_ref().unwrap();
+    fs::create_dir_all(target_dir).unwrap();
+    let rust_flags: Vec<_> = guest_opts.rustc_flags.iter().map(|s| s.as_str()).collect();
 
     let mut cmd = cargo_command("build", &rust_flags);
 
-    let features_str = guest_opts.features.join(",");
-    if !features_str.is_empty() {
-        cmd.args(["--features", &features_str]);
+    if !guest_opts.features.is_empty() {
+        cmd.args(["--features", guest_opts.features.join(",").as_str()]);
     }
-
-    cmd.args([
-        "--manifest-path",
-        pkg.manifest_path.as_str(),
-        "--target-dir",
-        target_dir.to_str().unwrap(),
-    ]);
-
-    if let Some(target_filter) = target_filter {
-        cmd.args([
-            format!("--{}", target_filter.kind).as_str(),
-            target_filter.name.as_str(),
-        ]);
-    }
+    cmd.args(["--target-dir", target_dir.to_str().unwrap()]);
 
     let profile = if let Some(profile) = &guest_opts.profile {
         profile
@@ -346,24 +424,17 @@ pub fn build_guest_package(
         .expect("cargo build failed");
     let stderr = child.stderr.take().unwrap();
 
-    tty_println(&format!("{}: Starting build for {RUSTC_TARGET}", pkg.name));
+    tty_println(&format!("openvm build: Starting build for {RUSTC_TARGET}"));
 
     for line in BufReader::new(stderr).lines() {
-        tty_println(&format!("{}: {}", pkg.name, line.unwrap()));
+        tty_println(&format!("openvm build: {}", line.unwrap()));
     }
 
     let res = child.wait().expect("Guest 'cargo build' failed");
     if !res.success() {
         Err(res.code())
     } else {
-        Ok(get_dir_with_profile(
-            &target_dir,
-            profile,
-            target_filter
-                .as_ref()
-                .map(|t| t.kind == "example")
-                .unwrap_or(false),
-        ))
+        Ok(get_dir_with_profile(target_dir, profile, false))
     }
 }
 

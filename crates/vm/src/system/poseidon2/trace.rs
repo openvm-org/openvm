@@ -28,9 +28,11 @@ where
 
         let mut inputs = Vec::with_capacity(height);
         let mut multiplicities = Vec::with_capacity(height);
-        let (actual_inputs, actual_multiplicities): (Vec<_>, Vec<_>) = self
-            .records
-            .into_par_iter()
+        #[cfg(feature = "parallel")]
+        let records_iter = self.records.into_par_iter();
+        #[cfg(not(feature = "parallel"))]
+        let records_iter = self.records.into_iter();
+        let (actual_inputs, actual_multiplicities): (Vec<_>, Vec<_>) = records_iter
             .map(|(input, mult)| (input, mult.load(std::sync::atomic::Ordering::Relaxed)))
             .unzip();
         inputs.extend(actual_inputs);
@@ -66,7 +68,12 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> ChipUsageGetter
     }
 
     fn current_trace_height(&self) -> usize {
-        self.records.len()
+        if self.nonempty.load(std::sync::atomic::Ordering::Relaxed) {
+            // Not to call `DashMap::len` too often
+            self.records.len()
+        } else {
+            0
+        }
     }
 
     fn trace_width(&self) -> usize {

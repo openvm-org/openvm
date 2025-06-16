@@ -152,6 +152,14 @@ function. What this does in words:
 
 For each extension's inventory generation, the `VmInventoryBuilder` is provided with a view of all current chips already inside the running chip complex. This means the inventory generation process is sequential in the order the extensions are specified, and each extension has borrow access to all chips constructed by any extension before it.
 
+## Build hooks
+Some of our extensions need to generate some code at build-time depending on the VM config (for example, the Algebra extension needs to call `moduli_init!` with the appropriate moduli).
+To accommodate this, we support build hooks in both `cargo openvm` and the SDK.
+To make use of this functionality, implement the `InitFileGenerator` trait.
+The `String` returned by the `generate_init_file_contents` must be valid Rust code.
+It will be written to a `openvm_init.rs` file in the package's manifest directory, and then (unhygenically) included in the guest code in place of the `openvm::init!` macro.
+You can specify a custom file name at build time (by a `cargo openvm` option or an SDK method argument), in which case you must also pass it to `openvm::init!` as an argument.
+
 ## Examples
 
 The [`extensions/`](../../extensions/) folder contains extensions implementing all non-system functionality via custom extensions. For example, the `Rv32I`, `Rv32M`, and `Rv32Io` extensions implement `VmExtension<F>` in [`openvm-rv32im-circuit`](../../extensions/rv32im/circuit/) and correspond to the RISC-V 32-bit base and multiplication instruction sets and an extension for IO, respectively.

@@ -6,7 +6,8 @@ use openvm_instructions::{
 };
 use openvm_rv32im_guest::{
     PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_BUFFER_IMM, HINT_FUNCT3, HINT_STOREW_IMM,
-    PHANTOM_FUNCT3, REVEAL_FUNCT3, RV32M_FUNCT7, RV32_ALU_OPCODE, SYSTEM_OPCODE, TERMINATE_FUNCT3,
+    NATIVE_STOREW_FUNCT3, NATIVE_STOREW_FUNCT7, PHANTOM_FUNCT3, REVEAL_FUNCT3, RV32M_FUNCT7,
+    RV32_ALU_OPCODE, SYSTEM_OPCODE, TERMINATE_FUNCT3,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{
@@ -91,6 +92,12 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
                         F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                         0,
                     ),
+                    PhantomImm::HintLoadByKey => Instruction::phantom(
+                        PhantomDiscriminant(Rv32Phantom::HintLoadByKey as u16),
+                        F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
+                        F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                        0,
+                    ),
                 })
             }
             (RV32_ALU_OPCODE, _) => {
@@ -149,9 +156,6 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32IoTranspilerExtension {
         if opcode != SYSTEM_OPCODE {
             return None;
         }
-        if funct3 != HINT_FUNCT3 && funct3 != REVEAL_FUNCT3 {
-            return None;
-        }
 
         let instruction = match funct3 {
             HINT_FUNCT3 => {
@@ -190,6 +194,23 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32IoTranspilerExtension {
                     3,
                     1,
                     (dec_insn.imm < 0) as isize,
+                ))
+            }
+            NATIVE_STOREW_FUNCT3 => {
+                // NATIVE_STOREW is a pseudo-instruction for STOREW_RV32 a,b,0,1,4
+                let dec_insn = RType::new(instruction_u32);
+                if dec_insn.funct7 != NATIVE_STOREW_FUNCT7 {
+                    return None;
+                }
+                Some(Instruction::large_from_isize(
+                    Rv32LoadStoreOpcode::STOREW.global_opcode(),
+                    (RV32_REGISTER_NUM_LIMBS * dec_insn.rs1) as isize,
+                    (RV32_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,
+                    0,
+                    1,
+                    4,
+                    1,
+                    0,
                 ))
             }
             _ => return None,

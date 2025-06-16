@@ -63,7 +63,6 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         offset: usize,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         range_checker: SharedVariableRangeCheckerChip,
-        height: usize,
     ) -> Self {
         let (expr, is_add_flag, is_sub_flag) = addsub_expr(config, range_checker.bus());
 
@@ -98,6 +97,6 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             "ModularAddSub",
             false,
         );
-        Self(ModularChip::new(air, step, height, mem_helper))
+        Self(ModularChip::new(air, step, mem_helper))
     }
 }

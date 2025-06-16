@@ -21,28 +21,28 @@ where
     /// Determines if execution should suspend
     fn should_suspend(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool;
 
     /// Called before execution begins
     fn on_start(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     );
 
     /// Called after suspend or terminate
     fn on_suspend_or_terminate(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         exit_code: Option<u32>,
     );
 
     fn on_suspend(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
         self.on_suspend_or_terminate(state, chip_complex, None);
@@ -50,7 +50,7 @@ where
 
     fn on_terminate(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         exit_code: u32,
     ) {
@@ -61,7 +61,7 @@ where
     // TODO(ayush): change instruction to Instruction<u32> / PInstruction
     fn execute_instruction(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>

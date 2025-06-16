@@ -41,7 +41,10 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FieldExtensionChip<F> {
         FieldExtensionStep::new(NativeVectorizedAdapterStep::new()),
         MAX_INS_CAPACITY,
         tester.memory_helper(),
-    )
+    );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
+    chip
 }
 
 fn set_and_execute(

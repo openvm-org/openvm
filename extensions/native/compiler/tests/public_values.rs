@@ -1,8 +1,11 @@
-use openvm_circuit::arch::{SingleSegmentVmExecutor, SystemConfig};
+use openvm_circuit::arch::{
+    execution_mode::metered::get_widths_and_interactions_from_vkey, SingleSegmentVmExecutor,
+    SystemConfig, VirtualMachine,
+};
 use openvm_native_circuit::{execute_program, Native, NativeConfig};
 use openvm_native_compiler::{asm::AsmBuilder, prelude::*};
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::{config::baby_bear_poseidon2::default_engine, p3_baby_bear::BabyBear};
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
@@ -28,13 +31,20 @@ fn test_compiler_public_values() {
     }
 
     let program = builder.compile_isa();
-    let executor = SingleSegmentVmExecutor::new(NativeConfig::new(
-        SystemConfig::default().with_public_values(2),
-        Native,
-    ));
+    let config = NativeConfig::new(SystemConfig::default().with_public_values(2), Native);
+
+    let vm = VirtualMachine::new(default_engine(), config.clone());
+    let vm_pk = vm.keygen();
+    let (widths, interactions) = get_widths_and_interactions_from_vkey(vm_pk.get_vk());
+
+    let executor = SingleSegmentVmExecutor::new(config);
+
+    let max_trace_heights = executor
+        .execute_metered(program.clone().into(), vec![], widths, interactions)
+        .unwrap();
 
     let exe_result = executor
-        .execute_and_compute_heights(program, vec![])
+        .execute_with_max_heights_and_compute_heights(program, vec![], &max_trace_heights)
         .unwrap();
     assert_eq!(
         exe_result

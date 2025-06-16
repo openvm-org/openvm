@@ -14,11 +14,14 @@ openvm_algebra_moduli_macros::moduli_declare! {
     Mersenne61 { modulus = "0x1fffffffffffffff" },
 }
 
+openvm::init!();
+/* The init! macro will expand to:
 openvm_algebra_moduli_macros::moduli_init! {
     "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787",
     "1000000000000000003",
     "0x1fffffffffffffff",
 }
+*/
 ```
 
 ## Full story
@@ -48,6 +51,7 @@ extern "C" {
     fn mul_extern_func_de0b6b3a7640003(rd: usize, rs1: usize, rs2: usize);
     fn div_extern_func_de0b6b3a7640003(rd: usize, rs1: usize, rs2: usize);
     fn is_eq_extern_func_de0b6b3a7640003(rs1: usize, rs2: usize) -> bool;
+    fn moduli_setup_extern_func_de0b6b3a7640003();
 }
 
 impl Mod1e18 {
@@ -110,6 +114,14 @@ mod algebra_impl_0 {
         }
         // ...
     }
+
+    impl Field for Mod1e18 {
+        // ...
+    }
+
+    impl Sqrt for Mod1e18 {
+        // ...
+    }
 }
 ```
 
@@ -125,31 +137,39 @@ Here `add_extern_func_de0b6b3a7640003` is the name of the function that will be 
 static OPENVM_SERIALIZED_MODULUS_2: [u8; 32] = [/* bytes of the modulus */];
 #[cfg(target_os = "zkvm")]
 mod openvm_intrinsics_ffi {
-    fn add_extern_func_de0b6b3a7640003(rd: usize, rs1: usize, rs2: usize);
-    fn sub_extern_func_de0b6b3a7640003(rd: usize, rs1: usize, rs2: usize);
-    fn mul_extern_func_de0b6b3a7640003(rd: usize, rs1: usize, rs2: usize);
-    fn div_extern_func_de0b6b3a7640003(rd: usize, rs1: usize, rs2: usize);
-    fn is_eq_extern_func_de0b6b3a7640003(rs1: usize, rs2: usize) -> bool;
+    fn add_extern_func_de0b6b3a7640003(rd: usize, rs1: usize, rs2: usize) {
+        // Implementation here
+    }
+    fn sub_extern_func_de0b6b3a7640003(rd: usize, rs1: usize, rs2: usize) {
+        // Implementation here
+    }
+    fn mul_extern_func_de0b6b3a7640003(rd: usize, rs1: usize, rs2: usize) {
+        // Implementation here
+    }
+    fn div_extern_func_de0b6b3a7640003(rd: usize, rs1: usize, rs2: usize) {
+        // Implementation here
+    }
+    fn is_eq_extern_func_de0b6b3a7640003(rs1: usize, rs2: usize) -> bool {
+        // Implementation here
+    }
+    fn moduli_setup_extern_func_de0b6b3a7640003() {
+        // Implementation here
+    }
 }
 #[allow(non_snake_case, non_upper_case_globals)]
 pub mod openvm_intrinsics_meta_do_not_type_this_by_yourself {
     // information about the bytes of all moduli
 }
-#[allow(non_snake_case)]
-pub fn setup_2() {
-    #[cfg(target_os = "zkvm")]
-    {
-        // send the setup instruction designed for the chip number 2
-    }
-}
-pub fn setup_all_moduli() {
-    setup_0();
-    setup_1();
-    setup_2();
-    // setup functions for all the other moduli provided in the `moduli_init!` function
-}
 ```
 
-The setup operation (e.g., `setup_2`) consists of reading the value `OPENVM_SERIALIZED_MODULUS_2` from memory and constraining that the read value is equal to the modulus the chip has been configured with. For each used modulus, its corresponding setup instruction **must** be called before all other operations -- this currently must be checked by inspecting the program code; it is not enforced by the virtual machine.
+The setup operation (e.g., `moduli_setup_extern_func_de0b6b3a7640003`) consists of reading the value `OPENVM_SERIALIZED_MODULUS_2` from memory and constraining that the read value is equal to the modulus the chip has been configured with. For each used modulus, the Rust bindings for the non-setup intrinsic instructions will automatically call the corresponding setup instruction on first use of any of its intrinsics.
 
-5. It follows from the above that the `moduli_declare!` invocations may be in multiple places in various compilation units, but all the `declare!`d moduli must be specified at least once in `moduli_init!` so that there will be no linker errors due to missing function implementations. Correspondingly, the `moduli_init!` macro should only be called once in the entire program (in the guest crate as the topmost compilation unit). Finally, the order of the moduli in `moduli_init!` has nothing to do with the `moduli_declare!` invocations, but it **must match** the order of the moduli in the chip configuration -- more specifically, in the modular extension parameters (the order of numbers in `ModularExtension::supported_modulus`, which is usually defined with the whole `app_vm_config` in the `openvm.toml` file. The plan is to obtain this value from the specific section of the ELF file at some point).
+5. It follows from the above that the `moduli_declare!` invocations may be in multiple places in various compilation units, but all the `declare!`d moduli must be specified at least once in `moduli_init!` so that there will be no linker errors due to missing function implementations. Correspondingly, the `moduli_init!` macro should only be called once in the entire program (in the guest crate as the topmost compilation unit). Finally, the order of the moduli in `moduli_init!` has nothing to do with the `moduli_declare!` invocations, but it **must match** the order of the moduli in the chip configuration -- more specifically, in the modular extension parameters (the order of numbers in `ModularExtension::supported_moduli`, which is usually defined with the whole `app_vm_config` in the `openvm.toml` file).
+
+6. For convenience, running `cargo openvm build` will automatically generate an appropriate call to `moduli_declare!` based on the order of the moduli in `openvm.toml`.
+More specifically, `cargo openvm build` will read `openvm.toml`, then generate a file named `openvm_init.rs` in the project's manifest directory (where `Cargo.toml` is located) containing a call to `moduli_declare!`.
+Then, you must call `openvm::init!();` in your code, and this will insert the contents of `openvm_init.rs` file into your code in place of the `init!` macro.
+You may specify an alternate name for the init file using the `--init-file-name` option of `cargo openvm build`.
+To include the generated file in your code, pass its name into the `init!` macro (for ex. `init!("my_init_file.rs")`).
+The custom filename will be interpreted as relative to the manifest directory.
+If you are using the SDK to build your code, it will also automatically generate the init file based on your config.

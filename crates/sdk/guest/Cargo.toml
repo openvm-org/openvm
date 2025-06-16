@@ -1,8 +1,0 @@
-[workspace]
-[package]
-name = "openvm-sdk-example-test"
-version = "0.0.0"
-edition = "2021"
-
-[dependencies]
-openvm = { path = "../../toolchain/openvm" }

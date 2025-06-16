@@ -1,6 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+extern crate alloc;
+
 use openvm_algebra_guest::{DivUnsafe, IntMod};
 
 openvm::entry!(main);
@@ -9,12 +11,9 @@ openvm_algebra_moduli_macros::moduli_declare! {
     Secp256k1Coord { modulus = "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F" }
 }
 
-openvm_algebra_moduli_macros::moduli_init!(
-    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
-);
+openvm::init!("openvm_init_little.rs");
 
 pub fn main() {
-    setup_all_moduli();
     let mut pow = Secp256k1Coord::MODULUS;
     pow[0] -= 2;
 

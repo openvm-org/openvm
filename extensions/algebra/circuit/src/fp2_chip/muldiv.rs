@@ -106,7 +106,6 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         offset: usize,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         range_checker: SharedVariableRangeCheckerChip,
-        height: usize,
     ) -> Self {
         let (expr, is_mul_flag, is_div_flag) = fp2_muldiv_expr(config, range_checker.bus());
 
@@ -141,7 +140,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             "Fp2MulDiv",
             false,
         );
-        Self(Fp2Chip::new(air, step, height, mem_helper))
+        Self(Fp2Chip::new(air, step, mem_helper))
     }
 
     pub fn expr(&self) -> &FieldExpr {
@@ -156,7 +155,10 @@ mod tests {
     use itertools::Itertools;
     use num_bigint::BigUint;
     use openvm_algebra_transpiler::Fp2Opcode;
-    use openvm_circuit::arch::testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+    use openvm_circuit::arch::{
+        testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        InsExecutorE1,
+    };
     use openvm_circuit_primitives::bitwise_op_lookup::{
         BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
     };
@@ -261,8 +263,9 @@ mod tests {
             OFFSET,
             bitwise_chip.clone(),
             tester.range_checker(),
-            MAX_INS_CAPACITY,
         );
+        chip.set_trace_height(MAX_INS_CAPACITY);
+
         assert_eq!(
             chip.expr().builder.num_variables,
             2,

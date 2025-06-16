@@ -2,7 +2,6 @@ use core::ops::Deref;
 use std::{
     borrow::{Borrow, BorrowMut},
     mem::offset_of,
-    sync::{Arc, Mutex},
 };
 
 use itertools::zip_eq;
@@ -646,12 +645,14 @@ impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpenin
 }
 
 pub struct FriReducedOpeningStep<F: Field> {
-    streams: Arc<Mutex<Streams<F>>>,
+    phantom: std::marker::PhantomData<F>,
 }
 
 impl<F: PrimeField32> FriReducedOpeningStep<F> {
-    pub fn new(streams: Arc<Mutex<Streams<F>>>) -> Self {
-        Self { streams }
+    pub fn new() -> Self {
+        Self {
+            phantom: std::marker::PhantomData,
+        }
     }
 }
 
@@ -669,7 +670,7 @@ where
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
         arena: &'buf mut RA,
     ) -> Result<()>
@@ -1008,7 +1009,7 @@ where
 {
     fn execute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -1046,8 +1047,7 @@ where
         let length = length.as_canonical_u32() as usize;
 
         let data = if is_init == 0 {
-            let mut streams = self.streams.lock().unwrap();
-            let hint_steam = &mut streams.hint_space[hint_id];
+            let hint_steam = &mut state.streams.hint_space[hint_id];
             hint_steam.drain(0..length).collect()
         } else {
             vec![]
@@ -1087,7 +1087,7 @@ where
 
     fn execute_metered(
         &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {

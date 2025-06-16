@@ -2,7 +2,7 @@ use std::{fmt, fmt::Display};
 
 use itertools::Itertools;
 use openvm_stark_backend::p3_field::Field;
-use serde::{Deserialize, Serialize};
+use serde::{de::Deserializer, Deserialize, Serialize, Serializer};
 
 use crate::instruction::{DebugInfo, Instruction};
 
@@ -10,31 +10,30 @@ pub const PC_BITS: usize = 30;
 /// We use default PC step of 4 whenever possible for consistency with RISC-V, where 4 comes
 /// from the fact that each standard RISC-V instruction is 32-bits = 4 bytes.
 pub const DEFAULT_PC_STEP: u32 = 4;
-pub const DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
 pub const MAX_ALLOWED_PC: u32 = (1 << PC_BITS) - 1;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(bound(serialize = "F: Serialize", deserialize = "F: Deserialize<'de>"))]
 pub struct Program<F> {
     /// A map from program counter to instruction.
     /// Sometimes the instructions are enumerated as 0, 4, 8, etc.
     /// Maybe at some point we will replace this with a struct that would have a `Vec` under the
     /// hood and divide the incoming `pc` by whatever given.
+    #[serde(
+        serialize_with = "serialize_instructions_and_debug_infos",
+        deserialize_with = "deserialize_instructions_and_debug_infos"
+    )]
     pub instructions_and_debug_infos: Vec<Option<(Instruction<F>, Option<DebugInfo>)>>,
     pub step: u32,
     pub pc_base: u32,
-    /// The upper bound of the number of public values the program would publish.
-    /// Currently, this won't result any constraint. But users should always be aware of the limit
-    /// of public values when they write programs.
-    pub max_num_public_values: usize,
 }
 
 impl<F: Field> Program<F> {
-    pub fn new_empty(step: u32, pc_base: u32, max_num_public_values: usize) -> Self {
+    pub fn new_empty(step: u32, pc_base: u32) -> Self {
         Self {
             instructions_and_debug_infos: vec![],
             step,
             pc_base,
-            max_num_public_values,
         }
     }
 
@@ -42,7 +41,6 @@ impl<F: Field> Program<F> {
         instructions: &[Instruction<F>],
         step: u32,
         pc_base: u32,
-        max_num_public_values: usize,
     ) -> Self {
         Self {
             instructions_and_debug_infos: instructions
@@ -51,7 +49,6 @@ impl<F: Field> Program<F> {
                 .collect(),
             step,
             pc_base,
-            max_num_public_values,
         }
     }
 
@@ -59,7 +56,6 @@ impl<F: Field> Program<F> {
         instructions: &[Option<Instruction<F>>],
         step: u32,
         pc_base: u32,
-        max_num_public_values: usize,
     ) -> Self {
         Self {
             instructions_and_debug_infos: instructions
@@ -68,7 +64,6 @@ impl<F: Field> Program<F> {
                 .collect(),
             step,
             pc_base,
-            max_num_public_values,
         }
     }
 
@@ -86,7 +81,6 @@ impl<F: Field> Program<F> {
                 .collect(),
             step: DEFAULT_PC_STEP,
             pc_base: 0,
-            max_num_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
         }
     }
 
@@ -102,12 +96,7 @@ impl<F: Field> Program<F> {
     }
 
     pub fn from_instructions(instructions: &[Instruction<F>]) -> Self {
-        Self::new_without_debug_infos(
-            instructions,
-            DEFAULT_PC_STEP,
-            0,
-            DEFAULT_MAX_NUM_PUBLIC_VALUES,
-        )
+        Self::new_without_debug_infos(instructions, DEFAULT_PC_STEP, 0)
     }
 
     pub fn len(&self) -> usize {
@@ -222,5 +211,83 @@ pub fn display_program_with_pc<F: Field>(program: &Program<F>) {
             "{} | {:?} {} {} {} {} {} {} {}",
             pc, opcode, a, b, c, d, e, f, g
         );
+    }
+}
+
+// `debug_info` is based on the symbol table of the binary. Usually serializing `debug_info` is not
+// meaningful because the program is executed by another binary. So here we only serialize
+// instructions.
+fn serialize_instructions_and_debug_infos<F: Serialize, S: Serializer>(
+    data: &[Option<(Instruction<F>, Option<DebugInfo>)>],
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    let mut ins_data = Vec::with_capacity(data.len());
+    let total_len = data.len() as u32;
+    for (i, o) in data.iter().enumerate() {
+        if let Some(o) = o {
+            ins_data.push((&o.0, i as u32));
+        }
+    }
+    (ins_data, total_len).serialize(serializer)
+}
+
+#[allow(clippy::type_complexity)]
+fn deserialize_instructions_and_debug_infos<'de, F: Deserialize<'de>, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<Option<(Instruction<F>, Option<DebugInfo>)>>, D::Error> {
+    let (inst_data, total_len): (Vec<(Instruction<F>, u32)>, u32) =
+        Deserialize::deserialize(deserializer)?;
+    let mut ret: Vec<Option<(Instruction<F>, Option<DebugInfo>)>> = Vec::new();
+    ret.resize_with(total_len as usize, || None);
+    for (inst, i) in inst_data {
+        ret[i as usize] = Some((inst, None));
+    }
+    Ok(ret)
+}
+
+#[cfg(test)]
+mod tests {
+    use itertools::izip;
+    use p3_baby_bear::BabyBear;
+
+    use super::*;
+    use crate::VmOpcode;
+
+    type F = BabyBear;
+
+    #[test]
+    fn test_program_serde() {
+        let mut program = Program::<F>::new_empty(4, 0);
+        program.instructions_and_debug_infos.push(Some((
+            Instruction::from_isize(VmOpcode::from_usize(113), 1, 2, 3, 4, 5),
+            None,
+        )));
+        program.instructions_and_debug_infos.push(None);
+        program.instructions_and_debug_infos.push(None);
+        program.instructions_and_debug_infos.push(Some((
+            Instruction::from_isize(VmOpcode::from_usize(145), 10, 20, 30, 40, 50),
+            None,
+        )));
+        program.instructions_and_debug_infos.push(Some((
+            Instruction::from_isize(VmOpcode::from_usize(145), 10, 20, 30, 40, 50),
+            None,
+        )));
+        program.instructions_and_debug_infos.push(None);
+        let bytes = bitcode::serialize(&program).unwrap();
+        let de_program: Program<F> = bitcode::deserialize(&bytes).unwrap();
+        for (expected_ins, ins) in izip!(
+            &program.instructions_and_debug_infos,
+            &de_program.instructions_and_debug_infos
+        ) {
+            match (expected_ins, ins) {
+                (Some(expected_ins), Some(ins)) => {
+                    assert_eq!(expected_ins.0, ins.0);
+                }
+                (None, None) => {}
+                _ => {
+                    panic!("Different instructions after serialization");
+                }
+            }
+        }
     }
 }

@@ -26,7 +26,10 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-use util::{tracing_read_or_imm_native, tracing_write_native};
+use util::{
+    memory_read_or_imm_native_from_state, memory_write_native_from_state,
+    tracing_read_or_imm_native, tracing_write_native,
+};
 
 use super::memory::{online::TracingMemory, MemoryAuxColsFactory};
 use crate::{
@@ -34,14 +37,9 @@ use crate::{
         execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterExecutorE1,
         AdapterTraceFiller, AdapterTraceStep, VmStateMut,
     },
-    system::{
-        memory::{
-            offline_checker::{MemoryReadAuxRecord, MemoryWriteAuxRecord},
-            online::GuestMemory,
-        },
-        native_adapter::util::{
-            memory_read_or_imm_native_from_state, memory_write_native_from_state,
-        },
+    system::memory::{
+        offline_checker::{MemoryReadAuxRecord, MemoryWriteAuxRecord},
+        online::GuestMemory,
     },
 };
 
@@ -322,7 +320,7 @@ where
     #[inline(always)]
     fn read<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Self::ReadData
     where
@@ -341,7 +339,7 @@ where
     #[inline(always)]
     fn write<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
     ) where

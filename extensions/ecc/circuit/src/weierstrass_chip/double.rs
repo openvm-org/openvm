@@ -74,7 +74,6 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         range_checker: SharedVariableRangeCheckerChip,
         a_biguint: BigUint,
-        height: usize,
     ) -> Self {
         let expr = ec_double_ne_expr(config, range_checker.bus(), a_biguint);
 
@@ -103,6 +102,6 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
             "EcDouble",
             true,
         );
-        Self(WeierstrassChip::new(air, step, height, mem_helper))
+        Self(WeierstrassChip::new(air, step, mem_helper))
     }
 }

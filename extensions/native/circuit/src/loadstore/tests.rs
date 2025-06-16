@@ -48,11 +48,10 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> NativeLoadStoreChip<F, NUM
             NativeLoadStoreAdapterStep::new(NativeLoadStoreOpcode::CLASS_OFFSET),
             NativeLoadStoreOpcode::CLASS_OFFSET,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
-    chip.step
-        .set_streams(Arc::new(Mutex::new(Streams::default())));
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
     chip
 }
 

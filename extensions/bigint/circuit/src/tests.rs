@@ -5,7 +5,7 @@ use openvm_bigint_transpiler::{
 use openvm_circuit::{
     arch::{
         testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS},
-        InstructionExecutor, VmAirWrapper,
+        InsExecutorE1, InstructionExecutor, VmAirWrapper,
     },
     utils::generate_long_number,
 };
@@ -116,9 +116,9 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
             bitwise_chip.clone(),
             offset,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
+    chip.set_trace_height(MAX_INS_CAPACITY);
 
     for _ in 0..num_ops {
         set_and_execute_rand(
@@ -157,9 +157,9 @@ fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
             bitwise_chip.clone(),
             offset,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
+    chip.set_trace_height(MAX_INS_CAPACITY);
 
     for _ in 0..num_ops {
         set_and_execute_rand(
@@ -206,9 +206,9 @@ fn run_mul_256_rand_test(opcode: MulOpcode, num_ops: usize) {
             range_tuple_chip.clone(),
             offset,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
+    chip.set_trace_height(MAX_INS_CAPACITY);
 
     for _ in 0..num_ops {
         set_and_execute_rand(
@@ -256,9 +256,9 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
             range_checker_chip.clone(),
             offset,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
+    chip.set_trace_height(MAX_INS_CAPACITY);
 
     for _ in 0..num_ops {
         set_and_execute_rand(
@@ -299,9 +299,9 @@ fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
             offset,
             DEFAULT_PC_STEP,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
+    chip.set_trace_height(MAX_INS_CAPACITY);
 
     let branch_fn = |opcode: usize, x: &[u32; INT256_NUM_LIMBS], y: &[u32; INT256_NUM_LIMBS]| {
         x.iter()
@@ -351,9 +351,10 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
             bitwise_chip.clone(),
             offset,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
+    chip.set_trace_height(MAX_INS_CAPACITY);
+
     let branch_fn =
         |opcode: usize, x: &[u32; INT256_NUM_LIMBS], y: &[u32; INT256_NUM_LIMBS]| -> bool {
             let opcode = BranchLessThanOpcode::from_usize(

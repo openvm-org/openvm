@@ -43,9 +43,11 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> CastFChip<F> {
             ConvertAdapterStep::<READ_SIZE, WRITE_SIZE>::new(),
             tester.range_checker().clone(),
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
-    )
+    );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
+    chip
 }
 
 fn set_and_execute(

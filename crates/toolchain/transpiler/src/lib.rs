@@ -33,7 +33,6 @@ impl<F: PrimeField32> FromElf for VmExe<F> {
             &instructions,
             DEFAULT_PC_STEP,
             elf.pc_base,
-            elf.max_num_public_values,
         );
         let init_memory = elf_memory_image_to_openvm_memory_image(elf.memory_image);
 

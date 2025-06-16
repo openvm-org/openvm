@@ -32,7 +32,7 @@ fn poseidon2_periphery_direct_test() {
         )
     });
 
-    let mut chip = Poseidon2PeripheryChip::<BabyBear>::new(
+    let chip = Poseidon2PeripheryChip::<BabyBear>::new(
         Poseidon2Config::default(),
         POSEIDON2_DIRECT_BUS,
         3,
@@ -86,7 +86,7 @@ fn poseidon2_periphery_duplicate_hashes_test() {
     });
     let counts: [u32; NUM_OPS] = std::array::from_fn(|_| rng.next_u32() % 20);
 
-    let mut chip = Poseidon2PeripheryChip::<BabyBear>::new(
+    let chip = Poseidon2PeripheryChip::<BabyBear>::new(
         Poseidon2Config::default(),
         POSEIDON2_DIRECT_BUS,
         3,
