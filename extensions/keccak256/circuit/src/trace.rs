@@ -290,7 +290,7 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for KeccakVmStep {
                     return;
                 }
 
-                let num_reads = len.div_ceil(KECCAK_WORD_SIZE) as usize;
+                let num_reads = len.div_ceil(KECCAK_WORD_SIZE);
                 let read_len = num_reads * KECCAK_WORD_SIZE;
 
                 let record: KeccakVmRecordMut =

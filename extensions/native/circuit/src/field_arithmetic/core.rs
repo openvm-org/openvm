@@ -155,10 +155,9 @@ where
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
-        [core_record.b, core_record.c] = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
+        [core_record.b, core_record.c] =
+            self.adapter
+                .read(state.memory, instruction, &mut adapter_record);
 
         core_record.local_opcode =
             opcode.local_opcode_idx(FieldArithmeticOpcode::CLASS_OFFSET) as u8;

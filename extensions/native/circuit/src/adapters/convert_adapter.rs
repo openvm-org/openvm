@@ -163,12 +163,12 @@ impl<F: PrimeField32, CTX, const READ_SIZE: usize, const WRITE_SIZE: usize> Adap
         debug_assert_eq!(e.as_canonical_u32(), AS::Native as u32);
 
         record.b_ptr = b;
-        let read = tracing_read_native(
+
+        tracing_read_native(
             memory,
             b.as_canonical_u32(),
             &mut record.read_aux.prev_timestamp,
-        );
-        read
+        )
     }
 
     #[inline(always)]

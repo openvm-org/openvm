@@ -510,10 +510,10 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep<F> {
 
                 self.bitwise_lookup_chip.request_range(
                     (record.inner.mem_ptr >> msl_rshift) << msl_lshift,
-                    ((num_words as u32) >> msl_rshift) << msl_lshift,
+                    (num_words >> msl_rshift) << msl_lshift,
                 );
 
-                let mut timestamp = record.inner.timestamp + num_words as u32 * 3;
+                let mut timestamp = record.inner.timestamp + num_words * 3;
                 let mut mem_ptr = record.inner.mem_ptr + num_words * RV32_REGISTER_NUM_LIMBS as u32;
 
                 // Assuming that `num_words` is usually small (e.g. 1 for `HINT_STOREW`)
@@ -574,7 +574,7 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep<F> {
                         cols.mem_ptr_limbs = mem_ptr.to_le_bytes().map(|x| F::from_canonical_u8(x));
                         cols.mem_ptr_ptr = F::from_canonical_u32(record.inner.mem_ptr_ptr);
 
-                        cols.from_state.timestamp = F::from_canonical_u32(timestamp.clone());
+                        cols.from_state.timestamp = F::from_canonical_u32(timestamp);
                         cols.from_state.pc = F::from_canonical_u32(record.inner.from_pc);
 
                         cols.rem_words_limbs = (num_words - idx as u32)

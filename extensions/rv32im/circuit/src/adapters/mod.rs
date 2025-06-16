@@ -150,7 +150,7 @@ where
     F: PrimeField32,
 {
     let (t_prev, data) = timed_read(memory, address_space, ptr);
-    *prev_timestamp = t_prev.into();
+    *prev_timestamp = t_prev;
     data
 }
 

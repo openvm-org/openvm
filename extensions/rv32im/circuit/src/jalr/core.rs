@@ -342,7 +342,7 @@ where
         let rs1 = u32::from_le_bytes(self.adapter.read(state, instruction));
 
         let (to_pc, rd) = run_jalr(*state.pc, rs1, c.as_canonical_u32() as u16, g.is_one());
-        let rd = rd.map(|x| x as u8);
+        let rd = rd.map(|x| x);
 
         self.adapter.write(state, instruction, &rd);
 

@@ -19,9 +19,8 @@ use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscrimi
 use openvm_native_compiler::{
     CastfOpcode, FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
     NativeJalOpcode, NativeLoadStore4Opcode, NativeLoadStoreOpcode, NativePhantom,
-    NativeRangeCheckOpcode, Poseidon2Opcode, VerifyBatchOpcode, BLOCK_LOAD_STORE_SIZE,
+    NativeRangeCheckOpcode, BLOCK_LOAD_STORE_SIZE,
 };
-use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::{
     BranchEqualCoreAir, Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor,
     Rv32IoPeriphery, Rv32M, Rv32MExecutor, Rv32MPeriphery,

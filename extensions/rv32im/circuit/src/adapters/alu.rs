@@ -222,7 +222,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
         let rs1 = tracing_read(
             memory,
             RV32_REGISTER_AS,
-            record.rs1_ptr as u32,
+            record.rs1_ptr,
             &mut record.reads_aux[0].prev_timestamp,
         );
 
@@ -261,7 +261,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
         tracing_write(
             memory,
             RV32_REGISTER_AS,
-            record.rd_ptr as u32,
+            record.rd_ptr,
             &data[0],
             &mut record.writes_aux.prev_timestamp,
             &mut record.writes_aux.prev_data,
@@ -301,7 +301,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceFiller<F, CTX>
 
         if record.rs2_as != 0 {
             mem_helper.fill(
-                record.reads_aux[1].prev_timestamp.into(),
+                record.reads_aux[1].prev_timestamp,
                 timestamp,
                 adapter_row.reads_aux[1].as_mut(),
             );
@@ -315,7 +315,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceFiller<F, CTX>
         timestamp -= 1;
 
         mem_helper.fill(
-            record.reads_aux[0].prev_timestamp.into(),
+            record.reads_aux[0].prev_timestamp,
             timestamp,
             adapter_row.reads_aux[0].as_mut(),
         );

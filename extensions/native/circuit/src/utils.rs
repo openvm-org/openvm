@@ -48,8 +48,8 @@ pub mod test_utils {
         }
     }
 
-    // Writes value to native memory and returns a pointer to the first element together with the value
-    // If `value` is None, randomizes it.
+    // Writes value to native memory and returns a pointer to the first element together with the
+    // value If `value` is None, randomizes it.
     pub fn write_native_array<F: PrimeField32, const N: usize>(
         tester: &mut VmChipTestBuilder<F>,
         rng: &mut StdRng,

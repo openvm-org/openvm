@@ -324,7 +324,7 @@ where
         );
 
         let (writes, _, _) =
-            run_field_expression(self, &core_record.input_limbs, *core_record.opcode as usize);
+            run_field_expression(self, core_record.input_limbs, *core_record.opcode as usize);
 
         self.adapter.write(
             state.memory,
@@ -363,7 +363,7 @@ where
         };
 
         let (_, inputs, flags) =
-            run_field_expression(self, &record.input_limbs, *record.opcode as usize);
+            run_field_expression(self, record.input_limbs, *record.opcode as usize);
 
         let range_checker = self.range_checker.as_ref();
         self.expr
@@ -402,11 +402,8 @@ where
         Ctx: E1E2ExecutionCtx,
     {
         let data: &[u8] = &self.adapter.read(state, instruction).into().0;
-        let (writes, _, _) = run_field_expression(
-            self,
-            data,
-            instruction.opcode.local_opcode_idx(self.offset) as usize,
-        );
+        let (writes, _, _) =
+            run_field_expression(self, data, instruction.opcode.local_opcode_idx(self.offset));
 
         self.adapter.write(state, instruction, &writes.into());
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);

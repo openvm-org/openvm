@@ -137,8 +137,8 @@ where
     type RecordMut<'a> = &'a mut Rv32VecHeapAdapterRecord<NUM_READS, 1, 1, READ_SIZE, WRITE_SIZE>;
 
     fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
-        record.from_pc = pc.into();
-        record.from_timestamp = memory.timestamp.into();
+        record.from_pc = pc;
+        record.from_timestamp = memory.timestamp;
     }
 
     fn read(

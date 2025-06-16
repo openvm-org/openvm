@@ -190,7 +190,7 @@ where
 
         core_record.a = rs1;
         core_record.b = rs2;
-        core_record.imm = imm.as_canonical_u32().into();
+        core_record.imm = imm.as_canonical_u32();
         core_record.local_opcode = branch_eq_opcode as u8;
 
         if fast_run_eq(branch_eq_opcode, &rs1, &rs2) {

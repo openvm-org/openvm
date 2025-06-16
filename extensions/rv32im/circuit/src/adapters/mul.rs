@@ -231,13 +231,13 @@ impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32MultAdapterStep {
         );
 
         mem_helper.fill(
-            record.reads_aux[1].prev_timestamp.into(),
+            record.reads_aux[1].prev_timestamp,
             timestamp + 1,
             adapter_row.reads_aux[1].as_mut(),
         );
 
         mem_helper.fill(
-            record.reads_aux[0].prev_timestamp.into(),
+            record.reads_aux[0].prev_timestamp,
             timestamp,
             adapter_row.reads_aux[0].as_mut(),
         );
