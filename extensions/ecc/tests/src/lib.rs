@@ -28,7 +28,8 @@ mod tests {
     };
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
-    use crate::test_vectors::P256_RECOVERY_TEST_VECTORS;
+    use crate::test_vectors::{K256_RECOVERY_TEST_VECTORS, P256_RECOVERY_TEST_VECTORS};
+
     type F = BabyBear;
 
     #[test]
@@ -188,13 +189,31 @@ mod tests {
                 .app_vm_config;
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
-            "ecdsa_recover",
+            "ecdsa_recover_p256",
             ["p256"],
-            &config,
+            &NoInitFile, // using already created file
         )?;
         let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
         let mut input = StdIn::default();
         input.write(&P256_RECOVERY_TEST_VECTORS.to_vec());
+        air_test_with_min_segments(config, openvm_exe, input, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn test_k256_ecdsa_recover() -> Result<()> {
+        let config =
+            toml::from_str::<AppConfig<SdkVmConfig>>(include_str!("../programs/openvm_k256.toml"))?
+                .app_vm_config;
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "ecdsa_recover_k256",
+            ["k256"],
+            &NoInitFile, // using already created file
+        )?;
+        let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
+        let mut input = StdIn::default();
+        input.write(&K256_RECOVERY_TEST_VECTORS.to_vec());
         air_test_with_min_segments(config, openvm_exe, input, 1);
         Ok(())
     }

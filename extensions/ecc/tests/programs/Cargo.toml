@@ -70,8 +70,12 @@ name = "ecdsa"
 required-features = ["k256"]
 
 [[example]]
-name = "ecdsa_recover"
+name = "ecdsa_recover_p256"
 required-features = ["p256"]
+
+[[example]]
+name = "ecdsa_recover_k256"
+required-features = ["k256"]
 
 [[example]]
 name = "invalid_setup"

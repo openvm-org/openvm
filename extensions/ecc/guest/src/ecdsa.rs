@@ -218,7 +218,7 @@ where
 impl<C> VerifyingKey<C>
 where
     C: IntrinsicCurve + PrimeCurve,
-    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>>,
+    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>> + VerifyCustomHook<C>,
     Coordinate<C>: IntMod,
     C::Scalar: IntMod + Reduce,
     for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
@@ -263,7 +263,34 @@ where
         recovery_id: RecoveryId,
     ) -> Result<Self> {
         let sig = signature.to_bytes();
-        Self::recover_from_prehash_noverify(prehash, &sig, recovery_id)
+        let vk = Self::recover_from_prehash_noverify(prehash, &sig, recovery_id)?;
+        vk.inner.as_affine().verify_hook(prehash, signature)?;
+        Ok(vk)
+    }
+}
+
+/// To match the RustCrypto trait [VerifyPrimitive]. Certain curves have special verification logic
+/// outside of the general ECDSA verification algorithm. This trait provides a hook for such logic.
+///
+/// This trait is intended to be implemented on type which can access
+/// the affine point representing the public key via `&self`, such as a
+/// particular curve's `AffinePoint` type.
+pub trait VerifyCustomHook<C>: WeierstrassPoint
+where
+    C: IntrinsicCurve + PrimeCurve,
+    SignatureSize<C>: ArrayLength<u8>,
+{
+    /// This is **NOT** the full ECDSA signature verification algorithm. The implementer should only
+    /// add additional verification logic not contained in [verify_prehashed]. The default
+    /// implementation does nothing.
+    ///
+    /// Accepts the following arguments:
+    ///
+    /// - `z`: message digest to be verified. MUST BE OUTPUT OF A CRYPTOGRAPHICALLY SECURE DIGEST
+    ///   ALGORITHM!!!
+    /// - `sig`: signature to be verified against the key and message
+    fn verify_hook(&self, _z: &[u8], _sig: &Signature<C>) -> Result<()> {
+        Ok(())
     }
 }
 
@@ -276,17 +303,17 @@ where
     C: PrimeCurve + IntrinsicCurve,
     D: Digest + FixedOutput<OutputSize = FieldBytesSize<C>>,
     SignatureSize<C>: ArrayLength<u8>,
-    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>>,
+    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>> + VerifyCustomHook<C>,
     Coordinate<C>: IntMod,
     <C as IntrinsicCurve>::Scalar: IntMod + Reduce,
     for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
     for<'a> &'a Scalar<C>: DivUnsafe<&'a Scalar<C>, Output = Scalar<C>>,
 {
     fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
-        verify_prehashed::<C>(
-            self.inner.as_affine().clone(),
+        PrehashVerifier::<Signature<C>>::verify_prehash(
+            self,
             &msg_digest.finalize_fixed(),
-            &signature.to_bytes(),
+            signature,
         )
     }
 }
@@ -295,13 +322,14 @@ impl<C> PrehashVerifier<Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + IntrinsicCurve,
     SignatureSize<C>: ArrayLength<u8>,
-    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>>,
+    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>> + VerifyCustomHook<C>,
     Coordinate<C>: IntMod,
     C::Scalar: IntMod + Reduce,
     for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
     for<'a> &'a Scalar<C>: DivUnsafe<&'a Scalar<C>, Output = Scalar<C>>,
 {
     fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
+        self.inner.as_affine().verify_hook(prehash, signature)?;
         verify_prehashed::<C>(
             self.inner.as_affine().clone(),
             prehash,
@@ -314,7 +342,7 @@ impl<C> Verifier<Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic + DigestPrimitive + IntrinsicCurve,
     SignatureSize<C>: ArrayLength<u8>,
-    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>>,
+    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>> + VerifyCustomHook<C>,
     Coordinate<C>: IntMod,
     <C as IntrinsicCurve>::Scalar: IntMod + Reduce,
     for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
@@ -454,6 +482,9 @@ where
         }
         assert!(FieldBytesSize::<C>::USIZE <= Coordinate::<C>::NUM_LIMBS);
         let x = Coordinate::<C>::from_be_bytes(&r_bytes);
+        if !x.is_reduced() {
+            return Err(Error::new());
+        }
         let rec_id = recovery_id.to_byte();
         // The point R decompressed from x-coordinate `r`
         let R: C::Point = FromCompressed::decompress(x, &rec_id).ok_or_else(Error::new)?;
@@ -468,6 +499,7 @@ where
     }
 }
 
+/// Assumes that `sig` is proper encoding of `r, s`.
 // Ref: https://docs.rs/ecdsa/latest/src/ecdsa/hazmat.rs.html#270
 #[allow(non_snake_case)]
 pub fn verify_prehashed<C>(pubkey: AffinePoint<C>, prehash: &[u8], sig: &[u8]) -> Result<()>
@@ -510,6 +542,8 @@ where
     // public key
     let Q = pubkey;
     let R = <C as IntrinsicCurve>::msm(&[u1, u2], &[G, Q]);
+    // For Coordinate<C>: IntMod, the internal implementation of is_identity will assert x, y
+    // coordinates of R are both reduced.
     if R.is_identity() {
         return Err(Error::new());
     }
