@@ -398,7 +398,7 @@ signed×unsigned multiplication respectively.
 
 DIV_RV32 and DIVU_RV32 perform signed and unsigned integer division of 32-bits by 32-bits. REM_RV32
 and REMU_RV32 provide the remainder of the corresponding division operation. Integer division is defined by
-`dividend = q * divisor + r` where `0 <= |r| < |divisor|` and either `sign(r) = sign(divisor)` or `r = 0`.
+`dividend = q * divisor + r` where `0 <= |r| < |divisor|` and either `sign(r) = sign(dividend)` or `r = 0`.
 
 Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 

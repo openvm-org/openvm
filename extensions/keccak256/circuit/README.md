@@ -4,7 +4,7 @@
 
 The `keccak-air` from Plonky3 is an AIR that does one `keccak-f[1600]` permutation every `NUM_ROUNDS = 24` rows (henceforth we call this the `keccak-f` AIR to avoid confusion). All rows in the round have the same `preimage`, which is the starting state prior to the permutation, represented as `5 * 5 * 4` `u16` limbs (the state in the spec is `5 * 5` `u64`s, but since the AIR uses a 31-bit field, the `u64` is broken into `u16`s).
 
-The `keccak-f` permutation copies `preimage` to `A` and mutates `A` over rounds. The mutations are materialized in the `keccak-f` AIR in `A'` and `A''` arrays. While the bits of `A'` are materialized, the bits of `preimage` and `A` are never materialized (there is an implicit bit compostion in the constraints).
+The `keccak-f` permutation copies `preimage` to `A` and mutates `A` over rounds. The mutations are materialized in the `keccak-f` AIR in `A'` and `A''` arrays. While the bits of `A'` are materialized, the bits of `preimage` and `A` are never materialized (there is an implicit bit composition in the constraints).
 
 ## Review of `keccak256` sponge
 

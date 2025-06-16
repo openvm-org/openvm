@@ -82,6 +82,9 @@ jobs:
           else
             RUN_E2E=${{ github.event.inputs.run-benchmark-e2e || 'false' }}
           fi
+          if [[ "$RUN_E2E" == "true" ]]; then
+            FEATURE_FLAGS="evm,${FEATURE_FLAGS}"
+          fi
           if [[ "${{ github.event.inputs.aggregation }}" == "true" ]]; then
             FEATURE_FLAGS="aggregation,${FEATURE_FLAGS}"
           fi

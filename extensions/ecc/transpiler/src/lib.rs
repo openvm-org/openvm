@@ -1,7 +1,6 @@
 use openvm_ecc_guest::{SwBaseFunct7, TeBaseFunct7, SW_FUNCT3, SW_OPCODE, TE_FUNCT3, TE_OPCODE};
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, PhantomDiscriminant,
-    VmOpcode,
+    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, VmOpcode,
 };
 use openvm_instructions_derive::LocalOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -31,15 +30,6 @@ pub enum Rv32WeierstrassOpcode {
 pub enum Rv32EdwardsOpcode {
     TE_ADD,
     SETUP_TE_ADD,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, FromRepr)]
-#[repr(u16)]
-pub enum EccPhantom {
-    SwHintDecompress = 0x40,
-    SwHintNonQr = 0x41,
-    TeHintDecompress = 0x42,
-    TeHintNonQr = 0x43,
 }
 
 #[derive(Default)]
@@ -80,26 +70,6 @@ impl EccTranspilerExtension {
                 ((dec_insn.funct7 as u8) / TeBaseFunct7::TWISTED_EDWARDS_MAX_KINDS) as usize;
             let curve_idx_shift = curve_idx * Rv32EdwardsOpcode::COUNT;
 
-            if let Some(TeBaseFunct7::TeHintDecompress) = TeBaseFunct7::from_repr(base_funct7) {
-                assert_eq!(dec_insn.rd, 0);
-                return Some(TranspilerOutput::one_to_one(Instruction::phantom(
-                    PhantomDiscriminant(EccPhantom::TeHintDecompress as u16),
-                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
-                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
-                    curve_idx as u16,
-                )));
-            }
-            if let Some(TeBaseFunct7::TeHintNonQr) = TeBaseFunct7::from_repr(base_funct7) {
-                assert_eq!(dec_insn.rd, 0);
-                assert_eq!(dec_insn.rs1, 0);
-                assert_eq!(dec_insn.rs2, 0);
-                return Some(TranspilerOutput::one_to_one(Instruction::phantom(
-                    PhantomDiscriminant(EccPhantom::TeHintNonQr as u16),
-                    F::ZERO,
-                    F::ZERO,
-                    curve_idx as u16,
-                )));
-            }
             if base_funct7 == TeBaseFunct7::TeSetup as u8 {
                 let local_opcode = Rv32EdwardsOpcode::SETUP_TE_ADD;
                 Some(Instruction::new(
@@ -152,27 +122,6 @@ impl EccTranspilerExtension {
             let curve_idx =
                 ((dec_insn.funct7 as u8) / SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS) as usize;
             let curve_idx_shift = curve_idx * Rv32WeierstrassOpcode::COUNT;
-
-            if let Some(SwBaseFunct7::SwHintDecompress) = SwBaseFunct7::from_repr(base_funct7) {
-                assert_eq!(dec_insn.rd, 0);
-                return Some(TranspilerOutput::one_to_one(Instruction::phantom(
-                    PhantomDiscriminant(EccPhantom::SwHintDecompress as u16),
-                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
-                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
-                    curve_idx as u16,
-                )));
-            }
-            if let Some(SwBaseFunct7::SwHintNonQr) = SwBaseFunct7::from_repr(base_funct7) {
-                assert_eq!(dec_insn.rd, 0);
-                assert_eq!(dec_insn.rs1, 0);
-                assert_eq!(dec_insn.rs2, 0);
-                return Some(TranspilerOutput::one_to_one(Instruction::phantom(
-                    PhantomDiscriminant(EccPhantom::SwHintNonQr as u16),
-                    F::ZERO,
-                    F::ZERO,
-                    curve_idx as u16,
-                )));
-            }
             if base_funct7 == SwBaseFunct7::SwSetup as u8 {
                 let local_opcode = match dec_insn.rs2 {
                     0 => Rv32WeierstrassOpcode::SETUP_SW_DOUBLE,

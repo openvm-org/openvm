@@ -6,7 +6,7 @@ Author: https://github.com/MonkeyKing-1
 
 Scope: Plonky3 poseidon2 and poseidon2 air
 
-Understanding how the Plonky3 posiedon2 air works, make sure it is sound.
+Understanding how the Plonky3 poseidon2 air works, make sure it is sound.
 
 ## 2. Findings
 
@@ -40,7 +40,7 @@ The external linear layer takes the current state and does some case work based 
 
 - Length 2: compute sum of elements of state and add to each element of state.
 - Length 3: compute sum of elements of state and add to each element of state.
-- Length is multiple of 4: Multiply every four elements by M, giving a new state. Compute the sum of elements with indices that are 0 mod 4, 1 mod 4, etc, computing four sums. Then add these sums to the elements that contributed to them. In other words, perform this multiplication:  
+- Length is multiple of 4: Multiply every four elements by M, giving a new state. Compute the sum of elements with indices that are 0 mod 4, 1 mod 4, etc, computing four sums. Then add these sums to the elements that contributed to them. In other words, perform this multiplication:
   `[[2M M  ... M], [M  2M ... M], ..., [M  M ... 2M]]`.
 
 ### Internal Linear Layer

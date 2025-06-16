@@ -19,6 +19,12 @@ use crate::{
     Secp256k1, ORDER_HEX,
 };
 
+impl Secp256k1Scalar {
+    /// Returns the SEC1 encoding of this scalar.
+    pub fn to_bytes(&self) -> FieldBytes {
+        self.to_be_bytes().into()
+    }
+}
 // --- Implement elliptic_curve traits on Secp256k1Scalar ---
 
 impl Copy for Secp256k1Scalar {}
