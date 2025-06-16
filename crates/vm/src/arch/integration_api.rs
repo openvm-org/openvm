@@ -105,7 +105,7 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 }
 
 pub trait SizedRecord<Layout, RecordMut> {
-    fn width_bytes(&self, layout: &Layout) -> usize;
+    fn num_bytes(&self, layout: &Layout) -> usize;
 }
 
 /// Given some minimum metadata of type `Layout` that specifies the record size, the `RecordArena`
@@ -406,7 +406,7 @@ impl<Record> SizedRecord<(), &mut Record> for DenseRecordArena
 where
     [u8]: BorrowMut<Record>,
 {
-    fn width_bytes(&self, _layout: &()) -> usize {
+    fn num_bytes(&self, _layout: &()) -> usize {
         size_of::<Record>()
     }
 }
@@ -415,13 +415,13 @@ impl<F, AS, I, A, C> SizedRecord<AdapterCoreLayout<AS, I>, (A, C)> for MatrixRec
 where
     AS: 'static + AdapterTraceStep<F, ()>,
 {
-    fn width_bytes(&self, _layout: &AdapterCoreLayout<AS, I>) -> usize {
+    fn num_bytes(&self, _layout: &AdapterCoreLayout<AS, I>) -> usize {
         AS::WIDTH * size_of::<F>()
     }
 }
 
 impl<F, I, R> SizedRecord<MultiRowLayout<I>, R> for MatrixRecordArena<F> {
-    fn width_bytes(&self, layout: &MultiRowLayout<I>) -> usize {
+    fn num_bytes(&self, layout: &MultiRowLayout<I>) -> usize {
         (layout.num_rows as usize) * self.width * size_of::<F>()
     }
 }
@@ -437,7 +437,7 @@ where
 {
     fn alloc(&'a mut self, layout: AdapterCoreLayout<AS, I>) -> (A, C) {
         let width =
-            <Self as SizedRecord<AdapterCoreLayout<AS, I>, (A, C)>>::width_bytes(self, &layout);
+            <Self as SizedRecord<AdapterCoreLayout<AS, I>, (A, C)>>::num_bytes(self, &layout);
         let buffer = self.alloc_single_row();
         // Doing a unchecked split here for perf
         let (adapter_buffer, core_buffer) = unsafe { buffer.split_at_mut_unchecked(width) };
@@ -471,8 +471,8 @@ where
     DenseRecordArena: SizedRecord<I, A> + SizedRecord<I, C>,
 {
     fn alloc(&'a mut self, layout: AdapterCoreLayout<AS, I>) -> (A, C) {
-        let adapter_width = <Self as SizedRecord<I, A>>::width_bytes(self, &layout.metadata);
-        let core_width = <Self as SizedRecord<I, C>>::width_bytes(self, &layout.metadata);
+        let adapter_width = <Self as SizedRecord<I, A>>::num_bytes(self, &layout.metadata);
+        let core_width = <Self as SizedRecord<I, C>>::num_bytes(self, &layout.metadata);
         let buffer = self.alloc_bytes(adapter_width + core_width);
         // Doing a unchecked split here for perf
         let (adapter_buffer, core_buffer) = unsafe { buffer.split_at_mut_unchecked(adapter_width) };
