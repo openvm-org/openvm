@@ -596,12 +596,12 @@ where
 
         let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let mem_ptr = read_rv32_register(&state.memory, b.as_canonical_u32());
+        let mem_ptr = read_rv32_register(state.memory, b.as_canonical_u32());
 
         let num_words = if local_opcode == HINT_STOREW {
             1
         } else {
-            read_rv32_register(&state.memory, a.as_canonical_u32())
+            read_rv32_register(state.memory, a.as_canonical_u32())
         };
 
         debug_assert!(mem_ptr <= (1 << self.pointer_max_bits));

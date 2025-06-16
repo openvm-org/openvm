@@ -605,8 +605,8 @@ where
 
         let read_data = match local_opcode {
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                let read_data = memory_read_from_state(state, e.as_canonical_u32(), ptr_val);
-                read_data
+                
+                memory_read_from_state(state, e.as_canonical_u32(), ptr_val)
             }
             STOREW | STOREH | STOREB => {
                 read_rv32_register_from_state(state, a.as_canonical_u32()).to_le_bytes()
@@ -659,7 +659,7 @@ where
 
         match local_opcode {
             STOREW | STOREH | STOREB => {
-                let rs1 = read_rv32_register(&state.memory, b.as_canonical_u32());
+                let rs1 = read_rv32_register(state.memory, b.as_canonical_u32());
                 let imm_extended = c.as_canonical_u32() + g.as_canonical_u32() * 0xffff0000;
                 let ptr = rs1.wrapping_add(imm_extended) & !3;
                 if e.as_canonical_u32() == 4 {
