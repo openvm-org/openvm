@@ -69,14 +69,7 @@ fn set_and_execute(
             tester.write(AS::Native as usize, a, data);
         }
         HINT_STOREW => {
-            // chip.step
-            //     .streams
-            //     .get()
-            //     .unwrap()
-            //     .lock()
-            //     .unwrap()
-            //     .hint_stream
-            //     .extend(data);
+            tester.streams.hint_stream.extend(data);
         }
     }
 
