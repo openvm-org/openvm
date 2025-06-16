@@ -1,3 +1,5 @@
+use std::{borrow::BorrowMut, mem::size_of};
+
 use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::Zero;
@@ -30,7 +32,6 @@ use crate::{
     builder::{FieldExpr, FieldExprCols},
     utils::biguint_to_limbs_vec,
 };
-
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {
     pub expr: FieldExpr,

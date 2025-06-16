@@ -173,7 +173,7 @@ where
     }
 }
 
-#[repr(C)]
+#[repr(C, align(4))]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct BaseAluCoreRecord<const NUM_LIMBS: usize> {
     pub b: [u8; NUM_LIMBS],

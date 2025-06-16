@@ -2,6 +2,7 @@ use std::{
     any::type_name,
     array::from_fn,
     borrow::{Borrow, BorrowMut},
+    io::Cursor,
     marker::PhantomData,
     ptr::slice_from_raw_parts_mut,
     sync::Arc,
@@ -101,6 +102,13 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
     pub reads: I::Reads,
     pub writes: I::Writes,
     pub instruction: I::ProcessedInstruction,
+}
+
+pub trait SizedRecord<Layout, RecordMut> {
+    /// The size of the record in bytes
+    fn size(&self, layout: &Layout) -> usize;
+    /// The alignment of the record in bytes
+    fn alignment(&self, layout: &Layout) -> usize;
 }
 
 /// Given some minimum metadata of type `Layout` that specifies the record size, the `RecordArena`
@@ -216,7 +224,8 @@ where
 /// Converts a field element slice into a record type.
 /// This function transmutes the `&mut [F]` to raw bytes,
 /// then uses the `CustomBorrow` trait to transmute to the desired record type `T`.
-/// **SAFETY**: `slice` must satisfy the requirements of the `CustomBorrow` trait.
+/// ## Safety
+/// `slice` must satisfy the requirements of the `CustomBorrow` trait.
 pub unsafe fn get_record_from_slice<'a, T, F, I>(slice: &mut &'a mut [F], metadata: I) -> T
 where
     [u8]: CustomBorrow<'a, T, I>,
@@ -232,7 +241,9 @@ where
 /// in scenarios involving chips that:
 /// - have a single row per instruction
 /// - have trace row = [adapter_row, core_row]
+///
 /// **NOTE**: `AS` is the adapter type that implements `AdapterTraceStep`
+///
 /// **WARNING**: `AS::WIDTH` is the number of field elements, not the size in bytes
 pub struct AdapterCoreLayout<AS, I = ()> {
     pub metadata: I,
@@ -292,6 +303,92 @@ pub struct MatrixRecordArena<F> {
     pub trace_offset: usize,
 }
 
+/// An auxiliary struct for implementing [RecordArena] for a single record type.
+/// This is useful for chips that have a single row per instruction,
+/// and where we only want to allocate a row with compressed information,
+/// not a trace row to be filled later.
+pub struct DenseRecordArena {
+    pub records_buffer: Cursor<Vec<u8>>,
+}
+
+const MAX_ALIGNMENT: usize = 32;
+
+impl DenseRecordArena {
+    /// Creates a new [DenseRecordArena] with the given capacity in bytes.
+    pub fn with_capacity(size_bytes: usize) -> Self {
+        let buffer = vec![0; size_bytes + MAX_ALIGNMENT];
+        let offset = (MAX_ALIGNMENT - (buffer.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT;
+        let mut cursor = Cursor::new(buffer);
+        cursor.set_position(offset as u64);
+        Self {
+            records_buffer: cursor,
+        }
+    }
+
+    /// Allocates a single record of the given type and returns a mutable reference to it.
+    pub fn alloc_one<'a, T>(&mut self) -> &'a mut T {
+        let begin = self.records_buffer.position();
+        let width = size_of::<T>();
+        debug_assert!(begin as usize + width <= self.records_buffer.get_ref().len());
+        self.records_buffer.set_position(begin + width as u64);
+        unsafe {
+            &mut *(self
+                .records_buffer
+                .get_mut()
+                .as_mut_ptr()
+                .add(begin as usize) as *mut T)
+        }
+    }
+
+    /// Allocates a slice of records of the given type and returns a mutable reference to it.
+    pub fn alloc_many<'a, T>(&mut self, count: usize) -> &'a mut [T] {
+        let begin = self.records_buffer.position();
+        let width = size_of::<T>() * count;
+        debug_assert!(begin as usize + width <= self.records_buffer.get_ref().len());
+        self.records_buffer.set_position(begin + width as u64);
+        unsafe {
+            std::slice::from_raw_parts_mut(
+                self.records_buffer
+                    .get_mut()
+                    .as_mut_ptr()
+                    .add(begin as usize) as *mut T,
+                count,
+            )
+        }
+    }
+
+    pub fn alloc_bytes<'a>(&mut self, count: usize) -> &'a mut [u8] {
+        self.alloc_many::<u8>(count)
+    }
+
+    pub fn allocated(&self) -> &[u8] {
+        let size = self.records_buffer.position() as usize;
+        let offset = (MAX_ALIGNMENT
+            - (self.records_buffer.get_ref().as_ptr() as usize % MAX_ALIGNMENT))
+            % MAX_ALIGNMENT;
+        &self.records_buffer.get_ref()[offset..offset + size]
+    }
+
+    pub fn align_to(&mut self, alignment: usize) {
+        debug_assert!(MAX_ALIGNMENT % alignment == 0);
+        let offset =
+            (alignment - (self.records_buffer.get_ref().as_ptr() as usize % alignment)) % alignment;
+        self.records_buffer.set_position(offset as u64);
+    }
+
+    /// Disclaimer: it shouldn't even be called here (only on GPU),
+    /// so this function is for testing purposes.
+    /// Also, it only covers the basic case where everything is placed
+    /// densely and consequently and its size is just sizeof
+    pub fn extract_records<Record: Sized + Clone>(&self) -> Vec<Record> {
+        let bytes = self.allocated();
+        let size = size_of::<Record>();
+        debug_assert!(bytes.len() % size == 0);
+        unsafe { std::slice::from_raw_parts(bytes.as_ptr() as *const Record, bytes.len() / size) }
+            .to_vec()
+    }
+}
+
 impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
     fn set_capacity(&mut self, trace_height: usize) {
         let size = trace_height * self.width;
@@ -321,8 +418,44 @@ impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
     }
 }
 
+impl<Record> SizedRecord<(), &mut Record> for DenseRecordArena
+where
+    [u8]: BorrowMut<Record>,
+{
+    fn size(&self, _layout: &()) -> usize {
+        size_of::<Record>()
+    }
+
+    fn alignment(&self, _layout: &()) -> usize {
+        align_of::<Record>()
+    }
+}
+
+impl<F, AS, I, A, C> SizedRecord<AdapterCoreLayout<AS, I>, (A, C)> for MatrixRecordArena<F>
+where
+    AS: 'static + AdapterTraceStep<F, ()>,
+{
+    fn size(&self, _layout: &AdapterCoreLayout<AS, I>) -> usize {
+        AS::WIDTH * size_of::<F>()
+    }
+
+    fn alignment(&self, _layout: &AdapterCoreLayout<AS, I>) -> usize {
+        align_of::<F>()
+    }
+}
+
+impl<F, I, R> SizedRecord<MultiRowLayout<I>, R> for MatrixRecordArena<F> {
+    fn size(&self, layout: &MultiRowLayout<I>) -> usize {
+        (layout.num_rows as usize) * self.width * size_of::<F>()
+    }
+
+    fn alignment(&self, _layout: &MultiRowLayout<I>) -> usize {
+        align_of::<F>()
+    }
+}
+
 /// RecordArena implementation for [MatrixRecordArena], with [AdapterCoreLayout]
-/// `A` is the adapter record type and `C` is the core record type
+/// `A` is the adapter RecordMut type and `C` is the core RecordMut type
 /// `AS` is a type that implements `AdapterTraceStep`, so the width of the adapter is `AS::WIDTH`
 impl<'a, F: Field, A, C, I: Clone, AS> RecordArena<'a, AdapterCoreLayout<AS, I>, (A, C)>
     for MatrixRecordArena<F>
@@ -331,10 +464,10 @@ where
     AS: 'static + AdapterTraceStep<F, ()>,
 {
     fn alloc(&'a mut self, layout: AdapterCoreLayout<AS, I>) -> (A, C) {
+        let width = <Self as SizedRecord<AdapterCoreLayout<AS, I>, (A, C)>>::size(self, &layout);
         let buffer = self.alloc_single_row();
         // Doing a unchecked split here for perf
-        let (adapter_buffer, core_buffer) =
-            unsafe { buffer.split_at_mut_unchecked(AS::WIDTH * size_of::<F>()) };
+        let (adapter_buffer, core_buffer) = unsafe { buffer.split_at_mut_unchecked(width) };
 
         let adapter_record: A = adapter_buffer.custom_borrow(layout.metadata.clone());
         let core_record: C = core_buffer.custom_borrow(layout.metadata);
@@ -353,6 +486,38 @@ where
         let buffer = self.alloc_buffer(layout.num_rows);
         let record: R = buffer.custom_borrow(layout.metadata);
         record
+    }
+}
+
+/// RecordArena implementation for [DenseRecordArena], with [AdapterCoreLayout]
+/// `A` is the adapter record type and `C` is the core record type
+/// `AS` is a type that implements `AdapterTraceStep`, so the width of the adapter is `AS::WIDTH`
+impl<'a, AS, A, C, I: Clone> RecordArena<'a, AdapterCoreLayout<AS, I>, (A, C)> for DenseRecordArena
+where
+    [u8]: CustomBorrow<'a, A, I> + CustomBorrow<'a, C, I>,
+    DenseRecordArena: SizedRecord<I, A> + SizedRecord<I, C>,
+{
+    fn alloc(&'a mut self, layout: AdapterCoreLayout<AS, I>) -> (A, C) {
+        let adapter_alignment = <Self as SizedRecord<I, A>>::alignment(self, &layout.metadata);
+        let core_alignment = <Self as SizedRecord<I, C>>::alignment(self, &layout.metadata);
+        let adapter_width = <Self as SizedRecord<I, A>>::size(self, &layout.metadata);
+        let aligned_adapter_width = adapter_width.next_multiple_of(core_alignment);
+        let core_width = <Self as SizedRecord<I, C>>::size(self, &layout.metadata);
+        let aligned_core_width = (aligned_adapter_width + core_width)
+            .next_multiple_of(adapter_alignment)
+            - aligned_adapter_width;
+        debug_assert_eq!(MAX_ALIGNMENT % adapter_alignment, 0);
+        debug_assert_eq!(MAX_ALIGNMENT % core_alignment, 0);
+        let buffer = self.alloc_bytes(aligned_adapter_width + aligned_core_width);
+        // Doing an unchecked split here for perf
+        let (adapter_buffer, core_buffer) =
+            unsafe { buffer.split_at_mut_unchecked(aligned_adapter_width) };
+
+        let adapter_record: A =
+            adapter_buffer[..adapter_width].custom_borrow(layout.metadata.clone());
+        let core_record: C = core_buffer[..core_width].custom_borrow(layout.metadata);
+
+        (adapter_record, core_record)
     }
 }
 
@@ -383,11 +548,11 @@ pub struct NewVmChipWrapper<F, AIR, STEP, RA> {
     mem_helper: SharedMemoryHelper<F>,
 }
 
-impl<F, AIR, STEP, RA> NewVmChipWrapper<F, AIR, STEP, RA>
+// TODO(AG): more general RA
+impl<F, AIR, STEP> NewVmChipWrapper<F, AIR, STEP, MatrixRecordArena<F>>
 where
     F: Field,
     AIR: BaseAir<F>,
-    RA: RowMajorMatrixArena<F>,
 {
     pub fn new(air: AIR, step: STEP, mem_helper: SharedMemoryHelper<F>) -> Self {
         let width = air.width();
@@ -396,7 +561,7 @@ where
             "type {} should have at least alignment of u32",
             type_name::<F>()
         );
-        let arena = RA::with_capacity(0, width);
+        let arena = MatrixRecordArena::with_capacity(0, width);
         Self {
             air,
             step,
@@ -407,6 +572,30 @@ where
 
     pub fn set_trace_buffer_height(&mut self, height: usize) {
         self.arena.set_capacity(height);
+    }
+}
+
+// TODO(AG): more general RA
+impl<F, AIR, STEP> NewVmChipWrapper<F, AIR, STEP, DenseRecordArena>
+where
+    F: Field,
+    AIR: BaseAir<F>,
+{
+    pub fn new(air: AIR, step: STEP, height: usize, mem_helper: SharedMemoryHelper<F>) -> Self {
+        let width = air.width();
+        assert!(height == 0 || height.is_power_of_two());
+        assert!(
+            align_of::<F>() >= align_of::<u32>(),
+            "type {} should have at least alignment of u32",
+            type_name::<F>()
+        );
+        let arena = DenseRecordArena::with_capacity(height * width * size_of::<F>());
+        Self {
+            air,
+            step,
+            arena,
+            mem_helper,
+        }
     }
 }
 
@@ -575,12 +764,11 @@ pub trait StepExecutorE1<F> {
     ) -> Result<()>;
 }
 
-impl<F, A, S, RA> InsExecutorE1<F> for NewVmChipWrapper<F, A, S, RA>
+impl<F, A, S> InsExecutorE1<F> for NewVmChipWrapper<F, A, S, MatrixRecordArena<F>>
 where
     F: PrimeField32,
     S: StepExecutorE1<F>,
     A: BaseAir<F>,
-    RA: RowMajorMatrixArena<F>,
 {
     fn execute_e1<Ctx>(
         &self,
