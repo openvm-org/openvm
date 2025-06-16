@@ -260,7 +260,7 @@ impl InitFileGenerator for SdkVmConfig {
             }
 
             if let Some(ecc_config) = &self.ecc {
-                contents.push_str(&ecc_config.generate_sw_init());
+                contents.push_str(&ecc_config.generate_ecc_init());
                 contents.push('\n');
             }
 

@@ -5,7 +5,7 @@ use hex_literal::hex;
 use lazy_static::lazy_static;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint::BigUint;
-use openvm_algebra_guest::{Field, IntMod};
+use openvm_algebra_guest::IntMod;
 
 use super::group::{CyclicGroup, Group};
 use crate::{edwards::CachedMulTable, IntrinsicCurve};
@@ -44,21 +44,6 @@ pub const CURVE_D: Ed25519Coord = Ed25519Coord::from_const_bytes(hex!(
 
 openvm_ecc_te_macros::te_declare! {
     Ed25519Point { mod_type = Ed25519Coord, a = CURVE_A, d = CURVE_D },
-}
-
-impl Field for Ed25519Coord {
-    const ZERO: Self = <Self as IntMod>::ZERO;
-    const ONE: Self = <Self as IntMod>::ONE;
-
-    type SelfRef<'a> = &'a Self;
-
-    fn double_assign(&mut self) {
-        IntMod::double_assign(self);
-    }
-
-    fn square_assign(&mut self) {
-        IntMod::square_assign(self);
-    }
 }
 
 impl CyclicGroup for Ed25519Point {

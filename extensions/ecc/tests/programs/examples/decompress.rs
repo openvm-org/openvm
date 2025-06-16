@@ -10,7 +10,6 @@ use openvm_ecc_guest::{
     algebra::{DivUnsafe, Field, IntMod},
     ed25519::{Ed25519Coord, Ed25519Point},
     edwards::TwistedEdwardsPoint,
-    k256::{Secp256k1Coord, Secp256k1Point},
     weierstrass::WeierstrassPoint,
     FromCompressed, Group,
 };
@@ -101,13 +100,6 @@ fn test_possible_te_decompression<P: TwistedEdwardsPoint + FromCompressed<P::Coo
     y: &P::Coordinate,
     rec_id: u8,
 ) {
-    let hint = P::hint_decompress(y, &rec_id).expect("hint should be well-formed");
-    if hint.possible {
-        assert_eq!(x, &hint.sqrt);
-    } else {
-        panic!("decompression should be possible");
-    }
-
     let p = P::decompress(y.clone(), &rec_id).unwrap();
     assert_eq!(p.x(), x);
     assert_eq!(p.y(), y);

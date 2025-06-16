@@ -14,10 +14,7 @@ use elliptic_curve::{
     FieldBytesEncoding,
 };
 use openvm_algebra_guest::IntMod;
-use openvm_ecc_guest::{
-    weierstrass::{IntrinsicCurve, WeierstrassPoint},
-    CyclicGroup,
-};
+use openvm_ecc_guest::{weierstrass::WeierstrassPoint, CyclicGroup, IntrinsicCurve};
 
 use crate::{
     internal::{P256Coord, P256Point, P256Scalar},
@@ -177,7 +174,7 @@ impl MulByGenerator for P256Point {}
 impl DecompressPoint<NistP256> for P256Point {
     /// Note that this is not constant time
     fn decompress(x_bytes: &FieldBytes, y_is_odd: Choice) -> CtOption<Self> {
-        use openvm_ecc_guest::weierstrass::FromCompressed;
+        use openvm_ecc_guest::FromCompressed;
 
         let x = P256Coord::from_be_bytes(x_bytes.as_slice());
         let rec_id = y_is_odd.unwrap_u8();

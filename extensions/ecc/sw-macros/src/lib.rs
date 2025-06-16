@@ -211,7 +211,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     use openvm_algebra_guest::IntMod;
                     // Safety: Self::set_up_once() ensures IntMod::set_up_once() has been called.
                     unsafe {
-                        self.x.eq_impl::<CHECK_SETUP>(&#intmod_type::ZERO) && self.y.eq_impl::<CHECK_SETUP>(&#intmod_type::ZERO)
+                        self.x.eq_impl::<CHECK_SETUP>(&<#intmod_type as IntMod>::ZERO) && self.y.eq_impl::<CHECK_SETUP>(&<#intmod_type as IntMod>::ZERO)
                     }
                 }
             }
@@ -355,7 +355,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             }
 
             mod #group_ops_mod_name {
-                use ::openvm_ecc_guest::{weierstrass::{WeierstrassPoint, FromCompressed}, impl_sw_group_ops, algebra::IntMod};
+                use ::openvm_ecc_guest::{weierstrass::{WeierstrassPoint}, FromCompressed, impl_sw_group_ops, algebra::IntMod};
                 use super::*;
 
                 impl_sw_group_ops!(#struct_name, #intmod_type);

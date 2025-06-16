@@ -1,10 +1,11 @@
 use derive_more::derive::From;
+use hex_literal::hex;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use once_cell::sync::Lazy;
-use openvm_algebra_guest::IntMod;
-use openvm_circuit::arch::{
-    SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+use openvm_circuit::{
+    arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
+    system::phantom::PhantomChip,
 };
 use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
 use openvm_circuit_primitives::bitwise_op_lookup::{
@@ -12,9 +13,8 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_guest::{
+    algebra::IntMod,
     ed25519::{CURVE_A as ED25519_A, CURVE_D as ED25519_D, ED25519_MODULUS, ED25519_ORDER},
-    k256::{SECP256K1_MODULUS, SECP256K1_ORDER},
-    p256::{CURVE_A as P256_A, CURVE_B as P256_B, P256_MODULUS, P256_ORDER},
 };
 use openvm_ecc_transpiler::{Rv32EdwardsOpcode, Rv32WeierstrassOpcode};
 use openvm_instructions::{LocalOpcode, VmOpcode};
@@ -65,9 +65,13 @@ pub struct TeCurveCoeffs {
 }
 
 pub static SECP256K1_CONFIG: Lazy<CurveConfig<SwCurveCoeffs>> = Lazy::new(|| CurveConfig {
-    struct_name: "Secp256k1".to_string(),
-    modulus: SECP256K1_MODULUS.clone(),
-    scalar: SECP256K1_ORDER.clone(),
+    struct_name: "Secp256k1Point".to_string(),
+    modulus: BigUint::from_bytes_be(&hex!(
+        "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
+    )),
+    scalar: BigUint::from_bytes_be(&hex!(
+        "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
+    )),
     coeffs: SwCurveCoeffs {
         a: BigUint::zero(),
         b: BigUint::from_u8(7u8).unwrap(),
@@ -75,17 +79,25 @@ pub static SECP256K1_CONFIG: Lazy<CurveConfig<SwCurveCoeffs>> = Lazy::new(|| Cur
 });
 
 pub static P256_CONFIG: Lazy<CurveConfig<SwCurveCoeffs>> = Lazy::new(|| CurveConfig {
-    struct_name: "P256".to_string(),
-    modulus: P256_MODULUS.clone(),
-    scalar: P256_ORDER.clone(),
+    struct_name: "P256Point".to_string(),
+    modulus: BigUint::from_bytes_be(&hex!(
+        "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff"
+    )),
+    scalar: BigUint::from_bytes_be(&hex!(
+        "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"
+    )),
     coeffs: SwCurveCoeffs {
-        a: BigUint::from_bytes_le(P256_A.as_le_bytes()),
-        b: BigUint::from_bytes_le(P256_B.as_le_bytes()),
+        a: BigUint::from_bytes_le(&hex!(
+            "fcffffffffffffffffffffff00000000000000000000000001000000ffffffff"
+        )),
+        b: BigUint::from_bytes_le(&hex!(
+            "4b60d2273e3cce3bf6b053ccb0061d65bc86987655bdebb3e7933aaad835c65a"
+        )),
     },
 });
 
 pub static ED25519_CONFIG: Lazy<CurveConfig<TeCurveCoeffs>> = Lazy::new(|| CurveConfig {
-    struct_name: "Ed25519".to_string(),
+    struct_name: "Ed25519Point".to_string(),
     modulus: ED25519_MODULUS.clone(),
     scalar: ED25519_ORDER.clone(),
     coeffs: TeCurveCoeffs {
@@ -122,7 +134,7 @@ impl EccExtension {
     }
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, BytesStateful)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum)]
 pub enum EccExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
     SwEcAddNeRv32_32(SwAddNeChip<F, 2, 32>),
@@ -139,6 +151,8 @@ pub enum EccExtensionExecutor<F: PrimeField32> {
 #[derive(ChipUsageGetter, Chip, AnyEnum, From)]
 pub enum EccExtensionPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
+    // We put this only to get the <F> generic to work
+    Phantom(PhantomChip<F>),
 }
 
 impl<F: PrimeField32> VmExtension<F> for EccExtension {

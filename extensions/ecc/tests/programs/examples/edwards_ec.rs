@@ -22,9 +22,6 @@ te_init! {
 openvm::entry!(main);
 
 pub fn main() {
-    setup_all_moduli();
-    setup_all_te_curves();
-
     // Base point of edwards25519
     let mut p1 = Ed25519Point::GENERATOR;
 
