@@ -1,8 +1,8 @@
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, SystemConfig, SystemPort, VmAirWrapper, VmExtension, VmInventory,
-        VmInventoryBuilder, VmInventoryError,
+        ExecutionBridge, InitFileGenerator, SystemConfig, SystemPort, VmAirWrapper, VmExtension,
+        VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
@@ -24,9 +24,6 @@ use strum::IntoEnumIterator;
 
 use crate::{adapters::*, *};
 
-// TODO(ayush): this should be decided after e2 execution
-const MAX_INS_CAPACITY: usize = 1 << 23;
-
 /// Config for a VM with base extension and IO extension
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Rv32IConfig {
@@ -38,6 +35,9 @@ pub struct Rv32IConfig {
     pub io: Rv32Io,
 }
 
+// Default implementation uses no init file
+impl InitFileGenerator for Rv32IConfig {}
+
 /// Config for a VM with base extension, IO extension, and multiplication extension
 #[derive(Clone, Debug, Default, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Rv32ImConfig {
@@ -46,6 +46,9 @@ pub struct Rv32ImConfig {
     #[extension]
     pub mul: Rv32M,
 }
+
+// Default implementation uses no init file
+impl InitFileGenerator for Rv32ImConfig {}
 
 impl Default for Rv32IConfig {
     fn default() -> Self {
@@ -229,7 +232,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 bitwise_lu_chip.clone(),
                 BaseAluOpcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -251,7 +253,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 bitwise_lu_chip.clone(),
                 LessThanOpcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(lt_chip, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
@@ -275,7 +276,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 range_checker.clone(),
                 ShiftOpcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(shift_chip, ShiftOpcode::iter().map(|x| x.global_opcode()))?;
@@ -294,7 +294,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 Rv32LoadStoreAdapterStep::new(pointer_max_bits, range_checker.clone()),
                 Rv32LoadStoreOpcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -318,7 +317,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 Rv32LoadStoreAdapterStep::new(pointer_max_bits, range_checker.clone()),
                 range_checker.clone(),
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -339,7 +337,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 BranchEqualOpcode::CLASS_OFFSET,
                 DEFAULT_PC_STEP,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -363,7 +360,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 bitwise_lu_chip.clone(),
                 BranchLessThanOpcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -383,7 +379,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 Rv32CondRdWriteAdapterStep::new(Rv32RdWriteAdapterStep::new()),
                 bitwise_lu_chip.clone(),
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -404,7 +399,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 bitwise_lu_chip.clone(),
                 range_checker.clone(),
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(jalr_chip, Rv32JalrOpcode::iter().map(|x| x.global_opcode()))?;
@@ -418,7 +412,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 Rv32AuipcCoreAir::new(bitwise_lu_chip.bus()),
             ),
             Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_lu_chip.clone()),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -438,6 +431,10 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         builder.add_phantom_sub_executor(
             phantom::Rv32PrintStrSubEx,
             PhantomDiscriminant(Rv32Phantom::PrintStr as u16),
+        )?;
+        builder.add_phantom_sub_executor(
+            phantom::Rv32HintLoadByKeySubEx,
+            PhantomDiscriminant(Rv32Phantom::HintLoadByKey as u16),
         )?;
 
         Ok(inventory)
@@ -501,7 +498,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
                 range_tuple_checker.clone(),
                 MulOpcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(mul_chip, MulOpcode::iter().map(|x| x.global_opcode()))?;
@@ -519,7 +515,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
                 bitwise_lu_chip.clone(),
                 range_tuple_checker.clone(),
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(mul_h_chip, MulHOpcode::iter().map(|x| x.global_opcode()))?;
@@ -542,7 +537,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
                 range_tuple_checker.clone(),
                 DivRemOpcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -581,7 +575,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
             chip
         };
 
-        let mut hintstore_chip = Rv32HintStoreChip::<F>::new(
+        let hintstore_chip = Rv32HintStoreChip::<F>::new(
             Rv32HintStoreAir::new(
                 ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
@@ -594,10 +588,8 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
                 builder.system_config().memory_config.pointer_max_bits,
                 Rv32HintStoreOpcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
-        hintstore_chip.step.set_streams(builder.streams().clone());
 
         inventory.add_executor(
             hintstore_chip,
@@ -636,6 +628,7 @@ mod phantom {
         }
     }
     pub struct Rv32PrintStrSubEx;
+    pub struct Rv32HintLoadByKeySubEx;
 
     impl<F: Field> PhantomSubExecutor<F> for Rv32HintInputSubEx {
         fn phantom_execute(
@@ -709,5 +702,56 @@ mod phantom {
             print!("{peeked_str}");
             Ok(())
         }
+    }
+
+    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv32HintLoadByKeySubEx {
+        fn phantom_execute(
+            &self,
+            memory: &GuestMemory,
+            streams: &mut Streams<F>,
+            _: PhantomDiscriminant,
+            a: u32,
+            b: u32,
+            _: u16,
+        ) -> eyre::Result<()> {
+            let ptr = read_rv32_register(memory, a);
+            let len = read_rv32_register(memory, b);
+            let key: Vec<u8> = (0..len)
+                .map(|i| memory_read::<1>(memory, 2, ptr + i)[0])
+                .collect();
+            if let Some(val) = streams.kv_store.get(&key) {
+                let to_push = hint_load_by_key_decode::<F>(val);
+                for input in to_push.into_iter().rev() {
+                    streams.input_stream.push_front(input);
+                }
+            } else {
+                bail!("Rv32HintLoadByKey: key not found");
+            }
+            Ok(())
+        }
+    }
+
+    pub fn hint_load_by_key_decode<F: PrimeField32>(value: &[u8]) -> Vec<Vec<F>> {
+        let mut offset = 0;
+        let len = extract_u32(value, offset) as usize;
+        offset += 4;
+        let mut ret = Vec::with_capacity(len);
+        for _ in 0..len {
+            let v_len = extract_u32(value, offset) as usize;
+            offset += 4;
+            let v = (0..v_len)
+                .map(|_| {
+                    let ret = F::from_canonical_u32(extract_u32(value, offset));
+                    offset += 4;
+                    ret
+                })
+                .collect();
+            ret.push(v);
+        }
+        ret
+    }
+
+    fn extract_u32(value: &[u8], offset: usize) -> u32 {
+        u32::from_le_bytes(value[offset..offset + 4].try_into().unwrap())
     }
 }

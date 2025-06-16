@@ -32,16 +32,18 @@ const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
 fn create_test_chip(tester: &VmChipTestBuilder<F>) -> JalRangeCheckChip<F> {
-    JalRangeCheckChip::<F>::new(
+    let mut chip = JalRangeCheckChip::<F>::new(
         JalRangeCheckAir::new(
             tester.execution_bridge(),
             tester.memory_bridge(),
             tester.range_checker().bus(),
         ),
         JalRangeCheckStep::new(tester.range_checker().clone()),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
-    )
+    );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
+    chip
 }
 
 // `a_val` and `c` will be disregarded if opcode is JAL

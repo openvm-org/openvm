@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_circuit::arch::instructions::{exe::VmExe, program::DEFAULT_MAX_NUM_PUBLIC_VALUES};
+use openvm_circuit::arch::{instructions::exe::VmExe, DEFAULT_MAX_NUM_PUBLIC_VALUES};
 use openvm_native_recursion::halo2::utils::{CacheHalo2ParamsReader, DEFAULT_PARAMS_DIR};
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
@@ -30,6 +30,8 @@ async fn main() -> Result<()> {
         NUM_PUBLIC_VALUES,
         max_segment_length,
     ));
+    let elf = args.build_bench_program("fibonacci", &app_config.app_vm_config, None)?;
+
     let agg_config = args.agg_config();
 
     let sdk = Sdk::new();
@@ -44,7 +46,6 @@ async fn main() -> Result<()> {
         &halo2_params_reader,
         &DefaultStaticVerifierPvHandler,
     )?;
-    let elf = args.build_bench_program("fibonacci")?;
     let exe = VmExe::from_elf(
         elf,
         Transpiler::default()

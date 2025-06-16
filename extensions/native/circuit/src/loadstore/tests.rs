@@ -1,13 +1,6 @@
-use std::{
-    array,
-    borrow::BorrowMut,
-    sync::{Arc, Mutex},
-};
+use std::{array, borrow::BorrowMut};
 
-use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, VmChipTestBuilder},
-    Streams,
-};
+use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{
     conversion::AS,
@@ -48,11 +41,10 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> NativeLoadStoreChip<F, NUM
             NativeLoadStoreAdapterStep::new(NativeLoadStoreOpcode::CLASS_OFFSET),
             NativeLoadStoreOpcode::CLASS_OFFSET,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
-    chip.step
-        .set_streams(Arc::new(Mutex::new(Streams::default())));
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
     chip
 }
 
@@ -77,14 +69,7 @@ fn set_and_execute(
             tester.write(AS::Native as usize, a, data);
         }
         HINT_STOREW => {
-            chip.step
-                .streams
-                .get()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .hint_stream
-                .extend(data);
+            tester.streams.hint_stream.extend(data);
         }
     }
 

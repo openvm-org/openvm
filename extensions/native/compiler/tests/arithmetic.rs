@@ -1,4 +1,6 @@
-use openvm_circuit::arch::{ExecutionError, VmExecutor};
+use openvm_circuit::arch::{
+    execution_mode::metered::get_widths_and_interactions_from_vkey, ExecutionError, VirtualMachine,
+};
 use openvm_native_circuit::{execute_program, NativeConfig};
 use openvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler, AsmConfig},
@@ -8,7 +10,7 @@ use openvm_native_compiler::{
 use openvm_stark_backend::p3_field::{
     extension::BinomialExtensionField, Field, FieldAlgebra, FieldExtensionAlgebra,
 };
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::{config::baby_bear_poseidon2::default_engine, p3_baby_bear::BabyBear};
 use rand::{thread_rng, Rng};
 
 const WORD_SIZE: usize = 1;
@@ -392,7 +394,12 @@ fn assert_failed_assertion(
 ) {
     let program = builder.compile_isa();
 
-    let executor = VmExecutor::<BabyBear, NativeConfig>::new(NativeConfig::aggregation(4, 3));
-    let result = executor.execute(program, vec![]);
+    let config = NativeConfig::aggregation(4, 3);
+    let vm = VirtualMachine::new(default_engine(), config);
+
+    let vm_pk = vm.keygen();
+    let (widths, interactions) = get_widths_and_interactions_from_vkey(vm_pk.get_vk());
+
+    let result = vm.execute_metered(program, vec![], widths, interactions);
     assert!(matches!(result, Err(ExecutionError::Fail { .. })));
 }

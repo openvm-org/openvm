@@ -95,7 +95,7 @@ impl KeccakVmStep {
 impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
     fn execute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -136,7 +136,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
 
     fn execute_metered(
         &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {
@@ -182,7 +182,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
 
         let output = keccak256(&input);
         for (i, word) in output.chunks_exact(KECCAK_WORD_SIZE).enumerate() {
-            memory_write_from_state::<_, KECCAK_WORD_SIZE>(
+            memory_write_from_state::<F, _, KECCAK_WORD_SIZE>(
                 state,
                 RV32_MEMORY_AS,
                 dst + (i * KECCAK_WORD_SIZE) as u32,

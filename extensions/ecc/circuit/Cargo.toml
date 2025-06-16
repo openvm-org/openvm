@@ -26,11 +26,10 @@ strum = { workspace = true }
 derive_more = { workspace = true }
 derive-new = { workspace = true }
 once_cell = { workspace = true, features = ["std"] }
-eyre = { workspace = true }
-num-integer = { workspace = true }
 serde = { workspace = true }
 serde_with = { workspace = true }
-rand = { workspace = true, features = ["std_rng"] }
+lazy_static = { workspace = true }
+hex-literal = { workspace = true }
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }
@@ -38,11 +37,3 @@ openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 lazy_static = { workspace = true }
-
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
-openvm-ecc-guest = { workspace = true, features = [
-    "halo2curves",
-    "k256",
-    "p256",
-] }
-openvm-algebra-guest = { workspace = true }

@@ -3,7 +3,8 @@ use std::result::Result;
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        SystemConfig, SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+        InitFileGenerator, SystemConfig, SystemPort, VmExtension, VmInventory, VmInventoryBuilder,
+        VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
@@ -22,7 +23,6 @@ use strum::IntoEnumIterator;
 use crate::*;
 
 // TODO: this should be decided after e2 execution
-const MAX_INS_CAPACITY: usize = 1 << 22;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Keccak256Rv32Config {
@@ -49,6 +49,9 @@ impl Default for Keccak256Rv32Config {
         }
     }
 }
+
+// Default implementation uses no init file
+impl InitFileGenerator for Keccak256Rv32Config {}
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Keccak256;
@@ -105,7 +108,6 @@ impl<F: PrimeField32> VmExtension<F> for Keccak256 {
                 Rv32KeccakOpcode::CLASS_OFFSET,
                 pointer_max_bits,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(

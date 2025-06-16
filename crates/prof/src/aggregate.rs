@@ -165,6 +165,7 @@ impl AggregateMetrics {
         let mut total_par_proof_time = MdTableCell::new(0.0, Some(0.0));
         for (group_name, metrics) in &self.by_group {
             let stats = metrics.get(PROOF_TIME_LABEL);
+            let execute_stats = metrics.get(EXECUTE_TIME_LABEL);
             if stats.is_none() {
                 continue;
             }
@@ -186,6 +187,24 @@ impl AggregateMetrics {
                 *total_proof_time.diff.as_mut().unwrap() += sum.diff.unwrap_or(0.0);
                 total_par_proof_time.val += max.val;
                 *total_par_proof_time.diff.as_mut().unwrap() += max.diff.unwrap_or(0.0);
+
+                // Account for the fact that execution is serial
+                // Add total execution time for the app proofs, and subtract the max segment
+                // execution time
+                if group_name != "leaf"
+                    && group_name != "root"
+                    && group_name != "halo2_outer"
+                    && group_name != "halo2_wrapper"
+                    && !group_name.starts_with("internal")
+                {
+                    let execute_stats = execute_stats.unwrap();
+                    total_par_proof_time.val +=
+                        (execute_stats.sum.val - execute_stats.max.val) / 1000.0;
+                    *total_par_proof_time.diff.as_mut().unwrap() +=
+                        (execute_stats.sum.diff.unwrap_or(0.0)
+                            - execute_stats.max.diff.unwrap_or(0.0))
+                            / 1000.0;
+                }
             }
         }
         self.total_proof_time = total_proof_time;
@@ -364,6 +383,8 @@ impl BenchmarkOutput {
 pub const PROOF_TIME_LABEL: &str = "total_proof_time_ms";
 pub const CELLS_USED_LABEL: &str = "main_cells_used";
 pub const CYCLES_LABEL: &str = "total_cycles";
+pub const EXECUTE_E1_TIME_LABEL: &str = "execute_e1_time_ms";
+pub const EXECUTE_METERED_TIME_LABEL: &str = "execute_metered_time_ms";
 pub const EXECUTE_TIME_LABEL: &str = "execute_time_ms";
 pub const TRACE_GEN_TIME_LABEL: &str = "trace_gen_time_ms";
 pub const PROVE_EXCL_TRACE_TIME_LABEL: &str = "stark_prove_excluding_trace_time_ms";
@@ -372,6 +393,8 @@ pub const VM_METRIC_NAMES: &[&str] = &[
     PROOF_TIME_LABEL,
     CELLS_USED_LABEL,
     CYCLES_LABEL,
+    EXECUTE_E1_TIME_LABEL,
+    EXECUTE_METERED_TIME_LABEL,
     EXECUTE_TIME_LABEL,
     TRACE_GEN_TIME_LABEL,
     PROVE_EXCL_TRACE_TIME_LABEL,

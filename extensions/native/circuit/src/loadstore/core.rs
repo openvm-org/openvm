@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    sync::{Arc, Mutex, OnceLock},
 };
 
 use openvm_circuit::{
@@ -10,7 +9,7 @@ use openvm_circuit::{
         get_record_from_slice,
         instructions::LocalOpcode,
         AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, EmptyLayout,
-        ExecutionError, RecordArena, Result, StepExecutorE1, Streams, TraceFiller, TraceStep,
+        ExecutionError, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
         VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
@@ -121,33 +120,18 @@ pub struct NativeLoadStoreCoreRecord<F, const NUM_CELLS: usize> {
 }
 
 #[derive(Debug)]
-pub struct NativeLoadStoreCoreStep<A, F, const NUM_CELLS: usize>
-where
-    F: Field,
-{
+pub struct NativeLoadStoreCoreStep<A, const NUM_CELLS: usize> {
     adapter: A,
     offset: usize,
-    pub streams: OnceLock<Arc<Mutex<Streams<F>>>>,
 }
 
-impl<A, F, const NUM_CELLS: usize> NativeLoadStoreCoreStep<A, F, NUM_CELLS>
-where
-    F: Field,
-{
+impl<A, const NUM_CELLS: usize> NativeLoadStoreCoreStep<A, NUM_CELLS> {
     pub fn new(adapter: A, offset: usize) -> Self {
-        Self {
-            adapter,
-            offset,
-            streams: OnceLock::new(),
-        }
-    }
-    pub fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
-        self.streams.set(streams).unwrap();
+        Self { adapter, offset }
     }
 }
 
-impl<F, CTX, A, const NUM_CELLS: usize> TraceStep<F, CTX>
-    for NativeLoadStoreCoreStep<A, F, NUM_CELLS>
+impl<F, CTX, A, const NUM_CELLS: usize> TraceStep<F, CTX> for NativeLoadStoreCoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static
@@ -168,7 +152,7 @@ where
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
         arena: &'buf mut RA,
     ) -> Result<()>
@@ -189,11 +173,10 @@ where
         let opcode = NativeLoadStoreOpcode::from_usize(core_record.local_opcode as usize);
 
         let data = if opcode == NativeLoadStoreOpcode::HINT_STOREW {
-            let mut streams = self.streams.get().unwrap().lock().unwrap();
-            if streams.hint_stream.len() < NUM_CELLS {
+            if state.streams.hint_stream.len() < NUM_CELLS {
                 return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
             }
-            array::from_fn(|_| streams.hint_stream.pop_front().unwrap())
+            array::from_fn(|_| state.streams.hint_stream.pop_front().unwrap())
         } else {
             data_read
         };
@@ -211,7 +194,7 @@ where
 }
 
 impl<F, CTX, A, const NUM_CELLS: usize> TraceFiller<F, CTX>
-    for NativeLoadStoreCoreStep<A, F, NUM_CELLS>
+    for NativeLoadStoreCoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F, CTX>,
@@ -235,7 +218,7 @@ where
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> StepExecutorE1<F> for NativeLoadStoreCoreStep<A, F, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> StepExecutorE1<F> for NativeLoadStoreCoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static
@@ -243,7 +226,7 @@ where
 {
     fn execute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -257,11 +240,10 @@ where
         let (_, data_read) = self.adapter.read(state, instruction);
 
         let data = if local_opcode == NativeLoadStoreOpcode::HINT_STOREW {
-            let mut streams = self.streams.get().unwrap().lock().unwrap();
-            if streams.hint_stream.len() < NUM_CELLS {
+            if state.streams.hint_stream.len() < NUM_CELLS {
                 return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
             }
-            array::from_fn(|_| streams.hint_stream.pop_front().unwrap())
+            array::from_fn(|_| state.streams.hint_stream.pop_front().unwrap())
         } else {
             data_read
         };
@@ -275,7 +257,7 @@ where
 
     fn execute_metered(
         &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()> {

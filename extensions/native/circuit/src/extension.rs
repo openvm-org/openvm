@@ -8,8 +8,8 @@ use loadstore_native_adapter::{NativeLoadStoreAdapterAir, NativeLoadStoreAdapter
 use native_vectorized_adapter::{NativeVectorizedAdapterAir, NativeVectorizedAdapterStep};
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, MemoryConfig, SystemConfig, SystemPort, VmAirWrapper, VmExtension,
-        VmInventory, VmInventoryBuilder, VmInventoryError,
+        ExecutionBridge, InitFileGenerator, MemoryConfig, SystemConfig, SystemPort, VmAirWrapper,
+        VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
@@ -36,9 +36,6 @@ use crate::{
     *,
 };
 
-// TODO(ayush): this should be decided after e2 execution
-const MAX_INS_CAPACITY: usize = 1 << 23;
-
 #[derive(Clone, Debug, Serialize, Deserialize, VmConfig, derive_new::new)]
 pub struct NativeConfig {
     #[system]
@@ -63,6 +60,9 @@ impl NativeConfig {
         }
     }
 }
+
+// Default implementation uses no init file
+impl InitFileGenerator for NativeConfig {}
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Native;
@@ -101,7 +101,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
 
         let range_checker = &builder.system_base().range_checker_chip;
 
-        let mut load_store_chip = NativeLoadStoreChip::<F, 1>::new(
+        let load_store_chip = NativeLoadStoreChip::<F, 1>::new(
             VmAirWrapper::new(
                 NativeLoadStoreAdapterAir::new(
                     memory_bridge,
@@ -113,16 +113,14 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 NativeLoadStoreAdapterStep::new(NativeLoadStoreOpcode::CLASS_OFFSET),
                 NativeLoadStoreOpcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
-        load_store_chip.step.set_streams(builder.streams().clone());
         inventory.add_executor(
             load_store_chip,
             NativeLoadStoreOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let mut block_load_store_chip = NativeLoadStoreChip::<F, BLOCK_LOAD_STORE_SIZE>::new(
+        let block_load_store_chip = NativeLoadStoreChip::<F, BLOCK_LOAD_STORE_SIZE>::new(
             VmAirWrapper::new(
                 NativeLoadStoreAdapterAir::new(
                     memory_bridge,
@@ -134,12 +132,8 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 NativeLoadStoreAdapterStep::new(NativeLoadStore4Opcode::CLASS_OFFSET),
                 NativeLoadStore4Opcode::CLASS_OFFSET,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
-        block_load_store_chip
-            .step
-            .set_streams(builder.streams().clone());
         inventory.add_executor(
             block_load_store_chip,
             NativeLoadStore4Opcode::iter().map(|x| x.global_opcode()),
@@ -158,7 +152,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 NativeBranchEqualOpcode::CLASS_OFFSET,
                 DEFAULT_PC_STEP,
             ),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -173,7 +166,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 range_checker.bus(),
             ),
             JalRangeCheckStep::new(range_checker.clone()),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -193,7 +185,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 FieldArithmeticCoreAir::new(),
             ),
             FieldArithmeticStep::new(AluNativeAdapterStep::new()),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -210,7 +201,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 FieldExtensionCoreAir::new(),
             ),
             FieldExtensionStep::new(NativeVectorizedAdapterStep::new()),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -223,8 +213,7 @@ impl<F: PrimeField32> VmExtension<F> for Native {
                 ExecutionBridge::new(execution_bus, program_bus),
                 memory_bridge,
             ),
-            FriReducedOpeningStep::new(builder.streams().clone()),
-            MAX_INS_CAPACITY,
+            FriReducedOpeningStep::new(),
             builder.system_base().memory_controller.helper(),
         );
 
@@ -447,7 +436,6 @@ impl<F: PrimeField32> VmExtension<F> for CastFExtension {
                 CastFCoreAir::new(range_checker.bus()),
             ),
             CastFStep::new(ConvertAdapterStep::<1, 4>::new(), range_checker.clone()),
-            MAX_INS_CAPACITY,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(castf_chip, [CastfOpcode::CASTF.global_opcode()])?;
@@ -484,3 +472,6 @@ impl Default for Rv32WithKernelsConfig {
         }
     }
 }
+
+// Default implementation uses no init file
+impl InitFileGenerator for Rv32WithKernelsConfig {}

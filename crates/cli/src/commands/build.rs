@@ -1,28 +1,21 @@
 use std::{
     env::var,
-    fs::{create_dir_all, read, write},
+    fs::{copy, create_dir_all, read},
     path::PathBuf,
-    sync::Arc,
 };
 
 use clap::Parser;
 use eyre::Result;
+use itertools::izip;
 use openvm_build::{
-    build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
+    build_generic, get_package, get_workspace_packages, get_workspace_root, GuestOptions,
 };
-use openvm_sdk::{
-    commit::{commit_app_exe, committed_exe_as_bn254},
-    fs::write_exe_to_file,
-    Sdk,
-};
+use openvm_circuit::arch::{InitFileGenerator, OPENVM_DEFAULT_INIT_FILE_NAME};
+use openvm_sdk::{fs::write_exe_to_file, Sdk};
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 
-use crate::{
-    default::{
-        DEFAULT_APP_CONFIG_PATH, DEFAULT_APP_EXE_PATH, DEFAULT_COMMITTED_APP_EXE_PATH,
-        DEFAULT_EXE_COMMIT_PATH, DEFAULT_MANIFEST_DIR,
-    },
-    util::read_config_toml_or_default,
+use crate::util::{
+    get_manifest_path_and_dir, get_target_dir, get_target_output_dir, read_config_toml_or_default,
 };
 
 #[derive(Parser)]
@@ -30,11 +23,14 @@ use crate::{
 pub struct BuildCmd {
     #[clap(flatten)]
     build_args: BuildArgs,
+
+    #[clap(flatten)]
+    cargo_args: BuildCargoArgs,
 }
 
 impl BuildCmd {
     pub fn run(&self) -> Result<()> {
-        build(&self.build_args)?;
+        build(&self.build_args, &self.cargo_args)?;
         Ok(())
     }
 }
@@ -43,105 +39,326 @@ impl BuildCmd {
 pub struct BuildArgs {
     #[arg(
         long,
-        help = "Path to the directory containing the Cargo.toml file for the guest code (relative to the current directory)",
-        default_value = DEFAULT_MANIFEST_DIR
-    )]
-    pub manifest_dir: PathBuf,
-
-    #[arg(long, help = "Path to the target directory")]
-    pub target_dir: Option<PathBuf>,
-
-    #[arg(long, value_delimiter = ',', help = "Feature flags passed to cargo")]
-    pub features: Vec<String>,
-
-    #[clap(flatten, help = "Filter the target to build")]
-    pub bin_type_filter: BinTypeFilter,
-
-    #[arg(
-        long,
-        default_value = "false",
-        help = "Skips transpilation into exe when set"
+        help = "Skips transpilation into exe when set",
+        help_heading = "OpenVM Options"
     )]
     pub no_transpile: bool,
 
     #[arg(
         long,
-        default_value = DEFAULT_APP_CONFIG_PATH,
-        help = "Path to the SDK config .toml file that specifies the transpiler extensions"
+        help = "Path to the OpenVM config .toml file that specifies the VM extensions, by default will search for the file at ${manifest_dir}/openvm.toml",
+        help_heading = "OpenVM Options"
     )]
-    pub config: PathBuf,
+    pub config: Option<PathBuf>,
 
     #[arg(
         long,
-        default_value = DEFAULT_APP_EXE_PATH,
-        help = "Output path for the transpiled program"
+        help = "Output directory that OpenVM proving artifacts will be copied to",
+        help_heading = "OpenVM Options"
     )]
-    pub exe_output: PathBuf,
+    pub output_dir: Option<PathBuf>,
 
     #[arg(
         long,
-        default_value = DEFAULT_COMMITTED_APP_EXE_PATH,
-        help = "Output path for the committed program"
+        default_value = OPENVM_DEFAULT_INIT_FILE_NAME,
+        help = "Name of the init file",
+        help_heading = "OpenVM Options"
     )]
-    pub committed_exe_output: PathBuf,
+    pub init_file_name: String,
+}
+
+impl Default for BuildArgs {
+    fn default() -> Self {
+        Self {
+            no_transpile: false,
+            config: None,
+            output_dir: None,
+            init_file_name: OPENVM_DEFAULT_INIT_FILE_NAME.to_string(),
+        }
+    }
+}
+
+#[derive(Clone, Parser)]
+pub struct BuildCargoArgs {
+    #[arg(
+        long,
+        short = 'p',
+        value_name = "PACKAGES",
+        help = "Build only specified packages",
+        help_heading = "Package Selection"
+    )]
+    pub package: Vec<String>,
 
     #[arg(
         long,
-        default_value = DEFAULT_EXE_COMMIT_PATH,
-        help = "Output path for the exe commit (bn254 commit of committed program)"
+        alias = "all",
+        help = "Build all members of the workspace",
+        help_heading = "Package Selection"
     )]
-    pub exe_commit_output: PathBuf,
+    pub workspace: bool,
 
-    #[arg(long, default_value = "release", help = "Build profile")]
+    #[arg(
+        long,
+        value_name = "PACKAGES",
+        help = "Exclude specified packages",
+        help_heading = "Package Selection"
+    )]
+    pub exclude: Vec<String>,
+
+    #[arg(
+        long,
+        help = "Build the package library",
+        help_heading = "Target Selection"
+    )]
+    pub lib: bool,
+
+    #[arg(
+        long,
+        value_name = "BIN",
+        help = "Build the specified binary",
+        help_heading = "Target Selection"
+    )]
+    pub bin: Vec<String>,
+
+    #[arg(
+        long,
+        help = "Build all binary targets",
+        help_heading = "Target Selection"
+    )]
+    pub bins: bool,
+
+    #[arg(
+        long,
+        value_name = "EXAMPLE",
+        help = "Build the specified example",
+        help_heading = "Target Selection"
+    )]
+    pub example: Vec<String>,
+
+    #[arg(
+        long,
+        help = "Build all example targets",
+        help_heading = "Target Selection"
+    )]
+    pub examples: bool,
+
+    #[arg(
+        long,
+        help = "Build all package targets",
+        help_heading = "Target Selection"
+    )]
+    pub all_targets: bool,
+
+    #[arg(
+        long,
+        short = 'F',
+        value_name = "FEATURES",
+        value_delimiter = ',',
+        help = "Space/comma separated list of features to activate",
+        help_heading = "Feature Selection"
+    )]
+    pub features: Vec<String>,
+
+    #[arg(
+        long,
+        help = "Activate all available features of all selected packages",
+        help_heading = "Feature Selection"
+    )]
+    pub all_features: bool,
+
+    #[arg(
+        long,
+        help = "Do not activate the `default` feature of the selected packages",
+        help_heading = "Feature Selection"
+    )]
+    pub no_default_features: bool,
+
+    #[arg(
+        long,
+        value_name = "NAME",
+        default_value = "release",
+        help = "Build with the given profile",
+        help_heading = "Compilation Options"
+    )]
     pub profile: String,
 
-    #[arg(long, default_value = "false", help = "use --offline in cargo build")]
+    #[arg(
+        long,
+        value_name = "DIR",
+        help = "Directory for all generated artifacts and intermediate files",
+        help_heading = "Output Options"
+    )]
+    pub target_dir: Option<PathBuf>,
+
+    #[arg(
+        long,
+        short = 'v',
+        help = "Use verbose output",
+        help_heading = "Display Options"
+    )]
+    pub verbose: bool,
+
+    #[arg(
+        long,
+        short = 'q',
+        help = "Do not print cargo log messages",
+        help_heading = "Display Options"
+    )]
+    pub quiet: bool,
+
+    #[arg(
+        long,
+        value_name = "WHEN",
+        default_value = "always",
+        help = "Control when colored output is used",
+        help_heading = "Display Options"
+    )]
+    pub color: String,
+
+    #[arg(
+        long,
+        value_name = "PATH",
+        help = "Path to the Cargo.toml file, by default searches for the file in the current or any parent directory",
+        help_heading = "Manifest Options"
+    )]
+    pub manifest_path: Option<PathBuf>,
+
+    #[arg(
+        long,
+        help = "Ignore rust-version specification in packages",
+        help_heading = "Manifest Options"
+    )]
+    pub ignore_rust_version: bool,
+
+    #[arg(
+        long,
+        help = "Asserts same dependencies and versions are used as when the existing Cargo.lock file was originally generated",
+        help_heading = "Manifest Options"
+    )]
+    pub locked: bool,
+
+    #[arg(
+        long,
+        help = "Prevents Cargo from accessing the network for any reason",
+        help_heading = "Manifest Options"
+    )]
     pub offline: bool,
+
+    #[arg(
+        long,
+        help = "Equivalent to specifying both --locked and --offline",
+        help_heading = "Manifest Options"
+    )]
+    pub frozen: bool,
 }
 
-#[derive(Clone, Default, clap::Args)]
-#[group(required = false, multiple = false)]
-pub struct BinTypeFilter {
-    #[arg(long, help = "Specifies the bin target to build")]
-    pub bin: Option<String>,
-
-    #[arg(long, help = "Specifies the example target to build")]
-    pub example: Option<String>,
+impl Default for BuildCargoArgs {
+    fn default() -> Self {
+        Self {
+            package: vec![],
+            workspace: false,
+            exclude: vec![],
+            lib: false,
+            bin: vec![],
+            bins: false,
+            example: vec![],
+            examples: false,
+            all_targets: false,
+            features: vec![],
+            all_features: false,
+            no_default_features: false,
+            profile: "release".to_string(),
+            target_dir: None,
+            verbose: false,
+            quiet: false,
+            color: "always".to_string(),
+            manifest_path: None,
+            ignore_rust_version: false,
+            locked: false,
+            offline: false,
+            frozen: false,
+        }
+    }
 }
 
-// Returns the path to the ELF file if it is unique.
-pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
+// Returns either a) the default transpilation output directory or b) the ELF output
+// directory if no_transpile is set to true.
+pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<PathBuf> {
     println!("[openvm] Building the package...");
-    let target_filter = if let Some(bin) = &build_args.bin_type_filter.bin {
-        Some(TargetFilter {
-            name: bin.clone(),
-            kind: "bin".to_string(),
-        })
-    } else {
-        build_args
-            .bin_type_filter
-            .example
-            .as_ref()
-            .map(|example| TargetFilter {
-                name: example.clone(),
-                kind: "example".to_string(),
-            })
-    };
+
+    // Find manifest_path, manifest_dir, and target_dir
+    let (manifest_path, manifest_dir) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
+    let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
+
+    // Set guest options using build arguments; use found manifest directory for consistency
     let mut guest_options = GuestOptions::default()
-        .with_features(build_args.features.clone())
-        .with_profile(build_args.profile.clone())
+        .with_features(cargo_args.features.clone())
+        .with_profile(cargo_args.profile.clone())
         .with_rustc_flags(var("RUSTFLAGS").unwrap_or_default().split_whitespace());
-    guest_options.target_dir = build_args.target_dir.clone();
-    if build_args.offline {
-        guest_options.options = vec!["--offline".to_string()];
+
+    guest_options.target_dir = Some(target_dir.clone());
+    guest_options
+        .options
+        .push(format!("--color={}", cargo_args.color));
+    guest_options.options.push("--manifest-path".to_string());
+    guest_options
+        .options
+        .push(manifest_path.to_string_lossy().to_string());
+
+    for pkg in &cargo_args.package {
+        guest_options.options.push("--package".to_string());
+        guest_options.options.push(pkg.clone());
+    }
+    for pkg in &cargo_args.exclude {
+        guest_options.options.push("--exclude".to_string());
+        guest_options.options.push(pkg.clone());
+    }
+    for target in &cargo_args.bin {
+        guest_options.options.push("--bin".to_string());
+        guest_options.options.push(target.clone());
+    }
+    for example in &cargo_args.example {
+        guest_options.options.push("--example".to_string());
+        guest_options.options.push(example.clone());
     }
 
-    let pkg = get_package(&build_args.manifest_dir);
-    // We support builds of libraries with 0 or >1 executables.
-    let elf_path = match build_guest_package(&pkg, &guest_options, None, &target_filter) {
-        Ok(target_dir) => {
-            find_unique_executable(&build_args.manifest_dir, &target_dir, &target_filter)
+    let all_bins = cargo_args.bins || cargo_args.all_targets;
+    let all_examples = cargo_args.examples || cargo_args.all_targets;
+
+    let boolean_flags = [
+        ("--workspace", cargo_args.workspace),
+        ("--lib", cargo_args.lib || cargo_args.all_targets),
+        ("--bins", all_bins),
+        ("--examples", all_examples),
+        ("--all-features", cargo_args.all_features),
+        ("--no-default-features", cargo_args.no_default_features),
+        ("--verbose", cargo_args.verbose),
+        ("--quiet", cargo_args.quiet),
+        ("--ignore-rust-version", cargo_args.ignore_rust_version),
+        ("--locked", cargo_args.locked),
+        ("--offline", cargo_args.offline),
+        ("--frozen", cargo_args.frozen),
+    ];
+    for (flag, enabled) in boolean_flags {
+        if enabled {
+            guest_options.options.push(flag.to_string());
         }
+    }
+
+    // Write to init file
+    let app_config = read_config_toml_or_default(
+        build_args
+            .config
+            .to_owned()
+            .unwrap_or_else(|| manifest_dir.join("openvm.toml")),
+    )?;
+    app_config
+        .app_vm_config
+        .write_to_init_file(&manifest_dir, Some(&build_args.init_file_name))?;
+
+    // Build (allowing passed options to decide what gets built)
+    let elf_target_dir = match build_generic(&guest_options) {
+        Ok(raw_target_dir) => raw_target_dir,
         Err(None) => {
             return Err(eyre::eyre!("Failed to build guest"));
         }
@@ -149,88 +366,97 @@ pub(crate) fn build(build_args: &BuildArgs) -> Result<Option<PathBuf>> {
             return Err(eyre::eyre!("Failed to build guest: code = {}", code));
         }
     };
+    println!("[openvm] Successfully built the packages");
 
-    if !build_args.no_transpile {
-        let elf_path = elf_path?;
-        println!("[openvm] Transpiling the package...");
-        let output_path = &build_args.exe_output;
-        let app_config = read_config_toml_or_default(&build_args.config)?;
+    // If transpilation is skipped, return the raw target directory
+    if build_args.no_transpile {
+        if build_args.output_dir.is_some() {
+            println!("[openvm] WARNING: Output directory set but transpilation skipped");
+        }
+        return Ok(elf_target_dir);
+    }
+
+    // Get all built packages
+    let workspace_root = get_workspace_root(&manifest_path);
+    let packages = if cargo_args.workspace || manifest_dir == workspace_root {
+        get_workspace_packages(manifest_dir)
+            .into_iter()
+            .filter(|pkg| {
+                (cargo_args.package.is_empty() || cargo_args.package.contains(&pkg.name))
+                    && !cargo_args.exclude.contains(&pkg.name)
+            })
+            .collect()
+    } else {
+        vec![get_package(manifest_dir)]
+    };
+
+    // Find elf paths of all targets for all built packages
+    let elf_targets = packages
+        .iter()
+        .flat_map(|pkg| pkg.targets.iter())
+        .filter(|target| {
+            // We only build bin and example targets (note they are mutually exclusive
+            // types). If no target selection flags are set, then all bin targets are
+            // built by default.
+            if target.is_example() {
+                all_examples || cargo_args.example.contains(&target.name)
+            } else if target.is_bin() {
+                all_bins
+                    || cargo_args.bin.contains(&target.name)
+                    || (!cargo_args.examples
+                        && !cargo_args.lib
+                        && cargo_args.bin.is_empty()
+                        && cargo_args.example.is_empty())
+            } else {
+                false
+            }
+        })
+        .collect::<Vec<_>>();
+    let elf_paths = elf_targets
+        .iter()
+        .map(|target| {
+            if target.is_example() {
+                elf_target_dir.join("examples")
+            } else {
+                elf_target_dir.clone()
+            }
+            .join(&target.name)
+        })
+        .collect::<Vec<_>>();
+
+    // Transpile, storing in ${target_dir}/openvm/${profile} by default
+    let target_output_dir = get_target_output_dir(&target_dir, &cargo_args.profile);
+
+    println!("[openvm] Transpiling the package...");
+    for (elf_path, target) in izip!(&elf_paths, &elf_targets) {
         let transpiler = app_config.app_vm_config.transpiler();
-
         let data = read(elf_path.clone())?;
         let elf = Elf::decode(&data, MEM_SIZE as u32)?;
         let exe = Sdk::new().transpile(elf, transpiler)?;
-        let committed_exe = commit_app_exe(app_config.app_fri_params.fri_params, exe.clone());
-        write_exe_to_file(exe, output_path)?;
 
-        if let Some(parent) = build_args.exe_commit_output.parent() {
-            create_dir_all(parent)?;
-        }
-        write(
-            &build_args.exe_commit_output,
-            committed_exe_as_bn254(&committed_exe).value.to_bytes(),
-        )?;
-        if let Some(parent) = build_args.committed_exe_output.parent() {
-            create_dir_all(parent)?;
-        }
-        let committed_exe = match Arc::try_unwrap(committed_exe) {
-            Ok(exe) => exe,
-            Err(_) => return Err(eyre::eyre!("Failed to unwrap committed_exe Arc")),
+        let target_name = if target.is_example() {
+            &format!("examples/{}", target.name)
+        } else {
+            &target.name
         };
-        write(
-            &build_args.committed_exe_output,
-            bitcode::serialize(&committed_exe)?,
-        )?;
+        let file_name = format!("{}.vmexe", target_name);
+        let file_path = target_output_dir.join(&file_name);
 
-        println!(
-            "[openvm] Successfully transpiled to {}",
-            output_path.display()
-        );
-        Ok(Some(elf_path))
-    } else if let Ok(elf_path) = elf_path {
-        println!(
-            "[openvm] Successfully built the package: {}",
-            elf_path.display()
-        );
-        Ok(Some(elf_path))
+        write_exe_to_file(exe, &file_path)?;
+        if let Some(output_dir) = &build_args.output_dir {
+            create_dir_all(output_dir)?;
+            copy(file_path, output_dir.join(file_name))?;
+        }
+    }
+
+    let final_output_dir = if let Some(output_dir) = &build_args.output_dir {
+        output_dir
     } else {
-        println!("[openvm] Successfully built the package");
-        Ok(None)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
-
-    use eyre::Result;
-    use openvm_build::RUSTC_TARGET;
-
-    use super::*;
-
-    #[test]
-    fn test_build_with_profile() -> Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let target_dir = temp_dir.path();
-        let build_args = BuildArgs {
-            manifest_dir: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("example"),
-            features: vec![],
-            bin_type_filter: Default::default(),
-            no_transpile: true,
-            config: PathBuf::from(DEFAULT_APP_CONFIG_PATH),
-            exe_output: PathBuf::from(DEFAULT_APP_EXE_PATH),
-            committed_exe_output: PathBuf::from(DEFAULT_COMMITTED_APP_EXE_PATH),
-            exe_commit_output: PathBuf::from(DEFAULT_EXE_COMMIT_PATH),
-            profile: "dev".to_string(),
-            target_dir: Some(target_dir.to_path_buf()),
-            offline: false,
-        };
-        build(&build_args)?;
-        assert!(
-            target_dir.join(RUSTC_TARGET).join("debug").exists(),
-            "did not build with dev profile"
-        );
-        temp_dir.close()?;
-        Ok(())
-    }
+        &target_output_dir
+    };
+    println!(
+        "[openvm] Successfully transpiled to {}",
+        final_output_dir.display()
+    );
+    Ok(final_output_dir.clone())
 }

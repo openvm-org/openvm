@@ -1,7 +1,10 @@
 use std::array;
 
 use openvm_circuit::{
-    arch::testing::{memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    arch::{
+        testing::{memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        InsExecutorE1,
+    },
     utils::get_random_message,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
@@ -28,7 +31,7 @@ fn create_test_chips(
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let chip = Sha256VmChip::new(
+    let mut chip = Sha256VmChip::new(
         Sha256VmAir::new(
             tester.system_port(),
             bitwise_bus,
@@ -40,9 +43,10 @@ fn create_test_chips(
             Rv32Sha256Opcode::CLASS_OFFSET,
             tester.address_bits(),
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
+    chip.set_trace_height(MAX_INS_CAPACITY);
+
     (chip, bitwise_chip)
 }
 

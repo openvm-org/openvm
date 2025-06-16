@@ -2,7 +2,7 @@
 [app_vm_config.rv32m]
 [app_vm_config.io]
 [app_vm_config.modular]
-supported_modulus = ["998244353","1000000007"]
+supported_moduli = ["998244353","1000000007"]
 
 [app_vm_config.fp2]
-supported_modulus = ["998244353","1000000007"]
+supported_moduli = [["Complex1", "998244353"], ["Complex2", "1000000007"]]

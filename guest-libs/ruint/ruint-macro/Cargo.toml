@@ -1,0 +1,23 @@
+[package]
+name = "ruint-macro"
+description = "The `uint!` macro for `Uint` and `Bits` literals"
+version = "1.2.1"
+keywords = ["uint", "macro"]
+categories = ["mathematics"]
+readme = "README.md"
+
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[lib]
+proc-macro = true
+
+[package.metadata.release]
+tag = false
+
+[dev-dependencies]
+ruint = { path = ".." }

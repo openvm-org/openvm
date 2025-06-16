@@ -34,7 +34,7 @@ where
 
     fn should_suspend(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
         state.clk >= self.clk_end
@@ -42,7 +42,7 @@ where
 
     fn on_start(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
         chip_complex
@@ -52,7 +52,7 @@ where
 
     fn on_suspend_or_terminate(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         exit_code: Option<u32>,
     ) {
@@ -65,7 +65,7 @@ where
     /// Execute a single instruction
     fn execute_instruction(
         &self,
-        state: &mut VmSegmentState<Self::Ctx>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
         instruction: &Instruction<F>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
@@ -80,6 +80,7 @@ where
             let memory_controller = &mut chip_complex.base.memory_controller;
             let new_state = executor.execute(
                 memory_controller,
+                &mut state.streams,
                 instruction,
                 ExecutionState::new(state.pc, timestamp),
             )?;
@@ -90,7 +91,6 @@ where
                 opcode,
             });
         };
-        state.clk += 1;
 
         Ok(())
     }

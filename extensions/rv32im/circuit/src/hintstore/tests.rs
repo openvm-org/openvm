@@ -1,12 +1,8 @@
-use std::{
-    array,
-    borrow::BorrowMut,
-    sync::{Arc, Mutex},
-};
+use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    ExecutionBridge, Streams,
+    ExecutionBridge,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -52,11 +48,10 @@ fn create_test_chip(
             tester.address_bits(),
         ),
         Rv32HintStoreStep::new(bitwise_chip.clone(), tester.address_bits(), 0),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
-    chip.step
-        .set_streams(Arc::new(Mutex::new(Streams::default())));
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
     (chip, bitwise_chip)
 }
 
@@ -76,14 +71,7 @@ fn set_and_execute(
     let read_data: [F; RV32_REGISTER_NUM_LIMBS] =
         array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << RV32_CELL_BITS))));
     for data in read_data {
-        chip.step
-            .streams
-            .get()
-            .unwrap()
-            .lock()
-            .unwrap()
-            .hint_stream
-            .push_back(data);
+        tester.streams.hint_stream.push_back(data);
     }
 
     tester.execute(
@@ -117,14 +105,7 @@ fn set_and_execute_buffer(
         .collect();
     for i in 0..num_words {
         for datum in data[i as usize] {
-            chip.step
-                .streams
-                .get()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .hint_stream
-                .push_back(datum);
+            tester.streams.hint_stream.push_back(datum);
         }
     }
 

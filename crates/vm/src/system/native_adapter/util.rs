@@ -44,7 +44,7 @@ where
 
 #[inline(always)]
 pub fn memory_read_native_from_state<Ctx, F, const N: usize>(
-    state: &mut VmStateMut<GuestMemory, Ctx>,
+    state: &mut VmStateMut<F, GuestMemory, Ctx>,
     ptr: u32,
 ) -> [F; N]
 where
@@ -58,7 +58,7 @@ where
 
 #[inline(always)]
 pub fn memory_read_or_imm_native_from_state<Ctx, F>(
-    state: &mut VmStateMut<GuestMemory, Ctx>,
+    state: &mut VmStateMut<F, GuestMemory, Ctx>,
     addr_space: u32,
     ptr_or_imm: F,
 ) -> F
@@ -78,7 +78,7 @@ where
 
 #[inline(always)]
 pub fn memory_write_native_from_state<Ctx, F, const N: usize>(
-    state: &mut VmStateMut<GuestMemory, Ctx>,
+    state: &mut VmStateMut<F, GuestMemory, Ctx>,
     ptr: u32,
     data: &[F; N],
 ) where

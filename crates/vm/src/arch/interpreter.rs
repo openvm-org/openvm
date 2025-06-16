@@ -28,14 +28,12 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
         &self,
         ctrl: CTRL,
         inputs: impl Into<Streams<F>>,
-    ) -> Result<VmSegmentState<CTRL::Ctx>, ExecutionError>
+    ) -> Result<VmSegmentState<F, CTRL::Ctx>, ExecutionError>
     where
         CTRL::Ctx: E1E2ExecutionCtx,
     {
         // Initialize the chip complex
         let mut chip_complex = self.vm_config.create_chip_complex().unwrap();
-        let inputs = inputs.into();
-        chip_complex.set_streams(inputs);
         // Initialize the memory
         let memory = if self.vm_config.system().continuation_enabled {
             let mem_config = self.vm_config.system().memory_config;
@@ -51,13 +49,8 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
 
         // Initialize the context
         let ctx = ctrl.initialize_context();
-        let mut vm_state = VmSegmentState {
-            clk: 0,
-            pc: self.exe.pc_start,
-            memory,
-            exit_code: None,
-            ctx,
-        };
+
+        let mut vm_state = VmSegmentState::new(0, self.exe.pc_start, memory, inputs.into(), ctx);
 
         // Start execution
         ctrl.on_start(&mut vm_state, &mut chip_complex);

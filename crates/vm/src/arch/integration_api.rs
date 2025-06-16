@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-    ExecutionState, InsExecutorE1, InstructionExecutor, Result, VmStateMut,
+    ExecutionState, InsExecutorE1, InstructionExecutor, Result, Streams, VmStateMut,
 };
 use crate::system::memory::{
     online::{GuestMemory, TracingMemory},
@@ -123,7 +123,7 @@ pub trait TraceStep<F, CTX> {
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
         arena: &'buf mut RA,
     ) -> Result<()>
@@ -141,6 +141,8 @@ pub trait TraceStep<F, CTX> {
 
 // TODO[jpw]: this might be temporary trait before moving trace to CTX
 pub trait RowMajorMatrixArena<F> {
+    /// Set the arena's capacity based on the projected trace height.
+    fn set_capacity(&mut self, trace_height: usize);
     fn with_capacity(height: usize, width: usize) -> Self;
     fn width(&self) -> usize;
     fn trace_offset(&self) -> usize;
@@ -291,6 +293,12 @@ pub struct MatrixRecordArena<F> {
 }
 
 impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
+    fn set_capacity(&mut self, trace_height: usize) {
+        let size = trace_height * self.width;
+        // PERF: use memset
+        self.trace_buffer.resize(size, F::ZERO);
+    }
+
     fn with_capacity(height: usize, width: usize) -> Self {
         let trace_buffer = F::zero_vec(height * width);
         Self {
@@ -381,21 +389,24 @@ where
     AIR: BaseAir<F>,
     RA: RowMajorMatrixArena<F>,
 {
-    pub fn new(air: AIR, step: STEP, height: usize, mem_helper: SharedMemoryHelper<F>) -> Self {
+    pub fn new(air: AIR, step: STEP, mem_helper: SharedMemoryHelper<F>) -> Self {
         let width = air.width();
-        assert!(height == 0 || height.is_power_of_two());
         assert!(
             align_of::<F>() >= align_of::<u32>(),
             "type {} should have at least alignment of u32",
             type_name::<F>()
         );
-        let arena = RA::with_capacity(height, width);
+        let arena = RA::with_capacity(0, width);
         Self {
             air,
             step,
             arena,
             mem_helper,
         }
+    }
+
+    pub fn set_trace_buffer_height(&mut self, height: usize) {
+        self.arena.set_capacity(height);
     }
 }
 
@@ -409,6 +420,7 @@ where
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
+        streams: &mut Streams<F>,
         instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>> {
@@ -416,6 +428,7 @@ where
         let state = VmStateMut {
             pc: &mut pc,
             memory: &mut memory.memory,
+            streams,
             ctx: &mut (),
         };
         self.step.execute(state, instruction, &mut self.arena)?;
@@ -529,7 +542,7 @@ where
 
     fn read<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Self::ReadData
     where
@@ -537,7 +550,7 @@ where
 
     fn write<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         data: &Self::WriteData,
     ) where
@@ -548,7 +561,7 @@ where
 pub trait StepExecutorE1<F> {
     fn execute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -556,7 +569,7 @@ pub trait StepExecutorE1<F> {
 
     fn execute_metered(
         &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()>;
@@ -566,10 +579,12 @@ impl<F, A, S, RA> InsExecutorE1<F> for NewVmChipWrapper<F, A, S, RA>
 where
     F: PrimeField32,
     S: StepExecutorE1<F>,
+    A: BaseAir<F>,
+    RA: RowMajorMatrixArena<F>,
 {
     fn execute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -580,7 +595,7 @@ where
 
     fn execute_metered(
         &self,
-        state: &mut VmStateMut<GuestMemory, MeteredCtx>,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()>
@@ -588,6 +603,10 @@ where
         F: PrimeField32,
     {
         self.step.execute_metered(state, instruction, chip_index)
+    }
+
+    fn set_trace_height(&mut self, height: usize) {
+        self.set_trace_buffer_height(height);
     }
 }
 

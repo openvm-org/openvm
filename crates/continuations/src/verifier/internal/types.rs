@@ -30,6 +30,36 @@ pub struct InternalVmVerifierInput<SC: StarkGenericConfig> {
 }
 assert_impl_all!(InternalVmVerifierInput<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
 
+/// A proof which can prove OpenVM program execution.
+#[derive(Deserialize, Serialize, Derivative)]
+#[serde(bound = "")]
+#[derivative(Clone(bound = "Com<SC>: Clone"))]
+pub struct VmStarkProof<SC: StarkGenericConfig> {
+    pub proof: Proof<SC>,
+    pub user_public_values: Vec<Val<SC>>,
+}
+assert_impl_all!(VmStarkProof<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
+
+/// Aggregated state of all segments
+#[derive(Debug, Clone, Copy, AlignedBorrow)]
+#[repr(C)]
+pub struct InternalVmVerifierPvs<T> {
+    pub vm_verifier_pvs: VmVerifierPvs<T>,
+    pub extra_pvs: InternalVmVerifierExtraPvs<T>,
+}
+
+/// Extra PVs for internal VM verifier except VmVerifierPvs.
+#[derive(Debug, Clone, Copy, AlignedBorrow)]
+#[repr(C)]
+pub struct InternalVmVerifierExtraPvs<T> {
+    /// The commitment of the leaf verifier program.
+    pub leaf_verifier_commit: [T; DIGEST_SIZE],
+    /// For recursion verification, a program need its own commitment, but its own commitment
+    /// cannot be hardcoded inside the program itself. So the commitment has to be read from
+    /// external and be committed.
+    pub internal_program_commit: [T; DIGEST_SIZE],
+}
+
 impl InternalVmVerifierInput<SC> {
     pub fn chunk_leaf_or_internal_proofs(
         self_program_commit: [Val<SC>; DIGEST_SIZE],
@@ -44,13 +74,6 @@ impl InternalVmVerifierInput<SC> {
             })
             .collect()
     }
-}
-/// Aggregated state of all segments
-#[derive(Debug, Clone, Copy, AlignedBorrow)]
-#[repr(C)]
-pub struct InternalVmVerifierPvs<T> {
-    pub vm_verifier_pvs: VmVerifierPvs<T>,
-    pub extra_pvs: InternalVmVerifierExtraPvs<T>,
 }
 
 impl<F: PrimeField32> InternalVmVerifierPvs<Felt<F>> {
@@ -68,18 +91,6 @@ impl<F: Default + Clone> InternalVmVerifierPvs<Felt<F>> {
         *v.as_mut_slice().borrow_mut() = self;
         v
     }
-}
-
-/// Extra PVs for internal VM verifier except VmVerifierPvs.
-#[derive(Debug, Clone, Copy, AlignedBorrow)]
-#[repr(C)]
-pub struct InternalVmVerifierExtraPvs<T> {
-    /// The commitment of the leaf verifier program.
-    pub leaf_verifier_commit: [T; DIGEST_SIZE],
-    /// For recursion verification, a program need its own commitment, but its own commitment
-    /// cannot be hardcoded inside the program itself. So the commitment has to be read from
-    /// external and be committed.
-    pub internal_program_commit: [T; DIGEST_SIZE],
 }
 
 impl<F: PrimeField32> InternalVmVerifierExtraPvs<Felt<F>> {

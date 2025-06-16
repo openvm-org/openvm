@@ -104,7 +104,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
         arena: &'buf mut RA,
     ) -> Result<()>

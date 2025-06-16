@@ -13,31 +13,38 @@ use openvm_stark_backend::{
     Chip,
 };
 
+#[cfg(feature = "bench-metrics")]
+use super::InstructionExecutor;
 use super::{
-    execution_control::ExecutionControl, ExecutionError, GenerationError, SystemConfig,
+    execution_control::ExecutionControl, ExecutionError, GenerationError, Streams, SystemConfig,
     VmChipComplex, VmComplexTraceHeights, VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
-use crate::{
-    arch::{instructions::*, InstructionExecutor},
-    system::memory::online::GuestMemory,
-};
+use crate::{arch::instructions::*, system::memory::online::GuestMemory};
 
-pub struct VmSegmentState<Ctx> {
+pub struct VmSegmentState<F, Ctx> {
     pub clk: u64,
     pub pc: u32,
     pub memory: Option<GuestMemory>,
+    pub streams: Streams<F>,
     pub exit_code: Option<u32>,
     pub ctx: Ctx,
 }
 
-impl<Ctx> VmSegmentState<Ctx> {
-    pub fn new(clk: u64, pc: u32, memory: Option<GuestMemory>, ctx: Ctx) -> Self {
+impl<F, Ctx> VmSegmentState<F, Ctx> {
+    pub fn new(
+        clk: u64,
+        pc: u32,
+        memory: Option<GuestMemory>,
+        streams: Streams<F>,
+        ctx: Ctx,
+    ) -> Self {
         Self {
             clk,
             pc,
             memory,
+            streams,
             ctx,
             exit_code: None,
         }
@@ -57,6 +64,7 @@ where
     pub trace_height_constraints: Vec<LinearConstraint>,
 
     /// Air names for debug purposes only.
+    #[cfg(feature = "bench-metrics")]
     pub(crate) air_names: Vec<String>,
     /// Metrics collected for this execution segment alone.
     #[cfg(feature = "bench-metrics")]
@@ -76,11 +84,13 @@ where
         #[allow(unused_variables)] fn_bounds: FnBounds,
         ctrl: Ctrl,
     ) -> Self {
+        #[cfg(feature = "bench-metrics")]
         let air_names = chip_complex.air_names();
 
         Self {
             chip_complex,
             ctrl,
+            #[cfg(feature = "bench-metrics")]
             air_names,
             trace_height_constraints,
             #[cfg(feature = "bench-metrics")]
@@ -105,7 +115,7 @@ where
     /// Stopping is triggered by should_stop() or if VM is terminated
     pub fn execute_from_state(
         &mut self,
-        state: &mut VmSegmentState<Ctrl::Ctx>,
+        state: &mut VmSegmentState<F, Ctrl::Ctx>,
     ) -> Result<(), ExecutionError> {
         let mut prev_backtrace: Option<Backtrace> = None;
 
@@ -125,6 +135,7 @@ where
 
             // Fetch, decode and execute single instruction
             self.execute_instruction(state, &mut prev_backtrace)?;
+            state.clk += 1;
         }
         Ok(())
     }
@@ -133,7 +144,7 @@ where
     // TODO(ayush): clean this up, separate to smaller functions
     fn execute_instruction(
         &mut self,
-        state: &mut VmSegmentState<Ctrl::Ctx>,
+        state: &mut VmSegmentState<F, Ctrl::Ctx>,
         prev_backtrace: &mut Option<Backtrace>,
     ) -> Result<(), ExecutionError> {
         let pc = state.pc;
@@ -208,7 +219,7 @@ where
     }
 
     /// Returns bool of whether to switch to next segment or not.
-    fn should_suspend(&mut self, state: &mut VmSegmentState<Ctrl::Ctx>) -> bool {
+    fn should_suspend(&mut self, state: &mut VmSegmentState<F, Ctrl::Ctx>) -> bool {
         if !self.system_config().continuation_enabled {
             return false;
         }
@@ -217,7 +228,6 @@ where
         self.ctrl.should_suspend(state, &self.chip_complex)
     }
 
-    // TODO(ayush): this is not relevant for e1/e2 execution
     /// Generate ProofInput to prove the segment. Should be called after ::execute
     pub fn generate_proof_input<SC: StarkGenericConfig>(
         #[allow(unused_mut)] mut self,

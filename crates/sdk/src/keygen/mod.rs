@@ -3,20 +3,17 @@ use std::sync::Arc;
 use derivative::Derivative;
 use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
-    arch::{VirtualMachine, VmComplexTraceHeights, VmConfig},
+    arch::{
+        execution_mode::metered::get_widths_and_interactions_from_vkey, InsExecutorE1,
+        VirtualMachine, VmComplexTraceHeights, VmConfig,
+    },
     system::{memory::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
 };
-use openvm_continuations::{
-    static_verifier::StaticVerifierPvHandler,
-    verifier::{
-        internal::InternalVmVerifierConfig, leaf::LeafVmVerifierConfig, root::RootVmVerifierConfig,
-    },
+use openvm_continuations::verifier::{
+    internal::InternalVmVerifierConfig, leaf::LeafVmVerifierConfig, root::RootVmVerifierConfig,
 };
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::ir::DIGEST_SIZE;
-use openvm_native_recursion::halo2::{
-    utils::Halo2ParamsReader, verifier::Halo2VerifierProvingKey, wrapper::Halo2WrapperProvingKey,
-};
 use openvm_stark_backend::{
     config::Val,
     p3_field::{FieldExtensionAlgebra, PrimeField32, TwoAdicField},
@@ -37,17 +34,28 @@ use openvm_stark_sdk::{
 };
 use serde::{Deserialize, Serialize};
 use tracing::info_span;
+#[cfg(feature = "evm-prove")]
+use {
+    crate::config::AggConfig,
+    openvm_continuations::static_verifier::StaticVerifierPvHandler,
+    openvm_native_recursion::halo2::{
+        utils::Halo2ParamsReader, verifier::Halo2VerifierProvingKey,
+        wrapper::Halo2WrapperProvingKey,
+    },
+};
 
 use crate::{
     commit::babybear_digest_to_bn254,
-    config::{AggConfig, AggStarkConfig, AppConfig},
+    config::{AggStarkConfig, AppConfig},
     keygen::perm::AirIdPermutation,
     prover::vm::types::VmProvingKey,
     NonRootCommittedExe, RootSC, F, SC,
 };
 
+pub mod asm;
 pub(crate) mod dummy;
 pub mod perm;
+#[cfg(feature = "evm-prove")]
 pub mod static_verifier;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -64,6 +72,7 @@ pub struct AppVerifyingKey {
     pub memory_dimensions: MemoryDimensions,
 }
 
+#[cfg(feature = "evm-prove")]
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AggProvingKey {
     pub agg_stark_pk: AggStarkProvingKey,
@@ -79,6 +88,7 @@ pub struct AggStarkProvingKey {
 }
 
 /// Attention: the size of this struct is VERY large, usually >10GB.
+#[cfg(feature = "evm-prove")]
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Halo2ProvingKey {
     /// Static verifier to verify a stark proof of the root verifier.
@@ -92,7 +102,7 @@ pub struct Halo2ProvingKey {
 
 impl<VC: VmConfig<F>> AppProvingKey<VC>
 where
-    VC::Executor: Chip<SC>,
+    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
     VC::Periphery: Chip<SC>,
 {
     pub fn keygen(config: AppConfig<VC>) -> Self {
@@ -321,7 +331,7 @@ impl AggStarkProvingKey {
             let root_program = RootVmVerifierConfig {
                 leaf_fri_params: config.leaf_fri_params,
                 internal_fri_params: config.internal_fri_params,
-                num_public_values: config.max_num_user_public_values,
+                num_user_public_values: config.max_num_user_public_values,
                 internal_vm_verifier_commit: internal_committed_exe.get_program_commit().into(),
                 compiler_options: config.compiler_options,
             }
@@ -335,10 +345,13 @@ impl AggStarkProvingKey {
             let mut vm_pk = vm.keygen();
             assert!(vm_pk.max_constraint_degree <= config.root_fri_params.max_constraint_degree());
 
+            let (widths, interactions) = get_widths_and_interactions_from_vkey(vm_pk.get_vk());
             let (air_heights, vm_heights) = compute_root_proof_heights(
                 root_vm_config.clone(),
                 root_committed_exe.exe.clone(),
                 &internal_proof,
+                widths,
+                interactions,
             );
             let root_air_perm = AirIdPermutation::compute(&air_heights);
             root_air_perm.permute(&mut vm_pk.per_air);
@@ -369,7 +382,7 @@ impl AggStarkProvingKey {
         self.internal_committed_exe.get_program_commit().into()
     }
 
-    pub fn num_public_values(&self) -> usize {
+    pub fn num_user_public_values(&self) -> usize {
         self.root_verifier_pk
             .vm_pk
             .vm_config
@@ -405,6 +418,7 @@ impl RootVerifierProvingKey {
     }
 }
 
+#[cfg(feature = "evm-prove")]
 impl AggProvingKey {
     /// Attention:
     /// - This function is very expensive. Usually it requires >64GB memory and takes >10 minutes.

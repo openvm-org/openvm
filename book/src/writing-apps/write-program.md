@@ -2,16 +2,17 @@
 
 ## Writing a guest program
 
-See the example [fibonacci program](https://github.com/openvm-org/openvm-example-fibonacci).
+To initialize an OpenVM guest program package, you can use the following CLI command:
 
-The guest program should be a `no_std` Rust crate. As long as it is `no_std`, you can import any other
-`no_std` crates and write Rust as you normally would. Import the `openvm` library crate to use `openvm` intrinsic functions (for example `openvm::io::*`).
+```bash
+cargo openvm init
+```
 
-More examples of guest programs can be found in the [benchmarks/guest](https://github.com/openvm-org/openvm/tree/main/benchmarks/guest) directory.
+For a guest program example, see this [fibonacci program](https://github.com/openvm-org/openvm-example-fibonacci). More examples can be found in the [benchmarks/guest](https://github.com/openvm-org/openvm/tree/main/benchmarks/guest) directory.
 
 ## Handling I/O
 
-The program can take input from stdin, with some functions provided by `openvm::io`.
+The program can take input from stdin, with some functions provided by `openvm::io`. Make sure to import the `openvm` library crate to use `openvm` intrinsic functions.
 
 `openvm::io::read` takes from stdin and deserializes it into a generic type `T`, so one should specify the type when calling it:
 
@@ -122,3 +123,11 @@ This tells Rust to use the custom `main` handler when the environment is `no_std
 ## Building and running
 
 See the [overview](./overview.md) on how to build and run the program.
+
+## Using crates that depend on `getrandom`
+
+OpenVM is compatible with [getrandom](https://crates.io/crates/getrandom) `v0.3`. The `cargo openvm` CLI will always compile with the [custom](https://docs.rs/getrandom/latest/getrandom/#opt-in-backends) `getrandom` backend.
+
+By default the `openvm` crate has a default feature `"getrandom-unsupported"` which exports a `__getrandom_v03_custom` function that always returns `Err(Error::UNSUPPORTED)`. This is enabled by default to allow compilation of guest programs that pull in dependencies which require `getrandom` but where the executed code does not actually use `getrandom` functions.
+
+To override the default behavior and provide a custom implementation, turn off the `"getrandom-unsupported"` feature in the `openvm` crate and supply your own `__getrandom_v03_custom` function as specified in the [getrandom docs](https://docs.rs/getrandom/latest/getrandom/#custom-backend).

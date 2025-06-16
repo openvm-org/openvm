@@ -1,12 +1,18 @@
 [package]
 name = "openvm-algebra-moduli-macros"
-version = { workspace = true }
-edition = "2021"
+description = "OpenVM algebra macros for modular arithmetic"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 syn = { version = "2.0", features = ["full"] }
 quote = "1.0"
 openvm-macros-common = { workspace = true, default-features = false }
+num-prime = { version = "0.4.4", default-features = false, features = ["big-int"] }
+num-bigint = { workspace = true }
 
 [lib]
 proc-macro = true

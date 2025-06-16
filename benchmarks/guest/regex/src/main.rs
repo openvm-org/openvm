@@ -11,7 +11,7 @@ pub fn main() {
 
     let caps = re.captures(data).expect("No match found.");
     let email = caps.name("email").expect("No email found.");
-    let email_hash = openvm_keccak256_guest::keccak256(email.as_str().as_bytes());
+    let email_hash = openvm_keccak256::keccak256(email.as_str().as_bytes());
 
     openvm::io::reveal_bytes32(email_hash);
 }

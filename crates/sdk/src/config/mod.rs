@@ -1,5 +1,5 @@
 use clap::Args;
-use openvm_circuit::arch::instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
+use openvm_circuit::arch::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use openvm_continuations::verifier::{
     common::types::VmVerifierPvs, internal::types::InternalVmVerifierPvs,
 };
@@ -68,16 +68,31 @@ pub struct Halo2Config {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Args)]
 pub struct AggregationTreeConfig {
     /// Each leaf verifier circuit will aggregate this many App VM proofs.
-    #[arg(long, default_value_t = DEFAULT_NUM_CHILDREN_LEAF)]
+    #[arg(
+        long,
+        default_value_t = DEFAULT_NUM_CHILDREN_LEAF,
+        help = "Number of children per leaf verifier circuit",
+        help_heading = "Aggregation Tree Options"
+    )]
     pub num_children_leaf: usize,
     /// Each internal verifier circuit will aggregate this many proofs,
     /// where each proof may be of either leaf or internal verifier (self) circuit.
-    #[arg(long, default_value_t = DEFAULT_NUM_CHILDREN_INTERNAL)]
+    #[arg(
+        long,
+        default_value_t = DEFAULT_NUM_CHILDREN_INTERNAL,
+        help = "Number of children per internal verifier circuit",
+        help_heading = "Aggregation Tree Options"
+    )]
     pub num_children_internal: usize,
     /// Safety threshold: how many times to do 1-to-1 aggregation of the "last" internal
     /// verifier proof before it is small enough for the root verifier circuit.
     /// Note: almost always no wrapping is needed.
-    #[arg(long, default_value_t = DEFAULT_MAX_INTERNAL_WRAPPER_LAYERS)]
+    #[arg(
+        long,
+        default_value_t = DEFAULT_MAX_INTERNAL_WRAPPER_LAYERS,
+        help = "Maximum number of internal wrapper layers",
+        help_heading = "Aggregation Tree Options"
+    )]
     pub max_internal_wrapper_layers: usize,
     // root currently always has 1 child for now
 }

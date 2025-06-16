@@ -37,7 +37,7 @@ const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_IMM: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
 
 fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> NativeBranchEqChip<F> {
-    NativeBranchEqChip::<F>::new(
+    let mut chip = NativeBranchEqChip::<F>::new(
         NativeBranchEqAir::new(
             BranchNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
             BranchEqualCoreAir::new(NativeBranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
@@ -47,9 +47,11 @@ fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> NativeBranchEqChip<F> 
             NativeBranchEqualOpcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         ),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
-    )
+    );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
+    chip
 }
 
 #[allow(clippy::too_many_arguments)]

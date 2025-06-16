@@ -33,15 +33,17 @@ const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
 fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FieldExtensionChip<F> {
-    FieldExtensionChip::<F>::new(
+    let mut chip = FieldExtensionChip::<F>::new(
         FieldExtensionAir::new(
             NativeVectorizedAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
             FieldExtensionCoreAir::new(),
         ),
         FieldExtensionStep::new(NativeVectorizedAdapterStep::new()),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
-    )
+    );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
+    chip
 }
 
 fn set_and_execute(

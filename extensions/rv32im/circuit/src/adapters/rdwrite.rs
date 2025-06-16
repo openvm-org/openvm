@@ -283,7 +283,7 @@ where
     #[inline(always)]
     fn read<Ctx>(
         &self,
-        _state: &mut VmStateMut<GuestMemory, Ctx>,
+        _state: &mut VmStateMut<F, GuestMemory, Ctx>,
         _instruction: &Instruction<F>,
     ) -> Self::ReadData
     where
@@ -294,7 +294,7 @@ where
     #[inline(always)]
     fn write<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         rd: &Self::WriteData,
     ) where
@@ -407,7 +407,7 @@ where
     #[inline(always)]
     fn read<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
     ) -> Self::ReadData
     where
@@ -419,7 +419,7 @@ where
     #[inline(always)]
     fn write<Ctx>(
         &self,
-        state: &mut VmStateMut<GuestMemory, Ctx>,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
         rd: &Self::WriteData,
     ) where
