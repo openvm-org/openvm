@@ -44,8 +44,8 @@ use openvm_stark_backend::{
 
 use super::RV32_REGISTER_NUM_LIMBS;
 use crate::adapters::{
-    memory_read, memory_read_from_state, memory_write_from_state, read_rv32_register_from_state,
-    timed_write, tracing_read, RV32_CELL_BITS,
+    memory_read, memory_read_from_state, memory_write_from_state, read_rv32_register,
+    read_rv32_register_from_state, timed_write, tracing_read, RV32_CELL_BITS,
 };
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
@@ -553,9 +553,15 @@ impl<F> AdapterExecutorE1<F> for Rv32LoadStoreAdapterStep
 where
     F: PrimeField32,
 {
-    // TODO(ayush): directly use u32
-    type ReadData = [u8; RV32_REGISTER_NUM_LIMBS];
-    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
+    // ((prev_data, read_data), shift_amount)
+    type ReadData = (
+        (
+            [u32; RV32_REGISTER_NUM_LIMBS],
+            [u8; RV32_REGISTER_NUM_LIMBS],
+        ),
+        u8,
+    );
+    type WriteData = [u32; RV32_REGISTER_NUM_LIMBS];
 
     fn read<Ctx>(
         &self,
@@ -565,7 +571,7 @@ where
     where
         Ctx: E1E2ExecutionCtx,
     {
-        let Instruction {
+        let &Instruction {
             opcode,
             a,
             b,
@@ -583,24 +589,44 @@ where
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
 
-        let read_data: [u8; RV32_REGISTER_NUM_LIMBS] = match local_opcode {
+        let rs1 = read_rv32_register_from_state(state, b.as_canonical_u32());
+        let imm_extended = c.as_canonical_u32() + g.as_canonical_u32() * 0xffff0000;
+
+        let ptr_val = rs1.wrapping_add(imm_extended);
+        let shift_amount = ptr_val & 3;
+        let ptr_val = ptr_val - shift_amount;
+
+        debug_assert!(
+            ptr_val < (1 << self.pointer_max_bits),
+            "ptr_val: {ptr_val} = rs1_val: {} + imm_extended: {imm_extended} >= 2 ** {}",
+            rs1,
+            self.pointer_max_bits
+        );
+
+        let read_data = match local_opcode {
             LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                let rs1 = read_rv32_register_from_state(state, b.as_canonical_u32());
-                let imm_extended = c.as_canonical_u32() + g.as_canonical_u32() * 0xffff0000;
-                let ptr_val = rs1.wrapping_add(imm_extended);
-                assert!(
-                    ptr_val < (1 << self.pointer_max_bits),
-                    "ptr_val: {ptr_val} = rs1_val: {rs1} + imm_extended: {imm_extended} >= 2 ** {}",
-                    self.pointer_max_bits
-                );
                 memory_read_from_state(state, e.as_canonical_u32(), ptr_val)
             }
             STOREW | STOREH | STOREB => {
-                memory_read_from_state(state, RV32_REGISTER_AS, a.as_canonical_u32())
+                read_rv32_register_from_state(state, a.as_canonical_u32()).to_le_bytes()
             }
         };
 
-        read_data
+        // We need to keep values of some cells to keep them unchanged when writing to those cells
+        let prev_data = match local_opcode {
+            STOREW | STOREH | STOREB => {
+                if e.as_canonical_u32() == 4 {
+                    memory_read_native(state.memory, ptr_val).map(|x: F| x.as_canonical_u32())
+                } else {
+                    memory_read(state.memory, e.as_canonical_u32(), ptr_val).map(u32::from)
+                }
+            }
+            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+                memory_read(state.memory, d.as_canonical_u32(), a.as_canonical_u32()).map(u32::from)
+            }
+        };
+
+        ((prev_data, read_data), shift_amount as u8)
     }
 
     fn write<Ctx>(
@@ -616,83 +642,42 @@ where
             a,
             b,
             c,
-            d,
             e,
             f: enabled,
             g,
             ..
         } = instruction;
 
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert!(e.as_canonical_u32() != RV32_IMM_AS);
-
         let local_opcode = Rv32LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
 
-        if enabled != F::ZERO {
-            match local_opcode {
-                STOREW | STOREH | STOREB => {
-                    let rs1 = read_rv32_register_from_state(state, b.as_canonical_u32());
-                    let imm_extended = c.as_canonical_u32() + g.as_canonical_u32() * 0xffff0000;
-                    let ptr_val = rs1.wrapping_add(imm_extended);
-                    assert!(
-                        ptr_val < (1 << self.pointer_max_bits),
-                        "ptr_val: {ptr_val} = rs1_val: {rs1} + imm_extended: {imm_extended} >= 2 ** {}",
-                        self.pointer_max_bits
-                    );
-                    // If store we only write the correct number of bytes
-                    match local_opcode {
-                        STOREW => {
-                            if e.as_canonical_u32() == 4 {
-                                memory_write_native_from_state(
-                                    state,
-                                    ptr_val,
-                                    &data.map(F::from_canonical_u8),
-                                );
-                            } else {
-                                memory_write_from_state(state, e.as_canonical_u32(), ptr_val, data);
-                            }
-                        }
-                        STOREH => {
-                            if e.as_canonical_u32() == 4 {
-                                memory_write_native_from_state(
-                                    state,
-                                    ptr_val,
-                                    &[F::from_canonical_u8(data[0]), F::from_canonical_u8(data[1])],
-                                );
-                            } else {
-                                memory_write_from_state(
-                                    state,
-                                    e.as_canonical_u32(),
-                                    ptr_val,
-                                    &[data[0], data[1]],
-                                );
-                            }
-                        }
-                        STOREB => {
-                            if e.as_canonical_u32() == 4 {
-                                memory_write_native_from_state(
-                                    state,
-                                    ptr_val,
-                                    &[F::from_canonical_u8(data[0])],
-                                );
-                            } else {
-                                memory_write_from_state(
-                                    state,
-                                    e.as_canonical_u32(),
-                                    ptr_val,
-                                    &[data[0]],
-                                );
-                            }
-                        }
-                        _ => unreachable!(),
-                    }
-                }
-                LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                    memory_write_from_state(state, RV32_REGISTER_AS, a.as_canonical_u32(), data);
+        if enabled == F::ZERO {
+            return;
+        }
+
+        match local_opcode {
+            STOREW | STOREH | STOREB => {
+                let rs1 = read_rv32_register(state.memory, b.as_canonical_u32());
+                let imm_extended = c.as_canonical_u32() + g.as_canonical_u32() * 0xffff0000;
+                let ptr = rs1.wrapping_add(imm_extended) & !3;
+                if e.as_canonical_u32() == 4 {
+                    memory_write_native_from_state(state, ptr, &data.map(F::from_canonical_u32));
+                } else {
+                    memory_write_from_state(
+                        state,
+                        e.as_canonical_u32(),
+                        ptr,
+                        &data.map(|x| x as u8),
+                    )
                 }
             }
-        }
+            LOADW | LOADB | LOADH | LOADBU | LOADHU => memory_write_from_state(
+                state,
+                RV32_REGISTER_AS,
+                a.as_canonical_u32(),
+                &data.map(|x| x as u8),
+            ),
+        };
     }
 }

@@ -596,6 +596,55 @@ where
 
         let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
+        let mem_ptr = read_rv32_register(state.memory, b.as_canonical_u32());
+
+        let num_words = if local_opcode == HINT_STOREW {
+            1
+        } else {
+            read_rv32_register(state.memory, a.as_canonical_u32())
+        };
+
+        debug_assert!(mem_ptr <= (1 << self.pointer_max_bits));
+        debug_assert_ne!(num_words, 0);
+        debug_assert!(num_words <= (1 << self.pointer_max_bits));
+
+        if state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
+            return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
+        }
+
+        let data = state
+            .streams
+            .hint_stream
+            .drain(0..num_words as usize * RV32_REGISTER_NUM_LIMBS)
+            .map(|x| x.as_canonical_u32() as u8)
+            .collect::<Vec<_>>();
+
+        unsafe {
+            state
+                .memory
+                .memory
+                .copy_slice_nonoverlapping((RV32_MEMORY_AS, mem_ptr), &data);
+        }
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        let &Instruction {
+            opcode, a, b, d, e, ..
+        } = instruction;
+
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
+
+        let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         let mem_ptr = read_rv32_register_from_state(state, b.as_canonical_u32());
 
         let num_words = if local_opcode == HINT_STOREW {
@@ -612,49 +661,24 @@ where
             return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
         }
 
-        for word_index in 0..num_words {
-            let data: [u8; RV32_REGISTER_NUM_LIMBS] = std::array::from_fn(|_| {
-                state
-                    .streams
-                    .hint_stream
-                    .pop_front()
-                    .unwrap()
-                    .as_canonical_u32() as u8
+        let data = state
+            .streams
+            .hint_stream
+            .drain(0..num_words as usize * RV32_REGISTER_NUM_LIMBS)
+            .map(|x| x.as_canonical_u32() as u8)
+            .collect::<Vec<_>>();
+        data.chunks_exact(RV32_REGISTER_NUM_LIMBS)
+            .enumerate()
+            .for_each(|(idx, chunk)| {
+                memory_write_from_state::<F, _, RV32_REGISTER_NUM_LIMBS>(
+                    state,
+                    RV32_MEMORY_AS,
+                    mem_ptr + (idx * RV32_REGISTER_NUM_LIMBS) as u32,
+                    &chunk.try_into().unwrap(),
+                );
             });
-            memory_write_from_state(
-                state,
-                RV32_MEMORY_AS,
-                mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index),
-                &data,
-            );
-        }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        let &Instruction {
-            opcode,
-            a: num_words_ptr,
-            ..
-        } = instruction;
-
-        let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-
-        let num_words = if local_opcode == HINT_STOREW {
-            1
-        } else {
-            read_rv32_register(state.memory, num_words_ptr.as_canonical_u32())
-        };
-
-        self.execute_e1(state, instruction)?;
         state.ctx.trace_heights[chip_index] += num_words;
 
         Ok(())
