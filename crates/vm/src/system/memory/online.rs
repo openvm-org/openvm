@@ -35,7 +35,11 @@ impl GuestMemory {
     where
         T: Copy + Debug,
     {
-        std::array::from_fn(|i| self.memory.get::<T>((addr_space, ptr + i as u32)))
+        debug_assert_eq!(size_of::<T>(), self.memory.cell_size[addr_space as usize]);
+        self.memory
+            .get_memory()
+            .get_unchecked(addr_space as usize)
+            .get((ptr as usize) * size_of::<T>())
     }
 
     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}`
@@ -50,9 +54,11 @@ impl GuestMemory {
     ) where
         T: Copy + Debug,
     {
-        values.iter().enumerate().for_each(|(i, value)| {
-            self.memory.set::<T>((addr_space, ptr + i as u32), *value);
-        });
+        debug_assert_eq!(size_of::<T>(), self.memory.cell_size[addr_space as usize]);
+        self.memory
+            .get_memory_mut()
+            .get_unchecked_mut(addr_space as usize)
+            .set((ptr as usize) * size_of::<T>(), values);
     }
 
     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}` and returns

@@ -285,6 +285,10 @@ impl AddressMap {
         &self.paged_vecs
     }
 
+    pub fn get_memory_mut(&mut self) -> &mut Vec<PagedVec> {
+        &mut self.paged_vecs
+    }
+
     pub fn items<F: PrimeField32>(&self) -> impl Iterator<Item = (Address, F)> + '_ {
         zip_eq(&self.paged_vecs, &self.cell_size)
             .enumerate()
@@ -326,16 +330,6 @@ impl AddressMap {
         self.paged_vecs
             .get_unchecked(addr_space as usize)
             .get((ptr as usize) * size_of::<T>())
-    }
-
-    /// # Safety
-    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
-    /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    pub unsafe fn set<T: Copy>(&mut self, (addr_space, ptr): Address, data: T) {
-        debug_assert_eq!(size_of::<T>(), self.cell_size[addr_space as usize]);
-        self.paged_vecs
-            .get_unchecked_mut(addr_space as usize)
-            .set((ptr as usize) * size_of::<T>(), &data)
     }
 
     /// # Safety

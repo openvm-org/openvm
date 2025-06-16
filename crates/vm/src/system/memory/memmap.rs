@@ -70,7 +70,7 @@ impl MmapWrapper {
     pub const CELL_STRIDE: usize = 1;
 
     pub fn new(len: usize) -> Self {
-        let num_pages = (len + PAGE_SIZE - 1) / PAGE_SIZE;
+        let num_pages = len.div_ceil(PAGE_SIZE);
         Self {
             mmap: MmapMut::map_anon(len).unwrap(),
             accessed: bitvec![0; num_pages],
@@ -313,6 +313,10 @@ impl AddressMap {
         &self.mem
     }
 
+    pub fn get_memory_mut(&mut self) -> &mut Vec<MmapWrapper> {
+        &mut self.mem
+    }
+
     pub fn items<F: PrimeField32>(&self) -> impl Iterator<Item = (Address, F)> + '_ {
         zip_eq(&self.mem, &self.cell_size).enumerate().flat_map(
             move |(as_idx, (space_mem, &cell_size))| {
@@ -356,16 +360,6 @@ impl AddressMap {
         self.mem
             .get_unchecked(addr_space as usize)
             .get((ptr as usize) * size_of::<T>())
-    }
-
-    /// # Safety
-    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
-    /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    pub unsafe fn set<T: Copy>(&mut self, (addr_space, ptr): Address, data: T) {
-        debug_assert_eq!(size_of::<T>(), self.cell_size[addr_space as usize]);
-        self.mem
-            .get_unchecked_mut(addr_space as usize)
-            .set((ptr as usize) * size_of::<T>(), &data);
     }
 
     /// # Safety
