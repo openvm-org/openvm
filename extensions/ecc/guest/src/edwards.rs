@@ -172,6 +172,16 @@ macro_rules! impl_te_group_ops {
                     *self = self.add_impl(self)
                 }
             }
+
+            // Note: It was found that implementing `is_identity` in group.rs as a default
+            // implementation increases the cycle count by 50% on the ecrecover benchmark. For
+            // this reason, we implement it here instead. We hypothesize that this is due to
+            // compiler optimizations that are not possible when the `is_identity` function is
+            // defined in a different source file.
+            #[inline(always)]
+            fn is_identity(&self) -> bool {
+                self == &<Self as Group>::IDENTITY
+            }
         }
 
         impl core::ops::Add<&$struct_name> for $struct_name {
