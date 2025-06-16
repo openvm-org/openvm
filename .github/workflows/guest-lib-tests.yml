@@ -74,4 +74,4 @@ jobs:
           if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
             FEATURE_ARGS="--features=bn254,bls12_381"
           fi
-          cargo nextest run --cargo-profile=fast $FEATURE_ARGS --no-tests=pass
+          cargo nextest run --cargo-profile=fast $FEATURE_ARGS --no-tests=pass --test-threads=1 --no-fail-fast
