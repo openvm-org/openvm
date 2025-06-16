@@ -1,7 +1,10 @@
 use std::array;
 
 use openvm_circuit::{
-    arch::testing::{memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    arch::{
+        testing::{memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        InsExecutorE1,
+    },
     utils::get_random_message,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
