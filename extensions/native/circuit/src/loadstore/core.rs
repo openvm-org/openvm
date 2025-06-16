@@ -9,7 +9,7 @@ use openvm_circuit::{
         get_record_from_slice,
         instructions::LocalOpcode,
         AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, EmptyLayout,
-        ExecutionError, RecordArena, Result, StepExecutorE1, Streams, TraceFiller, TraceStep,
+        ExecutionError, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
         VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
@@ -194,7 +194,7 @@ where
 }
 
 impl<F, CTX, A, const NUM_CELLS: usize> TraceFiller<F, CTX>
-    for NativeLoadStoreCoreStep<A, F, NUM_CELLS>
+    for NativeLoadStoreCoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F, CTX>,

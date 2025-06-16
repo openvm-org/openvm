@@ -714,8 +714,8 @@ mod phantom {
             b: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            let ptr = new_read_rv32_register(memory, 1, a);
-            let len = new_read_rv32_register(memory, 1, b);
+            let ptr = read_rv32_register(memory, a);
+            let len = read_rv32_register(memory, b);
             let key: Vec<u8> = (0..len)
                 .map(|i| memory_read::<1>(memory, 2, ptr + i)[0])
                 .collect();

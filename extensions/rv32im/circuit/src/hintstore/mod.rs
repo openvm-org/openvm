@@ -5,7 +5,7 @@ use openvm_circuit::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionError, ExecutionState,
         MatrixRecordArena, MultiRowLayout, NewVmChipWrapper, RecordArena, Result, StepExecutorE1,
-        Streams, TraceFiller, TraceStep, VmStateMut,
+        TraceFiller, TraceStep, VmStateMut,
     },
     system::memory::{
         offline_checker::{
@@ -324,7 +324,7 @@ impl<'a> CustomBorrow<'a, Rv32HintStoreRecordMut<'a>, Rv32HintStoreMetadata> for
     }
 }
 
-pub struct Rv32HintStoreStep<F: Field> {
+pub struct Rv32HintStoreStep {
     pointer_max_bits: usize,
     offset: usize,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
@@ -457,7 +457,7 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep<F> {
+impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -614,7 +614,8 @@ where
             return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
         }
 
-        let data = streams
+        let data = state
+            .streams
             .hint_stream
             .drain(0..num_words as usize * RV32_REGISTER_NUM_LIMBS)
             .map(|x| x.as_canonical_u32() as u8)
@@ -665,4 +666,4 @@ where
 }
 
 pub type Rv32HintStoreChip<F> =
-    NewVmChipWrapper<F, Rv32HintStoreAir, Rv32HintStoreStep<F>, MatrixRecordArena<F>>;
+    NewVmChipWrapper<F, Rv32HintStoreAir, Rv32HintStoreStep, MatrixRecordArena<F>>;

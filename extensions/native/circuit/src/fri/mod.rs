@@ -9,8 +9,8 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionState, MatrixRecordArena,
-        MultiRowLayout, NewVmChipWrapper, RecordArena, Result, StepExecutorE1, Streams,
-        TraceFiller, TraceStep, VmStateMut,
+        MultiRowLayout, NewVmChipWrapper, RecordArena, Result, StepExecutorE1, TraceFiller,
+        TraceStep, VmStateMut,
     },
     system::{
         memory::{
@@ -760,8 +760,7 @@ where
         let length = length as usize;
 
         let data = if !is_init {
-            let mut streams = self.streams.lock().unwrap();
-            let hint_steam = &mut streams.hint_space[hint_id];
+            let hint_steam = &mut state.streams.hint_space[hint_id];
             hint_steam.drain(0..length).collect()
         } else {
             vec![]

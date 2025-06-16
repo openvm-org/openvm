@@ -194,8 +194,8 @@ pub fn tracing_write<F, const N: usize>(
 }
 
 #[inline(always)]
-pub fn memory_read_from_state<Ctx, const N: usize>(
-    state: &mut VmStateMut<GuestMemory, Ctx>,
+pub fn memory_read_from_state<F, Ctx, const N: usize>(
+    state: &mut VmStateMut<F, GuestMemory, Ctx>,
     address_space: u32,
     ptr: u32,
 ) -> [u8; N]
@@ -208,8 +208,8 @@ where
 }
 
 #[inline(always)]
-pub fn memory_write_from_state<Ctx, const N: usize>(
-    state: &mut VmStateMut<GuestMemory, Ctx>,
+pub fn memory_write_from_state<F, Ctx, const N: usize>(
+    state: &mut VmStateMut<F, GuestMemory, Ctx>,
     address_space: u32,
     ptr: u32,
     data: &[u8; N],
@@ -222,7 +222,10 @@ pub fn memory_write_from_state<Ctx, const N: usize>(
 }
 
 #[inline(always)]
-pub fn read_rv32_register_from_state<Ctx>(state: &mut VmStateMut<GuestMemory, Ctx>, ptr: u32) -> u32
+pub fn read_rv32_register_from_state<F, Ctx>(
+    state: &mut VmStateMut<F, GuestMemory, Ctx>,
+    ptr: u32,
+) -> u32
 where
     Ctx: E1E2ExecutionCtx,
 {
