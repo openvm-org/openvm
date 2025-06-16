@@ -11,9 +11,8 @@ use openvm_circuit::{
         execution_mode::{e1::E1ExecutionControl, tracegen::TracegenExecutionControl},
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         interpreter::InterpretedInstance,
-        ChipId, MemoryConfig, SingleSegmentVmExecutor, SystemConfig, SystemTraceHeights,
-        VirtualMachine, VmComplexTraceHeights, VmConfig, VmInventoryTraceHeights,
-        VmSegmentExecutor, VmSegmentState,
+        ChipId, SingleSegmentVmExecutor, SystemTraceHeights, VirtualMachine, VmComplexTraceHeights,
+        VmConfig, VmInventoryTraceHeights, VmSegmentExecutor, VmSegmentState,
     },
     system::{
         memory::{MemoryTraceHeights, VolatileMemoryTraceHeights, CHUNK},
@@ -51,6 +50,8 @@ use openvm_stark_sdk::{
 use rand::Rng;
 use test_log::test;
 
+use openvm_circuit::utils::test_utils::test_system_config;
+
 pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
 where
     R: Rng + ?Sized,
@@ -61,19 +62,7 @@ where
 
 fn test_native_config() -> NativeConfig {
     NativeConfig {
-        system: SystemConfig::new(
-            3,
-            MemoryConfig::new(
-                2,
-                vec![0, 1 << 16, 1 << 16, 1 << 16, 1 << 16],
-                16,
-                29,
-                15,
-                32,
-                1024,
-            ),
-            0,
-        ),
+        system: test_system_config(),
         native: Default::default(),
     }
 }
@@ -302,7 +291,7 @@ fn test_vm_1_optional_air() {
 fn test_vm_public_values() {
     setup_tracing();
     let num_public_values = 100;
-    let config = SystemConfig::default().with_public_values(num_public_values);
+    let config = test_system_config().with_public_values(num_public_values);
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
     let vm = VirtualMachine::new(engine, config.clone());
@@ -766,7 +755,7 @@ fn test_vm_hint() {
     type F = BabyBear;
 
     let input_stream: Vec<Vec<F>> = vec![vec![F::TWO]];
-    let config = NativeConfig::new(SystemConfig::default(), Default::default());
+    let config = test_native_config();
     air_test_with_min_segments(config, program, input_stream, 1);
 }
 

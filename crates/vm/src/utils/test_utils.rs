@@ -1,5 +1,6 @@
 use std::array;
 
+use openvm_circuit::arch::{MemoryConfig, SystemConfig};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, Rng};
 
@@ -30,4 +31,20 @@ pub fn u32_sign_extend<const IMM_BITS: usize>(num: u32) -> u32 {
     } else {
         num
     }
+}
+
+pub fn test_system_config() -> SystemConfig {
+    SystemConfig::new(
+        3,
+        MemoryConfig::new(
+            2,
+            vec![0, 1 << 24, 1 << 24, 1 << 24, 1 << 24],
+            29,
+            29,
+            17,
+            32,
+            1 << 24,
+        ),
+        32,
+    )
 }
