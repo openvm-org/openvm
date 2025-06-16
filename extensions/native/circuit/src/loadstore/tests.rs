@@ -1,13 +1,6 @@
-use std::{
-    array,
-    borrow::BorrowMut,
-    sync::{Arc, Mutex},
-};
+use std::{array, borrow::BorrowMut};
 
-use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, VmChipTestBuilder},
-    Streams,
-};
+use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{
     conversion::AS,
@@ -76,14 +69,14 @@ fn set_and_execute(
             tester.write(AS::Native as usize, a, data);
         }
         HINT_STOREW => {
-            chip.step
-                .streams
-                .get()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .hint_stream
-                .extend(data);
+            // chip.step
+            //     .streams
+            //     .get()
+            //     .unwrap()
+            //     .lock()
+            //     .unwrap()
+            //     .hint_stream
+            //     .extend(data);
         }
     }
 

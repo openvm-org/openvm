@@ -30,7 +30,7 @@ const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
 fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FieldArithmeticChip<F> {
-    FieldArithmeticChip::<F>::new(
+    let mut chip = FieldArithmeticChip::<F>::new(
         FieldArithmeticAir::new(
             AluNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
             FieldArithmeticCoreAir::new(),

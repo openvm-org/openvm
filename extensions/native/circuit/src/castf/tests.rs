@@ -34,7 +34,7 @@ const WRITE_SIZE: usize = 4;
 type F = BabyBear;
 
 fn create_test_chip(tester: &VmChipTestBuilder<F>) -> CastFChip<F> {
-    CastFChip::<F>::new(
+    let mut chip = CastFChip::<F>::new(
         CastFAir::new(
             ConvertAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
             CastFCoreAir::new(tester.range_checker().bus()),
