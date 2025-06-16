@@ -1,6 +1,6 @@
 use inner::build_verification_program;
-use openvm_circuit::{arch::instructions::program::Program, utils::execute_and_prove_program};
-use openvm_native_circuit::NativeConfig;
+use openvm_circuit::{arch::instructions::program::Program, utils::{execute_and_prove_program, test_system_config}};
+use openvm_native_circuit::{NativeConfig, Native};
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_stark_backend::{
     config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig},
@@ -75,7 +75,7 @@ pub mod inner {
         recursive_stark_test(
             vparams,
             CompilerOptions::default(),
-            NativeConfig::aggregation(4, 7),
+            NativeConfig::new(test_system_config(), Native),
             &BabyBearPoseidon2Engine::new(fri_params),
         )
         .unwrap();

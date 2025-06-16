@@ -38,7 +38,7 @@ pub fn test_system_config() -> SystemConfig {
         3,
         MemoryConfig::new(
             2,
-            vec![0, 1 << 24, 1 << 24, 1 << 24, 1 << 24],
+            vec![0, 1 << 25, 1 << 25, 1 << 25, 1 << 25],
             29,
             29,
             17,
