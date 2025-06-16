@@ -98,9 +98,9 @@ pub fn setup_all_te_curves() {
 }
 ```
 
-3. Again, the `setup` function for every used curve must be called before any other instructions for that curve. If all curves are used, one can call `setup_all_te_curves()` to setup all of them.
+3. Again, if using the Rust bindings, then the `te_setup_extern_func_*` function for every curve is automatically called on first use of any of the curve's intrinsics.
 
-4. The order of the items in `te_init!` **must match** the order of the moduli in the chip configuration -- more specifically, in the modular extension parameters (the order of `CurveConfig`s in `TwistedEdwardsExtension::supported_curves`, which is usually defined with the whole `app_vm_config` in the `openvm.toml` file).
+4. The order of the items in `te_init!` **must match** the order of the moduli in the chip configuration -- more specifically, in the modular extension parameters (the order of `CurveConfig`s in `EccExtension::supported_te_curves`, which is usually defined with the whole `app_vm_config` in the `openvm.toml` file).
 
 5. Note that, due to the nature of function names, the name of the struct used in `te_init!` must be the same as in `te_declare!`. To illustrate, the following code will **fail** to compile:
 
@@ -119,3 +119,7 @@ te_init! {
 ```
 
 The reason is that, for example, the function `sw_add_extern_func_Secp256k1Point` remains unimplemented, but we implement `sw_add_extern_func_Sw`.
+
+6. `cargo openvm build` will automatically generate a call to `te_init!` based on `openvm.toml`.
+Note that `openvm.toml` must contain the name of each struct created by `te_declare!` as a string (in the example at the top of this document, its `"Ed25519Point"`).
+The SDK also supports this feature.
