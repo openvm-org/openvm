@@ -148,8 +148,8 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
             };
             if bytes <= 32 {
                 let add_ne_chip = EcAddNeChip::new(
-                    execution_bridge.clone(),
-                    memory_bridge.clone(),
+                    execution_bridge,
+                    memory_bridge,
                     builder.system_base().memory_controller.helper(),
                     pointer_max_bits,
                     config32.clone(),
@@ -165,8 +165,8 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
                 let double_chip = EcDoubleChip::new(
-                    execution_bridge.clone(),
-                    memory_bridge.clone(),
+                    execution_bridge,
+                    memory_bridge,
                     builder.system_base().memory_controller.helper(),
                     pointer_max_bits,
                     config32.clone(),
@@ -183,8 +183,8 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                 )?;
             } else if bytes <= 48 {
                 let add_ne_chip = EcAddNeChip::new(
-                    execution_bridge.clone(),
-                    memory_bridge.clone(),
+                    execution_bridge,
+                    memory_bridge,
                     builder.system_base().memory_controller.helper(),
                     pointer_max_bits,
                     config48.clone(),
@@ -200,8 +200,8 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
                 let double_chip = EcDoubleChip::new(
-                    execution_bridge.clone(),
-                    memory_bridge.clone(),
+                    execution_bridge,
+                    memory_bridge,
                     builder.system_base().memory_controller.helper(),
                     pointer_max_bits,
                     config48.clone(),

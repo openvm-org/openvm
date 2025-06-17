@@ -30,7 +30,7 @@ where
         state: &mut VmSegmentState<F, Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
-        self.clk_end.map_or(false, |clk_end| state.clk >= clk_end)
+        self.clk_end.is_some_and(|clk_end| state.clk >= clk_end)
     }
 
     fn on_start(

@@ -216,11 +216,10 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
                 let read_data: [u8; SHA256_BLOCK_CELLS] = block_slice
                     .chunks_exact(width)
                     .take(4)
-                    .map(|row| {
+                    .flat_map(|row| {
                         let cols: &Sha256VmRoundCols<F> = row[..SHA256VM_ROUND_WIDTH].borrow();
                         cols.inner.message_schedule.carry_or_buffer.as_flattened()
                     })
-                    .flatten()
                     .map(|x| x.as_canonical_u32() as u8)
                     .collect::<Vec<_>>()
                     .try_into()

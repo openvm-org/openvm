@@ -131,8 +131,8 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
 
             if bytes <= 32 {
                 let addsub_chip = Fp2AddSubChip::new(
-                    execution_bridge.clone(),
-                    memory_bridge.clone(),
+                    execution_bridge,
+                    memory_bridge,
                     builder.system_base().memory_controller.helper(),
                     pointer_max_bits,
                     config32.clone(),
@@ -147,8 +147,8 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
                 let muldiv_chip = Fp2MulDivChip::new(
-                    execution_bridge.clone(),
-                    memory_bridge.clone(),
+                    execution_bridge,
+                    memory_bridge,
                     builder.system_base().memory_controller.helper(),
                     pointer_max_bits,
                     config32.clone(),
@@ -164,8 +164,8 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                 )?;
             } else if bytes <= 48 {
                 let addsub_chip = Fp2AddSubChip::new(
-                    execution_bridge.clone(),
-                    memory_bridge.clone(),
+                    execution_bridge,
+                    memory_bridge,
                     builder.system_base().memory_controller.helper(),
                     pointer_max_bits,
                     config48.clone(),
@@ -180,8 +180,8 @@ impl<F: PrimeField32> VmExtension<F> for Fp2Extension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
                 let muldiv_chip = Fp2MulDivChip::new(
-                    execution_bridge.clone(),
-                    memory_bridge.clone(),
+                    execution_bridge,
+                    memory_bridge,
                     builder.system_base().memory_controller.helper(),
                     pointer_max_bits,
                     config48.clone(),

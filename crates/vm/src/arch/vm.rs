@@ -39,7 +39,7 @@ use crate::{
         execution_mode::{
             e1::E1ExecutionControl,
             metered::{bounded::Segment, MeteredCtx, MeteredExecutionControl},
-            tracegen::{TracegenCtx, TracegenExecutionControl},
+            tracegen::TracegenExecutionControl,
         },
         hasher::poseidon2::vm_poseidon2_hasher,
         VmSegmentExecutor, VmSegmentState,
@@ -715,8 +715,7 @@ where
             segment.set_override_trace_heights(overridden_heights.clone());
         }
 
-        let mut exec_state =
-            VmSegmentState::new(0, exe.pc_start, None, input.into(), TracegenCtx::default());
+        let mut exec_state = VmSegmentState::new(0, exe.pc_start, None, input.into(), ());
         metrics_span("execute_time_ms", || {
             segment.execute_from_state(&mut exec_state)
         })?;

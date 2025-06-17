@@ -8,7 +8,6 @@ use std::{
 use openvm_circuit::{
     arch::{
         create_and_initialize_chip_complex,
-        execution_control::ExecutionControl,
         execution_mode::{e1::E1ExecutionControl, tracegen::TracegenExecutionControl},
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         interpreter::InterpretedInstance,
@@ -800,7 +799,6 @@ fn test_hint_load_1() {
     .unwrap();
 
     let ctrl = TracegenExecutionControl::new(Some(segment.num_cycles));
-    let ctx = ExecutionControl::<F, NativeConfig>::initialize_context(&ctrl);
     let mut segment = VmSegmentExecutor::<F, NativeConfig, _>::new(
         chip_complex,
         vec![],
@@ -808,7 +806,7 @@ fn test_hint_load_1() {
         ctrl,
     );
 
-    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), ctx);
+    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), ());
     segment.execute_from_state(&mut exec_state).unwrap();
 
     let streams = exec_state.streams;
@@ -865,7 +863,6 @@ fn test_hint_load_2() {
     .unwrap();
 
     let ctrl = TracegenExecutionControl::new(Some(segment.num_cycles));
-    let ctx = ExecutionControl::<F, NativeConfig>::initialize_context(&ctrl);
     let mut segment = VmSegmentExecutor::<F, NativeConfig, _>::new(
         chip_complex,
         vec![],
@@ -873,7 +870,7 @@ fn test_hint_load_2() {
         ctrl,
     );
 
-    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), ctx);
+    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), ());
     segment.execute_from_state(&mut exec_state).unwrap();
 
     let [read] = unsafe {

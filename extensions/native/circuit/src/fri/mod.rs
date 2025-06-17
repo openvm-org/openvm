@@ -545,6 +545,12 @@ pub struct FriReducedOpeningStep<F: Field> {
     phantom: std::marker::PhantomData<F>,
 }
 
+impl<F: PrimeField32> Default for FriReducedOpeningStep<F> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<F: PrimeField32> FriReducedOpeningStep<F> {
     pub fn new() -> Self {
         Self {
