@@ -56,10 +56,13 @@ impl<T: Copy> Iterator for MmapWrapperIter<'_, T> {
             let page = self.current_index / PAGE_SIZE;
             let value = self.wrapper.get::<T>(self.current_index);
             let index = self.current_index / size;
-            self.current_index += size;
 
             if self.wrapper.accessed[page] {
+                self.current_index += size;
                 return Some((index, value));
+            }
+            else {
+                self.current_index = ((page + 1) * PAGE_SIZE).div_ceil(size) * size;
             }
         }
         None
