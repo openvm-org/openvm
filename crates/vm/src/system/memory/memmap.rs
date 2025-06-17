@@ -21,7 +21,7 @@ pub struct MmapWrapper {
 impl Clone for MmapWrapper {
     fn clone(&self) -> Self {
         let mut new_mmap = MmapMut::map_anon(self.mmap.len()).unwrap();
-        new_mmap.copy_from_slice(&self.mmap);
+        new_mmap[..=self.highest_accessed].copy_from_slice(&self.mmap[..=self.highest_accessed]);
         Self {
             mmap: new_mmap,
             highest_accessed: self.highest_accessed,
