@@ -35,6 +35,7 @@ mod tests {
 
     type F = BabyBear;
 
+    #[cfg(test)]
     fn test_rv32weierstrass_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
         let mut config = Rv32WeierstrassConfig::new(curves);
         config.system = test_system_config().with_continuations();
