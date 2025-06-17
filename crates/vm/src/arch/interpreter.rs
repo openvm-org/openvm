@@ -170,12 +170,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
                     let discriminant = SysPhantom::from_repr(inst.c.as_canonical_u32() as u16);
                     if inst.opcode == SystemOpcode::TERMINATE.global_opcode() {
                         PreComputeInstruction {
-                            handler: |inst, vm_state| {
-                                let inst = unsafe { &*inst };
-                                let pre_compute: &TerminatePreCompute = inst.pre_compute.borrow();
-                                vm_state.exit_code = Some(pre_compute.exit_code);
-                                Ok(())
-                            },
+                            handler: terminate_execute_e1_impl,
                             pre_compute: buf,
                         }
                     } else if inst.opcode == SystemOpcode::PHANTOM.global_opcode()
@@ -296,6 +291,16 @@ impl Drop for AlignedBuf {
         }
     }
 }
+unsafe fn terminate_execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+    inst: *const PreComputeInstruction<F, CTX>,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) -> crate::arch::Result<()> {
+    let inst = &*inst;
+    let pre_compute: &TerminatePreCompute = inst.pre_compute.borrow();
+    vm_state.exit_code = Some(pre_compute.exit_code);
+    Ok(())
+}
+
 unsafe fn debug_panic_execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     inst: *const PreComputeInstruction<F, CTX>,
     _vm_state: &mut VmSegmentState<F, CTX>,

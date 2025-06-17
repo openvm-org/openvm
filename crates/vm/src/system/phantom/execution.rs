@@ -5,6 +5,7 @@ use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
+use p3_baby_bear::BabyBear;
 
 use crate::{
     arch::{
@@ -78,6 +79,13 @@ pub(super) struct PhantomStateMut<'a, F> {
     pub(super) streams: &'a mut Streams<F>,
 }
 
+// #[allow(dead_code)]
+// pub unsafe fn _force_codegen() {
+//     let mut vm_state = VmSegmentState::<BabyBear, ()>::new(0, 0, None, Default::default(), ());
+//     let _ = execute_e1_impl::<BabyBear, ()>(std::ptr::null(), &mut vm_state).unwrap();
+// }
+
+#[inline(never)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     inst: *const PreComputeInstruction<F, CTX>,
     vm_state: &mut VmSegmentState<F, CTX>,

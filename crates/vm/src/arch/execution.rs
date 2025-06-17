@@ -123,6 +123,36 @@ macro_rules! next_instruction {
     };
 }
 
+#[inline]
+pub fn stack_frame_depth() -> usize {
+    let mut depth = 0;
+    backtrace::trace(|_| {
+        depth += 1;
+        true
+    });
+    depth
+}
+// #[macro_export]
+// macro_rules! next_instruction {
+//     ($next_inst: expr, $vm_state: expr) => {{
+//         println!(
+//             "pc = {}, clk = {}, stack_frame: {}",
+//             $vm_state.pc,
+//             $vm_state.instret,
+//             $crate::arch::execution::stack_frame_depth()
+//         );
+//         let handler = (*$next_inst).handler;
+//
+//         std::arch::asm! {
+//             "br {fn_ptr}",
+//             fn_ptr = in(reg) handler,
+//             in("x0") $next_inst,
+//             in("x1") $vm_state,
+//             options(noreturn)
+//         }
+//     }};
+// }
+
 pub struct PreComputeInstruction<'a, F, CTX> {
     pub handler: ExecuteFunc<F, CTX>,
     pub pre_compute: &'a [u8],
