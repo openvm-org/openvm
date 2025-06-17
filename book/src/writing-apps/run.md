@@ -15,7 +15,7 @@ If your program doesn't require inputs, you can (and should) omit the `--input` 
 
 ## Run Flags
 
-Many of the options for `cargo openvm run` will be passed to `cargo openvm build` if `--exe` is not specified. For more information on `build` (or `run`'s **Feature Selection**, **Compilation**, **Output**, **Display**, and/or **Manifest** options) see [Compiling](./writing-apps/build.md).
+Many of the options for `cargo openvm run` will be passed to `cargo openvm build` if `--exe` is not specified. For more information on `build` (or `run`'s **Feature Selection**, **Compilation**, **Output**, **Display**, and/or **Manifest** options) see [Compiling](./build.md).
 
 ### OpenVM Options
 
