@@ -1254,7 +1254,7 @@ where
     }
 }
 
-fn create_memory_image(
+pub fn create_memory_image(
     memory_config: &MemoryConfig,
     init_memory: SparseMemoryImage,
 ) -> MemoryImage {
@@ -1266,7 +1266,7 @@ fn create_memory_image(
     )
 }
 
-fn create_initial_state<F>(
+pub fn create_initial_state<F>(
     memory_config: &MemoryConfig,
     exe: &VmExe<F>,
     input: impl Into<Streams<F>>,
