@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use openvm_circuit::{
     arch::{
+        execution_mode::metered::get_widths_and_interactions_from_vkey,
         instructions::{
             exe::VmExe, instruction::Instruction, program::Program, LocalOpcode,
             SystemOpcode::TERMINATE,
@@ -189,12 +190,17 @@ where
     } else {
         // We first execute once to get the trace heights from dummy_exe, then pad to powers of 2
         // (forcing trace height 0 to 1)
+        let (widths, interactions) =
+            get_widths_and_interactions_from_vkey(app_vm_pk.vm_pk.get_vk());
         let executor = VmExecutor::new(app_vm_pk.vm_config.clone());
+        let segments = executor
+            .execute_metered(dummy_exe.exe.clone(), vec![], widths, interactions)
+            .unwrap();
+        assert_eq!(segments.len(), 1, "dummy exe should have only 1 segment");
         let mut results = executor
-            .execute_segments(dummy_exe.exe.clone(), vec![])
+            .execute_segments(dummy_exe.exe.clone(), vec![], &segments)
             .unwrap();
         // ASSUMPTION: the dummy exe has only 1 segment
-        assert_eq!(results.len(), 1, "dummy exe should have only 1 segment");
         let mut result = results.pop().unwrap();
         result.chip_complex.finalize_memory();
         let mut vm_heights = result.chip_complex.get_internal_trace_heights();

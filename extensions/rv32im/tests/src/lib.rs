@@ -173,10 +173,7 @@ mod tests {
             .execute_metered(exe.clone(), vec![], widths, interactions)
             .unwrap();
 
-        let final_memory = vm
-            .executor
-            .execute_with_segments(exe, vec![], &segments)?
-            .unwrap();
+        let final_memory = vm.executor.execute(exe, vec![], &segments)?.unwrap();
         let hasher = vm_poseidon2_hasher::<F>();
         let pv_proof = UserPublicValuesProof::compute(
             config.system.memory_config.memory_dimensions(),
@@ -293,7 +290,7 @@ mod tests {
         )
         .unwrap();
         let executor = VmExecutor::<F, _>::new(config.clone());
-        executor.execute(exe, vec![]).unwrap();
+        executor.execute_e1(exe, vec![], None).unwrap();
     }
 
     #[test_case(vec!["getrandom", "getrandom-unsupported"])]

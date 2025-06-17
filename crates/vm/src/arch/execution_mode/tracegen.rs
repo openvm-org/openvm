@@ -1,7 +1,6 @@
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::TracegenCtx;
 use crate::{
     arch::{
         execution_control::ExecutionControl, ExecutionError, ExecutionState, InstructionExecutor,
@@ -10,50 +9,28 @@ use crate::{
     system::memory::INITIAL_TIMESTAMP,
 };
 
-/// Check segment every 100 instructions.
-const SEGMENT_CHECK_INTERVAL: usize = 100;
+pub type TracegenCtx = ();
 
-// TODO(ayush): fix this name since it's a mouthful
-/// Implementation of the ExecutionControl trait using the old segmentation strategy
-pub struct TracegenExecutionControlWithSegmentation {
-    // Constant
-    air_names: Vec<String>,
+#[derive(Default, derive_new::new)]
+pub struct TracegenExecutionControl {
+    pub clk_end: Option<u64>,
 }
 
-impl TracegenExecutionControlWithSegmentation {
-    pub fn new(air_names: Vec<String>) -> Self {
-        Self { air_names }
-    }
-}
-
-impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControlWithSegmentation
+impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControl
 where
     F: PrimeField32,
     VC: VmConfig<F>,
 {
     type Ctx = TracegenCtx;
 
-    fn initialize_context(&self) -> Self::Ctx {
-        Self::Ctx {
-            since_last_segment_check: 0,
-        }
-    }
+    fn initialize_context(&self) -> Self::Ctx {}
+
     fn should_suspend(
         &self,
         state: &mut VmSegmentState<F, Self::Ctx>,
-        chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
+        _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
-        // Avoid checking segment too often.
-        if state.ctx.since_last_segment_check != SEGMENT_CHECK_INTERVAL {
-            state.ctx.since_last_segment_check += 1;
-            return false;
-        }
-        state.ctx.since_last_segment_check = 0;
-        chip_complex.config().segmentation_strategy.should_segment(
-            &self.air_names,
-            &chip_complex.dynamic_trace_heights().collect::<Vec<_>>(),
-            &chip_complex.current_trace_cells(),
-        )
+        self.clk_end.map_or(false, |clk_end| state.clk >= clk_end)
     }
 
     fn on_start(

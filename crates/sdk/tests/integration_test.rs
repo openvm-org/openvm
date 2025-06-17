@@ -214,11 +214,7 @@ fn test_public_values_and_leaf_verification() {
 
     let app_vm_result = app_vm
         .executor
-        .execute_with_segments_and_generate_with_cached_program(
-            app_committed_exe.clone(),
-            vec![],
-            &segments,
-        )
+        .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![], &segments)
         .unwrap();
     assert!(app_vm_result.per_segment.len() > 2);
 
@@ -617,11 +613,7 @@ fn test_segmentation_retry() {
 
     let app_vm_result = app_vm
         .executor
-        .execute_with_segments_and_generate_with_cached_program(
-            app_committed_exe.clone(),
-            vec![],
-            &segments,
-        )
+        .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![], &segments)
         .unwrap();
     assert!(app_vm_result.per_segment.len() > 2);
 
@@ -642,13 +634,11 @@ fn test_segmentation_retry() {
             coefficients: vec![1; num_airs],
             threshold: total_height as u32 - 1,
         }]);
-    let app_vm_result = app_vm
-        .executor
-        .execute_with_segments_and_generate_with_cached_program(
-            app_committed_exe.clone(),
-            vec![],
-            &segments,
-        );
+    let app_vm_result = app_vm.executor.execute_and_generate_with_cached_program(
+        app_committed_exe.clone(),
+        vec![],
+        &segments,
+    );
     assert!(matches!(
         app_vm_result,
         Err(GenerationError::TraceHeightsLimitExceeded)
@@ -665,11 +655,7 @@ fn test_segmentation_retry() {
         .unwrap();
     let app_vm_result = app_vm
         .executor
-        .execute_with_segments_and_generate_with_cached_program(
-            app_committed_exe.clone(),
-            vec![],
-            &segments,
-        )
+        .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![], &segments)
         .unwrap();
 
     // New max height should indeed by smaller.

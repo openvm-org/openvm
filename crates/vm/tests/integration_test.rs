@@ -264,7 +264,7 @@ fn test_vm_1_optional_air() {
             .unwrap();
 
         let result = vm
-            .execute_with_segments_and_generate(program, vec![], &segments)
+            .execute_and_generate(program, vec![], &segments)
             .expect("Failed to execute VM");
         assert_eq!(result.per_segment.len(), 1);
         let proof_input = result.per_segment.last().unwrap();
@@ -400,7 +400,7 @@ fn test_vm_1_persistent() {
         .unwrap();
 
     let result = vm
-        .execute_with_segments_and_generate(program.clone(), vec![], &segments)
+        .execute_and_generate(program.clone(), vec![], &segments)
         .unwrap();
     {
         let proof_input = result.per_segment.into_iter().next().unwrap();
@@ -428,9 +428,7 @@ fn test_vm_1_persistent() {
         );
     }
 
-    let result_for_proof = vm
-        .execute_with_segments_and_generate(program, vec![], &segments)
-        .unwrap();
+    let result_for_proof = vm.execute_and_generate(program, vec![], &segments).unwrap();
     let proofs = vm.prove(&pk, result_for_proof);
     vm.verify(&pk.get_vk(), proofs)
         .expect("Verification failed");
@@ -776,7 +774,7 @@ fn test_hint_load_1() {
     )
     .unwrap();
 
-    let ctrl = TracegenExecutionControl::new(segment.num_cycles);
+    let ctrl = TracegenExecutionControl::new(Some(segment.num_cycles));
     let ctx = ExecutionControl::<F, NativeConfig>::initialize_context(&ctrl);
     let mut segment = VmSegmentExecutor::<F, NativeConfig, _>::new(
         chip_complex,
@@ -836,7 +834,7 @@ fn test_hint_load_2() {
     )
     .unwrap();
 
-    let ctrl = TracegenExecutionControl::new(segment.num_cycles);
+    let ctrl = TracegenExecutionControl::new(Some(segment.num_cycles));
     let ctx = ExecutionControl::<F, NativeConfig>::initialize_context(&ctrl);
     let mut segment = VmSegmentExecutor::<F, NativeConfig, _>::new(
         chip_complex,

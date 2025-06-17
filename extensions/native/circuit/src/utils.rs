@@ -22,7 +22,7 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: impl Into<Strea
         .executor
         .execute_metered(program.clone(), input.clone(), widths, interactions)
         .unwrap();
-    vm.execute_with_segments(program, input, &segments).unwrap();
+    vm.execute(program, input, &segments).unwrap();
 }
 
 pub(crate) const fn const_max(a: usize, b: usize) -> usize {

@@ -98,7 +98,7 @@ where
         let mut final_memory = None;
         let per_segment = vm
             .executor
-            .execute_with_segments_and_then(
+            .execute_and_then(
                 exe.clone(),
                 input,
                 &segments,

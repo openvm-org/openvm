@@ -497,9 +497,7 @@ fn air_test_with_compress_poseidon2(
     let segments = vm
         .execute_metered(program.clone(), vec![], widths, interactions)
         .unwrap();
-    let result = vm
-        .execute_with_segments_and_generate(program, vec![], &segments)
-        .unwrap();
+    let result = vm.execute_and_generate(program, vec![], &segments).unwrap();
     let proofs = vm.prove(&pk, result);
     for proof in proofs {
         verify_single(&vm.engine, &pk.get_vk(), &proof).expect("Verification failed");

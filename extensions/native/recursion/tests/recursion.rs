@@ -64,7 +64,7 @@ where
 
     let mut result = vm
         .executor
-        .execute_with_segments_and_generate(fib_program, vec![], &segments)
+        .execute_and_generate(fib_program, vec![], &segments)
         .unwrap();
     assert_eq!(result.per_segment.len(), 1, "unexpected continuation");
     let proof_input = result.per_segment.remove(0);

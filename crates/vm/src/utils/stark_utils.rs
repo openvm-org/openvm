@@ -16,10 +16,11 @@ use openvm_stark_sdk::{
     utils::ProofInputForTest,
 };
 
+#[cfg(feature = "bench-metrics")]
+use crate::arch::vm::VmExecutor;
 use crate::{
     arch::{
-        execution_mode::metered::get_widths_and_interactions_from_vkey,
-        vm::{VirtualMachine, VmExecutor},
+        execution_mode::metered::get_widths_and_interactions_from_vkey, vm::VirtualMachine,
         InsExecutorE1, Streams, VmConfig,
     },
     system::memory::MemoryImage,
@@ -78,9 +79,7 @@ where
         .executor
         .execute_metered(exe.clone(), input.clone(), widths, interactions)
         .unwrap();
-    let mut result = vm
-        .execute_with_segments_and_generate(exe, input, &segments)
-        .unwrap();
+    let mut result = vm.execute_and_generate(exe, input, &segments).unwrap();
     let final_memory = Option::take(&mut result.final_memory);
     let global_airs = vm.config().create_chip_complex().unwrap().airs();
     if debug {
@@ -141,7 +140,7 @@ where
             config.system_mut().profiling = true;
             {
                 let executor = VmExecutor::<Val<SC>, VC>::new(config.clone());
-                executor.execute_with_segments(program_exe.clone(), input.clone(), &segments).unwrap();
+                executor.execute(program_exe.clone(), input.clone(), &segments).unwrap();
             }
             // Run again with metrics collection disabled and measure trace generation time
             config.system_mut().profiling = false;
@@ -150,7 +149,7 @@ where
     }
     let mut result = vm
         .executor
-        .execute_with_segments_and_generate(program_exe, input, &segments)
+        .execute_and_generate(program_exe, input, &segments)
         .unwrap();
 
     assert_eq!(
