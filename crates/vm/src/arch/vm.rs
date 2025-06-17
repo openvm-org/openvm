@@ -65,8 +65,6 @@ pub enum GenerationError {
     Execution(#[from] ExecutionError),
 }
 
-/// VM memory state for continuations.
-
 /// A trait for key-value store for `Streams`.
 pub trait KvStore: Send + Sync {
     fn get(&self, key: &[u8]) -> Option<&[u8]>;
@@ -263,7 +261,7 @@ where
         num_cycles: Option<u64>,
     ) -> Result<VmState<F>, ExecutionError> {
         let exe = exe.into();
-        let state = create_initial_state(&self.config, &exe, input);
+        let state = create_initial_state(&self.config.system().memory_config, &exe, input);
         self.execute_e1_from_state(exe, state, num_cycles)
     }
 
@@ -355,7 +353,7 @@ where
         interactions: Vec<usize>,
     ) -> Result<Vec<Segment>, ExecutionError> {
         let exe = exe.into();
-        let state = create_initial_state(&self.config, &exe, input);
+        let state = create_initial_state(&self.config.system().memory_config, &exe, input);
         self.execute_metered_from_state(exe, state, widths, interactions)
     }
 
@@ -455,7 +453,7 @@ where
         map_err: impl Fn(ExecutionError) -> E,
     ) -> Result<Vec<R>, E> {
         let exe = exe.into();
-        let state = create_initial_state(&self.config, &exe, input);
+        let state = create_initial_state(&self.config.system().memory_config, &exe, input);
         self.execute_and_then_from_state(exe, state, segments, f, map_err)
     }
 
@@ -495,7 +493,7 @@ where
         segments: &[Segment],
     ) -> Result<Option<MemoryImage>, ExecutionError> {
         let exe = exe.into();
-        let state = create_initial_state(&self.config, &exe, input);
+        let state = create_initial_state(&self.config.system().memory_config, &exe, input);
         self.execute_from_state(exe, state, segments)
     }
 
@@ -554,7 +552,7 @@ where
         VC::Periphery: Chip<SC>,
     {
         let exe = exe.into();
-        let state = create_initial_state(&self.config, &exe, input);
+        let state = create_initial_state(&self.config.system().memory_config, &exe, input);
         self.execute_from_state_and_generate(exe, state, segments)
     }
 
@@ -1268,17 +1266,15 @@ fn create_memory_image(
     )
 }
 
-fn create_initial_state<F, VC>(
-    config: &VC,
+fn create_initial_state<F>(
+    memory_config: &MemoryConfig,
     exe: &VmExe<F>,
     input: impl Into<Streams<F>>,
 ) -> VmState<F>
 where
     F: PrimeField32,
-    VC: VmConfig<F>,
-    VC::Executor: InsExecutorE1<F>,
 {
-    let memory = create_memory_image(&config.system().memory_config, exe.init_memory.clone());
+    let memory = create_memory_image(memory_config, exe.init_memory.clone());
     #[cfg(feature = "bench-metrics")]
     let mut state = VmState::new(0, exe.pc_start, memory, input);
     #[cfg(not(feature = "bench-metrics"))]
