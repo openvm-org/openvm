@@ -9,7 +9,7 @@ mod tests {
             VmExecutor,
         },
         system::memory::tree::public_values::UserPublicValuesProof,
-        utils::{air_test, air_test_with_min_segments, test_system_config},
+        utils::{air_test, air_test_with_min_segments, test_system_config_with_continuations},
     };
     use openvm_instructions::exe::VmExe;
     use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
@@ -30,17 +30,19 @@ mod tests {
 
     type F = BabyBear;
 
+    #[cfg(test)]
     fn test_rv32i_config() -> Rv32IConfig {
         Rv32IConfig {
-            system: test_system_config().with_continuations(),
+            system: test_system_config_with_continuations(),
             ..Default::default()
         }
     }
 
+    #[cfg(test)]
     fn test_rv32im_config() -> Rv32ImConfig {
         Rv32ImConfig {
             rv32i: Rv32IConfig {
-                system: test_system_config().with_continuations(),
+                system: test_system_config_with_continuations(),
                 ..Default::default()
             },
             ..Default::default()

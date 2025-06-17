@@ -12,7 +12,7 @@ mod bn254 {
     use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use openvm_circuit::utils::{
-        air_test, air_test_impl, air_test_with_min_segments, test_system_config,
+        air_test, air_test_impl, air_test_with_min_segments, test_system_config_with_continuations,
     };
     use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension};
     use openvm_ecc_guest::{
@@ -47,7 +47,7 @@ mod bn254 {
             .zip(primes.clone())
             .collect::<Vec<_>>();
         Rv32PairingConfig {
-            system: test_system_config().with_continuations(),
+            system: test_system_config_with_continuations(),
             base: Default::default(),
             mul: Default::default(),
             io: Default::default(),
@@ -61,10 +61,9 @@ mod bn254 {
     #[cfg(test)]
     fn test_rv32weierstrass_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
         let mut config = Rv32WeierstrassConfig::new(curves);
-        config.system = test_system_config().with_continuations();
+        config.system = test_system_config_with_continuations();
         config
     }
-
 
     #[test]
     fn test_bn_ec() -> Result<()> {
@@ -467,7 +466,10 @@ mod bls12_381 {
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use openvm_circuit::{
         arch::instructions::exe::VmExe,
-        utils::{air_test, air_test_impl, air_test_with_min_segments, test_system_config},
+        utils::{
+            air_test, air_test_impl, air_test_with_min_segments,
+            test_system_config_with_continuations,
+        },
     };
     use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension};
     use openvm_ecc_guest::{
@@ -504,7 +506,7 @@ mod bls12_381 {
             .zip(primes.clone())
             .collect::<Vec<_>>();
         Rv32PairingConfig {
-            system: test_system_config().with_continuations(),
+            system: test_system_config_with_continuations(),
             base: Default::default(),
             mul: Default::default(),
             io: Default::default(),
@@ -518,7 +520,7 @@ mod bls12_381 {
     #[cfg(test)]
     fn test_rv32weierstrass_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
         let mut config = Rv32WeierstrassConfig::new(curves);
-        config.system = test_system_config().with_continuations();
+        config.system = test_system_config_with_continuations();
         config
     }
 

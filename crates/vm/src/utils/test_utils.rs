@@ -48,3 +48,7 @@ pub fn test_system_config() -> SystemConfig {
         32,
     )
 }
+
+pub fn test_system_config_with_continuations() -> SystemConfig {
+    test_system_config().with_continuations()
+}

@@ -4,7 +4,7 @@ mod guest_tests {
     use openvm_algebra_transpiler::ModularTranspilerExtension;
     use openvm_circuit::{
         arch::instructions::exe::VmExe,
-        utils::{air_test, test_system_config},
+        utils::{air_test, test_system_config_with_continuations},
     };
     use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, SECP256K1_CONFIG};
     use openvm_ecc_transpiler::EccTranspilerExtension;
@@ -18,9 +18,10 @@ mod guest_tests {
 
     type F = BabyBear;
 
+    #[cfg(test)]
     fn test_rv32weierstrass_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
         let mut config = Rv32WeierstrassConfig::new(curves);
-        config.system = test_system_config().with_continuations();
+        config.system = test_system_config_with_continuations();
         config
     }
 
@@ -89,7 +90,7 @@ mod guest_tests {
         use openvm_circuit::{
             arch::{InitFileGenerator, SystemConfig},
             derive::VmConfig,
-            utils::test_system_config,
+            utils::test_system_config_with_continuations,
         };
         use openvm_ecc_circuit::{
             CurveConfig, WeierstrassExtension, WeierstrassExtensionExecutor,
@@ -128,7 +129,7 @@ mod guest_tests {
                     .flat_map(|c| [c.modulus.clone(), c.scalar.clone()])
                     .collect();
                 Self {
-                    system: test_system_config().with_continuations(),
+                    system: test_system_config_with_continuations(),
                     base: Default::default(),
                     mul: Default::default(),
                     io: Default::default(),

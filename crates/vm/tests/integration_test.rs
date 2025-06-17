@@ -29,7 +29,7 @@ use openvm_instructions::{
     SysPhantom,
     SystemOpcode::*,
 };
-use openvm_native_circuit::NativeConfig;
+use openvm_native_circuit::{test_native_config, test_native_continuations_config, NativeConfig};
 use openvm_native_compiler::{
     FieldArithmeticOpcode::*, FieldExtensionOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*,
     NativeLoadStoreOpcode::*, NativePhantom,
@@ -56,19 +56,6 @@ where
 {
     const MAX_MEMORY: usize = 1 << 29;
     rng.gen_range(0..MAX_MEMORY - len) / len * len
-}
-
-fn test_native_config() -> NativeConfig {
-    NativeConfig {
-        system: test_system_config(),
-        native: Default::default(),
-    }
-}
-
-fn test_native_continuations_config() -> NativeConfig {
-    let mut config = test_native_config();
-    config.system = config.system.with_continuations();
-    config
 }
 
 #[test]
