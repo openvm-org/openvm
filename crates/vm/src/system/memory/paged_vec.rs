@@ -10,7 +10,8 @@ use crate::arch::MemoryConfig;
 /// (address_space, pointer)
 pub type Address = (u32, u32);
 /// 4096 is the default page size on host architectures if huge pages is not enabled
-pub const PAGE_SIZE: usize = 1 << 12;
+const PAGE_SIZE: usize = 1 << 12;
+pub const CELL_STRIDE: usize = 1 << 12;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PagedVec {
@@ -100,8 +101,6 @@ impl PagedVec {
 // ------------------------------------------------------------------
 // Implementation for types requiring Default + Clone
 impl PagedVec {
-    pub const CELL_STRIDE: usize = 1 << 12;
-
     pub fn new(num_pages: usize) -> Self {
         Self {
             pages: vec![None; num_pages],
@@ -215,9 +214,7 @@ impl<T: Copy> Iterator for PagedVecIter<'_, T> {
     type Item = (usize, T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.current_page < self.vec.pages.len()
-            && self.vec.pages[self.current_page].is_none()
-        {
+        while self.current_page < self.vec.len() && self.vec.pages[self.current_page].is_none() {
             self.current_page += 1;
             debug_assert_eq!(self.current_index_in_page, 0);
             self.current_index_in_page = 0;

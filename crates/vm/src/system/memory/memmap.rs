@@ -10,6 +10,9 @@ use crate::arch::MemoryConfig;
 
 /// (address_space, pointer)
 pub type Address = (u32, u32);
+// use for serialization
+const PAGE_SIZE: usize = 1 << 12;
+pub const CELL_STRIDE: usize = 1;
 
 /// A wrapper around MmapMut that implements Clone and provides memory operations
 #[derive(Debug)]
@@ -68,8 +71,6 @@ impl<T: Copy> Iterator for MmapWrapperIter<'_, T> {
 }
 
 impl MmapWrapper {
-    pub const CELL_STRIDE: usize = 1;
-
     pub fn new(len: usize) -> Self {
         Self {
             mmap: MmapMut::map_anon(len).unwrap(),
@@ -266,8 +267,6 @@ impl AddressMapSerializeHelper {
         }
     }
 }
-
-const PAGE_SIZE: usize = 4096;
 
 impl Serialize for AddressMap {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>

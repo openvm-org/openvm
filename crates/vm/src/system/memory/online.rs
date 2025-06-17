@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     adapter::AccessAdapterInventory, offline_checker::MemoryBus, Address, AddressMap,
-    MemoryAddress, MemoryBackend,
+    MemoryAddress, MemoryBackend, CELL_STRIDE,
 };
 use crate::{arch::MemoryConfig, system::memory::MemoryImage};
 
@@ -204,7 +204,7 @@ impl<F: PrimeField32> TracingMemory<F> {
                     num_cells
                         .checked_mul(size_of::<AccessMetadata>())
                         .unwrap()
-                        .div_ceil(MemoryBackend::CELL_STRIDE * *min_block_size as usize),
+                        .div_ceil(CELL_STRIDE * *min_block_size as usize),
                 )
             })
             .collect();
