@@ -1,7 +1,4 @@
-use openvm_circuit::arch::{
-    execution_mode::metered::get_widths_and_interactions_from_vkey, Streams, SystemConfig,
-    VirtualMachine,
-};
+use openvm_circuit::arch::{Streams, SystemConfig, VirtualMachine};
 use openvm_instructions::program::Program;
 use openvm_stark_sdk::{config::baby_bear_poseidon2::default_engine, p3_baby_bear::BabyBear};
 
@@ -17,10 +14,15 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: impl Into<Strea
 
     let vm = VirtualMachine::new(default_engine(), config);
     let pk = vm.keygen();
-    let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+    let vk = pk.get_vk();
     let segments = vm
         .executor
-        .execute_metered(program.clone(), input.clone(), widths, interactions)
+        .execute_metered(
+            program.clone(),
+            input.clone(),
+            vk.total_widths(),
+            vk.num_interactions(),
+        )
         .unwrap();
     vm.execute(program, input, &segments).unwrap();
 }

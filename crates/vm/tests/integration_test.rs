@@ -9,10 +9,7 @@ use openvm_circuit::{
     arch::{
         create_and_initialize_chip_complex,
         execution_control::ExecutionControl,
-        execution_mode::{
-            e1::E1ExecutionControl, metered::get_widths_and_interactions_from_vkey,
-            tracegen::TracegenExecutionControl,
-        },
+        execution_mode::{e1::E1ExecutionControl, tracegen::TracegenExecutionControl},
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         interpreter::InterpretedInstance,
         ChipId, MemoryConfig, SingleSegmentVmExecutor, SystemConfig, SystemTraceHeights,
@@ -139,9 +136,14 @@ fn test_vm_override_executor_height() {
 
     let executor = SingleSegmentVmExecutor::new(vm_config.clone());
 
-    let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+    let vk = pk.get_vk();
     let max_trace_heights = executor
-        .execute_metered(committed_exe.exe.clone(), vec![], widths, interactions)
+        .execute_metered(
+            committed_exe.exe.clone(),
+            vec![],
+            vk.total_widths(),
+            vk.num_interactions(),
+        )
         .unwrap();
 
     let res = executor
@@ -257,10 +259,16 @@ fn test_vm_1_optional_air() {
 
         let program = Program::from_instructions(&instructions);
 
-        let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+        let pk = vm.keygen();
+        let vk = pk.get_vk();
         let segments = vm
             .executor
-            .execute_metered(program.clone(), vec![], widths, interactions)
+            .execute_metered(
+                program.clone(),
+                vec![],
+                vk.total_widths(),
+                vk.num_interactions(),
+            )
             .unwrap();
 
         let result = vm
@@ -302,9 +310,15 @@ fn test_vm_public_values() {
         ));
         let single_vm = SingleSegmentVmExecutor::new(config);
 
-        let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+        let pk = vm.keygen();
+        let vk = pk.get_vk();
         let max_trace_heights = single_vm
-            .execute_metered(program.clone().into(), vec![], widths, interactions)
+            .execute_metered(
+                program.clone().into(),
+                vec![],
+                vk.total_widths(),
+                vk.num_interactions(),
+            )
             .unwrap();
 
         let exe_result = single_vm
@@ -393,10 +407,16 @@ fn test_vm_1_persistent() {
 
     let program = Program::from_instructions(&instructions);
 
-    let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+    let pk = vm.keygen();
+    let vk = pk.get_vk();
     let segments = vm
         .executor
-        .execute_metered(program.clone(), vec![], widths, interactions)
+        .execute_metered(
+            program.clone(),
+            vec![],
+            vk.total_widths(),
+            vk.num_interactions(),
+        )
         .unwrap();
 
     let result = vm
@@ -758,10 +778,15 @@ fn test_hint_load_1() {
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let vm = VirtualMachine::new(engine, test_native_config());
     let pk = vm.keygen();
-    let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+    let vk = pk.get_vk();
     let mut segments = vm
         .executor
-        .execute_metered(program.clone(), input.clone(), widths, interactions)
+        .execute_metered(
+            program.clone(),
+            input.clone(),
+            vk.total_widths(),
+            vk.num_interactions(),
+        )
         .unwrap();
     assert_eq!(segments.len(), 1);
     let segment = segments.pop().unwrap();
@@ -818,10 +843,15 @@ fn test_hint_load_2() {
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let vm = VirtualMachine::new(engine, test_native_config());
     let pk = vm.keygen();
-    let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+    let vk = pk.get_vk();
     let mut segments = vm
         .executor
-        .execute_metered(program.clone(), input.clone(), widths, interactions)
+        .execute_metered(
+            program.clone(),
+            input.clone(),
+            vk.total_widths(),
+            vk.num_interactions(),
+        )
         .unwrap();
     assert_eq!(segments.len(), 1);
     let segment = segments.pop().unwrap();
