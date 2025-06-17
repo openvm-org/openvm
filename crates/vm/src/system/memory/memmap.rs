@@ -54,7 +54,7 @@ impl<T: Copy> Iterator for MmapWrapperIter<'_, T> {
     fn next(&mut self) -> Option<Self::Item> {
         let size = std::mem::size_of::<T>();
         while self.current_index + size <= self.wrapper.len() {
-            let page = self.current_index / PAGE_SIZE;
+            let page = self.current_index / TEST_PAGE_SIZE;
             let value = self.wrapper.get::<T>(self.current_index);
             let index = self.current_index / size;
 
@@ -63,7 +63,7 @@ impl<T: Copy> Iterator for MmapWrapperIter<'_, T> {
                 return Some((index, value));
             } else {
                 // Skip to next page if current page is not accessed
-                self.current_index = ((page + 1) * PAGE_SIZE).div_ceil(size) * size;
+                self.current_index = ((page + 1) * TEST_PAGE_SIZE).div_ceil(size) * size;
             }
         }
         None
@@ -74,7 +74,7 @@ impl MmapWrapper {
     pub const CELL_STRIDE: usize = 1;
 
     pub fn new(len: usize) -> Self {
-        let num_pages = len.div_ceil(PAGE_SIZE);
+        let num_pages = len.div_ceil(TEST_PAGE_SIZE);
         Self {
             mmap: MmapMut::map_anon(len).unwrap(),
             accessed: MmapMut::map_anon(num_pages).unwrap(),
@@ -158,11 +158,11 @@ impl MmapWrapper {
     pub fn set<BLOCK: Copy>(&mut self, start: usize, values: &BLOCK) {
         let size = std::mem::size_of::<BLOCK>();
         // Mark the pages as accessed using byte operations
-        let start_page = start / PAGE_SIZE;
-        let end_page = (start + size - 1) / PAGE_SIZE;
-        for page in start_page..=end_page {
-            self.accessed[page] = 1;
-        }
+        let start_page = start / TEST_PAGE_SIZE;
+        let end_page = (start + size - 1) / TEST_PAGE_SIZE;
+        // Set all pages in range to 1
+        self.accessed[start_page..=end_page].fill(1);
+
         unsafe {
             copy_nonoverlapping(
                 values as *const _ as *const u8,
@@ -180,11 +180,11 @@ impl MmapWrapper {
     pub fn replace<BLOCK: Copy>(&mut self, from: usize, values: &BLOCK) -> BLOCK {
         let size = std::mem::size_of::<BLOCK>();
         // Mark the pages as accessed
-        let start_page = from / PAGE_SIZE;
-        let end_page = (from + size - 1) / PAGE_SIZE;
-        for page in start_page..=end_page {
-            self.accessed[page] = 1;
-        }
+        let start_page = from / TEST_PAGE_SIZE;
+        let end_page = (from + size - 1) / TEST_PAGE_SIZE;
+        // Set all pages in range to 1
+        self.accessed[start_page..=end_page].fill(1);
+
         // Create an uninitialized array of MaybeUninit<BLOCK>
         let mut result: MaybeUninit<BLOCK> = MaybeUninit::uninit();
         unsafe {
@@ -269,6 +269,7 @@ impl AddressMapSerializeHelper {
     }
 }
 
+const TEST_PAGE_SIZE: usize = 64;
 const PAGE_SIZE: usize = 4096;
 
 impl Serialize for AddressMap {
