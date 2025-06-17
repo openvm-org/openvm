@@ -15,18 +15,16 @@ pub type Address = (u32, u32);
 #[derive(Debug)]
 pub struct MmapWrapper {
     mmap: MmapMut,
-    accessed: MmapMut, // Track which pages have been accessed using a byte per page
+    highest_accessed: usize, // Track the highest byte index that has been accessed
 }
 
 impl Clone for MmapWrapper {
     fn clone(&self) -> Self {
         let mut new_mmap = MmapMut::map_anon(self.mmap.len()).unwrap();
-        let mut new_accessed = MmapMut::map_anon(self.accessed.len()).unwrap();
         new_mmap.copy_from_slice(&self.mmap);
-        new_accessed.copy_from_slice(&self.accessed);
         Self {
             mmap: new_mmap,
-            accessed: new_accessed,
+            highest_accessed: self.highest_accessed,
         }
     }
 }
@@ -53,20 +51,16 @@ impl<T: Copy> Iterator for MmapWrapperIter<'_, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let size = std::mem::size_of::<T>();
-        while self.current_index + size <= self.wrapper.len() {
-            let page = self.current_index / TEST_PAGE_SIZE;
+        if self.current_index + size <= self.wrapper.len()
+            && self.current_index <= self.wrapper.highest_accessed
+        {
             let value = self.wrapper.get::<T>(self.current_index);
             let index = self.current_index / size;
-
-            if self.wrapper.accessed[page] != 0 {
-                self.current_index += size;
-                return Some((index, value));
-            } else {
-                // Skip to next page if current page is not accessed
-                self.current_index = ((page + 1) * TEST_PAGE_SIZE).div_ceil(size) * size;
-            }
+            self.current_index += size;
+            Some((index, value))
+        } else {
+            None
         }
-        None
     }
 }
 
@@ -74,10 +68,9 @@ impl MmapWrapper {
     pub const CELL_STRIDE: usize = 1;
 
     pub fn new(len: usize) -> Self {
-        let num_pages = len.div_ceil(TEST_PAGE_SIZE);
         Self {
             mmap: MmapMut::map_anon(len).unwrap(),
-            accessed: MmapMut::map_anon(num_pages).unwrap(),
+            highest_accessed: 0,
         }
     }
 
@@ -157,11 +150,12 @@ impl MmapWrapper {
     #[inline(always)]
     pub fn set<BLOCK: Copy>(&mut self, start: usize, values: &BLOCK) {
         let size = std::mem::size_of::<BLOCK>();
-        // Mark the pages as accessed using byte operations
-        let start_page = start / TEST_PAGE_SIZE;
-        let end_page = (start + size - 1) / TEST_PAGE_SIZE;
-        // Set all pages in range to 1
-        self.accessed[start_page..=end_page].fill(1);
+        let end = start + size - 1;
+
+        // Update highest accessed index if needed
+        if end > self.highest_accessed {
+            self.highest_accessed = end;
+        }
 
         unsafe {
             copy_nonoverlapping(
@@ -179,11 +173,12 @@ impl MmapWrapper {
     #[inline(always)]
     pub fn replace<BLOCK: Copy>(&mut self, from: usize, values: &BLOCK) -> BLOCK {
         let size = std::mem::size_of::<BLOCK>();
-        // Mark the pages as accessed
-        let start_page = from / TEST_PAGE_SIZE;
-        let end_page = (from + size - 1) / TEST_PAGE_SIZE;
-        // Set all pages in range to 1
-        self.accessed[start_page..=end_page].fill(1);
+        let end = from + size - 1;
+
+        // Update highest accessed index if needed
+        if end > self.highest_accessed {
+            self.highest_accessed = end;
+        }
 
         // Create an uninitialized array of MaybeUninit<BLOCK>
         let mut result: MaybeUninit<BLOCK> = MaybeUninit::uninit();
@@ -269,7 +264,6 @@ impl AddressMapSerializeHelper {
     }
 }
 
-const TEST_PAGE_SIZE: usize = 64;
 const PAGE_SIZE: usize = 4096;
 
 impl Serialize for AddressMap {
