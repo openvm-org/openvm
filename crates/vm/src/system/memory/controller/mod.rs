@@ -290,8 +290,7 @@ impl<F: PrimeField32> MemoryController<F> {
 
         match &mut self.interface_chip {
             MemoryInterface::Volatile { .. } => {
-                // Skip initialization for volatile memory
-                return;
+                panic!("Cannot set initial memory for volatile memory");
             }
             MemoryInterface::Persistent { initial_memory, .. } => {
                 *initial_memory = memory.clone();
