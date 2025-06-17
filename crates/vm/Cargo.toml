@@ -37,7 +37,6 @@ static_assertions.workspace = true
 getset.workspace = true
 dashmap.workspace = true
 memmap2 = "0.9.5"
-bitvec = "1.0.1"
 
 [dev-dependencies]
 test-log.workspace = true
