@@ -1,5 +1,12 @@
 use std::borrow::{Borrow, BorrowMut};
 
+use openvm_circuit_primitives_derive::AlignedBytesBorrow;
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
+};
+use openvm_stark_backend::p3_field::PrimeField32;
+use p3_baby_bear::BabyBear;
+
 use crate::{
     arch::{
         execution_mode::E1E2ExecutionCtx, ExecuteFunc, ExecutionError, InsExecutorE1,

@@ -111,9 +111,9 @@ fn create_default_transpiler() -> Transpiler<BabyBear> {
         .with_extension(Rv32ITranspilerExtension)
         .with_extension(Rv32IoTranspilerExtension)
         .with_extension(Rv32MTranspilerExtension)
-        // .with_extension(Int256TranspilerExtension)
-        // .with_extension(Keccak256TranspilerExtension)
-        // .with_extension(Sha256TranspilerExtension)
+    // .with_extension(Int256TranspilerExtension)
+    // .with_extension(Keccak256TranspilerExtension)
+    // .with_extension(Sha256TranspilerExtension)
 }
 
 fn load_program_executable(program: &str) -> Result<VmExe<BabyBear>> {
@@ -137,11 +137,10 @@ fn shared_widths_and_interactions() -> &'static (Vec<usize>, Vec<usize>) {
 fn benchmark_execute(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
-            let vm = create_default_vm();
             let exe = load_program_executable(program).expect("Failed to load program executable");
-
-            let interpreter = InterpretedInstance::new(vm_config, exe.clone());
-            (vm.executor, vec![])
+            let vm_config = ExecuteConfig::default();
+            let interpreter = InterpretedInstance::new(vm_config, exe);
+            (interpreter, vec![])
         })
         .bench_values(|(interpreter, input)| {
             interpreter

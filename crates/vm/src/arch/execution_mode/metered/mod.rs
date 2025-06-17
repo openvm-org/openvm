@@ -72,8 +72,8 @@ where
         //     PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
         // };
         // let &Instruction { opcode, .. } = instruction;
-        // if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode) {
-        //     let mut vm_state = VmStateMut {
+        // if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode)
+        // {     let mut vm_state = VmStateMut {
         //         pc: &mut state.pc,
         //         memory: state.memory.as_mut().unwrap(),
         //         streams: &mut state.streams,
