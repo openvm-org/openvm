@@ -338,9 +338,9 @@ impl DenseRecordArena {
         self.records_buffer.position() as usize
     }
 
-    // /// Transmutes a single record of the given type from some offset and returns a mutable reference to it.
-    // pub fn transmute_from<'a, T>(&mut self, offset_bytes: usize) -> &'a mut T {
-    //     let begin = self.records_buffer.position() + offset_bytes as u64;
+    // /// Transmutes a single record of the given type from some offset and returns a mutable
+    // reference to it. pub fn transmute_from<'a, T>(&mut self, offset_bytes: usize) -> &'a mut
+    // T {     let begin = self.records_buffer.position() + offset_bytes as u64;
     //     let width = size_of::<T>();
     //     debug_assert!(begin as usize + width <= self.records_buffer.get_ref().len());
     //     unsafe {

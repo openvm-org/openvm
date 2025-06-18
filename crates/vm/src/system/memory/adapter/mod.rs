@@ -324,9 +324,9 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
         //     (&mut row.lt_aux, &mut row.is_right_larger),
         // );
 
-        // // SAFETY: `values` slice is asserted to have length N. `row.values` is an array of length
-        // // N. Pointers are valid and regions do not overlap because exactly one of them is a
-        // // part of the trace.
+        // // SAFETY: `values` slice is asserted to have length N. `row.values` is an array of
+        // length // N. Pointers are valid and regions do not overlap because exactly one of
+        // them is a // part of the trace.
         // unsafe {
         //     std::ptr::copy_nonoverlapping(values.as_ptr(), row.values.as_mut_ptr(), N);
         // }
@@ -363,9 +363,9 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
         //     (&mut row.lt_aux, &mut row.is_right_larger),
         // );
 
-        // // SAFETY: `values` slice is asserted to have length N. `row.values` is an array of length
-        // // N. Pointers are valid and regions do not overlap because exactly one of them is a
-        // // part of the trace.
+        // // SAFETY: `values` slice is asserted to have length N. `row.values` is an array of
+        // length // N. Pointers are valid and regions do not overlap because exactly one of
+        // them is a // part of the trace.
         // unsafe {
         //     std::ptr::copy_nonoverlapping(values.as_ptr(), row.values.as_mut_ptr(), N);
         // }
