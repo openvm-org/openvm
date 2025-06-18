@@ -19,6 +19,7 @@ impl<const N: usize> RangeTupleCheckerChipGPU<N> {
     pub fn new(bus: RangeTupleCheckerBus<N>) -> Self {
         let range_max = bus.sizes.iter().product::<u32>() as usize;
         let count = Arc::new(DeviceBuffer::<F>::with_capacity(range_max));
+        count.fill_zero().unwrap();
         Self {
             air: RangeTupleCheckerAir { bus },
             count,

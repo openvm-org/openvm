@@ -25,6 +25,7 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChipGPU<NUM_BITS> {
         let count = Arc::new(DeviceBuffer::<F>::with_capacity(
             NUM_BITWISE_OP_LOOKUP_COLS * Self::num_rows(),
         ));
+        count.fill_zero().unwrap();
         Self {
             air: BitwiseOperationLookupAir::new(bus),
             count,
