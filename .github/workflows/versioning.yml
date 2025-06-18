@@ -12,7 +12,7 @@ jobs:
   verify-versioning:
     runs-on:
       - runs-on=${{ github.run_id }}
-      - family=64cpu-linux-arm64
+      - runner=64cpu-linux-arm64
       - extras=s3-cache
     steps:
       - name: Set up environment
