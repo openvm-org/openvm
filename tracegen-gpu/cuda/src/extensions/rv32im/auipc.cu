@@ -65,14 +65,15 @@ __global__ void auipc_tracegen(
     Fp *trace,
     size_t height,
     uint8_t *records,
+    size_t num_records,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *bitwise_lookup_ptr,
     uint32_t bitwise_num_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < height) {
-        RowSlice row(trace + idx, height);
+    RowSlice row(trace + idx, height);
+    if (idx < num_records) {
         auto record = reinterpret_cast<Rv32AuipcRecord *>(records)[idx];
 
         auto adapter =
@@ -81,6 +82,11 @@ __global__ void auipc_tracegen(
 
         auto core = Rv32AuipcCore(BitwiseOperationLookup(bitwise_lookup_ptr, bitwise_num_bits));
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv32AuipcCols, core)), record.core);
+    } else {
+#pragma unroll
+        for (size_t i = 0; i < sizeof(Rv32AuipcCols<uint8_t>); i++) {
+            row.write(i, 0);
+        }
     }
 }
 
@@ -95,13 +101,15 @@ extern "C" int _auipc_tracegen(
     uint32_t *d_bitwise_lookup,
     uint32_t bitwise_num_bits
 ) {
-    assert(height * sizeof(Rv32AuipcRecord) == record_len);
+    assert((height & (height - 1)) == 0);
+    assert(height * sizeof(Rv32AuipcRecord) >= record_len);
     assert(width == sizeof(Rv32AuipcCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
     auipc_tracegen<<<grid, block>>>(
         d_trace,
         height,
         d_records,
+        record_len / sizeof(Rv32AuipcRecord),
         d_range_checker,
         range_checker_num_bins,
         d_bitwise_lookup,

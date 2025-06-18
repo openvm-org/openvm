@@ -34,7 +34,7 @@ pub mod auipc {
             d_records.as_ptr(),
             d_records.len(),
             d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len(),
+            d_range_checker.len() / 2,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
         ))
