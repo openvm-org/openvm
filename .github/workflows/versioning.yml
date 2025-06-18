@@ -51,9 +51,11 @@ jobs:
       - name: Build tagged version
         run: cargo install --force --path crates/cli
 
-      # TODO(yi): Change --output to --output-dir after v1.3.0 release
+      # TODO(yi): Change --vk-output to --output-dir after v1.3.0 release
       - name: Generate keys from tagged version
-        run: cargo openvm keygen --output ./tagged-keys
+        run: |
+          mkdir -p ./tagged-keys
+          cargo openvm keygen --vk-output ./tagged-keys/app.vk
 
       # Compare keys
       - name: Compare verification keys
