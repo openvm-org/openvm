@@ -304,7 +304,16 @@ impl AggregateMetrics {
                         writeln!(
                             writer,
                             "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
-                            metric_name, "-", summary.sum, "-", "-",
+                            metric_name, summary.avg, "-", "-", "-",
+                        )?;
+                    } else if metric_name == EXECUTE_E1_INSN_MI_S_LABEL
+                        || metric_name == EXECUTE_E3_INSN_MI_S_LABEL
+                    {
+                        // skip sum because it is misleading
+                        writeln!(
+                            writer,
+                            "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
+                            metric_name, summary.avg, "-", summary.max, summary.min,
                         )?;
                     } else {
                         writeln!(
