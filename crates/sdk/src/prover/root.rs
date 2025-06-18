@@ -1,9 +1,6 @@
 use async_trait::async_trait;
 use itertools::Itertools;
-use openvm_circuit::arch::{
-    execution_mode::metered::get_widths_and_interactions_from_vkey, SingleSegmentVmExecutor,
-    Streams,
-};
+use openvm_circuit::arch::{SingleSegmentVmExecutor, Streams};
 use openvm_continuations::verifier::root::types::RootVmVerifierInput;
 use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::hints::Hintable;
@@ -35,15 +32,14 @@ impl RootVerifierLocalProver {
         }
     }
     pub fn execute_for_air_heights(&self, input: RootVmVerifierInput<SC>) -> Vec<usize> {
-        let (widths, interactions) =
-            get_widths_and_interactions_from_vkey(self.root_verifier_pk.vm_pk.vm_pk.get_vk());
+        let vm_vk = self.root_verifier_pk.vm_pk.vm_pk.get_vk();
         let max_trace_heights = self
             .executor_for_heights
             .execute_metered(
                 self.root_verifier_pk.root_committed_exe.exe.clone(),
                 input.write(),
-                widths,
-                interactions,
+                &vm_vk.total_widths(),
+                &vm_vk.num_interactions(),
             )
             .unwrap();
         let result = self

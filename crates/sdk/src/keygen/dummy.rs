@@ -49,8 +49,8 @@ pub(super) fn compute_root_proof_heights(
     root_vm_config: NativeConfig,
     root_exe: VmExe<F>,
     dummy_internal_proof: &Proof<SC>,
-    widths: Vec<usize>,
-    interactions: Vec<usize>,
+    widths: &[usize],
+    interactions: &[usize],
 ) -> (Vec<usize>, VmComplexTraceHeights) {
     let num_user_public_values = root_vm_config.system.num_public_values - 2 * DIGEST_SIZE;
     let root_input = RootVmVerifierInput {
@@ -189,12 +189,21 @@ where
     } else {
         // We first execute once to get the trace heights from dummy_exe, then pad to powers of 2
         // (forcing trace height 0 to 1)
+        let vm_vk = app_vm_pk.vm_pk.get_vk();
         let executor = VmExecutor::new(app_vm_pk.vm_config.clone());
+        let segments = executor
+            .execute_metered(
+                dummy_exe.exe.clone(),
+                vec![],
+                &vm_vk.total_widths(),
+                &vm_vk.num_interactions(),
+            )
+            .unwrap();
+        assert_eq!(segments.len(), 1, "dummy exe should have only 1 segment");
         let mut results = executor
-            .execute_segments(dummy_exe.exe.clone(), vec![])
+            .execute_segments(dummy_exe.exe.clone(), vec![], &segments)
             .unwrap();
         // ASSUMPTION: the dummy exe has only 1 segment
-        assert_eq!(results.len(), 1, "dummy exe should have only 1 segment");
         let mut result = results.pop().unwrap();
         result.chip_complex.finalize_memory();
         let mut vm_heights = result.chip_complex.get_internal_trace_heights();

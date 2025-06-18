@@ -5,9 +5,7 @@ pub mod exact;
 pub use bounded::MeteredCtxBounded as MeteredCtx;
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    keygen::types::MultiStarkVerifyingKey,
-    p3_field::{FieldExtensionAlgebra, PrimeField32},
+    p3_field::PrimeField32,
     ChipUsageGetter,
 };
 use p3_baby_bear::BabyBear;
@@ -101,9 +99,9 @@ impl<'a> MeteredExecutionControl<'a> {
                 && height > self.segmentation_limits.max_trace_height
             {
                 tracing::info!(
-                    "Segment {:2} | clk {:9} | chip {} ({}) height ({:8}) > max ({:8})",
+                    "Segment {:2} | instret {:9} | chip {} ({}) height ({:8}) > max ({:8})",
                     state.ctx.segments.len(),
-                    state.clk,
+                    state.instret,
                     i,
                     self.air_names[i],
                     height,
@@ -116,9 +114,9 @@ impl<'a> MeteredExecutionControl<'a> {
         let total_cells = self.calculate_total_cells(&trace_heights);
         if total_cells > self.segmentation_limits.max_cells {
             tracing::info!(
-                "Segment {:2} | clk {:9} | total cells ({:10}) > max ({:10})",
+                "Segment {:2} | instret {:9} | total cells ({:10}) > max ({:10})",
                 state.ctx.segments.len(),
-                state.clk,
+                state.instret,
                 total_cells,
                 self.segmentation_limits.max_cells
             );
@@ -128,9 +126,9 @@ impl<'a> MeteredExecutionControl<'a> {
         let total_interactions = self.calculate_total_interactions(&trace_heights);
         if total_interactions > self.segmentation_limits.max_interactions {
             tracing::info!(
-                "Segment {:2} | clk {:9} | total interactions ({:11}) > max ({:11})",
+                "Segment {:2} | instret {:9} | total interactions ({:11}) > max ({:11})",
                 state.ctx.segments.len(),
-                state.clk,
+                state.instret,
                 total_interactions,
                 self.segmentation_limits.max_interactions
             );
@@ -165,28 +163,28 @@ impl<'a> MeteredExecutionControl<'a> {
         VC: VmConfig<F>,
     {
         // Avoid checking segment too often.
-        if state.clk < state.ctx.clk_last_segment_check + SEGMENT_CHECK_INTERVAL {
+        if state.instret < state.ctx.instret_last_segment_check + SEGMENT_CHECK_INTERVAL {
             return;
         }
 
-        let clk_start = state
+        let instret_start = state
             .ctx
             .segments
             .last()
-            .map_or(0, |s| s.clk_start + s.num_cycles);
-        let num_cycles = state.clk - clk_start;
+            .map_or(0, |s| s.instret_start + s.num_insns);
+        let num_insns = state.instret - instret_start;
         // Segment should contain at least one cycle
-        if num_cycles > 0 && self.should_segment(state) {
+        if num_insns > 0 && self.should_segment(state) {
             let segment = Segment {
-                clk_start,
-                num_cycles,
+                instret_start,
+                num_insns,
                 trace_heights: state.ctx.trace_heights.clone(),
             };
             state.ctx.segments.push(segment);
             self.reset_segment::<F, VC>(state, chip_complex);
         }
 
-        state.ctx.clk_last_segment_check = state.clk;
+        state.ctx.instret_last_segment_check = state.instret;
     }
 }
 
@@ -266,19 +264,19 @@ where
         state.ctx.finalize_access_adapter_heights();
 
         tracing::info!(
-            "Segment {:2} | clk {:9} | terminated",
+            "Segment {:2} | instret {:9} | terminated",
             state.ctx.segments.len(),
-            state.clk,
+            state.instret,
         );
         // Add the last segment
-        let clk_start = state
+        let instret_start = state
             .ctx
             .segments
             .last()
-            .map_or(0, |s| s.clk_start + s.num_cycles);
+            .map_or(0, |s| s.instret_start + s.num_insns);
         let segment = Segment {
-            clk_start,
-            num_cycles: state.clk - clk_start,
+            instret_start,
+            num_insns: state.instret - instret_start,
             trace_heights: state.ctx.trace_heights.clone(),
         };
         state.ctx.segments.push(segment);
@@ -320,25 +318,4 @@ where
 
         Ok(())
     }
-}
-
-// TODO(ayush): move to stark-backend vkey
-pub fn get_widths_and_interactions_from_vkey<SC>(
-    vk: MultiStarkVerifyingKey<SC>,
-) -> (Vec<usize>, Vec<usize>)
-where
-    SC: StarkGenericConfig,
-{
-    vk.inner
-        .per_air
-        .iter()
-        .map(|vk| {
-            let total_width = vk.params.width.preprocessed.unwrap_or(0)
-                + vk.params.width.cached_mains.iter().sum::<usize>()
-                + vk.params.width.common_main
-                + vk.params.width.after_challenge.iter().sum::<usize>()
-                    * <SC::Challenge as FieldExtensionAlgebra<Val<SC>>>::D;
-            (total_width, vk.symbolic_constraints.interactions.len())
-        })
-        .unzip()
 }

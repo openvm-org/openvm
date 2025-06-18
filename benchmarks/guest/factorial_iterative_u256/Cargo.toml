@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 openvm = { path = "../../../crates/toolchain/openvm", features = ["std"] }
-openvm-bigint-guest = { path = "../../../extensions/bigint/guest" }
+openvm-ruint = { path = "../../../guest-libs/ruint/", package = "ruint", default-features = false }
 
 [features]
 default = []

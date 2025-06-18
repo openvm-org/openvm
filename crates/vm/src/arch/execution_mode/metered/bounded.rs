@@ -1,4 +1,5 @@
 use openvm_instructions::riscv::{RV32_IMM_AS, RV32_MEMORY_AS};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{execution_mode::E1E2ExecutionCtx, PUBLIC_VALUES_AIR_ID},
@@ -21,7 +22,7 @@ pub struct MeteredCtxBounded {
 
     // Indices of leaf nodes in the memory merkle tree
     pub leaf_indices: Vec<u64>,
-    pub clk_last_segment_check: u64,
+    pub instret_last_segment_check: u64,
     pub segments: Vec<Segment>,
 }
 
@@ -41,7 +42,7 @@ impl MeteredCtxBounded {
             as_byte_alignment_bits,
             memory_dimensions,
             leaf_indices: Vec::new(),
-            clk_last_segment_check: 0,
+            instret_last_segment_check: 0,
             segments: Vec::new(),
         }
     }
@@ -215,9 +216,9 @@ fn calculate_merkle_node_updates(
     diff
 }
 
-#[derive(derive_new::new, Debug)]
+#[derive(derive_new::new, Debug, Serialize, Deserialize)]
 pub struct Segment {
-    pub clk_start: u64,
-    pub num_cycles: u64,
+    pub instret_start: u64,
+    pub num_insns: u64,
     pub trace_heights: Vec<u32>,
 }

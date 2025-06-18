@@ -4,7 +4,6 @@ use eyre::Result;
 use openvm_build::GuestOptions;
 use openvm_circuit::{
     arch::{
-        execution_mode::metered::get_widths_and_interactions_from_vkey,
         hasher::poseidon2::vm_poseidon2_hasher, ContinuationVmProof, ExecutionError,
         GenerationError, SingleSegmentVmExecutor, SystemConfig, VirtualMachine, VmConfig,
     },
@@ -99,15 +98,15 @@ fn run_leaf_verifier(
 ) -> Result<Vec<F>, ExecutionError> {
     let leaf_vm = VirtualMachine::new(default_engine(), leaf_vm_config.clone());
     let leaf_vm_pk = leaf_vm.keygen();
-    let (widths, interactions) = get_widths_and_interactions_from_vkey(leaf_vm_pk.get_vk());
+    let leaf_vm_vk = leaf_vm_pk.get_vk();
 
     let executor = SingleSegmentVmExecutor::new(leaf_vm.config().clone());
 
     let max_trace_heights = executor.execute_metered(
         leaf_committed_exe.exe.clone(),
         verifier_input.write_to_stream(),
-        widths,
-        interactions,
+        &leaf_vm_vk.total_widths(),
+        &leaf_vm_vk.num_interactions(),
     )?;
 
     let exe_result = executor.execute_with_max_heights_and_compute_heights(
@@ -206,19 +205,20 @@ fn test_public_values_and_leaf_verification() {
     let app_vm = VirtualMachine::new(app_engine, app_pk.app_vm_pk.vm_config.clone());
 
     let app_vm_pk = app_vm.keygen();
-    let (widths, interactions) = get_widths_and_interactions_from_vkey(app_vm_pk.get_vk());
+    let app_vm_vk = app_vm_pk.get_vk();
     let segments = app_vm
         .executor
-        .execute_metered(app_committed_exe.exe.clone(), vec![], widths, interactions)
+        .execute_metered(
+            app_committed_exe.exe.clone(),
+            vec![],
+            &app_vm_vk.total_widths(),
+            &app_vm_vk.num_interactions(),
+        )
         .unwrap();
 
     let app_vm_result = app_vm
         .executor
-        .execute_with_segments_and_generate_with_cached_program(
-            app_committed_exe.clone(),
-            vec![],
-            &segments,
-        )
+        .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![], &segments)
         .unwrap();
     assert!(app_vm_result.per_segment.len() > 2);
 
@@ -604,24 +604,22 @@ fn test_segmentation_retry() {
     let mut app_vm = VirtualMachine::new(app_engine, app_pk.app_vm_pk.vm_config.clone());
 
     let app_vm_pk = app_vm.keygen();
-    let (widths, interactions) = get_widths_and_interactions_from_vkey(app_vm_pk.get_vk());
+    let app_vm_vk = app_vm_pk.get_vk();
+    let widths = app_vm_vk.total_widths();
+    let interactions = app_vm_vk.num_interactions();
     let segments = app_vm
         .executor
         .execute_metered(
             app_committed_exe.exe.clone(),
             vec![],
-            widths.clone(),
-            interactions.clone(),
+            &widths,
+            &interactions,
         )
         .unwrap();
 
     let app_vm_result = app_vm
         .executor
-        .execute_with_segments_and_generate_with_cached_program(
-            app_committed_exe.clone(),
-            vec![],
-            &segments,
-        )
+        .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![], &segments)
         .unwrap();
     assert!(app_vm_result.per_segment.len() > 2);
 
@@ -642,13 +640,11 @@ fn test_segmentation_retry() {
             coefficients: vec![1; num_airs],
             threshold: total_height as u32 - 1,
         }]);
-    let app_vm_result = app_vm
-        .executor
-        .execute_with_segments_and_generate_with_cached_program(
-            app_committed_exe.clone(),
-            vec![],
-            &segments,
-        );
+    let app_vm_result = app_vm.executor.execute_and_generate_with_cached_program(
+        app_committed_exe.clone(),
+        vec![],
+        &segments,
+    );
     assert!(matches!(
         app_vm_result,
         Err(GenerationError::TraceHeightsLimitExceeded)
@@ -661,15 +657,16 @@ fn test_segmentation_retry() {
     app_vm.executor.set_trace_height_constraints(vec![]);
     let segments = app_vm
         .executor
-        .execute_metered(app_committed_exe.exe.clone(), vec![], widths, interactions)
+        .execute_metered(
+            app_committed_exe.exe.clone(),
+            vec![],
+            &widths,
+            &interactions,
+        )
         .unwrap();
     let app_vm_result = app_vm
         .executor
-        .execute_with_segments_and_generate_with_cached_program(
-            app_committed_exe.clone(),
-            vec![],
-            &segments,
-        )
+        .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![], &segments)
         .unwrap();
 
     // New max height should indeed by smaller.

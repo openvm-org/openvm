@@ -1,6 +1,4 @@
-use openvm_circuit::arch::{
-    execution_mode::metered::get_widths_and_interactions_from_vkey, ExecutionError, VirtualMachine,
-};
+use openvm_circuit::arch::{ExecutionError, VirtualMachine};
 use openvm_native_circuit::{execute_program, NativeConfig};
 use openvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler, AsmConfig},
@@ -398,8 +396,13 @@ fn assert_failed_assertion(
     let vm = VirtualMachine::new(default_engine(), config);
 
     let vm_pk = vm.keygen();
-    let (widths, interactions) = get_widths_and_interactions_from_vkey(vm_pk.get_vk());
+    let vm_vk = vm_pk.get_vk();
 
-    let result = vm.execute_metered(program, vec![], widths, interactions);
+    let result = vm.execute_metered(
+        program,
+        vec![],
+        &vm_vk.total_widths(),
+        &vm_vk.num_interactions(),
+    );
     assert!(matches!(result, Err(ExecutionError::Fail { .. })));
 }

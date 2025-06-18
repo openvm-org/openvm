@@ -115,7 +115,7 @@ fn run_negative_castf_test(prank_vals: CastFPrankValues, b: Option<F>, error: Ve
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let mut chip = create_test_chip(&mut tester);
+    let mut chip = create_test_chip(&tester);
     set_and_execute(&mut tester, &mut chip, &mut rng, b);
 
     let adapter_width = BaseAir::<F>::width(&chip.air.adapter);

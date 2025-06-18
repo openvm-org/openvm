@@ -5,7 +5,6 @@ mod tests {
     use eyre::Result;
     use openvm_circuit::{
         arch::{
-            execution_mode::metered::get_widths_and_interactions_from_vkey,
             hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, Streams, VirtualMachine,
             VmExecutor,
         },
@@ -167,16 +166,18 @@ mod tests {
 
         let vm = VirtualMachine::new(default_engine(), config.clone());
         let pk = vm.keygen();
-        let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+        let vk = pk.get_vk();
         let segments = vm
             .executor
-            .execute_metered(exe.clone(), vec![], widths, interactions)
+            .execute_metered(
+                exe.clone(),
+                vec![],
+                &vk.total_widths(),
+                &vk.num_interactions(),
+            )
             .unwrap();
 
-        let final_memory = vm
-            .executor
-            .execute_with_segments(exe, vec![], &segments)?
-            .unwrap();
+        let final_memory = vm.executor.execute(exe, vec![], &segments)?.unwrap();
         let hasher = vm_poseidon2_hasher::<F>();
         let pv_proof = UserPublicValuesProof::compute(
             config.system.memory_config.memory_dimensions(),
@@ -293,7 +294,7 @@ mod tests {
         )
         .unwrap();
         let executor = VmExecutor::<F, _>::new(config.clone());
-        executor.execute(exe, vec![]).unwrap();
+        executor.execute_e1(exe, vec![], None).unwrap();
     }
 
     #[test_case(vec!["getrandom", "getrandom-unsupported"])]

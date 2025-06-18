@@ -17,12 +17,9 @@ use openvm_stark_sdk::{
 };
 
 #[cfg(feature = "bench-metrics")]
-use crate::arch::VmExecutor;
+use crate::arch::vm::VmExecutor;
 use crate::{
-    arch::{
-        execution_mode::metered::get_widths_and_interactions_from_vkey, InsExecutorE1, Streams,
-        VirtualMachine, VmConfig,
-    },
+    arch::{vm::VirtualMachine, InsExecutorE1, Streams, VmConfig},
     system::memory::MemoryImage,
 };
 
@@ -72,16 +69,19 @@ where
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(log_blowup));
     let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
-    let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+    let vk = pk.get_vk();
     let exe = exe.into();
     let input = input.into();
     let segments = vm
         .executor
-        .execute_metered(exe.clone(), input.clone(), widths, interactions)
+        .execute_metered(
+            exe.clone(),
+            input.clone(),
+            &vk.total_widths(),
+            &vk.num_interactions(),
+        )
         .unwrap();
-    let mut result = vm
-        .execute_with_segments_and_generate(exe, input, &segments)
-        .unwrap();
+    let mut result = vm.execute_and_generate(exe, input, &segments).unwrap();
     let final_memory = Option::take(&mut result.final_memory);
     let global_airs = vm.config().create_chip_complex().unwrap().airs();
     if debug {
@@ -130,10 +130,15 @@ where
     let vm = VirtualMachine::new(engine, config.clone());
 
     let pk = vm.keygen();
-    let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+    let vk = pk.get_vk();
     let segments = vm
         .executor
-        .execute_metered(program_exe.clone(), input.clone(), widths, interactions)
+        .execute_metered(
+            program_exe.clone(),
+            input.clone(),
+            &vk.total_widths(),
+            &vk.num_interactions(),
+        )
         .unwrap();
 
     cfg_if::cfg_if! {
@@ -142,7 +147,7 @@ where
             config.system_mut().profiling = true;
             {
                 let executor = VmExecutor::<Val<SC>, VC>::new(config.clone());
-                executor.execute_with_segments(program_exe.clone(), input.clone(), &segments).unwrap();
+                executor.execute(program_exe.clone(), input.clone(), &segments).unwrap();
             }
             // Run again with metrics collection disabled and measure trace generation time
             config.system_mut().profiling = false;
@@ -151,7 +156,7 @@ where
     }
     let mut result = vm
         .executor
-        .execute_with_segments_and_generate(program_exe, input, &segments)
+        .execute_and_generate(program_exe, input, &segments)
         .unwrap();
 
     assert_eq!(
