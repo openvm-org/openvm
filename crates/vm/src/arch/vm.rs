@@ -236,10 +236,13 @@ where
             segment.execute_from_state(&mut exec_state)
         })?;
 
+        if let Some(exit_code) = exec_state.exit_code {
+            if exit_code != ExitCode::Success as u32 {
+                return Err(ExecutionError::FailedWithExitCode(exit_code));
+            }
+        }
         if let Some(instret_end) = instret_end {
             assert_eq!(exec_state.instret, instret_end);
-        } else {
-            check_exit_code(exec_state.exit_code)?;
         }
 
         let state = VmState {
@@ -340,7 +343,14 @@ where
             executor.execute_from_state(&mut exec_state)
         })?;
 
-        check_exit_code(exec_state.exit_code)?;
+        match exec_state.exit_code {
+            Some(code) => {
+                if code != ExitCode::Success as u32 {
+                    return Err(ExecutionError::FailedWithExitCode(code));
+                }
+            }
+            None => return Err(ExecutionError::DidNotTerminate),
+        };
 
         Ok(exec_state.ctx.segments)
     }
@@ -676,7 +686,14 @@ where
             executor.execute_from_state(&mut exec_state)
         })?;
 
-        check_exit_code(exec_state.exit_code)?;
+        match exec_state.exit_code {
+            Some(code) => {
+                if code != ExitCode::Success as u32 {
+                    return Err(ExecutionError::FailedWithExitCode(code));
+                }
+            }
+            None => return Err(ExecutionError::DidNotTerminate),
+        };
 
         Ok(())
     }
@@ -744,7 +761,14 @@ where
             executor.execute_from_state(&mut exec_state)
         })?;
 
-        check_exit_code(exec_state.exit_code)?;
+        match exec_state.exit_code {
+            Some(code) => {
+                if code != ExitCode::Success as u32 {
+                    return Err(ExecutionError::FailedWithExitCode(code));
+                }
+            }
+            None => return Err(ExecutionError::DidNotTerminate),
+        };
 
         // Check segment count
         assert_eq!(
@@ -1303,16 +1327,4 @@ where
     }
 
     Ok(chip_complex)
-}
-
-fn check_exit_code(exit_code: Option<u32>) -> Result<(), ExecutionError> {
-    match exit_code {
-        Some(code) => {
-            if code != ExitCode::Success as u32 {
-                return Err(ExecutionError::FailedWithExitCode(code));
-            }
-        }
-        None => return Err(ExecutionError::DidNotTerminate),
-    };
-    Ok(())
 }
