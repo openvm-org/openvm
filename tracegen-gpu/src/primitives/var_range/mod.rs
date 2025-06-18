@@ -21,6 +21,7 @@ impl VariableRangeCheckerChipGPU {
     pub fn new(bus: VariableRangeCheckerBus) -> Self {
         let num_rows = (1 << (bus.range_max_bits + 1)) as usize;
         let count = Arc::new(DeviceBuffer::<F>::with_capacity(num_rows));
+        count.fill_zero().unwrap();
         Self {
             air: VariableRangeCheckerAir::new(bus),
             count,
