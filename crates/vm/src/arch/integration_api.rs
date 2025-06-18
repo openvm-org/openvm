@@ -325,6 +325,14 @@ impl DenseRecordArena {
         }
     }
 
+    pub fn set_capacity(&mut self, size_bytes: usize) {
+        let buffer = vec![0; size_bytes + MAX_ALIGNMENT];
+        let offset = (MAX_ALIGNMENT - (buffer.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT;
+        let mut cursor = Cursor::new(buffer);
+        cursor.set_position(offset as u64);
+        self.records_buffer = cursor;
+    }
+
     /// Allocates a single record of the given type and returns a mutable reference to it.
     pub fn alloc_one<'a, T>(&mut self) -> &'a mut T {
         let begin = self.records_buffer.position();
@@ -581,21 +589,24 @@ where
     F: Field,
     AIR: BaseAir<F>,
 {
-    pub fn new(air: AIR, step: STEP, height: usize, mem_helper: SharedMemoryHelper<F>) -> Self {
-        let width = air.width();
-        assert!(height == 0 || height.is_power_of_two());
+    pub fn new(air: AIR, step: STEP, mem_helper: SharedMemoryHelper<F>) -> Self {
         assert!(
             align_of::<F>() >= align_of::<u32>(),
             "type {} should have at least alignment of u32",
             type_name::<F>()
         );
-        let arena = DenseRecordArena::with_capacity(height * width * size_of::<F>());
+        let arena = DenseRecordArena::with_capacity(0);
         Self {
             air,
             step,
             arena,
             mem_helper,
         }
+    }
+
+    pub fn set_trace_buffer_height(&mut self, height: usize) {
+        let width = self.air.width();
+        self.arena.set_capacity(height * width * size_of::<F>());
     }
 }
 
