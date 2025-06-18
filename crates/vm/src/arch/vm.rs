@@ -344,9 +344,17 @@ where
             state.input,
             ctx,
         );
-        metrics_span("execute_metered_time_ms", || {
-            executor.execute_from_state(&mut exec_state)
-        })?;
+        #[cfg(feature = "bench-metrics")]
+        let start = std::time::Instant::now();
+        executor.execute_from_state(&mut exec_state)?;
+        #[cfg(feature = "bench-metrics")]
+        {
+            let elapsed = start.elapsed();
+            let insns = exec_state.clk;
+            metrics::gauge!("execute_e2_time_ms").set(elapsed.as_millis() as f64);
+            metrics::counter!("insns").absolute(insns);
+            metrics::gauge!("execute_e2_insn_mi/s").set(insns as f64 / elapsed.as_micros() as f64);
+        }
 
         check_exit_code(exec_state.exit_code)?;
 
@@ -417,10 +425,20 @@ where
             }
 
             let mut exec_state = VmSegmentState::new(state.clk, state.pc, None, state.input, ());
-            metrics_span("execute_time_ms", || {
-                segment.execute_from_state(&mut exec_state)
-            })
-            .map_err(&map_err)?;
+            #[cfg(feature = "bench-metrics")]
+            let start = std::time::Instant::now();
+            segment
+                .execute_from_state(&mut exec_state)
+                .map_err(&map_err)?;
+            #[cfg(feature = "bench-metrics")]
+            {
+                let elapsed = start.elapsed();
+                let insns = exec_state.clk;
+                metrics::gauge!("execute_e3_time_ms").set(elapsed.as_millis() as f64);
+                metrics::counter!("insns").absolute(insns);
+                metrics::gauge!("execute_e3_insn_mi/s")
+                    .set(insns as f64 / elapsed.as_micros() as f64);
+            }
 
             assert_eq!(
                 exec_state.pc,

@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use backtrace::Backtrace;
 use openvm_instructions::{
     exe::FnBounds,
