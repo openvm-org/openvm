@@ -40,8 +40,8 @@ fn test_compiler_public_values() {
         .execute_metered(
             program.clone().into(),
             vec![],
-            vm_vk.total_widths(),
-            vm_vk.num_interactions(),
+            &vm_vk.total_widths(),
+            &vm_vk.num_interactions(),
         )
         .unwrap();
 

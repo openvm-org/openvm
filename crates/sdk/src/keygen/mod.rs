@@ -347,8 +347,8 @@ impl AggStarkProvingKey {
                 root_vm_config.clone(),
                 root_committed_exe.exe.clone(),
                 &internal_proof,
-                vm_vk.total_widths(),
-                vm_vk.num_interactions(),
+                &vm_vk.total_widths(),
+                &vm_vk.num_interactions(),
             );
             let root_air_perm = AirIdPermutation::compute(&air_heights);
             root_air_perm.permute(&mut vm_pk.per_air);

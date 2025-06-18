@@ -61,8 +61,8 @@ where
         .execute_metered(
             fib_program.clone(),
             vec![],
-            vk.total_widths(),
-            vk.num_interactions(),
+            &vk.total_widths(),
+            &vk.num_interactions(),
         )
         .unwrap();
 

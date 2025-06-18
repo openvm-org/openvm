@@ -497,8 +497,8 @@ fn air_test_with_compress_poseidon2(
         .execute_metered(
             program.clone(),
             vec![],
-            vk.total_widths(),
-            vk.num_interactions(),
+            &vk.total_widths(),
+            &vk.num_interactions(),
         )
         .unwrap();
     let result = vm.execute_and_generate(program, vec![], &segments).unwrap();

@@ -172,8 +172,8 @@ mod tests {
             .execute_metered(
                 exe.clone(),
                 vec![],
-                vk.total_widths(),
-                vk.num_interactions(),
+                &vk.total_widths(),
+                &vk.num_interactions(),
             )
             .unwrap();
 

@@ -270,8 +270,8 @@ where
         &self,
         exe: VmExe<F>,
         state: VmState<F>,
-        widths: Vec<usize>,
-        interactions: Vec<usize>,
+        widths: &[usize],
+        interactions: &[usize],
     ) -> Result<Vec<Segment>, ExecutionError> {
         let _span = info_span!("execute_metered").entered();
 
@@ -280,7 +280,7 @@ where
                 .unwrap();
         let air_names = chip_complex.air_names();
         // TODO(ayush): get rid of segmentation_strategy altogether
-        let ctrl = MeteredExecutionControl::new(&air_names, &widths, &interactions)
+        let ctrl = MeteredExecutionControl::new(&air_names, widths, interactions)
             .with_max_trace_height(
                 self.config
                     .system()
@@ -349,8 +349,8 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-        widths: Vec<usize>,
-        interactions: Vec<usize>,
+        widths: &[usize],
+        interactions: &[usize],
     ) -> Result<Vec<Segment>, ExecutionError> {
         let exe = exe.into();
         let state = create_initial_state(&self.config.system().memory_config, &exe, input);
@@ -760,8 +760,8 @@ where
         &self,
         exe: VmExe<F>,
         input: impl Into<Streams<F>>,
-        widths: Vec<usize>,
-        interactions: Vec<usize>,
+        widths: &[usize],
+        interactions: &[usize],
     ) -> Result<Vec<u32>, ExecutionError> {
         let memory =
             create_memory_image(&self.config.system().memory_config, exe.init_memory.clone());
@@ -769,7 +769,7 @@ where
             create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
                 .unwrap();
         let air_names = chip_complex.air_names();
-        let ctrl = MeteredExecutionControl::new(&air_names, &widths, &interactions)
+        let ctrl = MeteredExecutionControl::new(&air_names, widths, interactions)
             .with_max_trace_height(
                 self.config
                     .system()
@@ -980,8 +980,8 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-        widths: Vec<usize>,
-        interactions: Vec<usize>,
+        widths: &[usize],
+        interactions: &[usize],
     ) -> Result<Vec<Segment>, ExecutionError> {
         self.executor
             .execute_metered(exe, input, widths, interactions)

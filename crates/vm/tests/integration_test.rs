@@ -140,8 +140,8 @@ fn test_vm_override_executor_height() {
         .execute_metered(
             committed_exe.exe.clone(),
             vec![],
-            vk.total_widths(),
-            vk.num_interactions(),
+            &vk.total_widths(),
+            &vk.num_interactions(),
         )
         .unwrap();
 
@@ -265,8 +265,8 @@ fn test_vm_1_optional_air() {
             .execute_metered(
                 program.clone(),
                 vec![],
-                vk.total_widths(),
-                vk.num_interactions(),
+                &vk.total_widths(),
+                &vk.num_interactions(),
             )
             .unwrap();
 
@@ -315,8 +315,8 @@ fn test_vm_public_values() {
             .execute_metered(
                 program.clone().into(),
                 vec![],
-                vk.total_widths(),
-                vk.num_interactions(),
+                &vk.total_widths(),
+                &vk.num_interactions(),
             )
             .unwrap();
 
@@ -413,8 +413,8 @@ fn test_vm_1_persistent() {
         .execute_metered(
             program.clone(),
             vec![],
-            vk.total_widths(),
-            vk.num_interactions(),
+            &vk.total_widths(),
+            &vk.num_interactions(),
         )
         .unwrap();
 
@@ -783,8 +783,8 @@ fn test_hint_load_1() {
         .execute_metered(
             program.clone(),
             input.clone(),
-            vk.total_widths(),
-            vk.num_interactions(),
+            &vk.total_widths(),
+            &vk.num_interactions(),
         )
         .unwrap();
     assert_eq!(segments.len(), 1);
@@ -847,8 +847,8 @@ fn test_hint_load_2() {
         .execute_metered(
             program.clone(),
             input.clone(),
-            vk.total_widths(),
-            vk.num_interactions(),
+            &vk.total_widths(),
+            &vk.num_interactions(),
         )
         .unwrap();
     assert_eq!(segments.len(), 1);

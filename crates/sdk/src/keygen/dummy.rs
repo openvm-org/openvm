@@ -49,8 +49,8 @@ pub(super) fn compute_root_proof_heights(
     root_vm_config: NativeConfig,
     root_exe: VmExe<F>,
     dummy_internal_proof: &Proof<SC>,
-    widths: Vec<usize>,
-    interactions: Vec<usize>,
+    widths: &[usize],
+    interactions: &[usize],
 ) -> (Vec<usize>, VmComplexTraceHeights) {
     let num_user_public_values = root_vm_config.system.num_public_values - 2 * DIGEST_SIZE;
     let root_input = RootVmVerifierInput {
@@ -195,8 +195,8 @@ where
             .execute_metered(
                 dummy_exe.exe.clone(),
                 vec![],
-                vm_vk.total_widths(),
-                vm_vk.num_interactions(),
+                &vm_vk.total_widths(),
+                &vm_vk.num_interactions(),
             )
             .unwrap();
         assert_eq!(segments.len(), 1, "dummy exe should have only 1 segment");

@@ -20,8 +20,8 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: impl Into<Strea
         .execute_metered(
             program.clone(),
             input.clone(),
-            vk.total_widths(),
-            vk.num_interactions(),
+            &vk.total_widths(),
+            &vk.num_interactions(),
         )
         .unwrap();
     vm.execute(program, input, &segments).unwrap();

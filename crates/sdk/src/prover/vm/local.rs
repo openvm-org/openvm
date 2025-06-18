@@ -94,8 +94,8 @@ where
             .execute_metered(
                 exe.clone(),
                 input.clone(),
-                vm_vk.total_widths(),
-                vm_vk.num_interactions(),
+                &vm_vk.total_widths(),
+                &vm_vk.num_interactions(),
             )
             .expect("execute_metered failed");
 
@@ -181,8 +181,8 @@ where
             .execute_metered(
                 self.committed_exe.exe.clone(),
                 input.clone(),
-                vm_vk.total_widths(),
-                vm_vk.num_interactions(),
+                &vm_vk.total_widths(),
+                &vm_vk.num_interactions(),
             )
             .expect("execute_metered failed");
         let proof_input = executor

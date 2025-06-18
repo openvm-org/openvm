@@ -105,8 +105,8 @@ fn run_leaf_verifier(
     let max_trace_heights = executor.execute_metered(
         leaf_committed_exe.exe.clone(),
         verifier_input.write_to_stream(),
-        leaf_vm_vk.total_widths(),
-        leaf_vm_vk.num_interactions(),
+        &leaf_vm_vk.total_widths(),
+        &leaf_vm_vk.num_interactions(),
     )?;
 
     let exe_result = executor.execute_with_max_heights_and_compute_heights(
@@ -211,8 +211,8 @@ fn test_public_values_and_leaf_verification() {
         .execute_metered(
             app_committed_exe.exe.clone(),
             vec![],
-            app_vm_vk.total_widths(),
-            app_vm_vk.num_interactions(),
+            &app_vm_vk.total_widths(),
+            &app_vm_vk.num_interactions(),
         )
         .unwrap();
 
@@ -612,8 +612,8 @@ fn test_segmentation_retry() {
         .execute_metered(
             app_committed_exe.exe.clone(),
             vec![],
-            widths.clone(),
-            interactions.clone(),
+            &widths,
+            &interactions,
         )
         .unwrap();
 
@@ -657,7 +657,12 @@ fn test_segmentation_retry() {
     app_vm.executor.set_trace_height_constraints(vec![]);
     let segments = app_vm
         .executor
-        .execute_metered(app_committed_exe.exe.clone(), vec![], widths, interactions)
+        .execute_metered(
+            app_committed_exe.exe.clone(),
+            vec![],
+            &widths,
+            &interactions,
+        )
         .unwrap();
     let app_vm_result = app_vm
         .executor

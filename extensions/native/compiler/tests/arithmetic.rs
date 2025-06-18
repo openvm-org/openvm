@@ -401,8 +401,8 @@ fn assert_failed_assertion(
     let result = vm.execute_metered(
         program,
         vec![],
-        vm_vk.total_widths(),
-        vm_vk.num_interactions(),
+        &vm_vk.total_widths(),
+        &vm_vk.num_interactions(),
     );
     assert!(matches!(result, Err(ExecutionError::Fail { .. })));
 }

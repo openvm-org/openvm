@@ -77,8 +77,8 @@ where
         .execute_metered(
             exe.clone(),
             input.clone(),
-            vk.total_widths(),
-            vk.num_interactions(),
+            &vk.total_widths(),
+            &vk.num_interactions(),
         )
         .unwrap();
     let mut result = vm.execute_and_generate(exe, input, &segments).unwrap();
@@ -136,8 +136,8 @@ where
         .execute_metered(
             program_exe.clone(),
             input.clone(),
-            vk.total_widths(),
-            vk.num_interactions(),
+            &vk.total_widths(),
+            &vk.num_interactions(),
         )
         .unwrap();
 
