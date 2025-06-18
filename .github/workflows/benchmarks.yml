@@ -213,14 +213,13 @@ jobs:
 
           # For PRs, get the latest commit from the target branch
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            TARGET_SHA=$(git ls-remote origin ${{ github.base_ref }} | cut -f1)
-            echo "Target branch latest commit: $TARGET_SHA"
+            REF_HASH=$(echo "${{ github.base_ref }}" | sha256sum | cut -d' ' -f1)
+            echo "Target branch REF_HASH: $REF_HASH"
           else
-            # For main branch, use "main" as before (backward compatibility)
-            TARGET_SHA="main"
+            REF_HASH=$(echo "refs/heads/main" | sha256sum | cut -d' ' -f1)
           fi
 
-          prev_json_files=$(echo $matrix | jq -r --arg target "$TARGET_SHA" '
+          prev_json_files=$(echo $matrix | jq -r --arg target "$REF_HASH" '
             .[] |
             "\($target)-\(.id).json"')
           prev_json_file_list=$(echo -n "$prev_json_files" | paste -sd "," -)
