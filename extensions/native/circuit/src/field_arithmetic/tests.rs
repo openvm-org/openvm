@@ -140,7 +140,7 @@ fn run_negative_field_arithmetic_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = create_test_chip(&mut tester);
+    let mut chip = create_test_chip(&tester);
 
     set_and_execute(&mut tester, &mut chip, &mut rng, opcode, Some(b), Some(c));
 

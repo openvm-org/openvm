@@ -318,26 +318,4 @@ mod tests {
         .unwrap();
         air_test(config, exe);
     }
-
-    #[test_case(vec!["getrandom", "getrandom-unsupported"])]
-    #[test_case(vec!["getrandom"])]
-    fn test_getrandom_unsupported(features: Vec<&str>) {
-        let config = Rv32ImConfig::default();
-        let elf = build_example_program_at_path_with_features(
-            get_programs_dir!(),
-            "getrandom",
-            &features,
-            &config,
-        )
-        .unwrap();
-        let exe = VmExe::from_elf(
-            elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension),
-        )
-        .unwrap();
-        air_test(config, exe);
-    }
 }

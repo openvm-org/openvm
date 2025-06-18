@@ -4,7 +4,6 @@ use eyre::Result;
 use openvm_build::GuestOptions;
 use openvm_circuit::{
     arch::{
-        execution_mode::metered::get_widths_and_interactions_from_vkey,
         hasher::poseidon2::vm_poseidon2_hasher, ContinuationVmProof, ExecutionError,
         GenerationError, SingleSegmentVmExecutor, SystemConfig, VirtualMachine, VmConfig,
     },
