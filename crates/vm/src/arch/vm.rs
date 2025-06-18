@@ -207,9 +207,9 @@ where
         &self,
         exe: VmExe<F>,
         state: VmState<F>,
-        num_insts: Option<u64>,
+        num_insns: Option<u64>,
     ) -> Result<VmState<F>, ExecutionError> {
-        let instret_end = num_insts.map(|n| state.instret + n);
+        let instret_end = num_insns.map(|n| state.instret + n);
 
         let chip_complex =
             create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
@@ -258,11 +258,11 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-        num_insts: Option<u64>,
+        num_insns: Option<u64>,
     ) -> Result<VmState<F>, ExecutionError> {
         let exe = exe.into();
         let state = create_initial_state(&self.config.system().memory_config, &exe, input);
-        self.execute_e1_from_state(exe, state, num_insts)
+        self.execute_e1_from_state(exe, state, num_insns)
     }
 
     /// Base metered execution function that operates from a given state
@@ -373,14 +373,14 @@ where
         // assert that segments are valid
         assert_eq!(segments.first().unwrap().instret_start, state.instret);
         for (prev, current) in segments.iter().zip(segments.iter().skip(1)) {
-            assert_eq!(current.instret_start, prev.instret_start + prev.num_insts);
+            assert_eq!(current.instret_start, prev.instret_start + prev.num_insns);
         }
 
         let mut results = Vec::new();
         for (
             segment_idx,
             Segment {
-                num_insts,
+                num_insns,
                 trace_heights,
                 ..
             },
@@ -395,7 +395,7 @@ where
             )
             .unwrap();
 
-            let ctrl = TracegenExecutionControl::new(Some(state.instret + num_insts));
+            let ctrl = TracegenExecutionControl::new(Some(state.instret + num_insns));
             let mut segment = VmSegmentExecutor::<_, VC, _>::new(
                 chip_complex,
                 self.trace_height_constraints.clone(),

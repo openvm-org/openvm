@@ -219,6 +219,6 @@ fn calculate_merkle_node_updates(
 #[derive(derive_new::new, Debug, Serialize, Deserialize)]
 pub struct Segment {
     pub instret_start: u64,
-    pub num_insts: u64,
+    pub num_insns: u64,
     pub trace_heights: Vec<u32>,
 }

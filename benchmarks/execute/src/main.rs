@@ -205,19 +205,19 @@ fn main() -> Result<()> {
             // let segments = executor.execute_metered(exe.clone(), vec![], widths, interactions)?;
             // for Segment {
             //     instret_start,
-            //     num_insts,
+            //     num_insns,
             //     ..
             // } in segments
             // {
             //     // E1 till instret_start
             //     let state = executor.execute_e1(exe.clone(), vec![], Some(instret_start))?;
             //     assert!(state.instret == instret_start);
-            //     // E3/tracegen from instret_start for num_insts beginning with state
+            //     // E3/tracegen from instret_start for num_insns beginning with state
             //     let mut result =
             // executor.execute_and_generate_segment::<BabyBearPoseidon2Config>(
             //         exe.clone(),
             //         state,
-            //         num_insts,
+            //         num_insns,
             //     )?;
             //     // let proof_input = result.per_segment.pop().unwrap();
             //     // let proof = tracing::info_span!("prove_single")

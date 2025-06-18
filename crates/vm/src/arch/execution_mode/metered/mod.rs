@@ -168,13 +168,13 @@ impl<'a> MeteredExecutionControl<'a> {
             .ctx
             .segments
             .last()
-            .map_or(0, |s| s.instret_start + s.num_insts);
-        let num_insts = state.instret - instret_start;
+            .map_or(0, |s| s.instret_start + s.num_insns);
+        let num_insns = state.instret - instret_start;
         // Segment should contain at least one cycle
-        if num_insts > 0 && self.should_segment(state) {
+        if num_insns > 0 && self.should_segment(state) {
             let segment = Segment {
                 instret_start,
-                num_insts,
+                num_insns,
                 trace_heights: state.ctx.trace_heights.clone(),
             };
             state.ctx.segments.push(segment);
@@ -270,10 +270,10 @@ where
             .ctx
             .segments
             .last()
-            .map_or(0, |s| s.instret_start + s.num_insts);
+            .map_or(0, |s| s.instret_start + s.num_insns);
         let segment = Segment {
             instret_start,
-            num_insts: state.instret - instret_start,
+            num_insns: state.instret - instret_start,
             trace_heights: state.ctx.trace_heights.clone(),
         };
         state.ctx.segments.push(segment);
