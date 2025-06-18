@@ -13,12 +13,12 @@ openvm::init!("openvm_init_ec_nonzero_a_p256.rs");
 pub fn main() {
     // Sample points got from https://asecuritysite.com/ecc/p256p
     let x1 = P256Coord::from_u32(5);
-    let y1 = P256Coord::from_le_bytes(&hex!(
+    let y1 = P256Coord::from_le_bytes_unchecked(&hex!(
         "ccfb4832085c4133c5a3d9643c50ca11de7a8199ce3b91fe061858aab9439245"
     ));
     let p1 = P256Point::from_xy(x1.clone(), y1.clone()).unwrap();
     let x2 = P256Coord::from_u32(6);
-    let y2 = P256Coord::from_le_bytes(&hex!(
+    let y2 = P256Coord::from_le_bytes_unchecked(&hex!(
         "cb23828228510d22e9c0e70fb802d1dc47007233e5856946c20a25542c4cb236"
     ));
     let p2 = P256Point::from_xy(x2.clone(), y2.clone()).unwrap();

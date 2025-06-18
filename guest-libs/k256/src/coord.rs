@@ -9,13 +9,19 @@ use crate::internal::Secp256k1Coord;
 
 impl Copy for Secp256k1Coord {}
 
+impl Default for Secp256k1Coord {
+    fn default() -> Self {
+        <Self as IntMod>::ZERO
+    }
+}
+
 impl ConditionallySelectable for Secp256k1Coord {
     fn conditional_select(
         a: &Secp256k1Coord,
         b: &Secp256k1Coord,
         choice: Choice,
     ) -> Secp256k1Coord {
-        Secp256k1Coord::from_le_bytes(
+        Secp256k1Coord::from_le_bytes_unchecked(
             &a.as_le_bytes()
                 .iter()
                 .zip(b.as_le_bytes().iter())

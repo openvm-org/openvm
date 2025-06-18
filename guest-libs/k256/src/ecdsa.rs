@@ -10,10 +10,12 @@ pub use ecdsa_core::{
     RecoveryId,
 };
 #[cfg(feature = "ecdsa")]
+use openvm_ecc_guest::ecdsa::VerifyCustomHook;
+#[cfg(feature = "ecdsa")]
 use {
     super::{Scalar, Secp256k1Point},
     ecdsa_core::hazmat::{SignPrimitive, VerifyPrimitive},
-    elliptic_curve::{ops::Invert, subtle::CtOption},
+    elliptic_curve::{ops::Invert, scalar::IsHigh, subtle::CtOption},
 };
 
 use super::Secp256k1;
@@ -46,12 +48,25 @@ impl SignPrimitive<Secp256k1> for Scalar {
 }
 
 #[cfg(feature = "ecdsa")]
+impl VerifyCustomHook<Secp256k1> for Secp256k1Point {
+    #[inline]
+    fn verify_hook(&self, _z: &[u8], sig: &Signature) -> signature::Result<()> {
+        if sig.s().is_high().into() {
+            return Err(Error::new());
+        }
+        Ok(())
+    }
+}
+
+#[cfg(feature = "ecdsa")]
 impl VerifyPrimitive<Secp256k1> for Secp256k1Point {
     fn verify_prehashed(
         &self,
         z: &crate::point::FieldBytes,
         sig: &Signature,
     ) -> Result<(), ecdsa_core::Error> {
+        self.verify_hook(z, sig)?;
+
         openvm_ecc_guest::ecdsa::verify_prehashed::<Secp256k1>(
             *self,
             z.as_slice(),
