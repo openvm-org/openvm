@@ -3,16 +3,18 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, ImmInstruction, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, EmptyLayout, ImmInstruction, RecordArena, Result, StepExecutorE1,
+        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -30,7 +32,7 @@ use openvm_stark_backend::{
 
 use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_J_TYPE_IMM_BITS};
 
-const ADDITIONAL_BITS: u32 = 0b11000000;
+pub(super) const ADDITIONAL_BITS: u32 = 0b11000000;
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
@@ -145,35 +147,29 @@ where
     }
 }
 
-pub struct Rv32JalLuiCoreStep<A> {
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct Rv32JalLuiStepRecord {
+    pub imm: u32,
+    pub rd_data: [u8; RV32_REGISTER_NUM_LIMBS],
+    pub is_jal: bool,
+}
+
+#[derive(derive_new::new)]
+pub struct Rv32JalLuiStep<A> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl<A> Rv32JalLuiCoreStep<A> {
-    pub fn new(
-        adapter: A,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-    ) -> Self {
-        Self {
-            adapter,
-            bitwise_lookup_chip,
-        }
-    }
-}
-
-impl<F, CTX, A> TraceStep<F, CTX> for Rv32JalLuiCoreStep<A>
+impl<F, CTX, A> TraceStep<F, CTX> for Rv32JalLuiStep<A>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
-            F,
-            CTX,
-            ReadData = (),
-            WriteData = [u8; RV32_REGISTER_NUM_LIMBS],
-            TraceContext<'a> = (),
-        >,
+        + for<'a> AdapterTraceStep<F, CTX, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
 {
+    type RecordLayout = EmptyLayout<A>;
+    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut Rv32JalLuiStepRecord);
+
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -181,75 +177,68 @@ where
         )
     }
 
-    fn execute(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
-        let Instruction { opcode, c: imm, .. } = instruction;
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
+        let &Instruction { opcode, c: imm, .. } = instruction;
 
-        let local_opcode =
-            Rv32JalLuiOpcode::from_usize(opcode.local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET));
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        A::start(*state.pc, state.memory, &mut adapter_record);
 
-        A::start(*state.pc, state.memory, adapter_row);
+        let is_jal = opcode.local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET) == JAL as usize;
+        let signed_imm = get_signed_imm(is_jal, imm);
 
-        let core_row: &mut Rv32JalLuiCoreCols<F> = core_row.borrow_mut();
+        let (to_pc, rd_data) = run_jal_lui(is_jal, *state.pc, signed_imm);
 
-        // `c` can be "negative" as a field element
-        let imm_f = imm.as_canonical_u32();
-        let signed_imm = match local_opcode {
-            JAL => {
-                if imm_f < (1 << (RV_J_TYPE_IMM_BITS - 1)) {
-                    imm_f as i32
-                } else {
-                    let neg_imm_f = F::ORDER_U32 - imm_f;
-                    debug_assert!(neg_imm_f < (1 << (RV_J_TYPE_IMM_BITS - 1)));
-                    -(neg_imm_f as i32)
-                }
-            }
-            LUI => imm_f as i32,
-        };
-        let (to_pc, rd_data) = run_jal_lui(local_opcode, *state.pc, signed_imm);
-
-        core_row.rd_data = rd_data.map(F::from_canonical_u8);
-        core_row.imm = instruction.c;
-        core_row.is_jal = F::from_bool(local_opcode == JAL);
-        core_row.is_lui = F::from_bool(local_opcode == LUI);
+        core_record.imm = imm.as_canonical_u32();
+        core_record.rd_data = rd_data;
+        core_record.is_jal = is_jal;
 
         self.adapter
-            .write(state.memory, instruction, adapter_row, &rd_data);
+            .write(state.memory, instruction, &rd_data, &mut adapter_record);
 
         *state.pc = to_pc;
 
-        *trace_offset += width;
-
         Ok(())
-    }
-
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        let core_row: &mut Rv32JalLuiCoreCols<F> = core_row.borrow_mut();
-
-        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
-
-        let rd_data = core_row.rd_data.map(|x| x.as_canonical_u32());
-        for pair in rd_data.chunks_exact(2) {
-            self.bitwise_lookup_chip.request_range(pair[0], pair[1]);
-        }
-        if core_row.is_jal == F::ONE {
-            self.bitwise_lookup_chip
-                .request_xor(rd_data[3], ADDITIONAL_BITS);
-        }
     }
 }
 
-impl<F, A> StepExecutorE1<F> for Rv32JalLuiCoreStep<A>
+impl<F, CTX, A> TraceFiller<F, CTX> for Rv32JalLuiStep<A>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F, CTX>,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let record: &Rv32JalLuiStepRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
+        let core_row: &mut Rv32JalLuiCoreCols<F> = core_row.borrow_mut();
+
+        for pair in record.rd_data.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(pair[0] as u32, pair[1] as u32);
+        }
+        if record.is_jal {
+            self.bitwise_lookup_chip
+                .request_xor(record.rd_data[3] as u32, ADDITIONAL_BITS);
+        }
+
+        // Writing in reverse order
+        core_row.is_lui = F::from_bool(!record.is_jal);
+        core_row.is_jal = F::from_bool(record.is_jal);
+        core_row.rd_data = record.rd_data.map(F::from_canonical_u8);
+        core_row.imm = F::from_canonical_u32(record.imm);
+    }
+}
+
+impl<F, A> StepExecutorE1<F> for Rv32JalLuiStep<A>
 where
     F: PrimeField32,
     A: 'static
@@ -263,26 +252,15 @@ where
     where
         Ctx: E1E2ExecutionCtx,
     {
-        let Instruction { opcode, c: imm, .. } = instruction;
+        let &Instruction { opcode, c: imm, .. } = instruction;
 
-        let local_opcode =
-            Rv32JalLuiOpcode::from_usize(opcode.local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET));
+        let is_jal = opcode.local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET) == JAL as usize;
+        let signed_imm = get_signed_imm(is_jal, imm);
+        let (to_pc, rd) = run_jal_lui(is_jal, *state.pc, signed_imm);
 
-        let imm_f = imm.as_canonical_u32();
-        let signed_imm = match local_opcode {
-            JAL => {
-                if imm_f < (1 << (RV_J_TYPE_IMM_BITS - 1)) {
-                    imm_f as i32
-                } else {
-                    let neg_imm_f = F::ORDER_U32 - imm_f;
-                    debug_assert!(neg_imm_f < (1 << (RV_J_TYPE_IMM_BITS - 1)));
-                    -(neg_imm_f as i32)
-                }
-            }
-            LUI => imm_f as i32,
-        };
-        let (to_pc, rd) = run_jal_lui(local_opcode, *state.pc, signed_imm);
+        self.adapter.write(state, instruction, &rd);
 
+        *state.pc = to_pc;
         self.adapter.write(state, instruction, &rd);
 
         *state.pc = to_pc;
@@ -303,32 +281,34 @@ where
     }
 }
 
-// returns (to_pc, rd_data)
-#[inline(always)]
-pub(super) fn run_jal_lui(
-    opcode: Rv32JalLuiOpcode,
-    pc: u32,
-    imm: i32,
-) -> (u32, [u8; RV32_REGISTER_NUM_LIMBS]) {
-    match opcode {
-        JAL => {
-            let rd_data = (pc + DEFAULT_PC_STEP).to_le_bytes();
-            let next_pc = pc as i32 + imm;
-            assert!(next_pc >= 0);
-            (next_pc as u32, rd_data)
+// returns the canonical signed representation of the immediate
+// `imm` can be "negative" as a field element
+pub(super) fn get_signed_imm<F: PrimeField32>(is_jal: bool, imm: F) -> i32 {
+    let imm_f = imm.as_canonical_u32();
+    if is_jal {
+        if imm_f < (1 << (RV_J_TYPE_IMM_BITS - 1)) {
+            imm_f as i32
+        } else {
+            let neg_imm_f = F::ORDER_U32 - imm_f;
+            debug_assert!(neg_imm_f < (1 << (RV_J_TYPE_IMM_BITS - 1)));
+            -(neg_imm_f as i32)
         }
-        LUI => {
-            let imm = imm as u32;
-            let rd = imm << 12;
-            (pc + DEFAULT_PC_STEP, rd.to_le_bytes())
-        }
+    } else {
+        imm_f as i32
     }
 }
 
-// TODO(ayush): move from here
-#[test]
-fn test_additional_bits() {
-    let last_limb_bits = PC_BITS - RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
-    let additional_bits = (last_limb_bits..RV32_CELL_BITS).fold(0, |acc, x| acc + (1u32 << x));
-    assert_eq!(additional_bits, ADDITIONAL_BITS);
+// returns (to_pc, rd_data)
+#[inline(always)]
+pub(super) fn run_jal_lui(is_jal: bool, pc: u32, imm: i32) -> (u32, [u8; RV32_REGISTER_NUM_LIMBS]) {
+    if is_jal {
+        let rd_data = (pc + DEFAULT_PC_STEP).to_le_bytes();
+        let next_pc = pc as i32 + imm;
+        debug_assert!(next_pc >= 0);
+        (next_pc as u32, rd_data)
+    } else {
+        let imm = imm as u32;
+        let rd = imm << 12;
+        (pc + DEFAULT_PC_STEP, rd.to_le_bytes())
+    }
 }

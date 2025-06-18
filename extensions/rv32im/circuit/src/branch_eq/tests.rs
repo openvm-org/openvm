@@ -31,6 +31,7 @@ use crate::{
     adapters::{
         Rv32BranchAdapterAir, Rv32BranchAdapterStep, RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
+    branch_eq::fast_run_eq,
     test_utils::get_verification_error,
     BranchEqualCoreAir,
 };
@@ -94,7 +95,7 @@ fn set_and_execute<E: InstructionExecutor<F>>(
         initial_pc,
     );
 
-    let (cmp_result, _, _) = run_eq::<F, RV32_REGISTER_NUM_LIMBS>(opcode, &a, &b);
+    let cmp_result = fast_run_eq(opcode, &a, &b);
     let from_pc = tester.execution.last_from_pc().as_canonical_u32() as i32;
     let to_pc = tester.execution.last_to_pc().as_canonical_u32() as i32;
     let pc_inc = if cmp_result { imm } else { 4 };
@@ -305,13 +306,11 @@ fn execute_roundtrip_sanity_test() {
 #[test]
 fn run_eq_sanity_test() {
     let x: [u8; RV32_REGISTER_NUM_LIMBS] = [19, 4, 17, 60];
-    let (cmp_result, _, diff_val) =
-        run_eq::<F, RV32_REGISTER_NUM_LIMBS>(BranchEqualOpcode::BEQ, &x, &x);
+    let (cmp_result, _, diff_val) = run_eq::<F, RV32_REGISTER_NUM_LIMBS>(true, &x, &x);
     assert!(cmp_result);
     assert_eq!(diff_val, F::ZERO);
 
-    let (cmp_result, _, diff_val) =
-        run_eq::<F, RV32_REGISTER_NUM_LIMBS>(BranchEqualOpcode::BNE, &x, &x);
+    let (cmp_result, _, diff_val) = run_eq::<F, RV32_REGISTER_NUM_LIMBS>(false, &x, &x);
     assert!(!cmp_result);
     assert_eq!(diff_val, F::ZERO);
 }
@@ -320,16 +319,14 @@ fn run_eq_sanity_test() {
 fn run_ne_sanity_test() {
     let x: [u8; RV32_REGISTER_NUM_LIMBS] = [19, 4, 17, 60];
     let y: [u8; RV32_REGISTER_NUM_LIMBS] = [19, 32, 18, 60];
-    let (cmp_result, diff_idx, diff_val) =
-        run_eq::<F, RV32_REGISTER_NUM_LIMBS>(BranchEqualOpcode::BEQ, &x, &y);
+    let (cmp_result, diff_idx, diff_val) = run_eq::<F, RV32_REGISTER_NUM_LIMBS>(true, &x, &y);
     assert!(!cmp_result);
     assert_eq!(
         diff_val * (F::from_canonical_u8(x[diff_idx]) - F::from_canonical_u8(y[diff_idx])),
         F::ONE
     );
 
-    let (cmp_result, diff_idx, diff_val) =
-        run_eq::<F, RV32_REGISTER_NUM_LIMBS>(BranchEqualOpcode::BNE, &x, &y);
+    let (cmp_result, diff_idx, diff_val) = run_eq::<F, RV32_REGISTER_NUM_LIMBS>(false, &x, &y);
     assert!(cmp_result);
     assert_eq!(
         diff_val * (F::from_canonical_u8(x[diff_idx]) - F::from_canonical_u8(y[diff_idx])),

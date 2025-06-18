@@ -52,11 +52,6 @@ jobs:
           set -e
           for dir in */; do
             if [ -f "${dir}Cargo.toml" ]; then
-              echo "Editing ${dir}Cargo.toml to use the current branch"
-              sed -i \
-                -e "s|\(git = \"https://github.com/openvm-org/openvm.git\"\)|\1, branch = \"${{ github.head_ref }}\"|" \
-                "${dir}Cargo.toml"
-
               echo "Building ${dir%/}"
               cd "$dir"
               cargo openvm build

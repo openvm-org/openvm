@@ -97,7 +97,7 @@ pub fn main() {
 
     let mut bytes = [0u8; 32];
     bytes[7] = 1 << 5; // 2^61 = modulus + 1
-    let mut res = Mersenne61::from_le_bytes(&bytes); // No need to start from reduced representation
+    let mut res = Mersenne61::from_le_bytes_unchecked(&bytes); // No need to start from reduced representation
     for _ in 0..61 {
         res += res.clone();
     }

@@ -8,8 +8,9 @@ use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, EmptyLayout, MinimalInstruction, RecordArena, Result, StepExecutorE1,
+        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -20,7 +21,7 @@ use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     is_equal_array::{IsEqArrayIo, IsEqArraySubAir},
-    SubAir, TraceSubRowGenerator,
+    AlignedBytesBorrow, SubAir, TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
@@ -283,6 +284,14 @@ where
     }
 }
 
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct ModularIsEqualRecord<const READ_LIMBS: usize> {
+    pub is_setup: bool,
+    pub b: [u8; READ_LIMBS],
+    pub c: [u8; READ_LIMBS],
+}
+
 #[derive(derive_new::new)]
 pub struct ModularIsEqualStep<
     A,
@@ -306,17 +315,20 @@ where
             CTX,
             ReadData: Into<[[u8; READ_LIMBS]; 2]>,
             WriteData: From<[u8; WRITE_LIMBS]>,
-            TraceContext<'a> = (),
         >,
 {
-    fn execute(
+    type RecordLayout = EmptyLayout<A>;
+    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut ModularIsEqualRecord<READ_LIMBS>);
+
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode =
@@ -326,73 +338,82 @@ where
             Rv32ModularArithmeticOpcode::IS_EQ | Rv32ModularArithmeticOpcode::SETUP_ISEQ
         );
 
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
-        let (adapter_row, core_row) = row_slice.split_at_mut(A::WIDTH);
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
-        let cols: &mut ModularIsEqualCoreCols<F, READ_LIMBS> = core_row.borrow_mut();
-
-        A::start(*state.pc, state.memory, adapter_row);
-        let [b, c] = self
+        A::start(*state.pc, state.memory, &mut adapter_record);
+        [core_record.b, core_record.c] = self
             .adapter
-            .read(state.memory, instruction, adapter_row)
+            .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        cols.b = b.map(F::from_canonical_u8);
-        cols.c = c.map(F::from_canonical_u8);
-
-        let (b_cmp, _) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.modulus_limbs);
-        let (c_cmp, _) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.modulus_limbs);
-        let is_setup = instruction.opcode.local_opcode_idx(self.offset)
+        core_record.is_setup = instruction.opcode.local_opcode_idx(self.offset)
             == Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize;
 
-        cols.is_setup = F::from_bool(is_setup);
-
-        if !is_setup {
-            assert!(b_cmp, "{:?} >= {:?}", b, self.modulus_limbs);
-        }
-        assert!(c_cmp, "{:?} >= {:?}", c, self.modulus_limbs);
-
         let mut write_data = [0u8; WRITE_LIMBS];
-        write_data[0] = (b == c) as u8;
-        self.adapter
-            .write(state.memory, instruction, adapter_row, &write_data.into());
+        write_data[0] = (core_record.b == core_record.c) as u8;
+
+        self.adapter.write(
+            state.memory,
+            instruction,
+            &write_data.into(),
+            &mut adapter_record,
+        );
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        *trace_offset += width;
 
         Ok(())
     }
 
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            Rv32ModularArithmeticOpcode::from_usize(opcode - self.offset)
+        )
+    }
+}
+
+impl<F, CTX, A, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
+    TraceFiller<F, CTX> for ModularIsEqualStep<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F, CTX>,
+{
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = row_slice.split_at_mut(A::WIDTH);
-        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
+        let (adapter_row, mut core_row) = row_slice.split_at_mut(A::WIDTH);
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let record: &ModularIsEqualRecord<READ_LIMBS> =
+            unsafe { get_record_from_slice(&mut core_row, ()) };
         let cols: &mut ModularIsEqualCoreCols<F, READ_LIMBS> = core_row.borrow_mut();
+        let (b_cmp, b_diff_idx) =
+            run_unsigned_less_than::<READ_LIMBS>(&record.b, &self.modulus_limbs);
+        let (c_cmp, c_diff_idx) =
+            run_unsigned_less_than::<READ_LIMBS>(&record.c, &self.modulus_limbs);
 
-        cols.is_valid = F::ONE;
-        let sub_air = IsEqArraySubAir::<READ_LIMBS>;
-        sub_air.generate_subrow(
-            (&cols.b, &cols.c),
-            (&mut cols.eq_marker, &mut cols.cmp_result),
-        );
-        let b = cols.b.map(|x| x.as_canonical_u32() as u8);
-        let c = cols.c.map(|x| x.as_canonical_u32() as u8);
-        let (_, b_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.modulus_limbs);
-        let (_, c_diff_idx) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.modulus_limbs);
-
-        if cols.is_setup != F::ONE {
-            cols.b_lt_diff =
-                F::from_canonical_u8(self.modulus_limbs[b_diff_idx]) - cols.b[b_diff_idx];
-            self.bitwise_lookup_chip.request_range(
-                (self.modulus_limbs[b_diff_idx] - b[b_diff_idx] - 1) as u32,
-                (self.modulus_limbs[c_diff_idx] - c[c_diff_idx] - 1) as u32,
-            );
+        if !record.is_setup {
+            assert!(b_cmp, "{:?} >= {:?}", record.b, self.modulus_limbs);
         }
-        cols.c_lt_diff = F::from_canonical_u8(self.modulus_limbs[c_diff_idx]) - cols.c[c_diff_idx];
+        assert!(c_cmp, "{:?} >= {:?}", record.c, self.modulus_limbs);
+
+        // Writing in reverse order
         cols.c_lt_mark = if b_diff_idx == c_diff_idx {
             F::ONE
         } else {
-            F::from_canonical_u8(2)
+            F::TWO
         };
+
+        cols.c_lt_diff =
+            F::from_canonical_u8(self.modulus_limbs[c_diff_idx] - record.c[c_diff_idx]);
+        if !record.is_setup {
+            cols.b_lt_diff =
+                F::from_canonical_u8(self.modulus_limbs[b_diff_idx] - record.b[b_diff_idx]);
+            self.bitwise_lookup_chip.request_range(
+                (self.modulus_limbs[b_diff_idx] - record.b[b_diff_idx] - 1) as u32,
+                (self.modulus_limbs[c_diff_idx] - record.c[c_diff_idx] - 1) as u32,
+            );
+        } else {
+            cols.b_lt_diff = F::ZERO;
+        }
+
         cols.lt_marker = from_fn(|i| {
             if i == b_diff_idx {
                 F::ONE
@@ -402,13 +423,17 @@ where
                 F::ZERO
             }
         });
-    }
 
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            Rv32ModularArithmeticOpcode::from_usize(opcode - self.offset)
-        )
+        cols.c = record.c.map(F::from_canonical_u8);
+        cols.b = record.b.map(F::from_canonical_u8);
+        let sub_air = IsEqArraySubAir::<READ_LIMBS>;
+        sub_air.generate_subrow(
+            (&cols.b, &cols.c),
+            (&mut cols.eq_marker, &mut cols.cmp_result),
+        );
+
+        cols.is_setup = F::from_bool(record.is_setup);
+        cols.is_valid = F::ONE;
     }
 }
 

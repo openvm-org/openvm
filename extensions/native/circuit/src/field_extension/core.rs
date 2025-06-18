@@ -8,14 +8,16 @@ use itertools::izip;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, EmptyLayout, MinimalInstruction, RecordArena, Result, StepExecutorE1,
+        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
     },
 };
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::FieldExtensionOpcode::{self, *};
@@ -25,7 +27,6 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use serde::{Deserialize, Serialize};
 
 pub const BETA: usize = 11;
 pub const EXT_DEG: usize = 4;
@@ -41,7 +42,7 @@ pub struct FieldExtensionCoreCols<T> {
     pub is_sub: T,
     pub is_mul: T,
     pub is_div: T,
-    /// `divisor_inv` is y.inverse() when opcode is FDIV and zero otherwise.
+    /// `divisor_inv` is z.inverse() when opcode is FDIV and zero otherwise.
     pub divisor_inv: [T; EXT_DEG],
 }
 
@@ -85,8 +86,8 @@ where
         // - Each flag in `flags` is a boolean.
         // - Exactly one flag in `flags` is true.
         // - The inner product of the `flags` and `opcodes` equals `io.opcode`.
-        // - The inner product of the `flags` and `results[:,j]` equals `io.z[j]` for each `j`.
-        // - If `is_div` is true, then `aux.divisor_inv` correctly represents the inverse of `io.y`.
+        // - The inner product of the `flags` and `results[:,j]` equals `io.x[j]` for each `j`.
+        // - If `is_div` is true, then `aux.divisor_inv` correctly represents the inverse of `io.z`.
 
         let mut is_valid = AB::Expr::ZERO;
         let mut expected_opcode = AB::Expr::ZERO;
@@ -140,12 +141,11 @@ where
 }
 
 #[repr(C)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(AlignedBytesBorrow, Debug)]
 pub struct FieldExtensionRecord<F> {
-    pub opcode: FieldExtensionOpcode,
-    pub x: [F; EXT_DEG],
     pub y: [F; EXT_DEG],
     pub z: [F; EXT_DEG],
+    pub local_opcode: u8,
 }
 
 #[derive(derive_new::new)]
@@ -156,15 +156,11 @@ pub struct FieldExtensionCoreStep<A> {
 impl<F, CTX, A> TraceStep<F, CTX> for FieldExtensionCoreStep<A>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterTraceStep<
-            F,
-            CTX,
-            ReadData = [[F; EXT_DEG]; 2],
-            WriteData = [F; EXT_DEG],
-            TraceContext<'a> = (),
-        >,
+    A: 'static + AdapterTraceStep<F, CTX, ReadData = [[F; EXT_DEG]; 2], WriteData = [F; EXT_DEG]>,
 {
+    type RecordLayout = EmptyLayout<A>;
+    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut FieldExtensionRecord<F>);
+
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -172,60 +168,71 @@ where
         )
     }
 
-    fn execute(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let &Instruction { opcode, .. } = instruction;
 
-        let local_opcode = FieldExtensionOpcode::from_usize(
-            opcode.local_opcode_idx(FieldExtensionOpcode::CLASS_OFFSET),
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
+
+        A::start(*state.pc, state.memory, &mut adapter_record);
+
+        core_record.local_opcode =
+            opcode.local_opcode_idx(FieldExtensionOpcode::CLASS_OFFSET) as u8;
+
+        [core_record.y, core_record.z] =
+            self.adapter
+                .read(state.memory, instruction, &mut adapter_record);
+
+        let x = run_field_extension(
+            FieldExtensionOpcode::from_usize(core_record.local_opcode as usize),
+            core_record.y,
+            core_record.z,
         );
 
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-
-        A::start(*state.pc, state.memory, adapter_row);
-
-        let [y, z] = self.adapter.read(state.memory, instruction, adapter_row);
-
-        let x = FieldExtension::solve(local_opcode, y, z).unwrap();
-
-        let core_row: &mut FieldExtensionCoreCols<_> = core_row.borrow_mut();
-        core_row.x = x;
-        core_row.y = y;
-        core_row.z = z;
-        core_row.is_add = F::from_bool(local_opcode == FieldExtensionOpcode::FE4ADD);
-        core_row.is_sub = F::from_bool(local_opcode == FieldExtensionOpcode::FE4SUB);
-        core_row.is_mul = F::from_bool(local_opcode == FieldExtensionOpcode::BBE4MUL);
-        core_row.is_div = F::from_bool(local_opcode == FieldExtensionOpcode::BBE4DIV);
-
         self.adapter
-            .write(state.memory, instruction, adapter_row, &x);
+            .write(state.memory, instruction, &x, &mut adapter_record);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
-        *trace_offset += width;
-
         Ok(())
     }
+}
 
+impl<F, CTX, A> TraceFiller<F, CTX> for FieldExtensionCoreStep<A>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F, CTX>,
+{
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
-
+        let record: &FieldExtensionRecord<F> = unsafe { get_record_from_slice(&mut core_row, ()) };
         let core_row: &mut FieldExtensionCoreCols<_> = core_row.borrow_mut();
 
-        core_row.divisor_inv = if core_row.is_div.is_one() {
-            FieldExtension::invert(core_row.z)
+        // Writing in reverse order to avoid overwriting the `record`
+        let opcode = FieldExtensionOpcode::from_usize(record.local_opcode as usize);
+        if opcode == FieldExtensionOpcode::BBE4DIV {
+            core_row.divisor_inv = FieldExtension::invert(record.z);
         } else {
-            [F::ZERO; EXT_DEG]
-        };
+            core_row.divisor_inv = [F::ZERO; EXT_DEG];
+        }
+
+        core_row.is_div = F::from_bool(opcode == FieldExtensionOpcode::BBE4DIV);
+        core_row.is_mul = F::from_bool(opcode == FieldExtensionOpcode::BBE4MUL);
+        core_row.is_sub = F::from_bool(opcode == FieldExtensionOpcode::FE4SUB);
+        core_row.is_add = F::from_bool(opcode == FieldExtensionOpcode::FE4ADD);
+
+        core_row.z = record.z;
+        core_row.y = record.y;
+        core_row.x = run_field_extension(opcode, core_row.y, core_row.z);
     }
 }
 
@@ -248,13 +255,11 @@ where
         let local_opcode_idx = opcode.local_opcode_idx(FieldExtensionOpcode::CLASS_OFFSET);
 
         let [y_val, z_val] = self.adapter.read(state, instruction);
-
-        let x_val = FieldExtension::solve(
+        let x_val = run_field_extension(
             FieldExtensionOpcode::from_usize(local_opcode_idx),
             y_val,
             z_val,
-        )
-        .unwrap();
+        );
 
         self.adapter.write(state, instruction, &x_val);
 
@@ -276,21 +281,24 @@ where
     }
 }
 
-pub struct FieldExtension;
-impl FieldExtension {
-    pub(super) fn solve<F: Field>(
-        opcode: FieldExtensionOpcode,
-        x: [F; EXT_DEG],
-        y: [F; EXT_DEG],
-    ) -> Option<[F; EXT_DEG]> {
-        match opcode {
-            FieldExtensionOpcode::FE4ADD => Some(Self::add(x, y)),
-            FieldExtensionOpcode::FE4SUB => Some(Self::subtract(x, y)),
-            FieldExtensionOpcode::BBE4MUL => Some(Self::multiply(x, y)),
-            FieldExtensionOpcode::BBE4DIV => Some(Self::divide(x, y)),
-        }
+// Returns the result of the field extension operation.
+// Will panic if divide by zero.
+pub(super) fn run_field_extension<F: Field>(
+    opcode: FieldExtensionOpcode,
+    y: [F; EXT_DEG],
+    z: [F; EXT_DEG],
+) -> [F; EXT_DEG] {
+    match opcode {
+        FieldExtensionOpcode::FE4ADD => FieldExtension::add(y, z),
+        FieldExtensionOpcode::FE4SUB => FieldExtension::subtract(y, z),
+        FieldExtensionOpcode::BBE4MUL => FieldExtension::multiply(y, z),
+        FieldExtensionOpcode::BBE4DIV => FieldExtension::divide(y, z),
     }
+}
 
+pub(crate) struct FieldExtension;
+
+impl FieldExtension {
     pub(crate) fn add<V, E>(x: [V; EXT_DEG], y: [V; EXT_DEG]) -> [E; EXT_DEG]
     where
         V: Copy,

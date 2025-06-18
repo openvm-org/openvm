@@ -688,9 +688,17 @@ pub struct MemoryAuxColsFactory<'a, T> {
 // parallelized trace generation.
 impl<F: PrimeField32> MemoryAuxColsFactory<'_, F> {
     /// Fill the trace assuming `prev_timestamp` is already provided in `buffer`.
-    pub fn fill_from_prev(&self, timestamp: u32, buffer: &mut MemoryBaseAuxCols<F>) {
-        let prev_timestamp = buffer.prev_timestamp.as_canonical_u32();
+    pub fn fill(&self, prev_timestamp: u32, timestamp: u32, buffer: &mut MemoryBaseAuxCols<F>) {
         self.generate_timestamp_lt(prev_timestamp, timestamp, &mut buffer.timestamp_lt_aux);
+        // Safety: even if prev_timestamp were obtained by transmute_ref from
+        // `buffer.prev_timestamp`, this should still work because it is a direct assignment
+        buffer.prev_timestamp = F::from_canonical_u32(prev_timestamp);
+    }
+
+    /// # Safety
+    /// We assume that `F::ZERO` has underlying memory equivalent to `mem::zeroed()`.
+    pub fn fill_zero(&self, buffer: &mut MemoryBaseAuxCols<F>) {
+        *buffer = unsafe { std::mem::zeroed() };
     }
 
     fn generate_timestamp_lt(

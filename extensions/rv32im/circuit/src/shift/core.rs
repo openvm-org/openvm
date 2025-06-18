@@ -6,8 +6,9 @@ use std::{
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, EmptyLayout, MinimalInstruction, RecordArena, Result, StepExecutorE1,
+        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -18,6 +19,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+    AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
@@ -242,6 +244,14 @@ where
     }
 }
 
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct ShiftCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub b: [u8; NUM_LIMBS],
+    pub c: [u8; NUM_LIMBS],
+    pub local_opcode: u8,
+}
+
 pub struct ShiftStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
@@ -276,114 +286,132 @@ where
             CTX,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-            TraceContext<'a> = (),
         >,
 {
+    type RecordLayout = EmptyLayout<A>;
+    type RecordMut<'a> = (
+        A::RecordMut<'a>,
+        &'a mut ShiftCoreRecord<NUM_LIMBS, LIMB_BITS>,
+    );
+
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", ShiftOpcode::from_usize(opcode - self.offset))
     }
 
-    fn execute(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
-        A::start(*state.pc, state.memory, adapter_row);
+        A::start(*state.pc, state.memory, &mut adapter_record);
 
         let [rs1, rs2] = self
             .adapter
-            .read(state.memory, instruction, adapter_row)
+            .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        let (output, limb_shift, bit_shift) =
-            run_shift::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
+        let (output, _, _) = run_shift::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
 
-        let core_row: &mut ShiftCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        core_row.a = output.map(F::from_canonical_u8);
-        core_row.b = rs1.map(F::from_canonical_u8);
-        core_row.c = rs2.map(F::from_canonical_u8);
-        // To be transformed later in fill_trace_row:
-        core_row.opcode_sll_flag = F::from_canonical_usize(local_opcode as usize);
-        core_row.bit_shift_marker[0] = F::from_canonical_usize(bit_shift);
-        core_row.limb_shift_marker[0] = F::from_canonical_usize(limb_shift);
+        core_record.b = rs1;
+        core_record.c = rs2;
+        core_record.local_opcode = local_opcode as u8;
 
-        self.adapter
-            .write(state.memory, instruction, adapter_row, &[output].into());
-
+        self.adapter.write(
+            state.memory,
+            instruction,
+            &[output].into(),
+            &mut adapter_record,
+        );
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        *trace_offset += width;
 
         Ok(())
     }
+}
 
+impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F, CTX>
+    for ShiftStep<A, NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F, CTX>,
+{
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
+        let record: &ShiftCoreRecord<NUM_LIMBS, LIMB_BITS> =
+            unsafe { get_record_from_slice(&mut core_row, ()) };
 
         let core_row: &mut ShiftCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 
-        let local_opcode =
-            ShiftOpcode::from_usize(core_row.opcode_sll_flag.as_canonical_u32() as usize);
+        let opcode = ShiftOpcode::from_usize(record.local_opcode as usize);
+        let (a, limb_shift, bit_shift) =
+            run_shift::<NUM_LIMBS, LIMB_BITS>(opcode, &record.b, &record.c);
 
-        let bit_shift = core_row.bit_shift_marker[0].as_canonical_u32() as usize;
-        let limb_shift = core_row.limb_shift_marker[0].as_canonical_u32() as usize;
-        let b = core_row.b.map(|x| x.as_canonical_u32());
-        let c = core_row.c.map(|x| x.as_canonical_u32());
-
-        let bit_shift_carry = array::from_fn(|i| match local_opcode {
-            ShiftOpcode::SLL => b[i] >> (LIMB_BITS - bit_shift),
-            _ => b[i] % (1 << bit_shift),
-        });
-
-        for carry_val in bit_shift_carry {
-            self.range_checker_chip.add_count(carry_val, bit_shift);
+        for pair in a.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range(pair[0] as u32, pair[1] as u32);
         }
 
         let num_bits_log = (NUM_LIMBS * LIMB_BITS).ilog2();
         self.range_checker_chip.add_count(
-            (((c[0] as usize) - bit_shift - limb_shift * LIMB_BITS) >> num_bits_log) as u32,
+            ((record.c[0] as usize - bit_shift - limb_shift * LIMB_BITS) >> num_bits_log) as u32,
             LIMB_BITS - num_bits_log as usize,
         );
 
-        let mut b_sign = 0;
-        if local_opcode == ShiftOpcode::SRA {
-            b_sign = b[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
-            self.bitwise_lookup_chip
-                .request_xor(b[NUM_LIMBS - 1], 1 << (LIMB_BITS - 1));
-        }
-
-        for pair in core_row.a.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0].as_canonical_u32(), pair[1].as_canonical_u32());
-        }
-
-        core_row.bit_multiplier_left = match local_opcode {
-            ShiftOpcode::SLL => F::from_canonical_usize(1 << bit_shift),
-            _ => F::ZERO,
+        core_row.bit_shift_carry = if bit_shift == 0 {
+            for _ in 0..NUM_LIMBS {
+                self.range_checker_chip.add_count(0, 0);
+            }
+            [F::ZERO; NUM_LIMBS]
+        } else {
+            array::from_fn(|i| {
+                let carry = match opcode {
+                    ShiftOpcode::SLL => record.b[i] >> (LIMB_BITS - bit_shift),
+                    _ => record.b[i] % (1 << bit_shift),
+                };
+                self.range_checker_chip.add_count(carry as u32, bit_shift);
+                F::from_canonical_u8(carry)
+            })
         };
-        core_row.bit_multiplier_right = match local_opcode {
+
+        core_row.limb_shift_marker = [F::ZERO; NUM_LIMBS];
+        core_row.limb_shift_marker[limb_shift] = F::ONE;
+        core_row.bit_shift_marker = [F::ZERO; LIMB_BITS];
+        core_row.bit_shift_marker[bit_shift] = F::ONE;
+
+        core_row.b_sign = F::ZERO;
+        if opcode == ShiftOpcode::SRA {
+            core_row.b_sign = F::from_canonical_u8(record.b[NUM_LIMBS - 1] >> (LIMB_BITS - 1));
+            self.bitwise_lookup_chip
+                .request_xor(record.b[NUM_LIMBS - 1] as u32, 1 << (LIMB_BITS - 1));
+        }
+
+        core_row.bit_multiplier_right = match opcode {
             ShiftOpcode::SLL => F::ZERO,
             _ => F::from_canonical_usize(1 << bit_shift),
         };
-        core_row.b_sign = F::from_canonical_u32(b_sign);
-        core_row.bit_shift_marker = array::from_fn(|i| F::from_bool(i == bit_shift));
-        core_row.limb_shift_marker = array::from_fn(|i| F::from_bool(i == limb_shift));
-        core_row.bit_shift_carry = bit_shift_carry.map(F::from_canonical_u32);
-        core_row.opcode_sll_flag = F::from_bool(local_opcode == ShiftOpcode::SLL);
-        core_row.opcode_srl_flag = F::from_bool(local_opcode == ShiftOpcode::SRL);
-        core_row.opcode_sra_flag = F::from_bool(local_opcode == ShiftOpcode::SRA);
+        core_row.bit_multiplier_left = match opcode {
+            ShiftOpcode::SLL => F::from_canonical_usize(1 << bit_shift),
+            _ => F::ZERO,
+        };
+
+        core_row.opcode_sra_flag = F::from_bool(opcode == ShiftOpcode::SRA);
+        core_row.opcode_srl_flag = F::from_bool(opcode == ShiftOpcode::SRL);
+        core_row.opcode_sll_flag = F::from_bool(opcode == ShiftOpcode::SLL);
+
+        core_row.c = record.c.map(F::from_canonical_u8);
+        core_row.b = record.b.map(F::from_canonical_u8);
+        core_row.a = a.map(F::from_canonical_u8);
     }
 }
 

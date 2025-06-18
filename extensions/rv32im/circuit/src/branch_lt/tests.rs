@@ -104,7 +104,8 @@ fn set_and_execute<E: InstructionExecutor<F>>(
         rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1))),
     );
 
-    let (cmp_result, _, _, _) = run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &a, &b);
+    let (cmp_result, _, _, _) =
+        run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode.local_usize() as u8, &a, &b);
     let from_pc = tester.execution.last_from_pc().as_canonical_u32() as i32;
     let to_pc = tester.execution.last_to_pc().as_canonical_u32() as i32;
     let pc_inc = if cmp_result { imm } else { 4 };
@@ -472,15 +473,21 @@ fn execute_roundtrip_sanity_test() {
 fn run_cmp_unsigned_sanity_test() {
     let x: [u8; RV32_REGISTER_NUM_LIMBS] = [145, 34, 25, 205];
     let y: [u8; RV32_REGISTER_NUM_LIMBS] = [73, 35, 25, 205];
-    let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(BranchLessThanOpcode::BLTU, &x, &y);
+    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+        BranchLessThanOpcode::BLTU as u8,
+        &x,
+        &y,
+    );
     assert!(cmp_result);
     assert_eq!(diff_idx, 1);
     assert!(!x_sign); // unsigned
     assert!(!y_sign); // unsigned
 
-    let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(BranchLessThanOpcode::BGEU, &x, &y);
+    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+        BranchLessThanOpcode::BGEU as u8,
+        &x,
+        &y,
+    );
     assert!(!cmp_result);
     assert_eq!(diff_idx, 1);
     assert!(!x_sign); // unsigned
@@ -492,14 +499,14 @@ fn run_cmp_same_sign_sanity_test() {
     let x: [u8; RV32_REGISTER_NUM_LIMBS] = [145, 34, 25, 205];
     let y: [u8; RV32_REGISTER_NUM_LIMBS] = [73, 35, 25, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(BranchLessThanOpcode::BLT, &x, &y);
+        run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(BranchLessThanOpcode::BLT as u8, &x, &y);
     assert!(cmp_result);
     assert_eq!(diff_idx, 1);
     assert!(x_sign); // negative
     assert!(y_sign); // negative
 
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(BranchLessThanOpcode::BGE, &x, &y);
+        run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(BranchLessThanOpcode::BGE as u8, &x, &y);
     assert!(!cmp_result);
     assert_eq!(diff_idx, 1);
     assert!(x_sign); // negative
@@ -511,14 +518,14 @@ fn run_cmp_diff_sign_sanity_test() {
     let x: [u8; RV32_REGISTER_NUM_LIMBS] = [45, 35, 25, 55];
     let y: [u8; RV32_REGISTER_NUM_LIMBS] = [173, 34, 25, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(BranchLessThanOpcode::BLT, &x, &y);
+        run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(BranchLessThanOpcode::BLT as u8, &x, &y);
     assert!(!cmp_result);
     assert_eq!(diff_idx, 3);
     assert!(!x_sign); // positive
     assert!(y_sign); // negative
 
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(BranchLessThanOpcode::BGE, &x, &y);
+        run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(BranchLessThanOpcode::BGE as u8, &x, &y);
     assert!(cmp_result);
     assert_eq!(diff_idx, 3);
     assert!(!x_sign); // positive
@@ -529,25 +536,31 @@ fn run_cmp_diff_sign_sanity_test() {
 fn run_cmp_eq_sanity_test() {
     let x: [u8; RV32_REGISTER_NUM_LIMBS] = [45, 35, 25, 55];
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(BranchLessThanOpcode::BLT, &x, &x);
+        run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(BranchLessThanOpcode::BLT as u8, &x, &x);
+    assert!(!cmp_result);
+    assert_eq!(diff_idx, RV32_REGISTER_NUM_LIMBS);
+    assert_eq!(x_sign, y_sign);
+
+    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+        BranchLessThanOpcode::BLTU as u8,
+        &x,
+        &x,
+    );
     assert!(!cmp_result);
     assert_eq!(diff_idx, RV32_REGISTER_NUM_LIMBS);
     assert_eq!(x_sign, y_sign);
 
     let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(BranchLessThanOpcode::BLTU, &x, &x);
-    assert!(!cmp_result);
-    assert_eq!(diff_idx, RV32_REGISTER_NUM_LIMBS);
-    assert_eq!(x_sign, y_sign);
-
-    let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(BranchLessThanOpcode::BGE, &x, &x);
+        run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(BranchLessThanOpcode::BGE as u8, &x, &x);
     assert!(cmp_result);
     assert_eq!(diff_idx, RV32_REGISTER_NUM_LIMBS);
     assert_eq!(x_sign, y_sign);
 
-    let (cmp_result, diff_idx, x_sign, y_sign) =
-        run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(BranchLessThanOpcode::BGEU, &x, &x);
+    let (cmp_result, diff_idx, x_sign, y_sign) = run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
+        BranchLessThanOpcode::BGEU as u8,
+        &x,
+        &x,
+    );
     assert!(cmp_result);
     assert_eq!(diff_idx, RV32_REGISTER_NUM_LIMBS);
     assert_eq!(x_sign, y_sign);

@@ -291,8 +291,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 LoadStoreCoreAir::new(Rv32LoadStoreOpcode::CLASS_OFFSET),
             ),
             LoadStoreStep::new(
-                Rv32LoadStoreAdapterStep::new(pointer_max_bits),
-                range_checker.clone(),
+                Rv32LoadStoreAdapterStep::new(pointer_max_bits, range_checker.clone()),
                 Rv32LoadStoreOpcode::CLASS_OFFSET,
             ),
             builder.system_base().memory_controller.helper(),
@@ -315,7 +314,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 LoadSignExtendCoreAir::new(range_checker.bus()),
             ),
             LoadSignExtendStep::new(
-                Rv32LoadStoreAdapterStep::new(pointer_max_bits),
+                Rv32LoadStoreAdapterStep::new(pointer_max_bits, range_checker.clone()),
                 range_checker.clone(),
             ),
             builder.system_base().memory_controller.helper(),
@@ -614,7 +613,7 @@ mod phantom {
     use openvm_stark_backend::p3_field::{Field, PrimeField32};
     use rand::{rngs::OsRng, Rng};
 
-    use crate::adapters::{memory_read, new_read_rv32_register};
+    use crate::adapters::{memory_read, read_rv32_register};
 
     pub struct Rv32HintInputSubEx;
     pub struct Rv32HintRandomSubEx {
@@ -672,7 +671,7 @@ mod phantom {
             _: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            let len = new_read_rv32_register(memory, 1, a) as usize;
+            let len = read_rv32_register(memory, a) as usize;
             streams.hint_stream.clear();
             streams.hint_stream.extend(
                 std::iter::repeat_with(|| {
@@ -694,8 +693,8 @@ mod phantom {
             b: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            let rd = new_read_rv32_register(memory, 1, a);
-            let rs1 = new_read_rv32_register(memory, 1, b);
+            let rd = read_rv32_register(memory, a);
+            let rs1 = read_rv32_register(memory, b);
             let bytes = (0..rs1)
                 .map(|i| memory_read::<1>(memory, 2, rd + i)[0])
                 .collect::<Vec<u8>>();
@@ -715,8 +714,8 @@ mod phantom {
             b: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            let ptr = new_read_rv32_register(memory, 1, a);
-            let len = new_read_rv32_register(memory, 1, b);
+            let ptr = read_rv32_register(memory, a);
+            let len = read_rv32_register(memory, b);
             let key: Vec<u8> = (0..len)
                 .map(|i| memory_read::<1>(memory, 2, ptr + i)[0])
                 .collect();

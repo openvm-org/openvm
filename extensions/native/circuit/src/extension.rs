@@ -3,7 +3,7 @@ use branch_native_adapter::{BranchNativeAdapterAir, BranchNativeAdapterStep};
 use convert_adapter::{ConvertAdapterAir, ConvertAdapterStep};
 use derive_more::derive::From;
 use fri::{FriReducedOpeningAir, FriReducedOpeningChip, FriReducedOpeningStep};
-use jal::{JalRangeCheckAir, JalRangeCheckChip, JalRangeCheckStep};
+use jal_rangecheck::{JalRangeCheckAir, JalRangeCheckChip, JalRangeCheckStep};
 use loadstore_native_adapter::{NativeLoadStoreAdapterAir, NativeLoadStoreAdapterStep};
 use native_vectorized_adapter::{NativeVectorizedAdapterAir, NativeVectorizedAdapterStep};
 use openvm_circuit::{
@@ -19,9 +19,8 @@ use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscrimi
 use openvm_native_compiler::{
     CastfOpcode, FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
     NativeJalOpcode, NativeLoadStore4Opcode, NativeLoadStoreOpcode, NativePhantom,
-    NativeRangeCheckOpcode, Poseidon2Opcode, VerifyBatchOpcode, BLOCK_LOAD_STORE_SIZE,
+    NativeRangeCheckOpcode, BLOCK_LOAD_STORE_SIZE,
 };
-use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::{
     BranchEqualCoreAir, Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor,
     Rv32IoPeriphery, Rv32M, Rv32MExecutor, Rv32MPeriphery,
@@ -33,7 +32,7 @@ use strum::IntoEnumIterator;
 use crate::{
     adapters::*,
     phantom::*,
-    poseidon2::{air::VerifyBatchBus, new_native_poseidon2_chip, NativePoseidon2Chip},
+    // poseidon2::{air::VerifyBatchBus, new_native_poseidon2_chip, NativePoseidon2Chip},
     *,
 };
 
@@ -77,7 +76,7 @@ pub enum NativeExecutor<F: PrimeField32> {
     FieldArithmetic(FieldArithmeticChip<F>),
     FieldExtension(FieldExtensionChip<F>),
     FriReducedOpening(FriReducedOpeningChip<F>),
-    VerifyBatch(NativePoseidon2Chip<F, 1>),
+    // VerifyBatch(NativePoseidon2Chip<F, 1>),
 }
 
 #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
@@ -223,21 +222,23 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             FriOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let poseidon2_chip = new_native_poseidon2_chip(
-            builder.system_port(),
-            Poseidon2Config::default(),
-            VerifyBatchBus::new(builder.new_bus_idx()),
-            // TODO: this may use too much memory.
-            builder.system_base().memory_controller.helper(),
-        );
-        inventory.add_executor(
-            poseidon2_chip,
-            [
-                VerifyBatchOpcode::VERIFY_BATCH.global_opcode(),
-                Poseidon2Opcode::PERM_POS2.global_opcode(),
-                Poseidon2Opcode::COMP_POS2.global_opcode(),
-            ],
-        )?;
+        // let poseidon2_chip = new_native_poseidon2_chip(
+        //     builder.system_port(),
+        //     Poseidon2Config::default(),
+        //     VerifyBatchBus::new(builder.new_bus_idx()),
+        //     builder.streams().clone(),
+        //     // TODO: this may use too much memory.
+        //     MAX_INS_CAPACITY,
+        //     builder.system_base().memory_controller.helper(),
+        // );
+        // inventory.add_executor(
+        //     poseidon2_chip,
+        //     [
+        //         VerifyBatchOpcode::VERIFY_BATCH.global_opcode(),
+        //         Poseidon2Opcode::PERM_POS2.global_opcode(),
+        //         Poseidon2Opcode::COMP_POS2.global_opcode(),
+        //     ],
+        // )?;
 
         builder.add_phantom_sub_executor(
             NativeHintInputSubEx,

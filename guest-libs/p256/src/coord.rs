@@ -9,9 +9,15 @@ use crate::internal::P256Coord;
 
 impl Copy for P256Coord {}
 
+impl Default for P256Coord {
+    fn default() -> Self {
+        <Self as IntMod>::ZERO
+    }
+}
+
 impl ConditionallySelectable for P256Coord {
     fn conditional_select(a: &P256Coord, b: &P256Coord, choice: Choice) -> P256Coord {
-        P256Coord::from_le_bytes(
+        P256Coord::from_le_bytes_unchecked(
             &a.as_le_bytes()
                 .iter()
                 .zip(b.as_le_bytes().iter())

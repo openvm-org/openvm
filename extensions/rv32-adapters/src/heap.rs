@@ -1,9 +1,10 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
-        BasicAdapterInterface, ExecutionBridge, MinimalInstruction, VmAdapterAir, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, BasicAdapterInterface, ExecutionBridge, MinimalInstruction, VmAdapterAir,
+        VmStateMut,
     },
     system::memory::{
         offline_checker::MemoryBridge,
@@ -24,7 +25,9 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
 };
 
-use crate::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterCols, Rv32VecHeapAdapterStep};
+use crate::{
+    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterCols, Rv32VecHeapAdapterRecord, Rv32VecHeapAdapterStep,
+};
 
 /// This adapter reads from NUM_READS <= 2 pointers and writes to 1 pointer.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
@@ -131,23 +134,20 @@ where
         Rv32VecHeapAdapterCols::<F, NUM_READS, 1, 1, READ_SIZE, WRITE_SIZE>::width();
     type ReadData = [[u8; READ_SIZE]; NUM_READS];
     type WriteData = [[u8; WRITE_SIZE]; 1];
+    type RecordMut<'a> = &'a mut Rv32VecHeapAdapterRecord<NUM_READS, 1, 1, READ_SIZE, WRITE_SIZE>;
 
-    type TraceContext<'a> = ();
-
-    fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]) {
-        let adapter_cols: &mut Rv32VecHeapAdapterCols<F, NUM_READS, 1, 1, READ_SIZE, WRITE_SIZE> =
-            adapter_row.borrow_mut();
-        adapter_cols.from_state.pc = F::from_canonical_u32(pc);
-        adapter_cols.from_state.timestamp = F::from_canonical_u32(memory.timestamp);
+    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+        record.from_pc = pc;
+        record.from_timestamp = memory.timestamp;
     }
 
     fn read(
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        adapter_row: &mut [F],
+        record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
-        let read_data = AdapterTraceStep::<F, CTX>::read(&self.0, memory, instruction, adapter_row);
+        let read_data = AdapterTraceStep::<F, CTX>::read(&self.0, memory, instruction, record);
         read_data.map(|r| r[0])
     }
 
@@ -155,14 +155,23 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        adapter_row: &mut [F],
         data: &Self::WriteData,
+        record: &mut Self::RecordMut<'_>,
     ) {
-        AdapterTraceStep::<F, CTX>::write(&self.0, memory, instruction, adapter_row, data);
+        AdapterTraceStep::<F, CTX>::write(&self.0, memory, instruction, data, record);
     }
+}
 
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, ctx: (), adapter_row: &mut [F]) {
-        AdapterTraceStep::<F, CTX>::fill_trace_row(&self.0, mem_helper, ctx, adapter_row);
+impl<
+        F: PrimeField32,
+        CTX,
+        const NUM_READS: usize,
+        const READ_SIZE: usize,
+        const WRITE_SIZE: usize,
+    > AdapterTraceFiller<F, CTX> for Rv32HeapAdapterStep<NUM_READS, READ_SIZE, WRITE_SIZE>
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
+        AdapterTraceFiller::<F, CTX>::fill_trace_row(&self.0, mem_helper, adapter_row);
     }
 }
 

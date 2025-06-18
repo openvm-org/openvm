@@ -1,31 +1,38 @@
 #[cfg(test)]
+mod test_vectors;
+
+#[cfg(test)]
 mod tests {
     use core::str::FromStr;
 
     use eyre::Result;
     use hex_literal::hex;
     use num_bigint::BigUint;
-    use openvm_algebra_circuit::ModularExtension;
     use openvm_algebra_transpiler::ModularTranspilerExtension;
     use openvm_circuit::{
-        arch::{instructions::exe::VmExe, SystemConfig},
+        arch::instructions::exe::VmExe,
         utils::{air_test, air_test_with_min_segments},
     };
-    use openvm_ecc_circuit::{
-        CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension, P256_CONFIG, SECP256K1_CONFIG,
-    };
+    use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, P256_CONFIG, SECP256K1_CONFIG};
     use openvm_ecc_transpiler::EccTranspilerExtension;
-    use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_sdk::config::SdkVmConfig;
+    use openvm_sdk::{
+        config::{AppConfig, SdkVmConfig},
+        StdIn,
+    };
     use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::{openvm_stark_backend, p3_baby_bear::BabyBear};
     use openvm_toolchain_tests::{
         build_example_program_at_path_with_features, get_programs_dir, NoInitFile,
     };
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
+
+    use crate::test_vectors::{
+        k256_sec1_decoding_test_vectors, K256_RECOVERY_TEST_VECTORS, P256_RECOVERY_TEST_VECTORS,
+    };
+
     type F = BabyBear;
 
     #[test]
@@ -163,36 +170,72 @@ mod tests {
 
     #[test]
     fn test_ecdsa() -> Result<()> {
-        let config = SdkVmConfig::builder()
-            .system(SystemConfig::default().with_continuations().into())
-            .rv32i(Default::default())
-            .rv32m(Default::default())
-            .io(Default::default())
-            .modular(ModularExtension::new(vec![
-                SECP256K1_CONFIG.modulus.clone(),
-                SECP256K1_CONFIG.scalar.clone(),
-            ]))
-            .keccak(Default::default())
-            .ecc(WeierstrassExtension::new(vec![SECP256K1_CONFIG.clone()]))
-            .build();
-
+        let config = toml::from_str::<AppConfig<SdkVmConfig>>(include_str!(
+            "../programs/openvm_k256_keccak.toml"
+        ))?
+        .app_vm_config;
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "ecdsa",
             ["k256"],
             &config,
         )?;
-        let openvm_exe = VmExe::from_elf(
-            elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(Keccak256TranspilerExtension)
-                .with_extension(EccTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
-        )?;
+        let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
         air_test(config, openvm_exe);
+        Ok(())
+    }
+
+    #[test]
+    fn test_p256_ecdsa_recover() -> Result<()> {
+        let config =
+            toml::from_str::<AppConfig<SdkVmConfig>>(include_str!("../programs/openvm_p256.toml"))?
+                .app_vm_config;
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "ecdsa_recover_p256",
+            ["p256"],
+            &NoInitFile, // using already created file
+        )?;
+        let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
+        let mut input = StdIn::default();
+        input.write(&P256_RECOVERY_TEST_VECTORS.to_vec());
+        air_test_with_min_segments(config, openvm_exe, input, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn test_k256_ecdsa_recover() -> Result<()> {
+        let config =
+            toml::from_str::<AppConfig<SdkVmConfig>>(include_str!("../programs/openvm_k256.toml"))?
+                .app_vm_config;
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "ecdsa_recover_k256",
+            ["k256"],
+            &NoInitFile, // using already created file
+        )?;
+        let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
+        let mut input = StdIn::default();
+        input.write(&K256_RECOVERY_TEST_VECTORS.to_vec());
+        air_test_with_min_segments(config, openvm_exe, input, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn test_k256_vk_from_sec1_bytes() -> Result<()> {
+        let config =
+            toml::from_str::<AppConfig<SdkVmConfig>>(include_str!("../programs/openvm_k256.toml"))?
+                .app_vm_config;
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "sec1_decode",
+            ["k256"],
+            &NoInitFile, // using already created file
+        )?;
+        let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
+        let mut input = StdIn::default();
+        input.write(&k256_sec1_decoding_test_vectors());
+        air_test_with_min_segments(config, openvm_exe, input, 1);
         Ok(())
     }
 

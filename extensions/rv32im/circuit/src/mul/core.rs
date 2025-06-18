@@ -6,15 +6,19 @@ use std::{
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, EmptyLayout, MinimalInstruction, RecordArena, Result, StepExecutorE1,
+        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip};
+use openvm_circuit_primitives::{
+    range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
+    AlignedBytesBorrow,
+};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_transpiler::MulOpcode;
@@ -114,6 +118,13 @@ where
     }
 }
 
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct MultiplicationCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub b: [u8; NUM_LIMBS],
+    pub c: [u8; NUM_LIMBS],
+}
+
 #[derive(Debug)]
 pub struct MultiplicationStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
@@ -161,66 +172,81 @@ where
             CTX,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-            TraceContext<'a> = (),
         >,
 {
+    type RecordLayout = EmptyLayout<A>;
+    type RecordMut<'a> = (
+        A::RecordMut<'a>,
+        &'a mut MultiplicationCoreRecord<NUM_LIMBS, LIMB_BITS>,
+    );
+
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", MulOpcode::from_usize(opcode - self.offset))
     }
 
-    fn execute(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let Instruction { opcode, .. } = instruction;
 
-        assert_eq!(
+        debug_assert_eq!(
             MulOpcode::from_usize(opcode.local_opcode_idx(self.offset)),
             MulOpcode::MUL
         );
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-
-        A::start(*state.pc, state.memory, adapter_row);
+        A::start(*state.pc, state.memory, &mut adapter_record);
 
         let [rs1, rs2] = self
             .adapter
-            .read(state.memory, instruction, adapter_row)
+            .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        let (a, carry) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1, &rs2);
+        let (a, _) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1, &rs2);
 
-        let core_row: &mut MultiplicationCoreCols<_, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        core_row.a = a.map(F::from_canonical_u8);
-        core_row.b = rs1.map(F::from_canonical_u8);
-        core_row.c = rs2.map(F::from_canonical_u8);
-        core_row.is_valid = F::ONE;
+        core_record.b = rs1;
+        core_record.c = rs2;
 
-        // TODO(ayush): move to fill_trace_row
+        // TODO(ayush): avoid this conversion
+        self.adapter
+            .write(state.memory, instruction, &[a].into(), &mut adapter_record);
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        Ok(())
+    }
+}
+impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F, CTX>
+    for MultiplicationStep<A, NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F, CTX>,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+
+        let record: &MultiplicationCoreRecord<NUM_LIMBS, LIMB_BITS> =
+            unsafe { get_record_from_slice(&mut core_row, ()) };
+
+        let core_row: &mut MultiplicationCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
+
+        let (a, carry) = run_mul::<NUM_LIMBS, LIMB_BITS>(&record.b, &record.c);
+
         for (a, carry) in a.iter().zip(carry.iter()) {
             self.range_tuple_chip.add_count(&[*a as u32, *carry]);
         }
 
-        // TODO(ayush): avoid this conversion
-        self.adapter
-            .write(state.memory, instruction, adapter_row, &[a].into());
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        *trace_offset += width;
-
-        Ok(())
-    }
-
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, _core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-
-        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
+        // write in reverse order
+        core_row.is_valid = F::ONE;
+        core_row.c = record.c.map(F::from_canonical_u8);
+        core_row.b = record.b.map(F::from_canonical_u8);
+        core_row.a = a.map(F::from_canonical_u8);
     }
 }
 

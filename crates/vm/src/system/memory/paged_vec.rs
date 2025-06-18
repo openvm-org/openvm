@@ -29,36 +29,89 @@ impl<const PAGE_SIZE: usize> PagedVec<PAGE_SIZE> {
     // into the memory pointed to by `dst`. If the relevant page is not
     // initialized, fills that portion with `0u8`.
     #[inline]
-    pub fn read_range_generic(&self, start: usize, len: usize, dst: *mut u8) {
-        let start_page = start / PAGE_SIZE;
-        let end_page = (start + len - 1) / PAGE_SIZE;
+    pub fn read_range_generic(&self, start: usize, len: usize, mut dst: *mut u8) {
+        let start_page_idx = start / PAGE_SIZE;
+        let end_page_idx = (start + len - 1) / PAGE_SIZE;
         unsafe {
-            if start_page == end_page {
+            if start_page_idx == end_page_idx {
                 let offset = start % PAGE_SIZE;
-                if let Some(page) = self.pages[start_page].as_ref() {
+                if let Some(page) = self.pages[start_page_idx].as_ref() {
                     ptr::copy_nonoverlapping(page.as_ptr().add(offset), dst, len);
                 } else {
                     std::slice::from_raw_parts_mut(dst, len).fill(0u8);
                 }
             } else {
-                debug_assert_eq!(
-                    start_page + 1,
-                    end_page,
-                    "Range spans more than two pages: {:?}",
-                    (start_page, end_page, start, len)
-                );
+                // First page
                 let offset = start % PAGE_SIZE;
                 let first_part = PAGE_SIZE - offset;
-                if let Some(page) = self.pages[start_page].as_ref() {
-                    ptr::copy_nonoverlapping(page.as_ptr().add(offset), dst, first_part);
-                } else {
-                    std::slice::from_raw_parts_mut(dst, first_part).fill(0u8);
+                {
+                    if let Some(page) = self.pages[start_page_idx].as_ref() {
+                        ptr::copy_nonoverlapping(page.as_ptr().add(offset), dst, first_part);
+                    } else {
+                        std::slice::from_raw_parts_mut(dst, first_part).fill(0u8);
+                    }
+                    dst = dst.add(first_part);
                 }
-                let second_part = len - first_part;
-                if let Some(page) = self.pages[end_page].as_ref() {
-                    ptr::copy_nonoverlapping(page.as_ptr(), dst.add(first_part), second_part);
-                } else {
-                    std::slice::from_raw_parts_mut(dst.add(first_part), second_part).fill(0u8);
+
+                // Middle pages
+                for page_idx in (start_page_idx + 1)..end_page_idx {
+                    if let Some(page) = self.pages[page_idx].as_ref() {
+                        ptr::copy_nonoverlapping(page.as_ptr(), dst, PAGE_SIZE);
+                    } else {
+                        std::slice::from_raw_parts_mut(dst, PAGE_SIZE).fill(0u8);
+                    }
+                    dst = dst.add(PAGE_SIZE);
+                }
+
+                // Last page
+                let last_part = (len - first_part) % PAGE_SIZE;
+                {
+                    if let Some(page) = self.pages[end_page_idx].as_ref() {
+                        ptr::copy_nonoverlapping(page.as_ptr(), dst, last_part);
+                    } else {
+                        std::slice::from_raw_parts_mut(dst, last_part).fill(0u8);
+                    }
+                }
+            }
+        }
+    }
+
+    // Updates a range of length `len` starting at index `start` with new values.
+    // and then writes the new values into the underlying pages,
+    // allocating pages (with defaults) if necessary.
+    #[inline]
+    pub fn set_range_generic(&mut self, start: usize, len: usize, mut new: *const u8) {
+        let start_page_idx = start / PAGE_SIZE;
+        let end_page_idx = (start + len - 1) / PAGE_SIZE;
+        unsafe {
+            if start_page_idx == end_page_idx {
+                let offset = start % PAGE_SIZE;
+                let page = self.pages[start_page_idx].get_or_insert_with(|| vec![0u8; PAGE_SIZE]);
+                ptr::copy_nonoverlapping(new, page.as_mut_ptr().add(offset), len);
+            } else {
+                // First page
+                let offset = start % PAGE_SIZE;
+                let first_part = PAGE_SIZE - offset;
+                {
+                    let start_page =
+                        self.pages[start_page_idx].get_or_insert_with(|| vec![0u8; PAGE_SIZE]);
+                    ptr::copy_nonoverlapping(new, start_page.as_mut_ptr().add(offset), first_part);
+                    new = new.add(first_part);
+                }
+
+                // Middle pages
+                for page_idx in (start_page_idx + 1)..end_page_idx {
+                    let page = self.pages[page_idx].get_or_insert_with(|| vec![0u8; PAGE_SIZE]);
+                    ptr::copy_nonoverlapping(new, page.as_mut_ptr(), PAGE_SIZE);
+                    new = new.add(PAGE_SIZE);
+                }
+
+                // Last page
+                let last_part = (len - first_part) % PAGE_SIZE;
+                {
+                    let end_page =
+                        self.pages[end_page_idx].get_or_insert_with(|| vec![0u8; PAGE_SIZE]);
+                    ptr::copy_nonoverlapping(new, end_page.as_mut_ptr(), last_part);
                 }
             }
         }
@@ -69,29 +122,50 @@ impl<const PAGE_SIZE: usize> PagedVec<PAGE_SIZE> {
     // and then writes the new values into the underlying pages,
     // allocating pages (with defaults) if necessary.
     #[inline]
-    pub fn set_range_generic(&mut self, start: usize, len: usize, new: *const u8, dst: *mut u8) {
-        let start_page = start / PAGE_SIZE;
-        let end_page = (start + len - 1) / PAGE_SIZE;
+    pub fn replace_range_generic(
+        &mut self,
+        start: usize,
+        len: usize,
+        mut new: *const u8,
+        mut dst: *mut u8,
+    ) {
+        let start_page_idx = start / PAGE_SIZE;
+        let end_page_idx = (start + len - 1) / PAGE_SIZE;
         unsafe {
-            if start_page == end_page {
+            if start_page_idx == end_page_idx {
                 let offset = start % PAGE_SIZE;
-                let page = self.pages[start_page].get_or_insert_with(|| vec![0u8; PAGE_SIZE]);
+                let page = self.pages[start_page_idx].get_or_insert_with(|| vec![0u8; PAGE_SIZE]);
                 ptr::copy_nonoverlapping(page.as_ptr().add(offset), dst, len);
                 ptr::copy_nonoverlapping(new, page.as_mut_ptr().add(offset), len);
             } else {
-                assert_eq!(start_page + 1, end_page);
+                // First page
                 let offset = start % PAGE_SIZE;
                 let first_part = PAGE_SIZE - offset;
                 {
-                    let page = self.pages[start_page].get_or_insert_with(|| vec![0u8; PAGE_SIZE]);
-                    ptr::copy_nonoverlapping(page.as_ptr().add(offset), dst, first_part);
-                    ptr::copy_nonoverlapping(new, page.as_mut_ptr().add(offset), first_part);
+                    let start_page =
+                        self.pages[start_page_idx].get_or_insert_with(|| vec![0u8; PAGE_SIZE]);
+                    ptr::copy_nonoverlapping(start_page.as_ptr().add(offset), dst, first_part);
+                    ptr::copy_nonoverlapping(new, start_page.as_mut_ptr().add(offset), first_part);
+                    dst = dst.add(first_part);
+                    new = new.add(first_part);
                 }
-                let second_part = len - first_part;
+
+                // Middle pages
+                for page_idx in (start_page_idx + 1)..end_page_idx {
+                    let page = self.pages[page_idx].get_or_insert_with(|| vec![0u8; PAGE_SIZE]);
+                    ptr::copy_nonoverlapping(page.as_ptr(), dst, PAGE_SIZE);
+                    ptr::copy_nonoverlapping(new, page.as_mut_ptr(), PAGE_SIZE);
+                    new = new.add(PAGE_SIZE);
+                    dst = dst.add(PAGE_SIZE);
+                }
+
+                // Last page
+                let last_part = (len - first_part) % PAGE_SIZE;
                 {
-                    let page = self.pages[end_page].get_or_insert_with(|| vec![0u8; PAGE_SIZE]);
-                    ptr::copy_nonoverlapping(page.as_ptr(), dst.add(first_part), second_part);
-                    ptr::copy_nonoverlapping(new.add(first_part), page.as_mut_ptr(), second_part);
+                    let end_page =
+                        self.pages[end_page_idx].get_or_insert_with(|| vec![0u8; PAGE_SIZE]);
+                    ptr::copy_nonoverlapping(end_page.as_ptr(), dst, last_part);
+                    ptr::copy_nonoverlapping(new, end_page.as_mut_ptr(), last_part);
                 }
             }
         }
@@ -136,30 +210,7 @@ impl<const PAGE_SIZE: usize> PagedVec<PAGE_SIZE> {
     // onto the stack in the function call.
     #[inline(always)]
     pub fn set<BLOCK: Copy>(&mut self, start: usize, values: &BLOCK) {
-        let len = size_of::<BLOCK>();
-        let start_page = start / PAGE_SIZE;
-        let end_page = (start + len - 1) / PAGE_SIZE;
-        let src = values as *const _ as *const u8;
-        unsafe {
-            if start_page == end_page {
-                let offset = start % PAGE_SIZE;
-                let page = self.pages[start_page].get_or_insert_with(|| vec![0u8; PAGE_SIZE]);
-                ptr::copy_nonoverlapping(src, page.as_mut_ptr().add(offset), len);
-            } else {
-                assert_eq!(start_page + 1, end_page);
-                let offset = start % PAGE_SIZE;
-                let first_part = PAGE_SIZE - offset;
-                {
-                    let page = self.pages[start_page].get_or_insert_with(|| vec![0u8; PAGE_SIZE]);
-                    ptr::copy_nonoverlapping(src, page.as_mut_ptr().add(offset), first_part);
-                }
-                let second_part = len - first_part;
-                {
-                    let page = self.pages[end_page].get_or_insert_with(|| vec![0u8; PAGE_SIZE]);
-                    ptr::copy_nonoverlapping(src.add(first_part), page.as_mut_ptr(), second_part);
-                }
-            }
-        }
+        self.set_range_generic(start, size_of::<BLOCK>(), values as *const _ as *const u8);
     }
 
     /// memcpy of new `values` into pages, memcpy of old existing values into new returned value.
@@ -169,7 +220,7 @@ impl<const PAGE_SIZE: usize> PagedVec<PAGE_SIZE> {
     pub fn replace<BLOCK: Copy>(&mut self, from: usize, values: &BLOCK) -> BLOCK {
         // Create an uninitialized array for old values.
         let mut result: MaybeUninit<BLOCK> = MaybeUninit::uninit();
-        self.set_range_generic(
+        self.replace_range_generic(
             from,
             size_of::<BLOCK>(),
             values as *const _ as *const u8,
@@ -331,22 +382,21 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    pub fn read_range_generic<T: Copy + Debug>(
+    /// - Panics if accessing out of bounds memory within the address space
+    pub unsafe fn get_slice<T: Copy + Debug>(
         &self,
         (addr_space, ptr): Address,
         len: usize,
     ) -> Vec<T> {
         let mut block: Vec<T> = Vec::with_capacity(len);
-        unsafe {
-            self.paged_vecs
-                .get_unchecked((addr_space - self.as_offset) as usize)
-                .read_range_generic(
-                    (ptr as usize) * size_of::<T>(),
-                    len * size_of::<T>(),
-                    block.as_mut_ptr() as *mut u8,
-                );
-            block.set_len(len);
-        }
+        self.paged_vecs
+            .get_unchecked((addr_space - self.as_offset) as usize)
+            .read_range_generic(
+                (ptr as usize) * size_of::<T>(),
+                len * size_of::<T>(),
+                block.as_mut_ptr() as *mut u8,
+            );
+        block.set_len(len);
         block
     }
 
@@ -364,6 +414,23 @@ impl<const PAGE_SIZE: usize> AddressMap<PAGE_SIZE> {
     }
     pub fn is_empty(&self) -> bool {
         self.paged_vecs.iter().all(|page| page.is_empty())
+    }
+
+    /// Copies `data` into the memory at `(addr_space, ptr)`.
+    /// # Safety
+    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
+    /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    pub unsafe fn copy_slice_nonoverlapping<T: Copy>(
+        &mut self,
+        (addr_space, ptr): Address,
+        data: &[T],
+    ) {
+        let start = (ptr as usize) * size_of::<T>();
+        let len = size_of_val(data);
+
+        self.paged_vecs
+            .get_unchecked_mut((addr_space - self.as_offset) as usize)
+            .set_range_generic(start, len, data.as_ptr() as *const u8);
     }
 
     // TODO[jpw]: stabilize the boundary memory image format and how to construct

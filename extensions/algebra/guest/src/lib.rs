@@ -152,12 +152,20 @@ pub trait IntMod:
     fn from_repr(repr: Self::Repr) -> Self;
 
     /// Creates a new IntMod from an array of bytes, little endian.
+    /// Returns `None` if the integer value of `bytes` is greater than or equal to the modulus.
+    fn from_le_bytes(bytes: &[u8]) -> Option<Self>;
+
+    /// Creates a new IntMod from an array of bytes, big endian.
+    /// Returns `None` if the integer value of `bytes` is greater than or equal to the modulus.
+    fn from_be_bytes(bytes: &[u8]) -> Option<Self>;
+
+    /// Creates a new IntMod from an array of bytes, little endian.
     /// Does not enforce the integer value of `bytes` must be less than the modulus.
-    fn from_le_bytes(bytes: &[u8]) -> Self;
+    fn from_le_bytes_unchecked(bytes: &[u8]) -> Self;
 
     /// Creates a new IntMod from an array of bytes, big endian.
     /// Does not enforce the integer value of `bytes` must be less than the modulus.
-    fn from_be_bytes(bytes: &[u8]) -> Self;
+    fn from_be_bytes_unchecked(bytes: &[u8]) -> Self;
 
     /// Creates a new IntMod from a u8.
     /// Does not enforce the integer value of `bytes` must be less than the modulus.

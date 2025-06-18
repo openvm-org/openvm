@@ -12,7 +12,7 @@ The functional part is provided by the `openvm-algebra-guest` crate, which is a 
   - `Repr` typically is `[u8; NUM_LIMBS]`, representing the number's underlying storage.
   - `MODULUS` is the compile-time known modulus.
   - `ZERO` and `ONE` represent the additive and multiplicative identities, respectively.
-  - Constructors include `from_repr`, `from_le_bytes`, `from_be_bytes`, `from_u8`, `from_u32`, and `from_u64`.
+  - Constructors include `from_repr`, `from_le_bytes`, `from_be_bytes`, `from_le_bytes_unchecked`, `from_be_bytes_unchecked`, `from_u8`, `from_u32`, and `from_u64`.
 
 - `Field` trait:
   Provides constants `ZERO` and `ONE` and methods for basic arithmetic operations within a field.

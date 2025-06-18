@@ -5,16 +5,26 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
-        BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
-        VmStateMut,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, BasicAdapterInterface,
+        ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir, VmStateMut,
     },
-    system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-        online::{GuestMemory, TracingMemory},
-        MemoryAddress, MemoryAuxColsFactory,
+    system::{
+        memory::{
+            offline_checker::{
+                MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+                MemoryWriteAuxRecord,
+            },
+            online::{GuestMemory, TracingMemory},
+            MemoryAddress, MemoryAuxColsFactory,
+        },
+        native_adapter::util::{
+            memory_read_native_from_state, memory_write_native_from_state, tracing_read_native,
+            tracing_write_native,
+        },
     },
 };
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_native_compiler::conversion::AS;
@@ -22,11 +32,6 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
-};
-
-use super::{
-    memory_read_native_from_state, memory_write_native_from_state, tracing_read_native,
-    tracing_write_native,
 };
 
 #[repr(C)]
@@ -121,24 +126,33 @@ impl<AB: InteractionBuilder, const N: usize> VmAdapterAir<AB> for NativeVectoriz
     }
 }
 
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct NativeVectorizedAdapterRecord<F, const N: usize> {
+    pub from_pc: u32,
+    pub from_timestamp: u32,
+    pub a_ptr: F,
+    pub b_ptr: F,
+    pub c_ptr: F,
+    pub reads_aux: [MemoryReadAuxRecord; 2],
+    pub write_aux: MemoryWriteAuxRecord<F, N>,
+}
+
 #[derive(derive_new::new)]
 pub struct NativeVectorizedAdapterStep<const N: usize>;
 
-impl<F, CTX, const N: usize> AdapterTraceStep<F, CTX> for NativeVectorizedAdapterStep<N>
-where
-    F: PrimeField32,
+impl<F: PrimeField32, CTX, const N: usize> AdapterTraceStep<F, CTX>
+    for NativeVectorizedAdapterStep<N>
 {
     const WIDTH: usize = size_of::<NativeVectorizedAdapterCols<u8, N>>();
     type ReadData = [[F; N]; 2];
     type WriteData = [F; N];
-    type TraceContext<'a> = ();
+    type RecordMut<'a> = &'a mut NativeVectorizedAdapterRecord<F, N>;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]) {
-        let adapter_row: &mut NativeVectorizedAdapterCols<F, N> = adapter_row.borrow_mut();
-
-        adapter_row.from_state.pc = F::from_canonical_u32(pc);
-        adapter_row.from_state.timestamp = F::from_canonical_u32(memory.timestamp());
+    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+        record.from_pc = pc;
+        record.from_timestamp = memory.timestamp();
     }
 
     #[inline(always)]
@@ -146,29 +160,26 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        adapter_row: &mut [F],
+        record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
         let &Instruction { b, c, d, e, .. } = instruction;
-
         debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
         debug_assert_eq!(e.as_canonical_u32(), AS::Native as u32);
 
-        let adapter_row: &mut NativeVectorizedAdapterCols<F, N> = adapter_row.borrow_mut();
-
-        adapter_row.b_pointer = b;
-        let y_val = tracing_read_native(
+        record.b_ptr = b;
+        let b_val = tracing_read_native(
             memory,
             b.as_canonical_u32(),
-            adapter_row.reads_aux[0].as_mut(),
+            &mut record.reads_aux[0].prev_timestamp,
         );
-        adapter_row.c_pointer = c;
-        let z_val = tracing_read_native(
+        record.c_ptr = c;
+        let c_val = tracing_read_native(
             memory,
             c.as_canonical_u32(),
-            adapter_row.reads_aux[1].as_mut(),
+            &mut record.reads_aux[1].prev_timestamp,
         );
 
-        [y_val, z_val]
+        [b_val, c_val]
     }
 
     #[inline(always)]
@@ -176,42 +187,61 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        adapter_row: &mut [F],
         data: &Self::WriteData,
+        record: &mut Self::RecordMut<'_>,
     ) {
         let &Instruction { a, d, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
 
-        let adapter_row: &mut NativeVectorizedAdapterCols<F, N> = adapter_row.borrow_mut();
-
-        adapter_row.a_pointer = a;
+        record.a_ptr = a;
         tracing_write_native(
             memory,
             a.as_canonical_u32(),
             data,
-            &mut adapter_row.writes_aux[0],
+            &mut record.write_aux.prev_timestamp,
+            &mut record.write_aux.prev_data,
         );
     }
+}
 
+impl<F: PrimeField32, CTX, const N: usize> AdapterTraceFiller<F, CTX>
+    for NativeVectorizedAdapterStep<N>
+{
     #[inline(always)]
-    fn fill_trace_row(
-        &self,
-        mem_helper: &MemoryAuxColsFactory<F>,
-        _ctx: Self::TraceContext<'_>,
-        adapter_row: &mut [F],
-    ) {
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        let record: &NativeVectorizedAdapterRecord<F, N> =
+            unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut NativeVectorizedAdapterCols<F, N> = adapter_row.borrow_mut();
 
-        let mut timestamp = adapter_row.from_state.timestamp.as_canonical_u32();
+        // Writing in reverse order to avoid overwriting the `record`
+        adapter_row.writes_aux[0].set_prev_data(record.write_aux.prev_data);
+        mem_helper.fill(
+            record.write_aux.prev_timestamp,
+            record.from_timestamp + 2,
+            adapter_row.writes_aux[0].as_mut(),
+        );
 
-        mem_helper.fill_from_prev(timestamp, adapter_row.reads_aux[0].as_mut());
-        timestamp += 1;
+        adapter_row
+            .reads_aux
+            .iter_mut()
+            .enumerate()
+            .zip(record.reads_aux.iter())
+            .rev()
+            .for_each(|((i, read_cols), read_record)| {
+                mem_helper.fill(
+                    read_record.prev_timestamp,
+                    record.from_timestamp + i as u32,
+                    read_cols.as_mut(),
+                );
+            });
 
-        mem_helper.fill_from_prev(timestamp, adapter_row.reads_aux[1].as_mut());
-        timestamp += 1;
+        adapter_row.c_pointer = record.c_ptr;
+        adapter_row.b_pointer = record.b_ptr;
+        adapter_row.a_pointer = record.a_ptr;
 
-        mem_helper.fill_from_prev(timestamp, adapter_row.writes_aux[0].as_mut());
+        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
+        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
     }
 }
 

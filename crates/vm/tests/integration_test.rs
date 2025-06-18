@@ -132,10 +132,10 @@ fn test_vm_override_executor_height() {
 
     let vm = VirtualMachine::new(e, vm_config.clone());
     let pk = vm.keygen();
+    let vk = pk.get_vk();
 
     let executor = SingleSegmentVmExecutor::new(vm_config.clone());
 
-    let vk = pk.get_vk();
     let max_trace_heights = executor
         .execute_metered(
             committed_exe.exe.clone(),
@@ -295,6 +295,7 @@ fn test_vm_public_values() {
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
     let vm = VirtualMachine::new(engine, config.clone());
     let pk = vm.keygen();
+    let vk = pk.get_vk();
 
     {
         let instructions = vec![
@@ -309,8 +310,6 @@ fn test_vm_public_values() {
         ));
         let single_vm = SingleSegmentVmExecutor::new(config);
 
-        let pk = vm.keygen();
-        let vk = pk.get_vk();
         let max_trace_heights = single_vm
             .execute_metered(
                 program.clone().into(),
@@ -388,6 +387,7 @@ fn test_vm_1_persistent() {
 
     let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
+    let vk = pk.get_vk();
 
     let n = 6;
     let instructions = vec![
@@ -406,8 +406,6 @@ fn test_vm_1_persistent() {
 
     let program = Program::from_instructions(&instructions);
 
-    let pk = vm.keygen();
-    let vk = pk.get_vk();
     let segments = vm
         .executor
         .execute_metered(

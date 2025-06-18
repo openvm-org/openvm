@@ -27,8 +27,13 @@ serde = { version = "1.0", default-features = false, features = [
     "alloc",
     "derive",
 ] }
+serde_with = { version = "3.13.0", default-features = false, features = [
+    "alloc",
+    "macros",
+] }
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 hex-literal = { version = "0.4.1", default-features = false }
+ecdsa-core = { version = "0.16.9", package = "ecdsa", default-features = false }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint = "0.4.6"
@@ -62,6 +67,18 @@ required-features = ["k256"]
 
 [[example]]
 name = "ecdsa"
+required-features = ["k256"]
+
+[[example]]
+name = "ecdsa_recover_p256"
+required-features = ["p256"]
+
+[[example]]
+name = "ecdsa_recover_k256"
+required-features = ["k256"]
+
+[[example]]
+name = "sec1_decode"
 required-features = ["k256"]
 
 [[example]]

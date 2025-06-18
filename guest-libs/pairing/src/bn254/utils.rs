@@ -7,7 +7,7 @@ use crate::bn254::G2Affine as OpenVmG2Affine;
 
 pub(crate) fn convert_bn254_halo2_fq_to_fp(x: Fq) -> Fp {
     let bytes = x.to_bytes();
-    Fp::from_le_bytes(&bytes)
+    Fp::from_le_bytes_unchecked(&bytes)
 }
 
 pub(crate) fn convert_bn254_halo2_fq2_to_fp2(x: Fq2) -> Fp2 {
