@@ -165,7 +165,7 @@ impl AggregateMetrics {
         let mut total_par_proof_time = MdTableCell::new(0.0, Some(0.0));
         for (group_name, metrics) in &self.by_group {
             let stats = metrics.get(PROOF_TIME_LABEL);
-            let execute_stats = metrics.get(EXECUTE_TIME_LABEL);
+            let execute_metered_stats = metrics.get(EXECUTE_METERED_TIME_LABEL);
             if stats.is_none() {
                 continue;
             }
@@ -189,21 +189,23 @@ impl AggregateMetrics {
                 *total_par_proof_time.diff.as_mut().unwrap() += max.diff.unwrap_or(0.0);
 
                 // Account for the fact that execution is serial
-                // Add total execution time for the app proofs, and subtract the max segment
-                // execution time
+                // Use execute_metered_time_ms directly (no summing needed since it's not
+                // per-segment)
                 if group_name != "leaf"
                     && group_name != "root"
                     && group_name != "halo2_outer"
                     && group_name != "halo2_wrapper"
                     && !group_name.starts_with("internal")
                 {
-                    let execute_stats = execute_stats.unwrap();
-                    total_par_proof_time.val +=
-                        (execute_stats.sum.val - execute_stats.max.val) / 1000.0;
-                    *total_par_proof_time.diff.as_mut().unwrap() +=
-                        (execute_stats.sum.diff.unwrap_or(0.0)
-                            - execute_stats.max.diff.unwrap_or(0.0))
-                            / 1000.0;
+                    if let Some(execute_metered_stats) = execute_metered_stats {
+                        // For metered metrics without segment labels, we just use the value
+                        // directly Count is 1, so avg = sum = max = min =
+                        // value
+                        total_par_proof_time.val += execute_metered_stats.avg.val / 1000.0;
+                        if let Some(diff) = execute_metered_stats.avg.diff {
+                            *total_par_proof_time.diff.as_mut().unwrap() += diff / 1000.0;
+                        }
+                    }
                 }
             }
         }
@@ -295,11 +297,31 @@ impl AggregateMetrics {
             for metric_name in names {
                 let summary = summaries.get(metric_name);
                 if let Some(summary) = summary {
-                    writeln!(
-                        writer,
-                        "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
-                        metric_name, summary.avg, summary.sum, summary.max, summary.min,
-                    )?;
+                    // Special handling for execute_metered metrics (not aggregated across segments)
+                    if metric_name == EXECUTE_METERED_TIME_LABEL
+                        || metric_name == EXECUTE_METERED_INSN_MI_S_LABEL
+                    {
+                        writeln!(
+                            writer,
+                            "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
+                            metric_name, summary.avg, "-", "-", "-",
+                        )?;
+                    } else if metric_name == EXECUTE_E1_INSN_MI_S_LABEL
+                        || metric_name == EXECUTE_E3_INSN_MI_S_LABEL
+                    {
+                        // skip sum because it is misleading
+                        writeln!(
+                            writer,
+                            "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
+                            metric_name, summary.avg, "-", summary.max, summary.min,
+                        )?;
+                    } else {
+                        writeln!(
+                            writer,
+                            "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
+                            metric_name, summary.avg, summary.sum, summary.max, summary.min,
+                        )?;
+                    }
                 }
             }
             writeln!(writer)?;
@@ -384,7 +406,11 @@ pub const PROOF_TIME_LABEL: &str = "total_proof_time_ms";
 pub const CELLS_USED_LABEL: &str = "main_cells_used";
 pub const CYCLES_LABEL: &str = "total_cycles";
 pub const EXECUTE_E1_TIME_LABEL: &str = "execute_e1_time_ms";
+pub const EXECUTE_E1_INSN_MI_S_LABEL: &str = "execute_e1_insn_mi/s";
 pub const EXECUTE_METERED_TIME_LABEL: &str = "execute_metered_time_ms";
+pub const EXECUTE_METERED_INSN_MI_S_LABEL: &str = "execute_metered_insn_mi/s";
+pub const EXECUTE_E3_TIME_LABEL: &str = "execute_e3_time_ms";
+pub const EXECUTE_E3_INSN_MI_S_LABEL: &str = "execute_e3_insn_mi/s";
 pub const EXECUTE_TIME_LABEL: &str = "execute_time_ms";
 pub const TRACE_GEN_TIME_LABEL: &str = "trace_gen_time_ms";
 pub const PROVE_EXCL_TRACE_TIME_LABEL: &str = "stark_prove_excluding_trace_time_ms";
@@ -394,7 +420,11 @@ pub const VM_METRIC_NAMES: &[&str] = &[
     CELLS_USED_LABEL,
     CYCLES_LABEL,
     EXECUTE_E1_TIME_LABEL,
+    EXECUTE_E1_INSN_MI_S_LABEL,
     EXECUTE_METERED_TIME_LABEL,
+    EXECUTE_METERED_INSN_MI_S_LABEL,
+    EXECUTE_E3_TIME_LABEL,
+    EXECUTE_E3_INSN_MI_S_LABEL,
     EXECUTE_TIME_LABEL,
     TRACE_GEN_TIME_LABEL,
     PROVE_EXCL_TRACE_TIME_LABEL,
