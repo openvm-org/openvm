@@ -1,27 +1,38 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    sync::Arc,
+};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, ImmInstruction, RecordArena, Result,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterTraceStep, EmptyAdapterCoreLayout, ExecutionState, ImmInstruction, InsExecutor,
+        InsExecutorE1, InstructionExecutor, RecordArena, Result, Streams, VmAdapterInterface,
+        VmAirWrapper, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
+        MemoryController, SharedMemoryHelper,
     },
+    utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::{utils::not, AlignedBytesBorrow};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    rap::BaseAirWithPublicValues,
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_maybe_rayon::prelude::{ParallelIterator, ParallelSliceMut},
+    prover::types::AirProofInput,
+    rap::{get_air_name, AnyRap, BaseAirWithPublicValues},
+    AirRef, Chip, ChipUsageGetter,
 };
+use rand::rngs::StdRng;
 use strum::IntoEnumIterator;
 
 #[repr(C)]
@@ -146,71 +157,40 @@ pub struct BranchEqualCoreRecord<const NUM_LIMBS: usize> {
     pub local_opcode: u8,
 }
 
-#[derive(derive_new::new)]
-pub struct BranchEqualStep<A, const NUM_LIMBS: usize> {
-    adapter: A,
-    pub offset: usize,
+pub struct BranchEqualStep<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize> {
+    pub air: VmAirWrapper<AdapterAir, BranchEqualCoreAir<NUM_LIMBS>>,
+    adapter: AdapterStep,
     pub pc_step: u32,
+    mem_helper: SharedMemoryHelper<F>,
 }
 
-impl<F, CTX, A, const NUM_LIMBS: usize> TraceStep<F, CTX> for BranchEqualStep<A, NUM_LIMBS>
-where
-    F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterTraceStep<F, CTX, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize>
+    BranchEqualStep<F, AdapterAir, AdapterStep, NUM_LIMBS>
 {
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut BranchEqualCoreRecord<NUM_LIMBS>);
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", BranchEqualOpcode::from_usize(opcode - self.offset))
-    }
-
-    fn execute<'buf, RA>(
-        &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
-        instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
-        let &Instruction { opcode, c: imm, .. } = instruction;
-
-        let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-
-        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
-
-        A::start(*state.pc, state.memory, &mut adapter_record);
-
-        let [rs1, rs2] = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
-
-        core_record.a = rs1;
-        core_record.b = rs2;
-        core_record.imm = imm.as_canonical_u32();
-        core_record.local_opcode = branch_eq_opcode as u8;
-
-        if fast_run_eq(branch_eq_opcode, &rs1, &rs2) {
-            *state.pc = (F::from_canonical_u32(*state.pc) + imm).as_canonical_u32();
-        } else {
-            *state.pc = state.pc.wrapping_add(self.pc_step);
+    pub fn new(
+        adapter_air: AdapterAir,
+        adapter_step: AdapterStep,
+        offset: usize,
+        pc_step: u32,
+        mem_helper: SharedMemoryHelper<F>,
+    ) -> Self {
+        Self {
+            air: VmAirWrapper::new(adapter_air, BranchEqualCoreAir::new(offset, pc_step)),
+            adapter: adapter_step,
+            pc_step,
+            mem_helper,
         }
-
-        Ok(())
     }
-}
 
-impl<F, CTX, A, const NUM_LIMBS: usize> TraceFiller<F, CTX> for BranchEqualStep<A, NUM_LIMBS>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
+    fn fill_trace_row(&self, row_slice: &mut [F])
+    where
+        F: PrimeField32,
+        AdapterStep: 'static + AdapterTraceFiller<F>,
+    {
+        let (adapter_row, mut core_row) =
+            unsafe { row_slice.split_at_mut_unchecked(AdapterStep::WIDTH) };
+        self.adapter
+            .fill_trace_row(&self.mem_helper.as_borrowed(), adapter_row);
         let record: &BranchEqualCoreRecord<NUM_LIMBS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
         let core_row: &mut BranchEqualCoreCols<F, NUM_LIMBS> = core_row.borrow_mut();
@@ -234,12 +214,105 @@ where
         core_row.b = record.b.map(F::from_canonical_u8);
         core_row.a = record.a.map(F::from_canonical_u8);
     }
+
+    fn fill_trace(&self, trace: &mut RowMajorMatrix<F>)
+    where
+        Self: Send + Sync,
+        F: PrimeField32 + Clone + Send + Sync,
+        AdapterStep: AdapterTraceFiller<F> + Send + Sync + 'static,
+    {
+        let rows_used = trace.height();
+        let width = trace.width();
+        trace.values[..rows_used * width]
+            .par_chunks_exact_mut(width)
+            .for_each(|row_slice| {
+                self.fill_trace_row(row_slice);
+            });
+
+        let padded_height = next_power_of_two_or_zero(rows_used);
+        trace.pad_to_height(padded_height, F::ZERO);
+    }
 }
 
-impl<F, A, const NUM_LIMBS: usize> StepExecutorE1<F> for BranchEqualStep<A, NUM_LIMBS>
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize> InstructionExecutor<F>
+    for BranchEqualStep<F, AdapterAir, AdapterStep, NUM_LIMBS>
+{
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            BranchEqualOpcode::from_usize(opcode - self.air.core.offset)
+        )
+    }
+
+    fn execute(
+        &mut self,
+        _memory: &mut MemoryController<F>,
+        _streams: &mut Streams<F>,
+        _rng: &mut StdRng,
+        _instruction: &Instruction<F>,
+        _from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
+        unimplemented!()
+    }
+}
+
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize, RA> InsExecutor<F, RA>
+    for BranchEqualStep<F, AdapterAir, AdapterStep, NUM_LIMBS>
+where
+    AdapterStep: AdapterTraceStep<F, ReadData = [[u8; NUM_LIMBS]; 2], WriteData = ()> + 'static,
+    for<'a> RA: RecordArena<
+        'a,
+        EmptyAdapterCoreLayout<F, AdapterStep>,
+        (
+            AdapterStep::RecordMut<'a>,
+            &'a mut BranchEqualCoreRecord<NUM_LIMBS>,
+        ),
+    >,
+{
+    fn execute_tracegen(
+        &mut self,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()>
+    where
+        F: PrimeField32,
+    {
+        let &Instruction { opcode, c: imm, .. } = instruction;
+
+        let branch_eq_opcode =
+            BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.air.core.offset));
+
+        let arena = &mut state.ctx.arenas[chip_index];
+        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+
+        AdapterStep::start(*state.pc, state.memory, &mut adapter_record);
+
+        let [rs1, rs2] = self
+            .adapter
+            .read(state.memory, instruction, &mut adapter_record);
+
+        core_record.a = rs1;
+        core_record.b = rs2;
+        core_record.imm = imm.as_canonical_u32();
+        core_record.local_opcode = branch_eq_opcode as u8;
+
+        if fast_run_eq(branch_eq_opcode, &rs1, &rs2) {
+            *state.pc = (F::from_canonical_u32(*state.pc) + imm).as_canonical_u32();
+        } else {
+            *state.pc = state.pc.wrapping_add(self.pc_step);
+        }
+
+        Ok(())
+    }
+}
+
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize> InsExecutorE1<F>
+    for BranchEqualStep<F, AdapterAir, AdapterStep, NUM_LIMBS>
 where
     F: PrimeField32,
-    A: 'static + for<'a> AdapterExecutorE1<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
+    AdapterStep:
+        'static + for<'a> AdapterExecutorE1<F, ReadData = [[u8; NUM_LIMBS]; 2], WriteData = ()>,
 {
     fn execute_e1<Ctx>(
         &self,
@@ -251,9 +324,10 @@ where
     {
         let &Instruction { opcode, c: imm, .. } = instruction;
 
-        let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let branch_eq_opcode =
+            BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.air.core.offset));
 
-        let [rs1, rs2] = self.adapter.read(state, instruction).into();
+        let [rs1, rs2] = self.adapter.read(state, instruction);
 
         let cmp_result = fast_run_eq(branch_eq_opcode, &rs1, &rs2);
 
@@ -278,6 +352,59 @@ where
         state.ctx.trace_heights[chip_index] += 1;
 
         Ok(())
+    }
+}
+
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize> ChipUsageGetter
+    for BranchEqualStep<F, AdapterAir, AdapterStep, NUM_LIMBS>
+where
+    F: Field,
+    AdapterAir: BaseAir<F>,
+{
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+
+    fn trace_width(&self) -> usize {
+        BaseAir::width(&self.air)
+    }
+
+    fn current_trace_height(&self) -> usize {
+        // TODO(ayush): fix this
+        // unimplemented!()
+        0
+    }
+}
+
+impl<SC, AdapterAir, AdapterStep, const NUM_LIMBS: usize> Chip<SC>
+    for BranchEqualStep<Val<SC>, AdapterAir, AdapterStep, NUM_LIMBS>
+where
+    SC: StarkGenericConfig,
+    Val<SC>: PrimeField32,
+    AdapterAir: BaseAir<Val<SC>>,
+    VmAirWrapper<AdapterAir, BranchEqualCoreAir<NUM_LIMBS>>: Clone + AnyRap<SC> + 'static,
+    AdapterStep: AdapterTraceFiller<Val<SC>> + Send + Sync + 'static,
+{
+    fn air(&self) -> AirRef<SC> {
+        Arc::new(self.air.clone())
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        unimplemented!("generate_air_proof_input isn't implemented")
+    }
+
+    fn generate_air_proof_input_with_trace(
+        self,
+        mut trace: RowMajorMatrix<Val<SC>>,
+    ) -> AirProofInput<SC> {
+        self.fill_trace(&mut trace);
+        assert!(
+            trace.height() == 0 || trace.height().is_power_of_two(),
+            "Trace height must be a power of two"
+        );
+
+        let public_values = vec![];
+        AirProofInput::simple(trace, public_values)
     }
 }
 

@@ -282,12 +282,11 @@ impl<
 
 impl<
         F: PrimeField32,
-        CTX,
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
-    > AdapterTraceStep<F, CTX>
+    > AdapterTraceStep<F>
     for Rv32IsEqualModeAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
@@ -370,12 +369,11 @@ where
 
 impl<
         F: PrimeField32,
-        CTX,
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
-    > AdapterTraceFiller<F, CTX>
+    > AdapterTraceFiller<F>
     for Rv32IsEqualModeAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {

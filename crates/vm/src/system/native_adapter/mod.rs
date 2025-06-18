@@ -184,7 +184,7 @@ pub struct NativeAdapterStep<F, const R: usize, const W: usize> {
     _phantom: PhantomData<F>,
 }
 
-impl<F, CTX, const R: usize, const W: usize> AdapterTraceStep<F, CTX> for NativeAdapterStep<F, R, W>
+impl<F, const R: usize, const W: usize> AdapterTraceStep<F> for NativeAdapterStep<F, R, W>
 where
     F: PrimeField32,
 {
@@ -253,7 +253,7 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX, const R: usize, const W: usize> AdapterTraceFiller<F, CTX>
+impl<F: PrimeField32, const R: usize, const W: usize> AdapterTraceFiller<F>
     for NativeAdapterStep<F, R, W>
 {
     #[inline(always)]

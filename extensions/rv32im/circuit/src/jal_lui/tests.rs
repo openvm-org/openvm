@@ -1,8 +1,9 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::arch::{
+    execution_mode::tracegen::TracegenCtx,
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    VmAirWrapper,
+    InsExecutor, MatrixRecordArena, RowMajorMatrixArena,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -17,12 +18,13 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    Chip,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
-use super::{run_jal_lui, Rv32JalLuiChip, Rv32JalLuiCoreAir, Rv32JalLuiStep};
+use super::{run_jal_lui, Rv32JalLuiChip, Rv32JalLuiStep};
 use crate::{
     adapters::{
         Rv32CondRdWriteAdapterAir, Rv32CondRdWriteAdapterCols, Rv32CondRdWriteAdapterStep,
@@ -48,33 +50,30 @@ fn create_test_chip(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let mut chip = Rv32JalLuiChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(
-                tester.memory_bridge(),
-                tester.execution_bridge(),
-            )),
-            Rv32JalLuiCoreAir::new(bitwise_bus),
-        ),
-        Rv32JalLuiStep::new(
-            Rv32CondRdWriteAdapterStep::new(Rv32RdWriteAdapterStep::new()),
-            bitwise_chip.clone(),
-        ),
+    let chip = Rv32JalLuiStep::new(
+        Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(
+            tester.memory_bridge(),
+            tester.execution_bridge(),
+        )),
+        Rv32CondRdWriteAdapterStep::new(Rv32RdWriteAdapterStep::new()),
+        bitwise_chip.clone(),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip)
 }
 
-fn set_and_execute(
+fn set_and_execute<RA>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32JalLuiChip<F>,
+    ctx: &mut TracegenCtx<RA>,
     rng: &mut StdRng,
     opcode: Rv32JalLuiOpcode,
     imm: Option<i32>,
     initial_pc: Option<u32>,
-) {
+) where
+    Rv32JalLuiChip<F>: InsExecutor<F, RA>,
+{
     let imm: i32 = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
     let imm = match opcode {
         JAL => ((imm >> 1) << 2) - (1 << IMM_BITS),
@@ -84,7 +83,7 @@ fn set_and_execute(
     let a = rng.gen_range((opcode == LUI) as usize..32) << 2;
     let needs_write = a != 0 || opcode == LUI;
 
-    tester.execute_with_pc(
+    tester.execute_with_pc_and_ctx(
         chip,
         &Instruction::large_from_isize(
             opcode.global_opcode(),
@@ -97,6 +96,7 @@ fn set_and_execute(
             0,
         ),
         initial_pc.unwrap_or(rng.gen_range(imm.unsigned_abs()..(1 << PC_BITS))),
+        ctx,
     );
     let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
     let final_pc = tester.execution.last_to_pc().as_canonical_u32();
@@ -122,11 +122,31 @@ fn rand_jal_lui_test(opcode: Rv32JalLuiOpcode, num_ops: usize) {
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
+    let width = BaseAir::<F>::width(&chip.air);
+    let mut ctx =
+        TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[(width, MAX_INS_CAPACITY)]);
+
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            opcode,
+            None,
+            None,
+        );
     }
 
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    let trace = ctx.arenas.pop().unwrap().into_matrix();
+    let air = chip.air();
+    let air_proof_input = chip.generate_air_proof_input_with_trace(trace);
+
+    let tester = tester
+        .build()
+        .load_air_proof_input((air, air_proof_input))
+        .load(bitwise_chip)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 //////////////////////////////////////////////////////////////////////////////////////
@@ -157,9 +177,14 @@ fn run_negative_jal_lui_test(
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
+    let width = BaseAir::<F>::width(&chip.air);
+    let mut ctx =
+        TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[(width, MAX_INS_CAPACITY)]);
+
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         initial_imm,
@@ -196,10 +221,16 @@ fn run_negative_jal_lui_test(
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
+    let trace = ctx.arenas.pop().unwrap().into_matrix();
+    let air = chip.air();
+    let mut air_proof_input = chip.generate_air_proof_input_with_trace(trace);
+
+    modify_trace(air_proof_input.raw.common_main.as_mut().unwrap());
+
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_air_proof_input((air, air_proof_input))
         .load(bitwise_chip)
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
@@ -319,9 +350,14 @@ fn execute_roundtrip_sanity_test() {
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, _) = create_test_chip(&tester);
 
+    let width = BaseAir::<F>::width(&chip.air);
+    let mut ctx =
+        TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[(width, MAX_INS_CAPACITY)]);
+
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         LUI,
         Some((1 << IMM_BITS) - 1),
@@ -330,6 +366,7 @@ fn execute_roundtrip_sanity_test() {
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         JAL,
         Some((1 << RV_IS_TYPE_IMM_BITS) - 1),

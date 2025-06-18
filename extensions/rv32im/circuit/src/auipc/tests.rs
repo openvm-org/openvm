@@ -1,8 +1,9 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::arch::{
+    execution_mode::tracegen::TracegenCtx,
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    DenseRecordArena, EmptyAdapterCoreLayout, InstructionExecutor, NewVmChipWrapper, VmAirWrapper,
+    DenseRecordArena, EmptyAdapterCoreLayout, InsExecutor, MatrixRecordArena, RowMajorMatrixArena,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -17,22 +18,23 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    Chip,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreAir, Rv32AuipcCoreCols, Rv32AuipcStep};
+use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreCols};
 use crate::{
     adapters::{
         Rv32RdWriteAdapterAir, Rv32RdWriteAdapterRecord, Rv32RdWriteAdapterStep, RV32_CELL_BITS,
         RV32_REGISTER_NUM_LIMBS,
     },
     test_utils::get_verification_error,
-    Rv32AuipcAir, Rv32AuipcCoreRecord, Rv32AuipcStepWithAdapter,
+    Rv32AuipcCoreRecord,
 };
 
 const IMM_BITS: usize = 24;
-const MAX_INS_CAPACITY: usize = 128;
+const MAX_INS_CAPACITY: usize = 256;
 type F = BabyBear;
 
 fn create_test_chip(
@@ -44,35 +46,35 @@ fn create_test_chip(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let mut chip = Rv32AuipcChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
-            Rv32AuipcCoreAir::new(bitwise_bus),
-        ),
-        Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_chip.clone()),
+    let chip = Rv32AuipcChip::new(
+        Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
+        Rv32RdWriteAdapterStep::new(),
+        bitwise_chip.clone(),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip)
 }
 
-fn set_and_execute<E: InstructionExecutor<F>>(
+fn set_and_execute<RA>(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut E,
+    chip: &mut Rv32AuipcChip<F>,
+    ctx: &mut TracegenCtx<RA>,
     rng: &mut StdRng,
     opcode: Rv32AuipcOpcode,
     imm: Option<u32>,
     initial_pc: Option<u32>,
-) {
+) where
+    Rv32AuipcChip<F>: InsExecutor<F, RA>,
+{
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS))) as usize;
     let a = rng.gen_range(0..32) << 2;
 
-    tester.execute_with_pc(
-        chip,
-        &Instruction::from_usize(opcode.global_opcode(), [a, 0, imm, 1, 0]),
-        initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
-    );
+    let instruction = Instruction::from_usize(opcode.global_opcode(), [a, 0, imm, 1, 0]);
+
+    let pc = initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS)));
+    tester.execute_with_pc_and_ctx(chip, &instruction, pc, ctx);
+
     let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
     let rd_data = run_auipc(initial_pc, imm as u32);
     assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
@@ -91,12 +93,32 @@ fn rand_auipc_test() {
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
+    let width = BaseAir::<F>::width(&chip.air);
+    let mut ctx =
+        TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[(width, MAX_INS_CAPACITY)]);
+
     let num_tests: usize = 100;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, AUIPC, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            AUIPC,
+            None,
+            None,
+        );
     }
 
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    let trace = ctx.arenas.pop().unwrap().into_matrix();
+    let air = chip.air();
+    let air_proof_input = chip.generate_air_proof_input_with_trace(trace);
+
+    let tester = tester
+        .build()
+        .load_air_proof_input((air, air_proof_input))
+        .load(bitwise_chip)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -125,16 +147,26 @@ fn run_negative_auipc_test(
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
+    let width = BaseAir::<F>::width(&chip.air);
+    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+
+    let mut ctx =
+        TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[(width, MAX_INS_CAPACITY)]);
+
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         initial_imm,
         initial_pc,
     );
 
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let trace = ctx.arenas.pop().unwrap().into_matrix();
+    let air = chip.air();
+    let mut air_proof_input = chip.generate_air_proof_input_with_trace(trace);
+
     let modify_trace = |trace: &mut DenseMatrix<F>| {
         let mut trace_row = trace.row_slice(0).to_vec();
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
@@ -153,10 +185,12 @@ fn run_negative_auipc_test(
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
+    modify_trace(air_proof_input.raw.common_main.as_mut().unwrap());
+
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_air_proof_input((air, air_proof_input))
         .load(bitwise_chip)
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
@@ -286,55 +320,49 @@ fn run_auipc_sanity_test() {
 /// to a [MatrixRecordArena]. After transferring we generate the trace and make sure that
 /// all the constraints pass.
 ///////////////////////////////////////////////////////////////////////////////////////
-type Rv32AuipcChipDense =
-    NewVmChipWrapper<F, Rv32AuipcAir, Rv32AuipcStepWithAdapter, DenseRecordArena>;
 
-fn create_test_chip_dense(tester: &mut VmChipTestBuilder<F>) -> Rv32AuipcChipDense {
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-
-    let mut chip = Rv32AuipcChipDense::new(
-        Rv32AuipcAir::new(
-            Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
-            Rv32AuipcCoreAir::new(bitwise_bus),
-        ),
-        Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_chip.clone()),
-        tester.memory_helper(),
-    );
-
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-    chip
-}
+type Record<'a> = (
+    &'a mut Rv32RdWriteAdapterRecord,
+    &'a mut Rv32AuipcCoreRecord,
+);
 
 #[test]
 fn dense_record_arena_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut sparse_chip, bitwise_chip) = create_test_chip(&tester);
+    let (mut chip, bitwise_chip) = create_test_chip(&mut tester);
 
-    {
-        let mut dense_chip = create_test_chip_dense(&mut tester);
+    let width = BaseAir::<F>::width(&chip.air);
+    let mut ctx = TracegenCtx::<DenseRecordArena>::new_with_capacity(&[(width * MAX_INS_CAPACITY)]);
 
-        let num_ops: usize = 100;
-        for _ in 0..num_ops {
-            set_and_execute(&mut tester, &mut dense_chip, &mut rng, AUIPC, None, None);
-        }
-
-        type Record<'a> = (
-            &'a mut Rv32RdWriteAdapterRecord,
-            &'a mut Rv32AuipcCoreRecord,
-        );
-
-        let mut record_interpreter = dense_chip.arena.get_record_seeker::<Record, _>();
-        record_interpreter.transfer_to_matrix_arena(
-            &mut sparse_chip.arena,
-            EmptyAdapterCoreLayout::<F, Rv32RdWriteAdapterStep>::new(),
+    let num_ops: usize = 100;
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            AUIPC,
+            None,
+            None,
         );
     }
 
+    let mut dense_arena = ctx.arenas.pop().unwrap();
+    let mut record_interpreter = dense_arena.get_record_seeker::<Record, _>();
+    let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(MAX_INS_CAPACITY, width);
+    record_interpreter.transfer_to_matrix_arena(
+        &mut matrix_arena,
+        EmptyAdapterCoreLayout::<F, Rv32RdWriteAdapterStep>::new(),
+    );
+
+    let trace = matrix_arena.into_matrix();
+    let air = chip.air();
+    let air_proof_input = chip.generate_air_proof_input_with_trace(trace);
+
     let tester = tester
         .build()
-        .load(sparse_chip)
+        .load_air_proof_input((air, air_proof_input))
         .load(bitwise_chip)
         .finalize();
     tester.simple_test().expect("Verification failed");

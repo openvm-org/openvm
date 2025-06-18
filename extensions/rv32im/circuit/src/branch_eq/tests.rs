@@ -1,8 +1,9 @@
 use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::arch::{
+    execution_mode::tracegen::TracegenCtx,
     testing::{memory::gen_pointer, VmChipTestBuilder},
-    InstructionExecutor, VmAirWrapper,
+    InsExecutor, MatrixRecordArena, RowMajorMatrixArena,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -18,56 +19,48 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    Chip,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
-use super::{
-    core::{run_eq, BranchEqualStep},
-    BranchEqualCoreCols, Rv32BranchEqualChip,
-};
+use super::{core::run_eq, BranchEqualCoreCols, Rv32BranchEqualChip};
 use crate::{
     adapters::{
         Rv32BranchAdapterAir, Rv32BranchAdapterStep, RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
     branch_eq::fast_run_eq,
     test_utils::get_verification_error,
-    BranchEqualCoreAir,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_IMM: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
 
-fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32BranchEqualChip<F> {
-    let mut chip = Rv32BranchEqualChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-            BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
-        ),
-        BranchEqualStep::new(
-            Rv32BranchAdapterStep::new(),
-            BranchEqualOpcode::CLASS_OFFSET,
-            DEFAULT_PC_STEP,
-        ),
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Rv32BranchEqualChip<F> {
+    Rv32BranchEqualChip::<F>::new(
+        Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+        Rv32BranchAdapterStep::new(),
+        BranchEqualOpcode::CLASS_OFFSET,
+        DEFAULT_PC_STEP,
         tester.memory_helper(),
-    );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-
-    chip
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: InstructionExecutor<F>>(
+fn set_and_execute<RA>(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut E,
+    chip: &mut Rv32BranchEqualChip<F>,
+    ctx: &mut TracegenCtx<RA>,
     rng: &mut StdRng,
     opcode: BranchEqualOpcode,
     a: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
     b: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
     imm: Option<i32>,
-) {
+) where
+    Rv32BranchEqualChip<F>: InsExecutor<F, RA>,
+{
     let a = a.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
     let b = b.unwrap_or(if rng.gen_bool(0.5) {
         a
@@ -82,7 +75,7 @@ fn set_and_execute<E: InstructionExecutor<F>>(
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_canonical_u8));
 
     let initial_pc = rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1)));
-    tester.execute_with_pc(
+    tester.execute_with_pc_and_ctx(
         chip,
         &Instruction::from_isize(
             opcode.global_opcode(),
@@ -93,6 +86,7 @@ fn set_and_execute<E: InstructionExecutor<F>>(
             1,
         ),
         initial_pc,
+        ctx,
     );
 
     let cmp_result = fast_run_eq(opcode, &a, &b);
@@ -115,13 +109,33 @@ fn set_and_execute<E: InstructionExecutor<F>>(
 fn rand_rv32_branch_eq_test(opcode: BranchEqualOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = create_test_chip(&mut tester);
+    let mut chip = create_test_chip(&tester);
+
+    let width = BaseAir::<F>::width(&chip.air);
+    let mut ctx =
+        TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[(width, MAX_INS_CAPACITY)]);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+        );
     }
 
-    let tester = tester.build().load(chip).finalize();
+    let trace = ctx.arenas.pop().unwrap().into_matrix();
+    let air = chip.air();
+    let air_proof_input = chip.generate_air_proof_input_with_trace(trace);
+
+    let tester = tester
+        .build()
+        .load_air_proof_input((air, air_proof_input))
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -144,11 +158,16 @@ fn run_negative_branch_eq_test(
     let imm = 16i32;
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = create_test_chip(&mut tester);
+    let mut chip = create_test_chip(&tester);
+
+    let width = BaseAir::<F>::width(&chip.air);
+    let mut ctx =
+        TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[(width, MAX_INS_CAPACITY)]);
 
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         Some(a),
@@ -170,10 +189,16 @@ fn run_negative_branch_eq_test(
         *trace = RowMajorMatrix::new(values, trace.width());
     };
 
+    let trace = ctx.arenas.pop().unwrap().into_matrix();
+    let air = chip.air();
+    let mut air_proof_input = chip.generate_air_proof_input_with_trace(trace);
+
+    modify_trace(air_proof_input.raw.common_main.as_mut().unwrap());
+
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_air_proof_input((air, air_proof_input))
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
 }
@@ -278,13 +303,18 @@ fn rv32_bne_invalid_inv_marker_negative_test() {
 fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = create_test_chip(&mut tester);
+    let mut chip = create_test_chip(&tester);
+
+    let width = BaseAir::<F>::width(&chip.air);
+    let mut ctx =
+        TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[(width, MAX_INS_CAPACITY)]);
 
     let x = [19, 4, 179, 60];
     let y = [19, 32, 180, 60];
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         BranchEqualOpcode::BEQ,
         Some(x),
@@ -295,6 +325,7 @@ fn execute_roundtrip_sanity_test() {
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         BranchEqualOpcode::BNE,
         Some(x),

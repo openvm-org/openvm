@@ -28,7 +28,10 @@ use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
 
-use super::{ExecutionBridge, ExecutionBus, InstructionExecutor, SystemPort};
+use super::{
+    execution_mode::tracegen::TracegenCtx, ExecutionBridge, ExecutionBus, InsExecutor,
+    InstructionExecutor, SystemPort, VmStateMut,
+};
 use crate::{
     arch::{ExecutionState, MemoryConfig, Streams},
     system::{
@@ -103,6 +106,18 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.execute_with_pc(executor, instruction, initial_pc);
     }
 
+    pub fn execute_with_ctx<RA, E>(
+        &mut self,
+        executor: &mut E,
+        instruction: &Instruction<F>,
+        ctx: &mut TracegenCtx<RA>,
+    ) where
+        E: InsExecutor<F, RA>,
+    {
+        let initial_pc = self.next_elem_size_u32();
+        self.execute_with_pc_and_ctx(executor, instruction, initial_pc, ctx);
+    }
+
     pub fn execute_with_pc<E: InstructionExecutor<F>>(
         &mut self,
         executor: &mut E,
@@ -124,6 +139,41 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
                 initial_state,
             )
             .expect("Expected the execution not to fail");
+
+        self.program.execute(instruction, &initial_state);
+        self.execution.execute(initial_state, final_state);
+    }
+
+    pub fn execute_with_pc_and_ctx<RA, E>(
+        &mut self,
+        executor: &mut E,
+        instruction: &Instruction<F>,
+        initial_pc: u32,
+        ctx: &mut TracegenCtx<RA>,
+    ) where
+        E: InsExecutor<F, RA>,
+    {
+        let initial_state = ExecutionState {
+            pc: initial_pc,
+            timestamp: self.memory.controller.timestamp(),
+        };
+
+        let mut pc = initial_pc;
+        let state = VmStateMut {
+            pc: &mut pc,
+            memory: &mut self.memory.controller.memory,
+            streams: &mut self.streams,
+            rng: &mut self.rng,
+            ctx,
+        };
+        executor
+            .execute_tracegen(state, instruction, 0)
+            .expect("Expected the execution not to fail");
+
+        let final_state = ExecutionState {
+            pc,
+            timestamp: self.memory.controller.timestamp(),
+        };
 
         self.program.execute(instruction, &initial_state);
         self.execution.execute(initial_state, final_state);

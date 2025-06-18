@@ -5,7 +5,7 @@ use openvm_circuit::{
     arch::ExecutionBridge,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_derive::{InsExecutorE1, InstructionExecutor};
+use openvm_circuit_derive::{InsExecutor, InsExecutorE1, InstructionExecutor};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::SharedBitwiseOperationLookupChip,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
@@ -50,7 +50,7 @@ pub fn fp2_addsub_expr(
 
 // Input: Fp2 * 2
 // Output: Fp2
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutor, InsExecutorE1)]
 pub struct Fp2AddSubChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     pub Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
 );
@@ -226,7 +226,6 @@ mod tests {
             bitwise_chip.clone(),
             tester.range_checker(),
         );
-        chip.set_trace_height(MAX_INS_CAPACITY);
 
         let num_ops = 10;
         for _ in 0..num_ops {

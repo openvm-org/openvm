@@ -1,8 +1,9 @@
 use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::arch::{
+    execution_mode::tracegen::TracegenCtx,
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    VmAirWrapper,
+    InsExecutor, MatrixRecordArena, RowMajorMatrixArena,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -17,11 +18,11 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    Chip,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::Rv32JalrCoreAir;
 use crate::{
     adapters::{
         compose, Rv32JalrAdapterAir, Rv32JalrAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
@@ -40,7 +41,7 @@ fn into_limbs(num: u32) -> [u32; 4] {
 }
 
 fn create_test_chip(
-    tester: &mut VmChipTestBuilder<F>,
+    tester: &VmChipTestBuilder<F>,
 ) -> (
     Rv32JalrChip<F>,
     SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
@@ -49,34 +50,31 @@ fn create_test_chip(
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let range_checker_chip = tester.memory_controller().range_checker.clone();
 
-    let mut chip = Rv32JalrChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32JalrAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
-            Rv32JalrCoreAir::new(bitwise_bus, range_checker_chip.bus()),
-        ),
-        Rv32JalrStep::new(
-            Rv32JalrAdapterStep::new(),
-            bitwise_chip.clone(),
-            range_checker_chip.clone(),
-        ),
+    let chip = Rv32JalrStep::new(
+        Rv32JalrAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
+        Rv32JalrAdapterStep::new(),
+        bitwise_chip.clone(),
+        range_checker_chip.clone(),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip)
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute(
+fn set_and_execute<RA>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32JalrChip<F>,
+    ctx: &mut TracegenCtx<RA>,
     rng: &mut StdRng,
     opcode: Rv32JalrOpcode,
     initial_imm: Option<u32>,
     initial_imm_sign: Option<u32>,
     initial_pc: Option<u32>,
     rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
-) {
+) where
+    Rv32JalrChip<F>: InsExecutor<F, RA>,
+{
     let imm = initial_imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
     let imm_sign = initial_imm_sign.unwrap_or(rng.gen_range(0..2));
     let imm_ext = imm + (imm_sign * 0xffff0000);
@@ -90,7 +88,7 @@ fn set_and_execute(
     tester.write(1, b, rs1);
 
     let initial_pc = initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS)));
-    tester.execute_with_pc(
+    tester.execute_with_pc_and_ctx(
         chip,
         &Instruction::from_usize(
             opcode.global_opcode(),
@@ -105,6 +103,7 @@ fn set_and_execute(
             ],
         ),
         initial_pc,
+        ctx,
     );
     let final_pc = tester.execution.last_to_pc().as_canonical_u32();
 
@@ -127,13 +126,18 @@ fn set_and_execute(
 fn rand_jalr_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, bitwise_chip) = create_test_chip(&mut tester);
+    let (mut chip, bitwise_chip) = create_test_chip(&tester);
+
+    let width = BaseAir::<F>::width(&chip.air);
+    let mut ctx =
+        TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[(width, MAX_INS_CAPACITY)]);
 
     let num_ops = 100;
     for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
             &mut chip,
+            &mut ctx,
             &mut rng,
             JALR,
             None,
@@ -143,7 +147,15 @@ fn rand_jalr_test() {
         );
     }
 
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    let trace = ctx.arenas.pop().unwrap().into_matrix();
+    let air = chip.air();
+    let air_proof_input = chip.generate_air_proof_input_with_trace(trace);
+
+    let tester = tester
+        .build()
+        .load_air_proof_input((air, air_proof_input))
+        .load(bitwise_chip)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -176,11 +188,16 @@ fn run_negative_jalr_test(
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let (mut chip, bitwise_chip) = create_test_chip(&mut tester);
+    let (mut chip, bitwise_chip) = create_test_chip(&tester);
+
+    let width = BaseAir::<F>::width(&chip.air);
+    let mut ctx =
+        TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[(width, MAX_INS_CAPACITY)]);
 
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         initial_imm,
@@ -214,10 +231,16 @@ fn run_negative_jalr_test(
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
+    let trace = ctx.arenas.pop().unwrap().into_matrix();
+    let air = chip.air();
+    let mut air_proof_input = chip.generate_air_proof_input_with_trace(trace);
+
+    modify_trace(air_proof_input.raw.common_main.as_mut().unwrap());
+
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_air_proof_input((air, air_proof_input))
         .load(bitwise_chip)
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));

@@ -24,11 +24,14 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-use super::memory::{online::GuestMemory, MemoryController};
+use super::memory::{
+    online::{GuestMemory, TracingMemory},
+    MemoryController,
+};
 use crate::{
     arch::{
-        execution_mode::{e1::E1Ctx, metered::MeteredCtx, E1E2ExecutionCtx},
-        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutorE1,
+        execution_mode::{e1::E1Ctx, metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
+        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutor, InsExecutorE1,
         InstructionExecutor, PcIncOrSet, PhantomSubExecutor, Streams, VmStateMut,
     },
     system::program::ProgramBus,
@@ -181,11 +184,12 @@ where
 
         Ok(())
     }
-
-    fn set_trace_height(&mut self, _height: usize) {}
 }
 
-impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
+impl<F> InstructionExecutor<F> for PhantomChip<F>
+where
+    F: PrimeField32,
+{
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
@@ -223,6 +227,40 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
     }
 }
 
+impl<F, RA> InsExecutor<F, RA> for PhantomChip<F>
+where
+    F: PrimeField32,
+{
+    fn execute_tracegen(
+        &mut self,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
+        instruction: &Instruction<F>,
+        _chip_index: usize,
+    ) -> Result<(), ExecutionError>
+    where
+        F: PrimeField32,
+    {
+        self.rows.push(PhantomCols {
+            pc: F::from_canonical_u32(*state.pc),
+            operands: [instruction.a, instruction.b, instruction.c],
+            timestamp: F::from_canonical_u32(state.memory.timestamp),
+            is_valid: F::ONE,
+        });
+
+        let mut state_e1 = VmStateMut {
+            pc: state.pc,
+            memory: &mut state.memory.data,
+            streams: state.streams,
+            rng: state.rng,
+            ctx: &mut E1Ctx::default(),
+        };
+        self.execute_e1(&mut state_e1, instruction)?;
+        state.memory.increment_timestamp();
+
+        Ok(())
+    }
+}
+
 impl<F: PrimeField32> ChipUsageGetter for PhantomChip<F> {
     fn air_name(&self) -> String {
         get_air_name(&self.air)
@@ -247,6 +285,25 @@ where
     }
 
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        let correct_height = self.rows.len().next_power_of_two();
+        let width = PhantomCols::<Val<SC>>::width();
+        let mut rows = Val::<SC>::zero_vec(width * correct_height);
+        rows.par_chunks_mut(width)
+            .zip(&self.rows)
+            .for_each(|(row, row_record)| {
+                let row: &mut PhantomCols<_> = row.borrow_mut();
+                *row = *row_record;
+            });
+        let trace = RowMajorMatrix::new(rows, width);
+
+        AirProofInput::simple(trace, vec![])
+    }
+
+    fn generate_air_proof_input_with_trace(
+        self,
+        _trace: RowMajorMatrix<Val<SC>>,
+    ) -> AirProofInput<SC> {
+        // TODO(ayush): trace should be filled during execution
         let correct_height = self.rows.len().next_power_of_two();
         let width = PhantomCols::<Val<SC>>::width();
         let mut rows = Val::<SC>::zero_vec(width * correct_height);

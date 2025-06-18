@@ -1,11 +1,14 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    sync::Arc,
+};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionError, ExecutionState,
-        MatrixRecordArena, MultiRowLayout, MultiRowMetadata, NewVmChipWrapper, RecordArena, Result,
-        SizedRecord, StepExecutorE1, TraceFiller, TraceStep, VmStateMut,
+        InsExecutor, InsExecutorE1, InstructionExecutor, MultiRowLayout, MultiRowMetadata,
+        RecordArena, Result, SizedRecord, Streams, VmStateMut,
     },
     system::memory::{
         offline_checker::{
@@ -13,8 +16,9 @@ use openvm_circuit::{
             MemoryWriteBytesAuxRecord,
         },
         online::{GuestMemory, TracingMemory},
-        MemoryAddress, MemoryAuxColsFactory,
+        MemoryAddress, MemoryController, SharedMemoryHelper,
     },
+    utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
@@ -33,13 +37,17 @@ use openvm_rv32im_transpiler::{
     Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW},
 };
 use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    prover::types::AirProofInput,
+    rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
+    AirRef, Chip, ChipUsageGetter,
 };
+use rand::rngs::StdRng;
 
 use crate::adapters::{
     memory_write_from_state, read_rv32_register, read_rv32_register_from_state, tracing_read,
@@ -352,163 +360,65 @@ impl SizedRecord<Rv32HintStoreLayout> for Rv32HintStoreRecordMut<'_> {
     }
 }
 
-pub struct Rv32HintStoreStep {
-    pointer_max_bits: usize,
-    offset: usize,
+pub struct Rv32HintStoreChip<F> {
+    air: Rv32HintStoreAir,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    mem_helper: SharedMemoryHelper<F>,
 }
 
-impl Rv32HintStoreStep {
+impl<F> Rv32HintStoreChip<F> {
     pub fn new(
+        execution_bridge: ExecutionBridge,
+        memory_bridge: MemoryBridge,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         pointer_max_bits: usize,
         offset: usize,
+        mem_helper: SharedMemoryHelper<F>,
     ) -> Self {
         Self {
-            pointer_max_bits,
-            offset,
+            air: Rv32HintStoreAir::new(
+                execution_bridge,
+                memory_bridge,
+                bitwise_lookup_chip.bus(),
+                offset,
+                pointer_max_bits,
+            ),
             bitwise_lookup_chip,
+            mem_helper,
         }
     }
 }
 
-impl<F, CTX> TraceStep<F, CTX> for Rv32HintStoreStep
-where
-    F: PrimeField32,
-{
-    type RecordLayout = MultiRowLayout<Rv32HintStoreMetadata>;
-    type RecordMut<'a> = Rv32HintStoreRecordMut<'a>;
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        if opcode == HINT_STOREW.global_opcode().as_usize() {
-            String::from("HINT_STOREW")
-        } else if opcode == HINT_BUFFER.global_opcode().as_usize() {
-            String::from("HINT_BUFFER")
-        } else {
-            unreachable!("unsupported opcode: {}", opcode)
-        }
-    }
-
-    fn execute<'buf, RA>(
-        &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
-        instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
+impl<F> Rv32HintStoreChip<F> {
+    fn fill_trace(&self, trace: &mut RowMajorMatrix<F>)
     where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+        Self: Send + Sync,
+        F: PrimeField32 + Clone + Send + Sync,
     {
-        let &Instruction {
-            opcode, a, b, d, e, ..
-        } = instruction;
-
-        let a = a.as_canonical_u32();
-        let b = b.as_canonical_u32();
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
-
-        let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-
-        // We do untraced read of `num_words` in order to allocate the record first
-        let num_words = if local_opcode == HINT_STOREW {
-            1
-        } else {
-            read_rv32_register(state.memory.data(), a)
-        };
-
-        let record = arena.alloc(MultiRowLayout::new(Rv32HintStoreMetadata {
-            num_words: num_words as usize,
-        }));
-
-        record.inner.from_pc = *state.pc;
-        record.inner.timestamp = state.memory.timestamp;
-        record.inner.mem_ptr_ptr = b;
-
-        record.inner.mem_ptr = u32::from_le_bytes(tracing_read(
-            state.memory,
-            RV32_REGISTER_AS,
-            b,
-            &mut record.inner.mem_ptr_aux_record.prev_timestamp,
-        ));
-
-        debug_assert!(record.inner.mem_ptr <= (1 << self.pointer_max_bits));
-        debug_assert_ne!(num_words, 0);
-        debug_assert!(num_words <= (1 << self.pointer_max_bits));
-
-        record.inner.num_words = num_words;
-        if local_opcode == HINT_STOREW {
-            state.memory.increment_timestamp();
-            record.inner.num_words_ptr = u32::MAX;
-        } else {
-            record.inner.num_words_ptr = a;
-            tracing_read::<_, RV32_REGISTER_NUM_LIMBS>(
-                state.memory,
-                RV32_REGISTER_AS,
-                record.inner.num_words_ptr,
-                &mut record.inner.num_words_read.prev_timestamp,
-            );
-        };
-
-        if state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
-            return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
-        }
-
-        for idx in 0..(num_words as usize) {
-            if idx != 0 {
-                state.memory.increment_timestamp();
-                state.memory.increment_timestamp();
-            }
-
-            let data_f: [F; RV32_REGISTER_NUM_LIMBS] =
-                std::array::from_fn(|_| state.streams.hint_stream.pop_front().unwrap());
-            let data: [u8; RV32_REGISTER_NUM_LIMBS] =
-                data_f.map(|byte| byte.as_canonical_u32() as u8);
-
-            record.var[idx].data = data;
-
-            tracing_write(
-                state.memory,
-                RV32_MEMORY_AS,
-                record.inner.mem_ptr + (RV32_REGISTER_NUM_LIMBS * idx) as u32,
-                data,
-                &mut record.var[idx].data_write_aux.prev_timestamp,
-                &mut record.var[idx].data_write_aux.prev_data,
-            );
-        }
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-}
-
-impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep {
-    fn fill_trace(
-        &self,
-        mem_helper: &MemoryAuxColsFactory<F>,
-        trace: &mut RowMajorMatrix<F>,
-        rows_used: usize,
-    ) {
+        let rows_used = trace.height();
         if rows_used == 0 {
             return;
         }
 
-        let width = trace.width;
-        let mut trace = &mut trace.values[..width * rows_used];
+        let width = trace.width();
+        let mut trace_values = &mut trace.values[..width * rows_used];
         let mut sizes = Vec::with_capacity(rows_used);
         let mut chunks = Vec::with_capacity(rows_used);
 
-        while !trace.is_empty() {
+        while !trace_values.is_empty() {
             let record: &Rv32HintStoreRecordHeader =
-                unsafe { get_record_from_slice(&mut trace, ()) };
-            let (chunk, rest) = trace.split_at_mut(width * record.num_words as usize);
+                unsafe { get_record_from_slice(&mut trace_values, ()) };
+            let (chunk, rest) = trace_values.split_at_mut(width * record.num_words as usize);
             sizes.push(record.num_words);
             chunks.push(chunk);
-            trace = rest;
+            trace_values = rest;
         }
 
         let msl_rshift: u32 = ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS) as u32;
         let msl_lshift: u32 =
-            (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits) as u32;
+            (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.air.pointer_max_bits) as u32;
+
+        let mem_helper = self.mem_helper.as_borrowed();
 
         chunks
             .par_iter_mut()
@@ -597,11 +507,134 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep {
                         cols.is_buffer = F::from_bool(!is_single);
                         cols.is_single = F::from_bool(is_single);
                     });
-            })
+            });
+
+        let padded_height = next_power_of_two_or_zero(rows_used);
+        trace.pad_to_height(padded_height, F::ZERO);
     }
 }
 
-impl<F> StepExecutorE1<F> for Rv32HintStoreStep
+impl<F> InstructionExecutor<F> for Rv32HintStoreChip<F> {
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        if opcode == HINT_STOREW.global_opcode().as_usize() {
+            String::from("HINT_STOREW")
+        } else if opcode == HINT_BUFFER.global_opcode().as_usize() {
+            String::from("HINT_BUFFER")
+        } else {
+            unreachable!("unsupported opcode: {}", opcode)
+        }
+    }
+
+    fn execute(
+        &mut self,
+        _memory: &mut MemoryController<F>,
+        _streams: &mut Streams<F>,
+        _rng: &mut StdRng,
+        _instruction: &Instruction<F>,
+        _from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
+        unimplemented!()
+    }
+}
+
+impl<F, RA> InsExecutor<F, RA> for Rv32HintStoreChip<F>
+where
+    F: PrimeField32,
+    for<'a> RA: RecordArena<'a, MultiRowLayout<Rv32HintStoreMetadata>, Rv32HintStoreRecordMut<'a>>,
+{
+    fn execute_tracegen(
+        &mut self,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        let &Instruction {
+            opcode, a, b, d, e, ..
+        } = instruction;
+
+        let a = a.as_canonical_u32();
+        let b = b.as_canonical_u32();
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
+
+        let local_opcode =
+            Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
+
+        // We do untraced read of `num_words` in order to allocate the record first
+        let num_words = if local_opcode == HINT_STOREW {
+            1
+        } else {
+            read_rv32_register(state.memory.data(), a)
+        };
+
+        let arena = &mut state.ctx.arenas[chip_index];
+        let record = arena.alloc(MultiRowLayout::new(Rv32HintStoreMetadata {
+            num_words: num_words as usize,
+        }));
+
+        record.inner.from_pc = *state.pc;
+        record.inner.timestamp = state.memory.timestamp;
+        record.inner.mem_ptr_ptr = b;
+
+        record.inner.mem_ptr = u32::from_le_bytes(tracing_read(
+            state.memory,
+            RV32_REGISTER_AS,
+            b,
+            &mut record.inner.mem_ptr_aux_record.prev_timestamp,
+        ));
+
+        debug_assert!(record.inner.mem_ptr <= (1 << self.air.pointer_max_bits));
+        debug_assert_ne!(num_words, 0);
+        debug_assert!(num_words <= (1 << self.air.pointer_max_bits));
+
+        record.inner.num_words = num_words;
+        if local_opcode == HINT_STOREW {
+            state.memory.increment_timestamp();
+            record.inner.num_words_ptr = u32::MAX;
+        } else {
+            record.inner.num_words_ptr = a;
+            tracing_read::<_, RV32_REGISTER_NUM_LIMBS>(
+                state.memory,
+                RV32_REGISTER_AS,
+                record.inner.num_words_ptr,
+                &mut record.inner.num_words_read.prev_timestamp,
+            );
+        };
+
+        if state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
+            return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
+        }
+
+        for idx in 0..(num_words as usize) {
+            if idx != 0 {
+                state.memory.increment_timestamp();
+                state.memory.increment_timestamp();
+            }
+
+            let data_f: [F; RV32_REGISTER_NUM_LIMBS] =
+                std::array::from_fn(|_| state.streams.hint_stream.pop_front().unwrap());
+            let data: [u8; RV32_REGISTER_NUM_LIMBS] =
+                data_f.map(|byte| byte.as_canonical_u32() as u8);
+
+            record.var[idx].data = data;
+
+            tracing_write(
+                state.memory,
+                RV32_MEMORY_AS,
+                record.inner.mem_ptr + (RV32_REGISTER_NUM_LIMBS * idx) as u32,
+                data,
+                &mut record.var[idx].data_write_aux.prev_timestamp,
+                &mut record.var[idx].data_write_aux.prev_data,
+            );
+        }
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+}
+
+impl<F> InsExecutorE1<F> for Rv32HintStoreChip<F>
 where
     F: PrimeField32,
 {
@@ -620,7 +653,8 @@ where
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
-        let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let local_opcode =
+            Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
 
         let mem_ptr = read_rv32_register(state.memory, b.as_canonical_u32());
 
@@ -630,9 +664,9 @@ where
             read_rv32_register(state.memory, a.as_canonical_u32())
         };
 
-        debug_assert!(mem_ptr <= (1 << self.pointer_max_bits));
+        debug_assert!(mem_ptr <= (1 << self.air.pointer_max_bits));
         debug_assert_ne!(num_words, 0);
-        debug_assert!(num_words <= (1 << self.pointer_max_bits));
+        debug_assert!(num_words <= (1 << self.air.pointer_max_bits));
 
         if state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
             return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
@@ -670,7 +704,8 @@ where
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
-        let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let local_opcode =
+            Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
         let mem_ptr = read_rv32_register_from_state(state, b.as_canonical_u32());
 
         let num_words = if local_opcode == HINT_STOREW {
@@ -679,9 +714,9 @@ where
             read_rv32_register_from_state(state, a.as_canonical_u32())
         };
 
-        debug_assert!(mem_ptr <= (1 << self.pointer_max_bits));
+        debug_assert!(mem_ptr <= (1 << self.air.pointer_max_bits));
         debug_assert_ne!(num_words, 0);
-        debug_assert!(num_words <= (1 << self.pointer_max_bits));
+        debug_assert!(num_words <= (1 << self.air.pointer_max_bits));
 
         if state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
             return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
@@ -711,5 +746,50 @@ where
     }
 }
 
-pub type Rv32HintStoreChip<F> =
-    NewVmChipWrapper<F, Rv32HintStoreAir, Rv32HintStoreStep, MatrixRecordArena<F>>;
+impl<F> ChipUsageGetter for Rv32HintStoreChip<F>
+where
+    F: Field,
+{
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+
+    fn trace_width(&self) -> usize {
+        BaseAir::<F>::width(&self.air)
+    }
+
+    fn current_trace_height(&self) -> usize {
+        // TODO(ayush): fix this
+        // unimplemented!()
+        0
+    }
+}
+
+impl<SC> Chip<SC> for Rv32HintStoreChip<Val<SC>>
+where
+    SC: StarkGenericConfig,
+    Val<SC>: PrimeField32,
+    Rv32HintStoreAir: Clone + AnyRap<SC> + 'static,
+{
+    fn air(&self) -> AirRef<SC> {
+        Arc::new(self.air)
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        unimplemented!("generate_air_proof_input isn't implemented")
+    }
+
+    fn generate_air_proof_input_with_trace(
+        self,
+        mut trace: RowMajorMatrix<Val<SC>>,
+    ) -> AirProofInput<SC> {
+        self.fill_trace(&mut trace);
+        assert!(
+            trace.height() == 0 || trace.height().is_power_of_two(),
+            "Trace height must be a power of two"
+        );
+
+        let public_values = vec![];
+        AirProofInput::simple(trace, public_values)
+    }
+}

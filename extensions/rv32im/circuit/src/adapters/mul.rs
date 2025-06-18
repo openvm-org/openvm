@@ -145,7 +145,7 @@ pub struct Rv32MultAdapterRecord {
 #[derive(derive_new::new)]
 pub struct Rv32MultAdapterStep;
 
-impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32MultAdapterStep
+impl<F> AdapterTraceStep<F> for Rv32MultAdapterStep
 where
     F: PrimeField32,
 {
@@ -213,7 +213,7 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32MultAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32MultAdapterStep {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &Rv32MultAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };

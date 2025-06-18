@@ -47,7 +47,6 @@ fn create_test_chips(
         ),
         tester.memory_helper(),
     );
-    chip.set_trace_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip)
 }

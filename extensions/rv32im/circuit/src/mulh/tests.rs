@@ -2,10 +2,11 @@ use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::{
+        execution_mode::tracegen::TracegenCtx,
         testing::{
             memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
-        InstructionExecutor, VmAirWrapper,
+        InsExecutor, MatrixRecordArena, RowMajorMatrixArena,
     },
     utils::generate_long_number,
 };
@@ -23,6 +24,7 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    Chip,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::rngs::StdRng;
@@ -33,7 +35,6 @@ use crate::{
     adapters::{Rv32MultAdapterAir, Rv32MultAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
     mulh::{MulHCoreCols, MulHStep, Rv32MulHChip},
     test_utils::get_verification_error,
-    MulHCoreAir,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
@@ -42,7 +43,7 @@ const MAX_NUM_LIMBS: u32 = 32;
 type F = BabyBear;
 
 fn create_test_chip(
-    tester: &mut VmChipTestBuilder<F>,
+    tester: &VmChipTestBuilder<F>,
 ) -> (
     Rv32MulHChip<F>,
     SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
@@ -57,32 +58,29 @@ fn create_test_chip(
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let range_tuple_checker = SharedRangeTupleCheckerChip::new(range_tuple_bus);
 
-    let mut chip = Rv32MulHChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-            MulHCoreAir::new(bitwise_bus, range_tuple_bus),
-        ),
-        MulHStep::new(
-            Rv32MultAdapterStep::new(),
-            bitwise_chip.clone(),
-            range_tuple_checker.clone(),
-        ),
+    let chip = MulHStep::new(
+        Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+        Rv32MultAdapterStep::new(),
+        bitwise_chip.clone(),
+        range_tuple_checker.clone(),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip, range_tuple_checker)
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: InstructionExecutor<F>>(
+fn set_and_execute<RA>(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut E,
+    chip: &mut Rv32MulHChip<F>,
+    ctx: &mut TracegenCtx<RA>,
     rng: &mut StdRng,
     opcode: MulHOpcode,
     b: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     c: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
-) {
+) where
+    Rv32MulHChip<F>: InsExecutor<F, RA>,
+{
     let b = b.unwrap_or(generate_long_number::<
         RV32_REGISTER_NUM_LIMBS,
         RV32_CELL_BITS,
@@ -99,9 +97,10 @@ fn set_and_execute<E: InstructionExecutor<F>>(
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
 
-    tester.execute(
+    tester.execute_with_ctx(
         chip,
         &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 0]),
+        ctx,
     );
 
     let (a, _, _, _, _) = run_mulh::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
@@ -124,15 +123,31 @@ fn set_and_execute<E: InstructionExecutor<F>>(
 fn run_rv32_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, bitwise_chip, range_tuple_checker) = create_test_chip(&mut tester);
+    let (mut chip, bitwise_chip, range_tuple_checker) = create_test_chip(&tester);
+
+    let width = BaseAir::<F>::width(&chip.air);
+    let mut ctx =
+        TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[(width, MAX_INS_CAPACITY)]);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            opcode,
+            None,
+            None,
+        );
     }
+
+    let trace = ctx.arenas.pop().unwrap().into_matrix();
+    let air = chip.air();
+    let air_proof_input = chip.generate_air_proof_input_with_trace(trace);
 
     let tester = tester
         .build()
-        .load(chip)
+        .load_air_proof_input((air, air_proof_input))
         .load(bitwise_chip)
         .load(range_tuple_checker)
         .finalize();
@@ -159,9 +174,21 @@ fn run_negative_mulh_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, bitwise_chip, range_tuple_chip) = create_test_chip(&mut tester);
+    let (mut chip, bitwise_chip, range_tuple_chip) = create_test_chip(&tester);
 
-    set_and_execute(&mut tester, &mut chip, &mut rng, opcode, Some(b), Some(c));
+    let width = BaseAir::<F>::width(&chip.air);
+    let mut ctx =
+        TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[(width, MAX_INS_CAPACITY)]);
+
+    set_and_execute(
+        &mut tester,
+        &mut chip,
+        &mut ctx,
+        &mut rng,
+        opcode,
+        Some(b),
+        Some(c),
+    );
 
     let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
@@ -175,10 +202,16 @@ fn run_negative_mulh_test(
         *trace = RowMajorMatrix::new(values, trace.width());
     };
 
+    let trace = ctx.arenas.pop().unwrap().into_matrix();
+    let air = chip.air();
+    let mut air_proof_input = chip.generate_air_proof_input_with_trace(trace);
+
+    modify_trace(air_proof_input.raw.common_main.as_mut().unwrap());
+
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_air_proof_input((air, air_proof_input))
         .load(bitwise_chip)
         .load(range_tuple_chip)
         .finalize();

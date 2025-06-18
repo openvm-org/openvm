@@ -1,8 +1,9 @@
 use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::arch::{
+    execution_mode::tracegen::TracegenCtx,
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    VmAirWrapper,
+    InsExecutor, MatrixRecordArena, RowMajorMatrixArena,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -17,12 +18,13 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    Chip,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
-use super::{core::run_alu, BaseAluCoreAir, Rv32BaseAluChip, Rv32BaseAluStep};
+use super::{core::run_alu, Rv32BaseAluChip};
 use crate::{
     adapters::{
         Rv32BaseAluAdapterAir, Rv32BaseAluAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
@@ -45,36 +47,33 @@ fn create_test_chip(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let mut chip = Rv32BaseAluChip::new(
-        VmAirWrapper::new(
-            Rv32BaseAluAdapterAir::new(
-                tester.execution_bridge(),
-                tester.memory_bridge(),
-                bitwise_bus,
-            ),
-            BaseAluCoreAir::new(bitwise_bus, BaseAluOpcode::CLASS_OFFSET),
+    let chip = Rv32BaseAluChip::new(
+        Rv32BaseAluAdapterAir::new(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            bitwise_bus,
         ),
-        Rv32BaseAluStep::new(
-            Rv32BaseAluAdapterStep::new(bitwise_chip.clone()),
-            bitwise_chip.clone(),
-            BaseAluOpcode::CLASS_OFFSET,
-        ),
+        Rv32BaseAluAdapterStep::new(bitwise_chip.clone()),
+        bitwise_chip.clone(),
+        BaseAluOpcode::CLASS_OFFSET,
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip)
 }
 
-fn set_and_execute(
+fn set_and_execute<RA>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32BaseAluChip<F>,
+    ctx: &mut TracegenCtx<RA>,
     rng: &mut StdRng,
     opcode: BaseAluOpcode,
     b: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
     is_imm: Option<bool>,
     c: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
-) {
+) where
+    Rv32BaseAluChip<F>: InsExecutor<F, RA>,
+{
     let b = b.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
     let (c_imm, c) = if is_imm.unwrap_or(rng.gen_bool(0.5)) {
         let (imm, c) = if let Some(c) = c {
@@ -98,7 +97,7 @@ fn set_and_execute(
         opcode.global_opcode().as_usize(),
         rng,
     );
-    tester.execute(chip, &instruction);
+    tester.execute_with_ctx(chip, &instruction, ctx);
 
     let a = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c)
         .map(F::from_canonical_u8);
@@ -123,6 +122,10 @@ fn rand_rv32_alu_test(opcode: BaseAluOpcode, num_ops: usize) {
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
+    let width = BaseAir::<F>::width(&chip.air);
+    let mut ctx =
+        TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[(width, MAX_INS_CAPACITY)]);
+
     // TODO(AG): make a more meaningful test for memory accesses
     tester.write(2, 1024, [F::ONE; 4]);
     tester.write(2, 1028, [F::ONE; 4]);
@@ -130,10 +133,27 @@ fn rand_rv32_alu_test(opcode: BaseAluOpcode, num_ops: usize) {
     assert_eq!(sm, [F::ONE; 8]);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+        );
     }
 
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    let trace = ctx.arenas.pop().unwrap().into_matrix();
+    let air = chip.air();
+    let air_proof_input = chip.generate_air_proof_input_with_trace(trace);
+
+    let tester = tester
+        .build()
+        .load_air_proof_input((air, air_proof_input))
+        .load(bitwise_chip)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -148,6 +168,10 @@ fn rand_rv32_alu_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
     let mut tester = VmChipTestBuilder::default_persistent();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
+    let width = BaseAir::<F>::width(&chip.air);
+    let mut ctx =
+        TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[(width, MAX_INS_CAPACITY)]);
+
     // TODO(AG): make a more meaningful test for memory accesses
     tester.write(2, 1024, [F::ONE; 4]);
     tester.write(2, 1028, [F::ONE; 4]);
@@ -155,10 +179,27 @@ fn rand_rv32_alu_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
     assert_eq!(sm, [F::ONE; 8]);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+        );
     }
 
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    let trace = ctx.arenas.pop().unwrap().into_matrix();
+    let air = chip.air();
+    let air_proof_input = chip.generate_air_proof_input_with_trace(trace);
+
+    let tester = tester
+        .build()
+        .load_air_proof_input((air, air_proof_input))
+        .load(bitwise_chip)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -184,9 +225,14 @@ fn run_negative_alu_test(
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
+    let width = BaseAir::<F>::width(&chip.air);
+    let mut ctx =
+        TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[(width, MAX_INS_CAPACITY)]);
+
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         Some(b),
@@ -213,10 +259,16 @@ fn run_negative_alu_test(
         *trace = RowMajorMatrix::new(values, trace.width());
     };
 
+    let trace = ctx.arenas.pop().unwrap().into_matrix();
+    let air = chip.air();
+    let mut air_proof_input = chip.generate_air_proof_input_with_trace(trace);
+
+    modify_trace(air_proof_input.raw.common_main.as_mut().unwrap());
+
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_air_proof_input((air, air_proof_input))
         .load(bitwise_chip)
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));

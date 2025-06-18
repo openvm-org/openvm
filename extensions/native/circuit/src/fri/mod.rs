@@ -7,10 +7,9 @@ use std::{
 use itertools::zip_eq;
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionState, MatrixRecordArena,
-        MultiRowLayout, MultiRowMetadata, NewVmChipWrapper, RecordArena, Result, SizedRecord,
-        StepExecutorE1, TraceFiller, TraceStep, VmStateMut,
+        execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
+        get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionState, MultiRowLayout,
+        NewVmChipWrapper, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep, VmStateMut,
     },
     system::{
         memory::{
@@ -694,7 +693,7 @@ impl<F: PrimeField32> FriReducedOpeningStep<F> {
     }
 }
 
-impl<F, CTX> TraceStep<F, CTX> for FriReducedOpeningStep<F>
+impl<F> TraceStep<F> for FriReducedOpeningStep<F>
 where
     F: PrimeField32,
 {
@@ -708,9 +707,9 @@ where
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
+        chip_index: usize,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -862,7 +861,7 @@ where
     }
 }
 
-impl<F, CTX> TraceFiller<F, CTX> for FriReducedOpeningStep<F>
+impl<F> TraceFiller<F> for FriReducedOpeningStep<F>
 where
     F: PrimeField32,
 {
@@ -1163,4 +1162,4 @@ where
 }
 
 pub type FriReducedOpeningChip<F> =
-    NewVmChipWrapper<F, FriReducedOpeningAir, FriReducedOpeningStep<F>, MatrixRecordArena<F>>;
+    NewVmChipWrapper<F, FriReducedOpeningAir, FriReducedOpeningStep<F>>;

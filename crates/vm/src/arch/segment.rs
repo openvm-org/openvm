@@ -17,8 +17,9 @@ use rand::rngs::StdRng;
 #[cfg(feature = "bench-metrics")]
 use super::InstructionExecutor;
 use super::{
-    execution_control::ExecutionControl, ExecutionError, GenerationError, Streams, SystemConfig,
-    VmChipComplex, VmComplexTraceHeights, VmConfig,
+    execution_control::ExecutionControl, execution_mode::tracegen::TracegenCtx, ExecutionError,
+    GenerationError, MatrixRecordArena, Streams, SystemConfig, VmChipComplex,
+    VmComplexTraceHeights, VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -257,17 +258,20 @@ where
     }
 
     /// Generate ProofInput to prove the segment. Should be called after ::execute
-    pub fn generate_proof_input<SC: StarkGenericConfig>(
+    pub fn generate_proof_input<SC>(
         #[allow(unused_mut)] mut self,
+        ctx: TracegenCtx<MatrixRecordArena<F>>,
         cached_program: Option<CommittedTraceData<SC>>,
     ) -> Result<ProofInput<SC>, GenerationError>
     where
+        SC: StarkGenericConfig,
         Domain<SC>: PolynomialSpace<Val = F>,
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
         metrics_span("trace_gen_time_ms", || {
             self.chip_complex.generate_proof_input(
+                ctx,
                 cached_program,
                 &self.trace_height_constraints,
                 #[cfg(feature = "bench-metrics")]

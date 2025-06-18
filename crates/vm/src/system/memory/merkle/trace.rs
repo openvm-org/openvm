@@ -81,6 +81,13 @@ where
         let pvs = init_root.into_iter().chain(final_root).collect();
         AirProofInput::simple(trace, pvs)
     }
+
+    fn generate_air_proof_input_with_trace(
+        self,
+        _trace: RowMajorMatrix<Val<SC>>,
+    ) -> AirProofInput<SC> {
+        todo!()
+    }
 }
 impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<CHUNK, F> {
     fn air_name(&self) -> String {

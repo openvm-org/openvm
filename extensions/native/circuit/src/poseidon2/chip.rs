@@ -116,14 +116,14 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> SizedRecord<NativePoseidon2Re
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> TraceStep<F>
     for NativePoseidon2Step<F, SBOX_REGISTERS>
 {
     type RecordLayout = MultiRowLayout<NativePoseidon2Metadata>;
     type RecordMut<'a> = NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS>;
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,
         arena: &'buf mut RA,
     ) -> openvm_circuit::arch::Result<()>

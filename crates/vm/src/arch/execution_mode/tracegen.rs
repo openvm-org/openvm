@@ -3,13 +3,38 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        execution_control::ExecutionControl, ExecutionError, ExecutionState, InstructionExecutor,
-        VmChipComplex, VmConfig, VmSegmentState,
+        execution_control::ExecutionControl, BaseRecordArena, ExecutionError, ExecutionState,
+        InsExecutor, MatrixRecordArena, VmChipComplex, VmConfig, VmSegmentState, VmStateMut,
+        PUBLIC_VALUES_AIR_ID,
     },
     system::memory::INITIAL_TIMESTAMP,
 };
 
-pub type TracegenCtx = ();
+#[derive(Debug)]
+pub struct TracegenCtx<RA> {
+    pub arenas: Vec<RA>,
+}
+
+impl<RA> TracegenCtx<RA>
+where
+    RA: BaseRecordArena,
+{
+    pub fn new(count: usize) -> Self {
+        let arenas = (0..count)
+            .map(|_| RA::with_capacity(RA::Capacity::default()))
+            .collect();
+        Self { arenas }
+    }
+
+    pub fn new_with_capacity(capacities: &[RA::Capacity]) -> Self {
+        let arenas = capacities
+            .iter()
+            .map(|&capacity| RA::with_capacity(capacity))
+            .collect();
+
+        Self { arenas }
+    }
+}
 
 #[derive(Default, derive_new::new)]
 pub struct TracegenExecutionControl {
@@ -20,10 +45,14 @@ impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControl
 where
     F: PrimeField32,
     VC: VmConfig<F>,
+    VC::Executor: InsExecutor<F, MatrixRecordArena<F>>,
 {
-    type Ctx = TracegenCtx;
+    // TODO(ayush): make generic
+    type Ctx = TracegenCtx<MatrixRecordArena<F>>;
 
-    fn initialize_context(&self) -> Self::Ctx {}
+    fn initialize_context(&self) -> Self::Ctx {
+        unimplemented!()
+    }
 
     fn should_suspend(
         &self,
@@ -66,20 +95,22 @@ where
     where
         F: PrimeField32,
     {
-        let timestamp = chip_complex.memory_controller().timestamp();
+        let offset = if chip_complex.config().has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
+        } else {
+            PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
+        };
 
         let &Instruction { opcode, .. } = instruction;
-
-        if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
-            let memory_controller = &mut chip_complex.base.memory_controller;
-            let new_state = executor.execute(
-                memory_controller,
-                &mut state.streams,
-                &mut state.rng,
-                instruction,
-                ExecutionState::new(state.pc, timestamp),
-            )?;
-            state.pc = new_state.pc;
+        if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode) {
+            let vm_state = VmStateMut {
+                pc: &mut state.pc,
+                memory: &mut chip_complex.base.memory_controller.memory,
+                streams: &mut state.streams,
+                rng: &mut state.rng,
+                ctx: &mut state.ctx,
+            };
+            executor.execute_tracegen(vm_state, instruction, offset + i)?;
         } else {
             return Err(ExecutionError::DisabledOperation {
                 pc: state.pc,

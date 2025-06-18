@@ -1,19 +1,22 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
+    sync::Arc,
 };
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, MinimalInstruction, RecordArena, Result,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterTraceStep, EmptyAdapterCoreLayout, ExecutionState, InsExecutor, InsExecutorE1,
+        InstructionExecutor, MinimalInstruction, RecordArena, Result, Streams, VmAdapterInterface,
+        VmAirWrapper, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
+        MemoryController, SharedMemoryHelper,
     },
+    utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
@@ -25,11 +28,17 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_transpiler::ShiftOpcode;
 use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    rap::BaseAirWithPublicValues,
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_maybe_rayon::prelude::{ParallelIterator, ParallelSliceMut},
+    prover::types::AirProofInput,
+    rap::{get_air_name, AnyRap, BaseAirWithPublicValues},
+    AirRef, Chip, ChipUsageGetter,
 };
+use rand::rngs::StdRng;
 use strum::IntoEnumIterator;
 
 #[repr(C)]
@@ -252,79 +261,107 @@ pub struct ShiftCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub local_opcode: u8,
 }
 
-pub struct ShiftStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
-    pub offset: usize,
+pub struct ShiftStep<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub air: VmAirWrapper<AdapterAir, ShiftCoreAir<NUM_LIMBS, LIMB_BITS>>,
+    pub adapter: AdapterStep,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
+    mem_helper: SharedMemoryHelper<F>,
 }
 
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, LIMB_BITS> {
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    ShiftStep<F, AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
+{
     pub fn new(
-        adapter: A,
+        adapter_air: AdapterAir,
+        adapter_step: AdapterStep,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         range_checker_chip: SharedVariableRangeCheckerChip,
         offset: usize,
+        mem_helper: SharedMemoryHelper<F>,
     ) -> Self {
         assert_eq!(NUM_LIMBS % 2, 0, "Number of limbs must be divisible by 2");
         Self {
-            adapter,
-            offset,
+            air: VmAirWrapper::new(
+                adapter_air,
+                ShiftCoreAir::new(bitwise_lookup_chip.bus(), range_checker_chip.bus(), offset),
+            ),
+            adapter: adapter_step,
             bitwise_lookup_chip,
             range_checker_chip,
+            mem_helper,
         }
     }
 }
 
-impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F, CTX>
-    for ShiftStep<A, NUM_LIMBS, LIMB_BITS>
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    InstructionExecutor<F> for ShiftStep<F, AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
+{
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            ShiftOpcode::from_usize(opcode - self.air.core.offset)
+        )
+    }
+
+    fn execute(
+        &mut self,
+        _memory: &mut MemoryController<F>,
+        _streams: &mut Streams<F>,
+        _rng: &mut StdRng,
+        _instruction: &Instruction<F>,
+        _from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
+        unimplemented!()
+    }
+}
+
+impl<F, AdapterAir, AdapterStep, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    InsExecutor<F, RA> for ShiftStep<F, AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
 where
-    F: PrimeField32,
-    A: 'static
+    AdapterStep: 'static
         + for<'a> AdapterTraceStep<
             F,
-            CTX,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
         >,
+    for<'a> RA: RecordArena<
+        'a,
+        EmptyAdapterCoreLayout<F, AdapterStep>,
+        (
+            AdapterStep::RecordMut<'a>,
+            &'a mut ShiftCoreRecord<NUM_LIMBS, LIMB_BITS>,
+        ),
+    >,
 {
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (
-        A::RecordMut<'a>,
-        &'a mut ShiftCoreRecord<NUM_LIMBS, LIMB_BITS>,
-    );
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", ShiftOpcode::from_usize(opcode - self.offset))
-    }
-
-    fn execute<'buf, RA>(
+    fn execute_tracegen(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
+        chip_index: usize,
     ) -> Result<()>
     where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+        F: PrimeField32,
     {
         let Instruction { opcode, .. } = instruction;
 
-        let local_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let local_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.air.core.offset));
 
+        let arena = &mut state.ctx.arenas[chip_index];
         let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
 
-        A::start(*state.pc, state.memory, &mut adapter_record);
+        AdapterStep::start(*state.pc, state.memory, &mut adapter_record);
 
-        let [rs1, rs2] = self
+        core_record.local_opcode = local_opcode as u8;
+        let shift_opcode = ShiftOpcode::from_usize(local_opcode as usize);
+
+        [core_record.b, core_record.c] = self
             .adapter
             .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        let (output, _, _) = run_shift::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
-
-        core_record.b = rs1;
-        core_record.c = rs2;
-        core_record.local_opcode = local_opcode as u8;
+        let (output, _, _) =
+            run_shift::<NUM_LIMBS, LIMB_BITS>(shift_opcode, &core_record.b, &core_record.c);
 
         self.adapter.write(
             state.memory,
@@ -338,15 +375,18 @@ where
     }
 }
 
-impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F, CTX>
-    for ShiftStep<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    ShiftStep<F, AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
 {
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
+    fn fill_trace_row(&self, row_slice: &mut [F])
+    where
+        F: PrimeField32,
+        AdapterStep: 'static + AdapterTraceFiller<F>,
+    {
+        let (adapter_row, mut core_row) =
+            unsafe { row_slice.split_at_mut_unchecked(AdapterStep::WIDTH) };
+        self.adapter
+            .fill_trace_row(&self.mem_helper.as_borrowed(), adapter_row);
 
         let record: &ShiftCoreRecord<NUM_LIMBS, LIMB_BITS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
@@ -413,13 +453,31 @@ where
         core_row.b = record.b.map(F::from_canonical_u8);
         core_row.a = a.map(F::from_canonical_u8);
     }
+
+    fn fill_trace(&self, trace: &mut RowMajorMatrix<F>)
+    where
+        Self: Send + Sync,
+        F: PrimeField32 + Clone + Send + Sync,
+        AdapterStep: AdapterTraceFiller<F> + Send + Sync + 'static,
+    {
+        let rows_used = trace.height();
+        let width = trace.width();
+        trace.values[..rows_used * width]
+            .par_chunks_exact_mut(width)
+            .for_each(|row_slice| {
+                self.fill_trace_row(row_slice);
+            });
+
+        let padded_height = next_power_of_two_or_zero(rows_used);
+        trace.pad_to_height(padded_height, F::ZERO);
+    }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
-    for ShiftStep<A, NUM_LIMBS, LIMB_BITS>
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<F>
+    for ShiftStep<F, AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static
+    AdapterStep: 'static
         + for<'a> AdapterExecutorE1<
             F,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
@@ -436,7 +494,7 @@ where
     {
         let Instruction { opcode, .. } = instruction;
 
-        let shift_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let shift_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.air.core.offset));
 
         let [rs1, rs2] = self.adapter.read(state, instruction).into();
 
@@ -459,6 +517,59 @@ where
         state.ctx.trace_heights[chip_index] += 1;
 
         Ok(())
+    }
+}
+
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> ChipUsageGetter
+    for ShiftStep<F, AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
+where
+    F: Field,
+    AdapterAir: BaseAir<F>,
+{
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+
+    fn trace_width(&self) -> usize {
+        BaseAir::width(&self.air)
+    }
+
+    fn current_trace_height(&self) -> usize {
+        // TODO(ayush): fix this
+        // unimplemented!()
+        0
+    }
+}
+
+impl<SC, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> Chip<SC>
+    for ShiftStep<Val<SC>, AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
+where
+    SC: StarkGenericConfig,
+    Val<SC>: PrimeField32,
+    AdapterAir: BaseAir<Val<SC>>,
+    VmAirWrapper<AdapterAir, ShiftCoreAir<NUM_LIMBS, LIMB_BITS>>: Clone + AnyRap<SC> + 'static,
+    AdapterStep: AdapterTraceFiller<Val<SC>> + Send + Sync + 'static,
+{
+    fn air(&self) -> AirRef<SC> {
+        Arc::new(self.air.clone())
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        unimplemented!("generate_air_proof_input isn't implemented")
+    }
+
+    fn generate_air_proof_input_with_trace(
+        self,
+        mut trace: RowMajorMatrix<Val<SC>>,
+    ) -> AirProofInput<SC> {
+        self.fill_trace(&mut trace);
+        assert!(
+            trace.height() == 0 || trace.height().is_power_of_two(),
+            "Trace height must be a power of two"
+        );
+
+        let public_values = vec![];
+        AirProofInput::simple(trace, public_values)
     }
 }
 

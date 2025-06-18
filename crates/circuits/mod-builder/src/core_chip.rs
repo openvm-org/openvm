@@ -5,7 +5,7 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterCoreMetadata,
         AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, CustomBorrow, DynAdapterInterface,
         DynArray, MinimalInstruction, RecordArena, Result, SizedRecord, StepExecutorE1,
@@ -346,20 +346,19 @@ impl<A> FieldExpressionStep<A> {
     }
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for FieldExpressionStep<A>
+impl<F, A> TraceStep<F> for FieldExpressionStep<A>
 where
     F: PrimeField32,
-    A: 'static
-        + AdapterTraceStep<F, CTX, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
+    A: 'static + AdapterTraceStep<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
 {
     type RecordLayout = FieldExpressionRecordLayout<F, A>;
     type RecordMut<'a> = (A::RecordMut<'a>, FieldExpressionCoreRecordMut<'a>);
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
+        chip_index: usize,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -397,10 +396,10 @@ where
     }
 }
 
-impl<F, CTX, A> TraceFiller<F, CTX> for FieldExpressionStep<A>
+impl<F, A> TraceFiller<F> for FieldExpressionStep<A>
 where
     F: PrimeField32 + Send + Sync + Clone,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         // Get the core record from the row slice

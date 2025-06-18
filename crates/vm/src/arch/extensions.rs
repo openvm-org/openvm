@@ -10,7 +10,7 @@ use getset::Getters;
 use itertools::{zip_eq, Itertools};
 #[cfg(feature = "bench-metrics")]
 use metrics::counter;
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, InsExecutor, InsExecutorE1, InstructionExecutor};
 use openvm_circuit_primitives::{
     utils::next_power_of_two_or_zero,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
@@ -20,12 +20,12 @@ use openvm_instructions::{
     program::Program, LocalOpcode, PhantomDiscriminant, PublishOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::{
-    config::{Domain, StarkGenericConfig},
+    config::{Domain, StarkGenericConfig, Val},
     interaction::{BusIndex, PermutationCheckBus},
     keygen::types::LinearConstraint,
     p3_commit::PolynomialSpace,
     p3_field::{FieldAlgebra, PrimeField32, TwoAdicField},
-    p3_matrix::Matrix,
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_util::log2_ceil_usize,
     prover::types::{AirProofInput, CommittedTraceData, ProofInput},
     utils::metrics_span,
@@ -36,13 +36,14 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    vm_poseidon2_config, ExecutionBus, GenerationError, InstructionExecutor, PhantomSubExecutor,
-    SystemConfig, SystemTraceHeights,
+    execution_mode::tracegen::TracegenCtx, vm_poseidon2_config, ExecutionBus, GenerationError,
+    InstructionExecutor, MatrixRecordArena, PhantomSubExecutor, RowMajorMatrixArena, SystemConfig,
+    SystemTraceHeights,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{ExecutionBridge, VmAirWrapper},
+    arch::ExecutionBridge,
     system::{
         connector::VmConnectorChip,
         memory::{
@@ -53,10 +54,7 @@ use crate::{
         phantom::PhantomChip,
         poseidon2::Poseidon2PeripheryChip,
         program::{ProgramBus, ProgramChip},
-        public_values::{
-            core::{PublicValuesCoreAir, PublicValuesCoreStep},
-            PublicValuesChip,
-        },
+        public_values::PublicValuesChip,
     },
 };
 
@@ -532,7 +530,7 @@ impl<F: PrimeField32> SystemBase<F> {
     }
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor, InsExecutorE1)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor, InsExecutor, InsExecutorE1)]
 pub enum SystemExecutor<F: PrimeField32> {
     PublicValues(PublicValuesChip<F>),
     Phantom(RefCell<PhantomChip<F>>),
@@ -584,21 +582,13 @@ impl<F: PrimeField32> SystemComplex<F> {
             assert_eq!(inventory.executors().len(), Self::PV_EXECUTOR_IDX);
 
             let chip = PublicValuesChip::new(
-                VmAirWrapper::new(
-                    NativeAdapterAir::new(
-                        ExecutionBridge::new(execution_bus, program_bus),
-                        memory_bridge,
-                    ),
-                    PublicValuesCoreAir::new(
-                        config.num_public_values,
-                        config.max_constraint_degree as u32 - 1,
-                    ),
+                NativeAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
                 ),
-                PublicValuesCoreStep::new(
-                    NativeAdapterStep::new(),
-                    config.num_public_values,
-                    config.max_constraint_degree as u32 - 1,
-                ),
+                NativeAdapterStep::new(),
+                config.num_public_values,
+                config.max_constraint_degree as u32 - 1,
                 memory_controller.helper(),
             );
 
@@ -982,13 +972,15 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .collect()
     }
 
-    pub(crate) fn generate_proof_input<SC: StarkGenericConfig>(
+    pub(crate) fn generate_proof_input<SC>(
         mut self,
+        ctx: TracegenCtx<MatrixRecordArena<Val<SC>>>,
         cached_program: Option<CommittedTraceData<SC>>,
         trace_height_constraints: &[LinearConstraint],
         #[cfg(feature = "bench-metrics")] metrics: &mut VmMetrics,
     ) -> Result<ProofInput<SC>, GenerationError>
     where
+        SC: StarkGenericConfig,
         Domain<SC>: PolynomialSpace<Val = F>,
         E: Chip<SC>,
         P: AnyEnum + Chip<SC>,
@@ -1035,6 +1027,12 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         #[cfg(feature = "bench-metrics")]
         self.finalize_metrics(metrics);
 
+        let executor_chip_offset = if self.config().has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1 + self.memory_controller().num_airs()
+        } else {
+            PUBLIC_VALUES_AIR_ID + self.memory_controller().num_airs()
+        };
+
         let has_pv_chip = self.public_values_chip_idx().is_some();
         // ATTENTION: The order of AIR proof input generation MUST be consistent with `airs`.
         let mut builder = VmProofInputBuilder::new();
@@ -1058,10 +1056,19 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         // generate_air_proof_input for public values and memory chips **last** but include
         // them into the `builder` **first**.
         let mut public_values_input = None;
-        let mut insertion_order = self.inventory.insertion_order;
-        insertion_order.reverse();
+        let insertion_order = self.inventory.insertion_order;
         let mut non_sys_inputs = Vec::with_capacity(insertion_order.len());
-        for chip_id in insertion_order {
+
+        let traces = ctx
+            .arenas
+            .into_iter()
+            .map(|arena| arena.into_matrix())
+            .collect::<Vec<_>>();
+        let executor_traces = traces
+            .into_iter()
+            .skip(executor_chip_offset)
+            .take(insertion_order.len());
+        for (chip_id, trace) in insertion_order.into_iter().rev().zip(executor_traces) {
             let mut height = None;
             if let Some(overridden_heights) = self.overridden_inventory_heights.as_ref() {
                 height = overridden_heights.chips.get(&chip_id).copied();
@@ -1070,7 +1077,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
                 ChipId::Executor(id) => {
                     let chip = self.inventory.executors.pop().unwrap();
                     assert_eq!(id, self.inventory.executors.len());
-                    generate_air_proof_input(chip, height)
+                    generate_air_proof_input_with_trace(chip, trace, height)
                 }
                 ChipId::Periphery(id) => {
                     let chip = self.inventory.periphery.pop().unwrap();
@@ -1174,6 +1181,27 @@ pub fn generate_air_proof_input<SC: StarkGenericConfig, C: Chip<SC>>(
     height: Option<usize>,
 ) -> AirProofInput<SC> {
     let mut proof_input = chip.generate_air_proof_input();
+    if let Some(height) = height {
+        let height = height.next_power_of_two();
+        let main = proof_input.raw.common_main.as_mut().unwrap();
+        assert!(
+            height >= main.height(),
+            "Overridden height must be greater than or equal to the used height"
+        );
+        main.pad_to_height(height, FieldAlgebra::ZERO);
+    }
+    proof_input
+}
+
+/// Generates an AIR proof input of the chip with the given trace and height, if any.
+///
+/// Assumption: an all-0 row is a valid dummy row for `chip`.
+pub fn generate_air_proof_input_with_trace<SC: StarkGenericConfig, C: Chip<SC>>(
+    chip: C,
+    trace: RowMajorMatrix<Val<SC>>,
+    height: Option<usize>,
+) -> AirProofInput<SC> {
+    let mut proof_input = chip.generate_air_proof_input_with_trace(trace);
     if let Some(height) = height {
         let height = height.next_power_of_two();
         let main = proof_input.raw.common_main.as_mut().unwrap();

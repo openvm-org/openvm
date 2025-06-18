@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::{
-    execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+    execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
     Streams,
 };
 use crate::system::{
@@ -119,6 +119,51 @@ pub trait InstructionExecutor<F> {
     fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
+impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
+    fn execute(
+        &mut self,
+        memory: &mut MemoryController<F>,
+        streams: &mut Streams<F>,
+        rng: &mut StdRng,
+        instruction: &Instruction<F>,
+        prev_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
+        self.borrow_mut()
+            .execute(memory, streams, rng, instruction, prev_state)
+    }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        self.borrow().get_opcode_name(opcode)
+    }
+}
+
+// TODO(ayush): merge with InsExecutorE1
+pub trait InsExecutor<F, RA> {
+    fn execute_tracegen(
+        &mut self,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()>
+    where
+        F: PrimeField32;
+}
+
+impl<F, RA, C: InsExecutor<F, RA>> InsExecutor<F, RA> for RefCell<C> {
+    fn execute_tracegen(
+        &mut self,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()>
+    where
+        F: PrimeField32,
+    {
+        self.borrow_mut()
+            .execute_tracegen(state, instruction, chip_index)
+    }
+}
+
 /// New trait for instruction execution
 pub trait InsExecutorE1<F> {
     fn execute_e1<Ctx>(
@@ -138,8 +183,6 @@ pub trait InsExecutorE1<F> {
     ) -> Result<()>
     where
         F: PrimeField32;
-
-    fn set_trace_height(&mut self, height: usize);
 }
 
 impl<F, C> InsExecutorE1<F> for RefCell<C>
@@ -169,28 +212,6 @@ where
     {
         self.borrow_mut()
             .execute_metered(state, instruction, chip_index)
-    }
-
-    fn set_trace_height(&mut self, height: usize) {
-        self.borrow_mut().set_trace_height(height);
-    }
-}
-
-impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
-    fn execute(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        streams: &mut Streams<F>,
-        rng: &mut StdRng,
-        instruction: &Instruction<F>,
-        prev_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>> {
-        self.borrow_mut()
-            .execute(memory, streams, rng, instruction, prev_state)
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        self.borrow().get_opcode_name(opcode)
     }
 }
 

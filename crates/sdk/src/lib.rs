@@ -13,9 +13,9 @@ use openvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         instructions::exe::VmExe,
-        verify_segments, ContinuationVmProof, ExecutionError, InitFileGenerator, InsExecutorE1,
-        VerifiedExecutionPayload, VmConfig, VmExecutor, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
-        PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
+        verify_segments, ContinuationVmProof, ExecutionError, InitFileGenerator, InsExecutor,
+        InsExecutorE1, VerifiedExecutionPayload, VmConfig, VmExecutor, CONNECTOR_AIR_ID,
+        PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
     },
     system::{
         memory::{merkle::public_values::extract_public_values, CHUNK},

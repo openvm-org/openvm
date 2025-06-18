@@ -6,8 +6,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, CustomBorrow, MultiRowLayout, MultiRowMetadata, RecordArena, Result,
-        SizedRecord, TraceFiller, TraceStep, VmStateMut,
+        execution_mode::tracegen::TracegenCtx, get_record_from_slice, CustomBorrow, MultiRowLayout,
+        RecordArena, Result, TraceFiller, TraceStep, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
@@ -128,7 +128,7 @@ impl SizedRecord<KeccakVmRecordLayout> for KeccakVmRecordMut<'_> {
     }
 }
 
-impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
+impl<F: PrimeField32> TraceStep<F> for KeccakVmStep {
     type RecordLayout = KeccakVmRecordLayout;
     type RecordMut<'a> = KeccakVmRecordMut<'a>;
 
@@ -138,9 +138,9 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
+        chip_index: usize,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -239,7 +239,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
     }
 }
 
-impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for KeccakVmStep {
+impl<F: PrimeField32> TraceFiller<F> for KeccakVmStep {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,

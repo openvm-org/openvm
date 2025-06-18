@@ -13,6 +13,7 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::BusIndex,
     p3_field::PrimeField32,
+    p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
     AirRef, Chip, ChipUsageGetter,
 };
@@ -64,6 +65,20 @@ where
         match self {
             Poseidon2PeripheryChip::Register0(chip) => chip.generate_air_proof_input(),
             Poseidon2PeripheryChip::Register1(chip) => chip.generate_air_proof_input(),
+        }
+    }
+
+    fn generate_air_proof_input_with_trace(
+        self,
+        trace: RowMajorMatrix<Val<SC>>,
+    ) -> AirProofInput<SC> {
+        match self {
+            Poseidon2PeripheryChip::Register0(chip) => {
+                chip.generate_air_proof_input_with_trace(trace)
+            }
+            Poseidon2PeripheryChip::Register1(chip) => {
+                chip.generate_air_proof_input_with_trace(trace)
+            }
         }
     }
 }

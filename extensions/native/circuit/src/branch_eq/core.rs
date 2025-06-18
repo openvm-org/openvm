@@ -2,7 +2,7 @@ use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep,
         EmptyAdapterCoreLayout, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
         VmStateMut,
@@ -36,10 +36,10 @@ pub struct NativeBranchEqualStep<A> {
     pub pc_step: u32,
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for NativeBranchEqualStep<A>
+impl<F, A> TraceStep<F> for NativeBranchEqualStep<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, CTX, ReadData: Into<[F; 2]>, WriteData = ()>,
+    A: 'static + AdapterTraceStep<F, ReadData: Into<[F; 2]>, WriteData = ()>,
 {
     type RecordLayout = EmptyAdapterCoreLayout<F, A>;
     type RecordMut<'a> = (A::RecordMut<'a>, &'a mut NativeBranchEqualCoreRecord<F>);
@@ -53,9 +53,9 @@ where
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
+        chip_index: usize,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -86,10 +86,10 @@ where
     }
 }
 
-impl<F, CTX, A> TraceFiller<F, CTX> for NativeBranchEqualStep<A>
+impl<F, A> TraceFiller<F> for NativeBranchEqualStep<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };

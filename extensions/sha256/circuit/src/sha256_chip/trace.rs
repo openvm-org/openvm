@@ -6,8 +6,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, CustomBorrow, MultiRowLayout, MultiRowMetadata, RecordArena, Result,
-        SizedRecord, TraceFiller, TraceStep, VmStateMut,
+        execution_mode::tracegen::TracegenCtx, get_record_from_slice, CustomBorrow, MultiRowLayout,
+        RecordArena, Result, TraceFiller, TraceStep, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
@@ -138,7 +138,7 @@ impl SizedRecord<Sha256VmRecordLayout> for Sha256VmRecordMut<'_> {
     }
 }
 
-impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
+impl<F: PrimeField32> TraceStep<F> for Sha256VmStep {
     type RecordLayout = Sha256VmRecordLayout;
     type RecordMut<'a> = Sha256VmRecordMut<'a>;
 
@@ -148,9 +148,9 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
+        chip_index: usize,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -243,7 +243,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
     }
 }
 
-impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Sha256VmStep {
+impl<F: PrimeField32> TraceFiller<F> for Sha256VmStep {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
