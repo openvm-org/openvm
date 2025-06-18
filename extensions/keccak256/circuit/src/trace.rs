@@ -93,7 +93,7 @@ impl<'a> CustomBorrow<'a, KeccakVmRecordMut<'a>, KeccakVmMetadata> for [u8] {
         }
     }
 
-    unsafe fn size_of_next(&'a self) -> usize {
+    unsafe fn size_of(&'a self) -> usize {
         let (header_buf, rest) = self.split_at_unchecked(size_of::<KeccakVmRecordHeader>());
         let mut total_len = header_buf.len();
         let header: &KeccakVmRecordHeader = header_buf.borrow();

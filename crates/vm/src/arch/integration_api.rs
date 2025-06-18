@@ -217,7 +217,7 @@ pub trait CustomBorrow<'a, T, I> {
     /// - `&self` must be a valid starting pointer on which `custom_borrow` has already be called
     /// - The data underlying `&self` has already been written to and is self-describing, so
     ///   metadata can be extracted
-    unsafe fn size_of_next(&'a self) -> usize;
+    unsafe fn size_of(&'a self) -> usize;
 }
 
 /// If a struct implements `BorrowMut<T>`, then the same implementation can be used for
@@ -230,7 +230,7 @@ where
         self.borrow_mut()
     }
 
-    unsafe fn size_of_next(&'a self) -> usize {
+    unsafe fn size_of(&'a self) -> usize {
         size_of::<T>()
     }
 }
