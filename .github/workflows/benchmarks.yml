@@ -2,7 +2,7 @@ name: "OpenVM Benchmarks: Coordinate Runner & Reporting"
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "feat/new-execution"]
   pull_request:
     types: [opened, synchronize, reopened, labeled]
     branches: ["**"]
@@ -219,7 +219,7 @@ jobs:
             # For main branch, use "main" as before (backward compatibility)
             TARGET_SHA="main"
           fi
-          
+
           prev_json_files=$(echo $matrix | jq -r --arg target "$TARGET_SHA" '
             .[] |
             "\($target)-\(.id).json"')
