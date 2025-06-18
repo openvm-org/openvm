@@ -47,7 +47,7 @@ jobs:
         run: cargo install --force --path crates/cli
       
       - name: Generate keys from tagged version
-        run: cargo openvm keygen --output-dir ./tagged-keys
+        run: cargo openvm keygen --output ./tagged-keys
       
       # Compare keys
       - name: Compare verification keys
