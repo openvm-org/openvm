@@ -164,25 +164,25 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
         });
 }
 
-// #[divan::bench(args = AVAILABLE_PROGRAMS, sample_count=3)]
-// fn benchmark_execute_e3(bencher: Bencher, program: &str) {
-//     bencher
-//         .with_inputs(|| {
-//             let vm = create_default_vm();
-//             let exe = load_program_executable(program).expect("Failed to load program executable");
-//             let state = create_initial_state(&vm.config().system.memory_config, &exe, vec![]);
+#[divan::bench(args = AVAILABLE_PROGRAMS, sample_count=3)]
+fn benchmark_execute_e3(bencher: Bencher, program: &str) {
+    bencher
+        .with_inputs(|| {
+            let vm = create_default_vm();
+            let exe = load_program_executable(program).expect("Failed to load program executable");
+            let state = create_initial_state(&vm.config().system.memory_config, &exe, vec![]);
 
-//             let (widths, interactions) = shared_widths_and_interactions();
-//             let segments = vm
-//                 .executor
-//                 .execute_metered(exe.clone(), vec![], widths, interactions)
-//                 .expect("Failed to execute program");
+            let (widths, interactions) = shared_widths_and_interactions();
+            let segments = vm
+                .executor
+                .execute_metered(exe.clone(), vec![], widths, interactions)
+                .expect("Failed to execute program");
 
-//             (vm.executor, exe, state, segments)
-//         })
-//         .bench_values(|(executor, exe, state, segments)| {
-//             executor
-//                 .execute_from_state(exe, state, &segments)
-//                 .expect("Failed to execute program");
-//         });
-// }
+            (vm.executor, exe, state, segments)
+        })
+        .bench_values(|(executor, exe, state, segments)| {
+            executor
+                .execute_from_state(exe, state, &segments)
+                .expect("Failed to execute program");
+        });
+}
