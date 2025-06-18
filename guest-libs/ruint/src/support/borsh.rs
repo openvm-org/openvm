@@ -96,13 +96,10 @@ mod test {
         let mut buf = [0; 33];
 
         something.serialize(&mut buf.as_mut_slice()).unwrap();
-        assert_eq!(
-            buf,
-            [
-                1, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0,
-                0, 0, 0, 0, 0
-            ]
-        );
+        assert_eq!(buf, [
+            1, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0,
+            0, 0, 0, 0
+        ]);
         assert_eq!(&something.value.to_le_bytes::<32>(), &buf[1..]);
         assert_eq!(Something::try_from_slice(&buf[..]).unwrap(), something);
     }
@@ -123,13 +120,10 @@ mod test {
 
         another_thing.serialize(&mut buf.as_mut_slice()).unwrap();
 
-        assert_eq!(
-            buf,
-            [
-                1, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0,
-                0, 0, 0, 0, 0
-            ]
-        );
+        assert_eq!(buf, [
+            1, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0,
+            0, 0, 0, 0
+        ]);
         assert_eq!(&another_thing.value.to_le_bytes::<32>(), &buf[1..]);
         assert_eq!(
             AnotherThing::try_from_slice(&buf[..]).unwrap(),
@@ -150,14 +144,14 @@ mod test {
 
     #[derive(Debug, BorshDeserialize, BorshSerialize, PartialEq, Eq)]
     struct AThirdThing {
-        value: Uint<64, 1>,
+        value:      Uint<64, 1>,
         bool_value: bool,
     }
 
     #[test]
     fn roundtrip_trailing_zeroes() {
         let instance = AThirdThing {
-            value: Uint::<64, 1>::from_limbs([1]),
+            value:      Uint::<64, 1>::from_limbs([1]),
             bool_value: true,
         };
 

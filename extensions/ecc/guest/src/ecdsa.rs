@@ -1,5 +1,5 @@
 use alloc::vec::Vec;
-use core::ops::{Add, AddAssign, Mul};
+use core::ops::{Add, Mul};
 
 use ecdsa_core::{
     self,
@@ -12,10 +12,11 @@ use ecdsa_core::{
     EncodedPoint, Error, RecoveryId, Result, Signature, SignatureSize,
 };
 use elliptic_curve::{
-    generic_array::ArrayLength,
+    bigint::CheckedAdd,
+    generic_array::{typenum::Unsigned, ArrayLength},
     sec1::{FromEncodedPoint, ModulusSize, Tag, ToEncodedPoint},
     subtle::{Choice, ConditionallySelectable, CtOption},
-    CurveArithmetic, FieldBytesSize, PrimeCurve,
+    CurveArithmetic, FieldBytes, FieldBytesEncoding, FieldBytesSize, PrimeCurve,
 };
 use openvm_algebra_guest::{DivUnsafe, IntMod, Reduce};
 
@@ -90,8 +91,17 @@ where
     C::Point: WeierstrassPoint + Group + FromCompressed<Coordinate<C>>,
     Coordinate<C>: IntMod,
 {
-    pub fn new(point: <C as IntrinsicCurve>::Point) -> Self {
-        Self { point }
+    /// Convert an [`AffinePoint`] into a [`PublicKey`].
+    /// In addition, for `Coordinate<C>` implementing `IntMod`, this function will assert that the
+    /// affine coordinates of `point` are both in canonical form.
+    pub fn from_affine(point: AffinePoint<C>) -> Result<Self> {
+        // Internally this calls `is_eq` on `x` and `y` coordinates, which will assert `x, y` are
+        // reduced.
+        if point.is_identity() {
+            Err(Error::new())
+        } else {
+            Ok(Self { point })
+        }
     }
 
     pub fn from_sec1_bytes(bytes: &[u8]) -> Result<Self>
@@ -118,18 +128,19 @@ where
             }
 
             Tag::CompressedEvenY | Tag::CompressedOddY => {
-                let x = Coordinate::<C>::from_be_bytes(&bytes[1..]);
+                let x = Coordinate::<C>::from_be_bytes(&bytes[1..]).ok_or_else(Error::new)?;
                 let rec_id = bytes[0] & 1;
                 let point = FromCompressed::decompress(x, &rec_id).ok_or_else(Error::new)?;
+                // Decompressed point will never be identity
                 Ok(Self { point })
             }
 
             Tag::Uncompressed => {
                 let (x_bytes, y_bytes) = bytes[1..].split_at(Coordinate::<C>::NUM_LIMBS);
-                let x = Coordinate::<C>::from_be_bytes(x_bytes);
-                let y = Coordinate::<C>::from_be_bytes(y_bytes);
+                let x = Coordinate::<C>::from_be_bytes(x_bytes).ok_or_else(Error::new)?;
+                let y = Coordinate::<C>::from_be_bytes(y_bytes).ok_or_else(Error::new)?;
                 let point = <C as IntrinsicCurve>::Point::from_xy(x, y).ok_or_else(Error::new)?;
-                Ok(Self { point })
+                Self::from_affine(point)
             }
 
             _ => Err(Error::new()),
@@ -187,7 +198,7 @@ where
     }
 
     pub fn from_affine(point: <C as IntrinsicCurve>::Point) -> Result<Self> {
-        let public_key = PublicKey::<C>::new(point);
+        let public_key = PublicKey::<C>::from_affine(point)?;
         Ok(Self::new(public_key))
     }
 
@@ -208,7 +219,7 @@ where
 impl<C> VerifyingKey<C>
 where
     C: IntrinsicCurve + PrimeCurve,
-    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>>,
+    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>> + VerifyCustomHook<C>,
     Coordinate<C>: IntMod,
     C::Scalar: IntMod + Reduce,
     for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
@@ -253,7 +264,34 @@ where
         recovery_id: RecoveryId,
     ) -> Result<Self> {
         let sig = signature.to_bytes();
-        Self::recover_from_prehash_noverify(prehash, &sig, recovery_id)
+        let vk = Self::recover_from_prehash_noverify(prehash, &sig, recovery_id)?;
+        vk.inner.as_affine().verify_hook(prehash, signature)?;
+        Ok(vk)
+    }
+}
+
+/// To match the RustCrypto trait [VerifyPrimitive]. Certain curves have special verification logic
+/// outside of the general ECDSA verification algorithm. This trait provides a hook for such logic.
+///
+/// This trait is intended to be implemented on type which can access
+/// the affine point representing the public key via `&self`, such as a
+/// particular curve's `AffinePoint` type.
+pub trait VerifyCustomHook<C>: WeierstrassPoint
+where
+    C: IntrinsicCurve + PrimeCurve,
+    SignatureSize<C>: ArrayLength<u8>,
+{
+    /// This is **NOT** the full ECDSA signature verification algorithm. The implementer should only
+    /// add additional verification logic not contained in [verify_prehashed]. The default
+    /// implementation does nothing.
+    ///
+    /// Accepts the following arguments:
+    ///
+    /// - `z`: message digest to be verified. MUST BE OUTPUT OF A CRYPTOGRAPHICALLY SECURE DIGEST
+    ///   ALGORITHM!!!
+    /// - `sig`: signature to be verified against the key and message
+    fn verify_hook(&self, _z: &[u8], _sig: &Signature<C>) -> Result<()> {
+        Ok(())
     }
 }
 
@@ -266,17 +304,17 @@ where
     C: PrimeCurve + IntrinsicCurve,
     D: Digest + FixedOutput<OutputSize = FieldBytesSize<C>>,
     SignatureSize<C>: ArrayLength<u8>,
-    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>>,
+    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>> + VerifyCustomHook<C>,
     Coordinate<C>: IntMod,
     <C as IntrinsicCurve>::Scalar: IntMod + Reduce,
     for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
     for<'a> &'a Scalar<C>: DivUnsafe<&'a Scalar<C>, Output = Scalar<C>>,
 {
     fn verify_digest(&self, msg_digest: D, signature: &Signature<C>) -> Result<()> {
-        verify_prehashed::<C>(
-            self.inner.as_affine().clone(),
+        PrehashVerifier::<Signature<C>>::verify_prehash(
+            self,
             &msg_digest.finalize_fixed(),
-            &signature.to_bytes(),
+            signature,
         )
     }
 }
@@ -285,13 +323,14 @@ impl<C> PrehashVerifier<Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + IntrinsicCurve,
     SignatureSize<C>: ArrayLength<u8>,
-    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>>,
+    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>> + VerifyCustomHook<C>,
     Coordinate<C>: IntMod,
     C::Scalar: IntMod + Reduce,
     for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
     for<'a> &'a Scalar<C>: DivUnsafe<&'a Scalar<C>, Output = Scalar<C>>,
 {
     fn verify_prehash(&self, prehash: &[u8], signature: &Signature<C>) -> Result<()> {
+        self.inner.as_affine().verify_hook(prehash, signature)?;
         verify_prehashed::<C>(
             self.inner.as_affine().clone(),
             prehash,
@@ -304,7 +343,7 @@ impl<C> Verifier<Signature<C>> for VerifyingKey<C>
 where
     C: PrimeCurve + CurveArithmetic + DigestPrimitive + IntrinsicCurve,
     SignatureSize<C>: ArrayLength<u8>,
-    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>>,
+    C::Point: WeierstrassPoint + CyclicGroup + FromCompressed<Coordinate<C>> + VerifyCustomHook<C>,
     Coordinate<C>: IntMod,
     <C as IntrinsicCurve>::Scalar: IntMod + Reduce,
     for<'a> &'a C::Point: Add<&'a C::Point, Output = C::Point>,
@@ -378,12 +417,14 @@ where
     Coordinate<C>: IntMod,
     C::Scalar: IntMod + Reduce,
 {
+    /// ## Assumption
+    /// To use this implementation, the `Signature<C>`, `Coordinate<C>`, and `FieldBytes<C>` should
+    /// all be encoded in big endian bytes. The implementation also assumes that
+    /// `Scalar::<C>::NUM_LIMBS <= FieldBytesSize::<C>::USIZE <= Coordinate::<C>::NUM_LIMBS`.
+    ///
     /// Ref: <https://github.com/RustCrypto/signatures/blob/85c984bcc9927c2ce70c7e15cbfe9c6936dd3521/ecdsa/src/recovery.rs#L297>
     ///
     /// Recovery does not require additional signature verification: <https://github.com/RustCrypto/signatures/pull/831>
-    ///
-    /// ## Panics
-    /// If the signature is invalid or public key cannot be recovered from the given input.
     #[allow(non_snake_case)]
     pub fn recover_from_prehash_noverify(
         prehash: &[u8],
@@ -401,26 +442,44 @@ where
         // Signature is default encoded in big endian bytes
         let (r_be, s_be) = sig.split_at(<C as IntrinsicCurve>::Scalar::NUM_LIMBS);
         // Note: Scalar internally stores using little endian
-        let r = Scalar::<C>::from_be_bytes(r_be);
-        let s = Scalar::<C>::from_be_bytes(s_be);
-        if !r.is_reduced() || !s.is_reduced() {
-            return Err(Error::new());
-        }
+        let r = Scalar::<C>::from_be_bytes(r_be).ok_or_else(Error::new)?;
+        let s = Scalar::<C>::from_be_bytes(s_be).ok_or_else(Error::new)?;
         if r == Scalar::<C>::ZERO || s == Scalar::<C>::ZERO {
             return Err(Error::new());
         }
 
         // Perf: don't use bits2field from ::ecdsa
-        let z = Scalar::<C>::from_be_bytes(bits2field::<C>(prehash).unwrap().as_ref());
+        let prehash_bytes = bits2field::<C>(prehash)?;
+        // If prehash is longer than Scalar::NUM_LIMBS, take leftmost bytes
+        let trim = prehash_bytes.len().saturating_sub(Scalar::<C>::NUM_LIMBS);
+        // from_be_bytes still works if len < Scalar::NUM_LIMBS
+        // we don't need to reduce because IntMod is up to modular equivalence
+        let z = Scalar::<C>::from_be_bytes_unchecked(&prehash_bytes[..prehash_bytes.len() - trim]);
 
         // `r` is in the Scalar field, we now possibly add C::ORDER to it to get `x`
         // in the Coordinate field.
-        let mut x = Coordinate::<C>::from_le_bytes(r.as_le_bytes());
+        // We take some extra care for the case when FieldBytesSize<C> may be larger than
+        // Scalar::<C>::NUM_LIMBS.
+        let mut r_bytes = {
+            let mut r_bytes = FieldBytes::<C>::default();
+            assert!(FieldBytesSize::<C>::USIZE >= Scalar::<C>::NUM_LIMBS);
+            let offset = r_bytes.len().saturating_sub(r_be.len());
+            r_bytes[offset..].copy_from_slice(r_be);
+            r_bytes
+        };
         if recovery_id.is_x_reduced() {
-            // Copy from slice in case Coordinate has more bytes than Scalar
-            let order = Coordinate::<C>::from_le_bytes(Scalar::<C>::MODULUS.as_ref());
-            x.add_assign(order);
+            match Option::<C::Uint>::from(
+                C::Uint::decode_field_bytes(&r_bytes).checked_add(&C::ORDER),
+            ) {
+                Some(restored) => r_bytes = restored.encode_field_bytes(),
+                // No reduction should happen here if r was reduced
+                None => {
+                    return Err(Error::new());
+                }
+            };
         }
+        assert!(FieldBytesSize::<C>::USIZE <= Coordinate::<C>::NUM_LIMBS);
+        let x = Coordinate::<C>::from_be_bytes(&r_bytes).ok_or_else(Error::new)?;
         let rec_id = recovery_id.to_byte();
         // The point R decompressed from x-coordinate `r`
         let R: C::Point = FromCompressed::decompress(x, &rec_id).ok_or_else(Error::new)?;
@@ -429,12 +488,13 @@ where
         let u2 = s.div_unsafe(&r);
         let NEG_G = C::Point::NEG_GENERATOR;
         let point = <C as IntrinsicCurve>::msm(&[neg_u1, u2], &[NEG_G, R]);
-        let public_key = PublicKey { point };
+        let vk = VerifyingKey::from_affine(point)?;
 
-        Ok(VerifyingKey { inner: public_key })
+        Ok(vk)
     }
 }
 
+/// Assumes that `sig` is proper encoding of `r, s`.
 // Ref: https://docs.rs/ecdsa/latest/src/ecdsa/hazmat.rs.html#270
 #[allow(non_snake_case)]
 pub fn verify_prehashed<C>(pubkey: AffinePoint<C>, prehash: &[u8], sig: &[u8]) -> Result<()>
@@ -453,18 +513,19 @@ where
     // Signature is default encoded in big endian bytes
     let (r_be, s_be) = sig.split_at(<C as IntrinsicCurve>::Scalar::NUM_LIMBS);
     // Note: Scalar internally stores using little endian
-    let r = Scalar::<C>::from_be_bytes(r_be);
-    let s = Scalar::<C>::from_be_bytes(s_be);
-    if !r.is_reduced() || !s.is_reduced() {
-        return Err(Error::new());
-    }
+    let r = Scalar::<C>::from_be_bytes(r_be).ok_or_else(Error::new)?;
+    let s = Scalar::<C>::from_be_bytes(s_be).ok_or_else(Error::new)?;
     if r == Scalar::<C>::ZERO || s == Scalar::<C>::ZERO {
         return Err(Error::new());
     }
 
     // Perf: don't use bits2field from ::ecdsa
-    let z =
-        <C as IntrinsicCurve>::Scalar::from_be_bytes(bits2field::<C>(prehash).unwrap().as_ref());
+    let prehash_bytes = bits2field::<C>(prehash)?;
+    // If prehash is longer than Scalar::NUM_LIMBS, take leftmost bytes
+    let trim = prehash_bytes.len().saturating_sub(Scalar::<C>::NUM_LIMBS);
+    // from_be_bytes still works if len < Scalar::NUM_LIMBS
+    // we don't need to reduce because IntMod is up to modular equivalence
+    let z = Scalar::<C>::from_be_bytes_unchecked(&prehash_bytes[..prehash_bytes.len() - trim]);
 
     let u1 = z.div_unsafe(&s);
     let u2 = (&r).div_unsafe(&s);
@@ -473,6 +534,8 @@ where
     // public key
     let Q = pubkey;
     let R = <C as IntrinsicCurve>::msm(&[u1, u2], &[G, Q]);
+    // For Coordinate<C>: IntMod, the internal implementation of is_identity will assert x, y
+    // coordinates of R are both reduced.
     if R.is_identity() {
         return Err(Error::new());
     }

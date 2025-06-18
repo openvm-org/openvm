@@ -391,13 +391,31 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         Self(repr)
                     }
 
-                    fn from_le_bytes(bytes: &[u8]) -> Self {
+                    fn from_le_bytes(bytes: &[u8]) -> Option<Self> {
+                        let elt = Self::from_le_bytes_unchecked(bytes);
+                        if elt.is_reduced() {
+                            Some(elt)
+                        } else {
+                            None
+                        }
+                    }
+
+                    fn from_be_bytes(bytes: &[u8]) -> Option<Self> {
+                        let elt = Self::from_be_bytes_unchecked(bytes);
+                        if elt.is_reduced() {
+                            Some(elt)
+                        } else {
+                            None
+                        }
+                    }
+
+                    fn from_le_bytes_unchecked(bytes: &[u8]) -> Self {
                         let mut arr = [0u8; #limbs];
                         arr.copy_from_slice(bytes);
                         Self(arr)
                     }
 
-                    fn from_be_bytes(bytes: &[u8]) -> Self {
+                    fn from_be_bytes_unchecked(bytes: &[u8]) -> Self {
                         let mut arr = [0u8; #limbs];
                         for (a, b) in arr.iter_mut().zip(bytes.iter().rev()) {
                             *a = *b;
@@ -761,11 +779,12 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                 fn reduce_le_bytes(bytes: &[u8]) -> Self {
                     let mut res = <Self as openvm_algebra_guest::IntMod>::ZERO;
                     // base should be 2 ^ #limbs which exceeds what Self can represent
-                    let mut base = <Self as openvm_algebra_guest::IntMod>::from_le_bytes(&[255u8; #limbs]);
+                    let mut base = <Self as openvm_algebra_guest::IntMod>::from_le_bytes_unchecked(&[255u8; #limbs]);
                     base += <Self as openvm_algebra_guest::IntMod>::ONE;
                     for chunk in bytes.chunks(#limbs).rev() {
-                        res = res * &base + <Self as openvm_algebra_guest::IntMod>::from_le_bytes(chunk);
+                        res = res * &base + <Self as openvm_algebra_guest::IntMod>::from_le_bytes_unchecked(chunk);
                     }
+                    openvm_algebra_guest::IntMod::assert_reduced(&res);
                     res
                 }
             }

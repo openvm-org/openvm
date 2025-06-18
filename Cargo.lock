@@ -4787,17 +4787,18 @@ dependencies = [
  "halo2curves-axiom",
  "hex-literal 0.4.1",
  "num-bigint 0.4.6",
- "openvm-algebra-circuit",
  "openvm-algebra-transpiler",
  "openvm-circuit",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
- "openvm-keccak256-transpiler",
  "openvm-rv32im-transpiler",
  "openvm-sdk",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
+ "serde",
+ "serde_with",
+ "toml 0.8.20",
 ]
 
 [[package]]
