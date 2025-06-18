@@ -39,7 +39,7 @@ jobs:
         run: cargo install --force --path crates/cli
 
       - name: Generate keys from main
-        run: cargo openvm keygen --output-dir ./main-keys
+        run: cargo openvm keygen --output ./main-keys
 
       # Checkout and build keygen from tagged version
       - name: Checkout tagged version
@@ -52,7 +52,7 @@ jobs:
         run: cargo install --force --path crates/cli
 
       - name: Generate keys from tagged version
-        run: cargo openvm keygen --output-dir ./tagged-keys
+        run: cargo openvm keygen --output ./tagged-keys
 
       # Compare keys
       - name: Compare verification keys
