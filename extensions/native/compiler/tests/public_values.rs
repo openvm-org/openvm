@@ -1,7 +1,4 @@
-use openvm_circuit::arch::{
-    execution_mode::metered::get_widths_and_interactions_from_vkey, SingleSegmentVmExecutor,
-    SystemConfig, VirtualMachine,
-};
+use openvm_circuit::arch::{SingleSegmentVmExecutor, SystemConfig, VirtualMachine};
 use openvm_native_circuit::{execute_program, Native, NativeConfig};
 use openvm_native_compiler::{asm::AsmBuilder, prelude::*};
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
@@ -35,12 +32,17 @@ fn test_compiler_public_values() {
 
     let vm = VirtualMachine::new(default_engine(), config.clone());
     let vm_pk = vm.keygen();
-    let (widths, interactions) = get_widths_and_interactions_from_vkey(vm_pk.get_vk());
+    let vm_vk = vm_pk.get_vk();
 
     let executor = SingleSegmentVmExecutor::new(config);
 
     let max_trace_heights = executor
-        .execute_metered(program.clone().into(), vec![], widths, interactions)
+        .execute_metered(
+            program.clone().into(),
+            vec![],
+            &vm_vk.total_widths(),
+            &vm_vk.num_interactions(),
+        )
         .unwrap();
 
     let exe_result = executor

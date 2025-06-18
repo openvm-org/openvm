@@ -595,7 +595,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
             &self.subchip.generate_trace(vec![cols.inner.inputs]).values
         };
         let inner_width = self.subchip.air.width();
-        row_slice[..inner_width].copy_from_slice(&inner_cols);
+        row_slice[..inner_width].copy_from_slice(inner_cols);
         let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = row_slice.borrow_mut();
 
         // Simple poseidon2 row

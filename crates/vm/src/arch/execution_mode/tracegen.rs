@@ -11,16 +11,9 @@ use crate::{
 
 pub type TracegenCtx = ();
 
-/// Implementation of the ExecutionControl trait using the old segmentation strategy
+#[derive(Default, derive_new::new)]
 pub struct TracegenExecutionControl {
-    // State
-    pub clk_end: u64,
-}
-
-impl TracegenExecutionControl {
-    pub fn new(clk_end: u64) -> Self {
-        Self { clk_end }
-    }
+    pub instret_end: Option<u64>,
 }
 
 impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControl
@@ -37,7 +30,8 @@ where
         state: &mut VmSegmentState<F, Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
-        state.clk >= self.clk_end
+        self.instret_end
+            .is_some_and(|instret_end| state.instret >= instret_end)
     }
 
     fn on_start(

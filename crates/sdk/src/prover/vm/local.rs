@@ -3,7 +3,6 @@ use std::{marker::PhantomData, sync::Arc};
 use async_trait::async_trait;
 use openvm_circuit::{
     arch::{
-        execution_mode::metered::get_widths_and_interactions_from_vkey,
         hasher::poseidon2::vm_poseidon2_hasher, GenerationError, InsExecutorE1,
         SingleSegmentVmExecutor, Streams, VirtualMachine, VmComplexTraceHeights, VmConfig,
     },
@@ -89,16 +88,21 @@ where
         } = self.committed_exe.as_ref();
         let input = input.into();
 
-        let (widths, interactions) = get_widths_and_interactions_from_vkey(self.pk.vm_pk.get_vk());
+        let vm_vk = self.pk.vm_pk.get_vk();
         let segments = vm
             .executor
-            .execute_metered(exe.clone(), input.clone(), widths, interactions)
+            .execute_metered(
+                exe.clone(),
+                input.clone(),
+                &vm_vk.total_widths(),
+                &vm_vk.num_interactions(),
+            )
             .expect("execute_metered failed");
 
         let mut final_memory = None;
         let per_segment = vm
             .executor
-            .execute_with_segments_and_then(
+            .execute_and_then(
                 exe.clone(),
                 input,
                 &segments,
@@ -171,14 +175,14 @@ where
             executor
         };
 
-        let (widths, interactions) = get_widths_and_interactions_from_vkey(self.pk.vm_pk.get_vk());
+        let vm_vk = self.pk.vm_pk.get_vk();
         let input = input.into();
         let max_trace_heights = executor
             .execute_metered(
                 self.committed_exe.exe.clone(),
                 input.clone(),
-                widths,
-                interactions,
+                &vm_vk.total_widths(),
+                &vm_vk.num_interactions(),
             )
             .expect("execute_metered failed");
         let proof_input = executor

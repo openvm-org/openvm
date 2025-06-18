@@ -75,9 +75,9 @@ fn create_dense_chip(
             Rv32AuipcCoreAir::new(bitwise_bus),
         ),
         Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_chip.clone()),
-        MAX_INS_CAPACITY,
         tester.memory_helper(),
     );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip)
 }

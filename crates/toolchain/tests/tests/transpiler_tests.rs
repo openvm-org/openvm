@@ -81,7 +81,7 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     )?;
     let config = Rv32ImConfig::default();
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(exe, vec![])?;
+    executor.execute_e1(exe, vec![], None)?;
     Ok(())
 }
 
@@ -144,7 +144,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
             .with_extension(Fp2TranspilerExtension),
     )?;
     let executor = VmExecutor::<F, _>::new(config);
-    executor.execute(openvm_exe, vec![])?;
+    executor.execute_e1(openvm_exe, vec![], None)?;
     Ok(())
 }
 

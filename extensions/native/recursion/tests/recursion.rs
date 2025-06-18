@@ -1,6 +1,5 @@
 use openvm_circuit::arch::{
-    execution_mode::metered::get_widths_and_interactions_from_vkey, instructions::program::Program,
-    SystemConfig, VirtualMachine, VmConfig,
+    instructions::program::Program, SystemConfig, VirtualMachine, VmConfig,
 };
 use openvm_native_circuit::{Native, NativeConfig};
 use openvm_native_compiler::{asm::AsmBuilder, ir::Felt};
@@ -56,15 +55,20 @@ where
 
     let vm = VirtualMachine::new(default_engine(), vm_config);
     let pk = vm.keygen();
-    let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
+    let vk = pk.get_vk();
     let segments = vm
         .executor
-        .execute_metered(fib_program.clone(), vec![], widths, interactions)
+        .execute_metered(
+            fib_program.clone(),
+            vec![],
+            &vk.total_widths(),
+            &vk.num_interactions(),
+        )
         .unwrap();
 
     let mut result = vm
         .executor
-        .execute_with_segments_and_generate(fib_program, vec![], &segments)
+        .execute_and_generate(fib_program, vec![], &segments)
         .unwrap();
     assert_eq!(result.per_segment.len(), 1, "unexpected continuation");
     let proof_input = result.per_segment.remove(0);
