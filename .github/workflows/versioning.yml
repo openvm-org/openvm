@@ -8,16 +8,20 @@ on:
 
 jobs:
   verify-versioning:
-    runs-on: [runs-on=${{ github.run_id }}, runner=32cpu-linux-arm64]
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - family=64cpu-linux-arm64
+      - disk=large
+      - extras=s3-cache
     steps:
       - name: Set up environment
         uses: actions/checkout@v4
-      
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-      
+
       - name: Cache Cargo dependencies
         uses: actions/cache@v4
         with:
@@ -28,27 +32,27 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
-      
+
       # Build and keygen from main
       - name: Build main
         run: cargo install --force --path crates/cli
-      
+
       - name: Generate keys from main
         run: cargo openvm keygen --output-dir ./main-keys
-      
+
       # Checkout and build keygen from tagged version
       - name: Checkout tagged version
         uses: actions/checkout@v4
         with:
           ref: v1.2.0
           clean: false
-      
+
       - name: Build tagged version
         run: cargo install --force --path crates/cli
-      
+
       - name: Generate keys from tagged version
         run: cargo openvm keygen --output-dir ./tagged-keys
-      
+
       # Compare keys
       - name: Compare verification keys
         run: |
