@@ -1,3 +1,4 @@
+# Workflow to verify versioning compatibility between main and patch versions
 name: Verify Versioning Compatibility
 
 on:
