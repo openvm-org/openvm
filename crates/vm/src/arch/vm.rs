@@ -139,7 +139,7 @@ pub struct VmState<F>
 where
     F: PrimeField32,
 {
-    pub clk: u64,
+    pub instret: u64,
     pub pc: u32,
     pub memory: MemoryImage,
     pub input: Streams<F>,
@@ -148,9 +148,9 @@ where
 }
 
 impl<F: PrimeField32> VmState<F> {
-    pub fn new(clk: u64, pc: u32, memory: MemoryImage, input: impl Into<Streams<F>>) -> Self {
+    pub fn new(instret: u64, pc: u32, memory: MemoryImage, input: impl Into<Streams<F>>) -> Self {
         Self {
-            clk,
+            instret,
             pc,
             memory,
             input: input.into(),
@@ -207,9 +207,9 @@ where
         &self,
         exe: VmExe<F>,
         state: VmState<F>,
-        num_cycles: Option<u64>,
+        num_insts: Option<u64>,
     ) -> Result<VmState<F>, ExecutionError> {
-        let clk_end = num_cycles.map(|n| state.clk + n);
+        let instret_end = num_insts.map(|n| state.instret + n);
 
         let chip_complex =
             create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
@@ -218,7 +218,7 @@ where
             chip_complex,
             self.trace_height_constraints.clone(),
             exe.fn_bounds.clone(),
-            E1ExecutionControl::new(clk_end),
+            E1ExecutionControl::new(instret_end),
         );
         #[cfg(feature = "bench-metrics")]
         {
@@ -226,7 +226,7 @@ where
         }
 
         let mut exec_state = VmSegmentState::new(
-            state.clk,
+            state.instret,
             state.pc,
             Some(GuestMemory::new(state.memory)),
             state.input,
@@ -236,14 +236,14 @@ where
             segment.execute_from_state(&mut exec_state)
         })?;
 
-        if let Some(clk_end) = clk_end {
-            assert_eq!(exec_state.clk, clk_end);
+        if let Some(instret_end) = instret_end {
+            assert_eq!(exec_state.instret, instret_end);
         } else {
             check_exit_code(exec_state.exit_code)?;
         }
 
         let state = VmState {
-            clk: exec_state.clk,
+            instret: exec_state.instret,
             pc: exec_state.pc,
             memory: exec_state.memory.unwrap().memory,
             input: exec_state.streams,
@@ -258,11 +258,11 @@ where
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
-        num_cycles: Option<u64>,
+        num_insts: Option<u64>,
     ) -> Result<VmState<F>, ExecutionError> {
         let exe = exe.into();
         let state = create_initial_state(&self.config.system().memory_config, &exe, input);
-        self.execute_e1_from_state(exe, state, num_cycles)
+        self.execute_e1_from_state(exe, state, num_insts)
     }
 
     /// Base metered execution function that operates from a given state
@@ -330,7 +330,7 @@ where
         );
 
         let mut exec_state = VmSegmentState::new(
-            state.clk,
+            state.instret,
             state.pc,
             Some(GuestMemory::new(state.memory)),
             state.input,
@@ -371,16 +371,16 @@ where
         map_err: impl Fn(ExecutionError) -> E,
     ) -> Result<Vec<R>, E> {
         // assert that segments are valid
-        assert_eq!(segments.first().unwrap().clk_start, state.clk);
+        assert_eq!(segments.first().unwrap().instret_start, state.instret);
         for (prev, current) in segments.iter().zip(segments.iter().skip(1)) {
-            assert_eq!(current.clk_start, prev.clk_start + prev.num_cycles,);
+            assert_eq!(current.instret_start, prev.instret_start + prev.num_insts);
         }
 
         let mut results = Vec::new();
         for (
             segment_idx,
             Segment {
-                num_cycles,
+                num_insts,
                 trace_heights,
                 ..
             },
@@ -395,7 +395,7 @@ where
             )
             .unwrap();
 
-            let ctrl = TracegenExecutionControl::new(Some(state.clk + num_cycles));
+            let ctrl = TracegenExecutionControl::new(Some(state.instret + num_insts));
             let mut segment = VmSegmentExecutor::<_, VC, _>::new(
                 chip_complex,
                 self.trace_height_constraints.clone(),
@@ -408,7 +408,8 @@ where
                 segment.metrics = state.metrics;
             }
 
-            let mut exec_state = VmSegmentState::new(state.clk, state.pc, None, state.input, ());
+            let mut exec_state =
+                VmSegmentState::new(state.instret, state.pc, None, state.input, ());
             metrics_span("execute_time_ms", || {
                 segment.execute_from_state(&mut exec_state)
             })
@@ -422,7 +423,7 @@ where
             );
 
             state = VmState {
-                clk: exec_state.clk,
+                instret: exec_state.instret,
                 pc: exec_state.pc,
                 memory: segment
                     .chip_complex

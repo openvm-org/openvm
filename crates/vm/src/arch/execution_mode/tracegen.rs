@@ -13,7 +13,7 @@ pub type TracegenCtx = ();
 
 #[derive(Default, derive_new::new)]
 pub struct TracegenExecutionControl {
-    pub clk_end: Option<u64>,
+    pub instret_end: Option<u64>,
 }
 
 impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControl
@@ -30,7 +30,8 @@ where
         state: &mut VmSegmentState<F, Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
-        self.clk_end.is_some_and(|clk_end| state.clk >= clk_end)
+        self.instret_end
+            .is_some_and(|instret_end| state.instret >= instret_end)
     }
 
     fn on_start(
