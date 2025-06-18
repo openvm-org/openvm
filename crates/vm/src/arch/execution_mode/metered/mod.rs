@@ -5,9 +5,7 @@ pub mod exact;
 pub use bounded::MeteredCtxBounded as MeteredCtx;
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    keygen::types::MultiStarkVerifyingKey,
-    p3_field::{FieldExtensionAlgebra, PrimeField32},
+    p3_field::PrimeField32,
     ChipUsageGetter,
 };
 use p3_baby_bear::BabyBear;
@@ -320,25 +318,4 @@ where
 
         Ok(())
     }
-}
-
-// TODO(ayush): move to stark-backend vkey
-pub fn get_widths_and_interactions_from_vkey<SC>(
-    vk: MultiStarkVerifyingKey<SC>,
-) -> (Vec<usize>, Vec<usize>)
-where
-    SC: StarkGenericConfig,
-{
-    vk.inner
-        .per_air
-        .iter()
-        .map(|vk| {
-            let total_width = vk.params.width.preprocessed.unwrap_or(0)
-                + vk.params.width.cached_mains.iter().sum::<usize>()
-                + vk.params.width.common_main
-                + vk.params.width.after_challenge.iter().sum::<usize>()
-                    * <SC::Challenge as FieldExtensionAlgebra<Val<SC>>>::D;
-            (total_width, vk.symbolic_constraints.interactions.len())
-        })
-        .unzip()
 }

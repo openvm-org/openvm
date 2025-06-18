@@ -135,7 +135,6 @@ pub struct VmExecutorResult<SC: StarkGenericConfig> {
     pub final_memory: Option<MemoryImage>,
 }
 
-/// VM memory state for continuations.
 pub struct VmState<F>
 where
     F: PrimeField32,
@@ -223,7 +222,7 @@ where
         );
         #[cfg(feature = "bench-metrics")]
         {
-            segment.metrics = Default::default();
+            segment.metrics = state.metrics;
         }
 
         let mut exec_state = VmSegmentState::new(
@@ -298,7 +297,7 @@ where
 
         #[cfg(feature = "bench-metrics")]
         {
-            executor.metrics = Default::default();
+            executor.metrics = state.metrics;
         }
 
         let continuations_enabled = executor
@@ -571,195 +570,6 @@ where
     {
         let mut final_memory = None;
         let per_segment = self.execute_and_then(
-            committed_exe.exe.clone(),
-            input,
-            segments,
-            |seg_idx, seg| {
-                final_memory = Some(seg.chip_complex.memory_controller().memory_image().clone());
-                tracing::info_span!("trace_gen", segment = seg_idx).in_scope(|| {
-                    seg.generate_proof_input(Some(committed_exe.committed_program.clone()))
-                })
-            },
-            GenerationError::Execution,
-        )?;
-
-        Ok(VmExecutorResult {
-            per_segment,
-            final_memory,
-        })
-    }
-    pub fn execute_with_segments(
-        &self,
-        exe: impl Into<VmExe<F>>,
-        input: impl Into<Streams<F>>,
-        segments: &[Segment],
-    ) -> Result<Option<MemoryImage>, ExecutionError> {
-        let executors =
-            self.execute_with_segments_and_then(exe, input, segments, |_, seg| Ok(seg), |err| err)?;
-        let last = executors
-            .last()
-            .expect("at least one segment must be executed");
-        let final_memory = Some(
-            last.chip_complex
-                .base
-                .memory_controller
-                .memory_image()
-                .clone(),
-        );
-        let end_state =
-            last.chip_complex.connector_chip().boundary_states[1].expect("end state must be set");
-        if end_state.is_terminate != 1 {
-            return Err(ExecutionError::DidNotTerminate);
-        }
-        if end_state.exit_code != ExitCode::Success as u32 {
-            return Err(ExecutionError::FailedWithExitCode(end_state.exit_code));
-        }
-        Ok(final_memory)
-    }
-
-    pub fn execute_with_segments_and_then<R, E>(
-        &self,
-        exe: impl Into<VmExe<F>>,
-        input: impl Into<Streams<F>>,
-        segments: &[Segment],
-        mut f: impl FnMut(usize, VmSegmentExecutor<F, VC, TracegenExecutionControl>) -> Result<R, E>,
-        map_err: impl Fn(ExecutionError) -> E,
-    ) -> Result<Vec<R>, E> {
-        let exe = exe.into();
-        let mut state = {
-            let mem_config = self.config.system().memory_config;
-            let memory = AddressMap::from_sparse(
-                mem_config.as_offset,
-                1 << mem_config.as_height,
-                1 << mem_config.pointer_max_bits,
-                exe.init_memory.clone(),
-            );
-            VmState::new(0, exe.pc_start, memory, input)
-        };
-        #[cfg(feature = "bench-metrics")]
-        {
-            state.metrics.fn_bounds = exe.fn_bounds.clone();
-        }
-
-        // assert that segments are valid
-        assert_eq!(segments.first().unwrap().instret_start, 0);
-        for (prev, current) in segments.iter().zip(segments.iter().skip(1)) {
-            assert_eq!(current.instret_start, prev.instret_start + prev.num_insns);
-        }
-
-        let mut results = Vec::new();
-        for (
-            segment_idx,
-            Segment {
-                num_insns,
-                trace_heights,
-                ..
-            },
-        ) in segments.iter().enumerate()
-        {
-            let _span = info_span!("execute_segment", segment = segment_idx).entered();
-            let chip_complex = create_and_initialize_chip_complex(
-                &self.config,
-                exe.program.clone(),
-                Some(state.memory),
-                Some(trace_heights),
-            )
-            .unwrap();
-
-            let ctrl = TracegenExecutionControl::new(Some(state.instret + num_insns));
-            let mut segment = VmSegmentExecutor::<_, VC, _>::new(
-                chip_complex,
-                self.trace_height_constraints.clone(),
-                exe.fn_bounds.clone(),
-                ctrl,
-            );
-
-            #[cfg(feature = "bench-metrics")]
-            {
-                segment.metrics = state.metrics;
-            }
-
-            let mut exec_state =
-                VmSegmentState::new(state.instret, state.pc, None, state.input, ());
-            metrics_span("execute_time_ms", || {
-                segment.execute_from_state(&mut exec_state)
-            })
-            .map_err(&map_err)?;
-
-            assert_eq!(
-                exec_state.pc,
-                segment.chip_complex.connector_chip().boundary_states[1]
-                    .unwrap()
-                    .pc
-            );
-
-            state = VmState {
-                instret: exec_state.instret,
-                pc: exec_state.pc,
-                memory: segment
-                    .chip_complex
-                    .base
-                    .memory_controller
-                    .memory_image()
-                    .clone(),
-                input: exec_state.streams,
-                #[cfg(feature = "bench-metrics")]
-                metrics: segment.metrics.partial_take(),
-            };
-
-            results.push(f(segment_idx, segment)?);
-        }
-        tracing::debug!("Number of continuation segments: {}", results.len());
-        #[cfg(feature = "bench-metrics")]
-        metrics::counter!("num_segments").absolute(results.len() as u64);
-
-        Ok(results)
-    }
-
-    pub fn execute_with_segments_and_generate<SC>(
-        &self,
-        exe: impl Into<VmExe<F>>,
-        input: impl Into<Streams<F>>,
-        segments: &[Segment],
-    ) -> Result<VmExecutorResult<SC>, GenerationError>
-    where
-        SC: StarkGenericConfig,
-        Domain<SC>: PolynomialSpace<Val = F>,
-        VC::Executor: Chip<SC>,
-        VC::Periphery: Chip<SC>,
-    {
-        let mut final_memory = None;
-        let per_segment = self.execute_with_segments_and_then(
-            exe,
-            input,
-            segments,
-            |seg_idx, seg| {
-                final_memory = Some(seg.chip_complex.memory_controller().memory_image().clone());
-                tracing::info_span!("trace_gen", segment = seg_idx)
-                    .in_scope(|| seg.generate_proof_input(None))
-            },
-            GenerationError::Execution,
-        )?;
-
-        Ok(VmExecutorResult {
-            per_segment,
-            final_memory,
-        })
-    }
-
-    pub fn execute_with_segments_and_generate_with_cached_program<SC: StarkGenericConfig>(
-        &self,
-        committed_exe: Arc<VmCommittedExe<SC>>,
-        input: impl Into<Streams<F>>,
-        segments: &[Segment],
-    ) -> Result<VmExecutorResult<SC>, GenerationError>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-        VC::Executor: Chip<SC> + InsExecutorE1<F>,
-        VC::Periphery: Chip<SC>,
-    {
-        let mut final_memory = None;
-        let per_segment = self.execute_with_segments_and_then(
             committed_exe.exe.clone(),
             input,
             segments,

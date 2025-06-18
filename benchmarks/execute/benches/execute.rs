@@ -169,8 +169,9 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
 //     bencher
 //         .with_inputs(|| {
 //             let vm = create_default_vm();
-//             let exe = load_program_executable(program).expect("Failed to load program executable");
-//             let state = create_initial_state(&vm.config().system.memory_config, &exe, vec![]);
+//             let exe = load_program_executable(program).expect("Failed to load program
+// executable");             let state = create_initial_state(&vm.config().system.memory_config,
+// &exe, vec![]);
 
 //             let (widths, interactions) = shared_widths_and_interactions();
 //             let segments = vm

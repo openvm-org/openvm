@@ -1,7 +1,6 @@
 use std::cmp::min;
 
 use openvm_circuit::arch::{
-    execution_mode::metered::get_widths_and_interactions_from_vkey,
     testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester},
     verify_single, VirtualMachine,
 };
