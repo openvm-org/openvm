@@ -232,9 +232,17 @@ where
             state.input,
             (),
         );
-        metrics_span("execute_e1_time_ms", || {
-            segment.execute_from_state(&mut exec_state)
-        })?;
+        #[cfg(feature = "bench-metrics")]
+        let start = std::time::Instant::now();
+        segment.execute_from_state(&mut exec_state)?;
+        #[cfg(feature = "bench-metrics")]
+        {
+            let elapsed = start.elapsed();
+            let insns = exec_state.clk;
+            metrics::gauge!("execute_e1_time_ms").set(elapsed.as_millis() as f64);
+            metrics::counter!("insns").absolute(insns);
+            metrics::gauge!("execute_e1_insn_mi/s").set(insns as f64 / elapsed.as_micros() as f64);
+        }
 
         if let Some(clk_end) = clk_end {
             assert_eq!(exec_state.clk, clk_end);
