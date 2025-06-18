@@ -25,9 +25,8 @@ impl Clone for MmapWrapper {
     fn clone(&self) -> Self {
         let mut new_mmap = MmapMut::map_anon(self.mmap.len()).unwrap();
         if self.highest_accessed > 0 {
-            new_mmap[..=self.highest_accessed].copy_from_slice(
-                &self.mmap[..=self.highest_accessed],
-            );
+            new_mmap[..=self.highest_accessed]
+                .copy_from_slice(&self.mmap[..=self.highest_accessed]);
         }
         Self {
             mmap: new_mmap,
