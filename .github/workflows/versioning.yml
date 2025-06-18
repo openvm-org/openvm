@@ -1,0 +1,64 @@
+name: Verify Versioning Compatibility
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  verify-versioning:
+    runs-on: [runs-on=${{ github.run_id }}, runner=32cpu-linux-arm64]
+    steps:
+      - name: Set up environment
+        uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      
+      # Build and keygen from main
+      - name: Build main
+        run: cargo install --force --path crates/cli
+      
+      - name: Generate keys from main
+        run: cargo openvm keygen --output-dir ./main-keys
+      
+      # Checkout and build keygen from tagged version
+      - name: Checkout tagged version
+        uses: actions/checkout@v4
+        with:
+          ref: v1.2.0
+          clean: false
+      
+      - name: Build tagged version
+        run: cargo install --force --path crates/cli
+      
+      - name: Generate keys from tagged version
+        run: cargo openvm keygen --output-dir ./tagged-keys
+      
+      # Compare keys
+      - name: Compare verification keys
+        run: |
+          echo "Comparing verification keys between main and v1.2.0..."
+          if cmp ./main-keys/app.vk ./tagged-keys/app.vk; then
+            echo "✅ Verification keys are identical - versioning policy maintained"
+          else
+            echo "❌ Verification keys differ - versioning policy violated"
+            echo "Main branch vkey:"
+            ls -la ./main-keys/app.vk
+            echo "Tagged version vkey:"
+            ls -la ./tagged-keys/app.vk
+            exit 1
+          fi
