@@ -39,7 +39,7 @@ jobs:
         run: cargo install --force --path crates/cli
 
       - name: Generate keys from main
-        run: cargo openvm keygen --output ./main-keys
+        run: cargo openvm keygen --output-dir ./main-keys
 
       # Checkout and build keygen from tagged version
       - name: Checkout tagged version
@@ -51,6 +51,7 @@ jobs:
       - name: Build tagged version
         run: cargo install --force --path crates/cli
 
+      # TODO(yi): Change --output to --output-dir after v1.3.0 release
       - name: Generate keys from tagged version
         run: cargo openvm keygen --output ./tagged-keys
 
