@@ -32,18 +32,18 @@ pub fn main() {
     }
     assert_eq!(res, Mersenne61::from_u32(1));
 
-    let mut non_reduced = Mersenne61::from_le_bytes(&[0xff; 32]);
+    let mut non_reduced = Mersenne61::from_le_bytes_unchecked(&[0xff; 32]);
     assert!(!non_reduced.is_reduced());
     let reduced = &non_reduced + &Mersenne61::ZERO;
     reduced.assert_reduced();
 
     assert_eq!(&non_reduced + &non_reduced, reduced.double());
 
-    non_reduced = Mersenne61::from_le_bytes(&Mersenne61::MODULUS);
+    non_reduced = Mersenne61::from_le_bytes_unchecked(&Mersenne61::MODULUS);
     assert!(!non_reduced.is_reduced());
 
     let mut bytes = [0u8; 32];
     bytes[7] = 1 << 5; // 2^61 = 2^{8*7 + 5} = modulus + 1
-    non_reduced = Mersenne61::from_le_bytes(&bytes);
+    non_reduced = Mersenne61::from_le_bytes_unchecked(&bytes);
     assert!(!non_reduced.is_reduced());
 }

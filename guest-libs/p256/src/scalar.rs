@@ -46,7 +46,7 @@ impl ConstantTimeEq for P256Scalar {
 
 impl ConditionallySelectable for P256Scalar {
     fn conditional_select(a: &P256Scalar, b: &P256Scalar, choice: Choice) -> P256Scalar {
-        P256Scalar::from_le_bytes(
+        P256Scalar::from_le_bytes_unchecked(
             &a.as_le_bytes()
                 .iter()
                 .zip(b.as_le_bytes().iter())
@@ -129,7 +129,7 @@ impl PrimeField for P256Scalar {
     /// Returns None if the byte array does not contain a big-endian integer in the range
     /// [0, p).
     fn from_repr(bytes: FieldBytes) -> CtOption<Self> {
-        let ret = Self::from_be_bytes(bytes.as_slice());
+        let ret = Self::from_be_bytes_unchecked(bytes.as_slice());
         CtOption::new(ret, (ret.is_reduced() as u8).into())
     }
 
@@ -154,7 +154,7 @@ impl Reduce<U256> for P256Scalar {
     type Bytes = FieldBytes;
 
     fn reduce(w: U256) -> Self {
-        Self::from_le_bytes(&w.to_le_bytes())
+        <Self as openvm_algebra_guest::Reduce>::reduce_le_bytes(&w.to_le_bytes())
     }
 
     #[inline]
@@ -200,13 +200,13 @@ impl FromUintUnchecked for P256Scalar {
     type Uint = U256;
 
     fn from_uint_unchecked(uint: Self::Uint) -> Self {
-        Self::from_le_bytes(&uint.to_le_bytes())
+        Self::from_le_bytes_unchecked(&uint.to_le_bytes())
     }
 }
 
 impl From<ScalarPrimitive<NistP256>> for P256Scalar {
     fn from(scalar: ScalarPrimitive<NistP256>) -> Self {
-        Self::from_le_bytes(&scalar.as_uint().to_le_bytes())
+        Self::from_le_bytes_unchecked(&scalar.as_uint().to_le_bytes())
     }
 }
 

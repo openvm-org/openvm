@@ -43,7 +43,7 @@ pub fn main() {
             // SAFETY: We're reading `6 * 32 == PAIR_ELEMENT_LEN` bytes from `input[idx..]`
             // per iteration. This is guaranteed to be in-bounds.
             let slice = unsafe { input.get_unchecked(start..start + 32) };
-            Fp::from_be_bytes(&slice[..32])
+            Fp::from_be_bytes_unchecked(&slice[..32])
         };
         // https://eips.ethereum.org/EIPS/eip-197, Fp2 is encoded as (a, b) where a * i + b
         let g1_x = read_fq_at(0);
