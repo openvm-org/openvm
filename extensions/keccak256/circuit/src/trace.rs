@@ -1,6 +1,6 @@
 use std::{
     array::{self, from_fn},
-    borrow::BorrowMut,
+    borrow::{Borrow, BorrowMut},
     cmp::min,
 };
 
@@ -51,7 +51,7 @@ pub struct KeccakVmMetadata {
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug, Clone)]
-pub struct KeccakVmRecord {
+pub struct KeccakVmRecordHeader {
     pub from_pc: u32,
     pub timestamp: u32,
     pub rd_ptr: u32,
@@ -66,7 +66,7 @@ pub struct KeccakVmRecord {
 }
 
 pub struct KeccakVmRecordMut<'a> {
-    pub inner: &'a mut KeccakVmRecord,
+    pub inner: &'a mut KeccakVmRecordHeader,
     // Having a continuous slice of the input is useful for fast hashing in `execute`
     pub input: &'a mut [u8],
     pub read_aux: &'a mut [MemoryReadAuxRecord],
@@ -79,18 +79,29 @@ pub struct KeccakVmRecordMut<'a> {
 /// Has debug assertions that check the size and alignment of the slices.
 impl<'a> CustomBorrow<'a, KeccakVmRecordMut<'a>, KeccakVmMetadata> for [u8] {
     fn custom_borrow(&'a mut self, metadata: KeccakVmMetadata) -> KeccakVmRecordMut<'a> {
-        let (record_buf, rest) =
-            unsafe { self.split_at_mut_unchecked(size_of::<KeccakVmRecord>()) };
+        let (header_buf, rest) =
+            unsafe { self.split_at_mut_unchecked(size_of::<KeccakVmRecordHeader>()) };
 
         // Note: each read is `KECCAK_WORD_SIZE` bytes
         let (input, rest) =
             unsafe { rest.split_at_mut_unchecked(metadata.num_reads * KECCAK_WORD_SIZE) };
         let (_, read_aux_buf, _) = unsafe { rest.align_to_mut::<MemoryReadAuxRecord>() };
         KeccakVmRecordMut {
-            inner: record_buf.borrow_mut(),
+            inner: header_buf.borrow_mut(),
             input,
             read_aux: &mut read_aux_buf[..metadata.num_reads],
         }
+    }
+
+    unsafe fn size_of_next(&'a self) -> usize {
+        let (header_buf, rest) = self.split_at_unchecked(size_of::<KeccakVmRecordHeader>());
+        let mut total_len = header_buf.len();
+        let header: &KeccakVmRecordHeader = header_buf.borrow();
+        let num_reads = (header.len as usize).div_ceil(KECCAK_WORD_SIZE);
+        total_len += num_reads * KECCAK_WORD_SIZE;
+        total_len = total_len.next_multiple_of(align_of::<MemoryReadAuxRecord>());
+        total_len += num_reads * size_of::<MemoryReadAuxRecord>();
+        total_len
     }
 }
 
@@ -233,7 +244,8 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for KeccakVmStep {
                 sizes.push((0, 0));
                 break;
             } else {
-                let record: &KeccakVmRecord = unsafe { get_record_from_slice(&mut trace, ()) };
+                let record: &KeccakVmRecordHeader =
+                    unsafe { get_record_from_slice(&mut trace, ()) };
                 let num_blocks = num_keccak_f(record.len as usize);
                 let (chunk, rest) =
                     trace.split_at_mut(NUM_KECCAK_VM_COLS * NUM_ROUNDS * num_blocks);

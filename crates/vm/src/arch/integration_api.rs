@@ -208,16 +208,30 @@ pub trait TraceFiller<F, CTX> {
 /// This is useful for record structs that have dynamic size
 pub trait CustomBorrow<'a, T, I> {
     fn custom_borrow(&'a mut self, metadata: I) -> T;
+
+    /// Given `&self` as a valid starting pointer of a reference that has already been previously
+    /// allocated and written to, read necessary metadata and return the length in bytes of the next
+    /// record. This must work even if `T` is not sized.
+    ///
+    /// # Safety
+    /// - `&self` must be a valid starting pointer on which `custom_borrow` has already be called
+    /// - The data underlying `&self` has already been written to and is self-describing, so
+    ///   metadata can be extracted
+    unsafe fn size_of_next(&'a self) -> usize;
 }
 
 /// If a struct implements `BorrowMut<T>`, then the same implementation can be used for
 /// `CustomBorrow`
-impl<'a, T, I> CustomBorrow<'a, &'a mut T, I> for [u8]
+impl<'a, T: Sized, I> CustomBorrow<'a, &'a mut T, I> for [u8]
 where
     [u8]: BorrowMut<T>,
 {
     fn custom_borrow(&'a mut self, _metadata: I) -> &'a mut T {
         self.borrow_mut()
+    }
+
+    unsafe fn size_of_next(&'a self) -> usize {
+        size_of::<T>()
     }
 }
 
