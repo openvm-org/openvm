@@ -1,12 +1,13 @@
 use std::{collections::HashMap, fs::File, path::Path};
 
-use aggregate::{
-    EXECUTE_TIME_LABEL, PROOF_TIME_LABEL, PROVE_EXCL_TRACE_TIME_LABEL, TRACE_GEN_TIME_LABEL,
-};
+use aggregate::{PROOF_TIME_LABEL, PROVE_EXCL_TRACE_TIME_LABEL, TRACE_GEN_TIME_LABEL};
 use eyre::Result;
 use memmap2::Mmap;
 
-use crate::types::{Labels, Metric, MetricDb, MetricsFile};
+use crate::{
+    aggregate::{EXECUTE_E3_TIME_LABEL, EXECUTE_METERED_TIME_LABEL},
+    types::{Labels, Metric, MetricDb, MetricsFile},
+};
 
 pub mod aggregate;
 pub mod summary;
@@ -45,13 +46,17 @@ impl MetricDb {
     pub fn apply_aggregations(&mut self) {
         for metrics in self.flat_dict.values_mut() {
             let get = |key: &str| metrics.iter().find(|m| m.name == key).map(|m| m.value);
-            let execute_time = get(EXECUTE_TIME_LABEL);
+            let execute_metered_time = get(EXECUTE_METERED_TIME_LABEL);
+            let execute_e3_time = get(EXECUTE_E3_TIME_LABEL);
             let trace_gen_time = get(TRACE_GEN_TIME_LABEL);
             let prove_excl_trace_time = get(PROVE_EXCL_TRACE_TIME_LABEL);
-            if let (Some(execute_time), Some(trace_gen_time), Some(prove_excl_trace_time)) =
-                (execute_time, trace_gen_time, prove_excl_trace_time)
+            if let (Some(execute_e3_time), Some(trace_gen_time), Some(prove_excl_trace_time)) =
+                (execute_e3_time, trace_gen_time, prove_excl_trace_time)
             {
-                let total_time = execute_time + trace_gen_time + prove_excl_trace_time;
+                let total_time = execute_metered_time.unwrap_or(0.0)
+                    + execute_e3_time
+                    + trace_gen_time
+                    + prove_excl_trace_time;
                 metrics.push(Metric::new(PROOF_TIME_LABEL.to_string(), total_time));
             }
         }

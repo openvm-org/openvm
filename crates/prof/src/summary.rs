@@ -177,8 +177,13 @@ impl AggregateMetrics {
                 .get(PROVE_EXCL_TRACE_TIME_LABEL)
                 .map(|s| s.sum.val)
                 .unwrap_or(0.0);
+            println!(
+                "{} {} {} {}",
+                execute_metered, execute_e3, trace_gen, stark_prove
+            );
             MdTableCell::new(execute_metered + execute_e3 + trace_gen + stark_prove, None)
         };
+        println!("{}", self.total_proof_time.val);
         let par_proof_time_ms = if let Some(proof_stats) = stats.get(PROOF_TIME_LABEL) {
             proof_stats.max
         } else {
