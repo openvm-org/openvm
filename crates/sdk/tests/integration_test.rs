@@ -109,7 +109,7 @@ fn run_leaf_verifier(
         &leaf_vm_vk.num_interactions(),
     )?;
 
-    let exe_result = executor.execute_with_max_heights_and_compute_heights(
+    let exe_result = executor.execute_and_compute_heights(
         leaf_committed_exe.exe.clone(),
         verifier_input.write_to_stream(),
         &max_trace_heights,

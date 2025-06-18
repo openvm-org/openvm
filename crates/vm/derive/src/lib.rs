@@ -164,8 +164,16 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         self.0.execute_metered(state, instruction, chip_index)
                     }
 
-                    fn set_trace_height(&mut self, height: usize) {
-                        self.0.set_trace_buffer_height(height);
+                    fn execute_tracegen<RA>(
+                        &mut self,
+                        state: ::openvm_circuit::arch::VmStateMut<F, ::openvm_circuit::system::memory::online::TracingMemory<F>, ::openvm_circuit::arch::execution_mode::tracegen::TracegenCtx<RA>>,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        chip_index: usize,
+                    ) -> ::openvm_circuit::arch::Result<()>
+                    where
+                        RA: ::openvm_circuit::arch::BaseRecordArena
+                    {
+                        self.0.execute_tracegen(state, instruction, chip_index)
                     }
                 }
             }
@@ -207,10 +215,10 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_metered(x, state, instruction, chip_index)
                 }
             }).collect::<Vec<_>>();
-            let set_trace_height_arms = variants.iter().map(|(variant_name, field)| {
+            let execute_tracegen_arms = variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::set_trace_height(x, height)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_tracegen(x, state, instruction, chip_index)
                 }
             }).collect::<Vec<_>>();
 
@@ -218,7 +226,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic> for #name #ty_generics {
                     fn execute_e1<Ctx>(
                         &self,
-                        state: &mut ::openvm_circuit::arch::VmStateMut<F,::openvm_circuit::system::memory::online::GuestMemory, Ctx>,
+                        state: &mut ::openvm_circuit::arch::VmStateMut<#first_ty_generic,::openvm_circuit::system::memory::online::GuestMemory, Ctx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
                     ) -> ::openvm_circuit::arch::Result<()>
                     where
@@ -231,7 +239,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
 
                     fn execute_metered(
                         &self,
-                        state: &mut ::openvm_circuit::arch::VmStateMut<F, ::openvm_circuit::system::memory::online::GuestMemory, ::openvm_circuit::arch::execution_mode::metered::MeteredCtx>,
+                        state: &mut ::openvm_circuit::arch::VmStateMut<#first_ty_generic, ::openvm_circuit::system::memory::online::GuestMemory, ::openvm_circuit::arch::execution_mode::metered::MeteredCtx>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
                         chip_index: usize,
                     ) -> ::openvm_circuit::arch::Result<()> {
@@ -240,12 +248,17 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         }
                     }
 
-                    fn set_trace_height(
+                    fn execute_tracegen<RA>(
                         &mut self,
-                        height: usize,
-                    ) {
+                        state: ::openvm_circuit::arch::VmStateMut<#first_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory<#first_ty_generic>, ::openvm_circuit::arch::execution_mode::tracegen::TracegenCtx<RA>>,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
+                        chip_index: usize,
+                    ) -> ::openvm_circuit::arch::Result<()>
+                    where
+                        RA: ::openvm_circuit::arch::BaseRecordArena,
+                    {
                         match self {
-                            #(#set_trace_height_arms,)*
+                            #(#execute_tracegen_arms,)*
                         }
                     }
                 }

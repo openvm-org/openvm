@@ -98,7 +98,7 @@ impl<'a> CustomBorrow<'a, Sha256VmRecordMut<'a>, Sha256VmMetadata> for [u8] {
     }
 }
 
-impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
+impl<F: PrimeField32> TraceStep<F> for Sha256VmStep {
     type RecordLayout = MultiRowLayout<Sha256VmMetadata>;
     type RecordMut<'a> = Sha256VmRecordMut<'a>;
 
@@ -106,11 +106,11 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
         format!("{:?}", Rv32Sha256Opcode::SHA256)
     }
 
-    fn execute<'buf, RA>(
+    fn execute<RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
+        chip_index: usize,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -204,7 +204,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
     }
 }
 
-impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Sha256VmStep {
+impl<F: PrimeField32> TraceFiller<F> for Sha256VmStep {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,

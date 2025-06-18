@@ -188,14 +188,13 @@ pub struct LoadSignExtendStep<A, const NUM_CELLS: usize, const LIMB_BITS: usize>
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F, CTX, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceStep<F, CTX>
+impl<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceStep<F>
     for LoadSignExtendStep<A, NUM_CELLS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
         + for<'a> AdapterTraceStep<
             F,
-            CTX,
             ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
             WriteData = [u32; NUM_CELLS],
         >,
@@ -213,11 +212,11 @@ where
         )
     }
 
-    fn execute<'buf, RA>(
+    fn execute<RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
+        chip_index: usize,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -260,11 +259,11 @@ where
     }
 }
 
-impl<F, CTX, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceFiller<F, CTX>
+impl<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceFiller<F>
     for LoadSignExtendStep<A, NUM_CELLS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };

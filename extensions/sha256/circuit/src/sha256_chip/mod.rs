@@ -6,7 +6,7 @@ use std::cmp::min;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        MatrixRecordArena, NewVmChipWrapper, Result, StepExecutorE1, VmStateMut,
+        NewVmChipWrapper, Result, StepExecutorE1, VmStateMut,
     },
     system::memory::online::GuestMemory,
 };
@@ -54,7 +54,7 @@ pub const SHA256_NUM_READ_ROWS: usize = SHA256_BLOCK_CELLS / SHA256_READ_SIZE;
 /// Maximum message length that this chip supports in bytes
 pub const SHA256_MAX_MESSAGE_LEN: usize = 1 << 29;
 
-pub type Sha256VmChip<F> = NewVmChipWrapper<F, Sha256VmAir, Sha256VmStep, MatrixRecordArena<F>>;
+pub type Sha256VmChip<F> = NewVmChipWrapper<F, Sha256VmAir, Sha256VmStep>;
 
 pub struct Sha256VmStep {
     pub inner: Sha256StepHelper,

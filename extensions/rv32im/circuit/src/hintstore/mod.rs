@@ -4,8 +4,8 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionError, ExecutionState,
-        MatrixRecordArena, MultiRowLayout, NewVmChipWrapper, RecordArena, Result, StepExecutorE1,
-        TraceFiller, TraceStep, VmStateMut,
+        MultiRowLayout, NewVmChipWrapper, RecordArena, Result, StepExecutorE1, TraceFiller,
+        TraceStep, VmStateMut,
     },
     system::memory::{
         offline_checker::{
@@ -342,7 +342,7 @@ impl Rv32HintStoreStep {
     }
 }
 
-impl<F, CTX> TraceStep<F, CTX> for Rv32HintStoreStep
+impl<F> TraceStep<F> for Rv32HintStoreStep
 where
     F: PrimeField32,
 {
@@ -359,11 +359,11 @@ where
         }
     }
 
-    fn execute<'buf, RA>(
+    fn execute<RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
+        chip_index: usize,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -455,7 +455,7 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep {
+impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreStep {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -685,5 +685,4 @@ where
     }
 }
 
-pub type Rv32HintStoreChip<F> =
-    NewVmChipWrapper<F, Rv32HintStoreAir, Rv32HintStoreStep, MatrixRecordArena<F>>;
+pub type Rv32HintStoreChip<F> = NewVmChipWrapper<F, Rv32HintStoreAir, Rv32HintStoreStep>;

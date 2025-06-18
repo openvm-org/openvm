@@ -327,7 +327,7 @@ pub struct Rv32LoadStoreAdapterStep {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32LoadStoreAdapterStep
+impl<F> AdapterTraceStep<F> for Rv32LoadStoreAdapterStep
 where
     F: PrimeField32,
 {
@@ -485,7 +485,7 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32LoadStoreAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32LoadStoreAdapterStep {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // TODO(ayush): should this be here?

@@ -259,13 +259,12 @@ pub struct LoadStoreStep<A, const NUM_CELLS: usize> {
     pub offset: usize,
 }
 
-impl<F, CTX, A, const NUM_CELLS: usize> TraceStep<F, CTX> for LoadStoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> TraceStep<F> for LoadStoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static
         + for<'a> AdapterTraceStep<
             F,
-            CTX,
             ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
             WriteData = [u32; NUM_CELLS],
         >,
@@ -280,11 +279,11 @@ where
         )
     }
 
-    fn execute<'buf, RA>(
+    fn execute<RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
+        chip_index: usize,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -320,10 +319,10 @@ where
     }
 }
 
-impl<F, CTX, A, const NUM_CELLS: usize> TraceFiller<F, CTX> for LoadStoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> TraceFiller<F> for LoadStoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };

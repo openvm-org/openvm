@@ -28,9 +28,9 @@ use thiserror::Error;
 use tracing::info_span;
 
 use super::{
-    ChipId, ExecutionError, InsExecutorE1, MemoryConfig, VmChipComplex, VmComplexTraceHeights,
-    VmConfig, VmInventoryError, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
-    PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
+    execution_mode::tracegen::TracegenCtx, ExecutionError, InsExecutorE1, MemoryConfig,
+    VmChipComplex, VmComplexTraceHeights, VmConfig, VmInventoryError, CONNECTOR_AIR_ID,
+    MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -212,8 +212,7 @@ where
         let instret_end = num_insns.map(|n| state.instret + n);
 
         let chip_complex =
-            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
-                .unwrap();
+            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
         let mut segment = VmSegmentExecutor::<F, VC, _>::new(
             chip_complex,
             self.trace_height_constraints.clone(),
@@ -276,8 +275,7 @@ where
         let _span = info_span!("execute_metered").entered();
 
         let chip_complex =
-            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
-                .unwrap();
+            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
         let air_names = chip_complex.air_names();
         // TODO(ayush): get rid of segmentation_strategy altogether
         let ctrl = MeteredExecutionControl::new(&air_names, widths, interactions)
@@ -391,7 +389,6 @@ where
                 &self.config,
                 exe.program.clone(),
                 Some(state.memory),
-                Some(trace_heights),
             )
             .unwrap();
 
@@ -408,8 +405,9 @@ where
                 segment.metrics = state.metrics;
             }
 
+            let ctx = TracegenCtx::new(trace_heights.len());
             let mut exec_state =
-                VmSegmentState::new(state.instret, state.pc, None, state.input, ());
+                VmSegmentState::new(state.instret, state.pc, None, state.input, ctx);
             metrics_span("execute_time_ms", || {
                 segment.execute_from_state(&mut exec_state)
             })
@@ -645,82 +643,6 @@ where
         self.trace_height_constraints = constraints;
     }
 
-    /// Executes a program, compute the trace heights, and returns the public values.
-    pub fn execute_and_compute_heights(
-        &self,
-        exe: impl Into<VmExe<F>>,
-        input: impl Into<Streams<F>>,
-    ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
-        let segment = {
-            let mut segment = self.execute_impl(exe.into(), input.into(), None)?;
-            segment.chip_complex.finalize_memory();
-            segment
-        };
-        let air_heights = segment.chip_complex.current_trace_heights();
-        let vm_heights = segment.chip_complex.get_internal_trace_heights();
-        let public_values = if let Some(pv_chip) = segment.chip_complex.public_values_chip() {
-            pv_chip.step.get_custom_public_values()
-        } else {
-            vec![]
-        };
-        Ok(SingleSegmentVmExecutionResult {
-            public_values,
-            air_heights,
-            vm_heights,
-        })
-    }
-
-    /// Executes a program and returns its proof input.
-    pub fn execute_and_generate<SC: StarkGenericConfig>(
-        &self,
-        committed_exe: Arc<VmCommittedExe<SC>>,
-        input: impl Into<Streams<F>>,
-    ) -> Result<ProofInput<SC>, GenerationError>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-        VC::Executor: Chip<SC>,
-        VC::Periphery: Chip<SC>,
-    {
-        let segment = self.execute_impl(committed_exe.exe.clone(), input, None)?;
-        let proof_input = tracing::info_span!("trace_gen").in_scope(|| {
-            segment.generate_proof_input(Some(committed_exe.committed_program.clone()))
-        })?;
-        Ok(proof_input)
-    }
-
-    fn execute_impl(
-        &self,
-        exe: VmExe<F>,
-        input: impl Into<Streams<F>>,
-        trace_heights: Option<&[u32]>,
-    ) -> Result<VmSegmentExecutor<F, VC, TracegenExecutionControl>, ExecutionError> {
-        let chip_complex = create_and_initialize_chip_complex(
-            &self.config,
-            exe.program.clone(),
-            None,
-            trace_heights,
-        )
-        .unwrap();
-
-        let ctrl = TracegenExecutionControl::default();
-        let mut segment = VmSegmentExecutor::new(
-            chip_complex,
-            self.trace_height_constraints.clone(),
-            exe.fn_bounds.clone(),
-            ctrl,
-        );
-
-        if let Some(overridden_heights) = self.overridden_heights.as_ref() {
-            segment.set_override_trace_heights(overridden_heights.clone());
-        }
-
-        let mut exec_state = VmSegmentState::new(0, exe.pc_start, None, input.into(), ());
-        metrics_span("execute_time_ms", || {
-            segment.execute_from_state(&mut exec_state)
-        })?;
-        Ok(segment)
-    }
-
     pub fn execute_e1(
         &self,
         exe: VmExe<F>,
@@ -729,8 +651,7 @@ where
         let memory =
             create_memory_image(&self.config.system().memory_config, exe.init_memory.clone());
         let chip_complex =
-            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
-                .unwrap();
+            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
         let ctrl = E1ExecutionControl::default();
         let mut executor = VmSegmentExecutor::<F, VC, _>::new(
             chip_complex,
@@ -767,8 +688,7 @@ where
         let memory =
             create_memory_image(&self.config.system().memory_config, exe.init_memory.clone());
         let chip_complex =
-            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
-                .unwrap();
+            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
         let air_names = chip_complex.air_names();
         let ctrl = MeteredExecutionControl::new(&air_names, widths, interactions)
             .with_max_trace_height(
@@ -830,8 +750,37 @@ where
         Ok(segment.trace_heights)
     }
 
+    fn execute_impl(
+        &self,
+        exe: VmExe<F>,
+        input: impl Into<Streams<F>>,
+        max_trace_heights: &[u32],
+    ) -> Result<VmSegmentExecutor<F, VC, TracegenExecutionControl>, ExecutionError> {
+        let chip_complex =
+            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
+
+        let ctrl = TracegenExecutionControl::default();
+        let mut segment = VmSegmentExecutor::new(
+            chip_complex,
+            self.trace_height_constraints.clone(),
+            exe.fn_bounds.clone(),
+            ctrl,
+        );
+
+        if let Some(overridden_heights) = self.overridden_heights.as_ref() {
+            segment.set_override_trace_heights(overridden_heights.clone());
+        }
+
+        let ctx = TracegenCtx::new(max_trace_heights.len());
+        let mut exec_state = VmSegmentState::new(0, exe.pc_start, None, input.into(), ctx);
+        metrics_span("execute_time_ms", || {
+            segment.execute_from_state(&mut exec_state)
+        })?;
+        Ok(segment)
+    }
+
     /// Executes a program and returns its proof input.
-    pub fn execute_with_max_heights_and_generate<SC: StarkGenericConfig>(
+    pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
         committed_exe: Arc<VmCommittedExe<SC>>,
         input: impl Into<Streams<F>>,
@@ -842,8 +791,7 @@ where
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        let segment =
-            self.execute_impl(committed_exe.exe.clone(), input, Some(max_trace_heights))?;
+        let segment = self.execute_impl(committed_exe.exe.clone(), input, max_trace_heights)?;
         let proof_input = tracing::info_span!("trace_gen").in_scope(|| {
             segment.generate_proof_input(Some(committed_exe.committed_program.clone()))
         })?;
@@ -851,15 +799,14 @@ where
     }
 
     /// Executes a program, compute the trace heights, and returns the public values.
-    pub fn execute_with_max_heights_and_compute_heights(
+    pub fn execute_and_compute_heights(
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
         max_trace_heights: &[u32],
     ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
         let executor = {
-            let mut executor =
-                self.execute_impl(exe.into(), input.into(), Some(max_trace_heights))?;
+            let mut executor = self.execute_impl(exe.into(), input.into(), max_trace_heights)?;
             executor.chip_complex.finalize_memory();
             executor
         };
@@ -1293,7 +1240,6 @@ pub fn create_and_initialize_chip_complex<F, VC>(
     config: &VC,
     program: Program<F>,
     initial_memory: Option<MemoryImage>,
-    max_trace_heights: Option<&[u32]>,
 ) -> Result<VmChipComplex<F, VC::Executor, VC::Periphery>, VmInventoryError>
 where
     F: PrimeField32,
@@ -1313,33 +1259,6 @@ where
 
     if let Some(initial_memory) = initial_memory {
         chip_complex.set_initial_memory(initial_memory);
-    }
-
-    if let Some(max_trace_heights) = max_trace_heights {
-        let executor_chip_offset = if chip_complex.config().has_public_values_chip() {
-            PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
-        } else {
-            PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
-        };
-
-        for (i, chip_id) in chip_complex
-            .inventory
-            .insertion_order
-            .iter()
-            .rev()
-            .enumerate()
-        {
-            if let ChipId::Executor(exec_id) = chip_id {
-                if let Some(height_index) = executor_chip_offset.checked_add(i) {
-                    if let Some(&height) = max_trace_heights.get(height_index) {
-                        if let Some(executor) = chip_complex.inventory.executors.get_mut(*exec_id) {
-                            // TODO(ayush): remove conversion
-                            executor.set_trace_height(height.next_power_of_two() as usize);
-                        }
-                    }
-                }
-            }
-        }
     }
 
     Ok(chip_complex)

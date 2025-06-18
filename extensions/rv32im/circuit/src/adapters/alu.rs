@@ -189,9 +189,7 @@ pub struct Rv32BaseAluAdapterRecord {
     pub writes_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
-impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
-    for Rv32BaseAluAdapterStep<LIMB_BITS>
-{
+impl<F: PrimeField32> AdapterTraceStep<F> for Rv32BaseAluAdapterStep<LIMB_BITS> {
     const WIDTH: usize = size_of::<Rv32BaseAluAdapterCols<u8>>();
     type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
     type WriteData = [[u8; RV32_REGISTER_NUM_LIMBS]; 1];
@@ -269,9 +267,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     }
 }
 
-impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceFiller<F, CTX>
-    for Rv32BaseAluAdapterStep<LIMB_BITS>
-{
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32BaseAluAdapterStep<LIMB_BITS> {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY: the following is highly unsafe. We are going to cast `adapter_row` to a record
         // buffer, and then do an _overlapping_ write to the `adapter_row` as a row of field

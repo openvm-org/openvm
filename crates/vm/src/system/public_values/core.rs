@@ -16,7 +16,7 @@ use openvm_stark_backend::{
 
 use crate::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, BasicAdapterInterface, EmptyLayout, MinimalInstruction, RecordArena,
         Result, StepExecutorE1, TraceFiller, TraceStep, VmCoreAir, VmStateMut,
@@ -143,10 +143,10 @@ where
     }
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for PublicValuesCoreStep<A, F>
+impl<F, A> TraceStep<F> for PublicValuesCoreStep<A, F>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, CTX, ReadData = [[F; 1]; 2], WriteData = [[F; 1]; 0]>,
+    A: 'static + AdapterTraceStep<F, ReadData = [[F; 1]; 2], WriteData = [[F; 1]; 0]>,
 {
     type RecordLayout = EmptyLayout<A>;
     type RecordMut<'a> = (A::RecordMut<'a>, &'a mut PublicValuesRecord<F>);
@@ -160,13 +160,14 @@ where
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<'buf, F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
+        chip_index: usize,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
     {
+        let arena = &mut state.ctx.arenas[chip_index];
         let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
@@ -200,10 +201,10 @@ where
     }
 }
 
-impl<F, CTX, A> TraceFiller<F, CTX> for PublicValuesCoreStep<A, F>
+impl<F, A> TraceFiller<F> for PublicValuesCoreStep<A, F>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };

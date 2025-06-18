@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::{
-    execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-    Streams,
+    execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
+    BaseRecordArena, Streams,
 };
 use crate::system::{
     memory::{
@@ -136,7 +136,15 @@ pub trait InsExecutorE1<F> {
     where
         F: PrimeField32;
 
-    fn set_trace_height(&mut self, height: usize);
+    fn execute_tracegen<'buf, RA>(
+        &mut self,
+        state: VmStateMut<'buf, F, TracingMemory<F>, TracegenCtx<RA>>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()>
+    where
+        F: PrimeField32,
+        RA: BaseRecordArena;
 }
 
 impl<F, C> InsExecutorE1<F> for RefCell<C>
@@ -168,8 +176,18 @@ where
             .execute_metered(state, instruction, chip_index)
     }
 
-    fn set_trace_height(&mut self, height: usize) {
-        self.borrow_mut().set_trace_height(height);
+    fn execute_tracegen<RA>(
+        &mut self,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()>
+    where
+        F: PrimeField32,
+        RA: BaseRecordArena,
+    {
+        self.borrow_mut()
+            .execute_tracegen(state, instruction, chip_index)
     }
 }
 

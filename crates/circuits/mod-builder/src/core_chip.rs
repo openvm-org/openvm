@@ -280,25 +280,20 @@ impl<A> FieldExpressionStep<A> {
     }
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for FieldExpressionStep<A>
+impl<F, A> TraceStep<F> for FieldExpressionStep<A>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
-            F,
-            CTX,
-            ReadData: Into<DynArray<u8>>,
-            WriteData: From<DynArray<u8>>,
-        >,
+        + for<'a> AdapterTraceStep<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
 {
     type RecordLayout = AdapterCoreLayout<A, FieldExpressionMetadata>;
     type RecordMut<'a> = (A::RecordMut<'a>, FieldExpressionCoreRecordMut<'a>);
 
-    fn execute<'buf, RA>(
+    fn execute<RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
+        chip_index: usize,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -341,10 +336,10 @@ where
     }
 }
 
-impl<F, CTX, A> TraceFiller<F, CTX> for FieldExpressionStep<A>
+impl<F, A> TraceFiller<F> for FieldExpressionStep<A>
 where
     F: PrimeField32 + Send + Sync + Clone,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         // Get the core record from the row slice

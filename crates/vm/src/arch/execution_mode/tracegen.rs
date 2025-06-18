@@ -3,13 +3,45 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        execution_control::ExecutionControl, ExecutionError, ExecutionState, InstructionExecutor,
-        VmChipComplex, VmConfig, VmSegmentState,
+        execution_control::ExecutionControl, BaseRecordArena, ExecutionError, ExecutionState,
+        InstructionExecutor, MatrixRecordArena, VmChipComplex, VmConfig, VmSegmentState,
     },
     system::memory::INITIAL_TIMESTAMP,
 };
 
-pub type TracegenCtx = ();
+#[derive(Debug)]
+pub struct TracegenCtx<RA>
+where
+    RA: BaseRecordArena,
+{
+    pub arenas: Vec<RA>,
+}
+
+impl<RA> TracegenCtx<RA>
+where
+    RA: BaseRecordArena,
+{
+    pub fn new(count: usize) -> Self {
+        let arenas = (0..count).map(|_| RA::with_capacity(0)).collect();
+        Self { arenas }
+    }
+
+    pub fn new_with_capacity(sizes: &[usize]) -> Self {
+        let arenas = sizes.iter().map(|&size| RA::with_capacity(size)).collect();
+
+        Self { arenas }
+    }
+}
+
+// impl<F: Field> TracegenCtx<MatrixRecordArena<F>> {
+//     pub fn into_matrices(self, widths: &[usize]) -> Vec<RowMajorMatrix<F>> {
+//         self.arenas
+//             .into_iter()
+//             .zip(widths)
+//             .map(|(arena, &width)| arena.into_matrix(width))
+//             .collect()
+//     }
+// }
 
 #[derive(Default, derive_new::new)]
 pub struct TracegenExecutionControl {
@@ -21,9 +53,12 @@ where
     F: PrimeField32,
     VC: VmConfig<F>,
 {
-    type Ctx = TracegenCtx;
+    // TODO(ayush): make generic
+    type Ctx = TracegenCtx<MatrixRecordArena<F>>;
 
-    fn initialize_context(&self) -> Self::Ctx {}
+    fn initialize_context(&self) -> Self::Ctx {
+        unimplemented!()
+    }
 
     fn should_suspend(
         &self,

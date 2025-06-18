@@ -63,12 +63,12 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_R
 pub(super) const NUM_INITIAL_READS: usize = 6;
 pub(super) const NUM_SIMPLE_ACCESSES: u32 = 7;
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> TraceStep<F>
     for NativePoseidon2Step<F, SBOX_REGISTERS>
 {
     fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,
         trace: &mut [F],
         trace_offset: &mut usize,

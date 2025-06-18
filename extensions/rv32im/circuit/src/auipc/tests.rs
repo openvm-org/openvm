@@ -3,7 +3,7 @@ use std::borrow::BorrowMut;
 use itertools::izip;
 use openvm_circuit::arch::{
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    DenseRecordArena, NewVmChipWrapper, VmAirWrapper,
+    NewVmChipWrapper, VmAirWrapper,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -58,7 +58,7 @@ fn create_test_chip(
     (chip, bitwise_chip)
 }
 
-type DenseChip<F> = NewVmChipWrapper<F, Rv32AuipcAir, Rv32AuipcStepWithAdapter, DenseRecordArena>;
+type DenseChip<F> = NewVmChipWrapper<F, Rv32AuipcAir, Rv32AuipcStepWithAdapter>;
 
 fn create_dense_chip(
     tester: &VmChipTestBuilder<F>,

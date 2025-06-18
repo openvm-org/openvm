@@ -6,9 +6,8 @@ use std::{
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, ExecutionBridge, ExecutionState, MatrixRecordArena, MultiRowLayout,
-        NewVmChipWrapper, PcIncOrSet, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
-        VmStateMut,
+        get_record_from_slice, ExecutionBridge, ExecutionState, MultiRowLayout, NewVmChipWrapper,
+        PcIncOrSet, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep, VmStateMut,
     },
     system::{
         memory::{
@@ -158,7 +157,7 @@ pub struct JalRangeCheckStep {
     range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F, CTX> TraceStep<F, CTX> for JalRangeCheckStep
+impl<F> TraceStep<F> for JalRangeCheckStep
 where
     F: PrimeField32,
 {
@@ -180,11 +179,11 @@ where
         panic!("Unknown opcode {}", opcode);
     }
 
-    fn execute<'buf, RA>(
+    fn execute<RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
+        chip_index: usize,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -240,7 +239,7 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for JalRangeCheckStep {
+impl<F: PrimeField32> TraceFiller<F> for JalRangeCheckStep {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut row_slice: &mut [F]) {
         let record: &mut JalRangeCheckRecord<F> =
             unsafe { get_record_from_slice(&mut row_slice, ()) };
@@ -362,5 +361,4 @@ where
     }
 }
 
-pub type JalRangeCheckChip<F> =
-    NewVmChipWrapper<F, JalRangeCheckAir, JalRangeCheckStep, MatrixRecordArena<F>>;
+pub type JalRangeCheckChip<F> = NewVmChipWrapper<F, JalRangeCheckAir, JalRangeCheckStep>;

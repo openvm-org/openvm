@@ -149,7 +149,7 @@ pub struct AluNativeAdapterRecord<F> {
 #[derive(derive_new::new)]
 pub struct AluNativeAdapterStep;
 
-impl<F: PrimeField32, CTX> AdapterTraceStep<F, CTX> for AluNativeAdapterStep {
+impl<F: PrimeField32> AdapterTraceStep<F> for AluNativeAdapterStep {
     const WIDTH: usize = size_of::<AluNativeAdapterCols<u8>>();
     type ReadData = [F; 2];
     type WriteData = [F; 1];
@@ -208,7 +208,7 @@ impl<F: PrimeField32, CTX> AdapterTraceStep<F, CTX> for AluNativeAdapterStep {
     }
 }
 
-impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for AluNativeAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for AluNativeAdapterStep {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &AluNativeAdapterRecord<F> =

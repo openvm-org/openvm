@@ -118,7 +118,6 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
         ),
         tester.memory_helper(),
     );
-    chip.set_trace_height(MAX_INS_CAPACITY);
 
     for _ in 0..num_ops {
         set_and_execute_rand(
@@ -159,7 +158,6 @@ fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
         ),
         tester.memory_helper(),
     );
-    chip.set_trace_height(MAX_INS_CAPACITY);
 
     for _ in 0..num_ops {
         set_and_execute_rand(
@@ -208,7 +206,6 @@ fn run_mul_256_rand_test(opcode: MulOpcode, num_ops: usize) {
         ),
         tester.memory_helper(),
     );
-    chip.set_trace_height(MAX_INS_CAPACITY);
 
     for _ in 0..num_ops {
         set_and_execute_rand(
@@ -258,7 +255,6 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
         ),
         tester.memory_helper(),
     );
-    chip.set_trace_height(MAX_INS_CAPACITY);
 
     for _ in 0..num_ops {
         set_and_execute_rand(
@@ -301,7 +297,6 @@ fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
         ),
         tester.memory_helper(),
     );
-    chip.set_trace_height(MAX_INS_CAPACITY);
 
     let branch_fn = |opcode: usize, x: &[u32; INT256_NUM_LIMBS], y: &[u32; INT256_NUM_LIMBS]| {
         x.iter()
@@ -353,7 +348,6 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
         ),
         tester.memory_helper(),
     );
-    chip.set_trace_height(MAX_INS_CAPACITY);
 
     let branch_fn =
         |opcode: usize, x: &[u32; INT256_NUM_LIMBS], y: &[u32; INT256_NUM_LIMBS]| -> bool {

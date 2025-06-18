@@ -94,7 +94,7 @@ impl<'a> CustomBorrow<'a, KeccakVmRecordMut<'a>, KeccakVmMetadata> for [u8] {
     }
 }
 
-impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
+impl<F: PrimeField32> TraceStep<F> for KeccakVmStep {
     type RecordLayout = MultiRowLayout<KeccakVmMetadata>;
     type RecordMut<'a> = KeccakVmRecordMut<'a>;
 
@@ -102,11 +102,11 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
         format!("{:?}", Rv32KeccakOpcode::KECCAK256)
     }
 
-    fn execute<'buf, RA>(
+    fn execute<RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
+        chip_index: usize,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -208,7 +208,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
     }
 }
 
-impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for KeccakVmStep {
+impl<F: PrimeField32> TraceFiller<F> for KeccakVmStep {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,

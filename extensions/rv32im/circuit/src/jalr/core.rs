@@ -206,13 +206,12 @@ impl<A> Rv32JalrStep<A> {
     }
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for Rv32JalrStep<A>
+impl<F, A> TraceStep<F> for Rv32JalrStep<A>
 where
     F: PrimeField32,
     A: 'static
         + for<'a> AdapterTraceStep<
             F,
-            CTX,
             ReadData = [u8; RV32_REGISTER_NUM_LIMBS],
             WriteData = [u8; RV32_REGISTER_NUM_LIMBS],
         >,
@@ -227,11 +226,11 @@ where
         )
     }
 
-    fn execute<'buf, RA>(
+    fn execute<RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
+        chip_index: usize,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -273,10 +272,10 @@ where
         Ok(())
     }
 }
-impl<F, CTX, A> TraceFiller<F, CTX> for Rv32JalrStep<A>
+impl<F, A> TraceFiller<F> for Rv32JalrStep<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
