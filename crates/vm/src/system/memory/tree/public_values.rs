@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
-    arch::hasher::Hasher,
+    arch::{hasher::Hasher, ADDR_SPACE_OFFSET},
     system::memory::{dimensions::MemoryDimensions, tree::MemoryNode, Address, MemoryImage},
 };
 
@@ -79,7 +79,7 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
         // 2. Compare user public values commitment with Merkle root of user public values.
         let pv_commit = self.public_values_commit;
         // 0.
-        let pv_as = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + 1;
+        let pv_as = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + ADDR_SPACE_OFFSET;
         let pv_start_idx = memory_dimensions.label_to_index((pv_as, 0));
         let pvs = &self.public_values;
         if pvs.len() % CHUNK != 0 || !(pvs.len() / CHUNK).is_power_of_two() {
@@ -137,9 +137,9 @@ fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeF
     let address_leading_zeros = memory_dimensions.address_height - pv_height;
 
     let mut curr_node = Arc::new(root);
-    let mut proof = Vec::with_capacity(memory_dimensions.as_height + address_leading_zeros);
-    for i in 0..memory_dimensions.as_height {
-        let bit = 1 << (memory_dimensions.as_height - i - 1);
+    let mut proof = Vec::with_capacity(memory_dimensions.addr_space_height + address_leading_zeros);
+    for i in 0..memory_dimensions.addr_space_height {
+        let bit = 1 << (memory_dimensions.addr_space_height - i - 1);
         if let MemoryNode::NonLeaf { left, right, .. } = curr_node.as_ref().clone() {
             if PUBLIC_VALUES_ADDRESS_SPACE_OFFSET & bit != 0 {
                 curr_node = right;
@@ -169,8 +169,8 @@ pub fn extract_public_values<F: PrimeField32>(
     final_memory: &MemoryImage,
 ) -> Vec<F> {
     // All (addr, value) pairs in the public value address space.
-    let f_as_start = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + 1;
-    let f_as_end = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + 2;
+    let f_as_start = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + ADDR_SPACE_OFFSET;
+    let f_as_end = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + ADDR_SPACE_OFFSET + 1;
 
     // This clones the entire memory. Ideally this should run in time proportional to
     // the size of the PV address space, not entire memory.
@@ -212,14 +212,14 @@ mod tests {
     #[test]
     fn test_public_value_happy_path() {
         let mut vm_config = SystemConfig::default();
-        vm_config.memory_config.as_height = 4;
+        vm_config.memory_config.addr_space_height = 4;
         vm_config.memory_config.pointer_max_bits = 5;
         let memory_dimensions = vm_config.memory_config.memory_dimensions();
         let pv_as = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset;
         let num_public_values = 16;
         let mut memory = AddressMap::new(
             memory_dimensions.as_offset,
-            1 << memory_dimensions.as_height,
+            1 << memory_dimensions.addr_space_height,
             1 << memory_dimensions.address_height,
         );
         unsafe {

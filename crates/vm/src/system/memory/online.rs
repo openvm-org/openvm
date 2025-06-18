@@ -191,8 +191,8 @@ impl<F: PrimeField32> TracingMemory<F> {
         memory_bus: MemoryBus,
         initial_block_size: usize,
     ) -> Self {
-        let num_cells = mem_config.as_sizes.clone();
-        let num_addr_sp = 1 + (1 << mem_config.as_height);
+        let num_cells = mem_config.addr_space_sizes.clone();
+        let num_addr_sp = 1 + (1 << mem_config.addr_space_height);
         let mut min_block_size = vec![1; num_addr_sp];
         // TMP: hardcoding for now
         min_block_size[1] = 4;

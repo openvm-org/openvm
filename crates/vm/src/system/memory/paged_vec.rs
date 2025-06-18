@@ -275,7 +275,7 @@ impl AddressMap {
         }
     }
     pub fn from_mem_config(mem_config: &MemoryConfig) -> Self {
-        Self::new(mem_config.as_sizes.clone())
+        Self::new(mem_config.addr_space_sizes.clone())
     }
 
     pub fn get_memory(&self) -> &Vec<PagedVec> {

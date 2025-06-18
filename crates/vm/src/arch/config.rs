@@ -19,6 +19,8 @@ const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 3;
 pub const DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
 /// Width of Poseidon2 VM uses.
 pub const POSEIDON2_WIDTH: usize = 16;
+/// Offset for address space indices. This is used to distinguish between different memory spaces.
+pub const ADDR_SPACE_OFFSET: u32 = 1;
 /// Returns a Poseidon2 config for the VM.
 pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<F> {
     Poseidon2Config::default()
@@ -70,13 +72,13 @@ pub trait InitFileGenerator {
 
 #[derive(Debug, Serialize, Deserialize, Clone, new)]
 pub struct MemoryConfig {
-    /// The maximum height of the address space. This means the trie has `as_height` layers for
-    /// searching the address space. The allowed address spaces are those in the range `[1,
-    /// 1 + 2^as_height)` where it starts from `1` to not allow address space `0` in memory.
-    pub as_height: usize,
+    /// The maximum height of the address space. This means the trie has `addr_space_height` layers
+    /// for searching the address space. The allowed address spaces are those in the range `[1,
+    /// 1 + 2^addr_space_height)` where it starts from 1 to not allow address space 0 in memory.
+    pub addr_space_height: usize,
     /// The number of cells in each address space. It is expected that the size of the list is
-    /// `1 << as_height + 1` and the first element is 0, which means no address space.
-    pub as_sizes: Vec<usize>,
+    /// `1 << addr_space_height + 1` and the first element is 0, which means no address space.
+    pub addr_space_sizes: Vec<usize>,
     pub pointer_max_bits: usize,
     /// All timestamps must be in the range `[0, 2^clk_max_bits)`. Maximum allowed: 29.
     pub clk_max_bits: usize,
@@ -90,9 +92,9 @@ pub struct MemoryConfig {
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        let mut as_sizes = vec![1 << 29; (1 << 3) + 1];
-        as_sizes[0] = 0;
-        Self::new(3, as_sizes, 29, 29, 17, 32, 1 << 24)
+        let mut addr_space_sizes = vec![0; (1 << 3) + ADDR_SPACE_OFFSET as usize];
+        addr_space_sizes[ADDR_SPACE_OFFSET as usize..ADDR_SPACE_OFFSET as usize + 4].fill(1 << 29);
+        Self::new(3, addr_space_sizes, 29, 29, 17, 32, 1 << 24)
     }
 }
 

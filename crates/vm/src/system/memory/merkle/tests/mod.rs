@@ -21,7 +21,10 @@ use rand::RngCore;
 
 use super::memory_to_partition;
 use crate::{
-    arch::testing::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
+    arch::{
+        ADDR_SPACE_OFFSET,
+        testing::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
+    },
     system::memory::{
         merkle::{
             columns::MemoryMerkleCols, tests::util::HashTestChip, MemoryDimensions,
@@ -45,7 +48,7 @@ fn test<const CHUNK: usize>(
     final_memory: &MemoryImage,
 ) {
     let MemoryDimensions {
-        as_height,
+        addr_space_height,
         address_height,
     } = memory_dimensions;
     let merkle_bus = PermutationCheckBus::new(MEMORY_MERKLE_BUS);
@@ -53,7 +56,7 @@ fn test<const CHUNK: usize>(
     // checking validity of test data
     for ((address_space, pointer), value) in final_memory.items::<BabyBear>() {
         let label = pointer / CHUNK as u32;
-        assert!(address_space < (1 << as_height) + 1);
+        assert!(address_space - ADDR_SPACE_OFFSET < (1 << addr_space_height));
         assert!(pointer < (CHUNK << address_height) as u32);
         if unsafe { initial_memory.get::<BabyBear>((address_space, pointer)) } != value {
             assert!(touched_labels.contains(&(address_space, label)));
@@ -231,7 +234,7 @@ fn random_test<const CHUNK: usize>(
 
     test::<CHUNK>(
         MemoryDimensions {
-            as_height: 1,
+            addr_space_height: 1,
             address_height: height,
         },
         &initial_memory,
@@ -258,13 +261,13 @@ fn expand_test_2() {
 #[test]
 fn expand_test_no_accesses() {
     let memory_dimensions = MemoryDimensions {
-        as_height: 2,
+        addr_space_height: 2,
         address_height: 1,
     };
     let mut hash_test_chip = HashTestChip::new();
 
     let memory = AddressMap::new(
-        vec![1 << memory_dimensions.address_height; 1 + (1 << memory_dimensions.as_height)],
+        vec![1 << memory_dimensions.address_height; 1 + (1 << memory_dimensions.addr_space_height)],
     );
     let tree = MemoryNode::<DEFAULT_CHUNK, _>::tree_from_memory(
         memory_dimensions,
@@ -294,14 +297,14 @@ fn expand_test_no_accesses() {
 #[should_panic]
 fn expand_test_negative() {
     let memory_dimensions = MemoryDimensions {
-        as_height: 2,
+        addr_space_height: 2,
         address_height: 1,
     };
 
     let mut hash_test_chip = HashTestChip::new();
 
     let memory = AddressMap::new(
-        vec![1 << memory_dimensions.address_height; 1 + (1 << memory_dimensions.as_height)],
+        vec![1 << memory_dimensions.address_height; 1 + (1 << memory_dimensions.addr_space_height)],
     );
     let tree = MemoryNode::<DEFAULT_CHUNK, _>::tree_from_memory(
         memory_dimensions,

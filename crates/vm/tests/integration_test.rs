@@ -367,7 +367,7 @@ fn test_vm_1_persistent() {
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let config = test_native_continuations_config();
     let ptr_max_bits = config.system.memory_config.pointer_max_bits;
-    let as_height = config.system.memory_config.as_height;
+    let addr_space_height = config.system.memory_config.addr_space_height;
     let airs = VmConfig::<BabyBear>::create_chip_complex(&config)
         .unwrap()
         .airs::<BabyBearPoseidon2Config>();
@@ -420,15 +420,15 @@ fn test_vm_1_persistent() {
         );
         let mut digest = [BabyBear::ZERO; CHUNK];
         let compression = vm_poseidon2_hasher();
-        for _ in 0..ptr_max_bits + as_height - 2 {
+        for _ in 0..ptr_max_bits + addr_space_height - 2 {
             digest = compression.compress(&digest, &digest);
         }
         assert_eq!(
             merkle_air_proof_input.raw.public_values[..8],
             // The value when you start with zeros and repeatedly hash the value with itself
-            // ptr_max_bits + as_height - 2 times.
-            // The height of the tree is ptr_max_bits + as_height - log2(8). The leaf also must be
-            // hashed once with padding for security.
+            // ptr_max_bits + addr_space_height - 2 times.
+            // The height of the tree is ptr_max_bits + addr_space_height - log2(8). The leaf also
+            // must be hashed once with padding for security.
             digest
         );
     }

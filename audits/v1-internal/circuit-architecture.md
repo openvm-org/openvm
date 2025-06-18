@@ -61,7 +61,7 @@ Author: [jonathanpwang](https://github.com/jonathanpwang)
 **Context:** https://github.com/openvm-org/openvm/blob/f3461e8e71dcd57d3c7ed5cc42592a4cf492c434/crates/vm/src/system/memory/controller/mod.rs#L241
 
 **Description:**
-The `MemoryController::with_volatile_memory` constructor uses `as_height` as `addr_space_max_bits` in the `VolatileBoundaryChip` constructor. However, the address spaces are in the range `[0, 1 + 2^addr_space_max_bits)`, so `addr_space_max_bits` is actually one higher. This would cause a runtime panic in trace generation if the full range of address spaces is used.
+The `MemoryController::with_volatile_memory` constructor uses `addr_space_height` as `addr_space_max_bits` in the `VolatileBoundaryChip` constructor. However, the address spaces are in the range `[0, ADDR_SPACE_OFFSET + 2^addr_space_max_bits)` where `ADDR_SPACE_OFFSET = 1`, so `addr_space_max_bits` is actually one higher. This would cause a runtime panic in trace generation if the full range of address spaces is used.
 
 **Recommendation:** Fix the constructor.
 

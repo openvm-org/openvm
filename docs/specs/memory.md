@@ -163,7 +163,7 @@ Both boundary chips perform, for every subsegment ever existed in our nice set, 
 
 The following invariants **must** be maintained by the memory architecture:
 1. In the MEMORY_BUS, the `timestamp` is always in range `[0, 2^timestamp_max_bits)` where `timestamp_max_bits <= F::bits() - 2` is a configuration constant.
-2. In the MEMORY_BUS, the `address_space` is always in range `[0, 1 + 2^as_height)` where `as_height` is a configuration constant satisfying `as_height < F::bits() - 2`. (Our current implementation only supports `as_height` less than the max bits supported by the VariableRangeCheckerBus).
+2. In the MEMORY_BUS, the `address_space` is always in range `[0, 1 + 2^addr_space_height)` where `addr_space_height` is a configuration constant satisfying `addr_space_height < F::bits() - 2`. (Our current implementation only supports `addr_space_height` less than the max bits supported by the VariableRangeCheckerBus).
 3. In the MEMORY_BUS, the `pointer` is always in range `[0, 2^pointer_max_bits)` where `pointer_max_bits <= F::bits() - 2` is a configuration constant.
 
 Invariant 1 is guaranteed by [time goes forward](#time-goes-forward) under the [assumption](./circuit.md#instruction-executors) that the timestamp increase during instruction execution is bounded by the number of AIR interactions.

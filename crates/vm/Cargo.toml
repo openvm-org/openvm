@@ -36,6 +36,9 @@ derivative.workspace = true
 static_assertions.workspace = true
 getset.workspace = true
 dashmap.workspace = true
+memmap2 = { version = "0.9.5", optional = true }
+
+[target.'cfg(any(unix, windows))'.dependencies]
 memmap2 = "0.9.5"
 
 [dev-dependencies]

@@ -38,7 +38,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
         let memory = if self.vm_config.system().continuation_enabled {
             let mem_config = self.vm_config.system().memory_config.clone();
             Some(GuestMemory::new(AddressMap::from_sparse(
-                mem_config.as_sizes.clone(),
+                mem_config.addr_space_sizes.clone(),
                 self.exe.init_memory.clone(),
             )))
         } else {

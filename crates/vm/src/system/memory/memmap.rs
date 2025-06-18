@@ -24,10 +24,7 @@ pub struct MmapWrapper {
 impl Clone for MmapWrapper {
     fn clone(&self) -> Self {
         let mut new_mmap = MmapMut::map_anon(self.mmap.len()).unwrap();
-        if self.highest_accessed > 0 {
-            new_mmap[..=self.highest_accessed]
-                .copy_from_slice(&self.mmap[..=self.highest_accessed]);
-        }
+        new_mmap.copy_from_slice(&self.mmap);
         Self {
             mmap: new_mmap,
             highest_accessed: self.highest_accessed,
@@ -307,7 +304,7 @@ impl AddressMap {
     }
 
     pub fn from_mem_config(mem_config: &MemoryConfig) -> Self {
-        Self::new(mem_config.as_sizes.clone())
+        Self::new(mem_config.addr_space_sizes.clone())
     }
 
     pub fn get_memory(&self) -> &Vec<MmapWrapper> {

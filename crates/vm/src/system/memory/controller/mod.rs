@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use self::interface::MemoryInterface;
 use super::{online::INITIAL_TIMESTAMP, volatile::VolatileBoundaryChip, AddressMap, MemoryAddress};
 use crate::{
-    arch::{hasher::HasherChip, MemoryConfig},
+    arch::{hasher::HasherChip, MemoryConfig, ADDR_SPACE_OFFSET},
     system::memory::{
         dimensions::MemoryDimensions,
         merkle::{MemoryMerkleChip, SerialReceiver},
@@ -189,12 +189,13 @@ impl<F: PrimeField32> MemoryController<F> {
         let range_checker_bus = range_checker.bus();
         assert!(mem_config.pointer_max_bits <= F::bits() - 2);
         assert!(mem_config
-            .as_sizes
+            .addr_space_sizes
             .iter()
             .all(|&x| x <= (1 << mem_config.pointer_max_bits)));
-        assert!(mem_config.as_height < F::bits() - 2);
-        let addr_space_max_bits =
-            log2_ceil_usize((1 + 2u32.pow(mem_config.as_height as u32)) as usize);
+        assert!(mem_config.addr_space_height < F::bits() - 2);
+        let addr_space_max_bits = log2_ceil_usize(
+            (ADDR_SPACE_OFFSET + 2u32.pow(mem_config.addr_space_height as u32)) as usize,
+        );
         Self {
             memory_bus,
             mem_config: mem_config.clone(),
@@ -223,7 +224,7 @@ impl<F: PrimeField32> MemoryController<F> {
         compression_bus: PermutationCheckBus,
     ) -> Self {
         let memory_dims = MemoryDimensions {
-            as_height: mem_config.as_height,
+            addr_space_height: mem_config.addr_space_height,
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
         };
         let range_checker_bus = range_checker.bus();

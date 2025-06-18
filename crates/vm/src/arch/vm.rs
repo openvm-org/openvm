@@ -1258,10 +1258,7 @@ pub fn create_memory_image(
     memory_config: &MemoryConfig,
     init_memory: SparseMemoryImage,
 ) -> MemoryImage {
-    AddressMap::from_sparse(
-        memory_config.as_sizes.clone(),
-        init_memory,
-    )
+    AddressMap::from_sparse(memory_config.addr_space_sizes.clone(), init_memory)
 }
 
 pub fn create_initial_state<F>(
