@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, io::Cursor, marker::PhantomData, sync::Arc};
+use std::{borrow::BorrowMut, marker::PhantomData, sync::Arc};
 
 pub use air::*;
 pub use columns::*;
@@ -18,13 +18,18 @@ use openvm_stark_backend::{
     AirRef, Chip, ChipUsageGetter,
 };
 
-use crate::system::memory::{
-    adapter::records::AccessAdapterRecordArena, offline_checker::MemoryBus, MemoryAddress,
+use crate::{
+    arch::{DenseRecordArena, RecordArena},
+    system::memory::{
+        adapter::records::{AccessLayout, AccessRecordMut},
+        offline_checker::MemoryBus,
+        MemoryAddress,
+    },
 };
 
 mod air;
 mod columns;
-mod records;
+pub(crate) mod records;
 #[cfg(test)]
 mod tests;
 
@@ -125,6 +130,19 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         }
     }
 
+    pub(crate) fn current_size<const N: usize>(&self) -> usize {
+        self.chips[get_chip_index(N)].current_size()
+    }
+
+    pub(crate) fn alloc_record(
+        &mut self,
+        block_size: usize,
+        layout: AccessLayout,
+    ) -> AccessRecordMut {
+        let index = get_chip_index(block_size);
+        self.chips[index].alloc_record(layout)
+    }
+
     pub(crate) fn execute_split(
         &mut self,
         address: MemoryAddress<u32, u32>,
@@ -158,6 +176,9 @@ pub trait GenericAccessAdapterChipTrait<F> {
     fn generate_trace(self) -> RowMajorMatrix<F>
     where
         F: PrimeField32;
+
+    fn current_size(&self) -> usize;
+    fn alloc_record(&mut self, layout: AccessLayout) -> AccessRecordMut;
 
     fn execute_split(&mut self, address: MemoryAddress<u32, u32>, values: &[F], timestamp: u32)
     where
@@ -204,10 +225,10 @@ impl<F: Clone + Send + Sync> GenericAccessAdapterChip<F> {
     }
 }
 
-pub struct AccessAdapterChip<F, const N: usize> {
+pub(crate) struct AccessAdapterChip<F, const N: usize> {
     air: AccessAdapterAir<N>,
     range_checker: SharedVariableRangeCheckerChip,
-    arena: AccessAdapterRecordArena,
+    arena: DenseRecordArena,
     overridden_height: Option<usize>,
     _marker: PhantomData<F>,
 }
@@ -224,7 +245,7 @@ impl<F: Clone + Send + Sync, const N: usize> AccessAdapterChip<F, N> {
         Self {
             air: AccessAdapterAir::<N> { memory_bus, lt_air },
             range_checker,
-            arena: AccessAdapterRecordArena::with_capacity(
+            arena: DenseRecordArena::with_capacity(
                 MAX_ARENA_SIZE * size_of::<AccessAdapterCols<F, N>>(),
             ),
             overridden_height: None,
@@ -243,62 +264,72 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
     where
         F: PrimeField32,
     {
-        let width = self.trace_width();
-        let records = self.arena.extract_bytes();
-        let trace: Vec<F> = records
-            .chunks_exact(size_of::<F>())
-            .map(|chunk| unsafe { std::ptr::read(chunk.as_ptr() as *const F) })
-            .collect();
-        let mut trace = RowMajorMatrix::new(trace, width);
-        let height = trace.height();
-        let padded_height = if let Some(oh) = self.overridden_height {
-            assert!(
-                oh >= height,
-                "Overridden height {oh} is less than the required height {height}"
-            );
-            oh
-        } else {
-            height
-        };
-        let padded_height = next_power_of_two_or_zero(padded_height);
-        trace.pad_to_height(padded_height, F::ZERO);
-        trace
-        // TODO(AG): everything related to the calculated trace height
-        // needs to be in memory controller, who owns these traces.
+        todo!()
+        // let width = self.trace_width();
+        // let records = self.arena.extract_bytes();
+        // let trace: Vec<F> = records
+        //     .chunks_exact(size_of::<F>())
+        //     .map(|chunk| unsafe { std::ptr::read(chunk.as_ptr() as *const F) })
+        //     .collect();
+        // let mut trace = RowMajorMatrix::new(trace, width);
+        // let height = trace.height();
+        // let padded_height = if let Some(oh) = self.overridden_height {
+        //     assert!(
+        //         oh >= height,
+        //         "Overridden height {oh} is less than the required height {height}"
+        //     );
+        //     oh
+        // } else {
+        //     height
+        // };
+        // let padded_height = next_power_of_two_or_zero(padded_height);
+        // trace.pad_to_height(padded_height, F::ZERO);
+        // trace
+        // // TODO(AG): everything related to the calculated trace height
+        // // needs to be in memory controller, who owns these traces.
+    }
+
+    fn current_size(&self) -> usize {
+        self.arena.current_size()
+    }
+
+    fn alloc_record(&mut self, layout: AccessLayout) -> AccessRecordMut<'_> {
+        self.arena.alloc(layout)
     }
 
     fn execute_split(&mut self, address: MemoryAddress<u32, u32>, values: &[F], timestamp: u32)
     where
         F: PrimeField32,
     {
-        let row_slice = self.arena.alloc_one::<AccessAdapterCols<F, N>>();
-        let row: &mut AccessAdapterCols<F, N> = row_slice.borrow_mut();
-        row.is_valid = F::ONE;
-        row.is_split = F::ONE;
-        row.address = MemoryAddress::new(
-            F::from_canonical_u32(address.address_space),
-            F::from_canonical_u32(address.pointer),
-        );
-        row.left_timestamp = F::from_canonical_u32(timestamp);
-        row.right_timestamp = F::from_canonical_u32(timestamp);
-        row.is_right_larger = F::ZERO;
-        debug_assert_eq!(
-            values.len(),
-            N,
-            "Input values slice length must match the access adapter type"
-        );
-        // TODO: move this to `fill_trace_row`
-        self.air.lt_air.generate_subrow(
-            (self.range_checker.as_ref(), timestamp, timestamp),
-            (&mut row.lt_aux, &mut row.is_right_larger),
-        );
+        todo!()
+        // let row_slice = self.arena.alloc_one::<AccessAdapterCols<F, N>>();
+        // let row: &mut AccessAdapterCols<F, N> = row_slice.borrow_mut();
+        // row.is_valid = F::ONE;
+        // row.is_split = F::ONE;
+        // row.address = MemoryAddress::new(
+        //     F::from_canonical_u32(address.address_space),
+        //     F::from_canonical_u32(address.pointer),
+        // );
+        // row.left_timestamp = F::from_canonical_u32(timestamp);
+        // row.right_timestamp = F::from_canonical_u32(timestamp);
+        // row.is_right_larger = F::ZERO;
+        // debug_assert_eq!(
+        //     values.len(),
+        //     N,
+        //     "Input values slice length must match the access adapter type"
+        // );
+        // // TODO: move this to `fill_trace_row`
+        // self.air.lt_air.generate_subrow(
+        //     (self.range_checker.as_ref(), timestamp, timestamp),
+        //     (&mut row.lt_aux, &mut row.is_right_larger),
+        // );
 
-        // SAFETY: `values` slice is asserted to have length N. `row.values` is an array of length
-        // N. Pointers are valid and regions do not overlap because exactly one of them is a
-        // part of the trace.
-        unsafe {
-            std::ptr::copy_nonoverlapping(values.as_ptr(), row.values.as_mut_ptr(), N);
-        }
+        // // SAFETY: `values` slice is asserted to have length N. `row.values` is an array of length
+        // // N. Pointers are valid and regions do not overlap because exactly one of them is a
+        // // part of the trace.
+        // unsafe {
+        //     std::ptr::copy_nonoverlapping(values.as_ptr(), row.values.as_mut_ptr(), N);
+        // }
     }
 
     fn execute_merge(
@@ -310,33 +341,34 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
     ) where
         F: PrimeField32,
     {
-        let row_slice = self.arena.alloc_one::<AccessAdapterCols<F, N>>();
-        let row: &mut AccessAdapterCols<F, N> = row_slice.borrow_mut();
-        row.is_valid = F::ONE;
-        row.is_split = F::ZERO;
-        row.address = MemoryAddress::new(
-            F::from_canonical_u32(address.address_space),
-            F::from_canonical_u32(address.pointer),
-        );
-        row.left_timestamp = F::from_canonical_u32(left_timestamp);
-        row.right_timestamp = F::from_canonical_u32(right_timestamp);
-        debug_assert_eq!(
-            values.len(),
-            N,
-            "Input values slice length must match the access adapter type"
-        );
-        // TODO: move this to `fill_trace_row`
-        self.air.lt_air.generate_subrow(
-            (self.range_checker.as_ref(), left_timestamp, right_timestamp),
-            (&mut row.lt_aux, &mut row.is_right_larger),
-        );
+        todo!()
+        // let row_slice = self.arena.alloc_one::<AccessAdapterCols<F, N>>();
+        // let row: &mut AccessAdapterCols<F, N> = row_slice.borrow_mut();
+        // row.is_valid = F::ONE;
+        // row.is_split = F::ZERO;
+        // row.address = MemoryAddress::new(
+        //     F::from_canonical_u32(address.address_space),
+        //     F::from_canonical_u32(address.pointer),
+        // );
+        // row.left_timestamp = F::from_canonical_u32(left_timestamp);
+        // row.right_timestamp = F::from_canonical_u32(right_timestamp);
+        // debug_assert_eq!(
+        //     values.len(),
+        //     N,
+        //     "Input values slice length must match the access adapter type"
+        // );
+        // // TODO: move this to `fill_trace_row`
+        // self.air.lt_air.generate_subrow(
+        //     (self.range_checker.as_ref(), left_timestamp, right_timestamp),
+        //     (&mut row.lt_aux, &mut row.is_right_larger),
+        // );
 
-        // SAFETY: `values` slice is asserted to have length N. `row.values` is an array of length
-        // N. Pointers are valid and regions do not overlap because exactly one of them is a
-        // part of the trace.
-        unsafe {
-            std::ptr::copy_nonoverlapping(values.as_ptr(), row.values.as_mut_ptr(), N);
-        }
+        // // SAFETY: `values` slice is asserted to have length N. `row.values` is an array of length
+        // // N. Pointers are valid and regions do not overlap because exactly one of them is a
+        // // part of the trace.
+        // unsafe {
+        //     std::ptr::copy_nonoverlapping(values.as_ptr(), row.values.as_mut_ptr(), N);
+        // }
     }
 }
 
@@ -360,7 +392,7 @@ impl<F, const N: usize> ChipUsageGetter for AccessAdapterChip<F, N> {
     }
 
     fn current_trace_height(&self) -> usize {
-        self.arena.current_len() / self.trace_width() / size_of::<AccessAdapterCols<F, N>>()
+        self.arena.records_buffer.position() as usize / size_of::<AccessAdapterCols<F, N>>()
     }
 
     fn trace_width(&self) -> usize {
