@@ -645,82 +645,6 @@ where
         self.trace_height_constraints = constraints;
     }
 
-    /// Executes a program, compute the trace heights, and returns the public values.
-    pub fn execute_and_compute_heights(
-        &self,
-        exe: impl Into<VmExe<F>>,
-        input: impl Into<Streams<F>>,
-    ) -> Result<SingleSegmentVmExecutionResult<F>, ExecutionError> {
-        let segment = {
-            let mut segment = self.execute_impl(exe.into(), input.into(), None)?;
-            segment.chip_complex.finalize_memory();
-            segment
-        };
-        let air_heights = segment.chip_complex.current_trace_heights();
-        let vm_heights = segment.chip_complex.get_internal_trace_heights();
-        let public_values = if let Some(pv_chip) = segment.chip_complex.public_values_chip() {
-            pv_chip.step.get_custom_public_values()
-        } else {
-            vec![]
-        };
-        Ok(SingleSegmentVmExecutionResult {
-            public_values,
-            air_heights,
-            vm_heights,
-        })
-    }
-
-    /// Executes a program and returns its proof input.
-    pub fn execute_and_generate<SC: StarkGenericConfig>(
-        &self,
-        committed_exe: Arc<VmCommittedExe<SC>>,
-        input: impl Into<Streams<F>>,
-    ) -> Result<ProofInput<SC>, GenerationError>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-        VC::Executor: Chip<SC>,
-        VC::Periphery: Chip<SC>,
-    {
-        let segment = self.execute_impl(committed_exe.exe.clone(), input, None)?;
-        let proof_input = tracing::info_span!("trace_gen").in_scope(|| {
-            segment.generate_proof_input(Some(committed_exe.committed_program.clone()))
-        })?;
-        Ok(proof_input)
-    }
-
-    fn execute_impl(
-        &self,
-        exe: VmExe<F>,
-        input: impl Into<Streams<F>>,
-        trace_heights: Option<&[u32]>,
-    ) -> Result<VmSegmentExecutor<F, VC, TracegenExecutionControl>, ExecutionError> {
-        let chip_complex = create_and_initialize_chip_complex(
-            &self.config,
-            exe.program.clone(),
-            None,
-            trace_heights,
-        )
-        .unwrap();
-
-        let ctrl = TracegenExecutionControl::default();
-        let mut segment = VmSegmentExecutor::new(
-            chip_complex,
-            self.trace_height_constraints.clone(),
-            exe.fn_bounds.clone(),
-            ctrl,
-        );
-
-        if let Some(overridden_heights) = self.overridden_heights.as_ref() {
-            segment.set_override_trace_heights(overridden_heights.clone());
-        }
-
-        let mut exec_state = VmSegmentState::new(0, exe.pc_start, None, input.into(), ());
-        metrics_span("execute_time_ms", || {
-            segment.execute_from_state(&mut exec_state)
-        })?;
-        Ok(segment)
-    }
-
     pub fn execute_e1(
         &self,
         exe: VmExe<F>,
@@ -777,7 +701,10 @@ where
                     .segmentation_strategy
                     .max_trace_height() as u32,
             )
-            .with_max_cells(self.config.system().segmentation_strategy.max_cells());
+            .with_max_cells(self.config.system().segmentation_strategy.max_cells())
+            // TODO(ayush): this is temporary way to prevent segmentation
+            //              add a metered execution mode with no segmentation
+            .with_segment_check_insns(u64::MAX);
         let mut executor = VmSegmentExecutor::<F, VC, _>::new(
             chip_complex,
             self.trace_height_constraints.clone(),
@@ -830,8 +757,41 @@ where
         Ok(segment.trace_heights)
     }
 
+    fn execute_impl(
+        &self,
+        exe: VmExe<F>,
+        input: impl Into<Streams<F>>,
+        trace_heights: Option<&[u32]>,
+    ) -> Result<VmSegmentExecutor<F, VC, TracegenExecutionControl>, ExecutionError> {
+        let chip_complex = create_and_initialize_chip_complex(
+            &self.config,
+            exe.program.clone(),
+            None,
+            trace_heights,
+        )
+        .unwrap();
+
+        let ctrl = TracegenExecutionControl::default();
+        let mut segment = VmSegmentExecutor::new(
+            chip_complex,
+            self.trace_height_constraints.clone(),
+            exe.fn_bounds.clone(),
+            ctrl,
+        );
+
+        if let Some(overridden_heights) = self.overridden_heights.as_ref() {
+            segment.set_override_trace_heights(overridden_heights.clone());
+        }
+
+        let mut exec_state = VmSegmentState::new(0, exe.pc_start, None, input.into(), ());
+        metrics_span("execute_time_ms", || {
+            segment.execute_from_state(&mut exec_state)
+        })?;
+        Ok(segment)
+    }
+
     /// Executes a program and returns its proof input.
-    pub fn execute_with_max_heights_and_generate<SC: StarkGenericConfig>(
+    pub fn execute_and_generate<SC: StarkGenericConfig>(
         &self,
         committed_exe: Arc<VmCommittedExe<SC>>,
         input: impl Into<Streams<F>>,
@@ -851,7 +811,7 @@ where
     }
 
     /// Executes a program, compute the trace heights, and returns the public values.
-    pub fn execute_with_max_heights_and_compute_heights(
+    pub fn execute_and_compute_heights(
         &self,
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
