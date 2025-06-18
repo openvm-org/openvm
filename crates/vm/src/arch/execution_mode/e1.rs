@@ -15,7 +15,7 @@ impl E1E2ExecutionCtx for E1Ctx {
 /// Implementation of the ExecutionControl trait using the old segmentation strategy
 #[derive(Default, derive_new::new)]
 pub struct E1ExecutionControl {
-    pub clk_end: Option<u64>,
+    pub instret_end: Option<u64>,
 }
 
 impl<F, VC> ExecutionControl<F, VC> for E1ExecutionControl
@@ -33,7 +33,8 @@ where
         state: &mut VmSegmentState<F, Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
-        self.clk_end.is_some_and(|clk_end| state.clk >= clk_end)
+        self.instret_end
+            .is_some_and(|instret_end| state.instret >= instret_end)
     }
 
     fn on_start(

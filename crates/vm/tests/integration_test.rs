@@ -798,7 +798,7 @@ fn test_hint_load_1() {
     )
     .unwrap();
 
-    let ctrl = TracegenExecutionControl::new(Some(segment.num_cycles));
+    let ctrl = TracegenExecutionControl::new(Some(segment.num_insns));
     let mut segment = VmSegmentExecutor::<F, NativeConfig, _>::new(
         chip_complex,
         vec![],
@@ -862,7 +862,7 @@ fn test_hint_load_2() {
     )
     .unwrap();
 
-    let ctrl = TracegenExecutionControl::new(Some(segment.num_cycles));
+    let ctrl = TracegenExecutionControl::new(Some(segment.num_insns));
     let mut segment = VmSegmentExecutor::<F, NativeConfig, _>::new(
         chip_complex,
         vec![],

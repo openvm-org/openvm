@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use backtrace::Backtrace;
 use openvm_instructions::{
     exe::FnBounds,
@@ -26,7 +24,7 @@ use crate::metrics::VmMetrics;
 use crate::{arch::instructions::*, system::memory::online::GuestMemory};
 
 pub struct VmSegmentState<F, Ctx> {
-    pub clk: u64,
+    pub instret: u64,
     pub pc: u32,
     pub memory: Option<GuestMemory>,
     pub streams: Streams<F>,
@@ -36,14 +34,14 @@ pub struct VmSegmentState<F, Ctx> {
 
 impl<F, Ctx> VmSegmentState<F, Ctx> {
     pub fn new(
-        clk: u64,
+        instret: u64,
         pc: u32,
         memory: Option<GuestMemory>,
         streams: Streams<F>,
         ctx: Ctx,
     ) -> Self {
         Self {
-            clk,
+            instret,
             pc,
             memory,
             streams,
@@ -137,7 +135,7 @@ where
 
             // Fetch, decode and execute single instruction
             self.execute_instruction(state, &mut prev_backtrace)?;
-            state.clk += 1;
+            state.instret += 1;
         }
         Ok(())
     }
