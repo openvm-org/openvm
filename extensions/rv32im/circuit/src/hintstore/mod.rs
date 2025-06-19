@@ -4,8 +4,7 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionError, ExecutionState,
-        MultiRowLayout, NewVmChipWrapper, RecordArena, Result, StepExecutorE1, TraceFiller,
-        TraceStep, VmStateMut,
+        InsExecutorE1, MultiRowLayout, RecordArena, Result, TraceFiller, TraceStep, VmStateMut,
     },
     system::memory::{
         offline_checker::{
@@ -593,7 +592,7 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreChip {
     }
 }
 
-impl<F> StepExecutorE1<F> for Rv32HintStoreStep
+impl<F> InsExecutorE1<F> for Rv32HintStoreStep
 where
     F: PrimeField32,
 {

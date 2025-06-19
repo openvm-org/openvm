@@ -1,18 +1,20 @@
 use std::{
     array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
+    sync::Arc,
 };
 
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyLayout, ImmInstruction, RecordArena, Result, StepExecutorE1,
-        TraceFiller, TraceStep, VmAdapterInterface, VmAirWrapper, VmCoreAir, VmStateMut,
+        AdapterTraceStep, EmptyLayout, ExecutionState, ImmInstruction, InsExecutor, InsExecutorE1,
+        InstructionExecutor, RecordArena, Result, Streams, VmAdapterInterface, VmAirWrapper,
+        VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
+        MemoryAuxColsFactory, MemoryController,
     },
 };
 use openvm_circuit_primitives::{
@@ -27,11 +29,13 @@ use openvm_instructions::{
 };
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    rap::{get_air_name, BaseAirWithPublicValues},
-    ChipUsageGetter,
+    prover::types::AirProofInput,
+    rap::{get_air_name, AnyRap, BaseAirWithPublicValues},
+    AirRef, Chip, ChipUsageGetter,
 };
 
 use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
@@ -203,77 +207,33 @@ pub struct Rv32AuipcCoreRecord {
     pub imm: u32,
 }
 
-#[derive(derive_new::new)]
 pub struct Rv32AuipcStep<AdapterAir, AdapterStep> {
-    air: VmAirWrapper<AdapterAir, Rv32AuipcCoreAir>,
+    pub air: VmAirWrapper<AdapterAir, Rv32AuipcCoreAir>,
     adapter: AdapterStep,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl<AdapterAir, AdapterStep> ChipUsageGetter for Rv32AuipcStep<AdapterAir, AdapterStep> {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
+impl<AdapterAir, AdapterStep> Rv32AuipcStep<AdapterAir, AdapterStep> {
+    pub fn new(
+        adapter_air: AdapterAir,
+        adapter_step: AdapterStep,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    ) -> Self {
+        Self {
+            air: VmAirWrapper::new(
+                adapter_air,
+                Rv32AuipcCoreAir::new(bitwise_lookup_chip.bus()),
+            ),
+            adapter: adapter_step,
+            bitwise_lookup_chip,
+        }
     }
 
-    fn trace_width(&self) -> usize {
-        BaseAir::width(&self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
-        // TODO(ayush): fix this
-        // unimplemented!()
-        0
-    }
-}
-
-impl<F, AdapterAir, AdapterStep> TraceStep<F> for Rv32AuipcStep<AdapterAir, AdapterStep>
-where
-    F: PrimeField32,
-    AdapterStep:
-        'static + AdapterTraceStep<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
-{
-    type RecordLayout = EmptyLayout<AdapterStep>;
-    type RecordMut<'a> = (AdapterStep::RecordMut<'a>, &'a mut Rv32AuipcCoreRecord);
-
-    fn get_opcode_name(&self, _: usize) -> String {
-        format!("{:?}", AUIPC)
-    }
-
-    fn execute<'buf, RA>(
-        &mut self,
-        state: VmStateMut<'buf, F, TracingMemory<F>, TracegenCtx<RA>>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()>
+    fn fill_trace_row<F>(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F])
     where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+        F: PrimeField32,
+        AdapterStep: 'static + AdapterTraceFiller<F>,
     {
-        let arena = &mut state.ctx.arenas[chip_index];
-        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
-
-        AdapterStep::start(*state.pc, state.memory, &mut adapter_record);
-
-        core_record.from_pc = *state.pc;
-        core_record.imm = instruction.c.as_canonical_u32();
-
-        let rd = run_auipc(*state.pc, core_record.imm);
-
-        self.adapter
-            .write(state.memory, instruction, &rd, &mut adapter_record);
-
-        // TODO(ayush): add increment_pc function to vmstate
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-}
-
-impl<F, AdapterAir, AdapterStep> TraceFiller<F> for Rv32AuipcStep<AdapterAir, AdapterStep>
-where
-    F: PrimeField32,
-    AdapterStep: 'static + AdapterTraceFiller<F>,
-{
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) =
             unsafe { row_slice.split_at_mut_unchecked(AdapterStep::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
@@ -311,7 +271,23 @@ where
     }
 }
 
-impl<F, AdapterAir, AdapterStep> StepExecutorE1<F> for Rv32AuipcStep<AdapterAir, AdapterStep>
+impl<AdapterAir, AdapterStep, F> InstructionExecutor<F> for Rv32AuipcStep<AdapterAir, AdapterStep> {
+    fn get_opcode_name(&self, _: usize) -> String {
+        format!("{:?}", AUIPC)
+    }
+
+    fn execute(
+        &mut self,
+        _memory: &mut MemoryController<F>,
+        _streams: &mut Streams<F>,
+        _instruction: &Instruction<F>,
+        _from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
+        unimplemented!()
+    }
+}
+
+impl<F, AdapterAir, AdapterStep> InsExecutorE1<F> for Rv32AuipcStep<AdapterAir, AdapterStep>
 where
     F: PrimeField32,
     AdapterStep: 'static
@@ -347,6 +323,97 @@ where
 
         Ok(())
     }
+}
+
+impl<AdapterAir, AdapterStep, F, RA> InsExecutor<F, RA> for Rv32AuipcStep<AdapterAir, AdapterStep>
+where
+    AdapterStep:
+        AdapterTraceStep<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]> + 'static,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyLayout<AdapterStep>,
+        (AdapterStep::RecordMut<'buf>, &'buf mut Rv32AuipcCoreRecord),
+    >,
+{
+    fn execute_tracegen(
+        &mut self,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()>
+    where
+        F: PrimeField32,
+    {
+        let arena = &mut state.ctx.arenas[chip_index];
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
+
+        AdapterStep::start(*state.pc, state.memory, &mut adapter_record);
+
+        core_record.from_pc = *state.pc;
+        core_record.imm = instruction.c.as_canonical_u32();
+
+        let rd = run_auipc(*state.pc, core_record.imm);
+
+        self.adapter
+            .write(state.memory, instruction, &rd, &mut adapter_record);
+
+        // TODO(ayush): add increment_pc function to vmstate
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+}
+
+impl<AdapterAir, AdapterStep> ChipUsageGetter for Rv32AuipcStep<AdapterAir, AdapterStep> {
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+
+    fn trace_width(&self) -> usize {
+        // TODO(ayush): fix this
+        // unimplemented!()
+        0
+    }
+
+    fn current_trace_height(&self) -> usize {
+        // TODO(ayush): fix this
+        // unimplemented!()
+        0
+    }
+}
+
+impl<SC, AdapterAir, AdapterStep> Chip<SC> for Rv32AuipcStep<AdapterAir, AdapterStep>
+where
+    SC: StarkGenericConfig,
+    Val<SC>: PrimeField32,
+    AdapterAir: BaseAir<Val<SC>>,
+    VmAirWrapper<AdapterAir, Rv32AuipcCoreAir>: Clone + AnyRap<SC> + 'static,
+{
+    fn air(&self) -> AirRef<SC> {
+        Arc::new(self.air.clone())
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        unimplemented!("generate_air_proof_input isn't implemented")
+    }
+
+    // fn trace_width(&self) -> usize {
+    //     BaseAir::width(&self.air)
+    // }
+
+    // fn generate_air_proof_input_with_trace(
+    //     self,
+    //     mut trace: RowMajorMatrix<F>,
+    // ) -> AirProofInput<SC> {
+    //     assert!(
+    //         trace.height().is_power_of_two(),
+    //         "Trace height must be a power of two"
+    //     );
+    //     self.fill_trace(&mut trace.values);
+
+    //     let public_values = vec![];
+    //     AirProofInput::simple(trace, public_values)
+    // }
 }
 
 // returns rd_data

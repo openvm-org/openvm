@@ -12,6 +12,8 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, AirBuilderWithPublicValues, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_maybe_rayon::prelude::{ParallelIterator, ParallelSliceMut},
     prover::types::AirProofInput,
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues},
     AirRef, Chip, ChipUsageGetter,
@@ -23,7 +25,7 @@ use crate::{
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, BasicAdapterInterface, EmptyLayout, ExecutionState, InsExecutor,
         InsExecutorE1, InstructionExecutor, MinimalInstruction, RecordArena, Result, Streams,
-        TraceFiller, VmAirWrapper, VmCoreAir, VmStateMut,
+        VmAirWrapper, VmCoreAir, VmStateMut,
     },
     system::{
         memory::{
@@ -124,66 +126,14 @@ pub struct PublicValuesCoreStep<AdapterAir, AdapterStep, F> {
     air: VmAirWrapper<AdapterAir, PublicValuesCoreAir>,
     adapter: AdapterStep,
     // TODO(ayush): put air here and take from air
-    encoder: Encoder,
     // Mutex is to make the struct Sync. But it actually won't be accessed by multiple threads.
     pub(crate) custom_pvs: Mutex<Vec<Option<F>>>,
-}
-
-impl<AdapterAir, AdapterStep, F> ChipUsageGetter
-    for PublicValuesCoreStep<AdapterAir, AdapterStep, F>
-where
-    F: Field,
-    AdapterAir: BaseAir<F>,
-{
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-
-    fn trace_width(&self) -> usize {
-        BaseAir::width(&self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
-        // TODO(ayush): fix this
-        // unimplemented!()
-        0
-    }
-}
-
-impl<SC, AdapterAir, AdapterStep> Chip<SC>
-    for PublicValuesCoreStep<AdapterAir, AdapterStep, Val<SC>>
-where
-    SC: StarkGenericConfig,
-    Val<SC>: PrimeField32,
-    AdapterAir: BaseAir<Val<SC>>,
-    VmAirWrapper<AdapterAir, PublicValuesCoreAir>: Clone + AnyRap<SC> + 'static,
-{
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        unimplemented!("generate_air_proof_input isn't implemented")
-    }
-
-    // fn generate_air_proof_input_with_trace(
-    //     self,
-    //     mut trace: RowMajorMatrix<F>,
-    // ) -> AirProofInput<SC> {
-    //     assert!(
-    //         trace.height().is_power_of_two(),
-    //         "Trace height must be a power of two"
-    //     );
-    //     self.fill_trace(&mut trace.values);
-
-    //     let public_values = self.generate_public_values();
-    //     AirProofInput::simple(trace, public_values)
-    // }
 }
 
 impl<AdapterAir, AdapterStep, F> PublicValuesCoreStep<AdapterAir, AdapterStep, F>
 where
     F: PrimeField32,
+    AdapterStep: 'static + AdapterTraceFiller<F>,
 {
     /// **Note:** `max_degree` is the maximum degree of the constraint polynomials to represent the
     /// flags. If you want the overall AIR's constraint degree to be `<= max_constraint_degree`,
@@ -200,55 +150,21 @@ where
                 PublicValuesCoreAir::new(num_custom_pvs, max_degree),
             ),
             adapter: adapter_step,
-            encoder: Encoder::new(num_custom_pvs, max_degree, true),
             custom_pvs: Mutex::new(vec![None; num_custom_pvs]),
         }
     }
+
     pub fn get_custom_public_values(&self) -> Vec<Option<F>> {
         self.custom_pvs.lock().unwrap().clone()
     }
-}
 
-impl<AdapterAir, AdapterStep, F> PublicValuesCoreStep<AdapterAir, AdapterStep, F>
-where
-    F: PrimeField32,
-{
     pub fn generate_public_values(&self) -> Vec<F> {
         self.get_custom_public_values()
             .into_iter()
             .map(|x| x.unwrap_or(F::ZERO))
             .collect()
     }
-}
 
-impl<AdapterAir, AdapterStep, F> InstructionExecutor<F>
-    for PublicValuesCoreStep<AdapterAir, AdapterStep, F>
-where
-    F: PrimeField32,
-{
-    fn execute(
-        &mut self,
-        _memory: &mut MemoryController<F>,
-        _streams: &mut Streams<F>,
-        _instruction: &Instruction<F>,
-        _from_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>> {
-        unimplemented!()
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            PublishOpcode::from_usize(opcode - PublishOpcode::CLASS_OFFSET)
-        )
-    }
-}
-
-impl<AdapterAir, AdapterStep, F> TraceFiller<F> for PublicValuesCoreStep<AdapterAir, AdapterStep, F>
-where
-    F: PrimeField32,
-    AdapterStep: 'static + AdapterTraceFiller<F>,
-{
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) =
             unsafe { row_slice.split_at_mut_unchecked(AdapterStep::WIDTH) };
@@ -257,7 +173,7 @@ where
         let cols = PublicValuesCoreColsView::<_, &mut F>::borrow_mut(core_row);
 
         let idx: usize = record.index.as_canonical_u32() as usize;
-        let pt = self.encoder.get_flag_pt(idx);
+        let pt = self.air.core.encoder.get_flag_pt(idx);
 
         cols.custom_pv_vars
             .into_iter()
@@ -269,6 +185,55 @@ where
         *cols.index = record.index;
         *cols.value = record.value;
         *cols.is_valid = F::ONE;
+    }
+
+    fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, _row_slice: &mut [F]) {
+        // By default, the row is filled with zeroes
+    }
+
+    fn fill_trace(
+        &self,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        trace: &mut RowMajorMatrix<F>,
+        rows_used: usize,
+    ) where
+        Self: Send + Sync,
+        F: Send + Sync + Clone,
+    {
+        let width = trace.width();
+        trace.values[..rows_used * width]
+            .par_chunks_exact_mut(width)
+            .for_each(|row_slice| {
+                self.fill_trace_row(mem_helper, row_slice);
+            });
+        trace.values[rows_used * width..]
+            .par_chunks_exact_mut(width)
+            .for_each(|row_slice| {
+                self.fill_dummy_trace_row(mem_helper, row_slice);
+            });
+    }
+}
+
+impl<AdapterAir, AdapterStep, F> InstructionExecutor<F>
+    for PublicValuesCoreStep<AdapterAir, AdapterStep, F>
+where
+    F: PrimeField32,
+{
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            PublishOpcode::from_usize(opcode - PublishOpcode::CLASS_OFFSET)
+        )
+    }
+
+    fn execute(
+        &mut self,
+        _memory: &mut MemoryController<F>,
+        _streams: &mut Streams<F>,
+        _instruction: &Instruction<F>,
+        _from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
+        unimplemented!()
     }
 }
 
@@ -367,4 +332,56 @@ where
 
         Ok(())
     }
+}
+
+impl<AdapterAir, AdapterStep, F> ChipUsageGetter
+    for PublicValuesCoreStep<AdapterAir, AdapterStep, F>
+where
+    F: Field,
+    AdapterAir: BaseAir<F>,
+{
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+
+    fn trace_width(&self) -> usize {
+        BaseAir::width(&self.air)
+    }
+
+    fn current_trace_height(&self) -> usize {
+        // TODO(ayush): fix this
+        // unimplemented!()
+        0
+    }
+}
+
+impl<SC, AdapterAir, AdapterStep> Chip<SC>
+    for PublicValuesCoreStep<AdapterAir, AdapterStep, Val<SC>>
+where
+    SC: StarkGenericConfig,
+    Val<SC>: PrimeField32,
+    AdapterAir: BaseAir<Val<SC>>,
+    VmAirWrapper<AdapterAir, PublicValuesCoreAir>: Clone + AnyRap<SC> + 'static,
+{
+    fn air(&self) -> AirRef<SC> {
+        Arc::new(self.air.clone())
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        unimplemented!("generate_air_proof_input isn't implemented")
+    }
+
+    // fn generate_air_proof_input_with_trace(
+    //     self,
+    //     mut trace: RowMajorMatrix<F>,
+    // ) -> AirProofInput<SC> {
+    //     assert!(
+    //         trace.height().is_power_of_two(),
+    //         "Trace height must be a power of two"
+    //     );
+    //     self.fill_trace(&mut trace.values);
+
+    //     let public_values = self.generate_public_values();
+    //     AirProofInput::simple(trace, public_values)
+    // }
 }

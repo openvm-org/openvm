@@ -1,5 +1,3 @@
-use openvm_circuit::arch::{NewVmChipWrapper, VmAirWrapper};
-
 use super::adapters::{
     Rv32BaseAluAdapterAir, Rv32BaseAluAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
@@ -10,10 +8,8 @@ pub use core::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv32LessThanAir =
-    VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
 pub type Rv32LessThanChip = LessThanStep<
-    Rv32LessThanAir,
+    Rv32BaseAluAdapterAir,
     Rv32BaseAluAdapterStep<RV32_CELL_BITS>,
     RV32_REGISTER_NUM_LIMBS,
     RV32_CELL_BITS,

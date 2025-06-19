@@ -1,35 +1,29 @@
 use std::{
-    any::type_name,
     array::from_fn,
     borrow::{Borrow, BorrowMut},
     io::Cursor,
     marker::PhantomData,
     ptr::slice_from_raw_parts_mut,
-    sync::Arc,
 };
 
-use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::types::AirProofInput,
-    rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use serde::{Deserialize, Serialize};
 
 use super::{
     execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
-    ExecutionState, InsExecutor, InsExecutorE1, InstructionExecutor, Result, Streams, VmStateMut,
+    Result, VmStateMut,
 };
 use crate::system::memory::{
     online::{GuestMemory, TracingMemory},
-    MemoryAuxColsFactory, MemoryController, SharedMemoryHelper,
+    MemoryAuxColsFactory,
 };
 
 /// The interface between primitive AIR and machine adapter AIR.

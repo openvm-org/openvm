@@ -7,7 +7,7 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyLayout, RecordArena, Result, SignedImmInstruction, StepExecutorE1,
+        AdapterTraceStep, EmptyLayout, InsExecutorE1, RecordArena, Result, SignedImmInstruction,
         TraceFiller, TraceStep, VmAdapterInterface, VmAirWrapper, VmCoreAir, VmStateMut,
     },
     system::memory::{
@@ -339,7 +339,7 @@ where
     }
 }
 
-impl<F, AdapterAir, AdapterStep> StepExecutorE1<F> for Rv32JalrStep<AdapterAir, AdapterStep>
+impl<F, AdapterAir, AdapterStep> InsExecutorE1<F> for Rv32JalrStep<AdapterAir, AdapterStep>
 where
     F: PrimeField32,
     AdapterStep: 'static

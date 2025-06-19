@@ -219,19 +219,14 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         };
 
         let base_alu_chip = Rv32BaseAluChip::new(
-            VmAirWrapper::new(
-                Rv32BaseAluAdapterAir::new(
-                    ExecutionBridge::new(execution_bus, program_bus),
-                    memory_bridge,
-                    bitwise_lu_chip.bus(),
-                ),
-                BaseAluCoreAir::new(bitwise_lu_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
+            Rv32BaseAluAdapterAir::new(
+                ExecutionBridge::new(execution_bus, program_bus),
+                memory_bridge,
+                bitwise_lu_chip.bus(),
             ),
-            Rv32BaseAluStep::new(
-                Rv32BaseAluAdapterStep::new(bitwise_lu_chip.clone()),
-                bitwise_lu_chip.clone(),
-                BaseAluOpcode::CLASS_OFFSET,
-            ),
+            Rv32BaseAluAdapterStep::new(bitwise_lu_chip.clone()),
+            bitwise_lu_chip.clone(),
+            BaseAluOpcode::CLASS_OFFSET,
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -403,16 +398,13 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         );
         inventory.add_executor(jalr_chip, Rv32JalrOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let auipc_chip = Rv32AuipcChip::<F>::new(
-            VmAirWrapper::new(
-                Rv32RdWriteAdapterAir::new(
-                    memory_bridge,
-                    ExecutionBridge::new(execution_bus, program_bus),
-                ),
-                Rv32AuipcCoreAir::new(bitwise_lu_chip.bus()),
+        let auipc_chip = Rv32AuipcChip::new(
+            Rv32RdWriteAdapterAir::new(
+                memory_bridge,
+                ExecutionBridge::new(execution_bus, program_bus),
             ),
-            Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_lu_chip.clone()),
-            builder.system_base().memory_controller.helper(),
+            Rv32RdWriteAdapterStep::new(),
+            bitwise_lu_chip.clone(),
         );
         inventory.add_executor(
             auipc_chip,

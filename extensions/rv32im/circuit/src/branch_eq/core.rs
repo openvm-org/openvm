@@ -4,7 +4,7 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyLayout, ImmInstruction, RecordArena, Result, StepExecutorE1,
+        AdapterTraceStep, EmptyLayout, ImmInstruction, InsExecutorE1, RecordArena, Result,
         TraceFiller, TraceStep, VmAdapterInterface, VmAirWrapper, VmCoreAir, VmStateMut,
     },
     system::memory::{
@@ -146,7 +146,6 @@ pub struct BranchEqualCoreRecord<const NUM_LIMBS: usize> {
     pub local_opcode: u8,
 }
 
-#[derive(derive_new::new)]
 pub struct BranchEqualStep<AdapterAir, AdapterStep, const NUM_LIMBS: usize> {
     air: VmAirWrapper<AdapterAir, BranchEqualCoreAir<NUM_LIMBS>>,
     adapter: AdapterStep,
@@ -262,7 +261,7 @@ where
     }
 }
 
-impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize> StepExecutorE1<F>
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize> InsExecutorE1<F>
     for BranchEqualStep<AdapterAir, AdapterStep, NUM_LIMBS>
 where
     F: PrimeField32,

@@ -9,7 +9,7 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyLayout, MinimalInstruction, RecordArena, Result, StepExecutorE1,
+        AdapterTraceStep, EmptyLayout, InsExecutorE1, MinimalInstruction, RecordArena, Result,
         TraceFiller, TraceStep, VmAdapterInterface, VmAirWrapper, VmCoreAir, VmStateMut,
     },
     system::memory::{
@@ -593,7 +593,7 @@ where
     }
 }
 
-impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<F>
     for DivRemStep<AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,

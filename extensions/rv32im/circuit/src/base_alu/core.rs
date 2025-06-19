@@ -8,8 +8,9 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyLayout, MinimalInstruction, RecordArena, Result, StepExecutorE1,
-        TraceFiller, TraceStep, VmAdapterInterface, VmAirWrapper, VmCoreAir, VmStateMut,
+        AdapterTraceStep, EmptyLayout, InsExecutor, InsExecutorE1, InstructionExecutor,
+        MinimalInstruction, RecordArena, Result, TraceFiller, TraceStep, VmAdapterInterface,
+        VmAirWrapper, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -29,6 +30,7 @@ use openvm_stark_backend::{
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::{get_air_name, BaseAirWithPublicValues},
+    Chip, ChipUsageGetter,
 };
 use strum::IntoEnumIterator;
 
@@ -182,96 +184,33 @@ pub struct BaseAluCoreRecord<const NUM_LIMBS: usize> {
     pub local_opcode: u8,
 }
 
-#[derive(derive_new::new)]
 pub struct BaseAluStep<AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     air: VmAirWrapper<AdapterAir, BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>>,
     adapter: AdapterStep,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
-    pub offset: usize,
 }
 
-impl<AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> ChipUsageGetter
-    for BaseAluStep<AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
-{
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-
-    fn trace_width(&self) -> usize {
-        BaseAir::width(&self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
-        // TODO(ayush): fix this
-        // unimplemented!()
-        0
-    }
-}
-
-impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F>
-    for BaseAluStep<AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    AdapterStep: 'static
-        + for<'a> AdapterTraceStep<
-            F,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-        >,
-{
-    /// Instructions that use one trace row per instruction have implicit layout
-    type RecordLayout = EmptyLayout<AdapterStep>;
-    type RecordMut<'a> = (
-        AdapterStep::RecordMut<'a>,
-        &'a mut BaseAluCoreRecord<NUM_LIMBS>,
-    );
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", BaseAluOpcode::from_usize(opcode - self.offset))
-    }
-
-    fn execute<'buf, RA>(
-        &mut self,
-        state: VmStateMut<'buf, F, TracingMemory<F>, TracegenCtx<RA>>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
-        let Instruction { opcode, .. } = instruction;
-
-        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-
-        let arena = &mut state.ctx.arenas[chip_index];
-        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
-
-        AdapterStep::start(*state.pc, state.memory, &mut adapter_record);
-
-        [core_record.b, core_record.c] = self
-            .adapter
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
-
-        let rd = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &core_record.b, &core_record.c);
-
-        core_record.local_opcode = local_opcode as u8;
-
-        self.adapter
-            .write(state.memory, instruction, &[rd].into(), &mut adapter_record);
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-}
-
-impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for BaseAluStep<AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
+impl<AdapterAir, AdapterStep> BaseAluStep<AdapterAir, AdapterStep>
 where
     F: PrimeField32,
     AdapterStep: 'static + AdapterTraceFiller<F>,
 {
+    pub fn new(
+        adapter_air: AdapterAir,
+        adapter_step: AdapterStep,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+        offset: usize,
+    ) -> Self {
+        Self {
+            air: VmAirWrapper::new(
+                adapter_air,
+                BaseAluCoreAir::new(bitwise_lookup_chip.bus(), offset),
+            ),
+            adapter: adapter_step,
+            bitwise_lookup_chip,
+        }
+    }
+
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) =
             unsafe { row_slice.split_at_mut_unchecked(AdapterStep::WIDTH) };
@@ -315,7 +254,28 @@ where
     }
 }
 
-impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    InstructionExecutor<F> for BaseAluStep<AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
+{
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            BaseAluOpcode::from_usize(opcode - self.air.core.offset)
+        )
+    }
+
+    fn execute(
+        &mut self,
+        _memory: &mut MemoryController<F>,
+        _streams: &mut Streams<F>,
+        _instruction: &Instruction<F>,
+        _from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
+        unimplemented!()
+    }
+}
+
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<F>
     for BaseAluStep<AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
@@ -358,6 +318,101 @@ where
 
         Ok(())
     }
+}
+
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutor<F>
+    for BaseAluStep<AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
+where
+    AdapterStep: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
+            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
+        >,
+{
+    fn execute_tracegen(
+        &mut self,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()>
+    where
+        F: PrimeField32,
+    {
+        let Instruction { opcode, .. } = instruction;
+
+        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+
+        let arena = &mut state.ctx.arenas[chip_index];
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
+
+        AdapterStep::start(*state.pc, state.memory, &mut adapter_record);
+
+        [core_record.b, core_record.c] = self
+            .adapter
+            .read(state.memory, instruction, &mut adapter_record)
+            .into();
+
+        let rd = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &core_record.b, &core_record.c);
+
+        core_record.local_opcode = local_opcode as u8;
+
+        self.adapter
+            .write(state.memory, instruction, &[rd].into(), &mut adapter_record);
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+}
+
+impl<AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> ChipUsageGetter
+    for BaseAluStep<AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
+{
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+
+    fn trace_width(&self) -> usize {
+        BaseAir::width(&self.air)
+    }
+
+    fn current_trace_height(&self) -> usize {
+        // TODO(ayush): fix this
+        // unimplemented!()
+        0
+    }
+}
+
+impl<SC, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> Chip<SC>
+    for BaseAluStep<AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
+where
+    SC: StarkGenericConfig,
+    Val<SC>: PrimeField32,
+    AdapterAir: BaseAir<Val<SC>>,
+    VmAirWrapper<AdapterAir, Rv32AuipcCoreAir>: Clone + AnyRap<SC> + 'static,
+{
+    fn air(&self) -> AirRef<SC> {
+        Arc::new(self.air.clone())
+    }
+
+    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+        unimplemented!("generate_air_proof_input isn't implemented")
+    }
+
+    // fn generate_air_proof_input_with_trace(
+    //     self,
+    //     mut trace: RowMajorMatrix<F>,
+    // ) -> AirProofInput<SC> {
+    //     assert!(
+    //         trace.height().is_power_of_two(),
+    //         "Trace height must be a power of two"
+    //     );
+    //     self.fill_trace(&mut trace.values);
+
+    //     let public_values = vec![];
+    //     AirProofInput::simple(trace, public_values)
+    // }
 }
 
 #[inline(always)]

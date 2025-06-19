@@ -1,5 +1,3 @@
-use openvm_circuit::arch::{NewVmChipWrapper, VmAirWrapper};
-
 use crate::adapters::{Rv32JalrAdapterAir, Rv32JalrAdapterStep};
 
 mod core;
@@ -8,5 +6,4 @@ pub use core::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv32JalrAir = VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir>;
-pub type Rv32JalrChip = Rv32JalrStep<Rv32JalrAir, Rv32JalrAdapterStep>;
+pub type Rv32JalrChip = Rv32JalrStep<Rv32JalrAdapterAir, Rv32JalrAdapterStep>;

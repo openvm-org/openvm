@@ -4,7 +4,7 @@ use itertools::izip;
 use openvm_circuit::arch::{
     execution_mode::tracegen::TracegenCtx,
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    DenseRecordArena, MatrixRecordArena, NewVmChipWrapper, VmAirWrapper,
+    DenseRecordArena, MatrixRecordArena,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -24,14 +24,14 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreAir, Rv32AuipcCoreCols, Rv32AuipcStep};
+use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreCols};
 use crate::{
     adapters::{
         Rv32RdWriteAdapterAir, Rv32RdWriteAdapterRecord, Rv32RdWriteAdapterStep, RV32_CELL_BITS,
         RV32_REGISTER_NUM_LIMBS,
     },
     test_utils::get_verification_error,
-    Rv32AuipcAir, Rv32AuipcCoreRecord, Rv32AuipcStepWithAdapter,
+    Rv32AuipcCoreRecord,
 };
 
 const IMM_BITS: usize = 24;
@@ -41,42 +41,16 @@ type F = BabyBear;
 fn create_test_chip(
     tester: &VmChipTestBuilder<F>,
 ) -> (
-    Rv32AuipcChip<F>,
+    Rv32AuipcChip,
     SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let chip = Rv32AuipcChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
-            Rv32AuipcCoreAir::new(bitwise_bus),
-        ),
-        Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_chip.clone()),
-        tester.memory_helper(),
-    );
-
-    (chip, bitwise_chip)
-}
-
-type DenseChip<F> = NewVmChipWrapper<F, Rv32AuipcAir, Rv32AuipcStepWithAdapter>;
-
-fn create_dense_chip(
-    tester: &VmChipTestBuilder<F>,
-) -> (
-    DenseChip<F>,
-    SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-) {
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-
-    let chip = DenseChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
-            Rv32AuipcCoreAir::new(bitwise_bus),
-        ),
-        Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_chip.clone()),
-        tester.memory_helper(),
+    let chip = Rv32AuipcChip::new(
+        Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
+        Rv32RdWriteAdapterStep::new(),
+        bitwise_chip.clone(),
     );
 
     (chip, bitwise_chip)
@@ -88,7 +62,7 @@ fn create_dense_chip(
 fn rand_auipc_dense_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, _bitwise_chip) = create_dense_chip(&tester);
+    let (mut chip, _bitwise_chip) = create_test_chip(&tester);
 
     let mut ctx =
         TracegenCtx::<DenseRecordArena>::new_with_capacity(
@@ -130,7 +104,7 @@ fn rand_auipc_dense_test() {
 
 fn set_and_execute<RA>(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut Rv32AuipcChip<F>,
+    chip: &mut Rv32AuipcChip,
     ctx: &mut TracegenCtx<RA>,
     rng: &mut StdRng,
     opcode: Rv32AuipcOpcode,

@@ -7,7 +7,7 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyLayout, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
+        AdapterTraceStep, EmptyLayout, InsExecutorE1, RecordArena, Result, TraceFiller, TraceStep,
         VmAdapterInterface, VmAirWrapper, VmCoreAir, VmStateMut,
     },
     system::memory::{
@@ -321,7 +321,7 @@ where
         core_row.opcode_loadb_flag0 = F::from_bool(record.is_byte && ((shift & 1) == 0));
     }
 }
-impl<F, AdapterAir, AdapterStep, const NUM_CELLS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
+impl<F, AdapterAir, AdapterStep, const NUM_CELLS: usize, const LIMB_BITS: usize> InsExecutorE1<F>
     for LoadSignExtendStep<AdapterAir, AdapterStep, NUM_CELLS, LIMB_BITS>
 where
     F: PrimeField32,
