@@ -4,7 +4,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     arch::{execution_mode::E1E2ExecutionCtx, VmStateMut},
-    system::memory::online::GuestMemory,
+    system::memory::{offline_checker::MemoryWriteAuxCols, online::GuestMemory},
 };
 
 #[inline(always)]
@@ -149,6 +149,21 @@ pub fn tracing_write_native<F, const BLOCK_SIZE: usize>(
     let (t_prev, data_prev) = timed_write_native(memory, ptr, vals);
     *prev_timestamp = t_prev;
     *prev_data = data_prev;
+}
+
+/// Writes `ptr, vals` into memory and records the previous timestamp and data.
+#[inline(always)]
+pub fn tracing_write_native_inplace<F, const BLOCK_SIZE: usize>(
+    memory: &mut TracingMemory<F>,
+    ptr: u32,
+    vals: &[F; BLOCK_SIZE],
+    cols: &mut MemoryWriteAuxCols<F, BLOCK_SIZE>,
+) where
+    F: PrimeField32,
+{
+    let (t_prev, data_prev) = timed_write_native(memory, ptr, vals);
+    cols.base.set_prev(F::from_canonical_u32(t_prev));
+    cols.prev_data = data_prev;
 }
 
 /// Reads value at `_ptr` from memory and records the previous timestamp.
