@@ -247,6 +247,10 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
                                 } else {
                                     -x
                                 };
+                                // handle the case where x = 0
+                                if correct_x.as_le_bytes()[0] & 1 != *rec_id & 1 {
+                                    return None;
+                                }
                                 // In order for sqrt() to return Some, we are guaranteed that x * x == x_squared, which already proves (correct_x, y) is on the curve
                                 Some(<#struct_name as ::openvm_ecc_guest::edwards::TwistedEdwardsPoint>::from_xy_unchecked(correct_x, y))
                             }
