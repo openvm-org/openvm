@@ -880,6 +880,7 @@ where
             let alpha = record.common.alpha;
             let is_init = record.common.is_init;
             let write_a = F::from_bool(!is_init);
+            let result = record.common.result;
 
             {
                 // ins2 row
@@ -954,7 +955,7 @@ where
                 cols.pc = F::from_canonical_u32(record.common.from_pc);
 
                 cols.prefix.data.alpha = alpha;
-                cols.prefix.data.result = record.common.result;
+                cols.prefix.data.result = result;
                 cols.prefix.data.idx = F::from_canonical_usize(length);
                 cols.prefix.data.b_ptr = record.common.b_ptr;
                 cols.prefix.data.write_a = write_a;
