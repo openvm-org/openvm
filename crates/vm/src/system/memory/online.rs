@@ -363,7 +363,7 @@ impl<F: PrimeField32> TracingMemory<F> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn record_access<T, const BLOCK_SIZE: usize>(
+    pub(crate) fn record_access<T, const BLOCK_SIZE: usize>(
         &mut self,
         address_space: usize,
         pointer: usize,
@@ -392,12 +392,19 @@ impl<F: PrimeField32> TracingMemory<F> {
                 });
             *record_mut.address_space = address_space as u32;
             *record_mut.pointer = pointer as u32;
-            *record_mut.block_size = block_size as u32;
-            let data_slice =
-                unsafe { std::slice::from_raw_parts(values.as_ptr() as *const u8, block_size) };
+            *record_mut.block_size = BLOCK_SIZE as u32;
+            let data_slice = unsafe {
+                std::slice::from_raw_parts(
+                    values.as_ptr() as *const u8,
+                    BLOCK_SIZE * size_of::<T>(),
+                )
+            };
             record_mut.data.copy_from_slice(data_slice);
             let prev_data_slice = unsafe {
-                std::slice::from_raw_parts(prev_values.as_ptr() as *const u8, block_size)
+                std::slice::from_raw_parts(
+                    prev_values.as_ptr() as *const u8,
+                    BLOCK_SIZE * size_of::<T>(),
+                )
             };
             record_mut.prev_data.copy_from_slice(prev_data_slice);
             if let Some(prev_timestamps) = prev_timestamps {
@@ -462,12 +469,16 @@ impl<F: PrimeField32> TracingMemory<F> {
         );
 
         self.set_meta_block(
-            address_space as usize,
-            pointer as usize,
+            address_space,
+            pointer,
             align,
             BLOCK_SIZE,
             self.timestamp,
-            self.access_adapter_inventory.current_size::<BLOCK_SIZE>() as u32,
+            if BLOCK_SIZE == 1 {
+                0
+            } else {
+                self.access_adapter_inventory.current_size::<BLOCK_SIZE>() as u32
+            },
         );
 
         *prev_ts.iter().max().unwrap()
@@ -586,7 +597,6 @@ impl<F: PrimeField32> TracingMemory<F> {
     {
         self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
         let values = self.data.read(address_space, pointer);
-        self.timestamp += 1;
         let t_prev = self.prev_access_time::<T, BLOCK_SIZE>(
             address_space as usize,
             pointer as usize,
@@ -594,6 +604,7 @@ impl<F: PrimeField32> TracingMemory<F> {
             &values,
             &values,
         );
+        self.timestamp += 1;
 
         (t_prev, values)
     }
@@ -631,7 +642,6 @@ impl<F: PrimeField32> TracingMemory<F> {
     {
         self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
         let values_prev = self.data.replace(address_space, pointer, values);
-        self.timestamp += 1;
         let t_prev = self.prev_access_time::<T, BLOCK_SIZE>(
             address_space as usize,
             pointer as usize,
@@ -639,6 +649,7 @@ impl<F: PrimeField32> TracingMemory<F> {
             values,
             &values_prev,
         );
+        self.timestamp += 1;
 
         (t_prev, values_prev)
     }

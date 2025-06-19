@@ -18,6 +18,7 @@ pub(crate) struct AccessRecordMut<'a> {
     // TODO(AG): optimize with some `Option` serialization stuff
 }
 
+#[derive(Debug)]
 pub(crate) struct AccessLayout {
     /// The size of the block in elements.
     pub block_size: usize,
@@ -31,7 +32,7 @@ pub(crate) struct AccessLayout {
 pub(crate) const MERGE_BEFORE_FLAG: u32 = 1 << 30;
 pub(crate) const SPLIT_AFTER_FLAG: u32 = 1 << 31;
 
-impl<'a> SizedRecord<AccessLayout, AccessRecordMut<'a>> for DenseRecordArena {
+impl SizedRecord<AccessLayout, AccessRecordMut<'_>> for DenseRecordArena {
     fn size(&self, layout: &AccessLayout) -> usize {
         debug_assert_eq!(layout.cell_size * layout.type_size, 4);
         4 * size_of::<u32>() // all individual u32 fields
@@ -71,7 +72,7 @@ impl<'a> RecordArena<'a, AccessLayout, AccessRecordMut<'a>> for DenseRecordArena
         // data: [u8] (block_size * type_size bytes)
         let data = unsafe {
             std::slice::from_raw_parts_mut(
-                bytes.as_mut_ptr().add(offset) as *mut u8,
+                bytes.as_mut_ptr().add(offset),
                 layout.block_size * layout.type_size,
             )
         };
@@ -80,7 +81,7 @@ impl<'a> RecordArena<'a, AccessLayout, AccessRecordMut<'a>> for DenseRecordArena
         // prev_data: [u8] (block_size * type_size bytes)
         let prev_data = unsafe {
             std::slice::from_raw_parts_mut(
-                bytes.as_mut_ptr().add(offset) as *mut u8,
+                bytes.as_mut_ptr().add(offset),
                 layout.block_size * layout.type_size,
             )
         };

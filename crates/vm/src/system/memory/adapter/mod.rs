@@ -21,7 +21,7 @@ use openvm_stark_backend::{
 use crate::{
     arch::{DenseRecordArena, RecordArena},
     system::memory::{
-        adapter::records::{AccessLayout, AccessRecordMut},
+        adapter::records::{AccessLayout, AccessRecordMut, SPLIT_AFTER_FLAG},
         offline_checker::MemoryBus,
         MemoryAddress,
     },
@@ -143,6 +143,11 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         self.chips[index].alloc_record(layout)
     }
 
+    pub(crate) fn mark_to_split(&mut self, block_size: usize, offset: usize) {
+        let index = get_chip_index(block_size);
+        self.chips[index].mark_to_split(offset);
+    }
+
     pub(crate) fn execute_split(
         &mut self,
         address: MemoryAddress<u32, u32>,
@@ -179,6 +184,7 @@ pub trait GenericAccessAdapterChipTrait<F> {
 
     fn current_size(&self) -> usize;
     fn alloc_record(&mut self, layout: AccessLayout) -> AccessRecordMut;
+    fn mark_to_split(&mut self, offset: usize);
 
     fn execute_split(&mut self, address: MemoryAddress<u32, u32>, values: &[F], timestamp: u32)
     where
@@ -295,6 +301,11 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
 
     fn alloc_record(&mut self, layout: AccessLayout) -> AccessRecordMut<'_> {
         self.arena.alloc(layout)
+    }
+
+    fn mark_to_split(&mut self, offset: usize) {
+        let timestamp_and_mask = self.arena.transmute_from::<'_, u32>(offset);
+        *timestamp_and_mask |= SPLIT_AFTER_FLAG;
     }
 
     fn execute_split(&mut self, address: MemoryAddress<u32, u32>, values: &[F], timestamp: u32)
