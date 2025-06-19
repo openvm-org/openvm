@@ -265,7 +265,6 @@ impl<T: Copy, const PAGE_SIZE: usize> Iterator for PagedVecIter<'_, T, PAGE_SIZE
             && self.vec.pages[self.current_page].is_none()
         {
             self.current_page += 1;
-            debug_assert_eq!(self.current_index_in_page, 0);
             self.current_index_in_page = 0;
         }
         let global_index = self.current_page * PAGE_SIZE + self.current_index_in_page;

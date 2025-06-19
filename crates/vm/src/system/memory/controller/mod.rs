@@ -349,7 +349,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     /// Returns the equipartition of the touched blocks.
-    /// Has side effects (namely setting the traces for the access adapters).
+    /// Has side effects.
     fn touched_blocks_to_equipartition<const CHUNK: usize, const INITIAL_MERGES: bool>(
         &mut self,
         touched_blocks: Vec<((u32, u32), AccessMetadata)>,
@@ -363,6 +363,7 @@ impl<F: PrimeField32> MemoryController<F> {
             let AccessMetadata {
                 timestamp,
                 block_size,
+                offset,
             } = metadata;
             if current_cnt > 0
                 && (current_address.address_space != addr_space
@@ -372,11 +373,14 @@ impl<F: PrimeField32> MemoryController<F> {
                     self.memory.min_block_size[current_address.address_space as usize] as usize;
                 current_values[current_cnt..].fill(F::ZERO);
                 current_timestamps[(current_cnt / min_block_size)..].fill(INITIAL_TIMESTAMP);
-                self.memory.execute_merges::<false>(
-                    current_address,
+                self.memory.record_access::<F, CHUNK>(
+                    current_address.address_space as usize,
+                    current_address.pointer as usize,
                     min_block_size,
+                    *current_timestamps.iter().max().unwrap(),
+                    Some(&current_timestamps),
                     &current_values,
-                    &current_timestamps,
+                    &current_values,
                 );
                 final_memory.insert(
                     (current_address.address_space, current_address.pointer),
@@ -413,24 +417,12 @@ impl<F: PrimeField32> MemoryController<F> {
             let values = (0..block_size)
                 .map(|i| self.memory.data.memory.get_f::<F>(addr_space, ptr + i))
                 .collect::<Vec<_>>();
-            self.memory.execute_splits::<false>(
-                MemoryAddress::new(addr_space, ptr),
-                min_block_size.min(CHUNK),
-                &values,
-                metadata.timestamp,
-            );
-            if INITIAL_MERGES {
-                debug_assert_eq!(CHUNK, 1);
-                let initial_values = vec![F::ZERO; min_block_size];
-                let initial_timestamps = vec![INITIAL_TIMESTAMP; min_block_size / CHUNK];
-                for i in (0..block_size).step_by(min_block_size) {
-                    self.memory.execute_merges::<false>(
-                        MemoryAddress::new(addr_space, ptr + i),
-                        CHUNK,
-                        &initial_values,
-                        &initial_timestamps,
-                    );
-                }
+            if (ptr != current_address.pointer || CHUNK as u32 != block_size)
+                && block_size > min_block_size as u32
+            {
+                self.memory
+                    .access_adapter_inventory
+                    .mark_to_split(block_size as usize, offset as usize);
             }
             for i in 0..block_size {
                 current_values[current_cnt] = values[i as usize];
@@ -439,11 +431,18 @@ impl<F: PrimeField32> MemoryController<F> {
                 }
                 current_cnt += 1;
                 if current_cnt == CHUNK {
-                    self.memory.execute_merges::<false>(
-                        current_address,
+                    self.memory.record_access::<F, CHUNK>(
+                        current_address.address_space as usize,
+                        current_address.pointer as usize,
                         min_block_size,
+                        *current_timestamps.iter().max().unwrap(),
+                        if ptr == current_address.pointer && CHUNK as u32 == block_size {
+                            None
+                        } else {
+                            Some(&current_timestamps)
+                        },
                         &current_values,
-                        &current_timestamps,
+                        &current_values,
                     );
                     final_memory.insert(
                         (current_address.address_space, current_address.pointer),
@@ -466,11 +465,14 @@ impl<F: PrimeField32> MemoryController<F> {
                 self.memory.min_block_size[current_address.address_space as usize] as usize;
             current_values[current_cnt..].fill(F::ZERO);
             current_timestamps[(current_cnt / min_block_size)..].fill(INITIAL_TIMESTAMP);
-            self.memory.execute_merges::<false>(
-                current_address,
+            self.memory.record_access::<F, CHUNK>(
+                current_address.address_space as usize,
+                current_address.pointer as usize,
                 min_block_size,
+                *current_timestamps.iter().max().unwrap(),
+                Some(&current_timestamps),
                 &current_values,
-                &current_timestamps,
+                &current_values,
             );
             final_memory.insert(
                 (current_address.address_space, current_address.pointer),
@@ -494,7 +496,7 @@ impl<F: PrimeField32> MemoryController<F> {
     where
         H: HasherChip<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
-        let touched_blocks = self.memory.touched_blocks().collect::<Vec<_>>();
+        let touched_blocks = self.memory.touched_blocks();
 
         let mut final_memory_volatile = None;
         let mut final_memory_persistent = None;
