@@ -4,16 +4,14 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use crate::{
     arch::{
         execution_control::ExecutionControl, BaseRecordArena, ExecutionError, ExecutionState,
-        InstructionExecutor, MatrixRecordArena, VmChipComplex, VmConfig, VmSegmentState,
+        InsExecutor, MatrixRecordArena, VmChipComplex, VmConfig, VmSegmentState, VmStateMut,
+        PUBLIC_VALUES_AIR_ID,
     },
     system::memory::INITIAL_TIMESTAMP,
 };
 
 #[derive(Debug)]
-pub struct TracegenCtx<RA>
-where
-    RA: BaseRecordArena,
-{
+pub struct TracegenCtx<RA> {
     pub arenas: Vec<RA>,
 }
 
@@ -52,6 +50,7 @@ impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControl
 where
     F: PrimeField32,
     VC: VmConfig<F>,
+    VC::Executor: InsExecutor<F, MatrixRecordArena<F>>,
 {
     // TODO(ayush): make generic
     type Ctx = TracegenCtx<MatrixRecordArena<F>>;
@@ -101,19 +100,21 @@ where
     where
         F: PrimeField32,
     {
-        let timestamp = chip_complex.memory_controller().timestamp();
+        let offset = if chip_complex.config().has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
+        } else {
+            PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
+        };
 
         let &Instruction { opcode, .. } = instruction;
-
-        if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
-            let memory_controller = &mut chip_complex.base.memory_controller;
-            let new_state = executor.execute(
-                memory_controller,
-                &mut state.streams,
-                instruction,
-                ExecutionState::new(state.pc, timestamp),
-            )?;
-            state.pc = new_state.pc;
+        if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode) {
+            let vm_state = VmStateMut {
+                pc: &mut state.pc,
+                memory: &mut chip_complex.base.memory_controller.memory,
+                streams: &mut state.streams,
+                ctx: &mut state.ctx,
+            };
+            executor.execute_tracegen(vm_state, instruction, offset + i)?;
         } else {
             return Err(ExecutionError::DisabledOperation {
                 pc: state.pc,

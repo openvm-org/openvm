@@ -30,8 +30,8 @@ use super::memory::{
 use crate::{
     arch::{
         execution_mode::{e1::E1Ctx, metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
-        BaseRecordArena, ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState,
-        InsExecutorE1, InstructionExecutor, PcIncOrSet, PhantomSubExecutor, Streams, VmStateMut,
+        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutor, InsExecutorE1,
+        InstructionExecutor, PcIncOrSet, PhantomSubExecutor, Streams, VmStateMut,
     },
     system::program::ProgramBus,
 };
@@ -182,38 +182,12 @@ where
 
         Ok(())
     }
-
-    fn execute_tracegen<RA>(
-        &mut self,
-        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
-        instruction: &Instruction<F>,
-        _chip_index: usize,
-    ) -> Result<(), ExecutionError>
-    where
-        F: PrimeField32,
-        RA: BaseRecordArena,
-    {
-        self.rows.push(PhantomCols {
-            pc: F::from_canonical_u32(*state.pc),
-            operands: [instruction.a, instruction.b, instruction.c],
-            timestamp: F::from_canonical_u32(state.memory.timestamp),
-            is_valid: F::ONE,
-        });
-
-        let mut state_e1 = VmStateMut {
-            pc: state.pc,
-            memory: &mut state.memory.data,
-            streams: state.streams,
-            ctx: &mut E1Ctx::default(),
-        };
-        self.execute_e1(&mut state_e1, instruction)?;
-        state.memory.increment_timestamp();
-
-        Ok(())
-    }
 }
 
-impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
+impl<F> InstructionExecutor<F> for PhantomChip<F>
+where
+    F: PrimeField32,
+{
     fn execute(
         &mut self,
         memory: &mut MemoryController<F>,
@@ -246,6 +220,39 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
 
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{:?}", SystemOpcode::PHANTOM)
+    }
+}
+
+impl<F, RA> InsExecutor<F, RA> for PhantomChip<F>
+where
+    F: PrimeField32,
+{
+    fn execute_tracegen(
+        &mut self,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
+        instruction: &Instruction<F>,
+        _chip_index: usize,
+    ) -> Result<(), ExecutionError>
+    where
+        F: PrimeField32,
+    {
+        self.rows.push(PhantomCols {
+            pc: F::from_canonical_u32(*state.pc),
+            operands: [instruction.a, instruction.b, instruction.c],
+            timestamp: F::from_canonical_u32(state.memory.timestamp),
+            is_valid: F::ONE,
+        });
+
+        let mut state_e1 = VmStateMut {
+            pc: state.pc,
+            memory: &mut state.memory.data,
+            streams: state.streams,
+            ctx: &mut E1Ctx::default(),
+        };
+        self.execute_e1(&mut state_e1, instruction)?;
+        state.memory.increment_timestamp();
+
+        Ok(())
     }
 }
 

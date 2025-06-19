@@ -115,6 +115,201 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
     }
 }
 
+// #[proc_macro_derive(InsExecutor)]
+// pub fn ins_executor_derive(input: TokenStream) -> TokenStream {
+//     let ast: syn::DeriveInput = syn::parse(input).unwrap();
+
+//     let name = &ast.ident;
+//     let generics = &ast.generics;
+//     let (impl_generics, ty_generics, _) = generics.split_for_impl();
+
+//     match &ast.data {
+//         Data::Struct(inner) => {
+//             // Check if the struct has only one unnamed field
+//             let inner_ty = match &inner.fields {
+//                 Fields::Unnamed(fields) => {
+//                     if fields.unnamed.len() != 1 {
+//                         panic!("Only one unnamed field is supported");
+//                     }
+//                     fields.unnamed.first().unwrap().ty.clone()
+//                 }
+//                 _ => panic!("Only unnamed fields are supported"),
+//             };
+//             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+//             // crate. Assume F is already generic of the field.
+//             let mut new_generics = generics.clone();
+//             let where_clause = new_generics.make_where_clause();
+//             where_clause
+//                 .predicates
+//                 .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InsExecutor<F, RA> });
+//             quote! {
+//                 impl #impl_generics ::openvm_circuit::arch::InsExecutor<F, RA> for #name #ty_generics #where_clause {
+//                     fn execute_tracegen(
+//                         &mut self,
+//                         state: ::openvm_circuit::arch::VmStateMut<F, ::openvm_circuit::system::memory::online::TracingMemory<F>, ::openvm_circuit::arch::execution_mode::tracegen::TracegenCtx<RA>>,
+//                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+//                         chip_index: usize,
+//                     ) -> ::openvm_circuit::arch::Result<()> {
+//                         self.0.execute_tracegen(state, instruction, chip_index)
+//                     }
+//                 }
+//             }
+//             .into()
+//         }
+//         Data::Enum(e) => {
+//             let variants = e
+//                 .variants
+//                 .iter()
+//                 .map(|variant| {
+//                     let variant_name = &variant.ident;
+
+//                     let mut fields = variant.fields.iter();
+//                     let field = fields.next().unwrap();
+//                     assert!(fields.next().is_none(), "Only one field is supported");
+//                     (variant_name, field)
+//                 })
+//                 .collect::<Vec<_>>();
+//             let first_ty_generic = ast
+//                 .generics
+//                 .params
+//                 .first()
+//                 .and_then(|param| match param {
+//                     GenericParam::Type(type_param) => Some(&type_param.ident),
+//                     _ => None,
+//                 })
+//                 .expect("First generic must be type for Field");
+
+//             // Create new generics with RA added
+//             let mut new_generics = generics.clone();
+//             new_generics.params.push(syn::parse_quote! { RA });
+//             let (new_impl_generics, _, _) = new_generics.split_for_impl();
+
+//             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+//             // crate. Assume F and RA are already generics.
+//             let execute_tracegen_arms: Vec<_> =
+//                 variants.iter().map(|(variant_name, field)| {
+//                     let field_ty = &field.ty;
+//                     let execute_tracegen_arm = quote! {
+//                         #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutor<#first_ty_generic, RA>>::execute_tracegen(x, state, instruction, chip_index)
+//                     };
+
+//                     execute_tracegen_arm
+//                 }).collect();
+//             quote! {
+//                 impl #new_impl_generics ::openvm_circuit::arch::InsExecutor<#first_ty_generic, RA> for #name #ty_generics {
+//                     fn execute_tracegen(
+//                         &mut self,
+//                         state: ::openvm_circuit::arch::VmStateMut<#first_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory<#first_ty_generic>, ::openvm_circuit::arch::execution_mode::tracegen::TracegenCtx<RA>>,
+//                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
+//                         chip_index: usize,
+//                     ) -> ::openvm_circuit::arch::Result<()> {
+//                         match self {
+//                             #(#execute_tracegen_arms,)*
+//                         }
+//                     }
+//                 }
+//             }
+//             .into()
+//         }
+//         Data::Union(_) => unimplemented!("Unions are not supported"),
+//     }
+// }
+
+#[proc_macro_derive(InsExecutor)]
+pub fn ins_executor_derive(input: TokenStream) -> TokenStream {
+    let ast: syn::DeriveInput = syn::parse(input).unwrap();
+
+    let name = &ast.ident;
+    let generics = &ast.generics;
+    let (impl_generics, ty_generics, _) = generics.split_for_impl();
+
+    match &ast.data {
+        Data::Struct(inner) => {
+            // Check if the struct has only one unnamed field
+            let inner_ty = match &inner.fields {
+                Fields::Unnamed(fields) => {
+                    if fields.unnamed.len() != 1 {
+                        panic!("Only one unnamed field is supported");
+                    }
+                    fields.unnamed.first().unwrap().ty.clone()
+                }
+                _ => panic!("Only unnamed fields are supported"),
+            };
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+            // crate. Assume F is already generic of the field.
+            let mut new_generics = generics.clone();
+            let where_clause = new_generics.make_where_clause();
+            where_clause
+                .predicates
+                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InsExecutor<F, ::openvm_circuit::arch::MatrixRecordArena<F>> });
+            quote! {
+                impl #impl_generics ::openvm_circuit::arch::InsExecutor<F, ::openvm_circuit::arch::MatrixRecordArena<F>> for #name #ty_generics #where_clause {
+                    fn execute_tracegen(
+                        &mut self,
+                        state: ::openvm_circuit::arch::VmStateMut<F, ::openvm_circuit::system::memory::online::TracingMemory<F>, ::openvm_circuit::arch::execution_mode::tracegen::TracegenCtx<::openvm_circuit::arch::MatrixRecordArena<F>>>,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        chip_index: usize,
+                    ) -> ::openvm_circuit::arch::Result<()> {
+                        self.0.execute_tracegen(state, instruction, chip_index)
+                    }
+                }
+            }
+            .into()
+        }
+        Data::Enum(e) => {
+            let variants = e
+                .variants
+                .iter()
+                .map(|variant| {
+                    let variant_name = &variant.ident;
+
+                    let mut fields = variant.fields.iter();
+                    let field = fields.next().unwrap();
+                    assert!(fields.next().is_none(), "Only one field is supported");
+                    (variant_name, field)
+                })
+                .collect::<Vec<_>>();
+            let first_ty_generic = ast
+                .generics
+                .params
+                .first()
+                .and_then(|param| match param {
+                    GenericParam::Type(type_param) => Some(&type_param.ident),
+                    _ => None,
+                })
+                .expect("First generic must be type for Field");
+
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+            // crate. Assume F is already generic of the field.
+            let execute_tracegen_arms: Vec<_> =
+                variants.iter().map(|(variant_name, field)| {
+                    let field_ty = &field.ty;
+                    let execute_tracegen_arm = quote! {
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutor<#first_ty_generic, ::openvm_circuit::arch::MatrixRecordArena<#first_ty_generic>>>::execute_tracegen(x, state, instruction, chip_index)
+                    };
+
+                    execute_tracegen_arm
+                }).collect();
+            quote! {
+                impl #impl_generics ::openvm_circuit::arch::InsExecutor<#first_ty_generic, ::openvm_circuit::arch::MatrixRecordArena<#first_ty_generic>> for #name #ty_generics {
+                    fn execute_tracegen(
+                        &mut self,
+                        state: ::openvm_circuit::arch::VmStateMut<#first_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory<#first_ty_generic>, ::openvm_circuit::arch::execution_mode::tracegen::TracegenCtx<::openvm_circuit::arch::MatrixRecordArena<#first_ty_generic>>>,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
+                        chip_index: usize,
+                    ) -> ::openvm_circuit::arch::Result<()> {
+                        match self {
+                            #(#execute_tracegen_arms,)*
+                        }
+                    }
+                }
+            }
+            .into()
+        }
+        Data::Union(_) => unimplemented!("Unions are not supported"),
+    }
+}
+
 #[proc_macro_derive(InsExecutorE1)]
 pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
@@ -163,18 +358,6 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     ) -> ::openvm_circuit::arch::Result<()> {
                         self.0.execute_metered(state, instruction, chip_index)
                     }
-
-                    fn execute_tracegen<RA>(
-                        &mut self,
-                        state: ::openvm_circuit::arch::VmStateMut<F, ::openvm_circuit::system::memory::online::TracingMemory<F>, ::openvm_circuit::arch::execution_mode::tracegen::TracegenCtx<RA>>,
-                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
-                        chip_index: usize,
-                    ) -> ::openvm_circuit::arch::Result<()>
-                    where
-                        RA: ::openvm_circuit::arch::BaseRecordArena
-                    {
-                        self.0.execute_tracegen(state, instruction, chip_index)
-                    }
                 }
             }
             .into()
@@ -215,12 +398,6 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_metered(x, state, instruction, chip_index)
                 }
             }).collect::<Vec<_>>();
-            let execute_tracegen_arms = variants.iter().map(|(variant_name, field)| {
-                let field_ty = &field.ty;
-                quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_tracegen(x, state, instruction, chip_index)
-                }
-            }).collect::<Vec<_>>();
 
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic> for #name #ty_generics {
@@ -245,20 +422,6 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     ) -> ::openvm_circuit::arch::Result<()> {
                         match self {
                             #(#execute_metered_arms,)*
-                        }
-                    }
-
-                    fn execute_tracegen<RA>(
-                        &mut self,
-                        state: ::openvm_circuit::arch::VmStateMut<#first_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory<#first_ty_generic>, ::openvm_circuit::arch::execution_mode::tracegen::TracegenCtx<RA>>,
-                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
-                        chip_index: usize,
-                    ) -> ::openvm_circuit::arch::Result<()>
-                    where
-                        RA: ::openvm_circuit::arch::BaseRecordArena,
-                    {
-                        match self {
-                            #(#execute_tracegen_arms,)*
                         }
                     }
                 }

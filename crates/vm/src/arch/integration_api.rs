@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
-    ExecutionState, InsExecutorE1, InstructionExecutor, Result, Streams, VmStateMut,
+    ExecutionState, InsExecutor, InsExecutorE1, InstructionExecutor, Result, Streams, VmStateMut,
 };
 use crate::system::memory::{
     online::{GuestMemory, TracingMemory},
@@ -637,6 +637,23 @@ where
     }
 }
 
+impl<F, RA, AIR, STEP> InsExecutor<F, RA> for NewVmChipWrapper<F, AIR, STEP>
+where
+    F: PrimeField32,
+    STEP: TraceStep<F> + StepExecutorE1<F>,
+    for<'buf> RA: RecordArena<'buf, STEP::RecordLayout, STEP::RecordMut<'buf>>,
+{
+    fn execute_tracegen(
+        &mut self,
+        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        self.step.execute(state, instruction, chip_index)?;
+        Ok(())
+    }
+}
+
 // Note[jpw]: the statement we want is:
 // - `Air` is an `Air<AB>` for all `AB: AirBuilder`s needed by stark-backend
 // which is equivalent to saying it implements AirRef<SC>
@@ -809,19 +826,6 @@ where
         chip_index: usize,
     ) -> Result<()> {
         self.step.execute_metered(state, instruction, chip_index)
-    }
-
-    fn execute_tracegen<'buf, RA>(
-        &mut self,
-        state: VmStateMut<'buf, F, TracingMemory<F>, TracegenCtx<RA>>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, S::RecordLayout, S::RecordMut<'buf>>,
-    {
-        self.step.execute(state, instruction, chip_index)?;
-        Ok(())
     }
 }
 

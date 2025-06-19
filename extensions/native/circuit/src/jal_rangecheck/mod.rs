@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, ExecutionBridge, ExecutionState, MultiRowLayout, NewVmChipWrapper,
         PcIncOrSet, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep, VmStateMut,
     },
@@ -179,7 +179,7 @@ where
         panic!("Unknown opcode {}", opcode);
     }
 
-    fn execute<RA>(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,

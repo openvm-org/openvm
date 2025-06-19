@@ -7,7 +7,7 @@ use std::{
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, EmptyLayout, MinimalInstruction, RecordArena, Result, StepExecutorE1,
         TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
@@ -168,7 +168,7 @@ where
         )
     }
 
-    fn execute<RA>(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,

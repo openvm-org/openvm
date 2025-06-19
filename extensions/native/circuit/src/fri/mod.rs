@@ -7,7 +7,7 @@ use std::{
 use itertools::zip_eq;
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionState, MultiRowLayout,
         NewVmChipWrapper, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep, VmStateMut,
     },
@@ -673,7 +673,7 @@ where
         String::from("FRI_REDUCED_OPENING")
     }
 
-    fn execute<RA>(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,

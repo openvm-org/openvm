@@ -3,7 +3,7 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1,
         AdapterTraceFiller, AdapterTraceStep, CustomBorrow, DynAdapterInterface, DynArray,
         MinimalInstruction, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
@@ -289,7 +289,7 @@ where
     type RecordLayout = AdapterCoreLayout<A, FieldExpressionMetadata>;
     type RecordMut<'a> = (A::RecordMut<'a>, FieldExpressionCoreRecordMut<'a>);
 
-    fn execute<RA>(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,

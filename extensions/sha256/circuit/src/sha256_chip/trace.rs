@@ -2,8 +2,8 @@ use std::{array, borrow::BorrowMut, cmp::min};
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, CustomBorrow, MultiRowLayout, RecordArena, Result, TraceFiller,
-        TraceStep, VmStateMut,
+        execution_mode::tracegen::TracegenCtx, get_record_from_slice, CustomBorrow, MultiRowLayout,
+        RecordArena, Result, TraceFiller, TraceStep, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
@@ -106,7 +106,7 @@ impl<F: PrimeField32> TraceStep<F> for Sha256VmStep {
         format!("{:?}", Rv32Sha256Opcode::SHA256)
     }
 
-    fn execute<RA>(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,

@@ -7,7 +7,7 @@ use openvm_circuit::{
     },
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, InsExecutor, InsExecutorE1, InstructionExecutor};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
@@ -62,7 +62,7 @@ impl Fp2Extension {
     }
 }
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutorE1, AnyEnum, From)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutor, InsExecutorE1, AnyEnum, From)]
 pub enum Fp2ExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
     Fp2AddSubRv32_32(Fp2AddSubChip<F, 2, 32>),

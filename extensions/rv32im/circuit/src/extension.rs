@@ -6,7 +6,7 @@ use openvm_circuit::{
     },
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InsExecutor, InsExecutorE1, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
@@ -134,7 +134,7 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 // ============ Executor and Periphery Enums for Extension ============
 
 /// RISC-V 32-bit Base (RV32I) Instruction Executors
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutorE1, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutor, InsExecutorE1, From, AnyEnum)]
 pub enum Rv32IExecutor<F: PrimeField32> {
     // Rv32 (for standard 32-bit integers):
     BaseAlu(Rv32BaseAluChip<F>),
@@ -150,7 +150,7 @@ pub enum Rv32IExecutor<F: PrimeField32> {
 }
 
 /// RISC-V 32-bit Multiplication Extension (RV32M) Instruction Executors
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutorE1, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutor, InsExecutorE1, From, AnyEnum)]
 pub enum Rv32MExecutor<F: PrimeField32> {
     Multiplication(Rv32MultiplicationChip<F>),
     MultiplicationHigh(Rv32MulHChip<F>),
@@ -158,7 +158,7 @@ pub enum Rv32MExecutor<F: PrimeField32> {
 }
 
 /// RISC-V 32-bit Io Instruction Executors
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutorE1, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutor, InsExecutorE1, From, AnyEnum)]
 pub enum Rv32IoExecutor<F: PrimeField32> {
     HintStore(Rv32HintStoreChip<F>),
 }

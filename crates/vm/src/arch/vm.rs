@@ -28,9 +28,9 @@ use thiserror::Error;
 use tracing::info_span;
 
 use super::{
-    execution_mode::tracegen::TracegenCtx, ExecutionError, InsExecutorE1, MemoryConfig,
-    VmChipComplex, VmComplexTraceHeights, VmConfig, VmInventoryError, CONNECTOR_AIR_ID,
-    MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
+    execution_mode::tracegen::TracegenCtx, ExecutionError, InsExecutor, InsExecutorE1,
+    MatrixRecordArena, MemoryConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
+    VmInventoryError, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -164,6 +164,7 @@ pub struct VmExecutorOneSegmentResult<F, VC>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
+    VC::Executor: InsExecutor<F, MatrixRecordArena<F>>,
 {
     pub segment: VmSegmentExecutor<F, VC, TracegenExecutionControl>,
     pub next_state: Option<VmState<F>>,
@@ -173,7 +174,7 @@ impl<F, VC> VmExecutor<F, VC>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
-    VC::Executor: InsExecutorE1<F>,
+    VC::Executor: InsExecutorE1<F> + InsExecutor<F, MatrixRecordArena<F>>,
 {
     /// Create a new VM executor with a given config.
     ///
@@ -563,7 +564,7 @@ where
     ) -> Result<VmExecutorResult<SC>, GenerationError>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
-        VC::Executor: Chip<SC> + InsExecutorE1<F>,
+        VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
         let mut final_memory = None;
@@ -613,7 +614,7 @@ impl<F, VC> SingleSegmentVmExecutor<F, VC>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
-    VC::Executor: InsExecutorE1<F>,
+    VC::Executor: InsExecutorE1<F> + InsExecutor<F, MatrixRecordArena<F>>,
 {
     pub fn new(config: VC) -> Self {
         Self::new_with_overridden_trace_heights(config, None)
@@ -873,7 +874,7 @@ where
     E: StarkEngine<SC>,
     Domain<SC>: PolynomialSpace<Val = F>,
     VC: VmConfig<F>,
-    VC::Executor: Chip<SC> + InsExecutorE1<F>,
+    VC::Executor: Chip<SC> + InsExecutorE1<F> + InsExecutor<F, MatrixRecordArena<F>>,
     VC::Periphery: Chip<SC>,
 {
     pub fn new(engine: E, config: VC) -> Self {

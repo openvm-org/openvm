@@ -6,7 +6,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, EmptyLayout, MinimalInstruction, RecordArena, Result, StepExecutorE1,
         TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
@@ -208,9 +208,9 @@ where
         format!("{:?}", BaseAluOpcode::from_usize(opcode - self.offset))
     }
 
-    fn execute<RA>(
+    fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
+        state: VmStateMut<'buf, F, TracingMemory<F>, TracegenCtx<RA>>,
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()>
@@ -220,6 +220,8 @@ where
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+
+        let arena = &mut state.ctx.arenas[chip_index];
         let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
