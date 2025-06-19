@@ -19,9 +19,9 @@ pub struct MeteredCtxBounded {
     num_access_adapters: u8,
     as_byte_alignment_bits: Vec<u8>,
     pub memory_dimensions: MemoryDimensions,
-
     // Indices of leaf nodes in the memory merkle tree
     pub leaf_indices: Vec<u64>,
+
     pub instret_last_segment_check: u64,
     pub segments: Vec<Segment>,
 }
