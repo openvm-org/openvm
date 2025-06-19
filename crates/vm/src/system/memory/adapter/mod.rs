@@ -8,6 +8,7 @@ use openvm_circuit_primitives::{
     var_range::SharedVariableRangeCheckerChip, TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_instructions::NATIVE_AS;
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig, Val},
     p3_air::BaseAir,
@@ -19,9 +20,12 @@ use openvm_stark_backend::{
 };
 
 use crate::{
-    arch::{DenseRecordArena, RecordArena},
+    arch::{DenseRecordArena, RecordArena, SizedRecord},
     system::memory::{
-        adapter::records::{AccessLayout, AccessRecordMut, SPLIT_AFTER_FLAG},
+        adapter::records::{
+            extract_metadata, fancy_record_borrow_thing, AccessLayout, AccessRecordMut,
+            MERGE_BEFORE_FLAG, SPLIT_AFTER_FLAG,
+        },
         offline_checker::MemoryBus,
         MemoryAddress,
     },
@@ -270,29 +274,178 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
     where
         F: PrimeField32,
     {
-        todo!()
-        // let width = self.trace_width();
-        // let records = self.arena.extract_bytes();
-        // let trace: Vec<F> = records
-        //     .chunks_exact(size_of::<F>())
-        //     .map(|chunk| unsafe { std::ptr::read(chunk.as_ptr() as *const F) })
-        //     .collect();
-        // let mut trace = RowMajorMatrix::new(trace, width);
-        // let height = trace.height();
-        // let padded_height = if let Some(oh) = self.overridden_height {
-        //     assert!(
-        //         oh >= height,
-        //         "Overridden height {oh} is less than the required height {height}"
-        //     );
-        //     oh
-        // } else {
-        //     height
-        // };
-        // let padded_height = next_power_of_two_or_zero(padded_height);
-        // trace.pad_to_height(padded_height, F::ZERO);
-        // trace
-        // // TODO(AG): everything related to the calculated trace height
-        // // needs to be in memory controller, who owns these traces.
+        let mut milestones = vec![(0, 0)];
+        // TODO(AG): replace all this with nice records reading function we will have,
+        // or even move it to GPU idk
+        let mut cur_height = 0;
+        let bytes = self.arena.allocated();
+        let mut ptr = 0;
+        while ptr < bytes.len() {
+            let timestamp_and_mask =
+                unsafe { std::ptr::read(bytes.as_ptr().add(ptr) as *const u32) };
+            let num_rows = if timestamp_and_mask & SPLIT_AFTER_FLAG != 0 {
+                1
+            } else {
+                0
+            } + if timestamp_and_mask & MERGE_BEFORE_FLAG != 0 {
+                1
+            } else {
+                0
+            };
+            let layout = extract_metadata(&bytes[ptr..]);
+            let num_rows = num_rows * (layout.block_size / N);
+            ptr += SizedRecord::<AccessLayout, AccessRecordMut<'_>>::size(&self.arena, &layout);
+
+            cur_height += num_rows;
+            milestones.push((ptr, cur_height));
+        }
+
+        let width = self.trace_width();
+        let mut trace = RowMajorMatrix::new(vec![F::ZERO; width * cur_height], width);
+        for (&(start_ptr, start_height), &(_, _)) in
+            milestones.iter().zip(milestones.iter().skip(1))
+        {
+            let mut ptr = start_ptr;
+            let layout = extract_metadata(&bytes[start_ptr..]);
+
+            // TODO(AG): get rid of this
+
+            // timestamp_and_mask: u32 (4 bytes)
+            let timestamp_and_mask = unsafe { *(bytes.as_ptr().add(ptr) as *const u32) };
+            ptr += 4;
+
+            // address_space: u32 (4 bytes)
+            let address_space = unsafe { *(bytes.as_ptr().add(ptr) as *const u32) };
+            ptr += 4;
+
+            // pointer: u32 (4 bytes)
+            let pointer = unsafe { *(bytes.as_ptr().add(ptr) as *const u32) };
+            ptr += 4;
+
+            // block_size: u32 (4 bytes)
+            let _block_size_field = unsafe { *(bytes.as_ptr().add(ptr) as *const u32) };
+            ptr += 4;
+
+            // data: [u8] (block_size * type_size bytes)
+            let data = unsafe {
+                std::slice::from_raw_parts(
+                    bytes.as_ptr().add(ptr),
+                    layout.block_size * layout.type_size,
+                )
+            };
+            ptr += layout.block_size * layout.type_size;
+
+            // prev_data: [u8] (block_size * type_size bytes)
+            let prev_data = unsafe {
+                std::slice::from_raw_parts(
+                    bytes.as_ptr().add(ptr),
+                    layout.block_size * layout.type_size,
+                )
+            };
+            ptr += layout.block_size * layout.type_size;
+
+            // timestamps: [u32] (block_size / cell_size * 4 bytes)
+            let timestamps = unsafe {
+                std::slice::from_raw_parts(
+                    bytes.as_ptr().add(ptr) as *const u32,
+                    layout.block_size / layout.cell_size,
+                )
+            };
+
+            let mut row_idx = start_height;
+            let num_segs = layout.block_size / N;
+            if timestamp_and_mask & MERGE_BEFORE_FLAG != 0 {
+                let timestamps_batch_len = N / 2;
+                for i in 0..num_segs {
+                    let row: &mut AccessAdapterCols<F, N> = trace.row_mut(row_idx).borrow_mut();
+                    row.is_valid = F::ONE;
+                    row.is_split = F::ZERO;
+                    row.address = MemoryAddress::new(
+                        F::from_canonical_u32(address_space),
+                        F::from_canonical_u32(pointer),
+                    );
+                    if address_space < NATIVE_AS {
+                        for j in 0..N {
+                            row.values[j] = F::from_canonical_u8(prev_data[i * N + j]);
+                        }
+                    } else {
+                        for j in 0..N {
+                            row.values[j] = unsafe {
+                                std::ptr::read(
+                                    prev_data.as_ptr().add((i * N + j) * layout.type_size)
+                                        as *const F,
+                                )
+                            };
+                        }
+                    }
+                    let left_timestamp = *timestamps
+                        [2 * i * timestamps_batch_len..(2 * i + 1) * timestamps_batch_len]
+                        .iter()
+                        .max()
+                        .unwrap();
+                    let right_timestamp = *timestamps
+                        [(2 * i + 1) * timestamps_batch_len..(2 * i + 2) * timestamps_batch_len]
+                        .iter()
+                        .max()
+                        .unwrap();
+                    row.left_timestamp = F::from_canonical_u32(left_timestamp);
+                    row.right_timestamp = F::from_canonical_u32(right_timestamp);
+                    self.air.lt_air.generate_subrow(
+                        (self.range_checker.as_ref(), left_timestamp, right_timestamp),
+                        (&mut row.lt_aux, &mut row.is_right_larger),
+                    );
+
+                    row_idx += 1;
+                }
+            }
+            if timestamp_and_mask & SPLIT_AFTER_FLAG != 0 {
+                for i in 0..num_segs {
+                    let row: &mut AccessAdapterCols<F, N> = trace.row_mut(row_idx).borrow_mut();
+                    row.is_valid = F::ONE;
+                    row.is_split = F::ONE;
+                    row.address = MemoryAddress::new(
+                        F::from_canonical_u32(address_space),
+                        F::from_canonical_u32(pointer),
+                    );
+                    if address_space < NATIVE_AS {
+                        for j in 0..N {
+                            row.values[j] = F::from_canonical_u8(data[i * N + j]);
+                        }
+                    } else {
+                        for j in 0..N {
+                            row.values[j] = unsafe {
+                                std::ptr::read(
+                                    data.as_ptr().add((i * N + j) * layout.type_size) as *const F
+                                )
+                            };
+                        }
+                    }
+                    let timestamp = timestamp_and_mask & !SPLIT_AFTER_FLAG & !MERGE_BEFORE_FLAG;
+                    row.left_timestamp = F::from_canonical_u32(timestamp);
+                    row.right_timestamp = F::from_canonical_u32(timestamp);
+                    self.air.lt_air.generate_subrow(
+                        (self.range_checker.as_ref(), timestamp, timestamp),
+                        (&mut row.lt_aux, &mut row.is_right_larger),
+                    );
+
+                    row_idx += 1;
+                }
+            }
+        }
+
+        let height = trace.height();
+        let padded_height = if let Some(oh) = self.overridden_height {
+            assert!(
+                oh >= height,
+                "Overridden height {oh} is less than the required height {height}"
+            );
+            oh
+        } else {
+            height
+        };
+        let padded_height = next_power_of_two_or_zero(padded_height);
+        trace.pad_to_height(padded_height, F::ZERO);
+        trace
     }
 
     fn current_size(&self) -> usize {

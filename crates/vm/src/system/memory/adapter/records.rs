@@ -106,3 +106,22 @@ impl<'a> RecordArena<'a, AccessLayout, AccessRecordMut<'a>> for DenseRecordArena
         }
     }
 }
+
+pub(crate) fn extract_metadata(bytes: &[u8]) -> AccessLayout {
+    let address_space = unsafe { std::ptr::read(bytes.as_ptr().add(4) as *const u32) };
+    let block_size = unsafe { std::ptr::read(bytes.as_ptr().add(12) as *const u32) };
+    let type_size = if address_space < 4 { 1 } else { 4 };
+    AccessLayout {
+        block_size: block_size as usize,
+        cell_size: 4 / type_size,
+        type_size,
+    }
+}
+
+pub(crate) fn fancy_record_borrow_thing<'a>(
+    bytes: &'a [u8],
+    arena: &'a mut DenseRecordArena,
+) -> AccessRecordMut<'a> {
+    let layout = extract_metadata(bytes);
+    arena.alloc(layout)
+}
