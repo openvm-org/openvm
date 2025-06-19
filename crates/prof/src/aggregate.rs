@@ -254,6 +254,7 @@ impl AggregateMetrics {
             .map(|(group_name, metrics)| {
                 let metrics = metrics
                     .iter()
+                    .filter(|(_, stats)| stats.avg.val.is_finite() && stats.sum.val.is_finite())
                     .flat_map(|(metric_name, stats)| {
                         [
                             (format!("{metric_name}::sum"), stats.sum.into()),
