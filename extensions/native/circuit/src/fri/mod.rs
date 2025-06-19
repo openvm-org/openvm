@@ -562,35 +562,41 @@ pub struct FriReducedOpeningHeaderRecord {
 }
 
 // Part of record that is common for all trace rows for an instruction
+// NOTE: Order for fields is important here to prevent overwriting.
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct FriReducedOpeningCommonRecord<F> {
-    pub from_pc: u32,
     pub timestamp: u32,
 
-    pub alpha_ptr: F,
+    pub a_ptr: F,
+
+    pub is_init: bool,
+
+    pub b_ptr: F,
+
     pub alpha: [F; EXT_DEG],
-    pub alpha_aux: MemoryReadAuxRecord,
+
+    pub from_pc: u32,
+
+    pub a_ptr_ptr: F,
+    pub a_ptr_aux: MemoryReadAuxRecord,
+
+    pub b_ptr_ptr: F,
+    pub b_ptr_aux: MemoryReadAuxRecord,
 
     pub length_ptr: F,
     pub length_aux: MemoryReadAuxRecord,
 
-    pub a_ptr_ptr: F,
-    pub a_ptr: F,
-    pub a_ptr_aux: MemoryReadAuxRecord,
-
-    pub b_ptr_ptr: F,
-    pub b_ptr: F,
-    pub b_ptr_aux: MemoryReadAuxRecord,
-
-    pub is_init_ptr: F,
-    pub is_init: bool,
-    pub is_init_aux: MemoryReadAuxRecord,
-
-    pub hint_id_ptr: F,
+    pub alpha_ptr: F,
+    pub alpha_aux: MemoryReadAuxRecord,
 
     pub result_ptr: F,
     pub result_aux: MemoryWriteAuxRecord<F, EXT_DEG>,
+
+    pub hint_id_ptr: F,
+
+    pub is_init_ptr: F,
+    pub is_init_aux: MemoryReadAuxRecord,
 }
 
 // Part of record for each workload row that calculates the partial `result`
