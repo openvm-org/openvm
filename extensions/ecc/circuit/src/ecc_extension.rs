@@ -108,7 +108,9 @@ pub static ED25519_CONFIG: Lazy<CurveConfig<TeCurveCoeffs>> = Lazy::new(|| Curve
 
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
 pub struct EccExtension {
+    #[serde(default)]
     pub supported_sw_curves: Vec<CurveConfig<SwCurveCoeffs>>,
+    #[serde(default)]
     pub supported_te_curves: Vec<CurveConfig<TeCurveCoeffs>>,
 }
 
