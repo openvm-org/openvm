@@ -2,8 +2,9 @@ use std::borrow::BorrowMut;
 
 use itertools::izip;
 use openvm_circuit::arch::{
+    execution_mode::tracegen::TracegenCtx,
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    NewVmChipWrapper, VmAirWrapper,
+    DenseRecordArena, MatrixRecordArena, NewVmChipWrapper, VmAirWrapper,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -18,6 +19,7 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -53,7 +55,6 @@ fn create_test_chip(
         Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_chip.clone()),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip)
 }
@@ -77,7 +78,6 @@ fn create_dense_chip(
         Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_chip.clone()),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip)
 }
@@ -89,6 +89,11 @@ fn rand_auipc_dense_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, _bitwise_chip) = create_dense_chip(&tester);
+
+    let mut ctx =
+        TracegenCtx::<DenseRecordArena>::new_with_capacity(
+            &[chip.trace_width() * MAX_INS_CAPACITY],
+        );
 
     let num_tests: usize = 10;
 
@@ -103,19 +108,15 @@ fn rand_auipc_dense_test() {
         .collect::<Vec<_>>();
 
     for (&imm, &a, &from_pc) in izip!(imms.iter(), args.iter(), from_pcs.iter()) {
-        tester.execute_with_pc(
-            &mut chip,
-            &Instruction::from_usize(AUIPC.global_opcode(), [a, 0, imm, 1, 0]),
-            from_pc,
-        );
+        let ins = Instruction::from_usize(AUIPC.global_opcode(), [a, 0, imm, 1, 0]);
+        tester.execute_with_pc_and_ctx(&mut chip, &ins, from_pc, &mut ctx);
         let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
         let rd_data = run_auipc(initial_pc, imm as u32);
         assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
     }
 
-    let records = chip
-        .arena
-        .extract_records::<(Rv32RdWriteAdapterRecord, Rv32AuipcCoreRecord)>();
+    let records =
+        ctx.arenas[0].extract_records::<(Rv32RdWriteAdapterRecord, Rv32AuipcCoreRecord)>();
     eprintln!("{:?}", records);
     assert_eq!(records.len(), num_tests);
     for i in 0..num_tests {
@@ -127,9 +128,10 @@ fn rand_auipc_dense_test() {
     }
 }
 
-fn set_and_execute(
+fn set_and_execute<RA>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32AuipcChip<F>,
+    ctx: &mut TracegenCtx<RA>,
     rng: &mut StdRng,
     opcode: Rv32AuipcOpcode,
     imm: Option<u32>,
@@ -138,11 +140,11 @@ fn set_and_execute(
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS))) as usize;
     let a = rng.gen_range(0..32) << 2;
 
-    tester.execute_with_pc(
-        chip,
-        &Instruction::from_usize(opcode.global_opcode(), [a, 0, imm, 1, 0]),
-        initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
-    );
+    let instruction = Instruction::from_usize(opcode.global_opcode(), [a, 0, imm, 1, 0]);
+
+    let pc = initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS)));
+    tester.execute_with_pc_and_ctx(chip, &instruction, pc, ctx);
+
     let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
     let rd_data = run_auipc(initial_pc, imm as u32);
     assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
@@ -161,9 +163,21 @@ fn rand_auipc_test() {
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
+
     let num_tests: usize = 100;
     for _ in 0..num_tests {
-        set_and_execute(&mut tester, &mut chip, &mut rng, AUIPC, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            AUIPC,
+            None,
+            None,
+        );
     }
 
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
@@ -195,9 +209,14 @@ fn run_negative_auipc_test(
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
+
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         initial_imm,
