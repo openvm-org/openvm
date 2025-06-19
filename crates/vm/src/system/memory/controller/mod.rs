@@ -17,6 +17,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
     p3_util::{log2_ceil_usize, log2_strict_usize},
     prover::types::AirProofInput,
+    utils::metrics_span,
     AirRef, Chip, ChipUsageGetter,
 };
 use serde::{Deserialize, Serialize};
@@ -513,7 +514,9 @@ impl<F: PrimeField32> MemoryController<F> {
         match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 let final_memory = final_memory_volatile.unwrap();
-                boundary_chip.finalize(final_memory);
+                metrics_span("boundary_finalize_time_ms", || {
+                    boundary_chip.finalize(final_memory)
+                });
             }
             MemoryInterface::Persistent {
                 boundary_chip,
@@ -523,12 +526,16 @@ impl<F: PrimeField32> MemoryController<F> {
                 let final_memory = final_memory_persistent.unwrap();
 
                 let hasher = hasher.unwrap();
-                boundary_chip.finalize(initial_memory, &final_memory, hasher);
+                metrics_span("boundary_finalize_time_ms", || {
+                    boundary_chip.finalize(initial_memory, &final_memory, hasher)
+                });
                 let final_memory_values = final_memory
                     .into_par_iter()
                     .map(|(key, value)| (key, value.values))
                     .collect();
-                merkle_chip.finalize(initial_memory.clone(), &final_memory_values, hasher);
+                metrics_span("merkle_finalize_time_ms", || {
+                    merkle_chip.finalize(initial_memory.clone(), &final_memory_values, hasher)
+                });
             }
         }
     }

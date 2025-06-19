@@ -415,6 +415,9 @@ pub const EXECUTE_METERED_INSN_MI_S_LABEL: &str = "execute_metered_insn_mi/s";
 pub const EXECUTE_E3_TIME_LABEL: &str = "execute_e3_time_ms";
 pub const EXECUTE_E3_INSN_MI_S_LABEL: &str = "execute_e3_insn_mi/s";
 pub const TRACE_GEN_TIME_LABEL: &str = "trace_gen_time_ms";
+pub const MEM_FIN_TIME_LABEL: &str = "memory_finalize_time_ms";
+pub const BOUNDARY_FIN_TIME_LABEL: &str = "boundary_finalize_time_ms";
+pub const MERKLE_FIN_TIME_LABEL: &str = "merkle_finalize_time_ms";
 pub const PROVE_EXCL_TRACE_TIME_LABEL: &str = "stark_prove_excluding_trace_time_ms";
 
 pub const VM_METRIC_NAMES: &[&str] = &[
@@ -428,6 +431,9 @@ pub const VM_METRIC_NAMES: &[&str] = &[
     EXECUTE_E3_TIME_LABEL,
     EXECUTE_E3_INSN_MI_S_LABEL,
     TRACE_GEN_TIME_LABEL,
+    MEM_FIN_TIME_LABEL,
+    BOUNDARY_FIN_TIME_LABEL,
+    MERKLE_FIN_TIME_LABEL,
     PROVE_EXCL_TRACE_TIME_LABEL,
     "main_trace_commit_time_ms",
     "generate_perm_trace_time_ms",
