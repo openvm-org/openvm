@@ -49,9 +49,8 @@ use crate::{
         memory::{
             merkle::MemoryMerklePvs,
             online::GuestMemory,
-            paged_vec::AddressMap,
             tree::public_values::{UserPublicValuesProof, UserPublicValuesProofError},
-            MemoryImage, CHUNK,
+            AddressMap, MemoryImage, CHUNK,
         },
         program::trace::VmCommittedExe,
     },
@@ -1218,12 +1217,7 @@ pub fn create_memory_image(
     memory_config: &MemoryConfig,
     init_memory: SparseMemoryImage,
 ) -> MemoryImage {
-    AddressMap::from_sparse(
-        memory_config.as_offset,
-        1 << memory_config.as_height,
-        1 << memory_config.pointer_max_bits,
-        init_memory,
-    )
+    AddressMap::from_sparse(memory_config.addr_space_sizes.clone(), init_memory)
 }
 
 pub fn create_initial_state<F>(

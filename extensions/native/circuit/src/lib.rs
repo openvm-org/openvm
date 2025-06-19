@@ -23,3 +23,9 @@ pub use extension::*;
 
 mod utils;
 pub use utils::*;
+
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_utils;
+
+#[cfg(any(test, feature = "test-utils"))]
+pub use test_utils::*;

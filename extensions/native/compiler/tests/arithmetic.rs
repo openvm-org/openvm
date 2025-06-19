@@ -1,5 +1,5 @@
 use openvm_circuit::arch::{ExecutionError, VirtualMachine};
-use openvm_native_circuit::{execute_program, NativeConfig};
+use openvm_native_circuit::{test_execute_program, NativeConfig};
 use openvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler, AsmConfig},
     conversion::{convert_program, CompilerOptions},
@@ -93,7 +93,7 @@ fn test_compiler_arithmetic() {
     builder.halt();
 
     let program = builder.clone().compile_isa();
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }
 
 #[test]
@@ -116,7 +116,7 @@ fn test_compiler_arithmetic_2() {
     builder.halt();
 
     let program = builder.clone().compile_isa();
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }
 
 #[test]
@@ -152,7 +152,7 @@ fn test_in_place_arithmetic() {
     builder.halt();
 
     let program = builder.clone().compile_isa();
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }
 
 #[test]
@@ -177,7 +177,7 @@ fn test_field_immediate() {
     builder.halt();
 
     let program = builder.compile_isa();
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }
 
 #[test]
@@ -249,10 +249,10 @@ fn test_ext_immediate() {
     builder.halt();
 
     let program = builder.clone().compile_isa();
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 
     let program = builder.compile_isa();
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }
 
 #[test]
@@ -302,10 +302,10 @@ fn test_ext_felt_arithmetic() {
     builder.halt();
 
     let program = builder.clone().compile_isa();
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 
     let program = builder.compile_isa();
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }
 
 #[test]
@@ -332,7 +332,7 @@ fn test_felt_equality() {
     println!("{}", asm_code);
 
     let program = convert_program::<F, EF>(asm_code, CompilerOptions::default());
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }
 
 #[test]
@@ -369,7 +369,7 @@ fn test_ext_equality() {
     builder.halt();
 
     let program = builder.compile_isa();
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }
 
 #[test]

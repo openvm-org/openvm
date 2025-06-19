@@ -446,7 +446,7 @@ impl Hintable<InnerConfig> for Commitments<Com<BabyBearPoseidon2Config>> {
 
 #[cfg(test)]
 mod test {
-    use openvm_native_circuit::execute_program;
+    use openvm_native_circuit::test_execute_program;
     use openvm_native_compiler::{
         asm::AsmBuilder,
         ir::{Ext, Felt, Var},
@@ -480,7 +480,7 @@ mod test {
         builder.halt();
 
         let program = builder.compile_isa();
-        execute_program(program, stream);
+        test_execute_program(program, stream);
     }
 
     #[test]
@@ -527,6 +527,6 @@ mod test {
         builder.halt();
 
         let program = builder.compile_isa();
-        execute_program(program, stream);
+        test_execute_program(program, stream);
     }
 }

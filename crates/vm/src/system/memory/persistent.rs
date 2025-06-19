@@ -21,7 +21,7 @@ use rustc_hash::FxHashSet;
 
 use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP, TimestampedValues};
 use crate::{
-    arch::hasher::Hasher,
+    arch::{hasher::Hasher, ADDR_SPACE_OFFSET},
     system::memory::{
         dimensions::MemoryDimensions, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
         TimestampedEquipartition,
@@ -92,7 +92,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             // direction = -1 => is_final = 1
             local.expand_direction.into(),
             AB::Expr::ZERO,
-            local.address_space - AB::F::from_canonical_u32(self.memory_dims.as_offset),
+            local.address_space - AB::F::from_canonical_u32(ADDR_SPACE_OFFSET),
             local.leaf_label.into(),
         ];
         expand_fields.extend(local.hash.map(Into::into));

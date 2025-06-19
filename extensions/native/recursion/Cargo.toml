@@ -8,7 +8,7 @@ repository.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }
-openvm-native-circuit = { workspace = true }
+openvm-native-circuit = { workspace = true, features = ["test-utils"] }
 openvm-native-compiler = { workspace = true }
 openvm-native-compiler-derive = { workspace = true }
 openvm-stark-sdk = { workspace = true }

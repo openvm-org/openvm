@@ -22,9 +22,6 @@ pub mod rust_rt;
 /// 4 bytes (i.e. 32 bits) as the zkVM is an implementation of the rv32im ISA.
 pub const WORD_SIZE: usize = core::mem::size_of::<u32>();
 
-/// Size of a zkVM memory page.
-pub const PAGE_SIZE: usize = 1024;
-
 /// Standard IO file descriptors for use with sys_read and sys_write.
 pub mod fileno {
     pub const STDIN: u32 = 0;

@@ -31,8 +31,8 @@ OpenVM depends on the following parameters, some of which are fixed and some of 
 | `PC_BITS`           | The number of bits in the program counter.                         | Fixed to 30.                                                                                        |
 | `DEFAULT_PC_STEP`   | The default program counter step size.                             | Fixed to 4.                                                                                         |
 | `LIMB_BITS`         | The number of bits in a limb for RISC-V memory emulation.          | Fixed to 8.                                                                                         |
-| `as_offset`         | The index of the first writable address space.                     | Fixed to 1.                                                                                         |
-| `as_height`         | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `as_height <= F::bits() - 2`                                             |
+| `ADDR_SPACE_OFFSET` | The index of the first writable address space.                     | Fixed to 1.                                                                                         |
+| `addr_space_height` | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `addr_space_height <= F::bits() - 2`                                             |
 | `pointer_max_bits`  | The maximum number of bits in a pointer.                           | Configurable, must satisfy `pointer_max_bits <= F::bits() - 2`                                      |
 | `num_public_values` | The number of user public values.                                  | Configurable. If continuation is enabled, it must equal `8` times a power of two(which is nonzero). |
 
@@ -113,12 +113,12 @@ Data memory is a random access memory (RAM) which supports read and write operat
 cells which represent a single field element indexed by **address space** and **pointer**. The number of supported
 address spaces and the size of each address space are configurable constants.
 
-- Valid address spaces not used for immediates lie in `[1, 1 + 2^as_height)` for configuration constant `as_height`.
+- Valid address spaces not used for immediates lie in `[1, 1 + 2^addr_space_height)` for configuration constant `addr_space_height`.
 - Valid pointers are field elements that lie in `[0, 2^pointer_max_bits)`, for
   configuration constant `pointer_max_bits`. When accessing an address out of `[0, 2^pointer_max_bits)`, the VM should
   panic.
 
-These configuration constants must satisfy `as_height, pointer_max_bits <= F::bits() - 2`. We use the following notation
+These configuration constants must satisfy `addr_space_height, pointer_max_bits <= F::bits() - 2`. We use the following notation
 to denote cells in memory:
 
 - `[a]_d` denotes the single-cell value at pointer location `a` in address space `d`. This is a single

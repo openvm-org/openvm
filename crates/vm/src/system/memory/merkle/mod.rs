@@ -36,7 +36,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
         merkle_bus: PermutationCheckBus,
         compression_bus: PermutationCheckBus,
     ) -> Self {
-        assert!(memory_dimensions.as_height > 0);
+        assert!(memory_dimensions.addr_space_height > 0);
         assert!(memory_dimensions.address_height > 0);
         Self {
             air: MemoryMerkleAir {
