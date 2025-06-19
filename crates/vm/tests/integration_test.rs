@@ -146,11 +146,7 @@ fn test_vm_override_executor_height() {
         .unwrap();
 
     let res = executor
-        .execute_with_max_heights_and_compute_heights(
-            committed_exe.exe.clone(),
-            vec![],
-            &max_trace_heights,
-        )
+        .execute_and_compute_heights(committed_exe.exe.clone(), vec![], &max_trace_heights)
         .unwrap();
     // Memory trace heights are not computed during execution.
     assert_eq!(
@@ -214,7 +210,7 @@ fn test_vm_override_executor_height() {
         Some(overridden_heights),
     );
     let proof_input = executor
-        .execute_with_max_heights_and_generate(committed_exe, vec![], &max_trace_heights)
+        .execute_and_generate(committed_exe, vec![], &max_trace_heights)
         .unwrap();
     let air_heights: Vec<_> = proof_input
         .per_air
@@ -321,7 +317,7 @@ fn test_vm_public_values() {
             .unwrap();
 
         let exe_result = single_vm
-            .execute_with_max_heights_and_compute_heights(program, vec![], &max_trace_heights)
+            .execute_and_compute_heights(program, vec![], &max_trace_heights)
             .unwrap();
         assert_eq!(
             exe_result.public_values,
@@ -332,7 +328,7 @@ fn test_vm_public_values() {
             .concat(),
         );
         let proof_input = single_vm
-            .execute_with_max_heights_and_generate(committed_exe, vec![], &max_trace_heights)
+            .execute_and_generate(committed_exe, vec![], &max_trace_heights)
             .unwrap();
         vm.engine
             .prove_then_verify(&pk, proof_input)
