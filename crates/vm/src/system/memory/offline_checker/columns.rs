@@ -14,7 +14,7 @@ use crate::system::memory::offline_checker::bridge::AUX_LEN;
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryBaseAuxCols<T> {
     /// The previous timestamps in which the cells were accessed.
-    pub(in crate::system::memory) prev_timestamp: T,
+    pub prev_timestamp: T,
     /// The auxiliary columns to perform the less than check.
     pub timestamp_lt_aux: LessThanAuxCols<T, AUX_LEN>,
 }
@@ -29,7 +29,7 @@ impl<F: PrimeField32> MemoryBaseAuxCols<F> {
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryWriteAuxCols<T, const N: usize> {
     pub base: MemoryBaseAuxCols<T>,
-    pub(in crate::system::memory) prev_data: [T; N],
+    pub prev_data: [T; N],
 }
 
 impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
