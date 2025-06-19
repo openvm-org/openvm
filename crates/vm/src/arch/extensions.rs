@@ -583,22 +583,13 @@ impl<F: PrimeField32> SystemComplex<F> {
             assert_eq!(inventory.executors().len(), Self::PV_EXECUTOR_IDX);
 
             let chip = PublicValuesChip::new(
-                VmAirWrapper::new(
-                    NativeAdapterAir::new(
-                        ExecutionBridge::new(execution_bus, program_bus),
-                        memory_bridge,
-                    ),
-                    PublicValuesCoreAir::new(
-                        config.num_public_values,
-                        config.max_constraint_degree as u32 - 1,
-                    ),
+                NativeAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
                 ),
-                PublicValuesCoreStep::new(
-                    NativeAdapterStep::new(),
-                    config.num_public_values,
-                    config.max_constraint_degree as u32 - 1,
-                ),
-                memory_controller.helper(),
+                NativeAdapterStep::new(),
+                config.num_public_values,
+                config.max_constraint_degree as u32 - 1,
             );
 
             inventory
