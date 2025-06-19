@@ -300,7 +300,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
                     }
                     if total_len != 0 {
                         num_non_inside_rows += 1;
-                        num_inside_rows += (total_len as usize + CHUNK - 1) / CHUNK;
+                        num_inside_rows += (total_len as usize).div_ceil(CHUNK);
                     }
                     if log_height == 0 {
                         break;
