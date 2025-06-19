@@ -582,144 +582,144 @@ impl<F: Field> MatrixRecordArena<F> {
     }
 }
 
-pub struct NewVmChipWrapper<F, AIR, STEP> {
-    pub air: AIR,
-    pub step: STEP,
-    mem_helper: SharedMemoryHelper<F>,
-}
+// pub struct NewVmChipWrapper<F, AIR, STEP> {
+//     pub air: AIR,
+//     pub step: STEP,
+//     mem_helper: SharedMemoryHelper<F>,
+// }
 
-impl<F, AIR, STEP> NewVmChipWrapper<F, AIR, STEP>
-where
-    F: Field,
-    AIR: BaseAir<F>,
-    STEP: TraceStep<F> + TraceFiller<F> + Send + Sync,
-{
-    pub fn new(air: AIR, step: STEP, mem_helper: SharedMemoryHelper<F>) -> Self {
-        assert!(
-            align_of::<F>() >= align_of::<u32>(),
-            "type {} should have at least alignment of u32",
-            type_name::<F>()
-        );
-        Self {
-            air,
-            step,
-            mem_helper,
-        }
-    }
+// impl<F, AIR, STEP> NewVmChipWrapper<F, AIR, STEP>
+// where
+//     F: Field,
+//     AIR: BaseAir<F>,
+//     STEP: TraceStep<F> + TraceFiller<F> + Send + Sync,
+// {
+//     pub fn new(air: AIR, step: STEP, mem_helper: SharedMemoryHelper<F>) -> Self {
+//         assert!(
+//             align_of::<F>() >= align_of::<u32>(),
+//             "type {} should have at least alignment of u32",
+//             type_name::<F>()
+//         );
+//         Self {
+//             air,
+//             step,
+//             mem_helper,
+//         }
+//     }
 
-    pub fn fill_trace(&self, trace: &mut RowMajorMatrix<F>) {
-        let rows_used = trace.height();
-        let padded_height = next_power_of_two_or_zero(rows_used);
-        trace.pad_to_height(padded_height, F::ZERO);
+//     pub fn fill_trace(&self, trace: &mut RowMajorMatrix<F>) {
+//         let rows_used = trace.height();
+//         let padded_height = next_power_of_two_or_zero(rows_used);
+//         trace.pad_to_height(padded_height, F::ZERO);
 
-        let mem_helper = self.mem_helper.as_borrowed();
-        self.step.fill_trace(&mem_helper, trace, rows_used);
-    }
-}
+//         let mem_helper = self.mem_helper.as_borrowed();
+//         self.step.fill_trace(&mem_helper, trace, rows_used);
+//     }
+// }
 
-impl<F, AIR, STEP> InstructionExecutor<F> for NewVmChipWrapper<F, AIR, STEP>
-where
-    F: PrimeField32,
-    STEP: TraceStep<F> + StepExecutorE1<F>,
-{
-    fn execute(
-        &mut self,
-        _memory: &mut MemoryController<F>,
-        _streams: &mut Streams<F>,
-        _instruction: &Instruction<F>,
-        _from_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>> {
-        unimplemented!()
-    }
+// impl<F, AIR, STEP> InstructionExecutor<F> for NewVmChipWrapper<F, AIR, STEP>
+// where
+//     F: PrimeField32,
+//     STEP: TraceStep<F> + StepExecutorE1<F>,
+// {
+//     fn execute(
+//         &mut self,
+//         _memory: &mut MemoryController<F>,
+//         _streams: &mut Streams<F>,
+//         _instruction: &Instruction<F>,
+//         _from_state: ExecutionState<u32>,
+//     ) -> Result<ExecutionState<u32>> {
+//         unimplemented!()
+//     }
 
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        self.step.get_opcode_name(opcode)
-    }
-}
+//     fn get_opcode_name(&self, opcode: usize) -> String {
+//         self.step.get_opcode_name(opcode)
+//     }
+// }
 
-impl<F, RA, AIR, STEP> InsExecutor<F, RA> for NewVmChipWrapper<F, AIR, STEP>
-where
-    F: PrimeField32,
-    STEP: TraceStep<F> + StepExecutorE1<F>,
-    for<'buf> RA: RecordArena<'buf, STEP::RecordLayout, STEP::RecordMut<'buf>>,
-{
-    fn execute_tracegen(
-        &mut self,
-        state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.step.execute(state, instruction, chip_index)?;
-        Ok(())
-    }
-}
+// impl<F, RA, AIR, STEP> InsExecutor<F, RA> for NewVmChipWrapper<F, AIR, STEP>
+// where
+//     F: PrimeField32,
+//     STEP: TraceStep<F> + StepExecutorE1<F>,
+//     for<'buf> RA: RecordArena<'buf, STEP::RecordLayout, STEP::RecordMut<'buf>>,
+// {
+//     fn execute_tracegen(
+//         &mut self,
+//         state: VmStateMut<F, TracingMemory<F>, TracegenCtx<RA>>,
+//         instruction: &Instruction<F>,
+//         chip_index: usize,
+//     ) -> Result<()> {
+//         self.step.execute(state, instruction, chip_index)?;
+//         Ok(())
+//     }
+// }
 
-// Note[jpw]: the statement we want is:
-// - `Air` is an `Air<AB>` for all `AB: AirBuilder`s needed by stark-backend
-// which is equivalent to saying it implements AirRef<SC>
-// The where clauses to achieve this statement is unfortunately really verbose.
-impl<SC, AIR, STEP> Chip<SC> for NewVmChipWrapper<Val<SC>, AIR, STEP>
-where
-    SC: StarkGenericConfig,
-    Val<SC>: PrimeField32,
-    STEP: TraceStep<Val<SC>> + TraceFiller<Val<SC>> + Send + Sync,
-    AIR: Clone + AnyRap<SC> + 'static,
-{
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
-    }
+// // Note[jpw]: the statement we want is:
+// // - `Air` is an `Air<AB>` for all `AB: AirBuilder`s needed by stark-backend
+// // which is equivalent to saying it implements AirRef<SC>
+// // The where clauses to achieve this statement is unfortunately really verbose.
+// impl<SC, AIR, STEP> Chip<SC> for NewVmChipWrapper<Val<SC>, AIR, STEP>
+// where
+//     SC: StarkGenericConfig,
+//     Val<SC>: PrimeField32,
+//     STEP: TraceStep<Val<SC>> + TraceFiller<Val<SC>> + Send + Sync,
+//     AIR: Clone + AnyRap<SC> + 'static,
+// {
+//     fn air(&self) -> AirRef<SC> {
+//         Arc::new(self.air.clone())
+//     }
 
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        unimplemented!("generate_air_proof_input isn't implemented")
-        // let width = self.arena.width();
-        // assert_eq!(self.arena.trace_offset() % width, 0);
-        // let rows_used = self.arena.trace_offset() / width;
-        // let height = next_power_of_two_or_zero(rows_used);
-        // let mut trace = self.arena.into_matrix();
-        // // This should be automatic since trace_buffer's height is a power of two:
-        // assert!(height.checked_mul(width).unwrap() <= trace.values.len());
-        // trace.values.truncate(height * width);
-        // let mem_helper = self.mem_helper.as_borrowed();
-        // self.step.fill_trace(&mem_helper, &mut trace, rows_used);
-        // drop(self.mem_helper);
+//     fn generate_air_proof_input(self) -> AirProofInput<SC> {
+//         unimplemented!("generate_air_proof_input isn't implemented")
+//         // let width = self.arena.width();
+//         // assert_eq!(self.arena.trace_offset() % width, 0);
+//         // let rows_used = self.arena.trace_offset() / width;
+//         // let height = next_power_of_two_or_zero(rows_used);
+//         // let mut trace = self.arena.into_matrix();
+//         // // This should be automatic since trace_buffer's height is a power of two:
+//         // assert!(height.checked_mul(width).unwrap() <= trace.values.len());
+//         // trace.values.truncate(height * width);
+//         // let mem_helper = self.mem_helper.as_borrowed();
+//         // self.step.fill_trace(&mem_helper, &mut trace, rows_used);
+//         // drop(self.mem_helper);
 
-        // AirProofInput::simple(trace, self.step.generate_public_values())
-    }
+//         // AirProofInput::simple(trace, self.step.generate_public_values())
+//     }
 
-    // fn generate_air_proof_input_with_trace(
-    //     self,
-    //     mut trace: RowMajorMatrix<Val<SC>>,
-    // ) -> AirProofInput<SC> {
-    //     assert!(
-    //         trace.height().is_power_of_two(),
-    //         "Trace height must be a power of two"
-    //     );
-    //     self.fill_trace(&mut trace.values);
+// fn generate_air_proof_input_with_trace(
+//     self,
+//     mut trace: RowMajorMatrix<Val<SC>>,
+// ) -> AirProofInput<SC> {
+//     assert!(
+//         trace.height().is_power_of_two(),
+//         "Trace height must be a power of two"
+//     );
+//     self.fill_trace(&mut trace.values);
 
-    //     let public_values = self.step.generate_public_values();
-    //     AirProofInput::simple(trace, public_values)
-    // }
-}
+//     let public_values = self.step.generate_public_values();
+//     AirProofInput::simple(trace, public_values)
+// }
+// }
 
-impl<F, AIR, C> ChipUsageGetter for NewVmChipWrapper<F, AIR, C>
-where
-    C: Sync,
-    AIR: BaseAir<F>,
-{
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
+// impl<F, AIR, C> ChipUsageGetter for NewVmChipWrapper<F, AIR, C>
+// where
+//     C: Sync,
+//     AIR: BaseAir<F>,
+// {
+//     fn air_name(&self) -> String {
+//         get_air_name(&self.air)
+//     }
 
-    fn current_trace_height(&self) -> usize {
-        // TODO(ayush): fix this
-        // unimplemented!()
-        0
-    }
+//     fn current_trace_height(&self) -> usize {
+//         // TODO(ayush): fix this
+//         // unimplemented!()
+//         0
+//     }
 
-    fn trace_width(&self) -> usize {
-        BaseAir::width(&self.air)
-    }
-}
+//     fn trace_width(&self) -> usize {
+//         BaseAir::width(&self.air)
+//     }
+// }
 
 /// A helper trait for expressing generic state accesses within the implementation of
 /// [TraceStep]. Note that this is only a helper trait when the same interface of state access
@@ -802,32 +802,32 @@ pub trait StepExecutorE1<F> {
     ) -> Result<()>;
 }
 
-impl<F, A, S> InsExecutorE1<F> for NewVmChipWrapper<F, A, S>
-where
-    F: PrimeField32,
-    S: StepExecutorE1<F> + TraceStep<F>,
-    A: BaseAir<F>,
-{
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        self.step.execute_e1(state, instruction)
-    }
+// impl<F, A, S> InsExecutorE1<F> for NewVmChipWrapper<F, A, S>
+// where
+//     F: PrimeField32,
+//     S: StepExecutorE1<F> + TraceStep<F>,
+//     A: BaseAir<F>,
+// {
+//     fn execute_e1<Ctx>(
+//         &self,
+//         state: &mut VmStateMut<F, GuestMemory, Ctx>,
+//         instruction: &Instruction<F>,
+//     ) -> Result<()>
+//     where
+//         Ctx: E1E2ExecutionCtx,
+//     {
+//         self.step.execute_e1(state, instruction)
+//     }
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.step.execute_metered(state, instruction, chip_index)
-    }
-}
+//     fn execute_metered(
+//         &self,
+//         state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+//         instruction: &Instruction<F>,
+//         chip_index: usize,
+//     ) -> Result<()> {
+//         self.step.execute_metered(state, instruction, chip_index)
+//     }
+// }
 
 #[derive(Clone, Copy, derive_new::new)]
 pub struct VmAirWrapper<A, C> {

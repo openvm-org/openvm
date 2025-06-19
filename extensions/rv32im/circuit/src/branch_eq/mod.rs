@@ -9,7 +9,5 @@ pub use core::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv32BranchEqualAir =
-    VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<RV32_REGISTER_NUM_LIMBS>>;
-pub type Rv32BranchEqualStep = BranchEqualStep<Rv32BranchAdapterStep, RV32_REGISTER_NUM_LIMBS>;
-pub type Rv32BranchEqualChip<F> = NewVmChipWrapper<F, Rv32BranchEqualAir, Rv32BranchEqualStep>;
+pub type Rv32BranchEqualChip =
+    BranchEqualStep<Rv32BranchAdapterAir, Rv32BranchAdapterStep, RV32_REGISTER_NUM_LIMBS>;

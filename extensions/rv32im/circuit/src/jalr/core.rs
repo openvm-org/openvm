@@ -8,7 +8,7 @@ use openvm_circuit::{
         execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, EmptyLayout, RecordArena, Result, SignedImmInstruction, StepExecutorE1,
-        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        TraceFiller, TraceStep, VmAdapterInterface, VmAirWrapper, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -31,7 +31,7 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    rap::BaseAirWithPublicValues,
+    rap::{get_air_name, BaseAirWithPublicValues},
 };
 
 use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
@@ -185,20 +185,39 @@ pub struct Rv32JalrCoreRecord {
     pub imm_sign: bool,
 }
 
-pub struct Rv32JalrStep<A> {
-    adapter: A,
+pub struct Rv32JalrStep<AdapterAir, AdapterStep> {
+    air: VmAirWrapper<AdapterAir, Rv32JalrCoreAir>,
+    adapter: AdapterStep,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<A> Rv32JalrStep<A> {
+impl<AdapterAir, AdapterStep> ChipUsageGetter for Rv32JalrStep<AdapterAir, AdapterStep> {
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+
+    fn trace_width(&self) -> usize {
+        BaseAir::width(&self.air)
+    }
+
+    fn current_trace_height(&self) -> usize {
+        // TODO(ayush): fix this
+        // unimplemented!()
+        0
+    }
+}
+
+impl<AdapterAir, AdapterStep> Rv32JalrStep<AdapterAir, AdapterStep> {
     pub fn new(
-        adapter: A,
+        air: VmAirWrapper<AdapterAir, Rv32JalrCoreAir>,
+        adapter: AdapterStep,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
         assert!(range_checker_chip.range_max_bits() >= 16);
         Self {
+            air,
             adapter,
             bitwise_lookup_chip,
             range_checker_chip,
@@ -206,18 +225,18 @@ impl<A> Rv32JalrStep<A> {
     }
 }
 
-impl<F, A> TraceStep<F> for Rv32JalrStep<A>
+impl<F, AdapterAir, AdapterStep> TraceStep<F> for Rv32JalrStep<AdapterAir, AdapterStep>
 where
     F: PrimeField32,
-    A: 'static
+    AdapterStep: 'static
         + for<'a> AdapterTraceStep<
             F,
             ReadData = [u8; RV32_REGISTER_NUM_LIMBS],
             WriteData = [u8; RV32_REGISTER_NUM_LIMBS],
         >,
 {
-    type RecordLayout = EmptyLayout<A>;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut Rv32JalrCoreRecord);
+    type RecordLayout = EmptyLayout<AdapterStep>;
+    type RecordMut<'a> = (AdapterStep::RecordMut<'a>, &'a mut Rv32JalrCoreRecord);
 
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
@@ -245,7 +264,7 @@ where
         let arena = &mut state.ctx.arenas[chip_index];
         let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
-        A::start(*state.pc, state.memory, &mut adapter_record);
+        AdapterStep::start(*state.pc, state.memory, &mut adapter_record);
 
         core_record.rs1_val = u32::from_le_bytes(self.adapter.read(
             state.memory,
@@ -273,13 +292,14 @@ where
         Ok(())
     }
 }
-impl<F, A> TraceFiller<F> for Rv32JalrStep<A>
+impl<F, AdapterAir, AdapterStep> TraceFiller<F> for Rv32JalrStep<AdapterAir, AdapterStep>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
+    AdapterStep: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (adapter_row, mut core_row) =
+            unsafe { row_slice.split_at_mut_unchecked(AdapterStep::WIDTH) };
 
         self.adapter.fill_trace_row(mem_helper, adapter_row);
         let record: &Rv32JalrCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
@@ -319,10 +339,10 @@ where
     }
 }
 
-impl<F, A> StepExecutorE1<F> for Rv32JalrStep<A>
+impl<F, AdapterAir, AdapterStep> StepExecutorE1<F> for Rv32JalrStep<AdapterAir, AdapterStep>
 where
     F: PrimeField32,
-    A: 'static
+    AdapterStep: 'static
         + for<'a> AdapterExecutorE1<
             F,
             ReadData = [u8; RV32_REGISTER_NUM_LIMBS],

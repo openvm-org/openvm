@@ -8,7 +8,7 @@ use openvm_circuit::{
         execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, EmptyLayout, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
-        VmAdapterInterface, VmCoreAir, VmStateMut,
+        VmAdapterInterface, VmAirWrapper, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -27,7 +27,7 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    rap::BaseAirWithPublicValues,
+    rap::{get_air_name, BaseAirWithPublicValues},
 };
 
 use crate::adapters::LoadStoreInstruction;
@@ -183,25 +183,49 @@ pub struct LoadSignExtendCoreRecord<const NUM_CELLS: usize> {
 }
 
 #[derive(derive_new::new)]
-pub struct LoadSignExtendStep<A, const NUM_CELLS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct LoadSignExtendStep<
+    AdapterAir,
+    AdapterStep,
+    const NUM_CELLS: usize,
+    const LIMB_BITS: usize,
+> {
+    air: VmAirWrapper<AdapterAir, LoadSignExtendCoreAir<NUM_CELLS, LIMB_BITS>>,
+    adapter: AdapterStep,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceStep<F>
-    for LoadSignExtendStep<A, NUM_CELLS, LIMB_BITS>
+impl<AdapterAir, AdapterStep, const NUM_CELLS: usize, const LIMB_BITS: usize> ChipUsageGetter
+    for LoadSignExtendStep<AdapterAir, AdapterStep, NUM_CELLS, LIMB_BITS>
+{
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+
+    fn trace_width(&self) -> usize {
+        BaseAir::width(&self.air)
+    }
+
+    fn current_trace_height(&self) -> usize {
+        // TODO(ayush): fix this
+        // unimplemented!()
+        0
+    }
+}
+
+impl<F, AdapterAir, AdapterStep, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceStep<F>
+    for LoadSignExtendStep<AdapterAir, AdapterStep, NUM_CELLS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static
+    AdapterStep: 'static
         + for<'a> AdapterTraceStep<
             F,
             ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
             WriteData = [u32; NUM_CELLS],
         >,
 {
-    type RecordLayout = EmptyLayout<A>;
+    type RecordLayout = EmptyLayout<AdapterStep>;
     type RecordMut<'a> = (
-        A::RecordMut<'a>,
+        AdapterStep::RecordMut<'a>,
         &'a mut LoadSignExtendCoreRecord<NUM_CELLS>,
     );
 
@@ -230,7 +254,7 @@ where
         let arena = &mut state.ctx.arenas[chip_index];
         let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
-        A::start(*state.pc, state.memory, &mut adapter_record);
+        AdapterStep::start(*state.pc, state.memory, &mut adapter_record);
 
         let tmp = self
             .adapter
@@ -260,14 +284,15 @@ where
     }
 }
 
-impl<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for LoadSignExtendStep<A, NUM_CELLS, LIMB_BITS>
+impl<F, AdapterAir, AdapterStep, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceFiller<F>
+    for LoadSignExtendStep<AdapterAir, AdapterStep, NUM_CELLS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
+    AdapterStep: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (adapter_row, mut core_row) =
+            unsafe { row_slice.split_at_mut_unchecked(AdapterStep::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
         let record: &LoadSignExtendCoreRecord<NUM_CELLS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
@@ -296,11 +321,11 @@ where
         core_row.opcode_loadb_flag0 = F::from_bool(record.is_byte && ((shift & 1) == 0));
     }
 }
-impl<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
-    for LoadSignExtendStep<A, NUM_CELLS, LIMB_BITS>
+impl<F, AdapterAir, AdapterStep, const NUM_CELLS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
+    for LoadSignExtendStep<AdapterAir, AdapterStep, NUM_CELLS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static
+    AdapterStep: 'static
         + AdapterExecutorE1<
             F,
             ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),

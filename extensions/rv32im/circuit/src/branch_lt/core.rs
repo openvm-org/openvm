@@ -5,7 +5,7 @@ use openvm_circuit::{
         execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, EmptyLayout, ImmInstruction, RecordArena, Result, StepExecutorE1,
-        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        TraceFiller, TraceStep, VmAdapterInterface, VmAirWrapper, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -24,7 +24,7 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    rap::BaseAirWithPublicValues,
+    rap::{get_air_name, BaseAirWithPublicValues},
 };
 use strum::IntoEnumIterator;
 
@@ -201,21 +201,46 @@ pub struct BranchLessThanCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usi
 }
 
 #[derive(derive_new::new)]
-pub struct BranchLessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
+pub struct BranchLessThanStep<
+    AdapterAir,
+    AdapterStep,
+    const NUM_LIMBS: usize,
+    const LIMB_BITS: usize,
+> {
+    air: VmAirWrapper<AdapterAir, BranchLessThanCoreAir<NUM_LIMBS, LIMB_BITS>>,
+    adapter: AdapterStep,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub offset: usize,
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F>
-    for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
+impl<AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> ChipUsageGetter
+    for BranchLessThanStep<AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
+{
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+
+    fn trace_width(&self) -> usize {
+        BaseAir::width(&self.air)
+    }
+
+    fn current_trace_height(&self) -> usize {
+        // TODO(ayush): fix this
+        // unimplemented!()
+        0
+    }
+}
+
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F>
+    for BranchLessThanStep<AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static + for<'a> AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
+    AdapterStep:
+        'static + for<'a> AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
 {
-    type RecordLayout = EmptyLayout<A>;
+    type RecordLayout = EmptyLayout<AdapterStep>;
     type RecordMut<'a> = (
-        A::RecordMut<'a>,
+        AdapterStep::RecordMut<'a>,
         &'a mut BranchLessThanCoreRecord<NUM_LIMBS, LIMB_BITS>,
     );
 
@@ -240,7 +265,7 @@ where
         let arena = &mut state.ctx.arenas[chip_index];
         let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
-        A::start(*state.pc, state.memory, &mut adapter_record);
+        AdapterStep::start(*state.pc, state.memory, &mut adapter_record);
 
         let [rs1, rs2] = self
             .adapter
@@ -262,14 +287,15 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
+    for BranchLessThanStep<AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
+    AdapterStep: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (adapter_row, mut core_row) =
+            unsafe { row_slice.split_at_mut_unchecked(AdapterStep::WIDTH) };
 
         let record: &BranchLessThanCoreRecord<NUM_LIMBS, LIMB_BITS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
@@ -356,11 +382,12 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
-    for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
+    for BranchLessThanStep<AdapterAir, AdapterStep, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static + for<'a> AdapterExecutorE1<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
+    AdapterStep: 'static
+        + for<'a> AdapterExecutorE1<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
 {
     fn execute_e1<Ctx>(
         &self,

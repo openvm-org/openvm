@@ -5,7 +5,7 @@ use openvm_circuit::{
         execution_mode::{metered::MeteredCtx, tracegen::TracegenCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, EmptyLayout, ImmInstruction, RecordArena, Result, StepExecutorE1,
-        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        TraceFiller, TraceStep, VmAdapterInterface, VmAirWrapper, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -20,7 +20,7 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    rap::BaseAirWithPublicValues,
+    rap::{get_air_name, BaseAirWithPublicValues},
 };
 use strum::IntoEnumIterator;
 
@@ -147,19 +147,43 @@ pub struct BranchEqualCoreRecord<const NUM_LIMBS: usize> {
 }
 
 #[derive(derive_new::new)]
-pub struct BranchEqualStep<A, const NUM_LIMBS: usize> {
-    adapter: A,
+pub struct BranchEqualStep<AdapterAir, AdapterStep, const NUM_LIMBS: usize> {
+    air: VmAirWrapper<AdapterAir, BranchEqualCoreAir<NUM_LIMBS>>,
+    adapter: AdapterStep,
     pub offset: usize,
     pub pc_step: u32,
 }
 
-impl<F, A, const NUM_LIMBS: usize> TraceStep<F> for BranchEqualStep<A, NUM_LIMBS>
+impl<AdapterAir, AdapterStep, const NUM_LIMBS: usize> ChipUsageGetter
+    for BranchEqualStep<AdapterAir, AdapterStep, NUM_LIMBS>
+{
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+
+    fn trace_width(&self) -> usize {
+        BaseAir::width(&self.air)
+    }
+
+    fn current_trace_height(&self) -> usize {
+        // TODO(ayush): fix this
+        // unimplemented!()
+        0
+    }
+}
+
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize> TraceStep<F>
+    for BranchEqualStep<AdapterAir, AdapterStep, NUM_LIMBS>
 where
     F: PrimeField32,
-    A: 'static + for<'a> AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
+    AdapterStep:
+        'static + for<'a> AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
 {
-    type RecordLayout = EmptyLayout<A>;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut BranchEqualCoreRecord<NUM_LIMBS>);
+    type RecordLayout = EmptyLayout<AdapterStep>;
+    type RecordMut<'a> = (
+        AdapterStep::RecordMut<'a>,
+        &'a mut BranchEqualCoreRecord<NUM_LIMBS>,
+    );
 
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", BranchEqualOpcode::from_usize(opcode - self.offset))
@@ -181,7 +205,7 @@ where
         let arena = &mut state.ctx.arenas[chip_index];
         let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
-        A::start(*state.pc, state.memory, &mut adapter_record);
+        AdapterStep::start(*state.pc, state.memory, &mut adapter_record);
 
         let [rs1, rs2] = self
             .adapter
@@ -203,13 +227,15 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize> TraceFiller<F> for BranchEqualStep<A, NUM_LIMBS>
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize> TraceFiller<F>
+    for BranchEqualStep<AdapterAir, AdapterStep, NUM_LIMBS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
+    AdapterStep: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (adapter_row, mut core_row) =
+            unsafe { row_slice.split_at_mut_unchecked(AdapterStep::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
         let record: &BranchEqualCoreRecord<NUM_LIMBS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
@@ -236,10 +262,12 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize> StepExecutorE1<F> for BranchEqualStep<A, NUM_LIMBS>
+impl<F, AdapterAir, AdapterStep, const NUM_LIMBS: usize> StepExecutorE1<F>
+    for BranchEqualStep<AdapterAir, AdapterStep, NUM_LIMBS>
 where
     F: PrimeField32,
-    A: 'static + for<'a> AdapterExecutorE1<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
+    AdapterStep: 'static
+        + for<'a> AdapterExecutorE1<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
 {
     fn execute_e1<Ctx>(
         &self,

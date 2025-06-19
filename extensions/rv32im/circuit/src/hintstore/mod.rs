@@ -38,7 +38,7 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
 };
 
 use crate::adapters::{
@@ -322,13 +322,30 @@ impl<'a> CustomBorrow<'a, Rv32HintStoreRecordMut<'a>, Rv32HintStoreMetadata> for
     }
 }
 
-pub struct Rv32HintStoreStep {
+pub struct Rv32HintStoreChip {
+    air: Rv32HintStoreAir,
     pointer_max_bits: usize,
     offset: usize,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl Rv32HintStoreStep {
+impl ChipUsageGetter for Rv32HintStoreChip {
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+
+    fn trace_width(&self) -> usize {
+        BaseAir::width(&self.air)
+    }
+
+    fn current_trace_height(&self) -> usize {
+        // TODO(ayush): fix this
+        // unimplemented!()
+        0
+    }
+}
+
+impl Rv32HintStoreChip {
     pub fn new(
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         pointer_max_bits: usize,
@@ -456,7 +473,7 @@ where
     }
 }
 
-impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreStep {
+impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreChip {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -685,5 +702,3 @@ where
         Ok(())
     }
 }
-
-pub type Rv32HintStoreChip<F> = NewVmChipWrapper<F, Rv32HintStoreAir, Rv32HintStoreStep>;
