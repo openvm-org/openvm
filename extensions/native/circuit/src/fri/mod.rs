@@ -950,38 +950,38 @@ where
 
             {
                 // ins 1 row
-                let cols_ins1: &mut Instruction1Cols<F> = ins1_chunk[..INS_1_WIDTH].borrow_mut();
+                let cols: &mut Instruction1Cols<F> = ins1_chunk[..INS_1_WIDTH].borrow_mut();
 
-                cols_ins1.write_a_x_is_first = write_a;
+                cols.write_a_x_is_first = write_a;
 
                 mem_helper.fill(
                     record.common.b_ptr_aux.prev_timestamp,
                     timestamp + 3,
-                    cols_ins1.b_ptr_aux.as_mut(),
+                    cols.b_ptr_aux.as_mut(),
                 );
-                cols_ins1.b_ptr_ptr = record.common.b_ptr_ptr;
+                cols.b_ptr_ptr = record.common.b_ptr_ptr;
 
                 mem_helper.fill(
                     record.common.a_ptr_aux.prev_timestamp,
                     timestamp + 2,
-                    cols_ins1.a_ptr_aux.as_mut(),
+                    cols.a_ptr_aux.as_mut(),
                 );
-                cols_ins1.a_ptr_ptr = record.common.a_ptr_ptr;
+                cols.a_ptr_ptr = record.common.a_ptr_ptr;
 
-                cols_ins1.pc = F::from_canonical_u32(record.common.from_pc);
+                cols.pc = F::from_canonical_u32(record.common.from_pc);
 
-                cols_ins1.prefix.data.alpha = alpha;
-                cols_ins1.prefix.data.result = results.pop().unwrap();
-                cols_ins1.prefix.data.idx = F::from_canonical_usize(length);
-                cols_ins1.prefix.data.b_ptr = b_ptr;
-                cols_ins1.prefix.data.write_a = write_a;
-                cols_ins1.prefix.data.a_ptr = a_ptr;
+                cols.prefix.data.alpha = alpha;
+                cols.prefix.data.result = results.pop().unwrap();
+                cols.prefix.data.idx = F::from_canonical_usize(length);
+                cols.prefix.data.b_ptr = b_ptr;
+                cols.prefix.data.write_a = write_a;
+                cols.prefix.data.a_ptr = a_ptr;
 
-                cols_ins1.prefix.a_or_is_first = F::ONE;
+                cols.prefix.a_or_is_first = F::ONE;
 
-                cols_ins1.prefix.general.timestamp = F::from_canonical_u32(timestamp);
-                cols_ins1.prefix.general.is_ins_row = F::ONE;
-                cols_ins1.prefix.general.is_workload_row = F::ZERO;
+                cols.prefix.general.timestamp = F::from_canonical_u32(timestamp);
+                cols.prefix.general.is_ins_row = F::ONE;
+                cols.prefix.general.is_workload_row = F::ZERO;
 
                 ins1_chunk[INS_1_WIDTH..OVERALL_WIDTH].fill(F::ZERO);
             }
