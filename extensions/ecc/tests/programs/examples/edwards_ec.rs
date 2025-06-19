@@ -27,24 +27,24 @@ pub fn main() {
 
     // random point on edwards25519
     let x2 = Ed25519Coord::from_u32(2);
-    let y2 = Ed25519Coord::from_be_bytes(&hex!(
+    let y2 = Ed25519Coord::from_be_bytes_unchecked(&hex!(
         "1A43BF127BDDC4D71FF910403C11DDB5BA2BCDD2815393924657EF111E712631"
     ));
     let mut p2 = Ed25519Point::from_xy(x2, y2).unwrap();
 
     // This is the sum of (x1, y1) and (x2, y2).
-    let x3 = Ed25519Coord::from_be_bytes(&hex!(
+    let x3 = Ed25519Coord::from_be_bytes_unchecked(&hex!(
         "636C0B519B2C5B1E0D3BFD213F45AFD5DAEE3CECC9B68CF88615101BC78329E6"
     ));
-    let y3 = Ed25519Coord::from_be_bytes(&hex!(
+    let y3 = Ed25519Coord::from_be_bytes_unchecked(&hex!(
         "704D8868CB335A7B609D04B9CD619511675691A78861F1DFF7A5EBC389C7EA92"
     ));
 
     // This is 2 * (x1, y1)
-    let x4 = Ed25519Coord::from_be_bytes(&hex!(
+    let x4 = Ed25519Coord::from_be_bytes_unchecked(&hex!(
         "56B98CC045559AD2BBC45CAB58D842ECEE264DB9395F6014B772501B62BB7EE8"
     ));
-    let y4 = Ed25519Coord::from_be_bytes(&hex!(
+    let y4 = Ed25519Coord::from_be_bytes_unchecked(&hex!(
         "1BCA918096D89C83A15105DF343DC9F7510494407750226DAC0A7620ACE77BEB"
     ));
 

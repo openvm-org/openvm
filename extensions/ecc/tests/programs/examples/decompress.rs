@@ -75,8 +75,8 @@ pub fn main() {
     test_impossible_sw_decompression::<CurvePoint1mod4>(&Fp1mod4::from_u8(1), rec_id);
 
     // ed25519
-    let x = Ed25519Coord::from_le_bytes(&bytes[192..224]);
-    let y = Ed25519Coord::from_le_bytes(&bytes[224..256]);
+    let x = Ed25519Coord::from_le_bytes_unchecked(&bytes[192..224]);
+    let y = Ed25519Coord::from_le_bytes_unchecked(&bytes[224..256]);
     let rec_id = x.as_le_bytes()[0] & 1;
     test_possible_te_decompression::<Ed25519Point>(&x, &y, rec_id);
     // y = 2 is not on the y-coordinate of any point on the Ed25519 curve

@@ -84,18 +84,6 @@ name = "sec1_decode"
 required-features = ["k256"]
 
 [[example]]
-name = "ecdsa_recover_p256"
-required-features = ["p256"]
-
-[[example]]
-name = "ecdsa_recover_k256"
-required-features = ["k256"]
-
-[[example]]
-name = "sec1_decode"
-required-features = ["k256"]
-
-[[example]]
 name = "edwards_ec"
 required-features = ["ed25519"]
 

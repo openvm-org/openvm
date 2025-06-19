@@ -14,8 +14,7 @@ mod tests {
         utils::{air_test, air_test_with_min_segments},
     };
     use openvm_ecc_circuit::{
-        CurveConfig, EccExtension, Rv32EccConfig, SwCurveCoeffs, ED25519_CONFIG, P256_CONFIG,
-        SECP256K1_CONFIG,
+        CurveConfig, Rv32EccConfig, SwCurveCoeffs, ED25519_CONFIG, P256_CONFIG, SECP256K1_CONFIG,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_rv32im_transpiler::{
