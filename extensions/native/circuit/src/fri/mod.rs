@@ -590,7 +590,6 @@ pub struct FriReducedOpeningCommonRecord<F> {
     pub hint_id_ptr: F,
 
     pub result_ptr: F,
-    pub result: [F; EXT_DEG],
     pub result_aux: MemoryWriteAuxRecord<F, EXT_DEG>,
 }
 
@@ -599,11 +598,7 @@ pub struct FriReducedOpeningCommonRecord<F> {
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct FriReducedOpeningWorkloadRowRecord<F> {
-    pub timestamp: u32,
     pub a: F,
-    pub a_ptr: F,
-    pub b_ptr: F,
-    pub result: [F; EXT_DEG],
     pub a_aux: MemoryWriteAuxRecord<F, 1>,
     pub b: [F; EXT_DEG],
     pub b_aux: MemoryReadAuxRecord,
@@ -808,12 +803,8 @@ where
         for (i, (a, b)) in as_and_bs.into_iter().rev().enumerate() {
             let workload_row = &mut record.workload[i];
 
-            workload_row.timestamp = timestamp_start + ((length - i) * 2) as u32;
-            workload_row.a_ptr = a_ptr + F::from_canonical_usize(length - i);
             workload_row.a = a;
-            workload_row.b_ptr = b_ptr + F::from_canonical_usize((length - i) * EXT_DEG);
             workload_row.b = b;
-            workload_row.result = result;
 
             // result = result * alpha + (b - a)
             result = FieldExtension::add(
@@ -831,7 +822,6 @@ where
             &mut record.common.result_aux.prev_data,
         );
         record.common.result_ptr = e;
-        record.common.result = result;
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -876,23 +866,44 @@ where
             let record: FriReducedOpeningRecordMut<F> =
                 unsafe { get_record_from_slice(&mut chunk, metadata) };
 
+            let timestamp = record.common.timestamp;
             let length = record.header.length as usize;
             let alpha = record.common.alpha;
             let is_init = record.common.is_init;
             let write_a = F::from_bool(!is_init);
-            let result = record.common.result;
+
+            let a_ptr = record.common.a_ptr;
+            let b_ptr = record.common.b_ptr;
+
+            let (workload_chunk, rest) = chunk.split_at_mut(length * OVERALL_WIDTH);
+            let (ins1_chunk, ins2_chunk) = rest.split_at_mut(OVERALL_WIDTH);
+
+            let mut results: Vec<[F; EXT_DEG]> =
+                std::iter::once([F::ZERO; EXT_DEG])
+                    .chain(record.workload.iter().scan(
+                        [F::ZERO; EXT_DEG],
+                        |result, workload_row| {
+                            let a = workload_row.a;
+                            let b = workload_row.b;
+
+                            *result = FieldExtension::add(
+                                FieldExtension::multiply(*result, alpha),
+                                FieldExtension::subtract(b, elem_to_ext(a)),
+                            );
+                            Some(*result)
+                        },
+                    ))
+                    .collect();
 
             {
                 // ins2 row
-                let offset = (length + 1) * OVERALL_WIDTH;
-                let cols: &mut Instruction2Cols<F> =
-                    chunk[offset..offset + INS_2_WIDTH].borrow_mut();
+                let cols: &mut Instruction2Cols<F> = ins2_chunk[..INS_2_WIDTH].borrow_mut();
 
                 cols.write_a_x_is_first = F::ZERO;
 
                 mem_helper.fill(
                     record.common.is_init_aux.prev_timestamp,
-                    record.common.timestamp + 4,
+                    timestamp + 4,
                     cols.is_init_aux.as_mut(),
                 );
                 cols.is_init_ptr = record.common.is_init_ptr;
@@ -903,80 +914,89 @@ where
                     .set_prev_data(record.common.result_aux.prev_data);
                 mem_helper.fill(
                     record.common.result_aux.prev_timestamp,
-                    record.common.timestamp + 5 + 2 * length as u32,
+                    timestamp + 5 + 2 * length as u32,
                     cols.result_aux.as_mut(),
                 );
                 cols.result_ptr = record.common.result_ptr;
 
                 mem_helper.fill(
                     record.common.alpha_aux.prev_timestamp,
-                    record.common.timestamp,
+                    timestamp,
                     cols.alpha_aux.as_mut(),
                 );
                 cols.alpha_ptr = record.common.alpha_ptr;
 
                 mem_helper.fill(
                     record.common.length_aux.prev_timestamp,
-                    record.common.timestamp + 1,
+                    timestamp + 1,
                     cols.length_aux.as_mut(),
                 );
                 cols.length_ptr = record.common.length_ptr;
 
                 cols.is_first = F::ZERO;
 
-                cols.general.timestamp = F::from_canonical_u32(record.common.timestamp);
+                cols.general.timestamp = F::from_canonical_u32(timestamp);
                 cols.general.is_ins_row = F::ONE;
                 cols.general.is_workload_row = F::ZERO;
 
-                chunk[offset + INS_2_WIDTH..offset + OVERALL_WIDTH].fill(F::ZERO);
+                ins2_chunk[INS_2_WIDTH..OVERALL_WIDTH].fill(F::ZERO);
             }
+
             {
                 // ins 1 row
-                let offset = length * OVERALL_WIDTH;
-                let cols: &mut Instruction1Cols<F> =
-                    chunk[offset..offset + INS_1_WIDTH].borrow_mut();
+                let cols_ins1: &mut Instruction1Cols<F> = ins1_chunk[..INS_1_WIDTH].borrow_mut();
 
-                cols.write_a_x_is_first = write_a;
+                cols_ins1.write_a_x_is_first = write_a;
 
                 mem_helper.fill(
                     record.common.b_ptr_aux.prev_timestamp,
-                    record.common.timestamp + 3,
-                    cols.b_ptr_aux.as_mut(),
+                    timestamp + 3,
+                    cols_ins1.b_ptr_aux.as_mut(),
                 );
-                cols.b_ptr_ptr = record.common.b_ptr_ptr;
+                cols_ins1.b_ptr_ptr = record.common.b_ptr_ptr;
 
                 mem_helper.fill(
                     record.common.a_ptr_aux.prev_timestamp,
-                    record.common.timestamp + 2,
-                    cols.a_ptr_aux.as_mut(),
+                    timestamp + 2,
+                    cols_ins1.a_ptr_aux.as_mut(),
                 );
-                cols.a_ptr_ptr = record.common.a_ptr_ptr;
+                cols_ins1.a_ptr_ptr = record.common.a_ptr_ptr;
 
-                cols.pc = F::from_canonical_u32(record.common.from_pc);
+                cols_ins1.pc = F::from_canonical_u32(record.common.from_pc);
 
-                cols.prefix.data.alpha = alpha;
-                cols.prefix.data.result = result;
-                cols.prefix.data.idx = F::from_canonical_usize(length);
-                cols.prefix.data.b_ptr = record.common.b_ptr;
-                cols.prefix.data.write_a = write_a;
-                cols.prefix.data.a_ptr = record.common.a_ptr;
+                cols_ins1.prefix.data.alpha = alpha;
+                cols_ins1.prefix.data.result = results.pop().unwrap();
+                cols_ins1.prefix.data.idx = F::from_canonical_usize(length);
+                cols_ins1.prefix.data.b_ptr = b_ptr;
+                cols_ins1.prefix.data.write_a = write_a;
+                cols_ins1.prefix.data.a_ptr = a_ptr;
 
-                cols.prefix.a_or_is_first = F::ONE;
+                cols_ins1.prefix.a_or_is_first = F::ONE;
 
-                cols.prefix.general.timestamp = F::from_canonical_u32(record.common.timestamp);
-                cols.prefix.general.is_ins_row = F::ONE;
-                cols.prefix.general.is_workload_row = F::ZERO;
+                cols_ins1.prefix.general.timestamp = F::from_canonical_u32(timestamp);
+                cols_ins1.prefix.general.is_ins_row = F::ONE;
+                cols_ins1.prefix.general.is_workload_row = F::ZERO;
 
-                chunk[offset + INS_1_WIDTH..offset + OVERALL_WIDTH].fill(F::ZERO);
+                ins1_chunk[INS_1_WIDTH..OVERALL_WIDTH].fill(F::ZERO);
             }
-            for (i, workload_row) in record.workload.iter().enumerate().rev() {
+
+            for (i, (workload_row, result)) in record
+                .workload
+                .iter()
+                .zip(results.into_iter())
+                .enumerate()
+                .rev()
+            {
                 let offset = i * OVERALL_WIDTH;
-                let cols: &mut WorkloadCols<F> = chunk[offset..offset + WL_WIDTH].borrow_mut();
+                let cols: &mut WorkloadCols<F> =
+                    workload_chunk[offset..offset + WL_WIDTH].borrow_mut();
+
+                let timestamp = timestamp + ((length - i) * 2) as u32;
 
                 // fill in reverse order
                 mem_helper.fill(
                     workload_row.b_aux.prev_timestamp,
-                    workload_row.timestamp + 4,
+                    timestamp + 4,
                     cols.b_aux.as_mut(),
                 );
                 cols.b = workload_row.b;
@@ -986,24 +1006,24 @@ where
                 }
                 mem_helper.fill(
                     workload_row.a_aux.prev_timestamp,
-                    workload_row.timestamp + 3,
+                    timestamp + 3,
                     cols.a_aux.as_mut(),
                 );
 
                 cols.prefix.data.alpha = alpha;
-                cols.prefix.data.result = workload_row.result;
+                cols.prefix.data.result = result;
                 cols.prefix.data.idx = F::from_canonical_usize(i);
-                cols.prefix.data.b_ptr = workload_row.b_ptr;
+                cols.prefix.data.b_ptr = b_ptr + F::from_canonical_usize((length - i) * EXT_DEG);
                 cols.prefix.data.write_a = write_a;
-                cols.prefix.data.a_ptr = workload_row.a_ptr;
+                cols.prefix.data.a_ptr = a_ptr + F::from_canonical_usize(length - i);
 
                 cols.prefix.a_or_is_first = workload_row.a;
 
-                cols.prefix.general.timestamp = F::from_canonical_u32(workload_row.timestamp);
+                cols.prefix.general.timestamp = F::from_canonical_u32(timestamp);
                 cols.prefix.general.is_ins_row = F::ZERO;
                 cols.prefix.general.is_workload_row = F::ONE;
 
-                chunk[offset + WL_WIDTH..offset + OVERALL_WIDTH].fill(F::ZERO);
+                workload_chunk[offset + WL_WIDTH..offset + OVERALL_WIDTH].fill(F::ZERO);
             }
         });
     }
