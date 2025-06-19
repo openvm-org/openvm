@@ -237,9 +237,7 @@ where
         })?;
 
         if let Some(exit_code) = exec_state.exit_code {
-            if exit_code != ExitCode::Success as u32 {
-                return Err(ExecutionError::FailedWithExitCode(exit_code));
-            }
+            check_exit_code(exit_code)?;
         }
         if let Some(instret_end) = instret_end {
             assert_eq!(exec_state.instret, instret_end);
@@ -343,14 +341,7 @@ where
             executor.execute_from_state(&mut exec_state)
         })?;
 
-        match exec_state.exit_code {
-            Some(code) => {
-                if code != ExitCode::Success as u32 {
-                    return Err(ExecutionError::FailedWithExitCode(code));
-                }
-            }
-            None => return Err(ExecutionError::DidNotTerminate),
-        };
+        check_termination(exec_state.exit_code)?;
 
         Ok(exec_state.ctx.segments)
     }
@@ -491,9 +482,7 @@ where
         if end_state.is_terminate != 1 {
             return Err(ExecutionError::DidNotTerminate);
         }
-        if end_state.exit_code != ExitCode::Success as u32 {
-            return Err(ExecutionError::FailedWithExitCode(end_state.exit_code));
-        }
+        check_exit_code(end_state.exit_code)?;
         Ok(final_memory)
     }
 
@@ -686,14 +675,7 @@ where
             executor.execute_from_state(&mut exec_state)
         })?;
 
-        match exec_state.exit_code {
-            Some(code) => {
-                if code != ExitCode::Success as u32 {
-                    return Err(ExecutionError::FailedWithExitCode(code));
-                }
-            }
-            None => return Err(ExecutionError::DidNotTerminate),
-        };
+        check_termination(exec_state.exit_code)?;
 
         Ok(())
     }
@@ -761,14 +743,7 @@ where
             executor.execute_from_state(&mut exec_state)
         })?;
 
-        match exec_state.exit_code {
-            Some(code) => {
-                if code != ExitCode::Success as u32 {
-                    return Err(ExecutionError::FailedWithExitCode(code));
-                }
-            }
-            None => return Err(ExecutionError::DidNotTerminate),
-        };
+        check_termination(exec_state.exit_code)?;
 
         // Check segment count
         assert_eq!(
@@ -1327,4 +1302,18 @@ where
     }
 
     Ok(chip_complex)
+}
+
+fn check_exit_code(exit_code: u32) -> Result<(), ExecutionError> {
+    if exit_code != ExitCode::Success as u32 {
+        return Err(ExecutionError::FailedWithExitCode(exit_code));
+    }
+    Ok(())
+}
+
+fn check_termination(exit_code: Option<u32>) -> Result<(), ExecutionError> {
+    match exit_code {
+        Some(code) => check_exit_code(code),
+        None => Err(ExecutionError::DidNotTerminate),
+    }
 }
