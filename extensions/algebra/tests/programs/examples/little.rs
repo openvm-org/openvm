@@ -34,7 +34,7 @@ pub fn main() {
     assert_eq!(res, inv);
 
     let two = Secp256k1Coord::from_u32(2);
-    let minus_two = Secp256k1Coord::from_le_bytes(&pow);
+    let minus_two = Secp256k1Coord::from_le_bytes_unchecked(&pow);
 
     assert_eq!(res - &minus_two, inv + &two);
 
