@@ -2,6 +2,7 @@ use openvm_algebra_circuit::*;
 use openvm_circuit::arch::{InitFileGenerator, SystemConfig};
 use openvm_circuit_derive::VmConfig;
 use openvm_rv32im_circuit::*;
+use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
@@ -21,6 +22,8 @@ pub struct Rv32EccConfig {
     pub modular: ModularExtension,
     #[extension]
     pub ecc: EccExtension,
+    #[extension]
+    pub sha256: Sha256,
 }
 
 impl Rv32EccConfig {
@@ -44,6 +47,7 @@ impl Rv32EccConfig {
             io: Default::default(),
             modular: ModularExtension::new(primes),
             ecc: EccExtension::new(sw_curves, te_curves),
+            sha256: Default::default(),
         }
     }
 }

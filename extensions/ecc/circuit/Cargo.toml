@@ -20,6 +20,7 @@ openvm-algebra-circuit = { workspace = true }
 openvm-rv32-adapters = { workspace = true }
 openvm-ecc-transpiler = { workspace = true }
 openvm-ecc-guest = { workspace = true, features = ["ed25519"] }
+openvm-sha256-circuit = { workspace = true }
 
 num-bigint = { workspace = true }
 num-integer = { workspace = true }

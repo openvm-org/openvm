@@ -4774,6 +4774,7 @@ dependencies = [
  "openvm-mod-circuit-builder",
  "openvm-rv32-adapters",
  "openvm-rv32im-circuit",
+ "openvm-sha256-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.8.5",
@@ -4801,7 +4802,9 @@ dependencies = [
  "openvm-ecc-sw-macros",
  "openvm-ecc-te-macros",
  "openvm-rv32im-guest",
+ "openvm-sha2",
  "serde",
+ "signature 2.2.0",
  "strum_macros",
 ]
 
@@ -4819,6 +4822,7 @@ dependencies = [
  "openvm-ecc-transpiler",
  "openvm-rv32im-transpiler",
  "openvm-sdk",
+ "openvm-sha256-transpiler",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",

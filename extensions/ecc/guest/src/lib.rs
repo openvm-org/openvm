@@ -18,6 +18,8 @@ pub use msm::*;
 
 /// Optimized ECDSA implementation with the same functional interface as the `ecdsa` crate
 pub mod ecdsa;
+/// Optimized EDDSA implementation
+pub mod eddsa;
 /// Edwards curve traits
 pub mod edwards;
 /// Weierstrass curve traits

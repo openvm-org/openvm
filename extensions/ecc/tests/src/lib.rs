@@ -26,6 +26,7 @@ mod tests {
         config::{AppConfig, SdkVmConfig},
         StdIn,
     };
+    use openvm_sha256_transpiler::Sha256TranspilerExtension;
     use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::{openvm_stark_backend, p3_baby_bear::BabyBear};
     use openvm_toolchain_tests::{
@@ -316,5 +317,28 @@ mod tests {
         let config =
             test_rv32ecc_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()], vec![]);
         air_test(config, openvm_exe);
+    }
+
+    #[test]
+    fn test_eddsa() -> Result<()> {
+        let config = Rv32EccConfig::new(vec![], vec![ED25519_CONFIG.clone()]);
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "eddsa",
+            ["ed25519"],
+            &config,
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(Sha256TranspilerExtension),
+        )?;
+        air_test(config, openvm_exe);
+        Ok(())
     }
 }
