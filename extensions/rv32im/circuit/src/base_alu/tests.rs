@@ -1,8 +1,9 @@
 use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::arch::{
+    execution_mode::tracegen::TracegenCtx,
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    VmAirWrapper,
+    MatrixRecordArena, VmAirWrapper,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -17,6 +18,7 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -45,7 +47,7 @@ fn create_test_chip(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let mut chip = Rv32BaseAluChip::new(
+    let chip = Rv32BaseAluChip::new(
         VmAirWrapper::new(
             Rv32BaseAluAdapterAir::new(
                 tester.execution_bridge(),
@@ -61,14 +63,14 @@ fn create_test_chip(
         ),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip)
 }
 
-fn set_and_execute(
+fn set_and_execute<RA>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32BaseAluChip<F>,
+    ctx: &mut TracegenCtx<RA>,
     rng: &mut StdRng,
     opcode: BaseAluOpcode,
     b: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
@@ -98,7 +100,7 @@ fn set_and_execute(
         opcode.global_opcode().as_usize(),
         rng,
     );
-    tester.execute(chip, &instruction);
+    tester.execute_with_ctx(chip, &instruction, ctx);
 
     let a = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c)
         .map(F::from_canonical_u8);
@@ -123,6 +125,10 @@ fn rand_rv32_alu_test(opcode: BaseAluOpcode, num_ops: usize) {
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
+
     // TODO(AG): make a more meaningful test for memory accesses
     tester.write(2, 1024, [F::ONE; 4]);
     tester.write(2, 1028, [F::ONE; 4]);
@@ -130,7 +136,16 @@ fn rand_rv32_alu_test(opcode: BaseAluOpcode, num_ops: usize) {
     assert_eq!(sm, [F::ONE; 8]);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+        );
     }
 
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
@@ -148,6 +163,10 @@ fn rand_rv32_alu_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
     let mut tester = VmChipTestBuilder::default_persistent();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
+
     // TODO(AG): make a more meaningful test for memory accesses
     tester.write(2, 1024, [F::ONE; 4]);
     tester.write(2, 1028, [F::ONE; 4]);
@@ -155,7 +174,16 @@ fn rand_rv32_alu_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
     assert_eq!(sm, [F::ONE; 8]);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+        );
     }
 
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
@@ -184,9 +212,14 @@ fn run_negative_alu_test(
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
+
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         Some(b),

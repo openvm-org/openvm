@@ -1,8 +1,9 @@
 use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::arch::{
+    execution_mode::tracegen::TracegenCtx,
     testing::{memory::gen_pointer, VmChipTestBuilder},
-    InstructionExecutor, VmAirWrapper,
+    MatrixRecordArena, VmAirWrapper,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -18,6 +19,7 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -40,8 +42,8 @@ type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_IMM: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
 
-fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32BranchEqualChip<F> {
-    let mut chip = Rv32BranchEqualChip::<F>::new(
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Rv32BranchEqualChip<F> {
+    let chip = Rv32BranchEqualChip::<F>::new(
         VmAirWrapper::new(
             Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
             BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
@@ -53,15 +55,15 @@ fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32BranchEqualChip<F>
         ),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     chip
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: InstructionExecutor<F>>(
+fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut E,
+    chip: &mut Rv32BranchEqualChip<F>,
+    ctx: &mut TracegenCtx<MatrixRecordArena<F>>,
     rng: &mut StdRng,
     opcode: BranchEqualOpcode,
     a: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
@@ -82,7 +84,7 @@ fn set_and_execute<E: InstructionExecutor<F>>(
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_canonical_u8));
 
     let initial_pc = rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1)));
-    tester.execute_with_pc(
+    tester.execute_with_pc_and_ctx(
         chip,
         &Instruction::from_isize(
             opcode.global_opcode(),
@@ -93,6 +95,7 @@ fn set_and_execute<E: InstructionExecutor<F>>(
             1,
         ),
         initial_pc,
+        ctx,
     );
 
     let cmp_result = fast_run_eq(opcode, &a, &b);
@@ -115,10 +118,23 @@ fn set_and_execute<E: InstructionExecutor<F>>(
 fn rand_rv32_branch_eq_test(opcode: BranchEqualOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = create_test_chip(&mut tester);
+    let mut chip = create_test_chip(&tester);
+
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+        );
     }
 
     let tester = tester.build().load(chip).finalize();
@@ -144,11 +160,16 @@ fn run_negative_branch_eq_test(
     let imm = 16i32;
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = create_test_chip(&mut tester);
+    let mut chip = create_test_chip(&tester);
+
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
 
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         Some(a),
@@ -280,11 +301,16 @@ fn execute_roundtrip_sanity_test() {
     let mut tester = VmChipTestBuilder::default();
     let mut chip = create_test_chip(&mut tester);
 
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
+
     let x = [19, 4, 179, 60];
     let y = [19, 32, 180, 60];
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         BranchEqualOpcode::BEQ,
         Some(x),
@@ -295,6 +321,7 @@ fn execute_roundtrip_sanity_test() {
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         BranchEqualOpcode::BNE,
         Some(x),

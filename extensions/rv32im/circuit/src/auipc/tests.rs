@@ -47,7 +47,7 @@ fn create_test_chip(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let mut chip = Rv32AuipcChip::<F>::new(
+    let chip = Rv32AuipcChip::<F>::new(
         VmAirWrapper::new(
             Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
             Rv32AuipcCoreAir::new(bitwise_bus),
@@ -70,7 +70,7 @@ fn create_dense_chip(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let mut chip = DenseChip::<F>::new(
+    let chip = DenseChip::<F>::new(
         VmAirWrapper::new(
             Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
             Rv32AuipcCoreAir::new(bitwise_bus),

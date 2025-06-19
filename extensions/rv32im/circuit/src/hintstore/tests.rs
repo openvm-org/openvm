@@ -1,8 +1,9 @@
 use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::arch::{
+    execution_mode::tracegen::TracegenCtx,
     testing::{memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    ExecutionBridge,
+    ExecutionBridge, MatrixRecordArena,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -20,6 +21,7 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -31,7 +33,7 @@ type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 4096;
 
 fn create_test_chip(
-    tester: &mut VmChipTestBuilder<F>,
+    tester: &VmChipTestBuilder<F>,
 ) -> (
     Rv32HintStoreChip<F>,
     SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
@@ -39,7 +41,7 @@ fn create_test_chip(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let mut chip = Rv32HintStoreChip::<F>::new(
+    let chip = Rv32HintStoreChip::<F>::new(
         Rv32HintStoreAir::new(
             ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
             tester.memory_bridge(),
@@ -50,14 +52,14 @@ fn create_test_chip(
         Rv32HintStoreStep::new(bitwise_chip.clone(), tester.address_bits(), 0),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip)
 }
 
-fn set_and_execute(
+fn set_and_execute<RA>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32HintStoreChip<F>,
+    ctx: &mut TracegenCtx<RA>,
     rng: &mut StdRng,
     opcode: Rv32HintStoreOpcode,
 ) {
@@ -74,18 +76,20 @@ fn set_and_execute(
         tester.streams.hint_stream.push_back(data);
     }
 
-    tester.execute(
+    tester.execute_with_ctx(
         chip,
         &Instruction::from_usize(VmOpcode::from_usize(opcode as usize), [0, b, 0, 1, 2]),
+        ctx,
     );
 
     let write_data = read_data;
     assert_eq!(write_data, tester.read::<4>(2, mem_ptr as usize));
 }
 
-fn set_and_execute_buffer(
+fn set_and_execute_buffer<RA>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32HintStoreChip<F>,
+    ctx: &mut TracegenCtx<RA>,
     rng: &mut StdRng,
     opcode: Rv32HintStoreOpcode,
 ) {
@@ -109,9 +113,10 @@ fn set_and_execute_buffer(
         }
     }
 
-    tester.execute(
+    tester.execute_with_ctx(
         chip,
         &Instruction::from_usize(VmOpcode::from_usize(opcode as usize), [a, b, 0, 1, 2]),
+        ctx,
     );
 
     for i in 0..num_words {
@@ -134,13 +139,18 @@ fn rand_hintstore_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let (mut chip, bitwise_chip) = create_test_chip(&mut tester);
+    let (mut chip, bitwise_chip) = create_test_chip(&tester);
+
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
+
     let num_ops: usize = 100;
     for _ in 0..num_ops {
         if rng.gen_bool(0.5) {
-            set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW);
+            set_and_execute(&mut tester, &mut chip, &mut ctx, &mut rng, HINT_STOREW);
         } else {
-            set_and_execute_buffer(&mut tester, &mut chip, &mut rng, HINT_BUFFER);
+            set_and_execute_buffer(&mut tester, &mut chip, &mut ctx, &mut rng, HINT_BUFFER);
         }
     }
 
@@ -163,9 +173,13 @@ fn run_negative_hintstore_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, bitwise_chip) = create_test_chip(&mut tester);
+    let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
-    set_and_execute(&mut tester, &mut chip, &mut rng, opcode);
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
+
+    set_and_execute(&mut tester, &mut chip, &mut ctx, &mut rng, opcode);
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
@@ -200,10 +214,14 @@ fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let (mut chip, _) = create_test_chip(&mut tester);
+    let (mut chip, _) = create_test_chip(&tester);
+
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
 
     let num_ops: usize = 10;
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW);
+        set_and_execute(&mut tester, &mut chip, &mut ctx, &mut rng, HINT_STOREW);
     }
 }

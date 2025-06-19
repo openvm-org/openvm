@@ -2,10 +2,11 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
+        execution_mode::tracegen::TracegenCtx,
         testing::{
             memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
-        InstructionExecutor, VmAirWrapper,
+        MatrixRecordArena, VmAirWrapper,
     },
     utils::generate_long_number,
 };
@@ -23,6 +24,7 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -54,7 +56,7 @@ fn limb_sra<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 }
 
 fn create_test_chip(
-    tester: &mut VmChipTestBuilder<F>,
+    tester: &VmChipTestBuilder<F>,
 ) -> (
     Rv32DivRemChip<F>,
     SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
@@ -69,7 +71,7 @@ fn create_test_chip(
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let range_tuple_chip = SharedRangeTupleCheckerChip::new(range_tuple_bus);
 
-    let mut chip = Rv32DivRemChip::<F>::new(
+    let chip = Rv32DivRemChip::<F>::new(
         VmAirWrapper::new(
             Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
             DivRemCoreAir::new(bitwise_bus, range_tuple_bus, DivRemOpcode::CLASS_OFFSET),
@@ -82,15 +84,15 @@ fn create_test_chip(
         ),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip, range_tuple_chip)
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: InstructionExecutor<F>>(
+fn set_and_execute<RA>(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut E,
+    chip: &mut Rv32DivRemChip<F>,
+    ctx: &mut TracegenCtx<RA>,
     rng: &mut StdRng,
     opcode: DivRemOpcode,
     b: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
@@ -117,8 +119,9 @@ fn set_and_execute<E: InstructionExecutor<F>>(
 
     let (q, r, _, _, _, _) =
         run_divrem::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(is_signed, &b, &c);
-    tester.execute(
+    tester.execute_with_ctx(
         chip,
+        ctx,
         &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 0]),
     );
 
@@ -142,10 +145,22 @@ fn set_and_execute<E: InstructionExecutor<F>>(
 fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, bitwise_chip, range_tuple_chip) = create_test_chip(&mut tester);
+    let (mut chip, bitwise_chip, range_tuple_chip) = create_test_chip(&tester);
+
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            opcode,
+            None,
+            None,
+        );
     }
 
     // Test special cases in addition to random cases (i.e. zero divisor with b > 0,
@@ -153,6 +168,7 @@ fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         Some([98, 188, 163, 127]),
@@ -161,6 +177,7 @@ fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         Some([98, 188, 163, 229]),
@@ -169,6 +186,7 @@ fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         Some([0, 0, 0, 128]),
@@ -177,6 +195,7 @@ fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         Some([0, 0, 0, 127]),
@@ -185,6 +204,7 @@ fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         Some([0, 0, 0, 0]),
@@ -193,6 +213,7 @@ fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         Some([0, 0, 0, 0]),
@@ -201,6 +222,7 @@ fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         Some([0, 0, 0, 128]),
@@ -242,9 +264,21 @@ fn run_negative_divrem_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, bitwise_chip, range_tuple_chip) = create_test_chip(&mut tester);
+    let (mut chip, bitwise_chip, range_tuple_chip) = create_test_chip(&tester);
 
-    set_and_execute(&mut tester, &mut chip, &mut rng, opcode, Some(b), Some(c));
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
+
+    set_and_execute(
+        &mut tester,
+        &mut chip,
+        &mut ctx,
+        &mut rng,
+        opcode,
+        Some(b),
+        Some(c),
+    );
 
     let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {

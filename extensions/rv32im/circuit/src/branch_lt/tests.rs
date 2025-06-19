@@ -2,8 +2,9 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
+        execution_mode::tracegen::TracegenCtx,
         testing::{memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        InstructionExecutor, VmAirWrapper,
+        MatrixRecordArena, VmAirWrapper,
     },
     utils::i32_to_f,
 };
@@ -20,6 +21,7 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -44,14 +46,14 @@ const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_IMM: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
 
 fn create_test_chip(
-    tester: &mut VmChipTestBuilder<F>,
+    tester: &VmChipTestBuilder<F>,
 ) -> (
     Rv32BranchLessThanChip<F>,
     SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let mut chip = Rv32BranchLessThanChip::<F>::new(
+    let chip = Rv32BranchLessThanChip::<F>::new(
         VmAirWrapper::new(
             Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
             BranchLessThanCoreAir::new(bitwise_bus, BranchLessThanOpcode::CLASS_OFFSET),
@@ -63,15 +65,15 @@ fn create_test_chip(
         ),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip)
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: InstructionExecutor<F>>(
+fn set_and_execute<RA>(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut E,
+    chip: &mut Rv32BranchLessThanChip<F>,
+    ctx: &mut TracegenCtx<RA>,
     rng: &mut StdRng,
     opcode: BranchLessThanOpcode,
     a: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
@@ -91,7 +93,7 @@ fn set_and_execute<E: InstructionExecutor<F>>(
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_canonical_u8));
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_canonical_u8));
 
-    tester.execute_with_pc(
+    tester.execute_with_pc_and_ctx(
         chip,
         &Instruction::from_isize(
             opcode.global_opcode(),
@@ -102,6 +104,7 @@ fn set_and_execute<E: InstructionExecutor<F>>(
             1,
         ),
         rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1))),
+        ctx,
     );
 
     let (cmp_result, _, _, _) =
@@ -127,16 +130,30 @@ fn set_and_execute<E: InstructionExecutor<F>>(
 fn rand_branch_lt_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, bitwise_chip) = create_test_chip(&mut tester);
+    let (mut chip, bitwise_chip) = create_test_chip(&tester);
+
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+        );
     }
 
     // Test special case where b = c
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         Some([101, 128, 202, 255]),
@@ -146,6 +163,7 @@ fn rand_branch_lt_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         Some([36, 0, 0, 0]),
@@ -184,11 +202,16 @@ fn run_negative_branch_lt_test(
     let imm = 16i32;
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, bitwise_chip) = create_test_chip(&mut tester);
+    let (mut chip, bitwise_chip) = create_test_chip(&tester);
+
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
 
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         Some(a),
@@ -447,10 +470,15 @@ fn execute_roundtrip_sanity_test() {
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, _) = create_test_chip(&mut tester);
 
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
+
     let x = [145, 34, 25, 205];
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         BranchLessThanOpcode::BLT,
         Some(x),
@@ -461,6 +489,7 @@ fn execute_roundtrip_sanity_test() {
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         BranchLessThanOpcode::BGE,
         Some(x),

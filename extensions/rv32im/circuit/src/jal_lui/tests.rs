@@ -1,8 +1,9 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::arch::{
+    execution_mode::tracegen::TracegenCtx,
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    VmAirWrapper,
+    MatrixRecordArena, VmAirWrapper,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -17,6 +18,7 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -48,7 +50,7 @@ fn create_test_chip(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let mut chip = Rv32JalLuiChip::<F>::new(
+    let chip = Rv32JalLuiChip::<F>::new(
         VmAirWrapper::new(
             Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(
                 tester.memory_bridge(),
@@ -62,14 +64,14 @@ fn create_test_chip(
         ),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip)
 }
 
-fn set_and_execute(
+fn set_and_execute<RA>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32JalLuiChip<F>,
+    ctx: &mut TracegenCtx<RA>,
     rng: &mut StdRng,
     opcode: Rv32JalLuiOpcode,
     imm: Option<i32>,
@@ -84,7 +86,7 @@ fn set_and_execute(
     let a = rng.gen_range((opcode == LUI) as usize..32) << 2;
     let needs_write = a != 0 || opcode == LUI;
 
-    tester.execute_with_pc(
+    tester.execute_with_pc_and_ctx(
         chip,
         &Instruction::large_from_isize(
             opcode.global_opcode(),
@@ -97,6 +99,7 @@ fn set_and_execute(
             0,
         ),
         initial_pc.unwrap_or(rng.gen_range(imm.unsigned_abs()..(1 << PC_BITS))),
+        ctx,
     );
     let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
     let final_pc = tester.execution.last_to_pc().as_canonical_u32();
@@ -122,8 +125,20 @@ fn rand_jal_lui_test(opcode: Rv32JalLuiOpcode, num_ops: usize) {
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
+
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut chip,
+            &mut ctx,
+            &mut rng,
+            opcode,
+            None,
+            None,
+        );
     }
 
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
@@ -157,9 +172,14 @@ fn run_negative_jal_lui_test(
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
+
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         opcode,
         initial_imm,
@@ -319,9 +339,14 @@ fn execute_roundtrip_sanity_test() {
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, _) = create_test_chip(&tester);
 
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
+        chip.trace_width() * MAX_INS_CAPACITY
+    ]);
+
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         LUI,
         Some((1 << IMM_BITS) - 1),
@@ -330,6 +355,7 @@ fn execute_roundtrip_sanity_test() {
     set_and_execute(
         &mut tester,
         &mut chip,
+        &mut ctx,
         &mut rng,
         JAL,
         Some((1 << RV_IS_TYPE_IMM_BITS) - 1),
