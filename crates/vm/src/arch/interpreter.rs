@@ -1,5 +1,6 @@
 use openvm_instructions::{exe::VmExe, program::Program, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
+use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
     arch::{
@@ -50,7 +51,14 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
         // Initialize the context
         let ctx = ctrl.initialize_context();
 
-        let mut vm_state = VmSegmentState::new(0, self.exe.pc_start, memory, inputs.into(), ctx);
+        let mut vm_state = VmSegmentState::new(
+            0,
+            self.exe.pc_start,
+            memory,
+            inputs.into(),
+            StdRng::seed_from_u64(0),
+            ctx,
+        );
 
         // Start execution
         ctrl.on_start(&mut vm_state, &mut chip_complex);

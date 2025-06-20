@@ -23,6 +23,7 @@ use openvm_stark_backend::{
     verifier::VerificationError,
     Chip,
 };
+use rand::{rngs::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::info_span;
@@ -143,17 +144,26 @@ where
     pub pc: u32,
     pub memory: MemoryImage,
     pub input: Streams<F>,
+    // TODO(ayush): make generic over SeedableRng
+    pub rng: StdRng,
     #[cfg(feature = "bench-metrics")]
     pub metrics: VmMetrics,
 }
 
 impl<F: PrimeField32> VmState<F> {
-    pub fn new(instret: u64, pc: u32, memory: MemoryImage, input: impl Into<Streams<F>>) -> Self {
+    pub fn new(
+        instret: u64,
+        pc: u32,
+        memory: MemoryImage,
+        input: impl Into<Streams<F>>,
+        seed: u64,
+    ) -> Self {
         Self {
             instret,
             pc,
             memory,
             input: input.into(),
+            rng: StdRng::seed_from_u64(seed),
             #[cfg(feature = "bench-metrics")]
             metrics: VmMetrics::default(),
         }
@@ -230,6 +240,7 @@ where
             state.pc,
             Some(GuestMemory::new(state.memory)),
             state.input,
+            state.rng,
             (),
         );
         metrics_span("execute_e1_time_ms", || {
@@ -248,6 +259,7 @@ where
             pc: exec_state.pc,
             memory: exec_state.memory.unwrap().memory,
             input: exec_state.streams,
+            rng: exec_state.rng,
             #[cfg(feature = "bench-metrics")]
             metrics: segment.metrics.partial_take(),
         };
@@ -262,7 +274,7 @@ where
         num_insns: Option<u64>,
     ) -> Result<VmState<F>, ExecutionError> {
         let exe = exe.into();
-        let state = create_initial_state(&self.config.system().memory_config, &exe, input);
+        let state = create_initial_state(&self.config.system().memory_config, &exe, input, 0);
         self.execute_e1_from_state(exe, state, num_insns)
     }
 
@@ -335,6 +347,7 @@ where
             state.pc,
             Some(GuestMemory::new(state.memory)),
             state.input,
+            state.rng,
             ctx,
         );
         metrics_span("execute_metered_time_ms", || {
@@ -354,7 +367,7 @@ where
         interactions: &[usize],
     ) -> Result<Vec<Segment>, ExecutionError> {
         let exe = exe.into();
-        let state = create_initial_state(&self.config.system().memory_config, &exe, input);
+        let state = create_initial_state(&self.config.system().memory_config, &exe, input, 0);
         self.execute_metered_from_state(exe, state, widths, interactions)
     }
 
@@ -410,7 +423,7 @@ where
             }
 
             let mut exec_state =
-                VmSegmentState::new(state.instret, state.pc, None, state.input, ());
+                VmSegmentState::new(state.instret, state.pc, None, state.input, state.rng, ());
             metrics_span("execute_time_ms", || {
                 segment.execute_from_state(&mut exec_state)
             })
@@ -433,6 +446,7 @@ where
                     .memory_image()
                     .clone(),
                 input: exec_state.streams,
+                rng: exec_state.rng,
                 #[cfg(feature = "bench-metrics")]
                 metrics: segment.metrics.partial_take(),
             };
@@ -455,7 +469,7 @@ where
         map_err: impl Fn(ExecutionError) -> E,
     ) -> Result<Vec<R>, E> {
         let exe = exe.into();
-        let state = create_initial_state(&self.config.system().memory_config, &exe, input);
+        let state = create_initial_state(&self.config.system().memory_config, &exe, input, 0);
         self.execute_and_then_from_state(exe, state, segments, f, map_err)
     }
 
@@ -493,7 +507,7 @@ where
         segments: &[Segment],
     ) -> Result<Option<MemoryImage>, ExecutionError> {
         let exe = exe.into();
-        let state = create_initial_state(&self.config.system().memory_config, &exe, input);
+        let state = create_initial_state(&self.config.system().memory_config, &exe, input, 0);
         self.execute_from_state(exe, state, segments)
     }
 
@@ -552,7 +566,7 @@ where
         VC::Periphery: Chip<SC>,
     {
         let exe = exe.into();
-        let state = create_initial_state(&self.config.system().memory_config, &exe, input);
+        let state = create_initial_state(&self.config.system().memory_config, &exe, input, 0);
         self.execute_from_state_and_generate(exe, state, segments)
     }
 
@@ -651,6 +665,7 @@ where
     ) -> Result<(), ExecutionError> {
         let memory =
             create_memory_image(&self.config.system().memory_config, exe.init_memory.clone());
+        let rng = StdRng::seed_from_u64(0);
         let chip_complex =
             create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
                 .unwrap();
@@ -669,6 +684,7 @@ where
             exe.pc_start,
             Some(GuestMemory::new(memory)),
             input.into(),
+            rng,
             ctx,
         );
         metrics_span("execute_e1_time_ms", || {
@@ -689,6 +705,7 @@ where
     ) -> Result<Vec<u32>, ExecutionError> {
         let memory =
             create_memory_image(&self.config.system().memory_config, exe.init_memory.clone());
+        let rng = StdRng::seed_from_u64(0);
         let chip_complex =
             create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
                 .unwrap();
@@ -737,6 +754,7 @@ where
             exe.pc_start,
             Some(GuestMemory::new(memory)),
             input.into(),
+            rng,
             ctx,
         );
         metrics_span("execute_metered_time_ms", || {
@@ -762,6 +780,7 @@ where
         input: impl Into<Streams<F>>,
         trace_heights: Option<&[u32]>,
     ) -> Result<VmSegmentExecutor<F, VC, TracegenExecutionControl>, ExecutionError> {
+        let rng = StdRng::seed_from_u64(0);
         let chip_complex = create_and_initialize_chip_complex(
             &self.config,
             exe.program.clone(),
@@ -782,7 +801,7 @@ where
             segment.set_override_trace_heights(overridden_heights.clone());
         }
 
-        let mut exec_state = VmSegmentState::new(0, exe.pc_start, None, input.into(), ());
+        let mut exec_state = VmSegmentState::new(0, exe.pc_start, None, input.into(), rng, ());
         metrics_span("execute_time_ms", || {
             segment.execute_from_state(&mut exec_state)
         })?;
@@ -1230,15 +1249,16 @@ pub fn create_initial_state<F>(
     memory_config: &MemoryConfig,
     exe: &VmExe<F>,
     input: impl Into<Streams<F>>,
+    seed: u64,
 ) -> VmState<F>
 where
     F: PrimeField32,
 {
     let memory = create_memory_image(memory_config, exe.init_memory.clone());
     #[cfg(feature = "bench-metrics")]
-    let mut state = VmState::new(0, exe.pc_start, memory, input);
+    let mut state = VmState::new(0, exe.pc_start, memory, input, seed);
     #[cfg(not(feature = "bench-metrics"))]
-    let state = VmState::new(0, exe.pc_start, memory, input);
+    let state = VmState::new(0, exe.pc_start, memory, input, seed);
     #[cfg(feature = "bench-metrics")]
     {
         state.metrics.fn_bounds = exe.fn_bounds.clone();

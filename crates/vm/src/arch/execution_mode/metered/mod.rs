@@ -310,6 +310,7 @@ where
                 pc: &mut state.pc,
                 memory: state.memory.as_mut().unwrap(),
                 streams: &mut state.streams,
+                rng: &mut state.rng,
                 ctx: &mut state.ctx,
             };
             executor.execute_metered(&mut vm_state, instruction, offset + i)?;

@@ -75,6 +75,7 @@ where
             let new_state = executor.execute(
                 memory_controller,
                 &mut state.streams,
+                &mut state.rng,
                 instruction,
                 ExecutionState::new(state.pc, timestamp),
             )?;

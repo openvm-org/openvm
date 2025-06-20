@@ -48,7 +48,7 @@ use openvm_stark_sdk::{
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
-use rand::Rng;
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use test_log::test;
 
 pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
@@ -767,6 +767,7 @@ fn test_hint_load_1() {
 
     let program = Program::from_instructions(&instructions);
     let input = vec![vec![F::ONE, F::TWO]];
+    let rng = StdRng::seed_from_u64(0);
 
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let vm = VirtualMachine::new(engine, test_native_config());
@@ -800,7 +801,7 @@ fn test_hint_load_1() {
         ctrl,
     );
 
-    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), ());
+    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), rng, ());
     segment.execute_from_state(&mut exec_state).unwrap();
 
     let streams = exec_state.streams;
@@ -831,6 +832,7 @@ fn test_hint_load_2() {
 
     let program = Program::from_instructions(&instructions);
     let input = vec![vec![F::ONE, F::TWO], vec![F::TWO, F::ONE]];
+    let rng = StdRng::seed_from_u64(0);
 
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let vm = VirtualMachine::new(engine, test_native_config());
@@ -864,7 +866,7 @@ fn test_hint_load_2() {
         ctrl,
     );
 
-    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), ());
+    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), rng, ());
     segment.execute_from_state(&mut exec_state).unwrap();
 
     let [read] = unsafe {

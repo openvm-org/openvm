@@ -12,6 +12,7 @@ use openvm_stark_backend::{
     utils::metrics_span,
     Chip,
 };
+use rand::rngs::StdRng;
 
 #[cfg(feature = "bench-metrics")]
 use super::InstructionExecutor;
@@ -28,6 +29,7 @@ pub struct VmSegmentState<F, Ctx> {
     pub pc: u32,
     pub memory: Option<GuestMemory>,
     pub streams: Streams<F>,
+    pub rng: StdRng,
     pub exit_code: Option<u32>,
     pub ctx: Ctx,
 }
@@ -38,6 +40,7 @@ impl<F, Ctx> VmSegmentState<F, Ctx> {
         pc: u32,
         memory: Option<GuestMemory>,
         streams: Streams<F>,
+        rng: StdRng,
         ctx: Ctx,
     ) -> Self {
         Self {
@@ -45,6 +48,7 @@ impl<F, Ctx> VmSegmentState<F, Ctx> {
             pc,
             memory,
             streams,
+            rng,
             ctx,
             exit_code: None,
         }
