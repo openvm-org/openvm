@@ -62,11 +62,7 @@ pub(super) fn compute_root_proof_heights(
         .execute_metered(root_exe.clone(), root_input.write(), widths, interactions)
         .unwrap();
     let res = vm
-        .execute_with_max_heights_and_compute_heights(
-            root_exe,
-            root_input.write(),
-            &max_trace_heights,
-        )
+        .execute_and_compute_heights(root_exe, root_input.write(), &max_trace_heights)
         .unwrap();
     let air_heights: Vec<_> = res
         .air_heights

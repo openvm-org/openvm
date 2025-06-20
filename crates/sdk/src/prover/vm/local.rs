@@ -186,11 +186,7 @@ where
             )
             .expect("execute_metered failed");
         let proof_input = executor
-            .execute_with_max_heights_and_generate(
-                self.committed_exe.clone(),
-                input,
-                &max_trace_heights,
-            )
+            .execute_and_generate(self.committed_exe.clone(), input, &max_trace_heights)
             .unwrap();
 
         let vm = VirtualMachine::new(e, executor.config);

@@ -29,12 +29,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use crate::{
-    adapters::*,
-    phantom::*,
-    // poseidon2::{air::VerifyBatchBus, new_native_poseidon2_chip, NativePoseidon2Chip},
-    *,
-};
+use crate::{adapters::*, air::VerifyBatchBus, phantom::*, *};
 
 #[derive(Clone, Debug, Serialize, Deserialize, VmConfig, derive_new::new)]
 pub struct NativeConfig {
@@ -222,23 +217,20 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             FriOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        // let poseidon2_chip = new_native_poseidon2_chip(
-        //     builder.system_port(),
-        //     Poseidon2Config::default(),
-        //     VerifyBatchBus::new(builder.new_bus_idx()),
-        //     builder.streams().clone(),
-        //     // TODO: this may use too much memory.
-        //     MAX_INS_CAPACITY,
-        //     builder.system_base().memory_controller.helper(),
-        // );
-        // inventory.add_executor(
-        //     poseidon2_chip,
-        //     [
-        //         VerifyBatchOpcode::VERIFY_BATCH.global_opcode(),
-        //         Poseidon2Opcode::PERM_POS2.global_opcode(),
-        //         Poseidon2Opcode::COMP_POS2.global_opcode(),
-        //     ],
-        // )?;
+        let poseidon2_chip = new_native_poseidon2_chip(
+            builder.system_port(),
+            Poseidon2Config::default(),
+            VerifyBatchBus::new(builder.new_bus_idx()),
+            builder.system_base().memory_controller.helper(),
+        );
+        inventory.add_executor(
+            poseidon2_chip,
+            [
+                VerifyBatchOpcode::VERIFY_BATCH.global_opcode(),
+                Poseidon2Opcode::PERM_POS2.global_opcode(),
+                Poseidon2Opcode::COMP_POS2.global_opcode(),
+            ],
+        )?;
 
         builder.add_phantom_sub_executor(
             NativeHintInputSubEx,

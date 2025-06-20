@@ -16,7 +16,7 @@ pub use field_extension::*;
 pub use fri::*;
 pub use jal_rangecheck::*;
 pub use loadstore::*;
-// pub use poseidon2::*;
+pub use poseidon2::*;
 
 mod extension;
 pub use extension::*;

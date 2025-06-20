@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use openvm_circuit::{
-    arch::{ExecutionBridge, NewVmChipWrapper, SystemPort},
+    arch::{ExecutionBridge, MatrixRecordArena, NewVmChipWrapper, SystemPort},
     system::memory::SharedMemoryHelper,
 };
 use openvm_native_compiler::conversion::AS;
@@ -24,6 +24,7 @@ pub type NativePoseidon2Chip<F, const SBOX_REGISTERS: usize> = NewVmChipWrapper<
     F,
     NativePoseidon2Air<F, SBOX_REGISTERS>,
     NativePoseidon2Step<F, SBOX_REGISTERS>,
+    MatrixRecordArena<F>,
 >;
 
 pub fn new_native_poseidon2_chip<F: PrimeField32, const SBOX_REGISTERS: usize>(

@@ -50,14 +50,14 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> NativeLoadStoreChip<F, NUM
 
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut NativeLoadStoreChip<F, 1>,
+    chip: &mut NativeLoadStoreChip<F, NUM_CELLS>,
     rng: &mut StdRng,
     opcode: NativeLoadStoreOpcode,
 ) {
-    let a = gen_pointer(rng, 1);
+    let a = gen_pointer(rng, NUM_CELLS);
     let ([c_val], c) = write_native_array(tester, rng, None);
 
-    let mem_ptr = gen_pointer(rng, 1);
+    let mem_ptr = gen_pointer(rng, NUM_CELLS);
     let b = F::from_canonical_usize(mem_ptr) - c_val;
     let data: [F; NUM_CELLS] = array::from_fn(|_| rng.gen());
 

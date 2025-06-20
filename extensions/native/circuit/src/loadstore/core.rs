@@ -114,9 +114,9 @@ where
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct NativeLoadStoreCoreRecord<F, const NUM_CELLS: usize> {
-    pub local_opcode: u8,
-    pub data: [F; NUM_CELLS],
     pub pointer_read: F,
+    pub data: [F; NUM_CELLS],
+    pub local_opcode: u8,
 }
 
 #[derive(Debug)]

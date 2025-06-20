@@ -4,7 +4,7 @@ use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
 use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
-    arch::{instructions::exe::VmExe, InitFileGenerator, SystemConfig, VmExecutor},
+    arch::{instructions::exe::VmExe, InitFileGenerator, SystemConfig, VirtualMachine},
     derive::VmConfig,
 };
 use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
@@ -20,6 +20,7 @@ use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_sdk::{
     bench::run_with_metric_collection,
+    config::baby_bear_poseidon2::default_engine,
     openvm_stark_backend::{self, p3_field::PrimeField32},
     p3_baby_bear::BabyBear,
 };
@@ -176,55 +177,42 @@ fn main() -> Result<()> {
 
             let exe = VmExe::from_elf(elf, transpiler)?;
 
-            let executor = VmExecutor::new(vm_config);
-            executor
+            let vm = VirtualMachine::new(default_engine(), vm_config.clone());
+            vm.executor
                 .execute_e1(exe.clone(), vec![], None)
                 // .execute(exe.clone(), vec![])
                 // .execute_metered(exe.clone(), vec![], widths, interactions)
                 .expect("Failed to execute program");
 
-            // let vm = VirtualMachine::new(default_engine(), vm_config.clone());
             // let pk = vm.keygen();
-            // let (widths, interactions): (Vec<usize>, Vec<usize>) = {
-            //     let vk = pk.get_vk();
-            //     vk.inner
-            //         .per_air
-            //         .iter()
-            //         .map(|vk| {
-            //             let total_width = vk.params.width.preprocessed.unwrap_or(0)
-            //                 + vk.params.width.cached_mains.iter().sum::<usize>()
-            //                 + vk.params.width.common_main
-            //                 // TODO(ayush): no magic value 4. should come from stark config
-            //                 + vk.params.width.after_challenge.iter().sum::<usize>() * 4;
-            //             (total_width, vk.symbolic_constraints.interactions.len())
-            //         })
-            //         .unzip()
-            // };
+            // let vk = pk.get_vk();
 
             // // E2 to find segment points
-            // let segments = executor.execute_metered(exe.clone(), vec![], widths, interactions)?;
-            // for Segment {
-            //     instret_start,
-            //     num_insns,
-            //     ..
-            // } in segments
-            // {
-            //     // E1 till instret_start
-            //     let state = executor.execute_e1(exe.clone(), vec![], Some(instret_start))?;
-            //     assert!(state.instret == instret_start);
-            //     // E3/tracegen from instret_start for num_insns beginning with state
-            //     let mut result =
-            // executor.execute_and_generate_segment::<BabyBearPoseidon2Config>(
-            //         exe.clone(),
-            //         state,
-            //         num_insns,
-            //     )?;
-            //     // let proof_input = result.per_segment.pop().unwrap();
-            //     // let proof = tracing::info_span!("prove_single")
-            //     //     .in_scope(|| vm.prove_single(&pk, proof_input));
+            // let segments = vm.executor.execute_metered(
+            //     exe.clone(),
+            //     vec![],
+            //     &vk.total_widths(),
+            //     &vk.num_interactions(),
+            // )?;
+            // for segment in segments {
+            //     let state =
+            //         vm.executor
+            //             .execute_e1(exe.clone(), vec![], Some(segment.instret_start))?;
+            //     assert!(state.instret == segment.instret_start);
 
-            //     // let proof_bytes = bitcode::serialize(&proof)?;
-            //     // tracing::info!("Proof size: {} bytes", proof_bytes.len());
+            //     let mut result = vm
+            //         .executor
+            //         .execute_from_state_and_generate::<BabyBearPoseidon2Config>(
+            //             exe.clone(),
+            //             state,
+            //             &[segment],
+            //         )?;
+            //     let proof_input = result.per_segment.pop().unwrap();
+            //     let proof = tracing::info_span!("prove_single")
+            //         .in_scope(|| vm.prove_single(&pk, proof_input));
+
+            //     let proof_bytes = bitcode::serialize(&proof)?;
+            //     tracing::info!("Proof size: {} bytes", proof_bytes.len());
             // }
 
             tracing::info!("Completed program: {}", program);
