@@ -106,15 +106,19 @@ impl MeteredCtx {
                 }
 
                 // At finalize, we'll need to read it in chunk-sized units for the merkle chip
-                self.update_adapter_heights(
-                    self.chunk_bits,
-                    self.as_byte_alignment_bits[address_space as usize],
-                );
+                self.update_adapter_heights(address_space, self.chunk_bits);
             }
         }
     }
 
-    fn update_adapter_heights(&mut self, size_bits: u32, align_bits: u8) {
+    fn update_adapter_heights(&mut self, address_space: u32, size_bits: u32) {
+        let align_bits = self.as_byte_alignment_bits[address_space as usize];
+        debug_assert!(
+            align_bits <= size_bits,
+            "align_bits ({}) must be <= size_bits ({})",
+            align_bits,
+            size_bits
+        );
         for adapter_bits in (align_bits as u32 + 1..=size_bits).rev() {
             self.trace_heights[self.adapter_offset + adapter_bits as usize - 1] +=
                 1 << (size_bits - adapter_bits + 1);
@@ -135,9 +139,8 @@ impl E1E2ExecutionCtx for MeteredCtx {
         );
 
         // Handle access adapter updates
-        let align_bits = self.as_byte_alignment_bits[address_space as usize];
         let size_bits = size.ilog2();
-        self.update_adapter_heights(size_bits, align_bits);
+        self.update_adapter_heights(address_space, size_bits);
 
         // Handle merkle tree updates
         // TODO(ayush): use a looser upper bound
