@@ -148,7 +148,7 @@ impl<'a> MeteredExecutionControl<'a> {
         F: PrimeField32,
         VC: VmConfig<F>,
     {
-        state.ctx.leaf_indices.clear();
+        state.ctx.page_indices.clear();
         for (i, &is_constant) in state.ctx.is_trace_height_constant.iter().enumerate() {
             if !is_constant {
                 state.ctx.trace_heights[i] = 0;
