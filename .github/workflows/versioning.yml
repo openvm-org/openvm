@@ -2,9 +2,13 @@
 name: Verify Versioning Compatibility
 
 on:
-  push:
-    branches: ["main"]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to compare against main (e.g., v1.2.0)'
+        required: true
+        default: 'v1.2.0'
+        type: string
 
 jobs:
   verify-versioning:
@@ -19,15 +23,7 @@ jobs:
           toolchain: stable
       
       - name: Cache Cargo dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+        uses: Swatinem/rust-cache@v2
       
       # Build and keygen from main
       - name: Build main
@@ -40,7 +36,7 @@ jobs:
       - name: Checkout tagged version
         uses: actions/checkout@v4
         with:
-          ref: v1.2.0
+          ref: ${{ inputs.version }}
           clean: false
       
       - name: Build tagged version
@@ -52,7 +48,7 @@ jobs:
       # Compare keys
       - name: Compare verification keys
         run: |
-          echo "Comparing verification keys between main and v1.2.0..."
+          echo "Comparing verification keys between main and ${{ inputs.version }}..."
           if cmp ./main-keys/app.vk ./tagged-keys/app.vk; then
             echo "✅ Verification keys are identical - versioning policy maintained"
           else
