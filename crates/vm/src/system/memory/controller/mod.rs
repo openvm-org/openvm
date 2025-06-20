@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, iter, marker::PhantomData};
+use std::{array::from_fn, collections::BTreeMap, fmt::Debug, iter, marker::PhantomData};
 
 use getset::{Getters, MutGetters};
 use openvm_circuit_primitives::{
@@ -9,6 +9,7 @@ use openvm_circuit_primitives::{
     },
     TraceSubRowGenerator,
 };
+use openvm_instructions::NATIVE_AS;
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     interaction::PermutationCheckBus,
@@ -354,11 +355,32 @@ impl<F: PrimeField32> MemoryController<F> {
         &mut self,
         touched_blocks: Vec<((u32, u32), AccessMetadata)>,
     ) -> TimestampedEquipartition<F, CHUNK> {
-        let mut current_values = [F::ZERO; CHUNK];
+        let mut final_memory = Vec::new();
+
+        debug_assert!(touched_blocks.is_sorted_by_key(|(addr, _)| addr));
+        let (bytes, fs): (Vec<_>, Vec<_>) = touched_blocks
+            .into_iter()
+            .partition(|((addr_sp, _), _)| *addr_sp < NATIVE_AS);
+
+        self.handle_touched_blocks::<u8, CHUNK>(&mut final_memory, bytes, |x| {
+            F::from_canonical_u8(x)
+        });
+        self.handle_touched_blocks::<F, CHUNK>(&mut final_memory, fs, |x| x);
+
+        final_memory.into_iter().collect()
+    }
+
+    fn handle_touched_blocks<T: Copy + Debug + Default, const CHUNK: usize>(
+        &mut self,
+        final_memory: &mut Vec<((u32, u32), TimestampedValues<F, CHUNK>)>,
+        touched_blocks: Vec<((u32, u32), AccessMetadata)>,
+        convert: impl Fn(T) -> F,
+    ) {
+        let mut current_values = [T::default(); CHUNK];
         let mut current_cnt = 0;
         let mut current_address = MemoryAddress::new(0, 0);
         let mut current_timestamps = vec![0; CHUNK];
-        let mut final_memory = TimestampedEquipartition::<F, CHUNK>::new();
+        let min_block_size = 4 / size_of::<T>(); // TODO(AG): is this always the case?
         for ((addr_space, ptr), metadata) in touched_blocks {
             let AccessMetadata {
                 timestamp,
@@ -369,54 +391,25 @@ impl<F: PrimeField32> MemoryController<F> {
                 && (current_address.address_space != addr_space
                     || current_address.pointer + CHUNK as u32 <= ptr)
             {
-                let min_block_size =
-                    self.memory.min_block_size[current_address.address_space as usize] as usize;
-                current_values[current_cnt..].fill(F::ZERO);
-                current_timestamps[(current_cnt / min_block_size)..].fill(INITIAL_TIMESTAMP);
-                self.memory.record_access::<F, CHUNK>(
-                    current_address.address_space as usize,
-                    current_address.pointer as usize,
-                    min_block_size,
-                    *current_timestamps.iter().max().unwrap(),
-                    Some(&current_timestamps),
-                    &current_values,
-                    &current_values,
-                );
-                final_memory.insert(
-                    (current_address.address_space, current_address.pointer),
-                    TimestampedValues {
-                        timestamp: *current_timestamps
-                            .iter()
-                            .take(current_cnt.div_ceil(min_block_size))
-                            .max()
-                            .unwrap(),
-                        values: current_values,
-                    },
-                );
-                current_cnt = 0;
+                panic!("How is the final touched thing not composed of chunks we created");
             }
-            let min_block_size = self.memory.min_block_size[addr_space as usize] as usize;
             if current_cnt == 0 {
                 let rem = ptr & (CHUNK as u32 - 1);
-                if rem != 0 {
-                    current_values[..(rem as usize)].fill(F::ZERO);
-                    current_address = MemoryAddress::new(addr_space, ptr - rem);
-                } else {
-                    current_address = MemoryAddress::new(addr_space, ptr);
-                }
+                assert_eq!(rem, 0, "why why why");
+                current_address = MemoryAddress::new(addr_space, ptr);
             } else {
                 let offset = (ptr - current_address.pointer) as usize;
-                current_values[current_cnt..offset].fill(F::ZERO);
-                current_timestamps[(current_cnt / min_block_size)..(offset / min_block_size)]
-                    .fill(INITIAL_TIMESTAMP);
-                current_cnt = offset;
+                assert_eq!(offset, current_cnt, "why why why");
             }
             debug_assert!(block_size >= min_block_size as u32);
             debug_assert!(ptr % min_block_size as u32 == 0);
 
-            let values = (0..block_size)
-                .map(|i| self.memory.data.memory.get_f::<F>(addr_space, ptr + i))
-                .collect::<Vec<_>>();
+            let values = unsafe {
+                self.memory
+                    .data
+                    .memory
+                    .get_slice::<T>((addr_space, ptr), block_size as usize)
+            };
             if (ptr != current_address.pointer || CHUNK as u32 != block_size)
                 && block_size > min_block_size as u32
             {
@@ -424,79 +417,83 @@ impl<F: PrimeField32> MemoryController<F> {
                     .access_adapter_inventory
                     .mark_to_split(block_size as usize, offset as usize);
             }
-            for i in 0..block_size {
-                current_values[current_cnt] = values[i as usize];
-                if current_cnt & (min_block_size - 1) == 0 {
-                    current_timestamps[current_cnt / min_block_size] = timestamp;
-                }
-                current_cnt += 1;
-                if current_cnt == CHUNK {
-                    self.memory.record_access::<F, CHUNK>(
-                        current_address.address_space as usize,
-                        current_address.pointer as usize,
+            if min_block_size > CHUNK {
+                assert_eq!(current_cnt, 0);
+                for i in (0..block_size).step_by(min_block_size) {
+                    self.memory.record_access::<T, false>(
                         min_block_size,
-                        *current_timestamps.iter().max().unwrap(),
-                        if ptr == current_address.pointer && CHUNK as u32 == block_size {
-                            None
-                        } else {
-                            Some(&current_timestamps)
-                        },
-                        &current_values,
-                        &current_values,
+                        current_address.address_space as usize,
+                        (current_address.pointer + i) as usize,
+                        CHUNK,
+                        metadata.timestamp,
+                        None,
+                        &values[i as usize..i as usize + min_block_size],
+                        &values[i as usize..i as usize + min_block_size],
+                        true,
                     );
-                    final_memory.insert(
-                        (current_address.address_space, current_address.pointer),
+                }
+                for i in (0..block_size).step_by(CHUNK) {
+                    final_memory.push((
+                        (addr_space, ptr + i),
                         TimestampedValues {
-                            timestamp: *current_timestamps
-                                .iter()
-                                .take(current_cnt.div_ceil(min_block_size))
-                                .max()
-                                .unwrap(),
-                            values: current_values,
+                            timestamp,
+                            values: from_fn(|j| convert(values[i as usize + j])),
                         },
-                    );
-                    current_address.pointer += current_cnt as u32;
-                    current_cnt = 0;
+                    ));
+                }
+            } else {
+                for i in 0..block_size {
+                    current_values[current_cnt] = values[i as usize];
+                    if current_cnt & (min_block_size - 1) == 0 {
+                        current_timestamps[current_cnt / min_block_size] = timestamp;
+                    }
+                    current_cnt += 1;
+                    if current_cnt == CHUNK {
+                        self.memory.record_access::<T, false>(
+                            CHUNK,
+                            current_address.address_space as usize,
+                            current_address.pointer as usize,
+                            min_block_size.min(CHUNK),
+                            *current_timestamps.iter().max().unwrap(),
+                            if ptr == current_address.pointer && CHUNK as u32 == block_size {
+                                None
+                            } else {
+                                Some(&current_timestamps[..CHUNK / min_block_size])
+                            },
+                            &current_values,
+                            &current_values,
+                            min_block_size > CHUNK,
+                        );
+                        final_memory.push((
+                            (current_address.address_space, current_address.pointer),
+                            TimestampedValues {
+                                timestamp: *current_timestamps
+                                    .iter()
+                                    .take(current_cnt.div_ceil(min_block_size))
+                                    .max()
+                                    .unwrap(),
+                                values: from_fn(|i| convert(current_values[i])),
+                            },
+                        ));
+                        current_address.pointer += current_cnt as u32;
+                        current_cnt = 0;
+                    }
                 }
             }
         }
         if current_cnt > 0 {
-            let min_block_size =
-                self.memory.min_block_size[current_address.address_space as usize] as usize;
-            current_values[current_cnt..].fill(F::ZERO);
-            current_timestamps[(current_cnt / min_block_size)..].fill(INITIAL_TIMESTAMP);
-            self.memory.record_access::<F, CHUNK>(
-                current_address.address_space as usize,
-                current_address.pointer as usize,
-                min_block_size,
-                *current_timestamps.iter().max().unwrap(),
-                Some(&current_timestamps),
-                &current_values,
-                &current_values,
-            );
-            final_memory.insert(
-                (current_address.address_space, current_address.pointer),
-                TimestampedValues {
-                    timestamp: *current_timestamps
-                        .iter()
-                        .take(current_cnt.div_ceil(min_block_size))
-                        .max()
-                        .unwrap(),
-                    values: current_values,
-                },
-            );
+            panic!("Again, why");
         }
-
-        final_memory
     }
 
-    /// Returns the final memory state if persistent.
+    /// Returns the final memory state if persistent. TODO(AG): update this description
     #[allow(clippy::assertions_on_constants)]
     pub fn finalize<H>(&mut self, hasher: Option<&mut H>)
     where
         H: HasherChip<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
         let touched_blocks = self.memory.touched_blocks();
+        eprintln!("touched_blocks: {:?}", touched_blocks);
 
         let mut final_memory_volatile = None;
         let mut final_memory_persistent = None;

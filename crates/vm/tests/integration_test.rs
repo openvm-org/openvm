@@ -415,6 +415,15 @@ fn test_vm_1_persistent() {
     let result = vm
         .execute_and_generate(program.clone(), vec![], &segments)
         .unwrap();
+    // vm.engine.debug(
+    //     &airs,
+    //     &pk.per_air,
+    //     &result.per_segment[0]
+    //         .per_air
+    //         .iter()
+    //         .map(|(_, air_proof_input)| air_proof_input.clone())
+    //         .collect::<Vec<_>>(),
+    // );
     {
         let proof_input = result.per_segment.into_iter().next().unwrap();
 

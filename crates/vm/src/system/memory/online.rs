@@ -1,8 +1,9 @@
-use std::fmt::Debug;
+use std::{cmp::Ordering, fmt::Debug};
 
 use getset::Getters;
 use itertools::{izip, zip_eq};
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
+use openvm_instructions::NATIVE_AS;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{
@@ -16,7 +17,7 @@ use crate::{
     system::memory::{
         adapter::{
             get_chip_index,
-            records::{AccessLayout, MERGE_BEFORE_FLAG},
+            records::{AccessLayout, MERGE_BEFORE_FLAG, SPLIT_AFTER_FLAG},
         },
         MemoryImage,
     },
@@ -162,6 +163,10 @@ pub struct AccessMetadata {
     /// We don't _have_ to store it, but this is probably faster
     /// in terms of cache locality
     pub timestamp: u32,
+}
+
+impl AccessMetadata {
+    pub const UNSPLITTABLE: u32 = u32::MAX;
 }
 
 /// Online memory that stores additional information for trace generation purposes.
@@ -363,23 +368,35 @@ impl<F: PrimeField32> TracingMemory<F> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn record_access<T, const BLOCK_SIZE: usize>(
+    pub(crate) fn record_access<T, const UPDATE_META: bool>(
         &mut self,
+        block_size: usize,
         address_space: usize,
         pointer: usize,
-        align: usize,
+        lowest_block_size: usize,
         timestamp: u32,
         prev_timestamps: Option<&[u32]>,
         values: &[T],
         prev_values: &[T],
+        split_after: bool,
     ) {
-        let mut block_size = align;
-        while block_size <= BLOCK_SIZE / 2 {
-            block_size *= 2;
+        eprintln!(
+            "recording access, block_size: {}, address_space: {}, pointer: {}, lowest_block_size: {}, timestamp: {}",
+            block_size, address_space, pointer, lowest_block_size, timestamp
+        );
+        let mut adapter_block_size = lowest_block_size;
+        let align = self.min_block_size[address_space] as usize;
+        let offset = if block_size > adapter_block_size {
+            self.access_adapter_inventory.current_size(block_size) as u32
+        } else {
+            0
+        };
+        while adapter_block_size <= block_size / 2 {
+            adapter_block_size *= 2;
             let record_mut = self.access_adapter_inventory.alloc_record(
-                block_size,
+                adapter_block_size,
                 AccessLayout {
-                    block_size: BLOCK_SIZE,
+                    block_size,
                     cell_size: align,
                     type_size: size_of::<T>(),
                 },
@@ -389,27 +406,44 @@ impl<F: PrimeField32> TracingMemory<F> {
                     MERGE_BEFORE_FLAG
                 } else {
                     0
-                });
+                })
+                | (if split_after { SPLIT_AFTER_FLAG } else { 0 });
             *record_mut.address_space = address_space as u32;
             *record_mut.pointer = pointer as u32;
-            *record_mut.block_size = BLOCK_SIZE as u32;
+            *record_mut.block_size = block_size as u32;
             let data_slice = unsafe {
                 std::slice::from_raw_parts(
                     values.as_ptr() as *const u8,
-                    BLOCK_SIZE * size_of::<T>(),
+                    block_size * size_of::<T>(),
                 )
             };
             record_mut.data.copy_from_slice(data_slice);
             let prev_data_slice = unsafe {
                 std::slice::from_raw_parts(
                     prev_values.as_ptr() as *const u8,
-                    BLOCK_SIZE * size_of::<T>(),
+                    block_size * size_of::<T>(),
                 )
             };
             record_mut.prev_data.copy_from_slice(prev_data_slice);
             if let Some(prev_timestamps) = prev_timestamps {
                 record_mut.timestamps.copy_from_slice(prev_timestamps);
             } // else we don't mind garbage values
+        }
+        if UPDATE_META {
+            if split_after {
+                for i in (0..block_size).step_by(lowest_block_size) {
+                    self.set_meta_block(
+                        address_space,
+                        pointer + i,
+                        align,
+                        lowest_block_size,
+                        timestamp,
+                        AccessMetadata::UNSPLITTABLE,
+                    );
+                }
+            } else {
+                self.set_meta_block(address_space, pointer, align, block_size, timestamp, offset);
+            }
         }
     }
 
@@ -432,6 +466,27 @@ impl<F: PrimeField32> TracingMemory<F> {
         let first_meta =
             self.meta[address_space].get::<AccessMetadata>(begin * size_of::<AccessMetadata>());
         let mut need_to_merge = first_meta.block_size != BLOCK_SIZE as u32;
+        let existing_metadatas = (0..num_segs)
+            .flat_map(|i| {
+                let meta = self.meta[address_space]
+                    .get::<AccessMetadata>((begin + i) * size_of::<AccessMetadata>());
+                if meta != first_meta {
+                    need_to_merge = true;
+                }
+                if meta.block_size > 0 && meta.offset != AccessMetadata::UNSPLITTABLE {
+                    Some(meta)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        if need_to_merge {
+            // Then we need to split everything we touched there
+            for meta in existing_metadatas {
+                self.access_adapter_inventory
+                    .mark_to_split(meta.block_size as usize, meta.offset as usize);
+            }
+        }
 
         let prev_ts = (0..num_segs)
             .map(|i| {
@@ -443,22 +498,71 @@ impl<F: PrimeField32> TracingMemory<F> {
                 if meta.block_size > 0 {
                     meta.timestamp
                 } else {
+                    // Initialize
+                    if self.initial_block_size >= align {
+                        // We need to split the initial block into chunks
+                        let block_start = (begin + i) & !(self.initial_block_size / align - 1);
+                        if (address_space as u32) < NATIVE_AS {
+                            let initial_values = unsafe {
+                                self.data.memory.get_slice::<u8>(
+                                    (address_space as u32, (block_start * align) as u32),
+                                    self.initial_block_size,
+                                )
+                            };
+                            eprintln!("from {}: values {:?}", block_start * align, initial_values);
+                            self.record_access::<u8, true>(
+                                self.initial_block_size,
+                                address_space,
+                                block_start * align,
+                                align,
+                                INITIAL_TIMESTAMP,
+                                None,
+                                &initial_values,
+                                &initial_values,
+                                true,
+                            );
+                        } else {
+                            let initial_values = (0..self.initial_block_size)
+                                .map(|i| {
+                                    self.data
+                                        .memory
+                                        .get_f(address_space as u32, (pointer + i) as u32)
+                                })
+                                .collect::<Vec<_>>();
+                            self.record_access::<F, true>(
+                                self.initial_block_size,
+                                address_space,
+                                block_start * align,
+                                align,
+                                INITIAL_TIMESTAMP,
+                                None,
+                                &initial_values,
+                                &initial_values,
+                                true,
+                            );
+                        }
+                    } else {
+                        debug_assert_eq!(self.initial_block_size, 1);
+                        debug_assert!((address_space as u32) < NATIVE_AS);
+                        self.record_access::<u8, true>(
+                            align,
+                            address_space,
+                            pointer + i * align,
+                            1,
+                            INITIAL_TIMESTAMP,
+                            Some(&[INITIAL_TIMESTAMP]),
+                            &vec![0; align],
+                            &vec![0; align],
+                            false,
+                        );
+                    }
                     INITIAL_TIMESTAMP
                 }
             })
             .collect::<Vec<_>>(); // TODO(AG): small buffer or small vec or something
 
-        if need_to_merge {
-            // Then we need to split everything we touched there
-            (0..num_segs).for_each(|i| {
-                let meta = self.meta[address_space]
-                    .get::<AccessMetadata>((begin + i) * size_of::<AccessMetadata>());
-                if meta.block_size > 0 {
-                    todo!() // set the split flag by meta.offset
-                }
-            });
-        }
-        self.record_access::<T, BLOCK_SIZE>(
+        self.record_access::<T, true>(
+            BLOCK_SIZE,
             address_space,
             pointer,
             align,
@@ -466,20 +570,21 @@ impl<F: PrimeField32> TracingMemory<F> {
             if need_to_merge { Some(&prev_ts) } else { None },
             values,
             prev_values,
+            true,
         );
 
-        self.set_meta_block(
-            address_space,
-            pointer,
-            align,
-            BLOCK_SIZE,
-            self.timestamp,
-            if BLOCK_SIZE == 1 {
-                0
-            } else {
-                self.access_adapter_inventory.current_size::<BLOCK_SIZE>() as u32
-            },
-        );
+        // self.set_meta_block(
+        //     address_space,
+        //     pointer,
+        //     align,
+        //     BLOCK_SIZE,
+        //     self.timestamp,
+        //     if BLOCK_SIZE == 1 {
+        //         0
+        //     } else {
+        //         self.access_adapter_inventory.current_size::<BLOCK_SIZE>() as u32
+        //     },
+        // );
 
         *prev_ts.iter().max().unwrap()
 
@@ -641,7 +746,7 @@ impl<F: PrimeField32> TracingMemory<F> {
         T: Copy + Debug,
     {
         self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
-        let values_prev = self.data.replace(address_space, pointer, values);
+        let values_prev = self.data.read(address_space, pointer);
         let t_prev = self.prev_access_time::<T, BLOCK_SIZE>(
             address_space as usize,
             pointer as usize,
@@ -649,6 +754,7 @@ impl<F: PrimeField32> TracingMemory<F> {
             values,
             &values_prev,
         );
+        self.data.write(address_space, pointer, values);
         self.timestamp += 1;
 
         (t_prev, values_prev)
@@ -667,7 +773,7 @@ impl<F: PrimeField32> TracingMemory<F> {
     }
 
     /// TODO: update this description
-    pub fn touched_blocks(&self) -> Vec<(Address, AccessMetadata)> {
+    pub fn touched_blocks(&mut self) -> Vec<(Address, AccessMetadata)> {
         let mut blocks = Vec::new();
         for (addr_space, (page, &align)) in zip_eq(&self.meta, &self.min_block_size).enumerate() {
             let mut next_idx = 0;
@@ -676,8 +782,26 @@ impl<F: PrimeField32> TracingMemory<F> {
                     continue;
                 }
                 if metadata.block_size != 0 {
-                    blocks.push(((addr_space as u32, idx as u32 * align), metadata));
-                    next_idx = idx + (metadata.block_size / align) as usize;
+                    eprintln!(
+                        "addr_space: {}, idx: {}, metadata: {:?}",
+                        addr_space, idx, metadata
+                    );
+                    if idx >= next_idx {
+                        blocks.push(((addr_space as u32, idx as u32 * align), metadata));
+                        next_idx = idx + (metadata.block_size / align) as usize;
+                    } else {
+                        // The next block is created by a split
+                        // and does not exist in form of a record
+                        blocks.push((
+                            (addr_space as u32, idx as u32 * align),
+                            AccessMetadata {
+                                offset: AccessMetadata::UNSPLITTABLE,
+                                block_size: align,
+                                timestamp: metadata.timestamp,
+                            },
+                        ));
+                        next_idx += 1;
+                    }
                 }
             }
         }

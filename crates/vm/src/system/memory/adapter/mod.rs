@@ -20,11 +20,11 @@ use openvm_stark_backend::{
 };
 
 use crate::{
-    arch::{DenseRecordArena, RecordArena, SizedRecord},
+    arch::{CustomBorrow, DenseRecordArena, RecordArena, SizedRecord},
     system::memory::{
         adapter::records::{
-            extract_metadata, fancy_record_borrow_thing, AccessLayout, AccessRecordMut,
-            MERGE_BEFORE_FLAG, SPLIT_AFTER_FLAG,
+            extract_metadata, size_by_layout, AccessLayout, AccessRecordMut, MERGE_BEFORE_FLAG,
+            SPLIT_AFTER_FLAG,
         },
         offline_checker::MemoryBus,
         MemoryAddress,
@@ -103,11 +103,12 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
     pub fn air_names(&self) -> Vec<String> {
         self.air_names.clone()
     }
-    pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>
+    pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(mut self) -> Vec<AirProofInput<SC>>
     where
         F: PrimeField32,
         Domain<SC>: PolynomialSpace<Val = F>,
     {
+        self.prepare_to_finalize();
         self.chips
             .into_iter()
             .map(|chip| chip.generate_air_proof_input())
@@ -134,8 +135,8 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         }
     }
 
-    pub(crate) fn current_size<const N: usize>(&self) -> usize {
-        self.chips[get_chip_index(N)].current_size()
+    pub(crate) fn current_size(&self, block_size: usize) -> usize {
+        self.chips[get_chip_index(block_size)].current_size()
     }
 
     pub(crate) fn alloc_record(
@@ -150,6 +151,80 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
     pub(crate) fn mark_to_split(&mut self, block_size: usize, offset: usize) {
         let index = get_chip_index(block_size);
         self.chips[index].mark_to_split(offset);
+    }
+
+    fn prepare_to_finalize(&mut self) {
+        let mut chip_data: Vec<(
+            &mut GenericAccessAdapterChip<F>,
+            usize,
+            Option<AccessLayout>,
+        )> = self
+            .chips
+            .iter_mut()
+            .map(|chip| {
+                let ptr = 0;
+                let layout = chip.extract_metadata_from(ptr);
+                (chip, ptr, layout)
+            })
+            .collect();
+
+        let extract_data = |chip: &mut GenericAccessAdapterChip<F>,
+                            ptr: usize,
+                            layout: &AccessLayout| {
+            let record = chip.fancy_record_borrow_thing(ptr, layout.clone()).unwrap();
+            let timestamp = (*record.timestamp_and_mask) & !SPLIT_AFTER_FLAG & !MERGE_BEFORE_FLAG;
+            let address_space = *record.address_space;
+            let pointer = *record.pointer;
+            let block_size = *record.block_size;
+            (timestamp, address_space, pointer, block_size)
+        };
+
+        loop {
+            let next_data = chip_data
+                .iter_mut()
+                .flat_map(|(chip, ptr, layout)| {
+                    layout
+                        .as_mut()
+                        .map(|layout| extract_data(chip, *ptr, layout))
+                })
+                .min();
+            match next_data {
+                None => break,
+                Some(next_data) => {
+                    let ids: Vec<usize> = chip_data
+                        .iter_mut()
+                        .enumerate()
+                        .filter_map(|(i, (chip, ptr, layout))| match layout {
+                            Some(layout) if extract_data(chip, *ptr, layout) == next_data => {
+                                Some(i)
+                            }
+                            _ => None,
+                        })
+                        .collect();
+                    let need_to_split = ids.iter().any(|&id| {
+                        let (chip, ptr, layout) = &mut chip_data[id];
+                        let record = chip
+                            .fancy_record_borrow_thing(*ptr, layout.as_ref().unwrap().clone())
+                            .unwrap();
+                        *record.timestamp_and_mask & SPLIT_AFTER_FLAG != 0
+                    });
+                    if need_to_split {
+                        for &id in ids.iter() {
+                            let (chip, ptr, layout) = &mut chip_data[id];
+                            let record = chip
+                                .fancy_record_borrow_thing(*ptr, layout.as_ref().unwrap().clone())
+                                .unwrap();
+                            *record.timestamp_and_mask |= SPLIT_AFTER_FLAG;
+                        }
+                    }
+                    for id in ids {
+                        let (chip, ptr, layout) = &mut chip_data[id];
+                        *ptr += size_by_layout(layout.as_ref().unwrap());
+                        *layout = chip.extract_metadata_from(*ptr);
+                    }
+                }
+            }
+        }
     }
 
     pub(crate) fn execute_split(
@@ -179,7 +254,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
 }
 
 #[enum_dispatch]
-pub trait GenericAccessAdapterChipTrait<F> {
+pub(crate) trait GenericAccessAdapterChipTrait<F> {
     fn set_override_trace_heights(&mut self, overridden_height: usize);
     fn n(&self) -> usize;
     fn generate_trace(self) -> RowMajorMatrix<F>
@@ -189,6 +264,13 @@ pub trait GenericAccessAdapterChipTrait<F> {
     fn current_size(&self) -> usize;
     fn alloc_record(&mut self, layout: AccessLayout) -> AccessRecordMut;
     fn mark_to_split(&mut self, offset: usize);
+    fn allocated(&self) -> &[u8];
+    fn extract_metadata_from(&self, offset: usize) -> Option<AccessLayout>;
+    fn fancy_record_borrow_thing(
+        &mut self,
+        offset: usize,
+        layout: AccessLayout,
+    ) -> Option<AccessRecordMut<'_>>;
 
     fn execute_split(&mut self, address: MemoryAddress<u32, u32>, values: &[F], timestamp: u32)
     where
@@ -301,7 +383,18 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
         }
 
         let width = self.trace_width();
-        let mut trace = RowMajorMatrix::new(vec![F::ZERO; width * cur_height], width);
+        let height = cur_height;
+        let padded_height = if let Some(oh) = self.overridden_height {
+            assert!(
+                oh >= height,
+                "Overridden height {oh} is less than the required height {height}"
+            );
+            oh
+        } else {
+            height
+        };
+        let padded_height = next_power_of_two_or_zero(padded_height);
+        let mut trace = RowMajorMatrix::new(vec![F::ZERO; width * padded_height], width);
         for (&(start_ptr, start_height), &(_, _)) in
             milestones.iter().zip(milestones.iter().skip(1))
         {
@@ -355,14 +448,13 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
             let mut row_idx = start_height;
             let num_segs = layout.block_size / N;
             if timestamp_and_mask & MERGE_BEFORE_FLAG != 0 {
-                let timestamps_batch_len = N / 2;
                 for i in 0..num_segs {
                     let row: &mut AccessAdapterCols<F, N> = trace.row_mut(row_idx).borrow_mut();
                     row.is_valid = F::ONE;
                     row.is_split = F::ZERO;
                     row.address = MemoryAddress::new(
                         F::from_canonical_u32(address_space),
-                        F::from_canonical_u32(pointer),
+                        F::from_canonical_u32(pointer + (i * N) as u32),
                     );
                     if address_space < NATIVE_AS {
                         for j in 0..N {
@@ -378,13 +470,14 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
                             };
                         }
                     }
-                    let left_timestamp = *timestamps
-                        [2 * i * timestamps_batch_len..(2 * i + 1) * timestamps_batch_len]
+                    let left_timestamp = *timestamps[2 * i * timestamps.len() / (2 * num_segs)
+                        ..((2 * i + 1) * timestamps.len()).div_ceil(2 * num_segs)]
                         .iter()
                         .max()
                         .unwrap();
-                    let right_timestamp = *timestamps
-                        [(2 * i + 1) * timestamps_batch_len..(2 * i + 2) * timestamps_batch_len]
+                    let right_timestamp = *timestamps[(2 * i + 1) * timestamps.len()
+                        / (2 * num_segs)
+                        ..((2 * i + 2) * timestamps.len()).div_ceil(2 * num_segs)]
                         .iter()
                         .max()
                         .unwrap();
@@ -405,7 +498,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
                     row.is_split = F::ONE;
                     row.address = MemoryAddress::new(
                         F::from_canonical_u32(address_space),
-                        F::from_canonical_u32(pointer),
+                        F::from_canonical_u32(pointer + (i * N) as u32),
                     );
                     if address_space < NATIVE_AS {
                         for j in 0..N {
@@ -432,19 +525,9 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
                 }
             }
         }
+        eprintln!("Trace size for {N}: {}x{}", trace.height(), trace.width());
+        eprintln!("Trace: {:?}", trace);
 
-        let height = trace.height();
-        let padded_height = if let Some(oh) = self.overridden_height {
-            assert!(
-                oh >= height,
-                "Overridden height {oh} is less than the required height {height}"
-            );
-            oh
-        } else {
-            height
-        };
-        let padded_height = next_power_of_two_or_zero(padded_height);
-        trace.pad_to_height(padded_height, F::ZERO);
         trace
     }
 
@@ -457,8 +540,34 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
     }
 
     fn mark_to_split(&mut self, offset: usize) {
-        let timestamp_and_mask = self.arena.transmute_from::<'_, u32>(offset);
+        let timestamp_and_mask = self.arena.transmute_from::<u32>(offset);
         *timestamp_and_mask |= SPLIT_AFTER_FLAG;
+    }
+
+    fn allocated(&self) -> &[u8] {
+        self.arena.allocated()
+    }
+
+    fn extract_metadata_from(&self, offset: usize) -> Option<AccessLayout> {
+        if offset < self.arena.records_buffer.position() as usize {
+            Some(extract_metadata(
+                &self.arena.records_buffer.get_ref()[offset..],
+            ))
+        } else {
+            None
+        }
+    }
+
+    fn fancy_record_borrow_thing(
+        &mut self,
+        offset: usize,
+        layout: AccessLayout,
+    ) -> Option<AccessRecordMut<'_>> {
+        if offset < self.arena.records_buffer.position() as usize {
+            Some(self.arena.records_buffer.get_mut()[offset..].custom_borrow(layout))
+        } else {
+            None
+        }
     }
 
     fn execute_split(&mut self, address: MemoryAddress<u32, u32>, values: &[F], timestamp: u32)
@@ -573,7 +682,7 @@ fn air_name(n: usize) -> String {
 pub fn get_chip_index(block_size: usize) -> usize {
     assert!(
         block_size.is_power_of_two() && block_size >= 2,
-        "Invalid block size {} for split operation",
+        "Invalid block size {}",
         block_size
     );
     let index = block_size.trailing_zeros() - 1;
