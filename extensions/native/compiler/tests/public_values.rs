@@ -46,7 +46,7 @@ fn test_compiler_public_values() {
         .unwrap();
 
     let exe_result = executor
-        .execute_with_max_heights_and_compute_heights(program, vec![], &max_trace_heights)
+        .execute_and_compute_heights(program, vec![], &max_trace_heights)
         .unwrap();
     assert_eq!(
         exe_result

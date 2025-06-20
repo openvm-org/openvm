@@ -79,7 +79,7 @@ fn set_and_execute(
 ) {
     let imm = initial_imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
     let imm_sign = initial_imm_sign.unwrap_or(rng.gen_range(0..2));
-    let imm_ext = imm + imm_sign * (0xffffffff ^ ((1 << IMM_BITS) - 1));
+    let imm_ext = imm + (imm_sign * 0xffff0000);
     let a = rng.gen_range(0..32) << 2;
     let b = rng.gen_range(1..32) << 2;
     let to_pc = rng.gen_range(0..(1 << PC_BITS));
@@ -110,11 +110,11 @@ fn set_and_execute(
 
     let rs1 = compose(rs1);
 
-    let (next_pc, rd_data) = run_jalr(opcode, initial_pc, imm_ext, rs1);
+    let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, imm_sign == 1);
     let rd_data = if a == 0 { [0; 4] } else { rd_data };
 
-    assert_eq!(next_pc, final_pc);
-    assert_eq!(rd_data.map(F::from_canonical_u32), tester.read::<4>(1, a));
+    assert_eq!(next_pc & !1, final_pc);
+    assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -305,11 +305,10 @@ fn overflow_negative_tests() {
 
 #[test]
 fn run_jalr_sanity_test() {
-    let opcode = JALR;
     let initial_pc = 789456120;
     let imm = -1235_i32 as u32;
     let rs1 = 736482910;
-    let (next_pc, rd_data) = run_jalr(opcode, initial_pc, imm, rs1);
-    assert_eq!(next_pc, 736481674);
+    let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, true);
+    assert_eq!(next_pc & !1, 736481674);
     assert_eq!(rd_data, [252, 36, 14, 47]);
 }

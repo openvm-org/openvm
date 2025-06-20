@@ -7,7 +7,7 @@ pub use double::*;
 #[cfg(test)]
 mod tests;
 
-use openvm_circuit::arch::{NewVmChipWrapper, VmAirWrapper};
+use openvm_circuit::arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper};
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionStep};
 use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
 
@@ -35,4 +35,5 @@ pub(crate) type WeierstrassChip<
     F,
     WeierstrassAir<NUM_READS, BLOCKS, BLOCK_SIZE>,
     WeierstrassStep<NUM_READS, BLOCKS, BLOCK_SIZE>,
+    MatrixRecordArena<F>,
 >;

@@ -7,8 +7,9 @@ use std::{
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, EmptyLayout, MinimalInstruction, RecordArena, Result, StepExecutorE1,
+        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -18,6 +19,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
+    AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
@@ -31,7 +33,7 @@ use openvm_stark_backend::{
 use strum::IntoEnumIterator;
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, Debug)]
 pub struct BaseAluCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
@@ -171,24 +173,20 @@ where
     }
 }
 
-pub struct BaseAluStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
-    pub offset: usize,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+#[repr(C, align(4))]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct BaseAluCoreRecord<const NUM_LIMBS: usize> {
+    pub b: [u8; NUM_LIMBS],
+    pub c: [u8; NUM_LIMBS],
+    // Use u8 instead of usize for better packing
+    pub local_opcode: u8,
 }
 
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAluStep<A, NUM_LIMBS, LIMB_BITS> {
-    pub fn new(
-        adapter: A,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
-        offset: usize,
-    ) -> Self {
-        Self {
-            adapter,
-            offset,
-            bitwise_lookup_chip,
-        }
-    }
+#[derive(derive_new::new)]
+pub struct BaseAluStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+    pub offset: usize,
 }
 
 impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F, CTX>
@@ -201,75 +199,95 @@ where
             CTX,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-            TraceContext<'a> = (),
         >,
 {
+    /// Instructions that use one trace row per instruction have implicit layout
+    type RecordLayout = EmptyLayout<A>;
+    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut BaseAluCoreRecord<NUM_LIMBS>);
+
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", BaseAluOpcode::from_usize(opcode - self.offset))
     }
 
-    fn execute(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        A::start(*state.pc, state.memory, &mut adapter_record);
 
-        A::start(*state.pc, state.memory, adapter_row);
-
-        let [rs1, rs2] = self
+        [core_record.b, core_record.c] = self
             .adapter
-            .read(state.memory, instruction, adapter_row)
+            .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        let rd = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
+        let rd = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &core_record.b, &core_record.c);
 
-        let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        core_row.a = rd.map(F::from_canonical_u8);
-        core_row.b = rs1.map(F::from_canonical_u8);
-        core_row.c = rs2.map(F::from_canonical_u8);
-        core_row.opcode_add_flag = F::from_bool(local_opcode == BaseAluOpcode::ADD);
-        core_row.opcode_sub_flag = F::from_bool(local_opcode == BaseAluOpcode::SUB);
-        core_row.opcode_xor_flag = F::from_bool(local_opcode == BaseAluOpcode::XOR);
-        core_row.opcode_or_flag = F::from_bool(local_opcode == BaseAluOpcode::OR);
-        core_row.opcode_and_flag = F::from_bool(local_opcode == BaseAluOpcode::AND);
+        core_record.local_opcode = local_opcode as u8;
 
         self.adapter
-            .write(state.memory, instruction, adapter_row, &[rd].into());
+            .write(state.memory, instruction, &[rd].into(), &mut adapter_record);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
-        *trace_offset += width;
-
         Ok(())
     }
+}
 
+impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F, CTX>
+    for BaseAluStep<A, NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F, CTX>,
+{
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
-
+        let record: &BaseAluCoreRecord<NUM_LIMBS> =
+            unsafe { get_record_from_slice(&mut core_row, ()) };
         let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
+        // SAFETY: the following is highly unsafe. We are going to cast `core_row` to a record
+        // buffer, and then do an _overlapping_ write to the `core_row` as a row of field elements.
+        // This requires:
+        // - Cols and Record structs should be repr(C) and we write in reverse order (to ensure
+        //   non-overlapping)
+        // - Do not overwrite any reference in `record` before it has already been used or moved
+        // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic
+        //   otherwise)
 
-        if core_row.opcode_add_flag == F::ONE || core_row.opcode_sub_flag == F::ONE {
-            for a_val in core_row.a.map(|x| x.as_canonical_u32()) {
-                self.bitwise_lookup_chip.request_xor(a_val, a_val);
+        let local_opcode = BaseAluOpcode::from_usize(record.local_opcode as usize);
+        let a = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &record.b, &record.c);
+        // PERF: needless conversion
+        core_row.opcode_and_flag = F::from_bool(local_opcode == BaseAluOpcode::AND);
+        core_row.opcode_or_flag = F::from_bool(local_opcode == BaseAluOpcode::OR);
+        core_row.opcode_xor_flag = F::from_bool(local_opcode == BaseAluOpcode::XOR);
+        core_row.opcode_sub_flag = F::from_bool(local_opcode == BaseAluOpcode::SUB);
+        core_row.opcode_add_flag = F::from_bool(local_opcode == BaseAluOpcode::ADD);
+
+        if local_opcode == BaseAluOpcode::ADD || local_opcode == BaseAluOpcode::SUB {
+            for a_val in a {
+                self.bitwise_lookup_chip
+                    .request_xor(a_val as u32, a_val as u32);
             }
         } else {
-            let b = core_row.b.map(|x| x.as_canonical_u32());
-            let c = core_row.c.map(|x| x.as_canonical_u32());
-            for (b_val, c_val) in zip(b, c) {
-                self.bitwise_lookup_chip.request_xor(b_val, c_val);
+            for (b_val, c_val) in zip(record.b, record.c) {
+                self.bitwise_lookup_chip
+                    .request_xor(b_val as u32, c_val as u32);
             }
         }
+        core_row.c = record.c.map(F::from_canonical_u8);
+        core_row.b = record.b.map(F::from_canonical_u8);
+        core_row.a = a.map(F::from_canonical_u8);
     }
 }
 

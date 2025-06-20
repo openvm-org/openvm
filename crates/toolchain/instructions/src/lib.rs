@@ -18,6 +18,8 @@ pub mod utils;
 
 pub use phantom::*;
 
+pub const NATIVE_AS: u32 = 4;
+
 pub trait LocalOpcode {
     const CLASS_OFFSET: usize;
     /// Convert from the discriminant of the enum to the typed enum variant.

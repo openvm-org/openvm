@@ -2,16 +2,17 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceStep,
-        BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
-        VmStateMut,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, BasicAdapterInterface,
+        ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir, VmStateMut,
     },
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols},
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord},
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS,
@@ -105,6 +106,16 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BranchAdapterAir {
     }
 }
 
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct Rv32BranchAdapterRecord {
+    pub from_pc: u32,
+    pub from_timestamp: u32,
+    pub rs1_ptr: u32,
+    pub rs2_ptr: u32,
+    pub reads_aux: [MemoryReadAuxRecord; 2],
+}
+
 /// Reads instructions of the form OP a, b, c, d, e where if(\[a:4\]_d op \[b:4\]_e) pc += c.
 /// Operands d and e can only be 1.
 #[derive(derive_new::new)]
@@ -117,13 +128,12 @@ where
     const WIDTH: usize = size_of::<Rv32BranchAdapterCols<u8>>();
     type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
     type WriteData = ();
-    type TraceContext<'a> = ();
+    type RecordMut<'a> = &'a mut Rv32BranchAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, adapter_row: &mut [F]) {
-        let adapter_row: &mut Rv32BranchAdapterCols<F> = adapter_row.borrow_mut();
-        adapter_row.from_state.pc = F::from_canonical_u32(pc);
-        adapter_row.from_state.timestamp = F::from_canonical_u32(memory.timestamp);
+    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut &mut Rv32BranchAdapterRecord) {
+        record.from_pc = pc;
+        record.from_timestamp = memory.timestamp;
     }
 
     #[inline(always)]
@@ -131,28 +141,26 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        adapter_row: &mut [F],
+        record: &mut &mut Rv32BranchAdapterRecord,
     ) -> Self::ReadData {
         let &Instruction { a, b, d, e, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV32_REGISTER_AS);
 
-        let adapter_row: &mut Rv32BranchAdapterCols<F> = adapter_row.borrow_mut();
-
-        adapter_row.rs1_ptr = a;
+        record.rs1_ptr = a.as_canonical_u32();
         let rs1 = tracing_read(
             memory,
             RV32_REGISTER_AS,
             a.as_canonical_u32(),
-            &mut adapter_row.reads_aux[0],
+            &mut record.reads_aux[0].prev_timestamp,
         );
-        adapter_row.rs2_ptr = b;
+        record.rs2_ptr = b.as_canonical_u32();
         let rs2 = tracing_read(
             memory,
             RV32_REGISTER_AS,
             b.as_canonical_u32(),
-            &mut adapter_row.reads_aux[1],
+            &mut record.reads_aux[1].prev_timestamp,
         );
 
         [rs1, rs2]
@@ -163,26 +171,38 @@ where
         &self,
         _memory: &mut TracingMemory<F>,
         _instruction: &Instruction<F>,
-        _adapter_row: &mut [F],
         _data: &Self::WriteData,
+        _record: &mut Self::RecordMut<'_>,
     ) {
+        // This function is intentionally left empty
     }
-
+}
+impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32BranchAdapterStep {
     #[inline(always)]
-    fn fill_trace_row(
-        &self,
-        mem_helper: &MemoryAuxColsFactory<F>,
-        _trace_ctx: Self::TraceContext<'_>,
-        adapter_row: &mut [F],
-    ) {
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        let record: &Rv32BranchAdapterRecord =
+            unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv32BranchAdapterCols<F> = adapter_row.borrow_mut();
 
-        let mut timestamp = adapter_row.from_state.timestamp.as_canonical_u32();
+        // We must assign in reverse
+        let timestamp = record.from_timestamp;
 
-        mem_helper.fill_from_prev(timestamp, adapter_row.reads_aux[0].as_mut());
-        timestamp += 1;
+        mem_helper.fill(
+            record.reads_aux[1].prev_timestamp,
+            timestamp + 1,
+            adapter_row.reads_aux[1].as_mut(),
+        );
 
-        mem_helper.fill_from_prev(timestamp, adapter_row.reads_aux[1].as_mut());
+        mem_helper.fill(
+            record.reads_aux[0].prev_timestamp,
+            timestamp,
+            adapter_row.reads_aux[0].as_mut(),
+        );
+
+        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
+        adapter_row.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
+        adapter_row.rs2_ptr = F::from_canonical_u32(record.rs2_ptr);
     }
 }
 

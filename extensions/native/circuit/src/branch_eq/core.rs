@@ -1,20 +1,33 @@
-use std::{array, borrow::BorrowMut};
+use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterExecutorE1, AdapterTraceStep, Result, StepExecutorE1, TraceStep, VmStateMut,
+        get_record_from_slice, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep,
+        EmptyLayout, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
     },
 };
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::NativeBranchEqualOpcode;
 use openvm_rv32im_circuit::BranchEqualCoreCols;
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
+
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct NativeBranchEqualCoreRecord<F> {
+    pub a: F,
+    pub b: F,
+    pub imm: F,
+    pub is_beq: bool,
+}
+
+#[derive(derive_new::new)]
 
 pub struct NativeBranchEqualStep<A> {
     adapter: A,
@@ -22,28 +35,14 @@ pub struct NativeBranchEqualStep<A> {
     pub pc_step: u32,
 }
 
-impl<A> NativeBranchEqualStep<A> {
-    pub fn new(adapter: A, offset: usize, pc_step: u32) -> Self {
-        Self {
-            adapter,
-            offset,
-            pc_step,
-        }
-    }
-}
-
 impl<F, CTX, A> TraceStep<F, CTX> for NativeBranchEqualStep<A>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterTraceStep<
-            F,
-            CTX,
-            ReadData: Into<[F; 2]>,
-            WriteData = (),
-            TraceContext<'a> = (),
-        >,
+    A: 'static + AdapterTraceStep<F, CTX, ReadData: Into<[F; 2]>, WriteData = ()>,
 {
+    type RecordLayout = EmptyLayout<A>;
+    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut NativeBranchEqualCoreRecord<F>);
+
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -51,56 +50,65 @@ where
         )
     }
 
-    fn execute(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let &Instruction { opcode, c: imm, .. } = instruction;
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
-        let branch_eq_opcode =
-            NativeBranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        A::start(*state.pc, state.memory, &mut adapter_record);
 
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-
-        A::start(*state.pc, state.memory, adapter_row);
-
-        let [rs1, rs2] = self
+        [core_record.a, core_record.b] = self
             .adapter
-            .read(state.memory, instruction, adapter_row)
+            .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        let (cmp_result, diff_idx, diff_inv_val) = run_eq(branch_eq_opcode, rs1, rs2);
+        let cmp_result = core_record.a == core_record.b;
 
-        let core_row: &mut BranchEqualCoreCols<_, 1> = core_row.borrow_mut();
-        core_row.a = [rs1];
-        core_row.b = [rs2];
-        core_row.cmp_result = F::from_bool(cmp_result);
-        core_row.imm = imm;
-        core_row.opcode_beq_flag = F::from_bool(branch_eq_opcode.0 == BranchEqualOpcode::BEQ);
-        core_row.opcode_bne_flag = F::from_bool(branch_eq_opcode.0 == BranchEqualOpcode::BNE);
-        core_row.diff_inv_marker =
-            array::from_fn(|i| if i == diff_idx { diff_inv_val } else { F::ZERO });
+        core_record.imm = imm;
+        core_record.is_beq =
+            opcode.local_opcode_idx(self.offset) == BranchEqualOpcode::BEQ as usize;
 
-        if cmp_result {
+        if cmp_result == core_record.is_beq {
             *state.pc = (F::from_canonical_u32(*state.pc) + imm).as_canonical_u32();
         } else {
             *state.pc = state.pc.wrapping_add(self.pc_step);
         }
 
-        *trace_offset += width;
-
         Ok(())
     }
+}
 
+impl<F, CTX, A> TraceFiller<F, CTX> for NativeBranchEqualStep<A>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F, CTX>,
+{
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, _core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let record: &NativeBranchEqualCoreRecord<F> =
+            unsafe { get_record_from_slice(&mut core_row, ()) };
+        let core_row: &mut BranchEqualCoreCols<F, 1> = core_row.borrow_mut();
+        let (cmp_result, diff_inv_val) = run_eq(record.is_beq, record.a, record.b);
 
-        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
+        // Writing in reverse order to avoid overwriting the `record`
+        core_row.diff_inv_marker[0] = diff_inv_val;
+
+        core_row.opcode_bne_flag = F::from_bool(!record.is_beq);
+        core_row.opcode_beq_flag = F::from_bool(record.is_beq);
+
+        core_row.imm = record.imm;
+        core_row.cmp_result = F::from_bool(cmp_result);
+
+        core_row.b = [record.b];
+        core_row.a = [record.a];
     }
 }
 
@@ -119,13 +127,10 @@ where
     {
         let &Instruction { opcode, c: imm, .. } = instruction;
 
-        let branch_eq_opcode =
-            NativeBranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-
         let [rs1, rs2] = self.adapter.read(state, instruction).into();
 
-        // TODO(ayush): probably don't need the other values
-        let (cmp_result, _, _) = run_eq::<F>(branch_eq_opcode, rs1, rs2);
+        let is_beq = opcode.local_opcode_idx(self.offset) == BranchEqualOpcode::BEQ as usize;
+        let cmp_result = (rs1 == rs2) ^ !is_beq;
 
         if cmp_result {
             // TODO(ayush): verify this is fine
@@ -153,16 +158,12 @@ where
 
 // Returns (cmp_result, diff_idx, x[diff_idx] - y[diff_idx])
 #[inline(always)]
-pub(super) fn run_eq<F>(local_opcode: NativeBranchEqualOpcode, x: F, y: F) -> (bool, usize, F)
+pub(super) fn run_eq<F>(is_beq: bool, x: F, y: F) -> (bool, F)
 where
     F: PrimeField32,
 {
     if x != y {
-        return (
-            local_opcode.0 == BranchEqualOpcode::BNE,
-            0,
-            (x - y).inverse(),
-        );
+        return (!is_beq, (x - y).inverse());
     }
-    (local_opcode.0 == BranchEqualOpcode::BEQ, 0, F::ZERO)
+    (is_beq, F::ZERO)
 }

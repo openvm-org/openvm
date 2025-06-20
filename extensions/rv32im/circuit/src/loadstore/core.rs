@@ -1,9 +1,13 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    array,
+    borrow::{Borrow, BorrowMut},
+};
 
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, Result, StepExecutorE1, TraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, EmptyLayout, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
         VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
@@ -11,7 +15,7 @@ use openvm_circuit::{
         MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
@@ -21,8 +25,6 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use serde_big_array::BigArray;
 
 use crate::adapters::LoadStoreInstruction;
 
@@ -63,20 +65,6 @@ pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {
     /// write_data will be constrained against read_data and prev_data
     /// depending on the opcode and the shift amount
     pub write_data: [T; NUM_CELLS],
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound = "F: Serialize + DeserializeOwned")]
-pub struct LoadStoreCoreRecord<F, const NUM_CELLS: usize> {
-    pub opcode: Rv32LoadStoreOpcode,
-    pub shift: u32,
-    #[serde(with = "BigArray")]
-    pub read_data: [F; NUM_CELLS],
-    #[serde(with = "BigArray")]
-    pub prev_data: [F; NUM_CELLS],
-    #[serde(with = "BigArray")]
-    pub write_data: [F; NUM_CELLS],
 }
 
 #[derive(Debug, Clone, derive_new::new)]
@@ -255,24 +243,20 @@ where
     }
 }
 
-pub struct LoadStoreStep<A, const NUM_CELLS: usize> {
-    adapter: A,
-    pub range_checker_chip: SharedVariableRangeCheckerChip,
-    pub offset: usize,
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct LoadStoreCoreRecord<const NUM_CELLS: usize> {
+    pub local_opcode: u8,
+    pub shift_amount: u8,
+    pub read_data: [u8; NUM_CELLS],
+    // Note: `prev_data` can be from native address space, so we need to use u32
+    pub prev_data: [u32; NUM_CELLS],
 }
 
-impl<A, const NUM_CELLS: usize> LoadStoreStep<A, NUM_CELLS> {
-    pub fn new(
-        adapter: A,
-        range_checker_chip: SharedVariableRangeCheckerChip,
-        offset: usize,
-    ) -> Self {
-        Self {
-            adapter,
-            range_checker_chip,
-            offset,
-        }
-    }
+#[derive(derive_new::new)]
+pub struct LoadStoreStep<A, const NUM_CELLS: usize> {
+    adapter: A,
+    pub offset: usize,
 }
 
 impl<F, CTX, A, const NUM_CELLS: usize> TraceStep<F, CTX> for LoadStoreStep<A, NUM_CELLS>
@@ -282,11 +266,13 @@ where
         + for<'a> AdapterTraceStep<
             F,
             CTX,
-            ReadData = (([u8; NUM_CELLS], [u8; NUM_CELLS]), u32),
-            WriteData = [u8; NUM_CELLS],
-            TraceContext<'a> = &'a SharedVariableRangeCheckerChip,
+            ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
+            WriteData = [u32; NUM_CELLS],
         >,
 {
+    type RecordLayout = EmptyLayout<A>;
+    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut LoadStoreCoreRecord<NUM_CELLS>);
+
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -294,35 +280,72 @@ where
         )
     }
 
-    fn execute(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let Instruction { opcode, .. } = instruction;
 
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
+
+        A::start(*state.pc, state.memory, &mut adapter_record);
+
+        (
+            (core_record.prev_data, core_record.read_data),
+            core_record.shift_amount,
+        ) = self
+            .adapter
+            .read(state.memory, instruction, &mut adapter_record);
+
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        core_record.local_opcode = local_opcode as u8;
 
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let write_data = run_write_data(
+            local_opcode,
+            core_record.read_data,
+            core_record.prev_data,
+            core_record.shift_amount as usize,
+        );
+        self.adapter
+            .write(state.memory, instruction, &write_data, &mut adapter_record);
 
-        A::start(*state.pc, state.memory, adapter_row);
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
-        let ((prev_data, read_data), shift) =
-            self.adapter.read(state.memory, instruction, adapter_row);
-        let prev_data = prev_data.map(F::from_canonical_u8);
-        let read_data = read_data.map(F::from_canonical_u8);
+        Ok(())
+    }
+}
 
-        let write_data = run_write_data(local_opcode, read_data, prev_data, shift);
+impl<F, CTX, A, const NUM_CELLS: usize> TraceFiller<F, CTX> for LoadStoreStep<A, NUM_CELLS>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F, CTX>,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        let core_cols: &mut LoadStoreCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
+        let record: &LoadStoreCoreRecord<NUM_CELLS> =
+            unsafe { get_record_from_slice(&mut core_row, ()) };
+        let core_row: &mut LoadStoreCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
 
-        let flags = &mut core_cols.flags;
+        let opcode = Rv32LoadStoreOpcode::from_usize(record.local_opcode as usize);
+        let shift = record.shift_amount;
+
+        let write_data = run_write_data(opcode, record.read_data, record.prev_data, shift as usize);
+        // Writing in reverse order
+        core_row.write_data = write_data.map(F::from_canonical_u32);
+        core_row.prev_data = record.prev_data.map(F::from_canonical_u32);
+        core_row.read_data = record.read_data.map(F::from_canonical_u8);
+        core_row.is_load = F::from_bool([LOADW, LOADHU, LOADBU].contains(&opcode));
+        core_row.is_valid = F::ONE;
+        let flags = &mut core_row.flags;
         *flags = [F::ZERO; 4];
-        match (local_opcode, shift) {
+        match (opcode, shift) {
             (LOADW, 0) => flags[0] = F::TWO,
             (LOADHU, 0) => flags[1] = F::TWO,
             (LOADHU, 2) => flags[2] = F::TWO,
@@ -341,31 +364,6 @@ where
             (STOREB, 3) => (flags[2], flags[3]) = (F::ONE, F::ONE),
             _ => unreachable!(),
         };
-        core_cols.prev_data = prev_data;
-        core_cols.read_data = read_data;
-        core_cols.is_valid = F::ONE;
-        core_cols.is_load = F::from_bool([LOADW, LOADHU, LOADBU].contains(&local_opcode));
-        core_cols.write_data = write_data;
-
-        self.adapter.write(
-            state.memory,
-            instruction,
-            adapter_row,
-            &write_data.map(|x| x.as_canonical_u32() as u8),
-        );
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        *trace_offset += width;
-
-        Ok(())
-    }
-
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, _core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-
-        self.adapter
-            .fill_trace_row(mem_helper, &self.range_checker_chip, adapter_row);
     }
 }
 
@@ -373,10 +371,10 @@ impl<F, A, const NUM_CELLS: usize> StepExecutorE1<F> for LoadStoreStep<A, NUM_CE
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterExecutorE1<
+        + AdapterExecutorE1<
             F,
-            ReadData = (([u8; NUM_CELLS], [u8; NUM_CELLS]), u32),
-            WriteData = [u8; NUM_CELLS],
+            ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
+            WriteData = [u32; NUM_CELLS],
         >,
 {
     fn execute_e1<Ctx>(
@@ -389,19 +387,11 @@ where
     {
         let Instruction { opcode, .. } = instruction;
 
-        // Get the local opcode for this instruction
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-
         let ((prev_data, read_data), shift_amount) = self.adapter.read(state, instruction);
-        let prev_data = prev_data.map(F::from_canonical_u8);
-        let read_data = read_data.map(F::from_canonical_u8);
-
-        // Process the data according to the load/store type and alignment
-        let write_data = run_write_data(local_opcode, read_data, prev_data, shift_amount);
-        let write_data = write_data.map(|x| x.as_canonical_u32() as u8);
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let write_data = run_write_data(local_opcode, read_data, prev_data, shift_amount as usize);
 
         self.adapter.write(state, instruction, &write_data);
-
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
@@ -420,40 +410,46 @@ where
     }
 }
 
+// Returns the write data
 #[inline(always)]
-pub(super) fn run_write_data<F: PrimeField32, const NUM_CELLS: usize>(
+pub(super) fn run_write_data<const NUM_CELLS: usize>(
     opcode: Rv32LoadStoreOpcode,
-    read_data: [F; NUM_CELLS],
-    prev_data: [F; NUM_CELLS],
-    shift: u32,
-) -> [F; NUM_CELLS] {
-    let shift = shift as usize;
-    let mut write_data = read_data;
+    read_data: [u8; NUM_CELLS],
+    prev_data: [u32; NUM_CELLS],
+    shift: usize,
+) -> [u32; NUM_CELLS] {
     match (opcode, shift) {
-        (LOADW, 0) => (),
+        (LOADW, 0) => {
+            read_data.map(|x| x as u32)
+        },
         (LOADBU, 0) | (LOADBU, 1) | (LOADBU, 2) | (LOADBU, 3) => {
-            for cell in write_data.iter_mut().take(NUM_CELLS).skip(1) {
-                *cell = F::ZERO;
-            }
-            write_data[0] = read_data[shift];
+           let mut wrie_data = [0; NUM_CELLS];
+           wrie_data[0] = read_data[shift] as u32;
+           wrie_data
         }
         (LOADHU, 0) | (LOADHU, 2) => {
-            for cell in write_data.iter_mut().take(NUM_CELLS).skip(NUM_CELLS / 2) {
-                *cell = F::ZERO;
-            }
+            let mut write_data = [0; NUM_CELLS];
             for (i, cell) in write_data.iter_mut().take(NUM_CELLS / 2).enumerate() {
-                *cell = read_data[i + shift];
+                *cell = read_data[i + shift] as u32;
             }
+            write_data
         }
-        (STOREW, 0) => (),
+        (STOREW, 0) => {
+            read_data.map(|x| x as u32)
+        },
         (STOREB, 0) | (STOREB, 1) | (STOREB, 2) | (STOREB, 3) => {
-            write_data = prev_data;
-            write_data[shift] = read_data[0];
+            let mut write_data = prev_data;
+            write_data[shift] = read_data[0] as u32;
+            write_data
         }
         (STOREH, 0) | (STOREH, 2) => {
-            write_data = prev_data;
-            write_data[shift..(NUM_CELLS / 2 + shift)]
-                .copy_from_slice(&read_data[..(NUM_CELLS / 2)]);
+            array::from_fn(|i| {
+                if i >= shift && i < (NUM_CELLS / 2 + shift){
+                    read_data[i - shift] as u32
+                } else {
+                    prev_data[i]
+                }
+            })
         }
         // Currently the adapter AIR requires `ptr_val` to be aligned to the data size in bytes.
         // The circuit requires that `shift = ptr_val % 4` so that `ptr_val - shift` is a multiple of 4.
@@ -461,6 +457,5 @@ pub(super) fn run_write_data<F: PrimeField32, const NUM_CELLS: usize>(
         _ => unreachable!(
             "unaligned memory access not supported by this execution environment: {opcode:?}, shift: {shift}"
         ),
-    };
-    write_data
+    }
 }

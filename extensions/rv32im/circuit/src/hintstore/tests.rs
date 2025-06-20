@@ -28,7 +28,7 @@ use super::{Rv32HintStoreAir, Rv32HintStoreChip, Rv32HintStoreCols, Rv32HintStor
 use crate::{adapters::decompose, test_utils::get_verification_error};
 
 type F = BabyBear;
-const MAX_INS_CAPACITY: usize = 1024;
+const MAX_INS_CAPACITY: usize = 4096;
 
 fn create_test_chip(
     tester: &mut VmChipTestBuilder<F>,
@@ -96,7 +96,7 @@ fn set_and_execute_buffer(
 
     tester.write(1, b, decompose(mem_ptr));
 
-    let num_words = rng.gen_range(1..20);
+    let num_words = rng.gen_range(1..28);
     let a = gen_pointer(rng, 4);
     tester.write(1, a, decompose(num_words));
 

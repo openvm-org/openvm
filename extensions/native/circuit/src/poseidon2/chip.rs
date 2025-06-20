@@ -3,11 +3,19 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        StepExecutorE1, TraceStep, VmStateMut,
+        CustomBorrow, MultiRowLayout, RecordArena, StepExecutorE1, TraceFiller, TraceStep,
+        VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
+    system::{
+        memory::{
+            offline_checker::MemoryBaseAuxCols,
+            online::{GuestMemory, TracingMemory},
+            MemoryAuxColsFactory,
+        },
+        native_adapter::util::{
+            memory_read_native, memory_write_native, tracing_read_native,
+            tracing_write_native_inplace,
+        },
     },
 };
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
@@ -23,17 +31,12 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::{ParallelIterator, ParallelSlice},
 };
 
-use crate::{
-    adapters::{
-        memory_read_native, memory_write_native, tracing_read_native, tracing_write_native,
+use crate::poseidon2::{
+    columns::{
+        InsideRowSpecificCols, NativePoseidon2Cols, SimplePoseidonSpecificCols,
+        TopLevelSpecificCols,
     },
-    poseidon2::{
-        columns::{
-            InsideRowSpecificCols, NativePoseidon2Cols, SimplePoseidonSpecificCols,
-            TopLevelSpecificCols,
-        },
-        CHUNK,
-    },
+    CHUNK,
 };
 
 pub struct NativePoseidon2Step<F: Field, const SBOX_REGISTERS: usize> {
@@ -63,24 +66,52 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_R
 pub(super) const NUM_INITIAL_READS: usize = 6;
 pub(super) const NUM_SIMPLE_ACCESSES: u32 = 7;
 
+pub struct NativePoseidon2Metadata {
+    num_rows: usize,
+}
+pub struct NativePoseidon2RecordMut<'a, F, const SBOX_REGISTERS: usize>(
+    &'a mut [NativePoseidon2Cols<F, SBOX_REGISTERS>],
+);
+impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize>
+    CustomBorrow<'a, NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS>, NativePoseidon2Metadata>
+    for [u8]
+{
+    fn custom_borrow(
+        &'a mut self,
+        metadata: NativePoseidon2Metadata,
+    ) -> NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS> {
+        let arr = unsafe {
+            self.align_to_mut::<NativePoseidon2Cols<F, SBOX_REGISTERS>>()
+                .1
+        };
+        NativePoseidon2RecordMut(&mut arr[..metadata.num_rows])
+    }
+}
+
 impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
     for NativePoseidon2Step<F, SBOX_REGISTERS>
 {
-    fn execute(
+    type RecordLayout = MultiRowLayout<NativePoseidon2Metadata>;
+    type RecordMut<'a> = NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS>;
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> openvm_circuit::arch::Result<()> {
-        debug_assert_eq!(width, NativePoseidon2Cols::<u8, SBOX_REGISTERS>::width());
+        arena: &'buf mut RA,
+    ) -> openvm_circuit::arch::Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let init_timestamp_u32 = state.memory.timestamp;
         if instruction.opcode == PERM_POS2.global_opcode()
             || instruction.opcode == COMP_POS2.global_opcode()
         {
-            let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> =
-                trace[*trace_offset..*trace_offset + width].borrow_mut();
+            let cols = &mut arena
+                .alloc(MultiRowLayout {
+                    num_rows: 1,
+                    metadata: NativePoseidon2Metadata { num_rows: 1 },
+                })
+                .0[0];
             let simple_cols: &mut SimplePoseidonSpecificCols<F> =
                 cols.specific[..SimplePoseidonSpecificCols::<u8>::width()].borrow_mut();
             let &Instruction {
@@ -96,13 +127,13 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
                 F::from_canonical_u32(AS::Native as u32)
             );
             debug_assert_eq!(data_address_space, F::from_canonical_u32(AS::Native as u32));
-            let [output_pointer]: [F; 1] = tracing_read_native(
+            let [output_pointer]: [F; 1] = tracing_read_native_helper(
                 state.memory,
                 output_register.as_canonical_u32(),
                 simple_cols.read_output_pointer.as_mut(),
             );
             let output_pointer_u32 = output_pointer.as_canonical_u32();
-            let [input_pointer_1]: [F; 1] = tracing_read_native(
+            let [input_pointer_1]: [F; 1] = tracing_read_native_helper(
                 state.memory,
                 input_register_1.as_canonical_u32(),
                 simple_cols.read_input_pointer_1.as_mut(),
@@ -112,19 +143,19 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
                 state.memory.increment_timestamp();
                 [input_pointer_1 + F::from_canonical_usize(CHUNK)]
             } else {
-                tracing_read_native(
+                tracing_read_native_helper(
                     state.memory,
                     input_register_2.as_canonical_u32(),
                     simple_cols.read_input_pointer_2.as_mut(),
                 )
             };
             let input_pointer_2_u32 = input_pointer_2.as_canonical_u32();
-            let data_1: [F; CHUNK] = tracing_read_native(
+            let data_1: [F; CHUNK] = tracing_read_native_helper(
                 state.memory,
                 input_pointer_1_u32,
                 simple_cols.read_data_1.as_mut(),
             );
-            let data_2: [F; CHUNK] = tracing_read_native(
+            let data_2: [F; CHUNK] = tracing_read_native_helper(
                 state.memory,
                 input_pointer_2_u32,
                 simple_cols.read_data_2.as_mut(),
@@ -138,14 +169,14 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
                 }
             });
             let output = self.subchip.permute(p2_input);
-            tracing_write_native(
+            tracing_write_native_inplace(
                 state.memory,
                 output_pointer_u32,
                 &std::array::from_fn(|i| output[i]),
                 &mut simple_cols.write_data_1,
             );
             if instruction.opcode == PERM_POS2.global_opcode() {
-                tracing_write_native(
+                tracing_write_native_inplace(
                     state.memory,
                     output_pointer_u32 + CHUNK as u32,
                     &std::array::from_fn(|i| output[i + CHUNK]),
@@ -176,8 +207,6 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
             simple_cols.output_pointer = output_pointer;
             simple_cols.input_pointer_1 = input_pointer_1;
             simple_cols.input_pointer_2 = input_pointer_2;
-
-            *trace_offset += width;
         } else if instruction.opcode == VERIFY_BATCH.global_opcode() {
             let init_timestamp = F::from_canonical_u32(init_timestamp_u32);
             let mut col_buffer =
@@ -204,35 +233,35 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
 
             let [proof_id]: [F; 1] =
                 memory_read_native(state.memory.data(), proof_id_ptr.as_canonical_u32());
-            let [dim_base_pointer]: [F; 1] = tracing_read_native(
+            let [dim_base_pointer]: [F; 1] = tracing_read_native_helper(
                 state.memory,
                 dim_register.as_canonical_u32(),
                 ltl_specific_cols.dim_base_pointer_read.as_mut(),
             );
             let dim_base_pointer_u32 = dim_base_pointer.as_canonical_u32();
-            let [opened_base_pointer]: [F; 1] = tracing_read_native(
+            let [opened_base_pointer]: [F; 1] = tracing_read_native_helper(
                 state.memory,
                 opened_register.as_canonical_u32(),
                 ltl_specific_cols.opened_base_pointer_read.as_mut(),
             );
             let opened_base_pointer_u32 = opened_base_pointer.as_canonical_u32();
-            let [opened_length]: [F; 1] = tracing_read_native(
+            let [opened_length]: [F; 1] = tracing_read_native_helper(
                 state.memory,
                 opened_length_register.as_canonical_u32(),
                 ltl_specific_cols.opened_length_read.as_mut(),
             );
-            let [index_base_pointer]: [F; 1] = tracing_read_native(
+            let [index_base_pointer]: [F; 1] = tracing_read_native_helper(
                 state.memory,
                 index_register.as_canonical_u32(),
                 ltl_specific_cols.index_base_pointer_read.as_mut(),
             );
             let index_base_pointer_u32 = index_base_pointer.as_canonical_u32();
-            let [commit_pointer]: [F; 1] = tracing_read_native(
+            let [commit_pointer]: [F; 1] = tracing_read_native_helper(
                 state.memory,
                 commit_register.as_canonical_u32(),
                 ltl_specific_cols.commit_pointer_read.as_mut(),
             );
-            let commit = tracing_read_native(
+            let commit = tracing_read_native_helper(
                 state.memory,
                 commit_pointer.as_canonical_u32(),
                 ltl_specific_cols.commit_read.as_mut(),
@@ -246,63 +275,39 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
 
             // Number of non-inside rows, this is used to compute the offset of the inside row
             // section.
-            let num_non_inside_rows = {
-                let mut log_height = initial_log_height_u32 as i32;
+            let (num_inside_rows, num_non_inside_rows) = {
+                let opened_element_size_u32 = opened_element_size.as_canonical_u32();
+                let mut num_non_inside_rows = initial_log_height_u32 as usize;
+                let mut num_inside_rows = 0;
+                let mut log_height = initial_log_height_u32;
                 let mut opened_index = 0;
-                let mut num_non_inside_rows = 0;
-                while log_height >= 0 {
-                    if opened_index < opened_length
-                        && memory_read_native::<F, 1>(
+                loop {
+                    let mut total_len = 0;
+                    while opened_index < opened_length {
+                        let [height]: [F; 1] = memory_read_native(
                             state.memory.data(),
                             dim_base_pointer_u32 + opened_index as u32,
-                        )[0] == F::from_canonical_u32(log_height as u32)
-                    {
-                        let mut row_pointer = 0;
-                        let mut row_end = 0;
-                        let mut is_first_in_segment = true;
-
-                        loop {
-                            let mut cell_idx = 0;
-                            for _ in 0..CHUNK {
-                                if is_first_in_segment || row_pointer == row_end {
-                                    if is_first_in_segment {
-                                        is_first_in_segment = false;
-                                    } else {
-                                        opened_index += 1;
-                                        if opened_index == opened_length
-                                            || memory_read_native::<F, 1>(
-                                                state.memory.data(),
-                                                dim_base_pointer_u32 + opened_index as u32,
-                                            )[0] != F::from_canonical_u32(log_height as u32)
-                                        {
-                                            break;
-                                        }
-                                    }
-                                    let [new_row_pointer, row_len]: [F; 2] = memory_read_native(
-                                        state.memory.data(),
-                                        opened_base_pointer_u32 + 2 * opened_index as u32,
-                                    );
-                                    row_pointer = new_row_pointer.as_canonical_u32() as usize;
-                                    row_end = row_pointer
-                                        + (opened_element_size * row_len).as_canonical_u32()
-                                            as usize;
-                                }
-                                cell_idx += 1;
-                                row_pointer += 1;
-                            }
-
-                            if cell_idx < CHUNK {
-                                break;
-                            }
+                        );
+                        if height.as_canonical_u32() != log_height {
+                            break;
                         }
-                        num_non_inside_rows += 1;
+                        let [row_len]: [F; 1] = memory_read_native(
+                            state.memory.data(),
+                            opened_base_pointer_u32 + 2 * opened_index as u32 + 1,
+                        );
+                        total_len += row_len.as_canonical_u32() * opened_element_size_u32;
+                        opened_index += 1;
                     }
-                    if log_height != 0 {
+                    if total_len != 0 {
                         num_non_inside_rows += 1;
+                        num_inside_rows += (total_len as usize).div_ceil(CHUNK);
+                    }
+                    if log_height == 0 {
+                        break;
                     }
                     log_height -= 1;
                 }
-                num_non_inside_rows
+                (num_inside_rows, num_non_inside_rows)
             };
             let mut proof_index = 0;
             let mut opened_index = 0;
@@ -316,8 +321,17 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
                     .collect()
             };
 
-            let mut inside_row_offset = *trace_offset + num_non_inside_rows * width;
-            let mut non_inside_row_offset = *trace_offset;
+            let total_num_row = num_inside_rows + num_non_inside_rows;
+            let allocated_rows = arena
+                .alloc(MultiRowLayout {
+                    num_rows: total_num_row as u32,
+                    metadata: NativePoseidon2Metadata {
+                        num_rows: total_num_row,
+                    },
+                })
+                .0;
+            let mut inside_row_idx = num_non_inside_rows;
+            let mut non_inside_row_idx = 0;
 
             while log_height >= 0 {
                 if opened_index < opened_length
@@ -341,8 +355,11 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
                     let mut is_first_in_segment = true;
 
                     loop {
-                        let inside_cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> =
-                            trace[inside_row_offset..inside_row_offset + width].borrow_mut();
+                        if inside_row_idx == total_num_row {
+                            opened_index += 1;
+                            break;
+                        }
+                        let inside_cols = &mut allocated_rows[inside_row_idx];
                         let inside_specific_cols: &mut InsideRowSpecificCols<F> = inside_cols
                             .specific[..InsideRowSpecificCols::<u8>::width()]
                             .borrow_mut();
@@ -365,7 +382,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
                                         break;
                                     }
                                 }
-                                let [new_row_pointer, row_len]: [F; 2] = tracing_read_native(
+                                let [new_row_pointer, row_len]: [F; 2] = tracing_read_native_helper(
                                     state.memory,
                                     opened_base_pointer_u32 + 2 * opened_index as u32,
                                     cell_cols.read_row_pointer_and_length.as_mut(),
@@ -377,7 +394,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
                             } else {
                                 state.memory.increment_timestamp();
                             }
-                            let [value]: [F; 1] = tracing_read_native(
+                            let [value]: [F; 1] = tracing_read_native_helper(
                                 state.memory,
                                 row_pointer as u32,
                                 cell_cols.read.as_mut(),
@@ -403,7 +420,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
                                 .increment_timestamp_by(2 * (CHUNK - cells_idx) as u32);
                         }
 
-                        inside_row_offset += width;
+                        inside_row_idx += 1;
                         inside_cols.inner.inputs = p2_input;
                         inside_cols.incorporate_row = F::ZERO;
                         inside_cols.incorporate_sibling = F::ZERO;
@@ -431,19 +448,17 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
                         }
                     }
                     {
-                        let inside_cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> =
-                            trace[inside_row_offset - width..inside_row_offset].borrow_mut();
+                        let inside_cols = &mut allocated_rows[inside_row_idx - 1];
                         inside_cols.end_inside_row = F::ONE;
                     }
 
-                    let incorporate_cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> =
-                        trace[non_inside_row_offset..non_inside_row_offset + width].borrow_mut();
+                    let incorporate_cols = &mut allocated_rows[non_inside_row_idx];
                     let top_level_specific_cols: &mut TopLevelSpecificCols<F> = incorporate_cols
                         .specific[..TopLevelSpecificCols::<u8>::width()]
                         .borrow_mut();
 
                     let final_opened_index = opened_index - 1;
-                    let [height_check]: [F; 1] = tracing_read_native(
+                    let [height_check]: [F; 1] = tracing_read_native_helper(
                         state.memory,
                         dim_base_pointer_u32 + initial_opened_index as u32,
                         top_level_specific_cols
@@ -452,7 +467,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
                     );
                     assert_eq!(height_check, F::from_canonical_u32(log_height as u32));
                     let final_height_read_timestamp = state.memory.timestamp;
-                    let [height_check]: [F; 1] = tracing_read_native(
+                    let [height_check]: [F; 1] = tracing_read_native_helper(
                         state.memory,
                         dim_base_pointer_u32 + final_opened_index as u32,
                         top_level_specific_cols.read_final_height.as_mut(),
@@ -466,8 +481,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
                         self.compress(root, hash)
                     };
                     root = new_root;
-
-                    non_inside_row_offset += width;
+                    non_inside_row_idx += 1;
 
                     incorporate_cols.incorporate_row = F::ONE;
                     incorporate_cols.incorporate_sibling = F::ZERO;
@@ -503,13 +517,12 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
                         .memory
                         .increment_timestamp_by(NUM_INITIAL_READS as u32);
 
-                    let sibling_cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> =
-                        trace[non_inside_row_offset..non_inside_row_offset + width].borrow_mut();
+                    let sibling_cols = &mut allocated_rows[non_inside_row_idx];
                     let top_level_specific_cols: &mut TopLevelSpecificCols<F> =
                         sibling_cols.specific[..TopLevelSpecificCols::<u8>::width()].borrow_mut();
 
                     let read_sibling_is_on_right_timestamp = state.memory.timestamp;
-                    let [sibling_is_on_right]: [F; 1] = tracing_read_native(
+                    let [sibling_is_on_right]: [F; 1] = tracing_read_native_helper(
                         state.memory,
                         index_base_pointer_u32 + proof_index as u32,
                         top_level_specific_cols
@@ -524,7 +537,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
                     };
                     root = new_root;
 
-                    non_inside_row_offset += width;
+                    non_inside_row_idx += 1;
 
                     sibling_cols.inner.inputs = p2_input;
 
@@ -557,8 +570,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
                 log_height -= 1;
                 proof_index += 1;
             }
-            let ltl_trace_cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> =
-                trace[non_inside_row_offset - width..non_inside_row_offset].borrow_mut();
+            let ltl_trace_cols = &mut allocated_rows[non_inside_row_idx - 1];
             let ltl_trace_specific_cols: &mut TopLevelSpecificCols<F> =
                 ltl_trace_cols.specific[..TopLevelSpecificCols::<u8>::width()].borrow_mut();
             ltl_trace_cols.end_top_level = F::ONE;
@@ -578,8 +590,6 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
                 ltl_specific_cols.index_base_pointer_read;
             ltl_trace_specific_cols.commit_pointer_read = ltl_specific_cols.commit_pointer_read;
             ltl_trace_specific_cols.commit_read = ltl_specific_cols.commit_read;
-
-            *trace_offset = inside_row_offset;
             assert_eq!(commit, root);
         } else {
             unreachable!()
@@ -589,6 +599,22 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
         Ok(())
     }
 
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        if opcode == VERIFY_BATCH.global_opcode().as_usize() {
+            String::from("VERIFY_BATCH")
+        } else if opcode == PERM_POS2.global_opcode().as_usize() {
+            String::from("PERM_POS2")
+        } else if opcode == COMP_POS2.global_opcode().as_usize() {
+            String::from("COMP_POS2")
+        } else {
+            unreachable!("unsupported opcode: {}", opcode)
+        }
+    }
+}
+
+impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceFiller<F, CTX>
+    for NativePoseidon2Step<F, SBOX_REGISTERS>
+{
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let inner_cols = {
             let cols: &NativePoseidon2Cols<F, SBOX_REGISTERS> = row_slice.as_ref().borrow();
@@ -603,26 +629,44 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
             let simple_cols: &mut SimplePoseidonSpecificCols<F> =
                 cols.specific[..SimplePoseidonSpecificCols::<u8>::width()].borrow_mut();
             let start_timestamp_u32 = cols.start_timestamp.as_canonical_u32();
-            mem_helper.fill_from_prev(
+            mem_fill_helper(
+                mem_helper,
                 start_timestamp_u32,
                 simple_cols.read_output_pointer.as_mut(),
             );
-            mem_helper.fill_from_prev(
+            mem_fill_helper(
+                mem_helper,
                 start_timestamp_u32 + 1,
                 simple_cols.read_input_pointer_1.as_mut(),
             );
             if simple_cols.is_compress.is_one() {
-                mem_helper.fill_from_prev(
+                mem_fill_helper(
+                    mem_helper,
                     start_timestamp_u32 + 2,
                     simple_cols.read_input_pointer_2.as_mut(),
                 );
             }
-            mem_helper.fill_from_prev(start_timestamp_u32 + 3, simple_cols.read_data_1.as_mut());
-            mem_helper.fill_from_prev(start_timestamp_u32 + 4, simple_cols.read_data_2.as_mut());
-            mem_helper.fill_from_prev(start_timestamp_u32 + 5, simple_cols.write_data_1.as_mut());
+            mem_fill_helper(
+                mem_helper,
+                start_timestamp_u32 + 3,
+                simple_cols.read_data_1.as_mut(),
+            );
+            mem_fill_helper(
+                mem_helper,
+                start_timestamp_u32 + 4,
+                simple_cols.read_data_2.as_mut(),
+            );
+            mem_fill_helper(
+                mem_helper,
+                start_timestamp_u32 + 5,
+                simple_cols.write_data_1.as_mut(),
+            );
             if simple_cols.is_compress.is_zero() {
-                mem_helper
-                    .fill_from_prev(start_timestamp_u32 + 6, simple_cols.write_data_2.as_mut());
+                mem_fill_helper(
+                    mem_helper,
+                    start_timestamp_u32 + 6,
+                    simple_cols.write_data_2.as_mut(),
+                );
             }
         } else if cols.inside_row.is_one() {
             let inside_row_specific_cols: &mut InsideRowSpecificCols<F> =
@@ -633,13 +677,17 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
                     break;
                 }
                 if cell.is_first_in_row.is_one() {
-                    mem_helper.fill_from_prev(
+                    mem_fill_helper(
+                        mem_helper,
                         start_timestamp_u32 + 2 * i as u32,
                         cell.read_row_pointer_and_length.as_mut(),
                     );
                 }
-                mem_helper
-                    .fill_from_prev(start_timestamp_u32 + 2 * i as u32 + 1, cell.read.as_mut());
+                mem_fill_helper(
+                    mem_helper,
+                    start_timestamp_u32 + 2 * i as u32 + 1,
+                    cell.read.as_mut(),
+                );
             }
         } else {
             let top_level_specific_cols: &mut TopLevelSpecificCols<F> =
@@ -647,45 +695,54 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
             let start_timestamp_u32 = cols.start_timestamp.as_canonical_u32();
             if cols.end_top_level.is_one() {
                 let very_start_timestamp_u32 = cols.very_first_timestamp.as_canonical_u32();
-                mem_helper.fill_from_prev(
+                mem_fill_helper(
+                    mem_helper,
                     very_start_timestamp_u32,
                     top_level_specific_cols.dim_base_pointer_read.as_mut(),
                 );
-                mem_helper.fill_from_prev(
+                mem_fill_helper(
+                    mem_helper,
                     very_start_timestamp_u32 + 1,
                     top_level_specific_cols.opened_base_pointer_read.as_mut(),
                 );
-                mem_helper.fill_from_prev(
+                mem_fill_helper(
+                    mem_helper,
                     very_start_timestamp_u32 + 2,
                     top_level_specific_cols.opened_length_read.as_mut(),
                 );
-                mem_helper.fill_from_prev(
+                mem_fill_helper(
+                    mem_helper,
                     very_start_timestamp_u32 + 3,
                     top_level_specific_cols.index_base_pointer_read.as_mut(),
                 );
-                mem_helper.fill_from_prev(
+                mem_fill_helper(
+                    mem_helper,
                     very_start_timestamp_u32 + 4,
                     top_level_specific_cols.commit_pointer_read.as_mut(),
                 );
-                mem_helper.fill_from_prev(
+                mem_fill_helper(
+                    mem_helper,
                     very_start_timestamp_u32 + 5,
                     top_level_specific_cols.commit_read.as_mut(),
                 );
             }
             if cols.incorporate_row.is_one() {
                 let end_timestamp = top_level_specific_cols.end_timestamp.as_canonical_u32();
-                mem_helper.fill_from_prev(
+                mem_fill_helper(
+                    mem_helper,
                     end_timestamp - 2,
                     top_level_specific_cols
                         .read_initial_height_or_sibling_is_on_right
                         .as_mut(),
                 );
-                mem_helper.fill_from_prev(
+                mem_fill_helper(
+                    mem_helper,
                     end_timestamp - 1,
                     top_level_specific_cols.read_final_height.as_mut(),
                 );
             } else if cols.incorporate_sibling.is_one() {
-                mem_helper.fill_from_prev(
+                mem_fill_helper(
+                    mem_helper,
                     start_timestamp_u32 + NUM_INITIAL_READS as u32,
                     top_level_specific_cols
                         .read_initial_height_or_sibling_is_on_right
@@ -701,19 +758,29 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
         let width = self.subchip.air.width();
         row_slice[..width].copy_from_slice(&self.empty_poseidon2_sub_cols);
     }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        if opcode == VERIFY_BATCH.global_opcode().as_usize() {
-            String::from("VERIFY_BATCH")
-        } else if opcode == PERM_POS2.global_opcode().as_usize() {
-            String::from("PERM_POS2")
-        } else if opcode == COMP_POS2.global_opcode().as_usize() {
-            String::from("COMP_POS2")
-        } else {
-            unreachable!("unsupported opcode: {}", opcode)
-        }
-    }
 }
+
+fn tracing_read_native_helper<F: PrimeField32, const BLOCK_SIZE: usize>(
+    memory: &mut TracingMemory<F>,
+    ptr: u32,
+    base_aux: &mut MemoryBaseAuxCols<F>,
+) -> [F; BLOCK_SIZE] {
+    let mut prev_ts = 0;
+    let ret = tracing_read_native(memory, ptr, &mut prev_ts);
+    base_aux.set_prev(F::from_canonical_u32(prev_ts));
+    ret
+}
+
+/// Fill `MemoryBaseAuxCols`, assuming that the `prev_timestamp` is already set in `base_aux`.
+fn mem_fill_helper<F: PrimeField32>(
+    mem_helper: &MemoryAuxColsFactory<F>,
+    timestamp: u32,
+    base_aux: &mut MemoryBaseAuxCols<F>,
+) {
+    let prev_ts = base_aux.prev_timestamp.as_canonical_u32();
+    mem_helper.fill(prev_ts, timestamp, base_aux);
+}
+
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE1<F>
     for NativePoseidon2Step<F, SBOX_REGISTERS>
 {

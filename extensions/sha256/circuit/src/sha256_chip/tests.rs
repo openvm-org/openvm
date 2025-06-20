@@ -1,14 +1,16 @@
 use std::array;
 
-use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    InsExecutorE1,
+use openvm_circuit::{
+    arch::{
+        testing::{memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        InsExecutorE1,
+    },
+    utils::get_random_message,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
-use openvm_sha256_air::get_random_message;
 use openvm_sha256_transpiler::Rv32Sha256Opcode::{self, *};
 use openvm_stark_backend::{interaction::BusIndex, p3_field::FieldAlgebra};
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};

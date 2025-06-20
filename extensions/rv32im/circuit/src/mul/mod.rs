@@ -1,4 +1,4 @@
-use openvm_circuit::arch::{NewVmChipWrapper, VmAirWrapper};
+use openvm_circuit::arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper};
 
 use super::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use crate::adapters::{Rv32MultAdapterAir, Rv32MultAdapterStep};
@@ -16,4 +16,4 @@ pub type Rv32MultiplicationAir = VmAirWrapper<
 pub type Rv32MultiplicationStep =
     MultiplicationStep<Rv32MultAdapterStep, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>;
 pub type Rv32MultiplicationChip<F> =
-    NewVmChipWrapper<F, Rv32MultiplicationAir, Rv32MultiplicationStep>;
+    NewVmChipWrapper<F, Rv32MultiplicationAir, Rv32MultiplicationStep, MatrixRecordArena<F>>;

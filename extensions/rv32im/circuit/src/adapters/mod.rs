@@ -3,7 +3,6 @@ use std::ops::Mul;
 use openvm_circuit::{
     arch::{execution_mode::E1E2ExecutionCtx, VmStateMut},
     system::memory::{
-        offline_checker::{MemoryBaseAuxCols, MemoryReadAuxCols, MemoryWriteAuxCols},
         online::{GuestMemory, TracingMemory},
         tree::public_values::PUBLIC_VALUES_AS,
     },
@@ -97,34 +96,6 @@ pub fn memory_write<const N: usize>(
     unsafe { memory.write::<u8, N>(address_space, ptr, data) }
 }
 
-#[inline(always)]
-pub fn memory_read_from_state<F, Ctx, const N: usize>(
-    state: &mut VmStateMut<F, GuestMemory, Ctx>,
-    address_space: u32,
-    ptr: u32,
-) -> [u8; N]
-where
-    Ctx: E1E2ExecutionCtx,
-{
-    state.ctx.on_memory_operation(address_space, ptr, N as u32);
-
-    memory_read(state.memory, address_space, ptr)
-}
-
-#[inline(always)]
-pub fn memory_write_from_state<F, Ctx, const N: usize>(
-    state: &mut VmStateMut<F, GuestMemory, Ctx>,
-    address_space: u32,
-    ptr: u32,
-    data: &[u8; N],
-) where
-    Ctx: E1E2ExecutionCtx,
-{
-    state.ctx.on_memory_operation(address_space, ptr, N as u32);
-
-    memory_write(state.memory, address_space, ptr, data)
-}
-
 /// Atomic read operation which increments the timestamp by 1.
 /// Returns `(t_prev, [ptr:4]_{address_space})` where `t_prev` is the timestamp of the last memory
 /// access.
@@ -173,14 +144,13 @@ pub fn tracing_read<F, const N: usize>(
     memory: &mut TracingMemory<F>,
     address_space: u32,
     ptr: u32,
-    aux_cols: &mut MemoryReadAuxCols<F>, /* TODO[jpw]: switch to raw u8
-                                          * buffer */
+    prev_timestamp: &mut u32,
 ) -> [u8; N]
 where
     F: PrimeField32,
 {
     let (t_prev, data) = timed_read(memory, address_space, ptr);
-    aux_cols.set_prev(F::from_canonical_u32(t_prev));
+    *prev_timestamp = t_prev;
     data
 }
 
@@ -188,14 +158,21 @@ where
 pub fn tracing_read_imm<F>(
     memory: &mut TracingMemory<F>,
     imm: u32,
-    imm_mut: &mut F,
+    imm_mut: &mut u32,
 ) -> [u8; RV32_REGISTER_NUM_LIMBS]
 where
     F: PrimeField32,
 {
-    *imm_mut = F::from_canonical_u32(imm);
+    *imm_mut = imm;
+    debug_assert_eq!(imm >> 24, 0); // highest byte should be zero to prevent overflow
+
     memory.increment_timestamp();
-    imm_to_bytes(imm)
+
+    let mut imm_le = imm.to_le_bytes();
+    // Important: we set the highest byte equal to the second highest byte, using the assumption
+    // that imm is at most 24 bits
+    imm_le[3] = imm_le[2];
+    imm_le
 }
 
 /// Writes `reg_ptr, reg_val` into memory and records the memory access in mutable buffer.
@@ -206,52 +183,58 @@ pub fn tracing_write<F, const N: usize>(
     address_space: u32,
     ptr: u32,
     data: &[u8; N],
-    aux_cols: &mut MemoryWriteAuxCols<F, N>, /* TODO[jpw]: switch to raw
-                                              * u8
-                                              * buffer */
+    prev_timestamp: &mut u32,
+    prev_data: &mut [u8; N],
 ) where
     F: PrimeField32,
 {
     let (t_prev, data_prev) = timed_write(memory, address_space, ptr, data);
-    aux_cols.set_prev(
-        F::from_canonical_u32(t_prev),
-        data_prev.map(F::from_canonical_u8),
-    );
+    *prev_timestamp = t_prev;
+    *prev_data = data_prev;
 }
 
-// TODO(ayush): this is bad but not sure how to avoid
 #[inline(always)]
-pub fn tracing_write_with_base_aux<F, const N: usize>(
-    memory: &mut TracingMemory<F>,
+pub fn memory_read_from_state<F, Ctx, const N: usize>(
+    state: &mut VmStateMut<F, GuestMemory, Ctx>,
+    address_space: u32,
+    ptr: u32,
+) -> [u8; N]
+where
+    Ctx: E1E2ExecutionCtx,
+{
+    state.ctx.on_memory_operation(address_space, ptr, N as u32);
+
+    memory_read(state.memory, address_space, ptr)
+}
+
+#[inline(always)]
+pub fn memory_write_from_state<F, Ctx, const N: usize>(
+    state: &mut VmStateMut<F, GuestMemory, Ctx>,
     address_space: u32,
     ptr: u32,
     data: &[u8; N],
-    base_aux_cols: &mut MemoryBaseAuxCols<F>,
 ) where
-    F: PrimeField32,
+    Ctx: E1E2ExecutionCtx,
 {
-    let (t_prev, _) = timed_write(memory, address_space, ptr, data);
-    base_aux_cols.set_prev(F::from_canonical_u32(t_prev));
+    state.ctx.on_memory_operation(address_space, ptr, N as u32);
+
+    memory_write(state.memory, address_space, ptr, data)
 }
 
-// TODO: remove new_
 #[inline(always)]
-pub fn new_read_rv32_register(memory: &GuestMemory, address_space: u32, ptr: u32) -> u32 {
-    u32::from_le_bytes(memory_read(memory, address_space, ptr))
-}
-
-// TODO(AG): if "register", why `address_space` is not hardcoded to be 1?
-// TODO(jpw): remove new_
-#[inline(always)]
-pub fn new_read_rv32_register_from_state<F, Ctx>(
+pub fn read_rv32_register_from_state<F, Ctx>(
     state: &mut VmStateMut<F, GuestMemory, Ctx>,
-    address_space: u32,
     ptr: u32,
 ) -> u32
 where
     Ctx: E1E2ExecutionCtx,
 {
-    u32::from_le_bytes(memory_read_from_state(state, address_space, ptr))
+    u32::from_le_bytes(memory_read_from_state(state, RV32_REGISTER_AS, ptr))
+}
+
+#[inline(always)]
+pub fn read_rv32_register(memory: &GuestMemory, ptr: u32) -> u32 {
+    u32::from_le_bytes(memory_read(memory, RV32_REGISTER_AS, ptr))
 }
 
 pub fn abstract_compose<T: FieldAlgebra, V: Mul<T, Output = T>>(

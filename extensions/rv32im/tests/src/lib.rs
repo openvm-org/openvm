@@ -60,7 +60,7 @@ mod tests {
         Ok(())
     }
 
-    // #[test_case("fibonacci", 1)]
+    #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
     fn test_rv32im_std(example_name: &str, min_segments: usize) -> Result<()> {
         let config = Rv32ImConfig::default();

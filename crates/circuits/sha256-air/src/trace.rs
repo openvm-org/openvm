@@ -18,7 +18,7 @@ use crate::{
     big_sig0, big_sig1, ch, columns::Sha256DigestCols, limbs_into_u32, maj, small_sig0, small_sig1,
     u32_into_bits_field, u32_into_u16s, SHA256_BLOCK_U8S, SHA256_H, SHA256_INVALID_CARRY_A,
     SHA256_INVALID_CARRY_E, SHA256_K, SHA256_ROUNDS_PER_ROW, SHA256_ROWS_PER_BLOCK,
-    SHA256_WORD_BITS, SHA256_WORD_U16S, SHA256_WORD_U8S,
+    SHA256_WORD_U16S, SHA256_WORD_U8S,
 };
 
 /// A helper struct for the SHA256 trace generation.
@@ -44,10 +44,15 @@ impl Sha256StepHelper {
         }
     }
     /// This function takes the input_message (padding not handled), the previous hash,
-    /// and updates the prev_hash after processing the block input
-    pub fn get_block_hash(prev_hash: &mut [u32; SHA256_HASH_WORDS], input: [u8; SHA256_BLOCK_U8S]) {
+    /// and returns the new hash after processing the block input
+    pub fn get_block_hash(
+        prev_hash: &[u32; SHA256_HASH_WORDS],
+        input: [u8; SHA256_BLOCK_U8S],
+    ) -> [u32; SHA256_HASH_WORDS] {
+        let mut new_hash = *prev_hash;
         let input_array = [GenericArray::from(input)];
-        compress256(prev_hash, &input_array);
+        compress256(&mut new_hash, &input_array);
+        new_hash
     }
 
     /// This function takes a 512-bit chunk of the input message (padding not handled), the previous
@@ -332,19 +337,8 @@ impl Sha256StepHelper {
         self: &Sha256StepHelper,
         cols: &mut Sha256RoundCols<F>,
     ) {
-        cols.flags.is_round_row = F::ZERO;
-        cols.flags.is_first_4_rows = F::ZERO;
-        cols.flags.is_digest_row = F::ZERO;
-
-        cols.flags.is_last_block = F::ZERO;
-        cols.flags.global_block_idx = F::ZERO;
         cols.flags.row_idx =
             get_flag_pt_array(&self.row_idx_encoder, 17).map(F::from_canonical_u32);
-        cols.flags.local_block_idx = F::ZERO;
-
-        cols.message_schedule.w = [[F::ZERO; SHA256_WORD_BITS]; SHA256_ROUNDS_PER_ROW];
-        cols.message_schedule.carry_or_buffer =
-            [[F::ZERO; SHA256_WORD_U16S * 2]; SHA256_ROUNDS_PER_ROW];
 
         let hash = SHA256_H.map(u32_into_bits_field::<F>);
 
@@ -514,7 +508,7 @@ pub fn generate_trace<F: PrimeField32>(
             prev_hash = SHA256_H;
         } else {
             local_block_idx += 1;
-            Sha256StepHelper::get_block_hash(&mut prev_hash, input);
+            prev_hash = Sha256StepHelper::get_block_hash(&prev_hash, input);
         }
     }
     // first pass

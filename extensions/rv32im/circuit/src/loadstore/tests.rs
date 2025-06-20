@@ -1,17 +1,14 @@
 use std::{array, borrow::BorrowMut};
 
-use openvm_circuit::{
-    arch::{
-        testing::{memory::gen_pointer, VmChipTestBuilder},
-        VmAirWrapper,
-    },
-    utils::u32_into_limbs,
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, VmChipTestBuilder},
+    VmAirWrapper,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::FieldAlgebra,
+    p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -25,7 +22,7 @@ use test_case::test_case;
 use super::{run_write_data, LoadStoreCoreAir, LoadStoreStep, Rv32LoadStoreChip};
 use crate::{
     adapters::{
-        compose, Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterCols, Rv32LoadStoreAdapterStep,
+        Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterCols, Rv32LoadStoreAdapterStep,
         RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     loadstore::LoadStoreCoreCols,
@@ -51,8 +48,7 @@ fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32LoadStoreChip<F> {
             LoadStoreCoreAir::new(Rv32LoadStoreOpcode::CLASS_OFFSET),
         ),
         LoadStoreStep::new(
-            Rv32LoadStoreAdapterStep::new(tester.address_bits()),
-            range_checker_chip.clone(),
+            Rv32LoadStoreAdapterStep::new(tester.address_bits(), range_checker_chip.clone()),
             Rv32LoadStoreOpcode::CLASS_OFFSET,
         ),
         tester.memory_helper(),
@@ -68,14 +64,14 @@ fn set_and_execute(
     chip: &mut Rv32LoadStoreChip<F>,
     rng: &mut StdRng,
     opcode: Rv32LoadStoreOpcode,
-    rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+    rs1: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
     imm: Option<u32>,
     imm_sign: Option<u32>,
     mem_as: Option<usize>,
 ) {
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
     let imm_sign = imm_sign.unwrap_or(rng.gen_range(0..2));
-    let imm_ext = imm + imm_sign * (0xffffffff ^ ((1 << IMM_BITS) - 1));
+    let imm_ext = imm + imm_sign * 0xffff0000;
 
     let alignment = match opcode {
         LOADW | STOREW => 2,
@@ -84,17 +80,12 @@ fn set_and_execute(
         _ => unreachable!(),
     };
 
-    let ptr_val = rng.gen_range(
-        0..(1 << (tester.memory_controller().mem_config().pointer_max_bits - alignment)),
-    ) << alignment;
-
-    let rs1 = rs1
-        .unwrap_or(u32_into_limbs::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
-            (ptr_val as u32).wrapping_sub(imm_ext),
-        ))
-        .map(F::from_canonical_u32);
+    let ptr_val: u32 = rng.gen_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
+    let rs1 = rs1.unwrap_or(ptr_val.wrapping_sub(imm_ext).to_le_bytes());
+    let ptr_val = imm_ext.wrapping_add(u32::from_le_bytes(rs1));
     let a = gen_pointer(rng, 4);
     let b = gen_pointer(rng, 4);
+
     let is_load = [LOADW, LOADHU, LOADBU].contains(&opcode);
     let mem_as = mem_as.unwrap_or(if is_load {
         *[1, 2].choose(rng).unwrap()
@@ -102,9 +93,8 @@ fn set_and_execute(
         *[2, 3, 4].choose(rng).unwrap()
     });
 
-    let ptr_val = imm_ext.wrapping_add(compose(rs1));
     let shift_amount = ptr_val % 4;
-    tester.write(1, b, rs1);
+    tester.write(1, b, rs1.map(F::from_canonical_u8));
 
     let mut some_prev_data: [F; RV32_REGISTER_NUM_LIMBS] =
         array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << RV32_CELL_BITS))));
@@ -121,6 +111,9 @@ fn set_and_execute(
         }
         tester.write(mem_as, (ptr_val - shift_amount) as usize, read_data);
     } else {
+        if mem_as == 4 {
+            some_prev_data = array::from_fn(|_| rng.gen());
+        }
         if a == 0 {
             read_data = [F::ZERO; RV32_REGISTER_NUM_LIMBS];
         }
@@ -146,7 +139,13 @@ fn set_and_execute(
         ),
     );
 
-    let write_data = run_write_data(opcode, read_data, some_prev_data, shift_amount);
+    let write_data = run_write_data(
+        opcode,
+        read_data.map(|x| x.as_canonical_u32() as u8),
+        some_prev_data.map(|x| x.as_canonical_u32()),
+        shift_amount as usize,
+    )
+    .map(F::from_canonical_u32);
     if is_load {
         if enabled_write {
             assert_eq!(write_data, tester.read::<4>(1, a));
@@ -215,7 +214,7 @@ struct LoadStorePrankValues {
 #[allow(clippy::too_many_arguments)]
 fn run_negative_loadstore_test(
     opcode: Rv32LoadStoreOpcode,
-    rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+    rs1: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
     imm: Option<u32>,
     imm_sign: Option<u32>,
     prank_vals: LoadStorePrankValues,
@@ -395,58 +394,58 @@ fn negative_wrong_address_space_tests() {
 ///////////////////////////////////////////////////////////////////////////////////////
 #[test]
 fn run_loadw_storew_sanity_test() {
-    let read_data = [138, 45, 202, 76].map(F::from_canonical_u32);
-    let prev_data = [159, 213, 89, 34].map(F::from_canonical_u32);
+    let read_data = [138, 45, 202, 76];
+    let prev_data = [159, 213, 89, 34];
     let store_write_data = run_write_data(STOREW, read_data, prev_data, 0);
     let load_write_data = run_write_data(LOADW, read_data, prev_data, 0);
-    assert_eq!(store_write_data, read_data);
-    assert_eq!(load_write_data, read_data);
+    assert_eq!(store_write_data, read_data.map(u32::from));
+    assert_eq!(load_write_data, read_data.map(u32::from));
 }
 
 #[test]
 fn run_storeh_sanity_test() {
-    let read_data = [250, 123, 67, 198].map(F::from_canonical_u32);
-    let prev_data = [144, 56, 175, 92].map(F::from_canonical_u32);
+    let read_data = [250, 123, 67, 198];
+    let prev_data = [144, 56, 175, 92];
     let write_data = run_write_data(STOREH, read_data, prev_data, 0);
     let write_data2 = run_write_data(STOREH, read_data, prev_data, 2);
-    assert_eq!(write_data, [250, 123, 175, 92].map(F::from_canonical_u32));
-    assert_eq!(write_data2, [144, 56, 250, 123].map(F::from_canonical_u32));
+    assert_eq!(write_data, [250, 123, 175, 92]);
+    assert_eq!(write_data2, [144, 56, 250, 123]);
 }
 
 #[test]
 fn run_storeb_sanity_test() {
-    let read_data = [221, 104, 58, 147].map(F::from_canonical_u32);
-    let prev_data = [199, 83, 243, 12].map(F::from_canonical_u32);
+    let read_data = [221, 104, 58, 147];
+    let prev_data = [199, 83, 243, 12];
     let write_data = run_write_data(STOREB, read_data, prev_data, 0);
     let write_data1 = run_write_data(STOREB, read_data, prev_data, 1);
     let write_data2 = run_write_data(STOREB, read_data, prev_data, 2);
     let write_data3 = run_write_data(STOREB, read_data, prev_data, 3);
-    assert_eq!(write_data, [221, 83, 243, 12].map(F::from_canonical_u32));
-    assert_eq!(write_data1, [199, 221, 243, 12].map(F::from_canonical_u32));
-    assert_eq!(write_data2, [199, 83, 221, 12].map(F::from_canonical_u32));
-    assert_eq!(write_data3, [199, 83, 243, 221].map(F::from_canonical_u32));
+    assert_eq!(write_data, [221, 83, 243, 12]);
+    assert_eq!(write_data1, [199, 221, 243, 12]);
+    assert_eq!(write_data2, [199, 83, 221, 12]);
+    assert_eq!(write_data3, [199, 83, 243, 221]);
 }
 
 #[test]
 fn run_loadhu_sanity_test() {
-    let read_data = [175, 33, 198, 250].map(F::from_canonical_u32);
-    let prev_data = [90, 121, 64, 205].map(F::from_canonical_u32);
+    let read_data = [175, 33, 198, 250];
+    let prev_data = [90, 121, 64, 205];
     let write_data = run_write_data(LOADHU, read_data, prev_data, 0);
     let write_data2 = run_write_data(LOADHU, read_data, prev_data, 2);
-    assert_eq!(write_data, [175, 33, 0, 0].map(F::from_canonical_u32));
-    assert_eq!(write_data2, [198, 250, 0, 0].map(F::from_canonical_u32));
+    assert_eq!(write_data, [175, 33, 0, 0]);
+    assert_eq!(write_data2, [198, 250, 0, 0]);
 }
 
 #[test]
 fn run_loadbu_sanity_test() {
-    let read_data = [131, 74, 186, 29].map(F::from_canonical_u32);
-    let prev_data = [142, 67, 210, 88].map(F::from_canonical_u32);
+    let read_data = [131, 74, 186, 29];
+    let prev_data = [142, 67, 210, 88];
     let write_data = run_write_data(LOADBU, read_data, prev_data, 0);
     let write_data1 = run_write_data(LOADBU, read_data, prev_data, 1);
     let write_data2 = run_write_data(LOADBU, read_data, prev_data, 2);
     let write_data3 = run_write_data(LOADBU, read_data, prev_data, 3);
-    assert_eq!(write_data, [131, 0, 0, 0].map(F::from_canonical_u32));
-    assert_eq!(write_data1, [74, 0, 0, 0].map(F::from_canonical_u32));
-    assert_eq!(write_data2, [186, 0, 0, 0].map(F::from_canonical_u32));
-    assert_eq!(write_data3, [29, 0, 0, 0].map(F::from_canonical_u32));
+    assert_eq!(write_data, [131, 0, 0, 0]);
+    assert_eq!(write_data1, [74, 0, 0, 0]);
+    assert_eq!(write_data2, [186, 0, 0, 0]);
+    assert_eq!(write_data3, [29, 0, 0, 0]);
 }

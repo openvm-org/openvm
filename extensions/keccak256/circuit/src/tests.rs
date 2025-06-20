@@ -1,8 +1,9 @@
 use std::{array, borrow::BorrowMut};
 
 use hex::FromHex;
-use openvm_circuit::arch::testing::{
-    memory::gen_pointer, VmChipTestBuilder, VmChipTester, BITWISE_OP_LOOKUP_BUS,
+use openvm_circuit::{
+    arch::testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester, BITWISE_OP_LOOKUP_BUS},
+    utils::get_random_message,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -12,7 +13,7 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_keccak256_transpiler::Rv32KeccakOpcode;
+use openvm_keccak256_transpiler::Rv32KeccakOpcode::{self, *};
 use openvm_stark_backend::{
     p3_field::FieldAlgebra, utils::disable_debug_builder, verifier::VerificationError,
 };
@@ -21,14 +22,14 @@ use openvm_stark_sdk::{
     utils::create_seeded_rng,
 };
 use p3_keccak_air::NUM_ROUNDS;
-use rand::Rng;
+use rand::{rngs::StdRng, Rng};
 use tiny_keccak::Hasher;
 
 use super::{columns::KeccakVmCols, utils::num_keccak_f, KeccakVmChip};
-use crate::{KeccakVmAir, KeccakVmStep};
+use crate::{utils::keccak256, KeccakVmAir, KeccakVmStep};
 
 type F = BabyBear;
-const MAX_INS_CAPACITY: usize = 4096;
+const MAX_INS_CAPACITY: usize = 8192;
 
 fn create_test_chips(
     tester: &mut VmChipTestBuilder<F>,
@@ -53,6 +54,52 @@ fn create_test_chips(
     chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     (chip, bitwise_chip)
+}
+
+fn set_and_execute(
+    tester: &mut VmChipTestBuilder<F>,
+    chip: &mut KeccakVmChip<F>,
+    rng: &mut StdRng,
+    opcode: Rv32KeccakOpcode,
+    message: Option<&[u8]>,
+    len: Option<usize>,
+) {
+    let len = len.unwrap_or(rng.gen_range(1..3000));
+    let tmp = get_random_message(rng, len);
+    let message: &[u8] = message.unwrap_or(&tmp);
+
+    let rd = gen_pointer(rng, 4);
+    let rs1 = gen_pointer(rng, 4);
+    let rs2 = gen_pointer(rng, 4);
+
+    let max_mem_ptr: u32 = 1 << tester.address_bits();
+    let dst_ptr = rng.gen_range(0..max_mem_ptr);
+    let dst_ptr = dst_ptr ^ (dst_ptr & 3);
+    tester.write(1, rd, dst_ptr.to_le_bytes().map(F::from_canonical_u8));
+    let src_ptr = rng.gen_range(0..(max_mem_ptr - len as u32));
+    let src_ptr = src_ptr ^ (src_ptr & 3);
+    tester.write(1, rs1, src_ptr.to_le_bytes().map(F::from_canonical_u8));
+    tester.write(1, rs2, len.to_le_bytes().map(F::from_canonical_u8));
+
+    message.chunks(4).enumerate().for_each(|(i, chunk)| {
+        let chunk: [&u8; 4] = array::from_fn(|i| chunk.get(i).unwrap_or(&0));
+        tester.write(
+            2,
+            src_ptr as usize + i * 4,
+            chunk.map(|&x| F::from_canonical_u8(x)),
+        );
+    });
+
+    tester.execute(
+        chip,
+        &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 2]),
+    );
+
+    let output = keccak256(message);
+    assert_eq!(
+        output.map(F::from_canonical_u8),
+        tester.read::<32>(2, dst_ptr as usize)
+    );
 }
 
 // io is vector of (input, expected_output, prank_output) where prank_output is Some if the trace
@@ -150,21 +197,34 @@ fn build_keccak256_test(
     tester
 }
 
+///////////////////////////////////////////////////////////////////////////////////////
+/// POSITIVE TESTS
+///
+/// Randomly generate computations and execute, ensuring that the generated trace
+/// passes all constraints.
+///////////////////////////////////////////////////////////////////////////////////////
 #[test]
-fn test_keccak256_negative() {
+fn rand_keccak256_test() {
     let mut rng = create_seeded_rng();
-    let mut hasher = tiny_keccak::Keccak::v256();
-    let input: Vec<_> = vec![0; 137];
-    hasher.update(&input);
-    let mut out = [0u8; 32];
-    hasher.finalize(&mut out);
-    out[0] = rng.gen();
-    let tester = build_keccak256_test(vec![(input, None, Some(out))]);
-    disable_debug_builder();
-    assert_eq!(
-        tester.simple_test().err(),
-        Some(VerificationError::OodEvaluationMismatch)
+    let mut tester = VmChipTestBuilder::default();
+    let (mut chip, bitwise_chip) = create_test_chips(&mut tester);
+
+    let num_ops: usize = 10;
+    for _ in 0..num_ops {
+        set_and_execute(&mut tester, &mut chip, &mut rng, KECCAK256, None, None);
+    }
+
+    set_and_execute(
+        &mut tester,
+        &mut chip,
+        &mut rng,
+        KECCAK256,
+        None,
+        Some(10000),
     );
+
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    tester.simple_test().expect("Verification failed");
 }
 
 // Keccak Known Answer Test (KAT) vectors from https://keccak.team/obsolete/KeccakKAT-3.zip.
@@ -192,4 +252,27 @@ fn test_keccak256_positive_kat_vectors() {
     let tester = build_keccak256_test(io);
 
     tester.simple_test().expect("Verification failed");
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+// NEGATIVE TESTS
+//
+// Given a fake trace of a single operation, setup a chip and run the test. We replace
+// part of the trace and check that the chip throws the expected error.
+//////////////////////////////////////////////////////////////////////////////////////
+#[test]
+fn test_keccak256_negative() {
+    let mut rng = create_seeded_rng();
+    let mut hasher = tiny_keccak::Keccak::v256();
+    let input: Vec<_> = vec![0; 137];
+    hasher.update(&input);
+    let mut out = [0u8; 32];
+    hasher.finalize(&mut out);
+    out[0] = rng.gen();
+    let tester = build_keccak256_test(vec![(input, None, Some(out))]);
+    disable_debug_builder();
+    assert_eq!(
+        tester.simple_test().err(),
+        Some(VerificationError::OodEvaluationMismatch)
+    );
 }

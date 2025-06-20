@@ -4991,6 +4991,7 @@ dependencies = [
  "serde-big-array",
  "static_assertions",
  "strum",
+ "test-case",
  "tracing",
 ]
 
@@ -5235,6 +5236,7 @@ dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",
+ "itertools 0.14.0",
  "num-bigint 0.4.6",
  "num-integer",
  "openvm-circuit",

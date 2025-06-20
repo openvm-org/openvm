@@ -14,7 +14,7 @@ use crate::arch::{
 };
 
 /// Check segment every 100 instructions.
-const SEGMENT_CHECK_INTERVAL: u64 = 100;
+const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 100;
 
 const DEFAULT_MAX_TRACE_HEIGHT: u32 = (1 << 23) - 100;
 const DEFAULT_MAX_CELLS: usize = 2_000_000_000; // 2B
@@ -41,6 +41,7 @@ pub struct MeteredExecutionControl<'a> {
     air_names: &'a [String],
     pub widths: &'a [usize],
     pub interactions: &'a [usize],
+    segment_check_insns: u64,
     segmentation_limits: SegmentationLimits,
 }
 
@@ -50,6 +51,7 @@ impl<'a> MeteredExecutionControl<'a> {
             air_names,
             widths,
             interactions,
+            segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
             segmentation_limits: SegmentationLimits::default(),
         }
     }
@@ -66,6 +68,11 @@ impl<'a> MeteredExecutionControl<'a> {
 
     pub fn with_max_interactions(mut self, max_interactions: usize) -> Self {
         self.segmentation_limits.max_interactions = max_interactions;
+        self
+    }
+
+    pub fn with_segment_check_insns(mut self, segment_check_insns: u64) -> Self {
+        self.segment_check_insns = segment_check_insns;
         self
     }
 
@@ -160,7 +167,7 @@ impl<'a> MeteredExecutionControl<'a> {
         VC: VmConfig<F>,
     {
         // Avoid checking segment too often.
-        if state.instret < state.ctx.instret_last_segment_check + SEGMENT_CHECK_INTERVAL {
+        if state.instret < state.ctx.instret_last_segment_check + self.segment_check_insns {
             return;
         }
 

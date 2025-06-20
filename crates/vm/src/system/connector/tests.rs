@@ -71,6 +71,7 @@ fn test_impl(
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
     let vm = VirtualMachine::new(engine, vm_config.clone());
     let pk = vm.keygen();
+    let vk = pk.get_vk();
 
     {
         let instructions = vec![Instruction::from_isize(
@@ -88,8 +89,9 @@ fn test_impl(
             vm.engine.config.pcs(),
         ));
         let single_vm = SingleSegmentVmExecutor::new(vm_config);
+        let max_trace_heights = vec![0; vk.total_widths().len()];
         let mut proof_input = single_vm
-            .execute_and_generate(committed_exe, vec![])
+            .execute_and_generate(committed_exe, vec![], &max_trace_heights)
             .unwrap();
         let connector_air_input = proof_input
             .per_air
