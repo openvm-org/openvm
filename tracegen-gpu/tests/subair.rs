@@ -4,8 +4,10 @@ use openvm_circuit_primitives::{
     encoder::Encoder, is_equal::IsEqSubAir, is_equal_array::IsEqArraySubAir, is_zero::IsZeroSubAir,
     TraceSubRowGenerator,
 };
+
 use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
 use openvm_stark_sdk::{dummy_airs::fib_air::chip::FibonacciChip, utils::create_seeded_rng};
+use p3_baby_bear::BabyBear;
 use p3_field::{FieldAlgebra, PrimeField32};
 use rand::Rng;
 use stark_backend_gpu::{
@@ -22,6 +24,9 @@ use tracegen_gpu::{
     },
     utils::{assert_eq_cpu_and_gpu_matrix, test_chip_whole_trace_output},
 };
+
+use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
+use tracegen_gpu::system::poseidon2;
 
 #[test]
 fn test_fibair_tracegen() {
@@ -439,4 +444,54 @@ fn test_encoder_without_invalid_row() {
     };
 
     assert_eq_cpu_and_gpu_matrix(cpu_matrix, &gpu_matrix);
+}
+
+#[test]
+fn test_tracegen_gpu_vs_cpu_poseidon2() {
+    const WIDTH: usize = 16; // constant for BabyBear
+    const N: usize = 16;
+    const SBOX_REGS: usize = 1;
+    const HALF_FULL_ROUNDS: usize = 4; // Constant for BabyBear
+    const PARTIAL_ROUNDS: usize = 13; // Constant for BabyBear
+
+    // Generate random states and prepare GPU inputs
+    let mut rng = create_seeded_rng();
+    let mut cpu_inputs: Vec<[F; WIDTH]> = Vec::with_capacity(N);
+    for _ in 0..N {
+        let state: [F; WIDTH] =
+            std::array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32)));
+        cpu_inputs.push(state);
+    }
+
+    // Flatten inputs in row-major order for GPU (same layout as cpu_inputs)
+    let mut inputs_rowmaj: Vec<F> = Vec::with_capacity(N * WIDTH);
+    for r in 0..N {
+        for c in 0..WIDTH {
+            inputs_rowmaj.push(cpu_inputs[r][c]);
+        }
+    }
+    let inputs_dev = inputs_rowmaj.to_device().unwrap();
+
+    // Launch GPU tracegen
+    let num_cols = 1
+        + WIDTH
+        + HALF_FULL_ROUNDS * (WIDTH * SBOX_REGS + WIDTH)
+        + PARTIAL_ROUNDS * (SBOX_REGS + 1)
+        + HALF_FULL_ROUNDS * (WIDTH * SBOX_REGS + WIDTH);
+
+    let gpu_mat = DeviceMatrix::<F>::with_capacity(N, num_cols);
+
+    unsafe {
+        poseidon2::tracegen(gpu_mat.buffer(), &inputs_dev, SBOX_REGS as u32, N as u32)
+            .expect("GPU tracegen failed");
+    }
+
+    // Run CPU tracegen
+    let config = Poseidon2Config::<BabyBear>::default();
+    let chip: Poseidon2SubChip<_, SBOX_REGS> = Poseidon2SubChip::new(config.constants);
+    let cpu_trace: RowMajorMatrix<BabyBear> = chip.generate_trace(cpu_inputs);
+
+    // Compare results
+    let cpu_arc = Arc::new(cpu_trace);
+    assert_eq_cpu_and_gpu_matrix(cpu_arc, &gpu_mat);
 }

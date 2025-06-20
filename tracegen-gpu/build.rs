@@ -69,6 +69,7 @@ fn main() {
         .file("cuda/src/dummy/is_zero.cu")
         .file("cuda/src/dummy/is_equal.cu")
         .file("cuda/src/dummy/utils.cu")
+        .file("cuda/src/system/poseidon2.cu")
         .compile("tracegen_gpu");
 
     // Make sure CUDA and our utilities are linked
