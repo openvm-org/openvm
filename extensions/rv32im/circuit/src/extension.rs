@@ -425,7 +425,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             PhantomDiscriminant(Rv32Phantom::HintInput as u16),
         )?;
         builder.add_phantom_sub_executor(
-            phantom::Rv32HintRandomSubEx::new(),
+            phantom::Rv32HintRandomSubEx,
             PhantomDiscriminant(Rv32Phantom::HintRandom as u16),
         )?;
         builder.add_phantom_sub_executor(
@@ -615,11 +615,6 @@ mod phantom {
 
     pub struct Rv32HintInputSubEx;
     pub struct Rv32HintRandomSubEx;
-    impl Rv32HintRandomSubEx {
-        pub fn new() -> Self {
-            Self
-        }
-    }
     pub struct Rv32PrintStrSubEx;
     pub struct Rv32HintLoadByKeySubEx;
 
