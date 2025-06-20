@@ -177,7 +177,7 @@ fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
         app_fri_params: FriParameters::new_for_testing(app_log_blowup).into(),
         app_vm_config: NativeConfig::new(
             SystemConfig::default()
-                .with_max_segment_len(200)
+                .with_max_segment_len(250)
                 .with_continuations()
                 .with_public_values(NUM_PUB_VALUES),
             Native,

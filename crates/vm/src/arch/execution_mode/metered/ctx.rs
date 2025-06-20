@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{execution_mode::E1E2ExecutionCtx, PUBLIC_VALUES_AIR_ID},
-    system::memory::{dimensions::MemoryDimensions, CHUNK},
+    system::memory::CHUNK,
 };
 
 // TODO(ayush): can segmentation also be triggered by timestamp overflow? should that be tracked?
