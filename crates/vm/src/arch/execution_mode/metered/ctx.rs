@@ -7,22 +7,21 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct PageSet<const PAGE_BITS: usize = 12> {
+pub struct BitSet {
     words: Box<[u64]>,
 }
 
-impl<const PAGE_BITS: usize> PageSet<PAGE_BITS> {
+impl BitSet {
     pub fn new(size_bits: usize) -> Self {
-        let num_words = 1 << size_bits.saturating_sub(PAGE_BITS + 6);
+        let num_words = 1 << size_bits.saturating_sub(6);
         Self {
             words: vec![0; num_words].into_boxed_slice(),
         }
     }
 
     pub fn insert(&mut self, index: usize) -> bool {
-        let page_index = index / (1 << PAGE_BITS);
-        let word_index = page_index / 64;
-        let bit_index = page_index % 64;
+        let word_index = index / 64;
+        let bit_index = index % 64;
         let mask = 1u64 << bit_index;
 
         let was_set = (self.words[word_index] & mask) != 0;
@@ -43,7 +42,7 @@ pub struct MeteredCtx<const PAGE_BITS: usize = 12> {
     pub trace_heights: Vec<u32>,
     pub is_trace_height_constant: Vec<bool>,
 
-    pub leaf_indices: PageSet<PAGE_BITS>,
+    pub page_indices: BitSet,
 
     pub instret_last_segment_check: u64,
     pub segments: Vec<Segment>,
@@ -96,7 +95,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         Self {
             trace_heights: vec![0; num_traces],
             is_trace_height_constant: vec![false; num_traces],
-            leaf_indices: PageSet::new(merkle_height),
+            page_indices: BitSet::new(merkle_height.saturating_sub(PAGE_BITS)),
             instret_last_segment_check: 0,
             segments: Vec::new(),
             as_byte_alignment_bits,
@@ -120,9 +119,9 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             } else {
                 self.memory_dimensions
                     .label_to_index((address_space, block_id)) as u32
-            };
+            } as usize;
 
-            if self.leaf_indices.insert(index as usize) {
+            if self.page_indices.insert(index >> PAGE_BITS) {
                 self.trace_heights[self.boundary_idx] += 1;
 
                 if let Some(merkle_tree_idx) = self.merkle_tree_index {
