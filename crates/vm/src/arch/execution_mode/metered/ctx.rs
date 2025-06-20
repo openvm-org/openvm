@@ -122,19 +122,22 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             } as usize;
 
             if self.page_indices.insert(index >> PAGE_BITS) {
-                self.trace_heights[self.boundary_idx] += 1;
+                // On page fault, assume we add all leaves in a page
+                let leaves = 1 << PAGE_BITS;
+                self.trace_heights[self.boundary_idx] += leaves;
 
                 if let Some(merkle_tree_idx) = self.merkle_tree_index {
                     let poseidon2_idx = self.trace_heights.len() - 2;
-                    let merkle_height = self.memory_dimensions.overall_height();
+                    self.trace_heights[poseidon2_idx] += leaves * 2;
 
+                    let merkle_height = self.memory_dimensions.overall_height();
                     let nodes = (((1 << PAGE_BITS) - 1) + (merkle_height - PAGE_BITS)) as u32;
                     self.trace_heights[poseidon2_idx] += nodes * 2;
                     self.trace_heights[merkle_tree_idx] += nodes * 2;
                 }
 
                 // At finalize, we'll need to read it in chunk-sized units for the merkle chip
-                self.update_adapter_heights_batch(address_space, self.chunk_bits, 1 << PAGE_BITS);
+                self.update_adapter_heights_batch(address_space, self.chunk_bits, leaves);
             }
 
             addr = addr.wrapping_add(self.chunk);
