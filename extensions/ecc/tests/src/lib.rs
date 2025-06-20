@@ -116,7 +116,6 @@ mod tests {
                     scalar: BigUint::from_str("1000000007")
                         .unwrap(),
                     a: BigUint::ZERO,
-                    // b: BigUint::from_str("3").unwrap(),
                     b: BigUint::from_str("6").unwrap(),
                 },
                 CurveConfig {
