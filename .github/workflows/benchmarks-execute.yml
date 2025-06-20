@@ -27,19 +27,15 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  codspeed-benchmarks:
-    name: Run codspeed ${{ matrix.mode }} benchmarks
+  codspeed-walltime-benchmarks:
+    name: Run codspeed walltime benchmarks
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=8cpu-linux-x64
       - extras=s3-cache
-    if: ${{ matrix.mode == 'walltime' || (matrix.mode == 'instrumentation' && github.event_name == 'workflow_dispatch') }}
 
-    strategy:
-      matrix:
-        mode: [instrumentation, walltime]
     env:
-      CODSPEED_RUNNER_MODE: ${{ matrix.mode }}
+      CODSPEED_RUNNER_MODE: walltime
 
     steps:
       - uses: runs-on/action@v1
@@ -64,4 +60,40 @@ jobs:
           run: cargo codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}
         env:
-          CODSPEED_RUNNER_MODE: ${{ matrix.mode }}
+          CODSPEED_RUNNER_MODE: walltime
+
+  codspeed-instrumentation-benchmarks:
+    name: Run codspeed instrumentation benchmarks
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=8cpu-linux-x64
+      - extras=s3-cache
+    if: github.event_name == 'workflow_dispatch'
+
+    env:
+      CODSPEED_RUNNER_MODE: instrumentation
+
+    steps:
+      - uses: runs-on/action@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+      - name: Install codspeed
+        run: cargo binstall --no-confirm --force cargo-codspeed
+
+      - name: Build benchmarks
+        working-directory: benchmarks/execute
+        run: cargo codspeed build
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v3
+        with:
+          working-directory: benchmarks/execute
+          run: cargo codspeed run
+          token: ${{ secrets.CODSPEED_TOKEN }}
+        env:
+          CODSPEED_RUNNER_MODE: instrumentation
