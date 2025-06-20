@@ -66,7 +66,7 @@ pub struct VmChipTestBuilder<F: PrimeField32> {
     pub rng: StdRng,
     pub execution: ExecutionTester<F>,
     pub program: ProgramTester<F>,
-    pub internal_rng: StdRng,
+    internal_rng: StdRng,
     default_register: usize,
     default_pointer: usize,
 }
