@@ -1,5 +1,4 @@
 use openvm_instructions::riscv::RV32_IMM_AS;
-use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -7,14 +6,44 @@ use crate::{
     system::memory::{dimensions::MemoryDimensions, CHUNK},
 };
 
+#[derive(Debug)]
+pub struct PageSet<const PAGE_BITS: usize = 12> {
+    words: Box<[u64]>,
+}
+
+impl<const PAGE_BITS: usize> PageSet<PAGE_BITS> {
+    pub fn new(size_bits: usize) -> Self {
+        let num_words = 1 << (size_bits - PAGE_BITS - 6);
+        Self {
+            words: vec![0; num_words].into_boxed_slice(),
+        }
+    }
+
+    pub fn insert(&mut self, index: usize) -> bool {
+        let page_index = index / (1 << PAGE_BITS);
+        let word_index = page_index / 64;
+        let bit_index = page_index % 64;
+        let mask = 1u64 << bit_index;
+
+        let was_set = (self.words[word_index] & mask) != 0;
+        self.words[word_index] |= mask;
+        !was_set
+    }
+
+    pub fn clear(&mut self) {
+        for item in self.words.iter_mut() {
+            *item = 0;
+        }
+    }
+}
+
 // TODO(ayush): can segmentation also be triggered by timestamp overflow? should that be tracked?
 #[derive(Debug)]
-pub struct MeteredCtx {
+pub struct MeteredCtx<const PAGE_BITS: usize = 12> {
     pub trace_heights: Vec<u32>,
     pub is_trace_height_constant: Vec<bool>,
 
-    // Indices of leaf nodes in the memory merkle tree
-    pub leaf_indices: FxHashSet<u32>,
+    pub leaf_indices: PageSet<PAGE_BITS>,
 
     pub instret_last_segment_check: u64,
     pub segments: Vec<Segment>,
@@ -28,7 +57,7 @@ pub struct MeteredCtx {
     chunk_bits: u32,
 }
 
-impl MeteredCtx {
+impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     pub fn new(
         num_traces: usize,
         continuations_enabled: bool,
@@ -62,11 +91,12 @@ impl MeteredCtx {
         };
 
         let chunk_bits = chunk.ilog2();
+        let merkle_height = memory_dimensions.overall_height();
 
         Self {
             trace_heights: vec![0; num_traces],
             is_trace_height_constant: vec![false; num_traces],
-            leaf_indices: FxHashSet::default(),
+            leaf_indices: PageSet::new(merkle_height),
             instret_last_segment_check: 0,
             segments: Vec::new(),
             as_byte_alignment_bits,
@@ -78,9 +108,7 @@ impl MeteredCtx {
             memory_dimensions,
         }
     }
-}
 
-impl MeteredCtx {
     fn update_boundary_merkle_heights(&mut self, address_space: u32, ptr: u32, size: u32) {
         let num_blocks = (size + self.chunk - 1) >> self.chunk_bits;
         let mut addr = ptr;
@@ -93,18 +121,21 @@ impl MeteredCtx {
                 self.memory_dimensions
                     .label_to_index((address_space, block_id)) as u32
             };
-            if self.leaf_indices.insert(index) {
+
+            if self.leaf_indices.insert(index as usize) {
                 self.trace_heights[self.boundary_idx] += 1;
 
                 if let Some(merkle_tree_idx) = self.merkle_tree_index {
                     let poseidon2_idx = self.trace_heights.len() - 2;
-                    let merkle_height = self.memory_dimensions.overall_height() as u32;
-                    self.trace_heights[poseidon2_idx] += (merkle_height + 1) * 2;
-                    self.trace_heights[merkle_tree_idx] += merkle_height * 2;
+                    let merkle_height = self.memory_dimensions.overall_height();
+
+                    let nodes = (((1 << PAGE_BITS) - 1) + (merkle_height - PAGE_BITS)) as u32;
+                    self.trace_heights[poseidon2_idx] += nodes * 2;
+                    self.trace_heights[merkle_tree_idx] += nodes * 2;
                 }
 
                 // At finalize, we'll need to read it in chunk-sized units for the merkle chip
-                self.update_adapter_heights(address_space, self.chunk_bits);
+                self.update_adapter_heights_batch(address_space, self.chunk_bits, 1 << PAGE_BITS);
             }
 
             addr = addr.wrapping_add(self.chunk);
@@ -112,6 +143,10 @@ impl MeteredCtx {
     }
 
     fn update_adapter_heights(&mut self, address_space: u32, size_bits: u32) {
+        self.update_adapter_heights_batch(address_space, size_bits, 1);
+    }
+
+    fn update_adapter_heights_batch(&mut self, address_space: u32, size_bits: u32, num: u32) {
         let align_bits = self.as_byte_alignment_bits[address_space as usize];
         debug_assert!(
             align_bits as u32 <= size_bits,
@@ -121,12 +156,12 @@ impl MeteredCtx {
         );
         for adapter_bits in (align_bits as u32 + 1..=size_bits).rev() {
             let adapter_idx = self.adapter_offset + adapter_bits as usize - 1;
-            self.trace_heights[adapter_idx] += 1 << (size_bits - adapter_bits + 1);
+            self.trace_heights[adapter_idx] += num << (size_bits - adapter_bits + 1);
         }
     }
 }
 
-impl E1E2ExecutionCtx for MeteredCtx {
+impl<const PAGE_BITS: usize> E1E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32) {
         debug_assert!(
             address_space != RV32_IMM_AS,
