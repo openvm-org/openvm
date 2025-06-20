@@ -27,39 +27,144 @@ jobs:
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
-      # Build and keygen from main
-      - name: Build main
+
+      # Build and test from main
+      - name: Build main CLI
         run: cargo install --force --path crates/cli
 
-      - name: Generate keys from main
-        run: cargo openvm keygen --output-dir ./main-keys
+      - name: Run setup from main
+        run: |
+          mkdir -p ./main-outputs
+          cargo openvm setup --output-dir ./main-outputs
 
-      # Checkout and build keygen from tagged version
+      - name: Build and keygen examples from main
+        run: |
+          mkdir -p ./main-outputs/examples
+          for example in examples/*/; do
+            if [ -f "$example/Cargo.toml" ]; then
+              example_name=$(basename "$example")
+              echo "Building and generating keys for example: $example_name"
+              cargo openvm build --manifest-path "$example/Cargo.toml"
+              cargo openvm keygen --manifest-path "$example/Cargo.toml" --output-dir "./main-outputs/examples/$example_name"
+            fi
+          done
+
+      - name: Build and keygen benchmarks from main
+        run: |
+          mkdir -p ./main-outputs/benchmarks
+          for benchmark in benchmarks/guest/*/; do
+            if [ -f "$benchmark/Cargo.toml" ]; then
+              benchmark_name=$(basename "$benchmark")
+              echo "Building and generating keys for benchmark: $benchmark_name"
+              cargo openvm build --manifest-path "$benchmark/Cargo.toml"
+              cargo openvm keygen --manifest-path "$benchmark/Cargo.toml" --output-dir "./main-outputs/benchmarks/$benchmark_name"
+            fi
+          done
+
+      # Checkout and test tagged version
       - name: Checkout tagged version
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.version }}
           clean: false
 
-      - name: Build tagged version
+      - name: Build tagged CLI
         run: cargo install --force --path crates/cli
 
-      # TODO(yi): Change --vk-output to --output-dir after v1.3.0 release
-      - name: Generate keys from tagged version
+      - name: Run setup from tagged version
         run: |
-          mkdir -p ./tagged-keys
-          cargo openvm keygen --vk-output ./tagged-keys/app.vk
-      # Compare keys
-      - name: Compare verification keys
+          mkdir -p ./tagged-outputs
+          cargo openvm setup --output-dir ./tagged-outputs
+
+      - name: Build and keygen examples from tagged version
         run: |
-          echo "Comparing verification keys between main and ${{ inputs.version }}..."
-          if cmp ./main-keys/app.vk ./tagged-keys/app.vk; then
-            echo "✅ Verification keys are identical - versioning policy maintained"
+          mkdir -p ./tagged-outputs/examples
+          for example in examples/*/; do
+            if [ -f "$example/Cargo.toml" ]; then
+              example_name=$(basename "$example")
+              echo "Building and generating keys for example: $example_name"
+              cargo openvm build --manifest-path "$example/Cargo.toml"
+              # TODO(yi): Change --vk-output to --output-dir after v1.3.0 release
+              mkdir -p "./tagged-outputs/examples/$example_name"
+              cargo openvm keygen --manifest-path "$example/Cargo.toml" --vk-output "./tagged-outputs/examples/$example_name/app.vk"
+            fi
+          done
+
+      - name: Build and keygen benchmarks from tagged version
+        run: |
+          mkdir -p ./tagged-outputs/benchmarks
+          for benchmark in benchmarks/guest/*/; do
+            if [ -f "$benchmark/Cargo.toml" ]; then
+              benchmark_name=$(basename "$benchmark")
+              echo "Building and generating keys for benchmark: $benchmark_name"
+              cargo openvm build --manifest-path "$benchmark/Cargo.toml"
+              # TODO(yi): Change --vk-output to --output-dir after v1.3.0 release
+              mkdir -p "./tagged-outputs/benchmarks/$benchmark_name"
+              cargo openvm keygen --manifest-path "$benchmark/Cargo.toml" --vk-output "./tagged-outputs/benchmarks/$benchmark_name/app.vk"
+            fi
+          done
+
+      # Compare all outputs
+      - name: Compare setup outputs
+        run: |
+          echo "Comparing setup outputs between main and ${{ inputs.version }}..."
+          if diff -r ./main-outputs ./tagged-outputs --exclude=examples --exclude=benchmarks; then
+            echo "✅ Setup outputs are identical"
           else
-            echo "❌ Verification keys differ - versioning policy violated"
-            echo "Main branch vkey:"
-            ls -la ./main-keys/app.vk
-            echo "Tagged version vkey:"
-            ls -la ./tagged-keys/app.vk
+            echo "❌ Setup outputs differ"
             exit 1
           fi
+
+      - name: Compare example verification keys
+        run: |
+          echo "Comparing example verification keys between main and ${{ inputs.version }}..."
+          failed=0
+          for example in examples/*/; do
+            if [ -f "$example/Cargo.toml" ]; then
+              example_name=$(basename "$example")
+              echo "Checking example: $example_name"
+              if cmp "./main-outputs/examples/$example_name/app.vk" "./tagged-outputs/examples/$example_name/app.vk"; then
+                echo "✅ $example_name verification keys are identical"
+              else
+                echo "❌ $example_name verification keys differ"
+                failed=1
+              fi
+            fi
+          done
+          if [ $failed -eq 1 ]; then
+            echo "❌ Some example verification keys differ - versioning policy violated"
+            exit 1
+          else
+            echo "✅ All example verification keys are identical"
+          fi
+
+      - name: Compare benchmark verification keys
+        run: |
+          echo "Comparing benchmark verification keys between main and ${{ inputs.version }}..."
+          failed=0
+          for benchmark in benchmarks/guest/*/; do
+            if [ -f "$benchmark/Cargo.toml" ]; then
+              benchmark_name=$(basename "$benchmark")
+              echo "Checking benchmark: $benchmark_name"
+              if cmp "./main-outputs/benchmarks/$benchmark_name/app.vk" "./tagged-outputs/benchmarks/$benchmark_name/app.vk"; then
+                echo "✅ $benchmark_name verification keys are identical"
+              else
+                echo "❌ $benchmark_name verification keys differ"
+                failed=1
+              fi
+            fi
+          done
+          if [ $failed -eq 1 ]; then
+            echo "❌ Some benchmark verification keys differ - versioning policy violated"
+            exit 1
+          else
+            echo "✅ All benchmark verification keys are identical"
+          fi
+
+      - name: Final summary
+        run: |
+          echo "🎉 Versioning compatibility verification completed successfully!"
+          echo "✅ Setup outputs are identical between main and ${{ inputs.version }}"
+          echo "✅ All example verification keys are identical"
+          echo "✅ All benchmark verification keys are identical"
+          echo "✅ Versioning policy maintained - patch upgrade is backward compatible"
