@@ -204,9 +204,10 @@ fn run_negative_branch_lt_test(
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
-    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
-        chip.trace_width() * MAX_INS_CAPACITY
-    ]);
+    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[(
+        chip.trace_width(),
+        MAX_INS_CAPACITY,
+    )]);
 
     set_and_execute(
         &mut tester,

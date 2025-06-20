@@ -4,7 +4,7 @@ use itertools::izip;
 use openvm_circuit::arch::{
     execution_mode::tracegen::TracegenCtx,
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    DenseRecordArena, MatrixRecordArena,
+    DenseRecordArena, InsExecutor, MatrixRecordArena,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -64,10 +64,8 @@ fn rand_auipc_dense_test() {
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, _bitwise_chip) = create_test_chip(&tester);
 
-    let mut ctx =
-        TracegenCtx::<DenseRecordArena>::new_with_capacity(
-            &[chip.trace_width() * MAX_INS_CAPACITY],
-        );
+    let width = BaseAir::<F>::width(&chip.air);
+    let mut ctx = TracegenCtx::<DenseRecordArena>::new_with_capacity(&[width * MAX_INS_CAPACITY]);
 
     let num_tests: usize = 10;
 
@@ -110,7 +108,9 @@ fn set_and_execute<RA>(
     opcode: Rv32AuipcOpcode,
     imm: Option<u32>,
     initial_pc: Option<u32>,
-) {
+) where
+    Rv32AuipcChip: InsExecutor<F, RA>,
+{
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS))) as usize;
     let a = rng.gen_range(0..32) << 2;
 
@@ -137,9 +137,9 @@ fn rand_auipc_test() {
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
-    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
-        chip.trace_width() * MAX_INS_CAPACITY
-    ]);
+    let width = BaseAir::<F>::width(&chip.air);
+    let mut ctx =
+        TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[(width, MAX_INS_CAPACITY)]);
 
     let num_tests: usize = 100;
     for _ in 0..num_tests {
@@ -183,9 +183,9 @@ fn run_negative_auipc_test(
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
-    let mut ctx = TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[
-        chip.trace_width() * MAX_INS_CAPACITY
-    ]);
+    let width = BaseAir::<F>::width(&chip.air);
+    let mut ctx =
+        TracegenCtx::<MatrixRecordArena<F>>::new_with_capacity(&[(width, MAX_INS_CAPACITY)]);
 
     set_and_execute(
         &mut tester,

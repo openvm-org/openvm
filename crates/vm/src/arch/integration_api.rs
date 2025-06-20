@@ -106,9 +106,9 @@ pub trait SizedRecord<Layout, RecordMut> {
 }
 
 pub trait BaseRecordArena {
-    type Item;
+    type Capacity: Default + Copy;
 
-    fn with_capacity(capacity: usize) -> Self;
+    fn with_capacity(capacity: Self::Capacity) -> Self;
 }
 
 /// Given some minimum metadata of type `Layout` that specifies the record size, the `RecordArena`
@@ -314,9 +314,9 @@ pub struct DenseRecordArena {
 const MAX_ALIGNMENT: usize = 32;
 
 impl BaseRecordArena for DenseRecordArena {
-    type Item = u8;
+    type Capacity = usize;
 
-    fn with_capacity(capacity: usize) -> Self {
+    fn with_capacity(capacity: Self::Capacity) -> Self {
         let buffer = vec![0; capacity + MAX_ALIGNMENT];
         let offset = (MAX_ALIGNMENT - (buffer.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT;
         let mut cursor = Cursor::new(buffer);
@@ -477,14 +477,13 @@ impl<F, I, R> SizedRecord<MultiRowLayout<I>, R> for MatrixRecordArena<F> {
 }
 
 impl<F: Field> BaseRecordArena for MatrixRecordArena<F> {
-    type Item = F;
+    type Capacity = (usize, usize);
 
-    fn with_capacity(capacity: usize) -> Self {
-        let trace_buffer = F::zero_vec(capacity);
+    fn with_capacity((width, height): (usize, usize)) -> Self {
+        let trace_buffer = F::zero_vec(width * height);
         Self {
             trace_buffer,
-            // TODO(ayush): fix this
-            width: 0,
+            width,
             trace_offset: 0,
         }
     }

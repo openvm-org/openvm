@@ -20,12 +20,17 @@ where
     RA: BaseRecordArena,
 {
     pub fn new(count: usize) -> Self {
-        let arenas = (0..count).map(|_| RA::with_capacity(0)).collect();
+        let arenas = (0..count)
+            .map(|_| RA::with_capacity(RA::Capacity::default()))
+            .collect();
         Self { arenas }
     }
 
-    pub fn new_with_capacity(sizes: &[usize]) -> Self {
-        let arenas = sizes.iter().map(|&size| RA::with_capacity(size)).collect();
+    pub fn new_with_capacity(capacities: &[RA::Capacity]) -> Self {
+        let arenas = capacities
+            .iter()
+            .map(|&capacity| RA::with_capacity(capacity))
+            .collect();
 
         Self { arenas }
     }

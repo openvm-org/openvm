@@ -370,18 +370,14 @@ impl<AdapterAir, AdapterStep> ChipUsageGetter for Rv32AuipcStep<AdapterAir, Adap
     }
 
     fn trace_width(&self) -> usize {
-        // TODO(ayush): fix this
-        // unimplemented!()
-        0
+        unimplemented!()
     }
 
     fn current_trace_height(&self) -> usize {
-        // TODO(ayush): fix this
-        // unimplemented!()
-        0
+        // TODO(ayush): remove
+        1
     }
 }
-
 impl<SC, AdapterAir, AdapterStep> Chip<SC> for Rv32AuipcStep<AdapterAir, AdapterStep>
 where
     SC: StarkGenericConfig,
