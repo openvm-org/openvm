@@ -329,7 +329,8 @@ where
                 .chip_complex
                 .memory_controller()
                 .mem_config()
-                .memory_dimensions(),
+                .memory_dimensions()
+                .overall_height() as u32,
         );
 
         let mut exec_state = VmSegmentState::new(
@@ -724,7 +725,11 @@ where
                 .iter()
                 .map(|&x| log2_strict_usize(x as usize) as u8)
                 .collect(),
-            self.config.system().memory_config.memory_dimensions(),
+            self.config
+                .system()
+                .memory_config
+                .memory_dimensions()
+                .overall_height() as u32,
         );
 
         let mut exec_state = VmSegmentState::new(

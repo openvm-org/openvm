@@ -14,12 +14,11 @@ pub struct MeteredCtx {
     pub is_trace_height_constant: Vec<bool>,
 
     // Indices of leaf nodes in the memory merkle tree
-    pub leaf_indices: FxHashSet<u64>,
+    pub leaf_indices: FxHashSet<(u32, u32)>,
 
     pub instret_last_segment_check: u64,
     pub segments: Vec<Segment>,
 
-    memory_dimensions: MemoryDimensions,
     as_byte_alignment_bits: Vec<u8>,
     boundary_idx: usize,
     merkle_tree_index: Option<usize>,
@@ -34,7 +33,7 @@ impl MeteredCtx {
         num_traces: usize,
         continuations_enabled: bool,
         as_byte_alignment_bits: Vec<u8>,
-        memory_dimensions: MemoryDimensions,
+        memory_merkle_tree_height: u32,
     ) -> Self {
         let boundary_idx = if continuations_enabled {
             PUBLIC_VALUES_AIR_ID
@@ -63,7 +62,6 @@ impl MeteredCtx {
         };
 
         let chunk_bits = chunk.ilog2();
-        let memory_merkle_height = memory_dimensions.overall_height() as u32;
 
         Self {
             trace_heights: vec![0; num_traces],
@@ -71,14 +69,13 @@ impl MeteredCtx {
             leaf_indices: FxHashSet::default(),
             instret_last_segment_check: 0,
             segments: Vec::new(),
-            memory_dimensions,
             as_byte_alignment_bits,
             boundary_idx,
             merkle_tree_index,
             adapter_offset,
             chunk,
             chunk_bits,
-            memory_merkle_height,
+            memory_merkle_height: memory_merkle_tree_height,
         }
     }
 }
@@ -86,27 +83,24 @@ impl MeteredCtx {
 impl MeteredCtx {
     fn update_boundary_merkle_heights(&mut self, address_space: u32, ptr: u32, size: u32) {
         let num_blocks = (size + self.chunk - 1) >> self.chunk_bits;
-        for i in 0..num_blocks {
-            let addr = ptr.wrapping_add(i * self.chunk);
+        let mut addr = ptr;
+        for _ in 0..num_blocks {
             let block_id = addr >> self.chunk_bits;
-            let leaf_id = self
-                .memory_dimensions
-                .label_to_index((address_space, block_id));
 
-            if self.leaf_indices.insert(leaf_id) {
-                let poseidon2_idx = self.trace_heights.len() - 2;
-
+            if self.leaf_indices.insert((address_space, block_id)) {
                 self.trace_heights[self.boundary_idx] += 1;
-                self.trace_heights[poseidon2_idx] += 2;
 
                 if let Some(merkle_tree_idx) = self.merkle_tree_index {
+                    let poseidon2_idx = self.trace_heights.len() - 2;
+                    self.trace_heights[poseidon2_idx] += (self.memory_merkle_height + 1) * 2;
                     self.trace_heights[merkle_tree_idx] += self.memory_merkle_height * 2;
-                    self.trace_heights[poseidon2_idx] += self.memory_merkle_height * 2;
                 }
 
                 // At finalize, we'll need to read it in chunk-sized units for the merkle chip
                 self.update_adapter_heights(address_space, self.chunk_bits);
             }
+
+            addr = addr.wrapping_add(self.chunk);
         }
     }
 
