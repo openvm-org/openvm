@@ -33,7 +33,7 @@ pub struct AppConfig<VC> {
     pub compiler_options: CompilerOptions,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AggConfig {
     /// STARK aggregation config
     pub agg_stark_config: AggStarkConfig,
@@ -55,7 +55,7 @@ pub struct AggStarkConfig {
     pub root_max_constraint_degree: usize,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Halo2Config {
     /// Log degree for the outer recursion verifier circuit.
     pub verifier_k: usize,
