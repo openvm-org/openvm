@@ -13,7 +13,7 @@ pub struct PageSet<const PAGE_BITS: usize = 12> {
 
 impl<const PAGE_BITS: usize> PageSet<PAGE_BITS> {
     pub fn new(size_bits: usize) -> Self {
-        let num_words = 1 << (size_bits - PAGE_BITS - 6);
+        let num_words = 1 << size_bits.saturating_sub(PAGE_BITS + 6);
         Self {
             words: vec![0; num_words].into_boxed_slice(),
         }
