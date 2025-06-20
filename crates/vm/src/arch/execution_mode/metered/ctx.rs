@@ -1,6 +1,5 @@
-use std::collections::HashSet;
-
 use openvm_instructions::riscv::RV32_IMM_AS;
+use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -15,7 +14,7 @@ pub struct MeteredCtx {
     pub is_trace_height_constant: Vec<bool>,
 
     // Indices of leaf nodes in the memory merkle tree
-    pub leaf_indices: HashSet<u64>,
+    pub leaf_indices: FxHashSet<u64>,
 
     pub instret_last_segment_check: u64,
     pub segments: Vec<Segment>,
@@ -69,7 +68,7 @@ impl MeteredCtx {
         Self {
             trace_heights: vec![0; num_traces],
             is_trace_height_constant: vec![false; num_traces],
-            leaf_indices: HashSet::new(),
+            leaf_indices: FxHashSet::default(),
             instret_last_segment_check: 0,
             segments: Vec::new(),
             memory_dimensions,
@@ -114,7 +113,7 @@ impl MeteredCtx {
     fn update_adapter_heights(&mut self, address_space: u32, size_bits: u32) {
         let align_bits = self.as_byte_alignment_bits[address_space as usize];
         debug_assert!(
-            align_bits <= size_bits,
+            align_bits as u32 <= size_bits,
             "align_bits ({}) must be <= size_bits ({})",
             align_bits,
             size_bits
