@@ -47,6 +47,8 @@ __device__ __forceinline__ void generate_subrow(
         if (diff != Fp(0) && equal) {
             diff_inv_marker[i] = inv(diff);
             equal = false;
+        } else {
+            diff_inv_marker[i] = Fp(0);
         }
     }
     *out = Fp(equal);
