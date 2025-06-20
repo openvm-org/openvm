@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{execution_mode::E1E2ExecutionCtx, PUBLIC_VALUES_AIR_ID},
-    system::memory::CHUNK,
+    system::memory::{dimensions::MemoryDimensions, CHUNK},
 };
 
 // TODO(ayush): can segmentation also be triggered by timestamp overflow? should that be tracked?
@@ -14,18 +14,18 @@ pub struct MeteredCtx {
     pub is_trace_height_constant: Vec<bool>,
 
     // Indices of leaf nodes in the memory merkle tree
-    pub leaf_indices: FxHashSet<(u32, u32)>,
+    pub leaf_indices: FxHashSet<u32>,
 
     pub instret_last_segment_check: u64,
     pub segments: Vec<Segment>,
 
+    memory_dimensions: MemoryDimensions,
     as_byte_alignment_bits: Vec<u8>,
     boundary_idx: usize,
     merkle_tree_index: Option<usize>,
     adapter_offset: usize,
     chunk: u32,
     chunk_bits: u32,
-    memory_merkle_height: u32,
 }
 
 impl MeteredCtx {
@@ -33,7 +33,7 @@ impl MeteredCtx {
         num_traces: usize,
         continuations_enabled: bool,
         as_byte_alignment_bits: Vec<u8>,
-        memory_merkle_tree_height: u32,
+        memory_dimensions: MemoryDimensions,
     ) -> Self {
         let boundary_idx = if continuations_enabled {
             PUBLIC_VALUES_AIR_ID
@@ -75,7 +75,7 @@ impl MeteredCtx {
             adapter_offset,
             chunk,
             chunk_bits,
-            memory_merkle_height: memory_merkle_tree_height,
+            memory_dimensions,
         }
     }
 }
@@ -86,14 +86,21 @@ impl MeteredCtx {
         let mut addr = ptr;
         for _ in 0..num_blocks {
             let block_id = addr >> self.chunk_bits;
-
-            if self.leaf_indices.insert((address_space, block_id)) {
+            let index = if self.chunk == 1 {
+                // Volatile
+                block_id
+            } else {
+                self.memory_dimensions
+                    .label_to_index((address_space, block_id)) as u32
+            };
+            if self.leaf_indices.insert(index) {
                 self.trace_heights[self.boundary_idx] += 1;
 
                 if let Some(merkle_tree_idx) = self.merkle_tree_index {
                     let poseidon2_idx = self.trace_heights.len() - 2;
-                    self.trace_heights[poseidon2_idx] += (self.memory_merkle_height + 1) * 2;
-                    self.trace_heights[merkle_tree_idx] += self.memory_merkle_height * 2;
+                    let merkle_height = self.memory_dimensions.overall_height() as u32;
+                    self.trace_heights[poseidon2_idx] += (merkle_height + 1) * 2;
+                    self.trace_heights[merkle_tree_idx] += merkle_height * 2;
                 }
 
                 // At finalize, we'll need to read it in chunk-sized units for the merkle chip
@@ -113,8 +120,8 @@ impl MeteredCtx {
             size_bits
         );
         for adapter_bits in (align_bits as u32 + 1..=size_bits).rev() {
-            self.trace_heights[self.adapter_offset + adapter_bits as usize - 1] +=
-                1 << (size_bits - adapter_bits + 1);
+            let adapter_idx = self.adapter_offset + adapter_bits as usize - 1;
+            self.trace_heights[adapter_idx] += 1 << (size_bits - adapter_bits + 1);
         }
     }
 }
