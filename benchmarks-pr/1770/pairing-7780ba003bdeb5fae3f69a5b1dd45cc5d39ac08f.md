@@ -1,0 +1,131 @@
+| Summary | Proof Time (s) | Parallel Proof Time (s) |
+|:---|---:|---:|
+| Total |  4.21 |  4.21 |
+| pairing |  3.87 |  3.87 |
+
+
+| pairing |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` |  3,874 |  3,874 |  3,874 |  3,874 |
+| `main_cells_used     ` |  97,508,739 |  97,508,739 |  97,508,739 |  97,508,739 |
+| `total_cycles        ` |  1,862,964 |  1,862,964 |  1,862,964 |  1,862,964 |
+| `execute_metered_time_ms` |  334 | -          | -          | -          |
+| `execute_metered_insn_mi/s` |  5.57 | -          | -          | -          |
+| `execute_e3_time_ms  ` |  485 |  485 |  485 |  485 |
+| `execute_e3_insn_mi/s` |  3.84 | -          |  3.84 |  3.84 |
+| `trace_gen_time_ms   ` |  375 |  375 |  375 |  375 |
+| `memory_finalize_time_ms` |  113 |  113 |  113 |  113 |
+| `boundary_finalize_time_ms` |  4 |  4 |  4 |  4 |
+| `merkle_finalize_time_ms` |  98 |  98 |  98 |  98 |
+| `stark_prove_excluding_trace_time_ms` |  3,014 |  3,014 |  3,014 |  3,014 |
+| `main_trace_commit_time_ms` |  636 |  636 |  636 |  636 |
+| `generate_perm_trace_time_ms` |  260 |  260 |  260 |  260 |
+| `perm_trace_commit_time_ms` |  625 |  625 |  625 |  625 |
+| `quotient_poly_compute_time_ms` |  329 |  329 |  329 |  329 |
+| `quotient_poly_commit_time_ms` |  293 |  293 |  293 |  293 |
+| `pcs_opening_time_ms ` |  865 |  865 |  865 |  865 |
+
+
+
+<details>
+<summary>Detailed Metrics</summary>
+
+| group | num_segments | keygen_time_ms | insns | fri.log_blowup | execute_metered_time_ms | execute_metered_insn_mi/s | commit_exe_time_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| pairing | 1 | 1,145 | 1,862,965 | 1 | 334 | 5.57 | 12 | 
+
+| group | air_name | quotient_deg | interactions | constraints |
+| --- | --- | --- | --- | --- |
+| pairing | AccessAdapterAir<16> | 2 | 5 | 12 | 
+| pairing | AccessAdapterAir<2> | 2 | 5 | 12 | 
+| pairing | AccessAdapterAir<32> | 2 | 5 | 12 | 
+| pairing | AccessAdapterAir<4> | 2 | 5 | 12 | 
+| pairing | AccessAdapterAir<8> | 2 | 5 | 12 | 
+| pairing | BitwiseOperationLookupAir<8> | 2 | 2 | 4 | 
+| pairing | KeccakVmAir | 2 | 321 | 4,513 | 
+| pairing | MemoryMerkleAir<8> | 2 | 4 | 39 | 
+| pairing | PersistentBoundaryAir<8> | 2 | 3 | 7 | 
+| pairing | PhantomAir | 2 | 3 | 5 | 
+| pairing | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 2 | 1 | 286 | 
+| pairing | ProgramAir | 1 | 1 | 4 | 
+| pairing | RangeTupleCheckerAir<2> | 1 | 1 | 4 | 
+| pairing | Rv32HintStoreAir | 2 | 18 | 28 | 
+| pairing | VariableRangeCheckerAir | 1 | 1 | 4 | 
+| pairing | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 2 | 20 | 37 | 
+| pairing | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 2 | 18 | 40 | 
+| pairing | VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | 2 | 24 | 91 | 
+| pairing | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 2 | 11 | 20 | 
+| pairing | VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | 2 | 13 | 35 | 
+| pairing | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 2 | 10 | 18 | 
+| pairing | VmAirWrapper<Rv32IsEqualModAdapterAir<2, 1, 32, 32>, ModularIsEqualCoreAir<32, 4, 8> | 2 | 25 | 225 | 
+| pairing | VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | 2 | 16 | 20 | 
+| pairing | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | 2 | 18 | 33 | 
+| pairing | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | 2 | 17 | 40 | 
+| pairing | VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | 2 | 25 | 84 | 
+| pairing | VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | 2 | 24 | 31 | 
+| pairing | VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | 2 | 19 | 19 | 
+| pairing | VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | 2 | 12 | 14 | 
+| pairing | VmAirWrapper<Rv32VecHeapAdapterAir<1, 2, 2, 32, 32>, FieldExpressionCoreAir> | 2 | 415 | 480 | 
+| pairing | VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, FieldExpressionCoreAir> | 2 | 158 | 190 | 
+| pairing | VmAirWrapper<Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>, FieldExpressionCoreAir> | 2 | 428 | 457 | 
+| pairing | VmConnectorAir | 2 | 5 | 11 | 
+
+| group | air_name | segment | rows | prep_cols | perm_cols | main_cols | cells |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| pairing | AccessAdapterAir<16> | 0 | 262,144 |  | 16 | 25 | 10,747,904 | 
+| pairing | AccessAdapterAir<32> | 0 | 131,072 |  | 16 | 41 | 7,471,104 | 
+| pairing | AccessAdapterAir<8> | 0 | 524,288 |  | 16 | 17 | 17,301,504 | 
+| pairing | BitwiseOperationLookupAir<8> | 0 | 65,536 | 3 | 8 | 2 | 655,360 | 
+| pairing | MemoryMerkleAir<8> | 0 | 32,768 |  | 16 | 32 | 1,572,864 | 
+| pairing | PersistentBoundaryAir<8> | 0 | 32,768 |  | 12 | 20 | 1,048,576 | 
+| pairing | PhantomAir | 0 | 1 |  | 12 | 6 | 18 | 
+| pairing | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 0 | 32,768 |  | 8 | 300 | 10,092,544 | 
+| pairing | ProgramAir | 0 | 32,768 |  | 8 | 10 | 589,824 | 
+| pairing | RangeTupleCheckerAir<2> | 0 | 524,288 | 2 | 8 | 1 | 4,718,592 | 
+| pairing | Rv32HintStoreAir | 0 | 256 |  | 44 | 32 | 19,456 | 
+| pairing | VariableRangeCheckerAir | 0 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| pairing | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 0 | 1,048,576 |  | 52 | 36 | 92,274,688 | 
+| pairing | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 0 | 65,536 |  | 40 | 37 | 5,046,272 | 
+| pairing | VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | 0 | 2,048 |  | 52 | 53 | 215,040 | 
+| pairing | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 0 | 262,144 |  | 28 | 26 | 14,155,776 | 
+| pairing | VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | 0 | 131,072 |  | 32 | 32 | 8,388,608 | 
+| pairing | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 0 | 8,192 |  | 28 | 18 | 376,832 | 
+| pairing | VmAirWrapper<Rv32IsEqualModAdapterAir<2, 1, 32, 32>, ModularIsEqualCoreAir<32, 4, 8> | 0 | 32 |  | 56 | 166 | 7,104 | 
+| pairing | VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | 0 | 65,536 |  | 36 | 28 | 4,194,304 | 
+| pairing | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | 0 | 1,048,576 |  | 52 | 41 | 97,517,568 | 
+| pairing | VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | 0 | 256 |  | 72 | 39 | 28,416 | 
+| pairing | VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | 0 | 512 |  | 52 | 31 | 42,496 | 
+| pairing | VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | 0 | 32,768 |  | 28 | 20 | 1,572,864 | 
+| pairing | VmAirWrapper<Rv32VecHeapAdapterAir<2, 1, 1, 32, 32>, FieldExpressionCoreAir> | 0 | 1,024 |  | 320 | 263 | 596,992 | 
+| pairing | VmAirWrapper<Rv32VecHeapAdapterAir<2, 2, 2, 32, 32>, FieldExpressionCoreAir> | 0 | 16,384 |  | 604 | 497 | 18,038,784 | 
+| pairing | VmConnectorAir | 0 | 2 | 1 | 16 | 5 | 42 | 
+
+| group | segment | trace_gen_time_ms | total_proof_time_ms | total_cycles | total_cells | stark_prove_excluding_trace_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | merkle_finalize_time_ms | memory_finalize_time_ms | main_trace_commit_time_ms | main_cells_used | insns | generate_perm_trace_time_ms | execute_e3_time_ms | execute_e3_insn_mi/s | boundary_finalize_time_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| pairing | 0 | 375 | 3,874 | 1,862,964 | 304,931,516 | 3,014 | 329 | 293 | 625 | 865 | 98 | 113 | 636 | 97,508,739 | 1,862,965 | 260 | 485 | 3.84 | 4 | 
+
+| group | segment | trace_height_constraint | weighted_sum | threshold |
+| --- | --- | --- | --- | --- |
+| pairing | 0 | 0 | 5,382,342 | 2,013,265,921 | 
+| pairing | 0 | 1 | 18,152,512 | 2,013,265,921 | 
+| pairing | 0 | 2 | 2,691,171 | 2,013,265,921 | 
+| pairing | 0 | 3 | 25,000,068 | 2,013,265,921 | 
+| pairing | 0 | 4 | 131,072 | 2,013,265,921 | 
+| pairing | 0 | 5 | 65,536 | 2,013,265,921 | 
+| pairing | 0 | 6 | 6,016,192 | 2,013,265,921 | 
+| pairing | 0 | 7 | 4,096 | 2,013,265,921 | 
+| pairing | 0 | 8 | 58,426,029 | 2,013,265,921 | 
+
+</details>
+
+
+Commit: https://github.com/openvm-org/openvm/commit/7780ba003bdeb5fae3f69a5b1dd45cc5d39ac08f
+
+Max Segment Length: 1048476
+
+Instance Type: 64cpu-linux-arm64
+
+Memory Allocator: jemalloc
+
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/15787817364)
