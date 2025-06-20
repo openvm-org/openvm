@@ -35,6 +35,7 @@ eyre.workspace = true
 derivative.workspace = true
 static_assertions.workspace = true
 getset.workspace = true
+dashmap.workspace = true
 
 [dev-dependencies]
 test-log.workspace = true
@@ -47,7 +48,7 @@ openvm-rv32im-transpiler.workspace = true
 
 [features]
 default = ["parallel", "jemalloc"]
-parallel = ["openvm-stark-backend/parallel"]
+parallel = ["openvm-stark-backend/parallel", "dashmap/rayon"]
 test-utils = ["dep:openvm-stark-sdk"]
 bench-metrics = ["dep:metrics", "openvm-stark-backend/bench-metrics"]
 function-span = ["bench-metrics"]

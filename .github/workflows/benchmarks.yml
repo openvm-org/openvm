@@ -2,7 +2,7 @@ name: "OpenVM Benchmarks: Coordinate Runner & Reporting"
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "feat/new-execution"]
   pull_request:
     types: [opened, synchronize, reopened, labeled]
     branches: ["**"]
@@ -211,9 +211,21 @@ jobs:
           json_file_list=$(echo -n "$json_files" | paste -sd "," -)
           echo $json_file_list
 
-          prev_json_files=$(echo $matrix | jq -r '
+          # For PRs, get the latest commit from the target branch
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            if [[ "${{ github.base_ref }}" == "refs/heads/main" ]]; then
+              REF_HASH="main"
+            else
+              REF_HASH=$(echo "${{ github.base_ref }}" | sha256sum | cut -d' ' -f1)
+            fi
+            echo "Target branch REF_HASH: $REF_HASH"
+          else
+            REF_HASH="main"
+          fi
+
+          prev_json_files=$(echo $matrix | jq -r --arg target "$REF_HASH" '
             .[] |
-            "main-\(.id).json"')
+            "\($target)-\(.id).json"')
           prev_json_file_list=$(echo -n "$prev_json_files" | paste -sd "," -)
           echo $prev_json_file_list
 

@@ -59,6 +59,7 @@ pub trait PhantomSubExecutor<F> {
         &mut self,
         memory: &MemoryController<F>,
         streams: &mut Streams<F>,
+        rng: &mut StdRng,
         discriminant: PhantomDiscriminant,
         a: F,
         b: F,

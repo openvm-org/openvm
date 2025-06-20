@@ -1,9 +1,9 @@
 use core::hint::black_box;
 use openvm as _;
 
-use openvm_keccak256_guest::keccak256;
+use openvm_keccak256::keccak256;
 
-const ITERATIONS: usize = 10_000;
+const ITERATIONS: usize = 65_000;
 
 pub fn main() {
     // Initialize with hash of an empty vector

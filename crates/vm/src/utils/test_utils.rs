@@ -31,3 +31,10 @@ pub fn u32_sign_extend<const IMM_BITS: usize>(num: u32) -> u32 {
         num
     }
 }
+
+/// Generate a random message of a given length in bytes
+pub fn get_random_message(rng: &mut StdRng, len: usize) -> Vec<u8> {
+    let mut random_message: Vec<u8> = vec![0u8; len];
+    rng.fill(&mut random_message[..]);
+    random_message
+}

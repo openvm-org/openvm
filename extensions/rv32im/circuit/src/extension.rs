@@ -1,12 +1,12 @@
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        InitFileGenerator, SystemConfig, SystemPort, VmExtension, VmInventory, VmInventoryBuilder,
-        VmInventoryError,
+        ExecutionBridge, InitFileGenerator, SystemConfig, SystemPort, VmAirWrapper, VmExtension,
+        VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
@@ -134,7 +134,7 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 // ============ Executor and Periphery Enums for Extension ============
 
 /// RISC-V 32-bit Base (RV32I) Instruction Executors
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutorE1, From, AnyEnum)]
 pub enum Rv32IExecutor<F: PrimeField32> {
     // Rv32 (for standard 32-bit integers):
     BaseAlu(Rv32BaseAluChip<F>),
@@ -150,7 +150,7 @@ pub enum Rv32IExecutor<F: PrimeField32> {
 }
 
 /// RISC-V 32-bit Multiplication Extension (RV32M) Instruction Executors
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutorE1, From, AnyEnum)]
 pub enum Rv32MExecutor<F: PrimeField32> {
     Multiplication(Rv32MultiplicationChip<F>),
     MultiplicationHigh(Rv32MulHChip<F>),
@@ -158,7 +158,7 @@ pub enum Rv32MExecutor<F: PrimeField32> {
 }
 
 /// RISC-V 32-bit Io Instruction Executors
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutorE1, From, AnyEnum)]
 pub enum Rv32IoExecutor<F: PrimeField32> {
     HintStore(Rv32HintStoreChip<F>),
 }
@@ -204,7 +204,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         } = builder.system_port();
 
         let range_checker = builder.system_base().range_checker_chip.clone();
-        let offline_memory = builder.system_base().offline_memory();
         let pointer_max_bits = builder.system_config().memory_config.pointer_max_bits;
 
         let bitwise_lu_chip = if let Some(&chip) = builder
@@ -220,14 +219,20 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         };
 
         let base_alu_chip = Rv32BaseAluChip::new(
-            Rv32BaseAluAdapterChip::new(
-                execution_bus,
-                program_bus,
-                memory_bridge,
-                bitwise_lu_chip.clone(),
+            VmAirWrapper::new(
+                Rv32BaseAluAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
+                    bitwise_lu_chip.bus(),
+                ),
+                BaseAluCoreAir::new(bitwise_lu_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
             ),
-            BaseAluCoreChip::new(bitwise_lu_chip.clone(), BaseAluOpcode::CLASS_OFFSET),
-            offline_memory.clone(),
+            Rv32BaseAluStep::new(
+                Rv32BaseAluAdapterStep::new(bitwise_lu_chip.clone()),
+                bitwise_lu_chip.clone(),
+                BaseAluOpcode::CLASS_OFFSET,
+            ),
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
             base_alu_chip,
@@ -235,43 +240,61 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         )?;
 
         let lt_chip = Rv32LessThanChip::new(
-            Rv32BaseAluAdapterChip::new(
-                execution_bus,
-                program_bus,
-                memory_bridge,
-                bitwise_lu_chip.clone(),
+            VmAirWrapper::new(
+                Rv32BaseAluAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
+                    bitwise_lu_chip.bus(),
+                ),
+                LessThanCoreAir::new(bitwise_lu_chip.bus(), LessThanOpcode::CLASS_OFFSET),
             ),
-            LessThanCoreChip::new(bitwise_lu_chip.clone(), LessThanOpcode::CLASS_OFFSET),
-            offline_memory.clone(),
+            LessThanStep::new(
+                Rv32BaseAluAdapterStep::new(bitwise_lu_chip.clone()),
+                bitwise_lu_chip.clone(),
+                LessThanOpcode::CLASS_OFFSET,
+            ),
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(lt_chip, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
 
         let shift_chip = Rv32ShiftChip::new(
-            Rv32BaseAluAdapterChip::new(
-                execution_bus,
-                program_bus,
-                memory_bridge,
-                bitwise_lu_chip.clone(),
+            VmAirWrapper::new(
+                Rv32BaseAluAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
+                    bitwise_lu_chip.bus(),
+                ),
+                ShiftCoreAir::new(
+                    bitwise_lu_chip.bus(),
+                    range_checker.bus(),
+                    ShiftOpcode::CLASS_OFFSET,
+                ),
             ),
-            ShiftCoreChip::new(
+            ShiftStep::new(
+                Rv32BaseAluAdapterStep::new(bitwise_lu_chip.clone()),
                 bitwise_lu_chip.clone(),
                 range_checker.clone(),
                 ShiftOpcode::CLASS_OFFSET,
             ),
-            offline_memory.clone(),
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(shift_chip, ShiftOpcode::iter().map(|x| x.global_opcode()))?;
 
         let load_store_chip = Rv32LoadStoreChip::new(
-            Rv32LoadStoreAdapterChip::new(
-                execution_bus,
-                program_bus,
-                memory_bridge,
-                pointer_max_bits,
-                range_checker.clone(),
+            VmAirWrapper::new(
+                Rv32LoadStoreAdapterAir::new(
+                    memory_bridge,
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    range_checker.bus(),
+                    pointer_max_bits,
+                ),
+                LoadStoreCoreAir::new(Rv32LoadStoreOpcode::CLASS_OFFSET),
             ),
-            LoadStoreCoreChip::new(Rv32LoadStoreOpcode::CLASS_OFFSET),
-            offline_memory.clone(),
+            LoadStoreStep::new(
+                Rv32LoadStoreAdapterStep::new(pointer_max_bits, range_checker.clone()),
+                Rv32LoadStoreOpcode::CLASS_OFFSET,
+            ),
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
             load_store_chip,
@@ -281,15 +304,20 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         )?;
 
         let load_sign_extend_chip = Rv32LoadSignExtendChip::new(
-            Rv32LoadStoreAdapterChip::new(
-                execution_bus,
-                program_bus,
-                memory_bridge,
-                pointer_max_bits,
+            VmAirWrapper::new(
+                Rv32LoadStoreAdapterAir::new(
+                    memory_bridge,
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    range_checker.bus(),
+                    pointer_max_bits,
+                ),
+                LoadSignExtendCoreAir::new(range_checker.bus()),
+            ),
+            LoadSignExtendStep::new(
+                Rv32LoadStoreAdapterStep::new(pointer_max_bits, range_checker.clone()),
                 range_checker.clone(),
             ),
-            LoadSignExtendCoreChip::new(range_checker.clone()),
-            offline_memory.clone(),
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
             load_sign_extend_chip,
@@ -297,49 +325,94 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         )?;
 
         let beq_chip = Rv32BranchEqualChip::new(
-            Rv32BranchAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            BranchEqualCoreChip::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
-            offline_memory.clone(),
+            VmAirWrapper::new(
+                Rv32BranchAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
+                ),
+                BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+            ),
+            BranchEqualStep::new(
+                Rv32BranchAdapterStep::new(),
+                BranchEqualOpcode::CLASS_OFFSET,
+                DEFAULT_PC_STEP,
+            ),
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
             beq_chip,
             BranchEqualOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let blt_chip = Rv32BranchLessThanChip::new(
-            Rv32BranchAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            BranchLessThanCoreChip::new(
+        let blt_chip = Rv32BranchLessThanChip::<F>::new(
+            VmAirWrapper::new(
+                Rv32BranchAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
+                ),
+                BranchLessThanCoreAir::new(
+                    bitwise_lu_chip.bus(),
+                    BranchLessThanOpcode::CLASS_OFFSET,
+                ),
+            ),
+            BranchLessThanStep::new(
+                Rv32BranchAdapterStep::new(),
                 bitwise_lu_chip.clone(),
                 BranchLessThanOpcode::CLASS_OFFSET,
             ),
-            offline_memory.clone(),
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
             blt_chip,
             BranchLessThanOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let jal_lui_chip = Rv32JalLuiChip::new(
-            Rv32CondRdWriteAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            Rv32JalLuiCoreChip::new(bitwise_lu_chip.clone()),
-            offline_memory.clone(),
+        let jal_lui_chip = Rv32JalLuiChip::<F>::new(
+            VmAirWrapper::new(
+                Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(
+                    memory_bridge,
+                    ExecutionBridge::new(execution_bus, program_bus),
+                )),
+                Rv32JalLuiCoreAir::new(bitwise_lu_chip.bus()),
+            ),
+            Rv32JalLuiStep::new(
+                Rv32CondRdWriteAdapterStep::new(Rv32RdWriteAdapterStep::new()),
+                bitwise_lu_chip.clone(),
+            ),
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
             jal_lui_chip,
             Rv32JalLuiOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let jalr_chip = Rv32JalrChip::new(
-            Rv32JalrAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            Rv32JalrCoreChip::new(bitwise_lu_chip.clone(), range_checker.clone()),
-            offline_memory.clone(),
+        let jalr_chip = Rv32JalrChip::<F>::new(
+            VmAirWrapper::new(
+                Rv32JalrAdapterAir::new(
+                    memory_bridge,
+                    ExecutionBridge::new(execution_bus, program_bus),
+                ),
+                Rv32JalrCoreAir::new(bitwise_lu_chip.bus(), range_checker.bus()),
+            ),
+            Rv32JalrStep::new(
+                Rv32JalrAdapterStep::new(),
+                bitwise_lu_chip.clone(),
+                range_checker.clone(),
+            ),
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(jalr_chip, Rv32JalrOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let auipc_chip = Rv32AuipcChip::new(
-            Rv32RdWriteAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            Rv32AuipcCoreChip::new(bitwise_lu_chip.clone()),
-            offline_memory.clone(),
+        let auipc_chip = Rv32AuipcChip::<F>::new(
+            VmAirWrapper::new(
+                Rv32RdWriteAdapterAir::new(
+                    memory_bridge,
+                    ExecutionBridge::new(execution_bus, program_bus),
+                ),
+                Rv32AuipcCoreAir::new(bitwise_lu_chip.bus()),
+            ),
+            Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_lu_chip.clone()),
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
             auipc_chip,
@@ -352,7 +425,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             PhantomDiscriminant(Rv32Phantom::HintInput as u16),
         )?;
         builder.add_phantom_sub_executor(
-            phantom::Rv32HintRandomSubEx::new(),
+            phantom::Rv32HintRandomSubEx,
             PhantomDiscriminant(Rv32Phantom::HintRandom as u16),
         )?;
         builder.add_phantom_sub_executor(
@@ -382,7 +455,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
             program_bus,
             memory_bridge,
         } = builder.system_port();
-        let offline_memory = builder.system_base().offline_memory();
 
         let bitwise_lu_chip = if let Some(&chip) = builder
             .find_chip::<SharedBitwiseOperationLookupChip<8>>()
@@ -412,28 +484,60 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
             chip
         };
 
-        let mul_chip = Rv32MultiplicationChip::new(
-            Rv32MultAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            MultiplicationCoreChip::new(range_tuple_checker.clone(), MulOpcode::CLASS_OFFSET),
-            offline_memory.clone(),
+        let mul_chip = Rv32MultiplicationChip::<F>::new(
+            VmAirWrapper::new(
+                Rv32MultAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
+                ),
+                // TODO(ayush): bus should return value not reference
+                MultiplicationCoreAir::new(*range_tuple_checker.bus(), MulOpcode::CLASS_OFFSET),
+            ),
+            MultiplicationStep::new(
+                Rv32MultAdapterStep::new(),
+                range_tuple_checker.clone(),
+                MulOpcode::CLASS_OFFSET,
+            ),
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(mul_chip, MulOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let mul_h_chip = Rv32MulHChip::new(
-            Rv32MultAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            MulHCoreChip::new(bitwise_lu_chip.clone(), range_tuple_checker.clone()),
-            offline_memory.clone(),
+        let mul_h_chip = Rv32MulHChip::<F>::new(
+            VmAirWrapper::new(
+                Rv32MultAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
+                ),
+                MulHCoreAir::new(bitwise_lu_chip.bus(), *range_tuple_checker.bus()),
+            ),
+            MulHStep::new(
+                Rv32MultAdapterStep::new(),
+                bitwise_lu_chip.clone(),
+                range_tuple_checker.clone(),
+            ),
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(mul_h_chip, MulHOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let div_rem_chip = Rv32DivRemChip::new(
-            Rv32MultAdapterChip::new(execution_bus, program_bus, memory_bridge),
-            DivRemCoreChip::new(
+        let div_rem_chip = Rv32DivRemChip::<F>::new(
+            VmAirWrapper::new(
+                Rv32MultAdapterAir::new(
+                    ExecutionBridge::new(execution_bus, program_bus),
+                    memory_bridge,
+                ),
+                DivRemCoreAir::new(
+                    bitwise_lu_chip.bus(),
+                    *range_tuple_checker.bus(),
+                    DivRemOpcode::CLASS_OFFSET,
+                ),
+            ),
+            DivRemStep::new(
+                Rv32MultAdapterStep::new(),
                 bitwise_lu_chip.clone(),
                 range_tuple_checker.clone(),
                 DivRemOpcode::CLASS_OFFSET,
             ),
-            offline_memory.clone(),
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
             div_rem_chip,
@@ -458,7 +562,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
             program_bus,
             memory_bridge,
         } = builder.system_port();
-        let offline_memory = builder.system_base().offline_memory();
 
         let bitwise_lu_chip = if let Some(&chip) = builder
             .find_chip::<SharedBitwiseOperationLookupChip<8>>()
@@ -472,16 +575,21 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
             chip
         };
 
-        let mut hintstore_chip = Rv32HintStoreChip::new(
-            execution_bus,
-            program_bus,
-            bitwise_lu_chip.clone(),
-            memory_bridge,
-            offline_memory.clone(),
-            builder.system_config().memory_config.pointer_max_bits,
-            Rv32HintStoreOpcode::CLASS_OFFSET,
+        let hintstore_chip = Rv32HintStoreChip::<F>::new(
+            Rv32HintStoreAir::new(
+                ExecutionBridge::new(execution_bus, program_bus),
+                memory_bridge,
+                bitwise_lu_chip.bus(),
+                Rv32HintStoreOpcode::CLASS_OFFSET,
+                builder.system_config().memory_config.pointer_max_bits,
+            ),
+            Rv32HintStoreStep::new(
+                bitwise_lu_chip,
+                builder.system_config().memory_config.pointer_max_bits,
+                Rv32HintStoreOpcode::CLASS_OFFSET,
+            ),
+            builder.system_base().memory_controller.helper(),
         );
-        hintstore_chip.set_streams(builder.streams().clone());
 
         inventory.add_executor(
             hintstore_chip,
@@ -497,34 +605,28 @@ mod phantom {
     use eyre::bail;
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
-        system::memory::MemoryController,
+        system::memory::online::GuestMemory,
     };
     use openvm_instructions::PhantomDiscriminant;
     use openvm_stark_backend::p3_field::{Field, PrimeField32};
-    use rand::{rngs::OsRng, Rng};
+    use rand::{rngs::StdRng, Rng};
 
-    use crate::adapters::unsafe_read_rv32_register;
+    use crate::adapters::{memory_read, read_rv32_register};
 
     pub struct Rv32HintInputSubEx;
-    pub struct Rv32HintRandomSubEx {
-        rng: OsRng,
-    }
-    impl Rv32HintRandomSubEx {
-        pub fn new() -> Self {
-            Self { rng: OsRng }
-        }
-    }
+    pub struct Rv32HintRandomSubEx;
     pub struct Rv32PrintStrSubEx;
     pub struct Rv32HintLoadByKeySubEx;
 
     impl<F: Field> PhantomSubExecutor<F> for Rv32HintInputSubEx {
         fn phantom_execute(
-            &mut self,
-            _: &MemoryController<F>,
+            &self,
+            _: &GuestMemory,
             streams: &mut Streams<F>,
+            _: &mut StdRng,
             _: PhantomDiscriminant,
-            _: F,
-            _: F,
+            _: u32,
+            _: u32,
             _: u16,
         ) -> eyre::Result<()> {
             let mut hint = match streams.input_stream.pop_front() {
@@ -550,18 +652,19 @@ mod phantom {
 
     impl<F: PrimeField32> PhantomSubExecutor<F> for Rv32HintRandomSubEx {
         fn phantom_execute(
-            &mut self,
-            memory: &MemoryController<F>,
+            &self,
+            memory: &GuestMemory,
             streams: &mut Streams<F>,
+            rng: &mut StdRng,
             _: PhantomDiscriminant,
-            a: F,
-            _: F,
+            a: u32,
+            _: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            let len = unsafe_read_rv32_register(memory, a) as usize;
+            let len = read_rv32_register(memory, a) as usize;
             streams.hint_stream.clear();
             streams.hint_stream.extend(
-                std::iter::repeat_with(|| F::from_canonical_u8(self.rng.gen::<u8>())).take(len * 4),
+                std::iter::repeat_with(|| F::from_canonical_u8(rng.gen::<u8>())).take(len * 4),
             );
             Ok(())
         }
@@ -569,23 +672,20 @@ mod phantom {
 
     impl<F: PrimeField32> PhantomSubExecutor<F> for Rv32PrintStrSubEx {
         fn phantom_execute(
-            &mut self,
-            memory: &MemoryController<F>,
+            &self,
+            memory: &GuestMemory,
             _: &mut Streams<F>,
+            _: &mut StdRng,
             _: PhantomDiscriminant,
-            a: F,
-            b: F,
+            a: u32,
+            b: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            let rd = unsafe_read_rv32_register(memory, a);
-            let rs1 = unsafe_read_rv32_register(memory, b);
+            let rd = read_rv32_register(memory, a);
+            let rs1 = read_rv32_register(memory, b);
             let bytes = (0..rs1)
-                .map(|i| -> eyre::Result<u8> {
-                    let val = memory.unsafe_read_cell(F::TWO, F::from_canonical_u32(rd + i));
-                    let byte: u8 = val.as_canonical_u32().try_into()?;
-                    Ok(byte)
-                })
-                .collect::<eyre::Result<Vec<u8>>>()?;
+                .map(|i| memory_read::<1>(memory, 2, rd + i)[0])
+                .collect::<Vec<u8>>();
             let peeked_str = String::from_utf8(bytes)?;
             print!("{peeked_str}");
             Ok(())
@@ -594,22 +694,19 @@ mod phantom {
 
     impl<F: PrimeField32> PhantomSubExecutor<F> for Rv32HintLoadByKeySubEx {
         fn phantom_execute(
-            &mut self,
-            memory: &MemoryController<F>,
+            &self,
+            memory: &GuestMemory,
             streams: &mut Streams<F>,
+            _: &mut StdRng,
             _: PhantomDiscriminant,
-            a: F,
-            b: F,
+            a: u32,
+            b: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            let ptr = unsafe_read_rv32_register(memory, a);
-            let len = unsafe_read_rv32_register(memory, b);
+            let ptr = read_rv32_register(memory, a);
+            let len = read_rv32_register(memory, b);
             let key: Vec<u8> = (0..len)
-                .map(|i| {
-                    memory
-                        .unsafe_read_cell(F::TWO, F::from_canonical_u32(ptr + i))
-                        .as_canonical_u32() as u8
-                })
+                .map(|i| memory_read::<1>(memory, 2, ptr + i)[0])
                 .collect();
             if let Some(val) = streams.kv_store.get(&key) {
                 let to_push = hint_load_by_key_decode::<F>(val);

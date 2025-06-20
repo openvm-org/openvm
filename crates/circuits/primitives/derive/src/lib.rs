@@ -73,6 +73,49 @@ pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
     TokenStream::from(methods)
 }
 
+/// `S` is the type the derive macro is being called on
+/// Implements Borrow<S> and BorrowMut<S> for [u8]
+/// [u8] has to have (checked via `debug_assert!`s)
+/// - at least size_of(S) length
+/// - at least align_of(S) alignment
+#[proc_macro_derive(AlignedBytesBorrow)]
+pub fn aligned_bytes_borrow_derive(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    let name = &ast.ident;
+
+    // Get impl generics, type generics, where clause
+    // Note, need to add the new type generic to the `impl_generics`
+    let (impl_generics, type_generics, where_clause) = ast.generics.split_for_impl();
+
+    let methods = quote! {
+        impl #impl_generics core::borrow::Borrow<#name #type_generics> for [u8]
+        where
+            #where_clause
+        {
+            fn borrow(&self) -> &#name #type_generics {
+                use core::mem::{align_of, size_of_val};
+                debug_assert!(size_of_val(self) >= core::mem::size_of::<#name #type_generics>());
+                debug_assert_eq!(self.as_ptr() as usize % align_of::<#name #type_generics>(), 0);
+                unsafe { &*(self.as_ptr() as *const #name #type_generics) }
+            }
+        }
+
+        impl #impl_generics core::borrow::BorrowMut<#name #type_generics> for [u8]
+        where
+            #where_clause
+        {
+            fn borrow_mut(&mut self) -> &mut #name #type_generics {
+                use core::mem::{align_of, size_of_val};
+                debug_assert!(size_of_val(self) >= core::mem::size_of::<#name #type_generics>());
+                debug_assert_eq!(self.as_ptr() as usize % align_of::<#name #type_generics>(), 0);
+                unsafe { &mut *(self.as_mut_ptr() as *mut #name #type_generics) }
+            }
+        }
+    };
+
+    TokenStream::from(methods)
+}
+
 #[proc_macro_derive(Chip, attributes(chip))]
 pub fn chip_derive(input: TokenStream) -> TokenStream {
     // Parse the attributes from the struct or enum
