@@ -35,6 +35,7 @@ impl<const N: usize, AB: InteractionBuilder> Air<AB> for AccessAdapterAir<N> {
         let main = builder.main();
 
         let local = main.row_slice(0);
+        debug_assert_eq!(local.len(), 9 + N);
         let local: &AccessAdapterCols<AB::Var, N> = (*local).borrow();
 
         builder.assert_bool(local.is_split);

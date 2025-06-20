@@ -9,6 +9,7 @@ use openvm_circuit_primitives::{
     },
     TraceSubRowGenerator,
 };
+use openvm_instructions::NATIVE_AS;
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     interaction::PermutationCheckBus,
@@ -373,15 +374,30 @@ impl<F: PrimeField32> MemoryController<F> {
                     self.memory.min_block_size[current_address.address_space as usize] as usize;
                 current_values[current_cnt..].fill(F::ZERO);
                 current_timestamps[(current_cnt / min_block_size)..].fill(INITIAL_TIMESTAMP);
-                self.memory.record_access::<F, CHUNK>(
-                    current_address.address_space as usize,
-                    current_address.pointer as usize,
-                    min_block_size,
-                    *current_timestamps.iter().max().unwrap(),
-                    Some(&current_timestamps),
-                    &current_values,
-                    &current_values,
-                );
+                if current_address.address_space < NATIVE_AS {
+                    let current_values_u8 = current_values.map(|v| v.as_canonical_u32() as u8);
+                    self.memory.record_access::<u8, false>(
+                        CHUNK,
+                        current_address.address_space as usize,
+                        current_address.pointer as usize,
+                        min_block_size,
+                        *current_timestamps.iter().max().unwrap(),
+                        Some(&current_timestamps),
+                        &current_values_u8,
+                        &current_values_u8,
+                    );
+                } else {
+                    self.memory.record_access::<F, false>(
+                        CHUNK,
+                        current_address.address_space as usize,
+                        current_address.pointer as usize,
+                        min_block_size,
+                        *current_timestamps.iter().max().unwrap(),
+                        Some(&current_timestamps),
+                        &current_values,
+                        &current_values,
+                    );
+                }
                 final_memory.insert(
                     (current_address.address_space, current_address.pointer),
                     TimestampedValues {
@@ -431,7 +447,8 @@ impl<F: PrimeField32> MemoryController<F> {
                 }
                 current_cnt += 1;
                 if current_cnt == CHUNK {
-                    self.memory.record_access::<F, CHUNK>(
+                    self.memory.record_access::<F, false>(
+                        CHUNK,
                         current_address.address_space as usize,
                         current_address.pointer as usize,
                         min_block_size,
@@ -465,7 +482,8 @@ impl<F: PrimeField32> MemoryController<F> {
                 self.memory.min_block_size[current_address.address_space as usize] as usize;
             current_values[current_cnt..].fill(F::ZERO);
             current_timestamps[(current_cnt / min_block_size)..].fill(INITIAL_TIMESTAMP);
-            self.memory.record_access::<F, CHUNK>(
+            self.memory.record_access::<F, false>(
+                CHUNK,
                 current_address.address_space as usize,
                 current_address.pointer as usize,
                 min_block_size,

@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use getset::Getters;
 use itertools::{izip, zip_eq};
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
+use openvm_instructions::NATIVE_AS;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{
@@ -16,7 +17,7 @@ use crate::{
     system::memory::{
         adapter::{
             get_chip_index,
-            records::{AccessLayout, MERGE_BEFORE_FLAG},
+            records::{AccessLayout, MERGE_BEFORE_FLAG, SPLIT_AFTER_FLAG},
         },
         MemoryImage,
     },
@@ -363,8 +364,9 @@ impl<F: PrimeField32> TracingMemory<F> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn record_access<T, const BLOCK_SIZE: usize>(
+    pub(crate) fn record_access<T, const SPLIT_AFTER: bool>(
         &mut self,
+        block_size: usize,
         address_space: usize,
         pointer: usize,
         align: usize,
@@ -373,13 +375,13 @@ impl<F: PrimeField32> TracingMemory<F> {
         values: &[T],
         prev_values: &[T],
     ) {
-        let mut block_size = align;
-        while block_size <= BLOCK_SIZE / 2 {
-            block_size *= 2;
+        let mut adapter_block_size = align;
+        while adapter_block_size <= block_size / 2 {
+            adapter_block_size *= 2;
             let record_mut = self.access_adapter_inventory.alloc_record(
-                block_size,
+                adapter_block_size,
                 AccessLayout {
-                    block_size: BLOCK_SIZE,
+                    block_size,
                     cell_size: align,
                     type_size: size_of::<T>(),
                 },
@@ -389,21 +391,22 @@ impl<F: PrimeField32> TracingMemory<F> {
                     MERGE_BEFORE_FLAG
                 } else {
                     0
-                });
+                })
+                | (if SPLIT_AFTER { SPLIT_AFTER_FLAG } else { 0 });
             *record_mut.address_space = address_space as u32;
             *record_mut.pointer = pointer as u32;
-            *record_mut.block_size = BLOCK_SIZE as u32;
+            *record_mut.block_size = block_size as u32;
             let data_slice = unsafe {
                 std::slice::from_raw_parts(
                     values.as_ptr() as *const u8,
-                    BLOCK_SIZE * size_of::<T>(),
+                    block_size * size_of::<T>(),
                 )
             };
             record_mut.data.copy_from_slice(data_slice);
             let prev_data_slice = unsafe {
                 std::slice::from_raw_parts(
                     prev_values.as_ptr() as *const u8,
-                    BLOCK_SIZE * size_of::<T>(),
+                    block_size * size_of::<T>(),
                 )
             };
             record_mut.prev_data.copy_from_slice(prev_data_slice);
@@ -443,6 +446,47 @@ impl<F: PrimeField32> TracingMemory<F> {
                 if meta.block_size > 0 {
                     meta.timestamp
                 } else {
+                    if self.initial_block_size > align {
+                        // We need to split the initial block into chunks
+                        let block_start = begin - begin % (self.initial_block_size / align);
+                        if (address_space as u32) < NATIVE_AS {
+                            let initial_values = (0..self.initial_block_size)
+                                .map(|i| unsafe {
+                                    self.data
+                                        .memory
+                                        .get::<u8>((address_space as u32, (pointer + i) as u32))
+                                })
+                                .collect::<Vec<_>>();
+                            self.record_access::<u8, true>(
+                                self.initial_block_size,
+                                address_space,
+                                block_start * align,
+                                align,
+                                INITIAL_TIMESTAMP,
+                                None,
+                                &initial_values,
+                                &initial_values,
+                            );
+                        } else {
+                            let initial_values = (0..self.initial_block_size)
+                                .map(|i| {
+                                    self.data
+                                        .memory
+                                        .get_f(address_space as u32, (pointer + i) as u32)
+                                })
+                                .collect::<Vec<_>>();
+                            self.record_access::<F, true>(
+                                self.initial_block_size,
+                                address_space,
+                                block_start * align,
+                                align,
+                                INITIAL_TIMESTAMP,
+                                None,
+                                &initial_values,
+                                &initial_values,
+                            );
+                        }
+                    }
                     INITIAL_TIMESTAMP
                 }
             })
@@ -454,11 +498,13 @@ impl<F: PrimeField32> TracingMemory<F> {
                 let meta = self.meta[address_space]
                     .get::<AccessMetadata>((begin + i) * size_of::<AccessMetadata>());
                 if meta.block_size > 0 {
-                    todo!() // set the split flag by meta.offset
+                    self.access_adapter_inventory
+                        .mark_to_split(meta.block_size as usize, meta.offset as usize);
                 }
             });
         }
-        self.record_access::<T, BLOCK_SIZE>(
+        self.record_access::<T, false>(
+            BLOCK_SIZE,
             address_space,
             pointer,
             align,

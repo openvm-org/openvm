@@ -1,4 +1,4 @@
-use crate::arch::{DenseRecordArena, RecordArena, SizedRecord};
+use crate::arch::{CustomBorrow, DenseRecordArena, RecordArena, SizedRecord};
 
 #[repr(C)]
 #[derive(Debug)]
@@ -18,7 +18,7 @@ pub(crate) struct AccessRecordMut<'a> {
     // TODO(AG): optimize with some `Option` serialization stuff
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct AccessLayout {
     /// The size of the block in elements.
     pub block_size: usize,
@@ -32,12 +32,16 @@ pub(crate) struct AccessLayout {
 pub(crate) const MERGE_BEFORE_FLAG: u32 = 1 << 30;
 pub(crate) const SPLIT_AFTER_FLAG: u32 = 1 << 31;
 
+pub(crate) fn size_by_layout(layout: &AccessLayout) -> usize {
+    debug_assert_eq!(layout.cell_size * layout.type_size, 4);
+    4 * size_of::<u32>() // all individual u32 fields
+        + layout.block_size * 2 * layout.type_size // data and prev_data
+        + (layout.block_size / layout.cell_size) * size_of::<u32>() // timestamps
+}
+
 impl SizedRecord<AccessLayout, AccessRecordMut<'_>> for DenseRecordArena {
     fn size(&self, layout: &AccessLayout) -> usize {
-        debug_assert_eq!(layout.cell_size * layout.type_size, 4);
-        4 * size_of::<u32>() // all individual u32 fields
-            + layout.block_size * 2 * layout.type_size // data and prev_data
-            + (layout.block_size / layout.cell_size) * size_of::<u32>() // timestamps
+        size_by_layout(layout)
     }
 
     fn alignment(&self, layout: &AccessLayout) -> usize {
@@ -46,33 +50,30 @@ impl SizedRecord<AccessLayout, AccessRecordMut<'_>> for DenseRecordArena {
     }
 }
 
-impl<'a> RecordArena<'a, AccessLayout, AccessRecordMut<'a>> for DenseRecordArena {
-    fn alloc(&'a mut self, layout: AccessLayout) -> AccessRecordMut<'a> {
-        let bytes = self.alloc_bytes(SizedRecord::<AccessLayout, AccessRecordMut<'a>>::size(
-            self, &layout,
-        ));
+impl<'a> CustomBorrow<'a, AccessRecordMut<'a>, AccessLayout> for [u8] {
+    fn custom_borrow(&'a mut self, layout: AccessLayout) -> AccessRecordMut<'a> {
         let mut offset = 0;
 
         // timestamp_and_mask: u32 (4 bytes)
-        let timestamp_and_mask = unsafe { &mut *(bytes.as_mut_ptr().add(offset) as *mut u32) };
+        let timestamp_and_mask = unsafe { &mut *(self.as_mut_ptr().add(offset) as *mut u32) };
         offset += 4;
 
         // address_space: u32 (4 bytes)
-        let address_space = unsafe { &mut *(bytes.as_mut_ptr().add(offset) as *mut u32) };
+        let address_space = unsafe { &mut *(self.as_mut_ptr().add(offset) as *mut u32) };
         offset += 4;
 
         // pointer: u32 (4 bytes)
-        let pointer = unsafe { &mut *(bytes.as_mut_ptr().add(offset) as *mut u32) };
+        let pointer = unsafe { &mut *(self.as_mut_ptr().add(offset) as *mut u32) };
         offset += 4;
 
         // block_size: u32 (4 bytes)
-        let block_size_field = unsafe { &mut *(bytes.as_mut_ptr().add(offset) as *mut u32) };
+        let block_size_field = unsafe { &mut *(self.as_mut_ptr().add(offset) as *mut u32) };
         offset += 4;
 
         // data: [u8] (block_size * type_size bytes)
         let data = unsafe {
             std::slice::from_raw_parts_mut(
-                bytes.as_mut_ptr().add(offset),
+                self.as_mut_ptr().add(offset),
                 layout.block_size * layout.type_size,
             )
         };
@@ -81,7 +82,7 @@ impl<'a> RecordArena<'a, AccessLayout, AccessRecordMut<'a>> for DenseRecordArena
         // prev_data: [u8] (block_size * type_size bytes)
         let prev_data = unsafe {
             std::slice::from_raw_parts_mut(
-                bytes.as_mut_ptr().add(offset),
+                self.as_mut_ptr().add(offset),
                 layout.block_size * layout.type_size,
             )
         };
@@ -90,7 +91,7 @@ impl<'a> RecordArena<'a, AccessLayout, AccessRecordMut<'a>> for DenseRecordArena
         // timestamps: [u32] (block_size / cell_size * 4 bytes)
         let timestamps = unsafe {
             std::slice::from_raw_parts_mut(
-                bytes.as_mut_ptr().add(offset) as *mut u32,
+                self.as_mut_ptr().add(offset) as *mut u32,
                 layout.block_size / layout.cell_size,
             )
         };
@@ -107,6 +108,15 @@ impl<'a> RecordArena<'a, AccessLayout, AccessRecordMut<'a>> for DenseRecordArena
     }
 }
 
+impl<'a> RecordArena<'a, AccessLayout, AccessRecordMut<'a>> for DenseRecordArena {
+    fn alloc(&'a mut self, layout: AccessLayout) -> AccessRecordMut<'a> {
+        let bytes = self.alloc_bytes(SizedRecord::<AccessLayout, AccessRecordMut<'a>>::size(
+            self, &layout,
+        ));
+        <[u8] as CustomBorrow<AccessRecordMut<'a>, AccessLayout>>::custom_borrow(bytes, layout)
+    }
+}
+
 pub(crate) fn extract_metadata(bytes: &[u8]) -> AccessLayout {
     let address_space = unsafe { std::ptr::read(bytes.as_ptr().add(4) as *const u32) };
     let block_size = unsafe { std::ptr::read(bytes.as_ptr().add(12) as *const u32) };
@@ -116,12 +126,4 @@ pub(crate) fn extract_metadata(bytes: &[u8]) -> AccessLayout {
         cell_size: 4 / type_size,
         type_size,
     }
-}
-
-pub(crate) fn fancy_record_borrow_thing<'a>(
-    bytes: &'a [u8],
-    arena: &'a mut DenseRecordArena,
-) -> AccessRecordMut<'a> {
-    let layout = extract_metadata(bytes);
-    arena.alloc(layout)
 }
