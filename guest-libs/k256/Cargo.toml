@@ -45,6 +45,7 @@ openvm-toolchain-tests.workspace = true
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true
 
+rand = { workspace = true }
 serde.workspace = true
 eyre.workspace = true
 derive_more = { workspace = true, features = ["from"] }

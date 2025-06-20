@@ -21,6 +21,7 @@ use openvm_stark_backend::{
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     AirRef, Chip, ChipUsageGetter,
 };
+use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -621,6 +622,7 @@ where
         &mut self,
         memory: &mut MemoryController<F>,
         streams: &mut Streams<F>,
+        rng: &mut StdRng,
         instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>> {
@@ -629,6 +631,7 @@ where
             pc: &mut pc,
             memory: &mut memory.memory,
             streams,
+            rng,
             ctx: &mut (),
         };
         self.step.execute(state, instruction, &mut self.arena)?;

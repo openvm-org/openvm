@@ -19,6 +19,7 @@ use openvm_stark_backend::{
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
     AirRef, Chip, ChipUsageGetter,
 };
+use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
@@ -152,6 +153,7 @@ where
                 .phantom_execute(
                     state.memory,
                     state.streams,
+                    state.rng,
                     discriminant,
                     a.as_canonical_u32(),
                     b.as_canonical_u32(),
@@ -188,6 +190,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
         &mut self,
         memory: &mut MemoryController<F>,
         streams: &mut Streams<F>,
+        rng: &mut StdRng,
         instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>, ExecutionError> {
@@ -203,6 +206,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
             pc: &mut pc,
             memory: &mut memory.memory.data,
             streams,
+            rng,
             ctx: &mut E1Ctx::default(),
         };
         self.execute_e1(&mut state, instruction)?;

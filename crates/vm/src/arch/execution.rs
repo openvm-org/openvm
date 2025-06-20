@@ -8,6 +8,7 @@ use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
     p3_field::{FieldAlgebra, PrimeField32},
 };
+use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -87,6 +88,7 @@ pub struct VmStateMut<'a, F, MEM, CTX> {
     pub pc: &'a mut u32,
     pub memory: &'a mut MEM,
     pub streams: &'a mut Streams<F>,
+    pub rng: &'a mut StdRng,
     pub ctx: &'a mut CTX,
 }
 
@@ -107,6 +109,7 @@ pub trait InstructionExecutor<F> {
         &mut self,
         memory: &mut MemoryController<F>,
         streams: &mut Streams<F>,
+        rng: &mut StdRng,
         instruction: &Instruction<F>,
         from_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>>;
@@ -178,11 +181,12 @@ impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
         &mut self,
         memory: &mut MemoryController<F>,
         streams: &mut Streams<F>,
+        rng: &mut StdRng,
         instruction: &Instruction<F>,
         prev_state: ExecutionState<u32>,
     ) -> Result<ExecutionState<u32>> {
         self.borrow_mut()
-            .execute(memory, streams, instruction, prev_state)
+            .execute(memory, streams, rng, instruction, prev_state)
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -399,11 +403,13 @@ impl<T: FieldAlgebra> From<(u32, Option<T>)> for PcIncOrSet<T> {
 ///
 /// Phantom sub-instructions are only allowed to use operands
 /// `a,b` and `c_upper = c.as_canonical_u32() >> 16`.
+#[allow(clippy::too_many_arguments)]
 pub trait PhantomSubExecutor<F>: Send {
     fn phantom_execute(
         &self,
         memory: &GuestMemory,
         streams: &mut Streams<F>,
+        rng: &mut StdRng,
         discriminant: PhantomDiscriminant,
         a: u32,
         b: u32,

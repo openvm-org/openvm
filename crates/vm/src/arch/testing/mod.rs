@@ -63,9 +63,10 @@ const RANGE_CHECKER_BUS: BusIndex = 4;
 pub struct VmChipTestBuilder<F: PrimeField32> {
     pub memory: MemoryTester<F>,
     pub streams: Streams<F>,
+    pub rng: StdRng,
     pub execution: ExecutionTester<F>,
     pub program: ProgramTester<F>,
-    rng: StdRng,
+    internal_rng: StdRng,
     default_register: usize,
     default_pointer: usize,
 }
@@ -74,17 +75,19 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn new(
         memory_controller: MemoryController<F>,
         streams: Streams<F>,
+        rng: StdRng,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,
-        rng: StdRng,
+        internal_rng: StdRng,
     ) -> Self {
         setup_tracing_with_log_level(Level::WARN);
         Self {
             memory: MemoryTester::new(memory_controller),
             streams,
+            rng,
             execution: ExecutionTester::new(execution_bus),
             program: ProgramTester::new(program_bus),
-            rng,
+            internal_rng,
             default_register: 0,
             default_pointer: 0,
         }
@@ -116,6 +119,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
             .execute(
                 &mut self.memory.controller,
                 &mut self.streams,
+                &mut self.rng,
                 instruction,
                 initial_state,
             )
@@ -126,7 +130,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     }
 
     fn next_elem_size_u32(&mut self) -> u32 {
-        self.rng.next_u32() % (1 << (F::bits() - 2))
+        self.internal_rng.next_u32() % (1 << (F::bits() - 2))
     }
 
     pub fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
@@ -289,9 +293,10 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         Self {
             memory: MemoryTester::new(memory_controller),
             streams: Default::default(),
+            rng: StdRng::seed_from_u64(0),
             execution: ExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
             program: ProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
-            rng: StdRng::seed_from_u64(0),
+            internal_rng: StdRng::seed_from_u64(0),
             default_register: 0,
             default_pointer: 0,
         }
@@ -314,9 +319,10 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
         Self {
             memory: MemoryTester::new(memory_controller),
             streams: Default::default(),
+            rng: StdRng::seed_from_u64(0),
             execution: ExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
             program: ProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
-            rng: StdRng::seed_from_u64(0),
+            internal_rng: StdRng::seed_from_u64(0),
             default_register: 0,
             default_pointer: 0,
         }

@@ -27,6 +27,7 @@ openvm-ecc-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-platform = { workspace = true }
 test-case.workspace = true
+rand = { workspace = true }
 serde = { workspace = true, features = ["alloc"] }
 derive_more = { workspace = true, features = ["from"] }
 

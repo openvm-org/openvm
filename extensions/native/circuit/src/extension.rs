@@ -270,6 +270,7 @@ pub(crate) mod phantom {
     };
     use openvm_instructions::PhantomDiscriminant;
     use openvm_stark_backend::p3_field::{Field, PrimeField32};
+    use rand::rngs::StdRng;
 
     pub struct NativeHintInputSubEx;
     pub struct NativeHintSliceSubEx<const N: usize>;
@@ -282,6 +283,7 @@ pub(crate) mod phantom {
             &self,
             _: &GuestMemory,
             streams: &mut Streams<F>,
+            _: &mut StdRng,
             _: PhantomDiscriminant,
             _: u32,
             _: u32,
@@ -307,6 +309,7 @@ pub(crate) mod phantom {
             &self,
             _: &GuestMemory,
             streams: &mut Streams<F>,
+            _: &mut StdRng,
             _: PhantomDiscriminant,
             _: u32,
             _: u32,
@@ -330,6 +333,7 @@ pub(crate) mod phantom {
             &self,
             memory: &GuestMemory,
             _: &mut Streams<F>,
+            _: &mut StdRng,
             _: PhantomDiscriminant,
             a: u32,
             _: u32,
@@ -346,6 +350,7 @@ pub(crate) mod phantom {
             &self,
             memory: &GuestMemory,
             streams: &mut Streams<F>,
+            _: &mut StdRng,
             _: PhantomDiscriminant,
             a: u32,
             len: u32,
@@ -370,6 +375,7 @@ pub(crate) mod phantom {
             &self,
             _: &GuestMemory,
             streams: &mut Streams<F>,
+            _: &mut StdRng,
             _: PhantomDiscriminant,
             _: u32,
             _: u32,

@@ -113,6 +113,7 @@ pub(crate) mod phantom {
     };
     use openvm_rv32im_circuit::adapters::{memory_read, read_rv32_register};
     use openvm_stark_backend::p3_field::PrimeField32;
+    use rand::rngs::StdRng;
 
     use super::PairingCurve;
 
@@ -123,6 +124,7 @@ pub(crate) mod phantom {
             &self,
             memory: &GuestMemory,
             streams: &mut Streams<F>,
+            _: &mut StdRng,
             _: PhantomDiscriminant,
             a: u32,
             b: u32,

@@ -136,7 +136,7 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
         .with_inputs(|| {
             let vm = create_default_vm();
             let exe = load_program_executable(program).expect("Failed to load program executable");
-            let state = create_initial_state(&vm.config().system.memory_config, &exe, vec![]);
+            let state = create_initial_state(&vm.config().system.memory_config, &exe, vec![], 0);
             (vm.executor, exe, state)
         })
         .bench_values(|(executor, exe, state)| {
@@ -152,7 +152,7 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
         .with_inputs(|| {
             let vm = create_default_vm();
             let exe = load_program_executable(program).expect("Failed to load program executable");
-            let state = create_initial_state(&vm.config().system.memory_config, &exe, vec![]);
+            let state = create_initial_state(&vm.config().system.memory_config, &exe, vec![], 0);
 
             let (widths, interactions) = shared_widths_and_interactions();
             (vm.executor, exe, state, widths, interactions)
@@ -171,7 +171,7 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
 //             let vm = create_default_vm();
 //             let exe = load_program_executable(program).expect("Failed to load program
 // executable");             let state = create_initial_state(&vm.config().system.memory_config,
-// &exe, vec![]);
+// &exe, vec![], 0);
 
 //             let (widths, interactions) = shared_widths_and_interactions();
 //             let segments = vm
