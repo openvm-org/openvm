@@ -38,7 +38,7 @@ use crate::{
     arch::{
         execution_mode::{
             e1::E1ExecutionControl,
-            metered::{bounded::Segment, MeteredCtx, MeteredExecutionControl},
+            metered::{ctx::Segment, MeteredCtx, MeteredExecutionControl},
             tracegen::TracegenExecutionControl,
         },
         hasher::poseidon2::vm_poseidon2_hasher,
@@ -314,16 +314,9 @@ where
             .chip_complex
             .memory_controller()
             .continuation_enabled();
-        let num_access_adapters = executor
-            .chip_complex
-            .memory_controller()
-            .memory
-            .access_adapter_inventory
-            .num_access_adapters();
         let ctx = MeteredCtx::new(
             widths.len(),
             continuations_enabled,
-            num_access_adapters as u8,
             executor
                 .chip_complex
                 .memory_controller()
@@ -720,16 +713,9 @@ where
             ctrl,
         );
 
-        let num_access_adapters = executor
-            .chip_complex
-            .memory_controller()
-            .memory
-            .access_adapter_inventory
-            .num_access_adapters();
         let ctx = MeteredCtx::new(
             widths.len(),
             self.config.system().continuation_enabled,
-            num_access_adapters as u8,
             executor
                 .chip_complex
                 .memory_controller()

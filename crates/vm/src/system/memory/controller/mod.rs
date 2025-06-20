@@ -44,7 +44,6 @@ pub mod dimensions;
 pub mod interface;
 
 pub const CHUNK: usize = 8;
-pub const CHUNK_BITS: usize = CHUNK.ilog2() as usize;
 
 /// The offset of the Merkle AIR in AIRs of MemoryController.
 pub const MERKLE_AIR_OFFSET: usize = 1;

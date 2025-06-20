@@ -1,14 +1,12 @@
-pub mod bounded;
-pub mod exact;
+pub mod ctx;
 
-// pub use exact::MeteredCtxExact as MeteredCtx;
-pub use bounded::MeteredCtxBounded as MeteredCtx;
+pub use ctx::MeteredCtx;
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 use p3_baby_bear::BabyBear;
 
 use crate::arch::{
-    execution_control::ExecutionControl, execution_mode::metered::bounded::Segment, ChipId,
+    execution_control::ExecutionControl, execution_mode::metered::ctx::Segment, ChipId,
     ExecutionError, InsExecutorE1, VmChipComplex, VmConfig, VmSegmentState, VmStateMut,
     CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID,
 };
@@ -96,7 +94,7 @@ impl<'a> MeteredExecutionControl<'a> {
     }
 
     fn should_segment<F>(&self, state: &mut VmSegmentState<F, MeteredCtx>) -> bool {
-        let trace_heights = state.ctx.trace_heights_if_finalized();
+        let trace_heights = &state.ctx.trace_heights;
         for (i, &height) in trace_heights.iter().enumerate() {
             // Only segment if the height is not constant and exceeds the maximum height
             if !state.ctx.is_trace_height_constant[i]
@@ -115,7 +113,7 @@ impl<'a> MeteredExecutionControl<'a> {
             }
         }
 
-        let total_cells = self.calculate_total_cells(&trace_heights);
+        let total_cells = self.calculate_total_cells(trace_heights);
         if total_cells > self.segmentation_limits.max_cells {
             tracing::info!(
                 "Segment {:2} | instret {:9} | total cells ({:10}) > max ({:10})",
@@ -127,7 +125,7 @@ impl<'a> MeteredExecutionControl<'a> {
             return true;
         }
 
-        let total_interactions = self.calculate_total_interactions(&trace_heights);
+        let total_interactions = self.calculate_total_interactions(trace_heights);
         if total_interactions > self.segmentation_limits.max_interactions {
             tracing::info!(
                 "Segment {:2} | instret {:9} | total interactions ({:11}) > max ({:11})",
@@ -150,7 +148,7 @@ impl<'a> MeteredExecutionControl<'a> {
         F: PrimeField32,
         VC: VmConfig<F>,
     {
-        state.ctx.leaf_indices.clear();
+        state.ctx.page_indices.clear();
         for (i, &is_constant) in state.ctx.is_trace_height_constant.iter().enumerate() {
             if !is_constant {
                 state.ctx.trace_heights[i] = 0;
@@ -265,8 +263,6 @@ where
         _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
         _exit_code: Option<u32>,
     ) {
-        state.ctx.finalize_access_adapter_heights();
-
         tracing::info!(
             "Segment {:2} | instret {:9} | terminated",
             state.ctx.segments.len(),

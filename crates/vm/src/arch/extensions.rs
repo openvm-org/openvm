@@ -964,6 +964,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     /// This returns 0 cells for chips with preprocessed trace because the number of trace cells is
     /// constant in those cases. This function is used to sample periodically and provided to
     /// the segmentation strategy to decide whether to segment during execution.
+    #[cfg(feature = "bench-metrics")]
     pub(crate) fn current_trace_cells(&self) -> Vec<usize>
     where
         E: ChipUsageGetter,
