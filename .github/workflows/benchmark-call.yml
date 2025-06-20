@@ -255,5 +255,10 @@ jobs:
       - name: Update latest branch result in s3
         if: github.event_name == 'push'
         run: |
-          REF_HASH=$(echo "${{ github.ref }}" | sha256sum | cut -d' ' -f1)
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            # for backwards compatibility
+            REF_HASH="main"
+          else
+            REF_HASH=$(echo "${{ github.ref }}" | sha256sum | cut -d' ' -f1)
+          fi
           s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/${REF_HASH}-${METRIC_NAME}.json"
