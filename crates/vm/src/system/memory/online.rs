@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{cmp::Ordering, fmt::Debug};
 
 use getset::Getters;
 use itertools::{izip, zip_eq};
@@ -364,18 +364,20 @@ impl<F: PrimeField32> TracingMemory<F> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn record_access<T, const SPLIT_AFTER: bool>(
+    pub(crate) fn record_access<T>(
         &mut self,
         block_size: usize,
         address_space: usize,
         pointer: usize,
-        align: usize,
+        lowest_block_size: usize,
         timestamp: u32,
         prev_timestamps: Option<&[u32]>,
         values: &[T],
         prev_values: &[T],
+        split_after: bool,
     ) {
-        let mut adapter_block_size = align;
+        let mut adapter_block_size = lowest_block_size;
+        let align = self.min_block_size[address_space] as usize;
         while adapter_block_size <= block_size / 2 {
             adapter_block_size *= 2;
             let record_mut = self.access_adapter_inventory.alloc_record(
@@ -392,7 +394,7 @@ impl<F: PrimeField32> TracingMemory<F> {
                 } else {
                     0
                 })
-                | (if SPLIT_AFTER { SPLIT_AFTER_FLAG } else { 0 });
+                | (if split_after { SPLIT_AFTER_FLAG } else { 0 });
             *record_mut.address_space = address_space as u32;
             *record_mut.pointer = pointer as u32;
             *record_mut.block_size = block_size as u32;
@@ -446,47 +448,68 @@ impl<F: PrimeField32> TracingMemory<F> {
                 if meta.block_size > 0 {
                     meta.timestamp
                 } else {
-                    if self.initial_block_size > align {
-                        // We need to split the initial block into chunks
-                        let block_start = begin - begin % (self.initial_block_size / align);
-                        if (address_space as u32) < NATIVE_AS {
-                            let initial_values = (0..self.initial_block_size)
-                                .map(|i| unsafe {
-                                    self.data
-                                        .memory
-                                        .get::<u8>((address_space as u32, (pointer + i) as u32))
-                                })
-                                .collect::<Vec<_>>();
-                            self.record_access::<u8, true>(
-                                self.initial_block_size,
-                                address_space,
-                                block_start * align,
+                    // Initialize
+                    match self.initial_block_size.cmp(&align) {
+                        Ordering::Greater => {
+                            // We need to split the initial block into chunks
+                            let block_start = begin - begin % (self.initial_block_size / align);
+                            if (address_space as u32) < NATIVE_AS {
+                                let initial_values = (0..self.initial_block_size)
+                                    .map(|i| unsafe {
+                                        self.data
+                                            .memory
+                                            .get::<u8>((address_space as u32, (pointer + i) as u32))
+                                    })
+                                    .collect::<Vec<_>>();
+                                self.record_access::<u8>(
+                                    self.initial_block_size,
+                                    address_space,
+                                    block_start * align,
+                                    align,
+                                    INITIAL_TIMESTAMP,
+                                    None,
+                                    &initial_values,
+                                    &initial_values,
+                                    true,
+                                );
+                            } else {
+                                let initial_values = (0..self.initial_block_size)
+                                    .map(|i| {
+                                        self.data
+                                            .memory
+                                            .get_f(address_space as u32, (pointer + i) as u32)
+                                    })
+                                    .collect::<Vec<_>>();
+                                self.record_access::<F>(
+                                    self.initial_block_size,
+                                    address_space,
+                                    block_start * align,
+                                    align,
+                                    INITIAL_TIMESTAMP,
+                                    None,
+                                    &initial_values,
+                                    &initial_values,
+                                    true,
+                                );
+                            }
+                        }
+                        Ordering::Less => {
+                            debug_assert_eq!(self.initial_block_size, 1);
+                            debug_assert!((address_space as u32) < NATIVE_AS);
+                            self.record_access::<u8>(
                                 align,
-                                INITIAL_TIMESTAMP,
-                                None,
-                                &initial_values,
-                                &initial_values,
-                            );
-                        } else {
-                            let initial_values = (0..self.initial_block_size)
-                                .map(|i| {
-                                    self.data
-                                        .memory
-                                        .get_f(address_space as u32, (pointer + i) as u32)
-                                })
-                                .collect::<Vec<_>>();
-                            self.record_access::<F, true>(
-                                self.initial_block_size,
                                 address_space,
-                                block_start * align,
-                                align,
+                                pointer + i * align,
+                                1,
                                 INITIAL_TIMESTAMP,
-                                None,
-                                &initial_values,
-                                &initial_values,
+                                Some(&[INITIAL_TIMESTAMP]),
+                                &vec![0; align],
+                                &vec![0; align],
+                                false,
                             );
                         }
-                    }
+                        Ordering::Equal => {}
+                    };
                     INITIAL_TIMESTAMP
                 }
             })
@@ -503,7 +526,7 @@ impl<F: PrimeField32> TracingMemory<F> {
                 }
             });
         }
-        self.record_access::<T, false>(
+        self.record_access::<T>(
             BLOCK_SIZE,
             address_space,
             pointer,
@@ -512,6 +535,7 @@ impl<F: PrimeField32> TracingMemory<F> {
             if need_to_merge { Some(&prev_ts) } else { None },
             values,
             prev_values,
+            true,
         );
 
         self.set_meta_block(
@@ -713,7 +737,7 @@ impl<F: PrimeField32> TracingMemory<F> {
     }
 
     /// TODO: update this description
-    pub fn touched_blocks(&self) -> Vec<(Address, AccessMetadata)> {
+    pub fn touched_blocks(&mut self) -> Vec<(Address, AccessMetadata)> {
         let mut blocks = Vec::new();
         for (addr_space, (page, &align)) in zip_eq(&self.meta, &self.min_block_size).enumerate() {
             let mut next_idx = 0;

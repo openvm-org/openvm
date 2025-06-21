@@ -393,7 +393,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
         } else {
             height
         };
-        let padded_height = padded_height.next_power_of_two(); // _or_zero? Will it even work?
+        let padded_height = next_power_of_two_or_zero(padded_height);
         let mut trace = RowMajorMatrix::new(vec![F::ZERO; width * padded_height], width);
         for (&(start_ptr, start_height), &(_, _)) in
             milestones.iter().zip(milestones.iter().skip(1))
@@ -448,14 +448,13 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
             let mut row_idx = start_height;
             let num_segs = layout.block_size / N;
             if timestamp_and_mask & MERGE_BEFORE_FLAG != 0 {
-                let timestamps_batch_len = N / 2;
                 for i in 0..num_segs {
                     let row: &mut AccessAdapterCols<F, N> = trace.row_mut(row_idx).borrow_mut();
                     row.is_valid = F::ONE;
                     row.is_split = F::ZERO;
                     row.address = MemoryAddress::new(
                         F::from_canonical_u32(address_space),
-                        F::from_canonical_u32(pointer),
+                        F::from_canonical_u32(pointer + (i * N) as u32),
                     );
                     if address_space < NATIVE_AS {
                         for j in 0..N {
@@ -471,13 +470,14 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
                             };
                         }
                     }
-                    let left_timestamp = *timestamps
-                        [2 * i * timestamps_batch_len..(2 * i + 1) * timestamps_batch_len]
+                    let left_timestamp = *timestamps[2 * i * timestamps.len() / (2 * num_segs)
+                        ..((2 * i + 1) * timestamps.len()).div_ceil(2 * num_segs)]
                         .iter()
                         .max()
                         .unwrap();
-                    let right_timestamp = *timestamps
-                        [(2 * i + 1) * timestamps_batch_len..(2 * i + 2) * timestamps_batch_len]
+                    let right_timestamp = *timestamps[(2 * i + 1) * timestamps.len()
+                        / (2 * num_segs)
+                        ..((2 * i + 2) * timestamps.len()).div_ceil(2 * num_segs)]
                         .iter()
                         .max()
                         .unwrap();
@@ -498,7 +498,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
                     row.is_split = F::ONE;
                     row.address = MemoryAddress::new(
                         F::from_canonical_u32(address_space),
-                        F::from_canonical_u32(pointer),
+                        F::from_canonical_u32(pointer + (i * N) as u32),
                     );
                     if address_space < NATIVE_AS {
                         for j in 0..N {
@@ -526,6 +526,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
             }
         }
         eprintln!("Trace size for {N}: {}x{}", trace.height(), trace.width());
+        eprintln!("Trace: {:?}", trace);
 
         trace
     }
