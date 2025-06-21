@@ -420,7 +420,7 @@ impl<F: PrimeField32> MemoryController<F> {
             if min_block_size > CHUNK {
                 assert_eq!(current_cnt, 0);
                 for i in (0..block_size).step_by(min_block_size) {
-                    self.memory.record_access::<T>(
+                    self.memory.record_access::<T, false>(
                         min_block_size,
                         current_address.address_space as usize,
                         (current_address.pointer + i) as usize,
@@ -449,7 +449,7 @@ impl<F: PrimeField32> MemoryController<F> {
                     }
                     current_cnt += 1;
                     if current_cnt == CHUNK {
-                        self.memory.record_access::<T>(
+                        self.memory.record_access::<T, false>(
                             CHUNK,
                             current_address.address_space as usize,
                             current_address.pointer as usize,
@@ -458,7 +458,7 @@ impl<F: PrimeField32> MemoryController<F> {
                             if ptr == current_address.pointer && CHUNK as u32 == block_size {
                                 None
                             } else {
-                                Some(&current_timestamps)
+                                Some(&current_timestamps[..CHUNK / min_block_size])
                             },
                             &current_values,
                             &current_values,
@@ -493,6 +493,7 @@ impl<F: PrimeField32> MemoryController<F> {
         H: HasherChip<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
         let touched_blocks = self.memory.touched_blocks();
+        eprintln!("touched_blocks: {:?}", touched_blocks);
 
         let mut final_memory_volatile = None;
         let mut final_memory_persistent = None;

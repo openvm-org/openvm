@@ -135,8 +135,8 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         }
     }
 
-    pub(crate) fn current_size<const N: usize>(&self) -> usize {
-        self.chips[get_chip_index(N)].current_size()
+    pub(crate) fn current_size(&self, block_size: usize) -> usize {
+        self.chips[get_chip_index(block_size)].current_size()
     }
 
     pub(crate) fn alloc_record(
@@ -682,7 +682,7 @@ fn air_name(n: usize) -> String {
 pub fn get_chip_index(block_size: usize) -> usize {
     assert!(
         block_size.is_power_of_two() && block_size >= 2,
-        "Invalid block size {} for split operation",
+        "Invalid block size {}",
         block_size
     );
     let index = block_size.trailing_zeros() - 1;
