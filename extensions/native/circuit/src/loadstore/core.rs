@@ -8,9 +8,9 @@ use openvm_circuit::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice,
         instructions::LocalOpcode,
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, EmptyLayout,
-        ExecutionError, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
-        VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep,
+        EmptyAdapterCoreLayout, ExecutionError, RecordArena, Result, StepExecutorE1, TraceFiller,
+        TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -137,7 +137,7 @@ where
     A: 'static
         + AdapterTraceStep<F, CTX, ReadData = (F, [F; NUM_CELLS]), WriteData = [F; NUM_CELLS]>,
 {
-    type RecordLayout = EmptyLayout<A>;
+    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
     type RecordMut<'a> = (
         A::RecordMut<'a>,
         &'a mut NativeLoadStoreCoreRecord<F, NUM_CELLS>,
@@ -161,7 +161,7 @@ where
     {
         let &Instruction { opcode, .. } = instruction;
 
-        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
+        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
