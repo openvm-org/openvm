@@ -291,8 +291,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 LoadStoreCoreAir::new(Rv32LoadStoreOpcode::CLASS_OFFSET),
             ),
             LoadStoreStep::new(
-                Rv32LoadStoreAdapterStep::new(pointer_max_bits),
-                range_checker.clone(),
+                Rv32LoadStoreAdapterStep::new(pointer_max_bits, range_checker.clone()),
                 Rv32LoadStoreOpcode::CLASS_OFFSET,
             ),
             builder.system_base().memory_controller.helper(),
@@ -315,7 +314,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
                 LoadSignExtendCoreAir::new(range_checker.bus()),
             ),
             LoadSignExtendStep::new(
-                Rv32LoadStoreAdapterStep::new(pointer_max_bits),
+                Rv32LoadStoreAdapterStep::new(pointer_max_bits, range_checker.clone()),
                 range_checker.clone(),
             ),
             builder.system_base().memory_controller.helper(),
@@ -426,7 +425,7 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
             PhantomDiscriminant(Rv32Phantom::HintInput as u16),
         )?;
         builder.add_phantom_sub_executor(
-            phantom::Rv32HintRandomSubEx::new(),
+            phantom::Rv32HintRandomSubEx,
             PhantomDiscriminant(Rv32Phantom::HintRandom as u16),
         )?;
         builder.add_phantom_sub_executor(
@@ -603,8 +602,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32Io {
 
 /// Phantom sub-executors
 mod phantom {
-    use std::sync::{Arc, Mutex};
-
     use eyre::bail;
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
@@ -612,22 +609,12 @@ mod phantom {
     };
     use openvm_instructions::PhantomDiscriminant;
     use openvm_stark_backend::p3_field::{Field, PrimeField32};
-    use rand::{rngs::OsRng, Rng};
+    use rand::{rngs::StdRng, Rng};
 
-    use crate::adapters::{memory_read, new_read_rv32_register};
+    use crate::adapters::{memory_read, read_rv32_register};
 
     pub struct Rv32HintInputSubEx;
-    pub struct Rv32HintRandomSubEx {
-        // TODO: this should be moved to VmState in order to be reproducible.
-        rng: Arc<Mutex<OsRng>>,
-    }
-    impl Rv32HintRandomSubEx {
-        pub fn new() -> Self {
-            Self {
-                rng: Default::default(),
-            }
-        }
-    }
+    pub struct Rv32HintRandomSubEx;
     pub struct Rv32PrintStrSubEx;
     pub struct Rv32HintLoadByKeySubEx;
 
@@ -636,6 +623,7 @@ mod phantom {
             &self,
             _: &GuestMemory,
             streams: &mut Streams<F>,
+            _: &mut StdRng,
             _: PhantomDiscriminant,
             _: u32,
             _: u32,
@@ -667,18 +655,16 @@ mod phantom {
             &self,
             memory: &GuestMemory,
             streams: &mut Streams<F>,
+            rng: &mut StdRng,
             _: PhantomDiscriminant,
             a: u32,
             _: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            let len = new_read_rv32_register(memory, 1, a) as usize;
+            let len = read_rv32_register(memory, a) as usize;
             streams.hint_stream.clear();
             streams.hint_stream.extend(
-                std::iter::repeat_with(|| {
-                    F::from_canonical_u8(self.rng.lock().unwrap().gen::<u8>())
-                })
-                .take(len * 4),
+                std::iter::repeat_with(|| F::from_canonical_u8(rng.gen::<u8>())).take(len * 4),
             );
             Ok(())
         }
@@ -689,13 +675,14 @@ mod phantom {
             &self,
             memory: &GuestMemory,
             _: &mut Streams<F>,
+            _: &mut StdRng,
             _: PhantomDiscriminant,
             a: u32,
             b: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            let rd = new_read_rv32_register(memory, 1, a);
-            let rs1 = new_read_rv32_register(memory, 1, b);
+            let rd = read_rv32_register(memory, a);
+            let rs1 = read_rv32_register(memory, b);
             let bytes = (0..rs1)
                 .map(|i| memory_read::<1>(memory, 2, rd + i)[0])
                 .collect::<Vec<u8>>();
@@ -710,13 +697,14 @@ mod phantom {
             &self,
             memory: &GuestMemory,
             streams: &mut Streams<F>,
+            _: &mut StdRng,
             _: PhantomDiscriminant,
             a: u32,
             b: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            let ptr = new_read_rv32_register(memory, 1, a);
-            let len = new_read_rv32_register(memory, 1, b);
+            let ptr = read_rv32_register(memory, a);
+            let len = read_rv32_register(memory, b);
             let key: Vec<u8> = (0..len)
                 .map(|i| memory_read::<1>(memory, 2, ptr + i)[0])
                 .collect();

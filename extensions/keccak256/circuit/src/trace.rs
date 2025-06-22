@@ -1,9 +1,21 @@
-use std::{array::from_fn, borrow::BorrowMut, cmp::min};
+use std::{
+    array::{self, from_fn},
+    borrow::BorrowMut,
+    cmp::min,
+};
 
 use openvm_circuit::{
-    arch::{Result, TraceStep, VmStateMut},
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    arch::{
+        get_record_from_slice, CustomBorrow, MultiRowLayout, RecordArena, Result, TraceFiller,
+        TraceStep, VmStateMut,
+    },
+    system::memory::{
+        offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
+        online::TracingMemory,
+        MemoryAuxColsFactory,
+    },
 };
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -11,30 +23,94 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_keccak256_transpiler::Rv32KeccakOpcode;
-use openvm_rv32im_circuit::adapters::{tracing_read, tracing_write};
+use openvm_rv32im_circuit::adapters::{read_rv32_register, tracing_read, tracing_write};
 use openvm_stark_backend::{
-    p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
+    p3_field::PrimeField32,
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_maybe_rayon::prelude::*,
 };
 use p3_keccak_air::{
     generate_trace_rows, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS, NUM_ROUNDS, U64_LIMBS,
 };
-use tiny_keccak::{keccakf, Hasher, Keccak};
+use tiny_keccak::keccakf;
 
 use super::{
     columns::KeccakVmCols, KECCAK_ABSORB_READS, KECCAK_DIGEST_WRITES, KECCAK_RATE_BYTES,
     KECCAK_REGISTER_READS, NUM_ABSORB_ROUNDS,
 };
-use crate::{columns::NUM_KECCAK_VM_COLS, utils::num_keccak_f, KeccakVmStep, KECCAK_WORD_SIZE};
+use crate::{
+    columns::NUM_KECCAK_VM_COLS,
+    utils::{keccak256, keccak_f, num_keccak_f},
+    KeccakVmStep, KECCAK_DIGEST_BYTES, KECCAK_RATE_U16S, KECCAK_WORD_SIZE,
+};
+
+#[derive(Clone, Copy)]
+pub struct KeccakVmMetadata {
+    pub num_reads: usize,
+}
+
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug, Clone)]
+pub struct KeccakVmRecord {
+    pub from_pc: u32,
+    pub timestamp: u32,
+    pub rd_ptr: u32,
+    pub rs1_ptr: u32,
+    pub rs2_ptr: u32,
+    pub dst: u32,
+    pub src: u32,
+    pub len: u32,
+
+    pub register_reads_aux: [MemoryReadAuxRecord; KECCAK_REGISTER_READS],
+    pub write_aux: [MemoryWriteBytesAuxRecord<KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES],
+}
+
+pub struct KeccakVmRecordMut<'a> {
+    pub inner: &'a mut KeccakVmRecord,
+    // Having a continuous slice of the input is useful for fast hashing in `execute`
+    pub input: &'a mut [u8],
+    pub read_aux: &'a mut [MemoryReadAuxRecord],
+}
+
+/// Custom borrowing that splits the buffer into a fixed `KeccakVmRecord` header
+/// followed by a slice of `u8`'s of length `num_reads * KECCAK_WORD_SIZE` where `num_reads` is
+/// provided at runtime, followed by a slice of `MemoryReadAuxRecord`'s of length `num_reads`.
+/// Uses `align_to_mut()` to make sure the slice is properly aligned to `MemoryReadAuxRecord`.
+/// Has debug assertions that check the size and alignment of the slices.
+impl<'a> CustomBorrow<'a, KeccakVmRecordMut<'a>, KeccakVmMetadata> for [u8] {
+    fn custom_borrow(&'a mut self, metadata: KeccakVmMetadata) -> KeccakVmRecordMut<'a> {
+        let (record_buf, rest) =
+            unsafe { self.split_at_mut_unchecked(size_of::<KeccakVmRecord>()) };
+
+        // Note: each read is `KECCAK_WORD_SIZE` bytes
+        let (input, rest) =
+            unsafe { rest.split_at_mut_unchecked(metadata.num_reads * KECCAK_WORD_SIZE) };
+        let (_, read_aux_buf, _) = unsafe { rest.align_to_mut::<MemoryReadAuxRecord>() };
+        KeccakVmRecordMut {
+            inner: record_buf.borrow_mut(),
+            input,
+            read_aux: &mut read_aux_buf[..metadata.num_reads],
+        }
+    }
+}
 
 impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
-    fn execute(
+    type RecordLayout = MultiRowLayout<KeccakVmMetadata>;
+    type RecordMut<'a> = KeccakVmRecordMut<'a>;
+
+    fn get_opcode_name(&self, _: usize) -> String {
+        format!("{:?}", Rv32KeccakOpcode::KECCAK256)
+    }
+
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let &Instruction {
             opcode,
             a,
@@ -44,326 +120,417 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
             e,
             ..
         } = instruction;
-        let d = d.as_canonical_u32();
-        let e = e.as_canonical_u32();
         debug_assert_eq!(opcode, Rv32KeccakOpcode::KECCAK256.global_opcode());
-        debug_assert_eq!(d, RV32_REGISTER_AS);
-        debug_assert_eq!(e, RV32_MEMORY_AS);
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
-        let trace = &mut trace[*trace_offset..];
-        let (dst, mut src, mut remaining_len) = {
-            let cols: &mut KeccakVmCols<F> = trace[..width].borrow_mut();
-            cols.instruction.start_timestamp = F::from_canonical_u32(state.memory.timestamp());
+        // Reading the length first without tracing to allocate a record of correct size
+        let len = read_rv32_register(state.memory.data(), c.as_canonical_u32()) as usize;
 
-            let a = a.as_canonical_u32();
-            let b = b.as_canonical_u32();
-            let c = c.as_canonical_u32();
-            let dst = tracing_read(state.memory, d, a, &mut cols.mem_oc.register_aux[0]);
-            let src = tracing_read(state.memory, d, b, &mut cols.mem_oc.register_aux[1]);
-            let len = tracing_read(state.memory, d, c, &mut cols.mem_oc.register_aux[2]);
-            (
-                dst,
-                u32::from_le_bytes(src),
-                u32::from_le_bytes(len) as usize,
-            )
-        };
+        let num_reads = len.div_ceil(KECCAK_WORD_SIZE);
+        let num_blocks = num_keccak_f(len);
+        let record = arena.alloc(MultiRowLayout {
+            num_rows: (num_blocks * NUM_ROUNDS) as u32,
+            metadata: KeccakVmMetadata { num_reads },
+        });
 
-        // Due to the AIR constraints, the final memory timestamp should be the following:
-        let final_timestamp = state.memory.timestamp()
-            + (remaining_len + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES) as u32;
-        let num_blocks = num_keccak_f(remaining_len);
-        let mut hasher = Keccak::v256();
+        record.inner.from_pc = *state.pc;
+        record.inner.timestamp = state.memory.timestamp();
+        record.inner.rd_ptr = a.as_canonical_u32();
+        record.inner.rs1_ptr = b.as_canonical_u32();
+        record.inner.rs2_ptr = c.as_canonical_u32();
 
-        trace
-            .chunks_mut(width * NUM_ROUNDS)
-            .enumerate()
-            .take(num_blocks)
-            .for_each(|(block_idx, chunk)| {
-                let cols: &mut KeccakVmCols<F> = chunk[..NUM_KECCAK_VM_COLS].borrow_mut();
-                if block_idx != 0 {
-                    cols.instruction.start_timestamp =
-                        F::from_canonical_u32(state.memory.timestamp());
+        record.inner.dst = u32::from_le_bytes(tracing_read(
+            state.memory,
+            RV32_REGISTER_AS,
+            record.inner.rd_ptr,
+            &mut record.inner.register_reads_aux[0].prev_timestamp,
+        ));
+        record.inner.src = u32::from_le_bytes(tracing_read(
+            state.memory,
+            RV32_REGISTER_AS,
+            record.inner.rs1_ptr,
+            &mut record.inner.register_reads_aux[1].prev_timestamp,
+        ));
+        record.inner.len = u32::from_le_bytes(tracing_read(
+            state.memory,
+            RV32_REGISTER_AS,
+            record.inner.rs2_ptr,
+            &mut record.inner.register_reads_aux[2].prev_timestamp,
+        ));
 
-                    state
-                        .memory
-                        .increment_timestamp_by(KECCAK_REGISTER_READS as u32);
-                }
-                cols.instruction.dst_ptr = a;
-                cols.instruction.src_ptr = b;
-                cols.instruction.len_ptr = c;
-                cols.instruction.dst = dst.map(F::from_canonical_u8);
-                cols.instruction
-                    .src_limbs
-                    .copy_from_slice(&src.to_le_bytes().map(F::from_canonical_u8)[1..]);
-                cols.instruction.len_limbs.copy_from_slice(
-                    &(remaining_len as u32)
-                        .to_le_bytes()
-                        .map(F::from_canonical_u8)[1..],
-                );
-                cols.instruction.src = F::from_canonical_u32(src);
-                cols.instruction.remaining_len = F::from_canonical_usize(remaining_len);
-                cols.instruction.pc = F::from_canonical_u32(*state.pc);
-                cols.sponge.is_new_start = F::from_bool(block_idx == 0);
+        debug_assert!(record.inner.src as usize + len <= (1 << self.pointer_max_bits));
+        debug_assert!(
+            record.inner.dst as usize + KECCAK_DIGEST_BYTES <= (1 << self.pointer_max_bits)
+        );
+        // We don't support messages longer than 2^[pointer_max_bits] bytes
+        debug_assert!(record.inner.len < (1 << self.pointer_max_bits));
 
-                for i in (0..KECCAK_RATE_BYTES).step_by(KECCAK_WORD_SIZE) {
-                    if i < remaining_len {
-                        let read = tracing_read::<_, KECCAK_WORD_SIZE>(
-                            state.memory,
-                            e,
-                            src + i as u32,
-                            &mut cols.mem_oc.absorb_reads[i / KECCAK_WORD_SIZE],
-                        );
-                        let copy_len = min(KECCAK_WORD_SIZE, remaining_len - i);
-                        hasher.update(&read[..copy_len]);
-                        cols.sponge.block_bytes[i..i + copy_len]
-                            .copy_from_slice(&read.map(F::from_canonical_u8)[..copy_len]);
-                        if copy_len != KECCAK_WORD_SIZE {
-                            cols.mem_oc
-                                .partial_block
-                                .copy_from_slice(&read.map(F::from_canonical_u8)[1..]);
-                        }
-                    } else {
-                        state.memory.increment_timestamp();
-                    }
-                }
-                if block_idx == num_blocks - 1 {
-                    if remaining_len == KECCAK_RATE_BYTES - 1 {
-                        cols.sponge.block_bytes[remaining_len] = F::from_canonical_u32(0b1000_0001);
-                    } else {
-                        cols.sponge.block_bytes[remaining_len] = F::from_canonical_u32(0x01);
-                        cols.sponge.block_bytes[KECCAK_RATE_BYTES - 1] =
-                            F::from_canonical_u32(0x80);
-                    }
-                } else {
-                    src += KECCAK_RATE_BYTES as u32;
-                    remaining_len -= KECCAK_RATE_BYTES;
-                }
-            });
+        for idx in 0..num_reads {
+            if idx % KECCAK_ABSORB_READS == 0 && idx != 0 {
+                // Need to increment the timestamp according at the start of each block due to the
+                // AIR constraints
+                state
+                    .memory
+                    .increment_timestamp_by(KECCAK_REGISTER_READS as u32);
+            }
+            let read = tracing_read::<_, KECCAK_WORD_SIZE>(
+                state.memory,
+                RV32_MEMORY_AS,
+                record.inner.src + (idx * KECCAK_WORD_SIZE) as u32,
+                &mut record.read_aux[idx].prev_timestamp,
+            );
+            record.input[idx * KECCAK_WORD_SIZE..(idx + 1) * KECCAK_WORD_SIZE]
+                .copy_from_slice(&read);
+        }
 
-        let last_row_offset = (num_blocks * NUM_ROUNDS - 1) * width;
-        let last_row: &mut KeccakVmCols<F> =
-            trace[last_row_offset..last_row_offset + NUM_KECCAK_VM_COLS].borrow_mut();
-        let mut digest = [0u8; 32];
-        hasher.finalize(&mut digest);
+        // Due to the AIR constraints, need to set the timestamp to the following:
+        state.memory.timestamp = record.inner.timestamp
+            + (num_blocks * (KECCAK_ABSORB_READS + KECCAK_REGISTER_READS)) as u32;
+
+        let digest = keccak256(&record.input[..len]);
         for (i, word) in digest.chunks_exact(KECCAK_WORD_SIZE).enumerate() {
             tracing_write::<_, KECCAK_WORD_SIZE>(
                 state.memory,
-                e,
-                u32::from_le_bytes(dst) + (i * KECCAK_WORD_SIZE) as u32,
+                RV32_MEMORY_AS,
+                record.inner.dst + (i * KECCAK_WORD_SIZE) as u32,
                 word.try_into().unwrap(),
-                &mut last_row.mem_oc.digest_writes[i],
+                &mut record.inner.write_aux[i].prev_timestamp,
+                &mut record.inner.write_aux[i].prev_data,
             );
         }
 
-        state.memory.timestamp = final_timestamp;
+        // Due to the AIR constraints, the final memory timestamp should be the following:
+        state.memory.timestamp = record.inner.timestamp
+            + (len + KECCAK_REGISTER_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES) as u32;
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        *trace_offset += num_blocks * NUM_ROUNDS * width;
         Ok(())
     }
+}
 
+impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for KeccakVmStep {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
-        trace: &mut [F],
-        width: usize,
+        trace_matrix: &mut RowMajorMatrix<F>,
         rows_used: usize,
-    ) where
-        Self: Send + Sync,
-        F: Send + Sync,
-    {
+    ) {
         if rows_used == 0 {
             return;
         }
 
-        let num_blocks = rows_used.div_ceil(NUM_ROUNDS);
-        let mut states = Vec::with_capacity(num_blocks);
-        let mut state = [0u64; 25];
-        trace
-            .chunks_mut(width * NUM_ROUNDS)
-            .take(num_blocks)
-            .for_each(|chunk| {
-                let cols: &mut KeccakVmCols<F> = chunk[..NUM_KECCAK_VM_COLS].borrow_mut();
-                if cols.sponge.is_new_start.is_one() {
-                    // a new instruction is starting
-                    state = [0u64; 25];
-                }
-                // absorb
-                for (bytes, s) in cols
-                    .sponge
-                    .block_bytes
-                    .chunks_exact(8)
-                    .zip(state.iter_mut())
-                {
-                    // u64 <-> bytes conversion is little-endian
-                    for (i, &byte) in bytes.iter().enumerate() {
-                        let byte = byte.as_canonical_u32();
-                        let s_byte = (*s >> (i * 8)) as u8;
-                        // Update bitwise lookup (i.e. xor) chip state: order matters!
-                        if cols.sponge.is_new_start.is_zero() {
-                            self.bitwise_lookup_chip.request_xor(byte, s_byte as u32);
-                        }
-                        *s ^= (byte as u64) << (i * 8);
-                    }
-                }
-                states.push(state);
-                keccakf(&mut state);
-            });
+        let mut chunks = Vec::with_capacity(trace_matrix.height() / NUM_ROUNDS);
+        let mut sizes = Vec::with_capacity(trace_matrix.height() / NUM_ROUNDS);
+        let mut trace = &mut trace_matrix.values[..];
+        let mut num_blocks_so_far = 0;
 
-        // We need to transpose state matrices due to a plonky3 issue: https://github.com/Plonky3/Plonky3/issues/672
-        // Note: the fix for this issue will be a commit after the major Field crate refactor PR https://github.com/Plonky3/Plonky3/pull/640
-        //       which will require a significant refactor to switch to.
-        let p3_states = states
-            .par_iter()
-            .map(|state| {
-                // transpose of 5x5 matrix
-                from_fn(|i| {
-                    let x = i / 5;
-                    let y = i % 5;
-                    state[x + 5 * y]
-                })
-            })
-            .collect();
+        // First pass over the trace to get the number of blocks for each instruction
+        // and divide the matrix into chunks of needed sizes
+        loop {
+            if num_blocks_so_far * NUM_ROUNDS >= rows_used {
+                // Push all the dummy rows as a single chunk and break
+                chunks.push(trace);
+                sizes.push((0, 0));
+                break;
+            } else {
+                let record: &KeccakVmRecord = unsafe { get_record_from_slice(&mut trace, ()) };
+                let num_blocks = num_keccak_f(record.len as usize);
+                let (chunk, rest) =
+                    trace.split_at_mut(NUM_KECCAK_VM_COLS * NUM_ROUNDS * num_blocks);
+                chunks.push(chunk);
+                sizes.push((num_blocks, record.len as usize));
+                num_blocks_so_far += num_blocks;
+                trace = rest;
+            }
+        }
 
-        let p3_keccak_trace: RowMajorMatrix<F> = generate_trace_rows(p3_states, 0);
-        trace
-            .par_chunks_mut(width * NUM_ROUNDS)
-            .zip(
-                p3_keccak_trace
-                    .values
-                    .par_chunks(NUM_KECCAK_PERM_COLS * NUM_ROUNDS),
-            )
-            .enumerate()
-            .for_each(|(block_idx, (block, p3_keccak_block))| {
-                // let cols: &mut KeccakVmCols<F> = block[..NUM_KECCAK_VM_COLS].borrow_mut();
-                if block_idx >= num_blocks {
-                    // fill in a dummy row
-                    block
-                        .par_chunks_mut(width)
-                        .zip(p3_keccak_block.par_chunks_exact(NUM_KECCAK_PERM_COLS))
-                        .for_each(|(row, p3_keccak_row)| {
-                            row[..NUM_KECCAK_PERM_COLS].copy_from_slice(p3_keccak_row);
+        // First, parallelize over instruction chunks, every instruction can have multiple blocks
+        // Then, compute some additional values for each block and parallelize over blocks within an
+        // instruction Finally, compute some additional values for each row and parallelize
+        // over rows within a block
+        chunks
+            .par_iter_mut()
+            .zip(sizes.par_iter())
+            .for_each(|(slice, (num_blocks, len))| {
+                if *num_blocks == 0 {
+                    // Fill in the dummy rows in parallel
+                    // Note: a 'block' of dummy rows is generated by `generate_trace_rows` from the
+                    // zero state       dummy rows are repeated every
+                    // `NUM_ROUNDS` rows
+                    let p3_trace: RowMajorMatrix<F> = generate_trace_rows(vec![[0u64; 25]; 1], 0);
+
+                    slice
+                        .par_chunks_exact_mut(NUM_KECCAK_VM_COLS)
+                        .enumerate()
+                        .for_each(|(row_idx, row)| {
+                            let idx = row_idx % NUM_ROUNDS;
+                            row[..NUM_KECCAK_PERM_COLS].copy_from_slice(
+                                &p3_trace.values
+                                    [idx * NUM_KECCAK_PERM_COLS..(idx + 1) * NUM_KECCAK_PERM_COLS],
+                            );
+
+                            // Need to get rid of the accidental garbage data that might overflow
+                            // the F's prime field. Unfortunately, there
+                            // is no good way around this
+                            unsafe {
+                                std::ptr::write_bytes(
+                                    row.as_mut_ptr().add(NUM_KECCAK_PERM_COLS) as *mut u8,
+                                    0,
+                                    (NUM_KECCAK_VM_COLS - NUM_KECCAK_PERM_COLS) * size_of::<F>(),
+                                );
+                            }
                             let cols: &mut KeccakVmCols<F> = row.borrow_mut();
+                            // The first row of a `dummy` block should have `is_new_start = F::ONE`
+                            cols.sponge.is_new_start = F::from_bool(idx == 0);
                             cols.sponge.block_bytes[0] = F::ONE;
                             cols.sponge.block_bytes[KECCAK_RATE_BYTES - 1] =
                                 F::from_canonical_u32(0x80);
-                            cols.sponge.is_padding_byte[0..KECCAK_RATE_BYTES].fill(F::ONE);
+                            cols.sponge.is_padding_byte = [F::ONE; KECCAK_RATE_BYTES];
                         });
-
-                    // The first row of the `dummy` block should have `is_new_start = F::ONE`
-                    let first_dummy_row: &mut KeccakVmCols<F> = block[..width].borrow_mut();
-                    first_dummy_row.sponge.is_new_start = F::ONE;
                     return;
                 }
 
-                // the first row is treated differently
-                let (first_row, block) = block.split_at_mut(width);
-                first_row[..NUM_KECCAK_PERM_COLS]
-                    .copy_from_slice(&p3_keccak_block[..NUM_KECCAK_PERM_COLS]);
-                let first_row: &mut KeccakVmCols<F> = first_row.borrow_mut();
-                first_row.instruction.is_enabled = F::ONE;
-                let remaining_len = first_row.instruction.remaining_len.as_canonical_u32() as usize;
-                for i in remaining_len..KECCAK_RATE_BYTES {
-                    first_row.sponge.is_padding_byte[i] = F::ONE;
+                let num_reads = len.div_ceil(KECCAK_WORD_SIZE);
+                let read_len = num_reads * KECCAK_WORD_SIZE;
+
+                let record: KeccakVmRecordMut =
+                    unsafe { get_record_from_slice(slice, KeccakVmMetadata { num_reads }) };
+
+                // Copy the read aux records and inner record to another place
+                // to safely fill in the trace matrix without overwriting the record
+                let mut read_aux_records = Vec::with_capacity(num_reads);
+                read_aux_records.extend_from_slice(record.read_aux);
+                let vm_record = record.inner.clone();
+                let partial_block = if read_len != *len {
+                    record.input[read_len - KECCAK_WORD_SIZE + 1..]
+                        .try_into()
+                        .unwrap()
+                } else {
+                    [0u8; KECCAK_WORD_SIZE - 1]
                 }
+                .map(F::from_canonical_u8);
+                let mut input = Vec::with_capacity(*num_blocks * KECCAK_RATE_BYTES);
+                input.extend_from_slice(&record.input[..*len]);
+                // Pad the input according to the Keccak spec
+                input.push(0x01);
+                input.resize(input.capacity(), 0);
+                *input.last_mut().unwrap() += 0x80;
 
-                for (row, p3_keccak_row) in block
-                    .chunks_exact_mut(width)
-                    .zip(p3_keccak_block.chunks_exact(NUM_KECCAK_PERM_COLS).skip(1))
-                {
-                    // Safety: `KeccakPermCols` **must** be the first field in `KeccakVmCols`
-                    row[..NUM_KECCAK_PERM_COLS].copy_from_slice(p3_keccak_row);
-                    let cols: &mut KeccakVmCols<F> = row.borrow_mut();
+                let mut states = Vec::with_capacity(*num_blocks);
+                let mut state = [0u64; 25];
 
-                    cols.instruction = first_row.instruction;
-                    cols.sponge.block_bytes = first_row.sponge.block_bytes;
-                    cols.sponge.is_padding_byte = first_row.sponge.is_padding_byte;
-                    cols.mem_oc.partial_block = first_row.mem_oc.partial_block;
-                }
-
-                let (_, last_row) = block.split_at_mut(width * (NUM_ROUNDS - 2));
-                let last_row: &mut KeccakVmCols<F> = last_row.borrow_mut();
-
-                first_row.instruction.is_enabled_first_round = first_row.instruction.is_enabled;
-                first_row.sponge.state_hi = from_fn(|i| {
-                    F::from_canonical_u8(
-                        (states[block_idx][i / U64_LIMBS] >> ((i % U64_LIMBS) * 16 + 8)) as u8,
-                    )
-                });
-
-                let start_timestamp = first_row.instruction.start_timestamp.as_canonical_u32();
-                first_row
-                    .mem_oc
-                    .absorb_reads
-                    .par_iter_mut()
-                    .take(remaining_len.div_ceil(KECCAK_WORD_SIZE))
+                input
+                    .chunks_exact(KECCAK_RATE_BYTES)
                     .enumerate()
-                    .for_each(|(i, read)| {
-                        mem_helper.fill_from_prev(
-                            start_timestamp + KECCAK_REGISTER_READS as u32 + i as u32,
-                            read.as_mut(),
-                        );
+                    .for_each(|(idx, chunk)| {
+                        // absorb
+                        for (bytes, s) in chunk.chunks_exact(8).zip(state.iter_mut()) {
+                            // u64 <-> bytes conversion is little-endian
+                            for (i, &byte) in bytes.iter().enumerate() {
+                                let s_byte = (*s >> (i * 8)) as u8;
+                                // Update bitwise lookup (i.e. xor) chip state: order matters!
+                                if idx != 0 {
+                                    self.bitwise_lookup_chip
+                                        .request_xor(byte as u32, s_byte as u32);
+                                }
+                                *s ^= (byte as u64) << (i * 8);
+                            }
+                        }
+                        states.push(state);
+                        keccakf(&mut state);
                     });
 
-                // Check if the first row is a new start (e.g. register reads happened)
-                if first_row.sponge.is_new_start.is_one() {
-                    let limb_shift_bits =
-                        RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits;
-
-                    self.bitwise_lookup_chip.request_range(
-                        first_row.instruction.dst[RV32_REGISTER_NUM_LIMBS - 1].as_canonical_u32()
-                            << limb_shift_bits,
-                        first_row.instruction.src_limbs[RV32_REGISTER_NUM_LIMBS - 2]
-                            .as_canonical_u32()
-                            << limb_shift_bits,
-                    );
-                    self.bitwise_lookup_chip.request_range(
-                        first_row.instruction.len_limbs[RV32_REGISTER_NUM_LIMBS - 2]
-                            .as_canonical_u32()
-                            << limb_shift_bits,
-                        first_row.instruction.len_limbs[RV32_REGISTER_NUM_LIMBS - 2]
-                            .as_canonical_u32()
-                            << limb_shift_bits,
-                    );
-                    first_row
-                        .mem_oc
-                        .register_aux
-                        .par_iter_mut()
-                        .enumerate()
-                        .for_each(|(i, aux)| {
-                            mem_helper.fill_from_prev(start_timestamp + i as u32, aux.as_mut());
+                slice
+                    .par_chunks_exact_mut(NUM_ROUNDS * NUM_KECCAK_VM_COLS)
+                    .enumerate()
+                    .for_each(|(block_idx, block_slice)| {
+                        // We need to transpose state matrices due to a plonky3 issue: https://github.com/Plonky3/Plonky3/issues/672
+                        // Note: the fix for this issue will be a commit after the major Field crate refactor PR https://github.com/Plonky3/Plonky3/pull/640
+                        //       which will require a significant refactor to switch to.
+                        let state = from_fn(|i| {
+                            let x = i / 5;
+                            let y = i % 5;
+                            states[block_idx][x + 5 * y]
                         });
-                }
 
-                let mut state = states[block_idx];
-                keccakf(&mut state);
-                last_row.sponge.state_hi = from_fn(|i| {
-                    F::from_canonical_u8((state[i / U64_LIMBS] >> ((i % U64_LIMBS) * 16 + 8)) as u8)
-                });
-                last_row.inner.export = last_row.instruction.is_enabled
-                    * F::from_bool(remaining_len < KECCAK_RATE_BYTES);
+                        // Note: we can call `generate_trace_rows` for each block separately because
+                        // its trace only depends on the current `state`
+                        // `generate_trace_rows` will generate additional dummy rows to make the
+                        // height into power of 2, but we can safely discard them
+                        let p3_trace: RowMajorMatrix<F> = generate_trace_rows(vec![state], 0);
+                        let input_offset = block_idx * KECCAK_RATE_BYTES;
+                        let start_timestamp = vm_record.timestamp
+                            + (block_idx * (KECCAK_REGISTER_READS + KECCAK_ABSORB_READS)) as u32;
+                        let rem_len = *len - input_offset;
 
-                // Check if this is the last block (e.g. digest write happened)
-                if remaining_len < KECCAK_RATE_BYTES {
-                    let write_timestamp =
-                        start_timestamp + KECCAK_REGISTER_READS as u32 + KECCAK_ABSORB_READS as u32;
-                    last_row
-                        .mem_oc
-                        .digest_writes
-                        .par_iter_mut()
-                        .enumerate()
-                        .for_each(|(i, write)| {
-                            mem_helper.fill_from_prev(write_timestamp + i as u32, write.as_mut());
-                        });
-                    for s in state.into_iter().take(NUM_ABSORB_ROUNDS) {
-                        for s_byte in s.to_le_bytes() {
-                            self.bitwise_lookup_chip.request_xor(0, s_byte as u32);
-                        }
-                    }
-                }
+                        block_slice
+                            .par_chunks_exact_mut(NUM_KECCAK_VM_COLS)
+                            .enumerate()
+                            .zip(p3_trace.values.par_chunks(NUM_KECCAK_PERM_COLS))
+                            .for_each(|((row_idx, row), p3_row)| {
+                                // Fill the inner columns
+                                // Safety: `KeccakPermCols` **must** be the first field in
+                                // `KeccakVmCols`
+                                row[..NUM_KECCAK_PERM_COLS].copy_from_slice(p3_row);
+
+                                let cols: &mut KeccakVmCols<F> = row.borrow_mut();
+                                // Fill the sponge columns
+                                cols.sponge.is_new_start =
+                                    F::from_bool(block_idx == 0 && row_idx == 0);
+                                if rem_len < KECCAK_RATE_BYTES {
+                                    cols.sponge.is_padding_byte[..rem_len].fill(F::ZERO);
+                                    cols.sponge.is_padding_byte[rem_len..].fill(F::ONE);
+                                } else {
+                                    cols.sponge.is_padding_byte = [F::ZERO; KECCAK_RATE_BYTES];
+                                }
+                                cols.sponge.block_bytes = array::from_fn(|i| {
+                                    F::from_canonical_u8(input[input_offset + i])
+                                });
+                                if row_idx == 0 {
+                                    cols.sponge.state_hi = from_fn(|i| {
+                                        F::from_canonical_u8(
+                                            (states[block_idx][i / U64_LIMBS]
+                                                >> ((i % U64_LIMBS) * 16 + 8))
+                                                as u8,
+                                        )
+                                    });
+                                } else if row_idx == NUM_ROUNDS - 1 {
+                                    let state = keccak_f(states[block_idx]);
+                                    cols.sponge.state_hi = from_fn(|i| {
+                                        F::from_canonical_u8(
+                                            (state[i / U64_LIMBS] >> ((i % U64_LIMBS) * 16 + 8))
+                                                as u8,
+                                        )
+                                    });
+                                    if block_idx == num_blocks - 1 {
+                                        cols.inner.export = F::ONE;
+                                        for s in state.into_iter().take(NUM_ABSORB_ROUNDS) {
+                                            for s_byte in s.to_le_bytes() {
+                                                self.bitwise_lookup_chip
+                                                    .request_xor(0, s_byte as u32);
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    cols.sponge.state_hi = [F::ZERO; KECCAK_RATE_U16S];
+                                }
+
+                                // Fill the instruction columns
+                                cols.instruction.pc = F::from_canonical_u32(vm_record.from_pc);
+                                cols.instruction.is_enabled = F::ONE;
+                                cols.instruction.is_enabled_first_round =
+                                    F::from_bool(row_idx == 0);
+                                cols.instruction.start_timestamp =
+                                    F::from_canonical_u32(start_timestamp);
+                                cols.instruction.dst_ptr = F::from_canonical_u32(vm_record.rd_ptr);
+                                cols.instruction.src_ptr = F::from_canonical_u32(vm_record.rs1_ptr);
+                                cols.instruction.len_ptr = F::from_canonical_u32(vm_record.rs2_ptr);
+                                cols.instruction.dst =
+                                    vm_record.dst.to_le_bytes().map(F::from_canonical_u8);
+
+                                let src = vm_record.src + (block_idx * KECCAK_RATE_BYTES) as u32;
+                                cols.instruction.src = F::from_canonical_u32(src);
+                                cols.instruction.src_limbs.copy_from_slice(
+                                    &src.to_le_bytes().map(F::from_canonical_u8)[1..],
+                                );
+                                cols.instruction.len_limbs.copy_from_slice(
+                                    &(rem_len as u32).to_le_bytes().map(F::from_canonical_u8)[1..],
+                                );
+                                cols.instruction.remaining_len =
+                                    F::from_canonical_u32(rem_len as u32);
+
+                                // Fill the register reads
+                                if row_idx == 0 && block_idx == 0 {
+                                    for ((i, cols), vm_record) in cols
+                                        .mem_oc
+                                        .register_aux
+                                        .iter_mut()
+                                        .enumerate()
+                                        .zip(vm_record.register_reads_aux.iter())
+                                    {
+                                        mem_helper.fill(
+                                            vm_record.prev_timestamp,
+                                            start_timestamp + i as u32,
+                                            cols.as_mut(),
+                                        );
+                                    }
+
+                                    let msl_rshift = RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
+                                    let msl_lshift = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS
+                                        - self.pointer_max_bits;
+                                    // Update the bitwise lookup chip
+                                    self.bitwise_lookup_chip.request_range(
+                                        (vm_record.dst >> msl_rshift) << msl_lshift,
+                                        (vm_record.src >> msl_rshift) << msl_lshift,
+                                    );
+                                    self.bitwise_lookup_chip.request_range(
+                                        (vm_record.len >> msl_rshift) << msl_lshift,
+                                        (vm_record.len >> msl_rshift) << msl_lshift,
+                                    );
+                                } else {
+                                    cols.mem_oc.register_aux.par_iter_mut().for_each(|aux| {
+                                        mem_helper.fill_zero(aux.as_mut());
+                                    });
+                                }
+
+                                // Fill the absorb reads
+                                if row_idx == 0 {
+                                    let reads_offs = block_idx * KECCAK_ABSORB_READS;
+                                    let num_reads = min(
+                                        rem_len.div_ceil(KECCAK_WORD_SIZE),
+                                        KECCAK_ABSORB_READS,
+                                    );
+                                    let start_timestamp =
+                                        start_timestamp + KECCAK_REGISTER_READS as u32;
+                                    for i in 0..num_reads {
+                                        mem_helper.fill(
+                                            read_aux_records[i + reads_offs].prev_timestamp,
+                                            start_timestamp + i as u32,
+                                            cols.mem_oc.absorb_reads[i].as_mut(),
+                                        );
+                                    }
+                                    for i in num_reads..KECCAK_ABSORB_READS {
+                                        mem_helper.fill_zero(cols.mem_oc.absorb_reads[i].as_mut());
+                                    }
+                                } else {
+                                    cols.mem_oc.absorb_reads.par_iter_mut().for_each(|aux| {
+                                        mem_helper.fill_zero(aux.as_mut());
+                                    });
+                                }
+
+                                if block_idx == num_blocks - 1 && row_idx == NUM_ROUNDS - 1 {
+                                    let timestamp = start_timestamp
+                                        + (KECCAK_ABSORB_READS + KECCAK_REGISTER_READS) as u32;
+                                    cols.mem_oc
+                                        .digest_writes
+                                        .par_iter_mut()
+                                        .enumerate()
+                                        .zip(vm_record.write_aux.par_iter())
+                                        .for_each(|((i, cols), vm_record)| {
+                                            cols.set_prev_data(
+                                                vm_record.prev_data.map(F::from_canonical_u8),
+                                            );
+                                            mem_helper.fill(
+                                                vm_record.prev_timestamp,
+                                                timestamp + i as u32,
+                                                cols.as_mut(),
+                                            );
+                                        });
+                                } else {
+                                    cols.mem_oc.digest_writes.par_iter_mut().for_each(|aux| {
+                                        aux.set_prev_data([F::ZERO; KECCAK_WORD_SIZE]);
+                                        mem_helper.fill_zero(aux.as_mut());
+                                    });
+                                }
+
+                                // Set the partial block only for the last block
+                                if block_idx == num_blocks - 1 {
+                                    cols.mem_oc.partial_block = partial_block;
+                                } else {
+                                    cols.mem_oc.partial_block = [F::ZERO; KECCAK_WORD_SIZE - 1];
+                                }
+                            });
+                    });
             });
-    }
-
-    fn get_opcode_name(&self, _: usize) -> String {
-        format!("{:?}", Rv32KeccakOpcode::KECCAK256)
     }
 }

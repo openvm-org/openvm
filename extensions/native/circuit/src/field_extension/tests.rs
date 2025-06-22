@@ -1,27 +1,32 @@
 use std::{
     array,
+    borrow::BorrowMut,
     ops::{Add, Div, Mul, Sub},
 };
 
-use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, VmChipTestBuilder},
-    VmAirWrapper,
-};
+use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
-use openvm_native_compiler::FieldExtensionOpcode;
+use openvm_native_compiler::{conversion::AS, FieldExtensionOpcode};
 use openvm_stark_backend::{
+    p3_air::BaseAir,
     p3_field::{extension::BinomialExtensionField, FieldAlgebra, FieldExtensionAlgebra},
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
     utils::disable_debug_builder,
     verifier::VerificationError,
-    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use rand::Rng;
-use strum::EnumCount;
+use rand::{rngs::StdRng, Rng};
+use test_case::test_case;
 
-use super::{FieldExtension, FieldExtensionChip, FieldExtensionCoreAir, FieldExtensionCoreStep};
-use crate::adapters::native_vectorized_adapter::{
-    NativeVectorizedAdapterAir, NativeVectorizedAdapterStep,
+use crate::{
+    adapters::{NativeVectorizedAdapterAir, NativeVectorizedAdapterStep},
+    field_extension::run_field_extension,
+    test_utils::write_native_array,
+    FieldExtension, FieldExtensionAir, FieldExtensionChip, FieldExtensionCoreAir,
+    FieldExtensionCoreCols, FieldExtensionStep, EXT_DEG,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
@@ -29,11 +34,11 @@ type F = BabyBear;
 
 fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FieldExtensionChip<F> {
     let mut chip = FieldExtensionChip::<F>::new(
-        VmAirWrapper::new(
+        FieldExtensionAir::new(
             NativeVectorizedAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
             FieldExtensionCoreAir::new(),
         ),
-        FieldExtensionCoreStep::new(NativeVectorizedAdapterStep::new()),
+        FieldExtensionStep::new(NativeVectorizedAdapterStep::new()),
         tester.memory_helper(),
     );
     chip.set_trace_buffer_height(MAX_INS_CAPACITY);
@@ -41,74 +46,180 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FieldExtensionChip<F> {
     chip
 }
 
-#[test]
-fn new_field_extension_air_test() {
-    type F = BabyBear;
+fn set_and_execute(
+    tester: &mut VmChipTestBuilder<F>,
+    chip: &mut FieldExtensionChip<F>,
+    rng: &mut StdRng,
+    opcode: FieldExtensionOpcode,
+    y: Option<[F; EXT_DEG]>,
+    z: Option<[F; EXT_DEG]>,
+) {
+    let (y_val, y_ptr) = write_native_array(tester, rng, y);
+    let (z_val, z_ptr) = write_native_array(tester, rng, z);
 
+    let x_ptr = gen_pointer(rng, EXT_DEG);
+
+    tester.execute(
+        chip,
+        &Instruction::from_usize(
+            opcode.global_opcode(),
+            [
+                x_ptr,
+                y_ptr,
+                z_ptr,
+                AS::Native as usize,
+                AS::Native as usize,
+            ],
+        ),
+    );
+
+    let result = tester.read::<EXT_DEG>(AS::Native as usize, x_ptr);
+    let expected = run_field_extension(opcode, y_val, z_val);
+    assert_eq!(result, expected);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+/// POSITIVE TESTS
+///
+/// Randomly generate computations and execute, ensuring that the generated trace
+/// passes all constraints.
+///////////////////////////////////////////////////////////////////////////////////////
+
+#[test_case(FieldExtensionOpcode::FE4ADD, 100)]
+#[test_case(FieldExtensionOpcode::FE4SUB, 100)]
+#[test_case(FieldExtensionOpcode::BBE4MUL, 100)]
+#[test_case(FieldExtensionOpcode::BBE4DIV, 100)]
+fn rand_field_extension_test(opcode: FieldExtensionOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let mut chip = create_test_chip(&tester);
-    let trace_width = chip.trace_width();
-
-    let mut rng = create_seeded_rng();
-    let num_ops: usize = 7; // test padding with dummy row
 
     for _ in 0..num_ops {
-        let opcode =
-            FieldExtensionOpcode::from_usize(rng.gen_range(0..FieldExtensionOpcode::COUNT));
-
-        let as_d = 4usize;
-        let as_e = 4usize;
-        let address1 = gen_pointer(&mut rng, 4);
-        let address2 = gen_pointer(&mut rng, 4);
-        let result_address = gen_pointer(&mut rng, 4);
-
-        let operand1 = array::from_fn(|_| rng.gen::<F>());
-        let operand2 = array::from_fn(|_| rng.gen::<F>());
-
-        assert!(address1.abs_diff(address2) >= 4);
-
-        tester.write(as_d, address1, operand1);
-        tester.write(as_e, address2, operand2);
-
-        let result = FieldExtension::solve(opcode, operand1, operand2).unwrap();
-
-        tester.execute(
-            &mut chip,
-            &Instruction::from_usize(
-                opcode.global_opcode(),
-                [result_address, address1, address2, as_d, as_e],
-            ),
-        );
-        assert_eq!(result, tester.read(as_d, result_address));
+        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
     }
 
-    // positive test
-    let mut tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(chip).finalize();
     tester.simple_test().expect("Verification failed");
+}
 
-    disable_debug_builder();
-    // negative test pranking each IO value
-    for height in [0, num_ops - 1] {
-        // TODO: better way to modify existing traces in tester
-        let extension_trace = tester.air_proof_inputs[2]
-            .1
-            .raw
-            .common_main
-            .as_mut()
-            .unwrap();
-        let original_trace = extension_trace.clone();
-        for width in 0..trace_width {
-            let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
-            extension_trace.row_mut(height)[width] = prank_value;
+//////////////////////////////////////////////////////////////////////////////////////
+// NEGATIVE TESTS
+//
+// Given a fake trace of a single operation, setup a chip and run the test. We replace
+// part of the trace and check that the chip throws the expected error.
+//////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Clone, Copy, Default)]
+struct FieldExtensionPrankValues {
+    pub x: Option<[F; EXT_DEG]>,
+    pub y: Option<[F; EXT_DEG]>,
+    pub z: Option<[F; EXT_DEG]>,
+    pub opcode_flags: Option<[bool; 4]>,
+    pub divisor_inv: Option<[F; EXT_DEG]>,
+}
+
+fn run_negative_field_extension_test(
+    opcode: FieldExtensionOpcode,
+    y: Option<[F; EXT_DEG]>,
+    z: Option<[F; EXT_DEG]>,
+    prank_vals: FieldExtensionPrankValues,
+    error: VerificationError,
+) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let mut chip = create_test_chip(&tester);
+    set_and_execute(&mut tester, &mut chip, &mut rng, opcode, y, z);
+
+    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<F>| {
+        let mut values = trace.row_slice(0).to_vec();
+        let core_cols: &mut FieldExtensionCoreCols<F> =
+            values.split_at_mut(adapter_width).1.borrow_mut();
+
+        if let Some(x) = prank_vals.x {
+            core_cols.x = x;
+        }
+        if let Some(y) = prank_vals.y {
+            core_cols.y = y;
+        }
+        if let Some(z) = prank_vals.z {
+            core_cols.z = z;
+        }
+        if let Some(opcode_flags) = prank_vals.opcode_flags {
+            [
+                core_cols.is_add,
+                core_cols.is_sub,
+                core_cols.is_mul,
+                core_cols.is_div,
+            ] = opcode_flags.map(F::from_bool);
+        }
+        if let Some(divisor_inv) = prank_vals.divisor_inv {
+            core_cols.divisor_inv = divisor_inv;
         }
 
-        assert_eq!(
-            tester.simple_test().err(),
-            Some(VerificationError::OodEvaluationMismatch),
-            "Expected constraint to fail"
-        );
-        tester.air_proof_inputs[2].1.raw.common_main = Some(original_trace);
-    }
+        *trace = RowMajorMatrix::new(values, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(chip, modify_trace)
+        .finalize();
+    tester.simple_test_with_expected_error(error);
+}
+
+#[test]
+fn rand_negative_field_extension_test() {
+    let mut rng = create_seeded_rng();
+    run_negative_field_extension_test(
+        FieldExtensionOpcode::FE4ADD,
+        None,
+        None,
+        FieldExtensionPrankValues {
+            x: Some(array::from_fn(|_| rng.gen::<F>())),
+            y: Some(array::from_fn(|_| rng.gen::<F>())),
+            z: Some(array::from_fn(|_| rng.gen::<F>())),
+            opcode_flags: Some(array::from_fn(|_| rng.gen_bool(0.5))),
+            divisor_inv: Some(array::from_fn(|_| rng.gen::<F>())),
+        },
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn field_extension_negative_tests() {
+    run_negative_field_extension_test(
+        FieldExtensionOpcode::BBE4DIV,
+        None,
+        None,
+        FieldExtensionPrankValues {
+            z: Some([F::ZERO; EXT_DEG]),
+            ..Default::default()
+        },
+        VerificationError::OodEvaluationMismatch,
+    );
+
+    run_negative_field_extension_test(
+        FieldExtensionOpcode::BBE4DIV,
+        None,
+        None,
+        FieldExtensionPrankValues {
+            divisor_inv: Some([F::ZERO; EXT_DEG]),
+            ..Default::default()
+        },
+        VerificationError::OodEvaluationMismatch,
+    );
+
+    run_negative_field_extension_test(
+        FieldExtensionOpcode::BBE4MUL,
+        Some([F::ZERO; EXT_DEG]),
+        None,
+        FieldExtensionPrankValues {
+            z: Some([F::ZERO; EXT_DEG]),
+            ..Default::default()
+        },
+        VerificationError::ChallengePhaseError,
+    );
 }
 
 #[test]

@@ -6,15 +6,18 @@ use std::{
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        get_record_from_slice,
         instructions::LocalOpcode,
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, ExecutionError, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, EmptyLayout,
+        ExecutionError, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
+        VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
     },
 };
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_native_compiler::NativeLoadStoreOpcode;
@@ -24,11 +27,9 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use serde::{Deserialize, Serialize};
-use serde_big_array::BigArray;
 use strum::IntoEnumIterator;
 
-use super::super::adapters::loadstore_native_adapter::NativeLoadStoreInstruction;
+use crate::adapters::NativeLoadStoreInstruction;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -39,16 +40,6 @@ pub struct NativeLoadStoreCoreCols<T, const NUM_CELLS: usize> {
 
     pub pointer_read: T,
     pub data: [T; NUM_CELLS],
-}
-
-#[repr(C)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NativeLoadStoreCoreRecord<F, const NUM_CELLS: usize> {
-    pub opcode: NativeLoadStoreOpcode,
-
-    pub pointer_read: F,
-    #[serde(with = "BigArray")]
-    pub data: [F; NUM_CELLS],
 }
 
 #[derive(Clone, Debug, derive_new::new)]
@@ -120,6 +111,14 @@ where
     }
 }
 
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct NativeLoadStoreCoreRecord<F, const NUM_CELLS: usize> {
+    pub pointer_read: F,
+    pub data: [F; NUM_CELLS],
+    pub local_opcode: u8,
+}
+
 #[derive(Debug)]
 pub struct NativeLoadStoreCoreStep<A, const NUM_CELLS: usize> {
     adapter: A,
@@ -136,14 +135,14 @@ impl<F, CTX, A, const NUM_CELLS: usize> TraceStep<F, CTX> for NativeLoadStoreCor
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
-            F,
-            CTX,
-            ReadData = (F, [F; NUM_CELLS]),
-            WriteData = [F; NUM_CELLS],
-            TraceContext<'a> = F,
-        >,
+        + AdapterTraceStep<F, CTX, ReadData = (F, [F; NUM_CELLS]), WriteData = [F; NUM_CELLS]>,
 {
+    type RecordLayout = EmptyLayout<A>;
+    type RecordMut<'a> = (
+        A::RecordMut<'a>,
+        &'a mut NativeLoadStoreCoreRecord<F, NUM_CELLS>,
+    );
+
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -151,26 +150,29 @@ where
         )
     }
 
-    fn execute(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let &Instruction { opcode, .. } = instruction;
 
-        let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        A::start(*state.pc, state.memory, &mut adapter_record);
 
-        A::start(*state.pc, state.memory, adapter_row);
+        let (pointer_read, data_read) =
+            self.adapter
+                .read(state.memory, instruction, &mut adapter_record);
 
-        let (pointer_read, data_read) = self.adapter.read(state.memory, instruction, adapter_row);
+        core_record.local_opcode = opcode.local_opcode_idx(self.offset) as u8;
+        let opcode = NativeLoadStoreOpcode::from_usize(core_record.local_opcode as usize);
 
-        let data = if local_opcode == NativeLoadStoreOpcode::HINT_STOREW {
+        let data = if opcode == NativeLoadStoreOpcode::HINT_STOREW {
             if state.streams.hint_stream.len() < NUM_CELLS {
                 return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
             }
@@ -180,29 +182,39 @@ where
         };
 
         self.adapter
-            .write(state.memory, instruction, adapter_row, &data);
+            .write(state.memory, instruction, &data, &mut adapter_record);
 
-        let core_row: &mut NativeLoadStoreCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
-
-        core_row.pointer_read = pointer_read;
-        core_row.data = data;
-        core_row.is_loadw = F::from_bool(local_opcode == NativeLoadStoreOpcode::LOADW);
-        core_row.is_storew = F::from_bool(local_opcode == NativeLoadStoreOpcode::STOREW);
-        core_row.is_hint_storew = F::from_bool(local_opcode == NativeLoadStoreOpcode::HINT_STOREW);
+        core_record.pointer_read = pointer_read;
+        core_record.data = data;
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
-        *trace_offset += width;
-
         Ok(())
     }
+}
 
+impl<F, CTX, A, const NUM_CELLS: usize> TraceFiller<F, CTX>
+    for NativeLoadStoreCoreStep<A, NUM_CELLS>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F, CTX>,
+{
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
 
+        let record: &NativeLoadStoreCoreRecord<F, NUM_CELLS> =
+            unsafe { get_record_from_slice(&mut core_row, ()) };
         let core_row: &mut NativeLoadStoreCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
-        self.adapter
-            .fill_trace_row(mem_helper, core_row.is_hint_storew, adapter_row);
+
+        let opcode = NativeLoadStoreOpcode::from_usize(record.local_opcode as usize);
+
+        // Writing in reverse order to avoid overwriting the `record`
+        core_row.data = record.data;
+        core_row.pointer_read = record.pointer_read;
+        core_row.is_hint_storew = F::from_bool(opcode == NativeLoadStoreOpcode::HINT_STOREW);
+        core_row.is_storew = F::from_bool(opcode == NativeLoadStoreOpcode::STOREW);
+        core_row.is_loadw = F::from_bool(opcode == NativeLoadStoreOpcode::LOADW);
     }
 }
 

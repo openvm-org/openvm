@@ -9,12 +9,12 @@ use crate::system::memory::offline_checker::bridge::AUX_LEN;
 
 // repr(C) is needed to make sure that the compiler does not reorder the fields
 // we assume the order of the fields when using borrow or borrow_mut
-#[repr(C)]
 /// Base structure for auxiliary memory columns.
+#[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryBaseAuxCols<T> {
     /// The previous timestamps in which the cells were accessed.
-    pub(in crate::system::memory) prev_timestamp: T,
+    pub prev_timestamp: T,
     /// The auxiliary columns to perform the less than check.
     pub timestamp_lt_aux: LessThanAuxCols<T, AUX_LEN>,
 }
@@ -29,7 +29,7 @@ impl<F: PrimeField32> MemoryBaseAuxCols<F> {
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryWriteAuxCols<T, const N: usize> {
     pub base: MemoryBaseAuxCols<T>,
-    pub(in crate::system::memory) prev_data: [T; N],
+    pub prev_data: [T; N],
 }
 
 impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
@@ -45,9 +45,8 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
         &self.prev_data
     }
 
-    /// Sets the previous timestamp and data **without** updating the less than auxiliary columns.
-    pub fn set_prev(&mut self, timestamp: T, data: [T; N]) {
-        self.base.prev_timestamp = timestamp;
+    /// Sets the previous data **without** updating the less than auxiliary columns.
+    pub fn set_prev_data(&mut self, data: [T; N]) {
         self.prev_data = data;
     }
 }
@@ -108,6 +107,12 @@ impl<T, const N: usize> AsMut<MemoryBaseAuxCols<T>> for MemoryWriteAuxCols<T, N>
 }
 
 impl<T> AsMut<MemoryBaseAuxCols<T>> for MemoryReadAuxCols<T> {
+    fn as_mut(&mut self) -> &mut MemoryBaseAuxCols<T> {
+        &mut self.base
+    }
+}
+
+impl<T> AsMut<MemoryBaseAuxCols<T>> for MemoryReadOrImmediateAuxCols<T> {
     fn as_mut(&mut self) -> &mut MemoryBaseAuxCols<T> {
         &mut self.base
     }

@@ -47,7 +47,7 @@ use openvm_stark_sdk::{
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
-use rand::Rng;
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use test_log::test;
 
 pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
@@ -118,10 +118,10 @@ fn test_vm_override_executor_height() {
 
     let vm = VirtualMachine::new(e, vm_config.clone());
     let pk = vm.keygen();
+    let vk = pk.get_vk();
 
     let executor = SingleSegmentVmExecutor::new(vm_config.clone());
 
-    let vk = pk.get_vk();
     let max_trace_heights = executor
         .execute_metered(
             committed_exe.exe.clone(),
@@ -132,11 +132,7 @@ fn test_vm_override_executor_height() {
         .unwrap();
 
     let res = executor
-        .execute_with_max_heights_and_compute_heights(
-            committed_exe.exe.clone(),
-            vec![],
-            &max_trace_heights,
-        )
+        .execute_and_compute_heights(committed_exe.exe.clone(), vec![], &max_trace_heights)
         .unwrap();
     // Memory trace heights are not computed during execution.
     assert_eq!(
@@ -200,7 +196,7 @@ fn test_vm_override_executor_height() {
         Some(overridden_heights),
     );
     let proof_input = executor
-        .execute_with_max_heights_and_generate(committed_exe, vec![], &max_trace_heights)
+        .execute_and_generate(committed_exe, vec![], &max_trace_heights)
         .unwrap();
     let air_heights: Vec<_> = proof_input
         .per_air
@@ -281,6 +277,7 @@ fn test_vm_public_values() {
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
     let vm = VirtualMachine::new(engine, config.clone());
     let pk = vm.keygen();
+    let vk = pk.get_vk();
 
     {
         let instructions = vec![
@@ -295,8 +292,6 @@ fn test_vm_public_values() {
         ));
         let single_vm = SingleSegmentVmExecutor::new(config);
 
-        let pk = vm.keygen();
-        let vk = pk.get_vk();
         let max_trace_heights = single_vm
             .execute_metered(
                 program.clone().into(),
@@ -307,7 +302,7 @@ fn test_vm_public_values() {
             .unwrap();
 
         let exe_result = single_vm
-            .execute_with_max_heights_and_compute_heights(program, vec![], &max_trace_heights)
+            .execute_and_compute_heights(program, vec![], &max_trace_heights)
             .unwrap();
         assert_eq!(
             exe_result.public_values,
@@ -318,7 +313,7 @@ fn test_vm_public_values() {
             .concat(),
         );
         let proof_input = single_vm
-            .execute_with_max_heights_and_generate(committed_exe, vec![], &max_trace_heights)
+            .execute_and_generate(committed_exe, vec![], &max_trace_heights)
             .unwrap();
         vm.engine
             .prove_then_verify(&pk, proof_input)
@@ -374,6 +369,7 @@ fn test_vm_1_persistent() {
 
     let vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
+    let vk = pk.get_vk();
 
     let n = 6;
     let instructions = vec![
@@ -392,8 +388,6 @@ fn test_vm_1_persistent() {
 
     let program = Program::from_instructions(&instructions);
 
-    let pk = vm.keygen();
-    let vk = pk.get_vk();
     let segments = vm
         .executor
         .execute_metered(
@@ -759,6 +753,7 @@ fn test_hint_load_1() {
 
     let program = Program::from_instructions(&instructions);
     let input = vec![vec![F::ONE, F::TWO]];
+    let rng = StdRng::seed_from_u64(0);
 
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let vm = VirtualMachine::new(engine, test_native_config());
@@ -792,7 +787,7 @@ fn test_hint_load_1() {
         ctrl,
     );
 
-    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), ());
+    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), rng, ());
     segment.execute_from_state(&mut exec_state).unwrap();
 
     let streams = exec_state.streams;
@@ -823,6 +818,7 @@ fn test_hint_load_2() {
 
     let program = Program::from_instructions(&instructions);
     let input = vec![vec![F::ONE, F::TWO], vec![F::TWO, F::ONE]];
+    let rng = StdRng::seed_from_u64(0);
 
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let vm = VirtualMachine::new(engine, test_native_config());
@@ -856,7 +852,7 @@ fn test_hint_load_2() {
         ctrl,
     );
 
-    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), ());
+    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), rng, ());
     segment.execute_from_state(&mut exec_state).unwrap();
 
     let [read] = unsafe {

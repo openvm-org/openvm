@@ -1,8 +1,9 @@
 use std::borrow::BorrowMut;
 
+use itertools::izip;
 use openvm_circuit::arch::{
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    VmAirWrapper,
+    DenseRecordArena, NewVmChipWrapper, VmAirWrapper,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -24,9 +25,11 @@ use rand::{rngs::StdRng, Rng};
 use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreAir, Rv32AuipcCoreCols, Rv32AuipcStep};
 use crate::{
     adapters::{
-        Rv32RdWriteAdapterAir, Rv32RdWriteAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+        Rv32RdWriteAdapterAir, Rv32RdWriteAdapterRecord, Rv32RdWriteAdapterStep, RV32_CELL_BITS,
+        RV32_REGISTER_NUM_LIMBS,
     },
     test_utils::get_verification_error,
+    Rv32AuipcAir, Rv32AuipcCoreRecord, Rv32AuipcStepWithAdapter,
 };
 
 const IMM_BITS: usize = 24;
@@ -55,6 +58,75 @@ fn create_test_chip(
     (chip, bitwise_chip)
 }
 
+type DenseChip<F> = NewVmChipWrapper<F, Rv32AuipcAir, Rv32AuipcStepWithAdapter, DenseRecordArena>;
+
+fn create_dense_chip(
+    tester: &VmChipTestBuilder<F>,
+) -> (
+    DenseChip<F>,
+    SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+) {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+
+    let mut chip = DenseChip::<F>::new(
+        VmAirWrapper::new(
+            Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
+            Rv32AuipcCoreAir::new(bitwise_bus),
+        ),
+        Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_chip.clone()),
+        tester.memory_helper(),
+    );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
+    (chip, bitwise_chip)
+}
+
+/// A toy example showing how the dense chip wrapper works with normal usual records
+/// that compose the row (not very efficiently, but works).
+#[test]
+fn rand_auipc_dense_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut chip, _bitwise_chip) = create_dense_chip(&tester);
+
+    let num_tests: usize = 10;
+
+    let imms = (0..num_tests)
+        .map(|_| rng.gen_range(0..(1 << IMM_BITS)) as usize)
+        .collect::<Vec<_>>();
+    let args = (0..num_tests)
+        .map(|_| rng.gen_range(0..32) << 2)
+        .collect::<Vec<_>>();
+    let from_pcs = (0..num_tests)
+        .map(|_| rng.gen_range(0..(1 << PC_BITS)))
+        .collect::<Vec<_>>();
+
+    for (&imm, &a, &from_pc) in izip!(imms.iter(), args.iter(), from_pcs.iter()) {
+        tester.execute_with_pc(
+            &mut chip,
+            &Instruction::from_usize(AUIPC.global_opcode(), [a, 0, imm, 1, 0]),
+            from_pc,
+        );
+        let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
+        let rd_data = run_auipc(initial_pc, imm as u32);
+        assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
+    }
+
+    let records = chip
+        .arena
+        .extract_records::<(Rv32RdWriteAdapterRecord, Rv32AuipcCoreRecord)>();
+    eprintln!("{:?}", records);
+    assert_eq!(records.len(), num_tests);
+    for i in 0..num_tests {
+        assert_eq!(records[i].0.from_pc, from_pcs[i]);
+        assert_eq!(records[i].0.from_timestamp, 2 * i as u32 + 1);
+        assert_eq!(records[i].0.rd_ptr, args[i] as u32);
+        assert_eq!(records[i].1.from_pc, from_pcs[i]);
+        assert_eq!(records[i].1.imm, imms[i] as u32);
+    }
+}
+
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut Rv32AuipcChip<F>,
@@ -72,7 +144,7 @@ fn set_and_execute(
         initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
     );
     let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
-    let rd_data = run_auipc(opcode, initial_pc, imm as u32);
+    let rd_data = run_auipc(initial_pc, imm as u32);
     assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
 }
 
@@ -269,10 +341,9 @@ fn overflow_negative_tests() {
 
 #[test]
 fn run_auipc_sanity_test() {
-    let opcode = AUIPC;
     let initial_pc = 234567890;
     let imm = 11302451;
-    let rd_data = run_auipc(opcode, initial_pc, imm);
+    let rd_data = run_auipc(initial_pc, imm);
 
     assert_eq!(rd_data, [210, 107, 113, 186]);
 }

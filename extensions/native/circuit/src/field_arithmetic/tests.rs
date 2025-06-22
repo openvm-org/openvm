@@ -1,30 +1,29 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, VmChipTestBuilder},
-    VmAirWrapper,
-};
+use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
-use openvm_native_compiler::FieldArithmeticOpcode;
+use openvm_native_compiler::{conversion::AS, FieldArithmeticOpcode};
 use openvm_stark_backend::{
+    p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
     utils::disable_debug_builder,
     verifier::VerificationError,
-    Chip,
 };
-use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
-};
-use rand::Rng;
-use strum::EnumCount;
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use rand::{rngs::StdRng, Rng};
+use test_case::test_case;
 
 use super::{
-    FieldArithmetic, FieldArithmeticChip, FieldArithmeticCoreAir, FieldArithmeticCoreCols,
-    FieldArithmeticStep,
+    FieldArithmeticChip, FieldArithmeticCoreAir, FieldArithmeticCoreCols, FieldArithmeticStep,
 };
-use crate::adapters::alu_native_adapter::{
-    AluNativeAdapterAir, AluNativeAdapterCols, AluNativeAdapterStep,
+use crate::{
+    adapters::{AluNativeAdapterAir, AluNativeAdapterStep},
+    field_arithmetic::{run_field_arithmetic, FieldArithmeticAir},
+    test_utils::write_native_or_imm,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
@@ -32,7 +31,7 @@ type F = BabyBear;
 
 fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FieldArithmeticChip<F> {
     let mut chip = FieldArithmeticChip::<F>::new(
-        VmAirWrapper::new(
+        FieldArithmeticAir::new(
             AluNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
             FieldArithmeticCoreAir::new(),
         ),
@@ -44,128 +43,190 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FieldArithmeticChip<F> {
     chip
 }
 
-#[test]
-fn new_field_arithmetic_air_test() {
-    let num_ops = 3; // non-power-of-2 to also test padding
-    let elem_range = || 1..=100;
-    let xy_address_space_range = || 0usize..=1;
+#[allow(clippy::too_many_arguments)]
+fn set_and_execute(
+    tester: &mut VmChipTestBuilder<F>,
+    chip: &mut FieldArithmeticChip<F>,
+    rng: &mut StdRng,
+    opcode: FieldArithmeticOpcode,
+    b: Option<F>,
+    c: Option<F>,
+) {
+    let b_val = b.unwrap_or(rng.gen());
+    let c_val = c.unwrap_or(if opcode == FieldArithmeticOpcode::DIV {
+        // If division, make sure c is not zero
+        F::from_canonical_u32(rng.gen_range(0..F::NEG_ONE.as_canonical_u32()) + 1)
+    } else {
+        rng.gen()
+    });
+    assert!(!c_val.is_zero(), "Division by zero");
+    let (b, b_as) = write_native_or_imm(tester, rng, b_val, None);
+    let (c, c_as) = write_native_or_imm(tester, rng, c_val, None);
+    let a = gen_pointer(rng, 1);
 
+    tester.execute(
+        chip,
+        &Instruction::new(
+            opcode.global_opcode(),
+            F::from_canonical_usize(a),
+            b,
+            c,
+            F::from_canonical_usize(AS::Native as usize),
+            F::from_canonical_usize(b_as),
+            F::from_canonical_usize(c_as),
+            F::ZERO,
+        ),
+    );
+
+    let expected = run_field_arithmetic(opcode, b_val, c_val);
+    let result = tester.read::<1>(AS::Native as usize, a)[0];
+    assert_eq!(result, expected);
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+// POSITIVE TESTS
+//
+// Randomly generate computations and execute, ensuring that the generated trace
+// passes all constraints.
+//////////////////////////////////////////////////////////////////////////////////////
+#[test_case(FieldArithmeticOpcode::ADD, 100)]
+#[test_case(FieldArithmeticOpcode::SUB, 100)]
+#[test_case(FieldArithmeticOpcode::MUL, 100)]
+#[test_case(FieldArithmeticOpcode::DIV, 100)]
+fn new_field_arithmetic_air_test(opcode: FieldArithmeticOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let mut chip = create_test_chip(&tester);
 
-    let mut rng = create_seeded_rng();
-
     for _ in 0..num_ops {
-        let opcode =
-            FieldArithmeticOpcode::from_usize(rng.gen_range(0..FieldArithmeticOpcode::COUNT));
-
-        let operand1 = BabyBear::from_canonical_u32(rng.gen_range(elem_range()));
-        let operand2 = BabyBear::from_canonical_u32(rng.gen_range(elem_range()));
-
-        if opcode == FieldArithmeticOpcode::DIV && operand2.is_zero() {
-            continue;
-        }
-
-        let result_as = 4usize;
-        let as1 = rng.gen_range(xy_address_space_range()) * 4;
-        let as2 = rng.gen_range(xy_address_space_range()) * 4;
-        let address1 = if as1 == 0 {
-            operand1.as_canonical_u32() as usize
-        } else {
-            gen_pointer(&mut rng, 1)
-        };
-        let address2 = if as2 == 0 {
-            operand2.as_canonical_u32() as usize
-        } else {
-            gen_pointer(&mut rng, 1)
-        };
-        assert_ne!(address1, address2);
-        let result_address = gen_pointer(&mut rng, 1);
-
-        let result = FieldArithmetic::run_field_arithmetic(opcode, operand1, operand2).unwrap();
-        tracing::debug!(
-            "{opcode:?} d = {}, e = {}, f = {}, result_addr = {}, addr1 = {}, addr2 = {}, z = {}, x = {}, y = {}",
-            result_as, as1, as2, result_address, address1, address2, result, operand1, operand2,
-        );
-
-        if as1 != 0 {
-            tester.write(as1, address1, [operand1]);
-        }
-        if as2 != 0 {
-            tester.write(as2, address2, [operand2]);
-        }
-        tester.execute(
-            &mut chip,
-            &Instruction::from_usize(
-                opcode.global_opcode(),
-                [result_address, address1, address2, result_as, as1, as2],
-            ),
-        );
-        assert_eq!(result, tester.read::<1>(result_as, result_address)[0]);
+        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
     }
 
-    let mut tester = tester.build().load(chip).finalize();
+    set_and_execute(
+        &mut tester,
+        &mut chip,
+        &mut rng,
+        opcode,
+        Some(F::ZERO),
+        None,
+    );
+
+    let tester = tester.build().load(chip).finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+// NEGATIVE TESTS
+//
+// Given a fake trace of a single operation, setup a chip and run the test. We replace
+// part of the trace and check that the chip throws the expected error.
+//////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Default)]
+struct FieldExpressionPrankVals {
+    a: Option<F>,
+    b: Option<F>,
+    c: Option<F>,
+    opcode_flags: Option<[bool; 4]>,
+    divisor_inv: Option<F>,
+}
+#[allow(clippy::too_many_arguments)]
+fn run_negative_field_arithmetic_test(
+    opcode: FieldArithmeticOpcode,
+    b: F,
+    c: F,
+    prank_vals: FieldExpressionPrankVals,
+    error: VerificationError,
+) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let mut chip = create_test_chip(&tester);
+
+    set_and_execute(&mut tester, &mut chip, &mut rng, opcode, Some(b), Some(c));
+
+    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<F>| {
+        let mut values = trace.row_slice(0).to_vec();
+        let cols: &mut FieldArithmeticCoreCols<F> =
+            values.split_at_mut(adapter_width).1.borrow_mut();
+        if let Some(a) = prank_vals.a {
+            cols.a = a;
+        }
+        if let Some(b) = prank_vals.b {
+            cols.b = b;
+        }
+        if let Some(c) = prank_vals.c {
+            cols.c = c;
+        }
+        if let Some(opcode_flags) = prank_vals.opcode_flags {
+            [cols.is_add, cols.is_sub, cols.is_mul, cols.is_div] = opcode_flags.map(F::from_bool);
+        }
+        if let Some(divisor_inv) = prank_vals.divisor_inv {
+            cols.divisor_inv = divisor_inv;
+        }
+        *trace = RowMajorMatrix::new(values, trace.width());
+    };
 
     disable_debug_builder();
-    // negative test pranking each IO value
-    for height in 0..num_ops {
-        // TODO: better way to modify existing traces in tester
-        let arith_trace = tester.air_proof_inputs[2]
-            .1
-            .raw
-            .common_main
-            .as_mut()
-            .unwrap();
-        let old_trace = arith_trace.clone();
-        for width in 0..FieldArithmeticCoreCols::<BabyBear>::width() {
-            let prank_value = BabyBear::from_canonical_u32(rng.gen_range(1..=100));
-            arith_trace.row_mut(height)[width] = prank_value;
-        }
-
-        // Run a test after pranking each row
-        assert_eq!(
-            tester.simple_test().err(),
-            Some(VerificationError::OodEvaluationMismatch),
-            "Expected constraint to fail"
-        );
-
-        tester.air_proof_inputs[2].1.raw.common_main = Some(old_trace);
-    }
+    let tester = tester
+        .build()
+        .load_and_prank_trace(chip, modify_trace)
+        .finalize();
+    tester.simple_test_with_expected_error(error);
 }
 
 #[test]
-fn new_field_arithmetic_air_zero_div_zero() {
-    let mut tester = VmChipTestBuilder::default();
-    let mut chip = create_test_chip(&tester);
-    tester.write(4, 6, [BabyBear::from_canonical_u32(111)]);
-    tester.write(4, 7, [BabyBear::from_canonical_u32(222)]);
-
-    tester.execute(
-        &mut chip,
-        &Instruction::from_usize(
-            FieldArithmeticOpcode::DIV.global_opcode(),
-            [5, 6, 7, 4, 4, 4],
-        ),
+fn field_arithmetic_negative_zero_div_test() {
+    run_negative_field_arithmetic_test(
+        FieldArithmeticOpcode::DIV,
+        F::from_canonical_u32(111),
+        F::from_canonical_u32(222),
+        FieldExpressionPrankVals {
+            b: Some(F::ZERO),
+            ..Default::default()
+        },
+        VerificationError::OodEvaluationMismatch,
     );
-    tester.build();
 
-    let chip_air = chip.air();
-    let mut chip_input = chip.generate_air_proof_input();
-    // set the value of [c]_f to zero, necessary to bypass trace gen checks
-    let row = chip_input.raw.common_main.as_mut().unwrap().row_mut(0);
-    let cols: &mut FieldArithmeticCoreCols<BabyBear> = row
-        .split_at_mut(AluNativeAdapterCols::<BabyBear>::width())
-        .1
-        .borrow_mut();
-    cols.b = BabyBear::ZERO;
+    run_negative_field_arithmetic_test(
+        FieldArithmeticOpcode::DIV,
+        F::ZERO,
+        F::TWO,
+        FieldExpressionPrankVals {
+            c: Some(F::ZERO),
+            ..Default::default()
+        },
+        VerificationError::OodEvaluationMismatch,
+    );
 
-    disable_debug_builder();
+    run_negative_field_arithmetic_test(
+        FieldArithmeticOpcode::DIV,
+        F::ZERO,
+        F::TWO,
+        FieldExpressionPrankVals {
+            c: Some(F::ZERO),
+            opcode_flags: Some([false, false, true, false]),
+            ..Default::default()
+        },
+        VerificationError::ChallengePhaseError,
+    );
+}
 
-    assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(vec![chip_air], vec![chip_input]).err(),
-        Some(VerificationError::OodEvaluationMismatch),
-        "Expected constraint to fail"
+#[test]
+fn field_arithmetic_negative_rand() {
+    let mut rng = create_seeded_rng();
+    run_negative_field_arithmetic_test(
+        FieldArithmeticOpcode::DIV,
+        F::from_canonical_u32(111),
+        F::from_canonical_u32(222),
+        FieldExpressionPrankVals {
+            a: Some(rng.gen()),
+            b: Some(rng.gen()),
+            c: Some(rng.gen()),
+            opcode_flags: Some([rng.gen(), rng.gen(), rng.gen(), rng.gen()]),
+            divisor_inv: Some(rng.gen()),
+        },
+        VerificationError::OodEvaluationMismatch,
     );
 }
 

@@ -12,6 +12,7 @@ use openvm_stark_backend::{
     utils::metrics_span,
     Chip,
 };
+use rand::rngs::StdRng;
 
 #[cfg(feature = "bench-metrics")]
 use super::InstructionExecutor;
@@ -28,6 +29,7 @@ pub struct VmSegmentState<F, Ctx> {
     pub pc: u32,
     pub memory: Option<GuestMemory>,
     pub streams: Streams<F>,
+    pub rng: StdRng,
     pub exit_code: Option<u32>,
     pub ctx: Ctx,
 }
@@ -38,6 +40,7 @@ impl<F, Ctx> VmSegmentState<F, Ctx> {
         pc: u32,
         memory: Option<GuestMemory>,
         streams: Streams<F>,
+        rng: StdRng,
         ctx: Ctx,
     ) -> Self {
         Self {
@@ -45,6 +48,7 @@ impl<F, Ctx> VmSegmentState<F, Ctx> {
             pc,
             memory,
             streams,
+            rng,
             ctx,
             exit_code: None,
         }
@@ -110,6 +114,30 @@ where
             .set_override_system_trace_heights(overridden_heights.system);
         self.chip_complex
             .set_override_inventory_trace_heights(overridden_heights.inventory);
+    }
+
+    pub fn execute_spanned(
+        &mut self,
+        _name: &str,
+        state: &mut VmSegmentState<F, Ctrl::Ctx>,
+    ) -> Result<(), ExecutionError> {
+        #[cfg(feature = "bench-metrics")]
+        let start = std::time::Instant::now();
+        #[cfg(feature = "bench-metrics")]
+        let start_instret = state.instret;
+
+        self.execute_from_state(state)?;
+
+        #[cfg(feature = "bench-metrics")]
+        {
+            let elapsed = start.elapsed();
+            let insns = state.instret - start_instret;
+            metrics::gauge!(format!("{_name}_time_ms")).set(elapsed.as_millis() as f64);
+            metrics::counter!("insns").absolute(insns);
+            metrics::gauge!(format!("{_name}_insn_mi/s"))
+                .set(insns as f64 / elapsed.as_micros() as f64);
+        }
+        Ok(())
     }
 
     /// Stopping is triggered by should_stop() or if VM is terminated

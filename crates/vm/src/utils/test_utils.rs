@@ -52,3 +52,10 @@ pub fn test_system_config() -> SystemConfig {
 pub fn test_system_config_with_continuations() -> SystemConfig {
     test_system_config().with_continuations()
 }
+
+/// Generate a random message of a given length in bytes
+pub fn get_random_message(rng: &mut StdRng, len: usize) -> Vec<u8> {
+    let mut random_message: Vec<u8> = vec![0u8; len];
+    rng.fill(&mut random_message[..]);
+    random_message
+}

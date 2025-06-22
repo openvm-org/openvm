@@ -3,11 +3,15 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        ExecutionBridge, ExecutionError, ExecutionState, NewVmChipWrapper, Result, StepExecutorE1,
-        TraceStep, VmStateMut,
+        get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionError, ExecutionState,
+        MatrixRecordArena, MultiRowLayout, NewVmChipWrapper, RecordArena, Result, StepExecutorE1,
+        TraceFiller, TraceStep, VmStateMut,
     },
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::{
+            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+            MemoryWriteBytesAuxRecord,
+        },
         online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
     },
@@ -15,6 +19,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
+    AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -31,12 +36,13 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    p3_matrix::Matrix,
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 
 use crate::adapters::{
-    decompose, memory_read, memory_read_from_state, memory_write_from_state, tracing_read,
+    memory_write_from_state, read_rv32_register, read_rv32_register_from_state, tracing_read,
     tracing_write,
 };
 
@@ -178,7 +184,6 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
                 &local_cols.write_aux,
             )
             .eval(builder, is_valid.clone());
-
         let expected_opcode = (local_cols.is_single
             * AB::F::from_canonical_usize(HINT_STOREW as usize + self.offset))
             + (local_cols.is_buffer
@@ -260,6 +265,63 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct Rv32HintStoreMetadata {
+    num_words: usize,
+}
+
+// This is the part of the record that we keep only once per instruction
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct Rv32HintStoreRecord {
+    pub num_words: u32,
+
+    pub from_pc: u32,
+    pub timestamp: u32,
+
+    pub mem_ptr_ptr: u32,
+    pub mem_ptr: u32,
+    pub mem_ptr_aux_record: MemoryReadAuxRecord,
+
+    // will set `num_words_ptr` to `u32::MAX` in case of single hint
+    pub num_words_ptr: u32,
+    pub num_words_read: MemoryReadAuxRecord,
+}
+
+// This is the part of the record that we keep `num_words` times per instruction
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct Rv32HintStoreVar {
+    pub data_write_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
+    pub data: [u8; RV32_REGISTER_NUM_LIMBS],
+}
+
+/// **SAFETY**: the order of the fields in `Rv32HintStoreRecord` and `Rv32HintStoreVar` is
+/// important. The chip also assumes that the offset of the fields `write_aux` and `data` in
+/// `Rv32HintStoreCols` is bigger than `size_of::<Rv32HintStoreRecord>()`
+#[derive(Debug)]
+pub struct Rv32HintStoreRecordMut<'a> {
+    pub inner: &'a mut Rv32HintStoreRecord,
+    pub var: &'a mut [Rv32HintStoreVar],
+}
+
+/// Custom borrowing that splits the buffer into a fixed `Rv32HintStoreRecord` header
+/// followed by a slice of `Rv32HintStoreVar`'s of length `num_words` provided at runtime.
+/// Uses `align_to_mut()` to make sure the slice is properly aligned to `Rv32HintStoreVar`.
+/// Has debug assertions to make sure the above works as expected.
+impl<'a> CustomBorrow<'a, Rv32HintStoreRecordMut<'a>, Rv32HintStoreMetadata> for [u8] {
+    fn custom_borrow(&'a mut self, metadata: Rv32HintStoreMetadata) -> Rv32HintStoreRecordMut<'a> {
+        let (record_buf, rest) =
+            unsafe { self.split_at_mut_unchecked(size_of::<Rv32HintStoreRecord>()) };
+
+        let (_, vars, _) = unsafe { rest.align_to_mut::<Rv32HintStoreVar>() };
+        Rv32HintStoreRecordMut {
+            inner: record_buf.borrow_mut(),
+            var: &mut vars[..metadata.num_words],
+        }
+    }
+}
+
 pub struct Rv32HintStoreStep {
     pointer_max_bits: usize,
     offset: usize,
@@ -284,6 +346,9 @@ impl<F, CTX> TraceStep<F, CTX> for Rv32HintStoreStep
 where
     F: PrimeField32,
 {
+    type RecordLayout = MultiRowLayout<Rv32HintStoreMetadata>;
+    type RecordMut<'a> = Rv32HintStoreRecordMut<'a>;
+
     fn get_opcode_name(&self, opcode: usize) -> String {
         if opcode == HINT_STOREW.global_opcode().as_usize() {
             String::from("HINT_STOREW")
@@ -294,83 +359,75 @@ where
         }
     }
 
-    fn execute(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let &Instruction {
-            opcode,
-            a: num_words_ptr,
-            b: mem_ptr_ptr,
-            d,
-            e,
-            ..
+            opcode, a, b, d, e, ..
         } = instruction;
 
+        let a = a.as_canonical_u32();
+        let b = b.as_canonical_u32();
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
         let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let row: &mut Rv32HintStoreCols<F> =
-            trace[*trace_offset..*trace_offset + width].borrow_mut();
-
-        row.from_state.pc = F::from_canonical_u32(*state.pc);
-        row.from_state.timestamp = F::from_canonical_u32(state.memory.timestamp);
-
-        row.mem_ptr_ptr = mem_ptr_ptr;
-        let mem_ptr_limbs: [u8; RV32_REGISTER_NUM_LIMBS] = tracing_read(
-            state.memory,
-            RV32_REGISTER_AS,
-            mem_ptr_ptr.as_canonical_u32(),
-            &mut row.mem_ptr_aux_cols,
-        );
-        let mem_ptr = u32::from_le_bytes(mem_ptr_limbs);
-        debug_assert!(mem_ptr <= (1 << self.pointer_max_bits));
-
-        row.num_words_ptr = num_words_ptr;
+        // We do untraced read of `num_words` in order to allocate the record first
         let num_words = if local_opcode == HINT_STOREW {
-            row.is_single = F::ONE;
-            state.memory.increment_timestamp();
             1
         } else {
-            row.is_buffer_start = F::ONE;
-            row.is_buffer = F::ONE;
-            let num_words_limbs: [u8; RV32_REGISTER_NUM_LIMBS] = tracing_read(
-                state.memory,
-                RV32_REGISTER_AS,
-                num_words_ptr.as_canonical_u32(),
-                &mut row.num_words_aux_cols,
-            );
-            u32::from_le_bytes(num_words_limbs)
+            read_rv32_register(state.memory.data(), a)
         };
+
+        let record = arena.alloc(MultiRowLayout {
+            num_rows: num_words,
+            metadata: Rv32HintStoreMetadata {
+                num_words: num_words as usize,
+            },
+        });
+
+        record.inner.from_pc = *state.pc;
+        record.inner.timestamp = state.memory.timestamp;
+        record.inner.mem_ptr_ptr = b;
+
+        record.inner.mem_ptr = u32::from_le_bytes(tracing_read(
+            state.memory,
+            RV32_REGISTER_AS,
+            b,
+            &mut record.inner.mem_ptr_aux_record.prev_timestamp,
+        ));
+
+        debug_assert!(record.inner.mem_ptr <= (1 << self.pointer_max_bits));
         debug_assert_ne!(num_words, 0);
         debug_assert!(num_words <= (1 << self.pointer_max_bits));
+
+        record.inner.num_words = num_words;
+        if local_opcode == HINT_STOREW {
+            state.memory.increment_timestamp();
+            record.inner.num_words_ptr = u32::MAX;
+        } else {
+            record.inner.num_words_ptr = a;
+            tracing_read::<_, RV32_REGISTER_NUM_LIMBS>(
+                state.memory,
+                RV32_REGISTER_AS,
+                record.inner.num_words_ptr,
+                &mut record.inner.num_words_read.prev_timestamp,
+            );
+        };
 
         if state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
             return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
         }
 
-        let mem_ptr_msl = mem_ptr >> ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS);
-        let num_words_msl = num_words >> ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS);
-        // TODO(ayush): see if this can be moved to fill_trace_row
-        self.bitwise_lookup_chip.request_range(
-            mem_ptr_msl << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits),
-            num_words_msl << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits),
-        );
-
-        for word_index in 0..(num_words as usize) {
-            let offset = *trace_offset + word_index * width;
-            let row: &mut Rv32HintStoreCols<F> = trace[offset..offset + width].borrow_mut();
-
-            if word_index != 0 {
-                row.is_buffer = F::ONE;
-                row.from_state.timestamp = F::from_canonical_u32(state.memory.timestamp);
-
+        for idx in 0..(num_words as usize) {
+            if idx != 0 {
                 state.memory.increment_timestamp();
                 state.memory.increment_timestamp();
             }
@@ -380,51 +437,141 @@ where
             let data: [u8; RV32_REGISTER_NUM_LIMBS] =
                 data_f.map(|byte| byte.as_canonical_u32() as u8);
 
-            let mem_ptr_word = mem_ptr + (RV32_REGISTER_NUM_LIMBS * word_index) as u32;
+            record.var[idx].data = data;
 
-            row.data = data_f;
             tracing_write(
                 state.memory,
                 RV32_MEMORY_AS,
-                mem_ptr_word,
+                record.inner.mem_ptr + (RV32_REGISTER_NUM_LIMBS * idx) as u32,
                 &data,
-                &mut row.write_aux,
+                &mut record.var[idx].data_write_aux.prev_timestamp,
+                &mut record.var[idx].data_write_aux.prev_data,
             );
-
-            row.rem_words_limbs = decompose(num_words - word_index as u32);
-            row.mem_ptr_limbs = decompose(mem_ptr_word);
         }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
-        *trace_offset += (num_words as usize) * width;
-
         Ok(())
     }
+}
 
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let row: &mut Rv32HintStoreCols<F> = row_slice.borrow_mut();
-
-        let mut timestamp = row.from_state.timestamp.as_canonical_u32();
-
-        if row.is_single.is_one() || row.is_buffer_start.is_one() {
-            mem_helper.fill_from_prev(timestamp, row.mem_ptr_aux_cols.as_mut());
+impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep {
+    fn fill_trace(
+        &self,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        trace: &mut RowMajorMatrix<F>,
+        rows_used: usize,
+    ) {
+        if rows_used == 0 {
+            return;
         }
-        timestamp += 1;
 
-        if row.is_buffer_start.is_one() {
-            mem_helper.fill_from_prev(timestamp, row.num_words_aux_cols.as_mut());
+        let width = trace.width;
+        let mut trace = &mut trace.values[..width * rows_used];
+        let mut sizes = Vec::with_capacity(rows_used);
+        let mut chunks = Vec::with_capacity(rows_used);
+
+        while !trace.is_empty() {
+            let record: &Rv32HintStoreRecord = unsafe { get_record_from_slice(&mut trace, ()) };
+            let (chunk, rest) = trace.split_at_mut(width * record.num_words as usize);
+            sizes.push(record.num_words);
+            chunks.push(chunk);
+            trace = rest;
         }
-        timestamp += 1;
 
-        mem_helper.fill_from_prev(timestamp, row.write_aux.as_mut());
+        let msl_rshift: u32 = ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS) as u32;
+        let msl_lshift: u32 =
+            (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits) as u32;
 
-        for half in 0..(RV32_REGISTER_NUM_LIMBS / 2) {
-            self.bitwise_lookup_chip.request_range(
-                row.data[2 * half].as_canonical_u32(),
-                row.data[2 * half + 1].as_canonical_u32(),
-            );
-        }
+        chunks
+            .par_iter_mut()
+            .zip(sizes.par_iter())
+            .for_each(|(chunk, &num_words)| {
+                let record: Rv32HintStoreRecordMut = unsafe {
+                    get_record_from_slice(
+                        chunk,
+                        Rv32HintStoreMetadata {
+                            num_words: num_words as usize,
+                        },
+                    )
+                };
+
+                self.bitwise_lookup_chip.request_range(
+                    (record.inner.mem_ptr >> msl_rshift) << msl_lshift,
+                    (num_words >> msl_rshift) << msl_lshift,
+                );
+
+                let mut timestamp = record.inner.timestamp + num_words * 3;
+                let mut mem_ptr = record.inner.mem_ptr + num_words * RV32_REGISTER_NUM_LIMBS as u32;
+
+                // Assuming that `num_words` is usually small (e.g. 1 for `HINT_STOREW`)
+                // it is better to do a serial pass of the rows per instruction (going from the last
+                // row to the first row) instead of a parallel pass, since need to
+                // copy the record to a new buffer in parallel case.
+                chunk
+                    .rchunks_exact_mut(width)
+                    .zip(record.var.iter().enumerate().rev())
+                    .for_each(|(row, (idx, var))| {
+                        for pair in var.data.chunks_exact(2) {
+                            self.bitwise_lookup_chip
+                                .request_range(pair[0] as u32, pair[1] as u32);
+                        }
+
+                        let cols: &mut Rv32HintStoreCols<F> = row.borrow_mut();
+                        let is_single = record.inner.num_words_ptr == u32::MAX;
+                        timestamp -= 3;
+                        if idx == 0 && !is_single {
+                            mem_helper.fill(
+                                record.inner.num_words_read.prev_timestamp,
+                                timestamp + 1,
+                                cols.num_words_aux_cols.as_mut(),
+                            );
+                            cols.num_words_ptr = F::from_canonical_u32(record.inner.num_words_ptr);
+                        } else {
+                            mem_helper.fill_zero(cols.num_words_aux_cols.as_mut());
+                            cols.num_words_ptr = F::ZERO;
+                        }
+
+                        cols.is_buffer_start = F::from_bool(idx == 0 && !is_single);
+
+                        // Note: writing in reverse
+                        cols.data = var.data.map(|x| F::from_canonical_u8(x));
+
+                        cols.write_aux.set_prev_data(
+                            var.data_write_aux
+                                .prev_data
+                                .map(|x| F::from_canonical_u8(x)),
+                        );
+                        mem_helper.fill(
+                            var.data_write_aux.prev_timestamp,
+                            timestamp + 2,
+                            cols.write_aux.as_mut(),
+                        );
+
+                        if idx == 0 {
+                            mem_helper.fill(
+                                record.inner.mem_ptr_aux_record.prev_timestamp,
+                                timestamp,
+                                cols.mem_ptr_aux_cols.as_mut(),
+                            );
+                        } else {
+                            mem_helper.fill_zero(cols.mem_ptr_aux_cols.as_mut());
+                        }
+
+                        mem_ptr -= RV32_REGISTER_NUM_LIMBS as u32;
+                        cols.mem_ptr_limbs = mem_ptr.to_le_bytes().map(|x| F::from_canonical_u8(x));
+                        cols.mem_ptr_ptr = F::from_canonical_u32(record.inner.mem_ptr_ptr);
+
+                        cols.from_state.timestamp = F::from_canonical_u32(timestamp);
+                        cols.from_state.pc = F::from_canonical_u32(record.inner.from_pc);
+
+                        cols.rem_words_limbs = (num_words - idx as u32)
+                            .to_le_bytes()
+                            .map(|x| F::from_canonical_u8(x));
+                        cols.is_buffer = F::from_bool(!is_single);
+                        cols.is_single = F::from_bool(is_single);
+                    });
+            })
     }
 }
 
@@ -441,12 +588,7 @@ where
         Ctx: E1E2ExecutionCtx,
     {
         let &Instruction {
-            opcode,
-            a: num_words_ptr,
-            b: mem_ptr_ptr,
-            d,
-            e,
-            ..
+            opcode, a, b, d, e, ..
         } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
@@ -454,18 +596,15 @@ where
 
         let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let mem_ptr_limbs =
-            memory_read_from_state(state, RV32_REGISTER_AS, mem_ptr_ptr.as_canonical_u32());
-        let mem_ptr = u32::from_le_bytes(mem_ptr_limbs);
-        debug_assert!(mem_ptr <= (1 << self.pointer_max_bits));
+        let mem_ptr = read_rv32_register(state.memory, b.as_canonical_u32());
 
         let num_words = if local_opcode == HINT_STOREW {
             1
         } else {
-            let num_words_limbs =
-                memory_read_from_state(state, RV32_REGISTER_AS, num_words_ptr.as_canonical_u32());
-            u32::from_le_bytes(num_words_limbs)
+            read_rv32_register(state.memory, a.as_canonical_u32())
         };
+
+        debug_assert!(mem_ptr <= (1 << self.pointer_max_bits));
         debug_assert_ne!(num_words, 0);
         debug_assert!(num_words <= (1 << self.pointer_max_bits));
 
@@ -473,21 +612,18 @@ where
             return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
         }
 
-        for word_index in 0..num_words {
-            let data: [u8; RV32_REGISTER_NUM_LIMBS] = std::array::from_fn(|_| {
-                state
-                    .streams
-                    .hint_stream
-                    .pop_front()
-                    .unwrap()
-                    .as_canonical_u32() as u8
-            });
-            memory_write_from_state(
-                state,
-                RV32_MEMORY_AS,
-                mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index),
-                &data,
-            );
+        let data = state
+            .streams
+            .hint_stream
+            .drain(0..num_words as usize * RV32_REGISTER_NUM_LIMBS)
+            .map(|x| x.as_canonical_u32() as u8)
+            .collect::<Vec<_>>();
+
+        unsafe {
+            state
+                .memory
+                .memory
+                .copy_slice_nonoverlapping((RV32_MEMORY_AS, mem_ptr), &data);
         }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
@@ -502,29 +638,52 @@ where
         chip_index: usize,
     ) -> Result<()> {
         let &Instruction {
-            opcode,
-            a: num_words_ptr,
-            ..
+            opcode, a, b, d, e, ..
         } = instruction;
 
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
+
         let local_opcode = Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let mem_ptr = read_rv32_register_from_state(state, b.as_canonical_u32());
 
         let num_words = if local_opcode == HINT_STOREW {
             1
         } else {
-            let num_words_limbs = memory_read(
-                state.memory,
-                RV32_REGISTER_AS,
-                num_words_ptr.as_canonical_u32(),
-            );
-            u32::from_le_bytes(num_words_limbs)
+            read_rv32_register_from_state(state, a.as_canonical_u32())
         };
 
-        self.execute_e1(state, instruction)?;
+        debug_assert!(mem_ptr <= (1 << self.pointer_max_bits));
+        debug_assert_ne!(num_words, 0);
+        debug_assert!(num_words <= (1 << self.pointer_max_bits));
+
+        if state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
+            return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
+        }
+
+        let data = state
+            .streams
+            .hint_stream
+            .drain(0..num_words as usize * RV32_REGISTER_NUM_LIMBS)
+            .map(|x| x.as_canonical_u32() as u8)
+            .collect::<Vec<_>>();
+        data.chunks_exact(RV32_REGISTER_NUM_LIMBS)
+            .enumerate()
+            .for_each(|(idx, chunk)| {
+                memory_write_from_state::<F, _, RV32_REGISTER_NUM_LIMBS>(
+                    state,
+                    RV32_MEMORY_AS,
+                    mem_ptr + (idx * RV32_REGISTER_NUM_LIMBS) as u32,
+                    &chunk.try_into().unwrap(),
+                );
+            });
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         state.ctx.trace_heights[chip_index] += num_words;
 
         Ok(())
     }
 }
 
-pub type Rv32HintStoreChip<F> = NewVmChipWrapper<F, Rv32HintStoreAir, Rv32HintStoreStep>;
+pub type Rv32HintStoreChip<F> =
+    NewVmChipWrapper<F, Rv32HintStoreAir, Rv32HintStoreStep, MatrixRecordArena<F>>;

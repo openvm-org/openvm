@@ -1,39 +1,43 @@
-use openvm_circuit::arch::{testing::VmChipTestBuilder, VmAirWrapper};
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
-use openvm_native_compiler::NativeLoadStoreOpcode::{self, *};
-use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
-use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use rand::{rngs::StdRng, Rng};
+use std::{array, borrow::BorrowMut};
 
-use super::{NativeLoadStoreChip, NativeLoadStoreCoreAir, NativeLoadStoreCoreStep};
-use crate::adapters::loadstore_native_adapter::{
-    NativeLoadStoreAdapterAir, NativeLoadStoreAdapterStep,
+use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_native_compiler::{
+    conversion::AS,
+    NativeLoadStoreOpcode::{self, *},
+};
+use openvm_stark_backend::{
+    p3_air::BaseAir,
+    p3_field::{FieldAlgebra, PrimeField32},
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
+    utils::disable_debug_builder,
+    verifier::VerificationError,
+};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use rand::{rngs::StdRng, Rng};
+use test_case::test_case;
+
+use super::{NativeLoadStoreChip, NativeLoadStoreCoreAir};
+use crate::{
+    adapters::{NativeLoadStoreAdapterAir, NativeLoadStoreAdapterCols, NativeLoadStoreAdapterStep},
+    test_utils::write_native_array,
+    NativeLoadStoreAir, NativeLoadStoreCoreCols, NativeLoadStoreStep,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
+const NUM_CELLS: usize = 1;
 type F = BabyBear;
 
-#[derive(Debug)]
-struct TestData {
-    a: F,
-    b: F,
-    c: F,
-    d: F,
-    e: F,
-    ad_val: F,
-    cd_val: F,
-    data_val: F,
-    is_load: bool,
-    is_hint: bool,
-}
-
-fn create_test_chip(tester: &VmChipTestBuilder<F>) -> NativeLoadStoreChip<F, 1> {
-    let mut chip = NativeLoadStoreChip::<F, 1>::new(
-        VmAirWrapper::new(
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> NativeLoadStoreChip<F, NUM_CELLS> {
+    let mut chip = NativeLoadStoreChip::<F, NUM_CELLS>::new(
+        NativeLoadStoreAir::new(
             NativeLoadStoreAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
             NativeLoadStoreCoreAir::new(NativeLoadStoreOpcode::CLASS_OFFSET),
         ),
-        NativeLoadStoreCoreStep::new(
+        NativeLoadStoreStep::new(
             NativeLoadStoreAdapterStep::new(NativeLoadStoreOpcode::CLASS_OFFSET),
             NativeLoadStoreOpcode::CLASS_OFFSET,
         ),
@@ -44,125 +48,187 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> NativeLoadStoreChip<F, 1> 
     chip
 }
 
-fn gen_test_data(rng: &mut StdRng, opcode: NativeLoadStoreOpcode) -> TestData {
-    let is_load = matches!(opcode, NativeLoadStoreOpcode::LOADW);
-
-    let a = rng.gen_range(0..1 << 20);
-    let b = rng.gen_range(0..1 << 20);
-    let c = rng.gen_range(0..1 << 20);
-    let d = F::from_canonical_u32(4u32);
-    let e = F::from_canonical_u32(4u32);
-
-    TestData {
-        a: F::from_canonical_u32(a),
-        b: F::from_canonical_u32(b),
-        c: F::from_canonical_u32(c),
-        d,
-        e,
-        ad_val: F::from_canonical_u32(111),
-        cd_val: F::from_canonical_u32(222),
-        data_val: F::from_canonical_u32(444),
-        is_load,
-        is_hint: matches!(opcode, NativeLoadStoreOpcode::HINT_STOREW),
-    }
-}
-
-fn get_data_pointer(data: &TestData) -> F {
-    if data.d != F::ZERO {
-        data.cd_val + data.b
-    } else {
-        data.c + data.b
-    }
-}
-
-fn set_values(tester: &mut VmChipTestBuilder<F>, data: &TestData) {
-    if data.d != F::ZERO {
-        tester.write(
-            data.d.as_canonical_u32() as usize,
-            data.a.as_canonical_u32() as usize,
-            [data.ad_val],
-        );
-        tester.write(
-            data.d.as_canonical_u32() as usize,
-            data.c.as_canonical_u32() as usize,
-            [data.cd_val],
-        );
-    }
-    if data.is_load {
-        let data_pointer = get_data_pointer(data);
-        tester.write(
-            data.e.as_canonical_u32() as usize,
-            data_pointer.as_canonical_u32() as usize,
-            [data.data_val],
-        );
-    }
-    if data.is_hint {
-        for _ in 0..data.e.as_canonical_u32() {
-            tester.streams.hint_stream.push_back(data.data_val);
-        }
-    }
-}
-
-fn check_values(tester: &mut VmChipTestBuilder<F>, data: &TestData) {
-    let data_pointer = get_data_pointer(data);
-
-    let written_data_val = if data.is_load {
-        tester.read::<1>(
-            data.d.as_canonical_u32() as usize,
-            data.a.as_canonical_u32() as usize,
-        )[0]
-    } else {
-        tester.read::<1>(
-            data.e.as_canonical_u32() as usize,
-            data_pointer.as_canonical_u32() as usize,
-        )[0]
-    };
-
-    let correct_data_val = if data.is_load || data.is_hint {
-        data.data_val
-    } else if data.d != F::ZERO {
-        data.ad_val
-    } else {
-        data.a
-    };
-
-    assert_eq!(written_data_val, correct_data_val, "{:?}", data);
-}
-
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut NativeLoadStoreChip<F, 1>,
+    chip: &mut NativeLoadStoreChip<F, NUM_CELLS>,
     rng: &mut StdRng,
     opcode: NativeLoadStoreOpcode,
 ) {
-    let data = gen_test_data(rng, opcode);
-    set_values(tester, &data);
+    let a = gen_pointer(rng, NUM_CELLS);
+    let ([c_val], c) = write_native_array(tester, rng, None);
 
-    tester.execute_with_pc(
+    let mem_ptr = gen_pointer(rng, NUM_CELLS);
+    let b = F::from_canonical_usize(mem_ptr) - c_val;
+    let data: [F; NUM_CELLS] = array::from_fn(|_| rng.gen());
+
+    match opcode {
+        LOADW => {
+            tester.write(AS::Native as usize, mem_ptr, data);
+        }
+        STOREW => {
+            tester.write(AS::Native as usize, a, data);
+        }
+        HINT_STOREW => {
+            tester.streams.hint_stream.extend(data);
+        }
+    }
+
+    tester.execute(
         chip,
         &Instruction::from_usize(
             opcode.global_opcode(),
-            [data.a, data.b, data.c, data.d, data.e].map(|x| x.as_canonical_u32() as usize),
+            [
+                a,
+                b.as_canonical_u32() as usize,
+                c,
+                AS::Native as usize,
+                AS::Native as usize,
+            ],
         ),
-        0u32,
     );
 
-    check_values(tester, &data);
+    let result = match opcode {
+        STOREW | HINT_STOREW => tester.read(AS::Native as usize, mem_ptr),
+        LOADW => tester.read(AS::Native as usize, a),
+    };
+    assert_eq!(result, data);
 }
 
-#[test]
-fn rand_native_loadstore_test() {
-    setup_tracing();
+///////////////////////////////////////////////////////////////////////////////////////
+/// POSITIVE TESTS
+///
+/// Randomly generate computations and execute, ensuring that the generated trace
+/// passes all constraints.
+///////////////////////////////////////////////////////////////////////////////////////
 
+#[test_case(STOREW, 100)]
+#[test_case(HINT_STOREW, 100)]
+#[test_case(LOADW, 100)]
+fn rand_native_loadstore_test(opcode: NativeLoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let mut chip = create_test_chip(&tester);
 
-    for _ in 0..20 {
-        set_and_execute(&mut tester, &mut chip, &mut rng, STOREW);
-        set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW);
-        set_and_execute(&mut tester, &mut chip, &mut rng, LOADW);
+    for _ in 0..num_ops {
+        set_and_execute(&mut tester, &mut chip, &mut rng, opcode);
     }
     let tester = tester.build().load(chip).finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+// NEGATIVE TESTS
+//
+// Given a fake trace of a single operation, setup a chip and run the test. We replace
+// part of the trace and check that the chip throws the expected error.
+//////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Clone, Copy, Default)]
+struct NativeLoadStorePrankValues {
+    // Core cols
+    pub data: Option<[F; NUM_CELLS]>,
+    pub opcode_flags: Option<[bool; 3]>,
+    pub pointer_read: Option<F>,
+    // Adapter cols
+    pub data_write_pointer: Option<F>,
+}
+
+fn run_negative_native_loadstore_test(
+    opcode: NativeLoadStoreOpcode,
+    prank_vals: NativeLoadStorePrankValues,
+    error: VerificationError,
+) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let mut chip = create_test_chip(&tester);
+
+    set_and_execute(&mut tester, &mut chip, &mut rng, opcode);
+
+    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<F>| {
+        let mut values = trace.row_slice(0).to_vec();
+        let (adapter_row, core_row) = values.split_at_mut(adapter_width);
+        let adapter_cols: &mut NativeLoadStoreAdapterCols<F, NUM_CELLS> = adapter_row.borrow_mut();
+        let core_cols: &mut NativeLoadStoreCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
+
+        if let Some(data) = prank_vals.data {
+            core_cols.data = data;
+        }
+        if let Some(pointer_read) = prank_vals.pointer_read {
+            core_cols.pointer_read = pointer_read;
+        }
+        if let Some(opcode_flags) = prank_vals.opcode_flags {
+            [
+                core_cols.is_loadw,
+                core_cols.is_storew,
+                core_cols.is_hint_storew,
+            ] = opcode_flags.map(F::from_bool);
+        }
+        if let Some(data_write_pointer) = prank_vals.data_write_pointer {
+            adapter_cols.data_write_pointer = data_write_pointer;
+        }
+
+        *trace = RowMajorMatrix::new(values, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(chip, modify_trace)
+        .finalize();
+    tester.simple_test_with_expected_error(error);
+}
+
+#[test]
+fn negative_native_loadstore_tests() {
+    run_negative_native_loadstore_test(
+        STOREW,
+        NativeLoadStorePrankValues {
+            data_write_pointer: Some(F::ZERO),
+            ..Default::default()
+        },
+        VerificationError::OodEvaluationMismatch,
+    );
+
+    run_negative_native_loadstore_test(
+        LOADW,
+        NativeLoadStorePrankValues {
+            data_write_pointer: Some(F::ZERO),
+            ..Default::default()
+        },
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn invalid_flags_native_loadstore_tests() {
+    run_negative_native_loadstore_test(
+        HINT_STOREW,
+        NativeLoadStorePrankValues {
+            opcode_flags: Some([false, false, false]),
+            ..Default::default()
+        },
+        VerificationError::ChallengePhaseError,
+    );
+
+    run_negative_native_loadstore_test(
+        LOADW,
+        NativeLoadStorePrankValues {
+            opcode_flags: Some([false, false, true]),
+            ..Default::default()
+        },
+        VerificationError::OodEvaluationMismatch,
+    );
+}
+
+#[test]
+fn invalid_data_native_loadstore_tests() {
+    run_negative_native_loadstore_test(
+        LOADW,
+        NativeLoadStorePrankValues {
+            data: Some([F::ZERO; NUM_CELLS]),
+            ..Default::default()
+        },
+        VerificationError::ChallengePhaseError,
+    );
 }

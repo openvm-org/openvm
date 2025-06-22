@@ -3,7 +3,7 @@ use branch_native_adapter::{BranchNativeAdapterAir, BranchNativeAdapterStep};
 use convert_adapter::{ConvertAdapterAir, ConvertAdapterStep};
 use derive_more::derive::From;
 use fri::{FriReducedOpeningAir, FriReducedOpeningChip, FriReducedOpeningStep};
-use jal::{JalRangeCheckAir, JalRangeCheckChip, JalRangeCheckStep};
+use jal_rangecheck::{JalRangeCheckAir, JalRangeCheckChip, JalRangeCheckStep};
 use loadstore_native_adapter::{NativeLoadStoreAdapterAir, NativeLoadStoreAdapterStep};
 use native_vectorized_adapter::{NativeVectorizedAdapterAir, NativeVectorizedAdapterStep};
 use openvm_circuit::{
@@ -30,12 +30,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use crate::{
-    adapters::*,
-    phantom::*,
-    poseidon2::{air::VerifyBatchBus, new_native_poseidon2_chip, NativePoseidon2Chip},
-    *,
-};
+use crate::{adapters::*, air::VerifyBatchBus, phantom::*, *};
 
 #[derive(Clone, Debug, Serialize, Deserialize, VmConfig, derive_new::new)]
 pub struct NativeConfig {
@@ -227,7 +222,6 @@ impl<F: PrimeField32> VmExtension<F> for Native {
             builder.system_port(),
             Poseidon2Config::default(),
             VerifyBatchBus::new(builder.new_bus_idx()),
-            // TODO: this may use too much memory.
             builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
@@ -276,6 +270,7 @@ pub(crate) mod phantom {
     };
     use openvm_instructions::PhantomDiscriminant;
     use openvm_stark_backend::p3_field::{Field, PrimeField32};
+    use rand::rngs::StdRng;
 
     pub struct NativeHintInputSubEx;
     pub struct NativeHintSliceSubEx<const N: usize>;
@@ -288,6 +283,7 @@ pub(crate) mod phantom {
             &self,
             _: &GuestMemory,
             streams: &mut Streams<F>,
+            _: &mut StdRng,
             _: PhantomDiscriminant,
             _: u32,
             _: u32,
@@ -313,6 +309,7 @@ pub(crate) mod phantom {
             &self,
             _: &GuestMemory,
             streams: &mut Streams<F>,
+            _: &mut StdRng,
             _: PhantomDiscriminant,
             _: u32,
             _: u32,
@@ -336,6 +333,7 @@ pub(crate) mod phantom {
             &self,
             memory: &GuestMemory,
             _: &mut Streams<F>,
+            _: &mut StdRng,
             _: PhantomDiscriminant,
             a: u32,
             _: u32,
@@ -352,6 +350,7 @@ pub(crate) mod phantom {
             &self,
             memory: &GuestMemory,
             streams: &mut Streams<F>,
+            _: &mut StdRng,
             _: PhantomDiscriminant,
             a: u32,
             len: u32,
@@ -376,6 +375,7 @@ pub(crate) mod phantom {
             &self,
             _: &GuestMemory,
             streams: &mut Streams<F>,
+            _: &mut StdRng,
             _: PhantomDiscriminant,
             _: u32,
             _: u32,

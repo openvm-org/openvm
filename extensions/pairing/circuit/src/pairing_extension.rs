@@ -111,8 +111,9 @@ pub(crate) mod phantom {
         bn254::BN254_NUM_LIMBS,
         pairing::{FinalExp, MultiMillerLoop},
     };
-    use openvm_rv32im_circuit::adapters::{memory_read, new_read_rv32_register};
+    use openvm_rv32im_circuit::adapters::{memory_read, read_rv32_register};
     use openvm_stark_backend::p3_field::PrimeField32;
+    use rand::rngs::StdRng;
 
     use super::PairingCurve;
 
@@ -123,13 +124,14 @@ pub(crate) mod phantom {
             &self,
             memory: &GuestMemory,
             streams: &mut Streams<F>,
+            _: &mut StdRng,
             _: PhantomDiscriminant,
             a: u32,
             b: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
-            let rs1 = new_read_rv32_register(memory, 1, a);
-            let rs2 = new_read_rv32_register(memory, 1, b);
+            let rs1 = read_rv32_register(memory, a);
+            let rs2 = read_rv32_register(memory, b);
             hint_pairing(memory, &mut streams.hint_stream, rs1, rs2, c_upper)
         }
     }
@@ -256,11 +258,13 @@ pub(crate) mod phantom {
     where
         Fp::Repr: From<[u8; N]>,
     {
-        let repr: [u8; N] = memory
-            .memory
-            .read_range_generic((RV32_MEMORY_AS, ptr), N)
-            .try_into()
-            .unwrap();
+        let repr: [u8; N] = unsafe {
+            memory
+                .memory
+                .get_slice((RV32_MEMORY_AS, ptr), N)
+                .try_into()
+                .unwrap()
+        };
         Fp::from_repr(repr.into())
             .into_option()
             .ok_or(eyre::eyre!("bad ff::PrimeField repr"))

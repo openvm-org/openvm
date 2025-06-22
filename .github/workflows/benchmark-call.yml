@@ -250,9 +250,15 @@ jobs:
           fi
 
       ##########################################################################
-      # Update s3 for latest main metrics upon a push event                    #
+      # Update s3 for latest branch metrics upon a push event                  #
       ##########################################################################
-      - name: Update latest main result in s3
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Update latest branch result in s3
+        if: github.event_name == 'push'
         run: |
-          s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/main-${METRIC_NAME}.json"
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            # for backwards compatibility
+            REF_HASH="main"
+          else
+            REF_HASH=$(echo "${{ github.ref }}" | sha256sum | cut -d' ' -f1)
+          fi
+          s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/${REF_HASH}-${METRIC_NAME}.json"

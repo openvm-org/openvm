@@ -28,6 +28,7 @@ use openvm_stark_backend::{
     p3_matrix::Matrix,
     p3_util::log2_ceil_usize,
     prover::types::{AirProofInput, CommittedTraceData, ProofInput},
+    utils::metrics_span,
     AirRef, Chip, ChipUsageGetter,
 };
 use p3_baby_bear::BabyBear;
@@ -793,11 +794,15 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
                 .as_any_kind_mut()
                 .downcast_mut()
                 .expect("Poseidon2 chip required for persistent memory");
-            self.base.memory_controller.finalize(Some(hasher));
+            metrics_span("memory_finalize_time_ms", || {
+                self.base.memory_controller.finalize(Some(hasher))
+            });
         } else {
-            self.base
-                .memory_controller
-                .finalize(None::<&mut Poseidon2PeripheryChip<F>>);
+            metrics_span("memory_finalize_time_ms", || {
+                self.base
+                    .memory_controller
+                    .finalize(None::<&mut Poseidon2PeripheryChip<F>>)
+            });
         };
     }
 

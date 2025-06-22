@@ -9,12 +9,16 @@ To scope metrics from different proofs, we use the [`metrics_tracing_context`](h
 
 For a single segment proof, the following metrics are collected:
 
-- `execute_time_ms` (gauge): The runtime execution time of the segment in milliseconds.
+- `execute_metered_time_ms` (gauge): The metered execution time of the segment in milliseconds. This is timed across **all** segments in the group.
+- `execute_e3_time_ms` (gauge): The preflight execution time of the segment in milliseconds.
   - If this is a segment in a VM with continuations enabled, a `segment: segment_idx` label is added to the metric.
 - `trace_gen_time_ms` (gauge): The time to generate non-cached trace matrices from execution records.
   - If this is a segment in a VM with continuations enabled, a `segment: segment_idx` label is added to the metric.
+  - `memory_finalize_time_ms` (gauge): The time in trace generation spent on memory finalization.
+    - `boundary_finalize_time_ms` (gauge): The time in memory finalization spent on boundary finalization.
+    - `merkle_finalize_time_ms` (gauge): The time in memory finalization spent on merkle tree finalization.
 - All metrics collected by [`openvm-stark-backend`](https://github.com/openvm-org/stark-backend/blob/main/docs/metrics.md), in particular `stark_prove_excluding_trace_time_ms` (gauge).
-  - The total proving time of the proof is the sum of `execute_time_ms + trace_gen_time_ms + stark_prove_excluding_trace_time_ms`.
+- The `total_proof_time_ms` of the proof is the sum of `execute_e3_time_ms + trace_gen_time_ms + stark_prove_excluding_trace_time_ms`. This **only** includes `execute_metered_time_ms` for non-app proofs; `execute_metered_time_ms` is not recorded separately since it is not a per-segment metric.
 - `total_cycles` (counter): The total number of cycles in the segment.
 - `main_cells_used` (counter): The total number of main trace cells used by all chips in the segment. This does not include cells needed to pad rows to power-of-two matrix heights. Only main trace cells, not preprocessed or permutation trace cells, are counted.
 

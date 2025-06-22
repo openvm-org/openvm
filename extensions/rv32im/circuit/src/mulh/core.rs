@@ -6,8 +6,9 @@ use std::{
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, EmptyLayout, MinimalInstruction, RecordArena, Result, StepExecutorE1,
+        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -17,6 +18,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
+    AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
@@ -188,6 +190,14 @@ where
     }
 }
 
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct MulHCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub b: [u8; NUM_LIMBS],
+    pub c: [u8; NUM_LIMBS],
+    pub local_opcode: u8,
+}
+
 pub struct MulHStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
@@ -232,9 +242,14 @@ where
             CTX,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-            TraceContext<'a> = (),
         >,
 {
+    type RecordLayout = EmptyLayout<A>;
+    type RecordMut<'a> = (
+        A::RecordMut<'a>,
+        &'a mut MulHCoreRecord<NUM_LIMBS, LIMB_BITS>,
+    );
+
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -242,75 +257,92 @@ where
         )
     }
 
-    fn execute(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let Instruction { opcode, .. } = instruction;
 
-        let mulh_opcode = MulHOpcode::from_usize(opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        A::start(*state.pc, state.memory, &mut adapter_record);
 
-        A::start(*state.pc, state.memory, adapter_row);
+        core_record.local_opcode = opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET) as u8;
+        let mulh_opcode = MulHOpcode::from_usize(core_record.local_opcode as usize);
 
-        let [rs1, rs2] = self
+        [core_record.b, core_record.c] = self
             .adapter
-            .read(state.memory, instruction, adapter_row)
+            .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        let b = rs1.map(u32::from);
-        let c = rs2.map(u32::from);
-        let (a, a_mul, carry, b_ext, c_ext) = run_mulh::<NUM_LIMBS, LIMB_BITS>(mulh_opcode, &b, &c);
+        let (a, _, _, _, _) = run_mulh::<NUM_LIMBS, LIMB_BITS>(
+            mulh_opcode,
+            &core_record.b.map(u32::from),
+            &core_record.c.map(u32::from),
+        );
 
-        let core_row: &mut MulHCoreCols<_, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        core_row.a = a.map(F::from_canonical_u32);
-        core_row.b = b.map(F::from_canonical_u32);
-        core_row.c = c.map(F::from_canonical_u32);
-        core_row.a_mul = a_mul.map(F::from_canonical_u32);
-        core_row.b_ext = F::from_canonical_u32(b_ext);
-        core_row.c_ext = F::from_canonical_u32(c_ext);
-        core_row.opcode_mulh_flag = F::from_bool(mulh_opcode == MulHOpcode::MULH);
-        core_row.opcode_mulhsu_flag = F::from_bool(mulh_opcode == MulHOpcode::MULHSU);
-        core_row.opcode_mulhu_flag = F::from_bool(mulh_opcode == MulHOpcode::MULHU);
+        // TODO(ayush): avoid this conversion
+        let a = a.map(|x| x as u8);
+        self.adapter
+            .write(state.memory, instruction, &[a].into(), &mut adapter_record);
 
-        // TODO(ayush): move to fill_trace_row
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+}
+
+impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F, CTX>
+    for MulHStep<A, NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F, CTX>,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let record: &MulHCoreRecord<NUM_LIMBS, LIMB_BITS> =
+            unsafe { get_record_from_slice(&mut core_row, ()) };
+        let core_row: &mut MulHCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
+
+        let opcode = MulHOpcode::from_usize(record.local_opcode as usize);
+        let (a, a_mul, carry, b_ext, c_ext) = run_mulh::<NUM_LIMBS, LIMB_BITS>(
+            opcode,
+            &record.b.map(u32::from),
+            &record.c.map(u32::from),
+        );
+
         for i in 0..NUM_LIMBS {
             self.range_tuple_chip.add_count(&[a_mul[i], carry[i]]);
             self.range_tuple_chip
                 .add_count(&[a[i], carry[NUM_LIMBS + i]]);
         }
 
-        if mulh_opcode != MulHOpcode::MULHU {
+        if opcode != MulHOpcode::MULHU {
             let b_sign_mask = if b_ext == 0 { 0 } else { 1 << (LIMB_BITS - 1) };
             let c_sign_mask = if c_ext == 0 { 0 } else { 1 << (LIMB_BITS - 1) };
             self.bitwise_lookup_chip.request_range(
-                (b[NUM_LIMBS - 1] - b_sign_mask) << 1,
-                (c[NUM_LIMBS - 1] - c_sign_mask) << ((mulh_opcode == MulHOpcode::MULH) as u32),
+                (record.b[NUM_LIMBS - 1] as u32 - b_sign_mask) << 1,
+                (record.c[NUM_LIMBS - 1] as u32 - c_sign_mask)
+                    << ((opcode == MulHOpcode::MULH) as u32),
             );
         }
 
-        // TODO(ayush): avoid this conversion
-        let a = a.map(|x| x as u8);
-        self.adapter
-            .write(state.memory, instruction, adapter_row, &[a].into());
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        *trace_offset += width;
-
-        Ok(())
-    }
-
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, _core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-
-        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
+        // Write in reverse order
+        core_row.opcode_mulhu_flag = F::from_bool(opcode == MulHOpcode::MULHU);
+        core_row.opcode_mulhsu_flag = F::from_bool(opcode == MulHOpcode::MULHSU);
+        core_row.opcode_mulh_flag = F::from_bool(opcode == MulHOpcode::MULH);
+        core_row.c_ext = F::from_canonical_u32(c_ext);
+        core_row.b_ext = F::from_canonical_u32(b_ext);
+        core_row.a_mul = a_mul.map(F::from_canonical_u32);
+        core_row.c = record.c.map(F::from_canonical_u8);
+        core_row.b = record.b.map(F::from_canonical_u8);
+        core_row.a = a.map(F::from_canonical_u32);
     }
 }
 

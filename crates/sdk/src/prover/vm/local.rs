@@ -127,7 +127,7 @@ where
                 },
                 GenerationError::Execution,
             )
-            .expect("execute_with_segments_and_then failed");
+            .expect("execute_and_then failed");
         let user_public_values = UserPublicValuesProof::compute(
             self.pk.vm_config.system().memory_config.memory_dimensions(),
             self.pk.vm_config.system().num_public_values,
@@ -186,11 +186,7 @@ where
             )
             .expect("execute_metered failed");
         let proof_input = executor
-            .execute_with_max_heights_and_generate(
-                self.committed_exe.clone(),
-                input,
-                &max_trace_heights,
-            )
+            .execute_and_generate(self.committed_exe.clone(), input, &max_trace_heights)
             .unwrap();
 
         let vm = VirtualMachine::new(e, executor.config);

@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use openvm_circuit_primitives::{encoder::Encoder, SubAir};
+use openvm_circuit_primitives::{encoder::Encoder, AlignedBytesBorrow, SubAir};
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -13,13 +13,13 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, BasicAdapterInterface,
-        MinimalInstruction, Result, StepExecutorE1, TraceStep, VmCoreAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, BasicAdapterInterface, EmptyLayout, MinimalInstruction, RecordArena,
+        Result, StepExecutorE1, TraceFiller, TraceStep, VmCoreAir, VmStateMut,
     },
     system::{
         memory::{
@@ -108,10 +108,10 @@ impl<AB: InteractionBuilder + AirBuilderWithPublicValues> VmCoreAir<AB, AdapterI
 }
 
 #[repr(C)]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(AlignedBytesBorrow, Debug)]
 pub struct PublicValuesRecord<F> {
-    value: F,
-    index: F,
+    pub value: F,
+    pub index: F,
 }
 
 /// ATTENTION: If a specific public value is not provided, a default 0 will be used when generating
@@ -146,15 +146,11 @@ where
 impl<F, CTX, A> TraceStep<F, CTX> for PublicValuesCoreStep<A, F>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterTraceStep<
-            F,
-            CTX,
-            ReadData = [[F; 1]; 2],
-            WriteData = [[F; 1]; 0],
-            TraceContext<'a> = (),
-        >,
+    A: 'static + AdapterTraceStep<F, CTX, ReadData = [[F; 1]; 2], WriteData = [[F; 1]; 0]>,
 {
+    type RecordLayout = EmptyLayout<A>;
+    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut PublicValuesRecord<F>);
+
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -162,26 +158,28 @@ where
         )
     }
 
-    fn execute(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
-        A::start(*state.pc, state.memory, adapter_row);
+        A::start(*state.pc, state.memory, &mut adapter_record);
 
-        let [[value], [index]] = self.adapter.read(state.memory, instruction, adapter_row);
+        [[core_record.value], [core_record.index]] =
+            self.adapter
+                .read(state.memory, instruction, &mut adapter_record);
         {
-            let idx: usize = index.as_canonical_u32() as usize;
+            let idx: usize = core_record.index.as_canonical_u32() as usize;
             let mut custom_pvs = self.custom_pvs.lock().unwrap();
 
             if custom_pvs[idx].is_none() {
-                custom_pvs[idx] = Some(value);
+                custom_pvs[idx] = Some(core_record.value);
             } else {
                 // Not a hard constraint violation when publishing the same value twice but the
                 // program should avoid that.
@@ -189,32 +187,9 @@ where
             }
         }
 
-        let cols = PublicValuesCoreColsView::<_, &mut F>::borrow_mut(core_row);
-        debug_assert_eq!(cols.width(), width - A::WIDTH);
-
-        *cols.value = value;
-        *cols.index = index;
-
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        *trace_offset += width;
 
         Ok(())
-    }
-
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-
-        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
-
-        let cols = PublicValuesCoreColsView::<_, &mut F>::borrow_mut(core_row);
-
-        *cols.is_valid = F::ONE;
-
-        let idx: usize = cols.index.as_canonical_u32() as usize;
-        let pt = self.encoder.get_flag_pt(idx);
-        for (i, var) in cols.custom_pv_vars.into_iter().enumerate() {
-            *var = F::from_canonical_u32(pt[i]);
-        }
     }
 
     fn generate_public_values(&self) -> Vec<F> {
@@ -222,6 +197,33 @@ where
             .into_iter()
             .map(|x| x.unwrap_or(F::ZERO))
             .collect()
+    }
+}
+
+impl<F, CTX, A> TraceFiller<F, CTX> for PublicValuesCoreStep<A, F>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F, CTX>,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let record: &PublicValuesRecord<F> = unsafe { get_record_from_slice(&mut core_row, ()) };
+        let cols = PublicValuesCoreColsView::<_, &mut F>::borrow_mut(core_row);
+
+        let idx: usize = record.index.as_canonical_u32() as usize;
+        let pt = self.encoder.get_flag_pt(idx);
+
+        cols.custom_pv_vars
+            .into_iter()
+            .zip(pt.iter())
+            .for_each(|(var, &val)| {
+                *var = F::from_canonical_u32(val);
+            });
+
+        *cols.index = record.index;
+        *cols.value = record.value;
+        *cols.is_valid = F::ONE;
     }
 }
 

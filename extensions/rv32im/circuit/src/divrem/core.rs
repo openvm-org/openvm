@@ -8,8 +8,9 @@ use num_integer::Integer;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, MinimalInstruction, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, EmptyLayout, MinimalInstruction, RecordArena, Result, StepExecutorE1,
+        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -20,6 +21,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
     utils::{not, select},
+    AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
@@ -392,6 +394,14 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemStep<A, NUM_LIMBS,
     }
 }
 
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct DivRemCoreRecords<const NUM_LIMBS: usize> {
+    pub b: [u8; NUM_LIMBS],
+    pub c: [u8; NUM_LIMBS],
+    pub local_opcode: u8,
+}
+
 impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F, CTX>
     for DivRemStep<A, NUM_LIMBS, LIMB_BITS>
 where
@@ -402,45 +412,90 @@ where
             CTX,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-            TraceContext<'a> = (),
         >,
 {
+    type RecordLayout = EmptyLayout<A>;
+    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut DivRemCoreRecords<NUM_LIMBS>);
+
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", DivRemOpcode::from_usize(opcode - self.offset))
     }
 
-    fn execute(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let Instruction { opcode, .. } = instruction;
 
-        let divrem_opcode = DivRemOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
-        let is_signed = divrem_opcode == DivRemOpcode::DIV || divrem_opcode == DivRemOpcode::REM;
-        let is_div = divrem_opcode == DivRemOpcode::DIV || divrem_opcode == DivRemOpcode::DIVU;
+        A::start(*state.pc, state.memory, &mut adapter_record);
 
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        core_record.local_opcode = opcode.local_opcode_idx(self.offset) as u8;
 
-        A::start(*state.pc, state.memory, adapter_row);
+        let is_signed = core_record.local_opcode == DivRemOpcode::DIV as u8
+            || core_record.local_opcode == DivRemOpcode::REM as u8;
+        let is_div = core_record.local_opcode == DivRemOpcode::DIV as u8
+            || core_record.local_opcode == DivRemOpcode::DIVU as u8;
 
-        let [rs1, rs2] = self
+        [core_record.b, core_record.c] = self
             .adapter
-            .read(state.memory, instruction, adapter_row)
+            .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        let b = rs1.map(u32::from);
-        let c = rs2.map(u32::from);
-        let (q, r, b_sign, c_sign, q_sign, case) =
-            run_divrem::<NUM_LIMBS, LIMB_BITS>(is_signed, &b, &c);
+        let b = core_record.b.map(u32::from);
+        let c = core_record.c.map(u32::from);
+        let (q, r, _, _, _, _) = run_divrem::<NUM_LIMBS, LIMB_BITS>(is_signed, &b, &c);
 
-        // TODO(ayush): move parts to fill_trace_row
-        let carries = run_mul_carries::<NUM_LIMBS, LIMB_BITS>(is_signed, &c, &q, &r, q_sign);
+        let rd = if is_div {
+            q.map(|x| x as u8)
+        } else {
+            r.map(|x| x as u8)
+        };
+
+        self.adapter
+            .write(state.memory, instruction, &[rd].into(), &mut adapter_record);
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+}
+
+impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F, CTX>
+    for DivRemStep<A, NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F, CTX>,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let record: &DivRemCoreRecords<NUM_LIMBS> =
+            unsafe { get_record_from_slice(&mut core_row, ()) };
+        let core_row: &mut DivRemCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
+
+        let opcode = DivRemOpcode::from_usize(record.local_opcode as usize);
+        let is_signed = opcode == DivRemOpcode::DIV || opcode == DivRemOpcode::REM;
+
+        let (q, r, b_sign, c_sign, q_sign, case) = run_divrem::<NUM_LIMBS, LIMB_BITS>(
+            is_signed,
+            &record.b.map(u32::from),
+            &record.c.map(u32::from),
+        );
+
+        let carries = run_mul_carries::<NUM_LIMBS, LIMB_BITS>(
+            is_signed,
+            &record.c.map(u32::from),
+            &q,
+            &r,
+            q_sign,
+        );
         for i in 0..NUM_LIMBS {
             self.range_tuple_chip.add_count(&[q[i], carries[i]]);
             self.range_tuple_chip
@@ -459,76 +514,55 @@ where
             let b_sign_mask = if b_sign { 1 << (LIMB_BITS - 1) } else { 0 };
             let c_sign_mask = if c_sign { 1 << (LIMB_BITS - 1) } else { 0 };
             self.bitwise_lookup_chip.request_range(
-                (b[NUM_LIMBS - 1] - b_sign_mask) << 1,
-                (c[NUM_LIMBS - 1] - c_sign_mask) << 1,
+                (record.b[NUM_LIMBS - 1] as u32 - b_sign_mask) << 1,
+                (record.c[NUM_LIMBS - 1] as u32 - c_sign_mask) << 1,
             );
         }
 
-        let c_sum_f = F::from_canonical_u32(c.iter().sum());
-        let c_sum_inv_f = c_sum_f.try_inverse().unwrap_or(F::ZERO);
+        // Write in a reverse order
+        core_row.opcode_remu_flag = F::from_bool(opcode == DivRemOpcode::REMU);
+        core_row.opcode_rem_flag = F::from_bool(opcode == DivRemOpcode::REM);
+        core_row.opcode_divu_flag = F::from_bool(opcode == DivRemOpcode::DIVU);
+        core_row.opcode_div_flag = F::from_bool(opcode == DivRemOpcode::DIV);
+
+        core_row.lt_diff = F::ZERO;
+        core_row.lt_marker = [F::ZERO; NUM_LIMBS];
+        if case == DivRemCoreSpecialCase::None && !r_zero {
+            let idx = run_sltu_diff_idx(&record.c.map(u32::from), &r_prime, c_sign);
+            let val = if c_sign {
+                r_prime[idx] - record.c[idx] as u32
+            } else {
+                record.c[idx] as u32 - r_prime[idx]
+            };
+            self.bitwise_lookup_chip.request_range(val - 1, 0);
+            core_row.lt_diff = F::from_canonical_u32(val);
+            core_row.lt_marker[idx] = F::ONE;
+        }
+
+        let r_prime_f = r_prime.map(F::from_canonical_u32);
+        core_row.r_inv = r_prime_f.map(|r| (r - F::from_canonical_u32(256)).inverse());
+        core_row.r_prime = r_prime_f;
 
         let r_sum_f = r
             .iter()
             .fold(F::ZERO, |acc, r| acc + F::from_canonical_u32(*r));
-        let r_sum_inv_f = r_sum_f.try_inverse().unwrap_or(F::ZERO);
+        core_row.r_sum_inv = r_sum_f.try_inverse().unwrap_or(F::ZERO);
 
-        let (lt_diff_idx, lt_diff_val) = if case == DivRemCoreSpecialCase::None && !r_zero {
-            let idx = run_sltu_diff_idx(&c, &r_prime, c_sign);
-            let val = if c_sign {
-                r_prime[idx] - c[idx]
-            } else {
-                c[idx] - r_prime[idx]
-            };
-            self.bitwise_lookup_chip.request_range(val - 1, 0);
-            (idx, val)
-        } else {
-            (NUM_LIMBS, 0)
-        };
+        let c_sum_f = F::from_canonical_u32(record.c.iter().fold(0, |acc, c| acc + *c as u32));
+        core_row.c_sum_inv = c_sum_f.try_inverse().unwrap_or(F::ZERO);
 
-        let r_prime_f = r_prime.map(F::from_canonical_u32);
-
-        let core_row: &mut DivRemCoreCols<_, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        core_row.b = rs1.map(F::from_canonical_u8);
-        core_row.c = rs2.map(F::from_canonical_u8);
-        core_row.q = q.map(F::from_canonical_u32);
-        core_row.r = r.map(F::from_canonical_u32);
-        core_row.zero_divisor = F::from_bool(case == DivRemCoreSpecialCase::ZeroDivisor);
-        core_row.r_zero = F::from_bool(r_zero);
-        core_row.b_sign = F::from_bool(b_sign);
-        core_row.c_sign = F::from_bool(c_sign);
-        core_row.q_sign = F::from_bool(q_sign);
         core_row.sign_xor = F::from_bool(sign_xor);
-        core_row.c_sum_inv = c_sum_inv_f;
-        core_row.r_sum_inv = r_sum_inv_f;
-        core_row.r_prime = r_prime_f;
-        core_row.r_inv = r_prime_f.map(|r| (r - F::from_canonical_u32(256)).inverse());
-        core_row.lt_marker = array::from_fn(|i| F::from_bool(i == lt_diff_idx));
-        core_row.lt_diff = F::from_canonical_u32(lt_diff_val);
-        core_row.opcode_div_flag = F::from_bool(divrem_opcode == DivRemOpcode::DIV);
-        core_row.opcode_divu_flag = F::from_bool(divrem_opcode == DivRemOpcode::DIVU);
-        core_row.opcode_rem_flag = F::from_bool(divrem_opcode == DivRemOpcode::REM);
-        core_row.opcode_remu_flag = F::from_bool(divrem_opcode == DivRemOpcode::REMU);
+        core_row.q_sign = F::from_bool(q_sign);
+        core_row.c_sign = F::from_bool(c_sign);
+        core_row.b_sign = F::from_bool(b_sign);
 
-        let rd = if is_div {
-            q.map(|x| x as u8)
-        } else {
-            r.map(|x| x as u8)
-        };
+        core_row.r_zero = F::from_bool(r_zero);
+        core_row.zero_divisor = F::from_bool(case == DivRemCoreSpecialCase::ZeroDivisor);
 
-        self.adapter
-            .write(state.memory, instruction, adapter_row, &[rd].into());
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        *trace_offset += width;
-
-        Ok(())
-    }
-
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, _core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-
-        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
+        core_row.r = r.map(F::from_canonical_u32);
+        core_row.q = q.map(F::from_canonical_u32);
+        core_row.c = record.c.map(F::from_canonical_u8);
+        core_row.b = record.b.map(F::from_canonical_u8);
     }
 }
 

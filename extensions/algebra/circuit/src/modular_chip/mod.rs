@@ -4,7 +4,7 @@ mod is_eq;
 pub use is_eq::*;
 mod muldiv;
 pub use muldiv::*;
-use openvm_circuit::arch::{NewVmChipWrapper, VmAirWrapper};
+use openvm_circuit::arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper};
 use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionStep};
 use openvm_rv32_adapters::{
@@ -23,8 +23,12 @@ pub(crate) type ModularAir<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAir
 pub(crate) type ModularStep<const BLOCKS: usize, const BLOCK_SIZE: usize> =
     FieldExpressionStep<Rv32VecHeapAdapterStep<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>;
 
-pub(crate) type ModularChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> =
-    NewVmChipWrapper<F, ModularAir<BLOCKS, BLOCK_SIZE>, ModularStep<BLOCKS, BLOCK_SIZE>>;
+pub(crate) type ModularChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> = NewVmChipWrapper<
+    F,
+    ModularAir<BLOCKS, BLOCK_SIZE>,
+    ModularStep<BLOCKS, BLOCK_SIZE>,
+    MatrixRecordArena<F>,
+>;
 
 // Must have TOTAL_LIMBS = NUM_LANES * LANE_SIZE
 pub type ModularIsEqualAir<
@@ -56,4 +60,5 @@ pub type ModularIsEqualChip<
     F,
     ModularIsEqualAir<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
     VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+    MatrixRecordArena<F>,
 >;

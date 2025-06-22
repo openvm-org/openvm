@@ -1,13 +1,11 @@
-use std::{
-    array,
-    borrow::{Borrow, BorrowMut},
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceStep, ImmInstruction, Result,
-        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, EmptyLayout, ImmInstruction, RecordArena, Result, StepExecutorE1,
+        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -17,6 +15,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
+    AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
@@ -192,26 +191,20 @@ where
     }
 }
 
-pub struct BranchLessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    adapter: A,
-    pub offset: usize,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct BranchLessThanCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub a: [u8; NUM_LIMBS],
+    pub b: [u8; NUM_LIMBS],
+    pub imm: u32,
+    pub local_opcode: u8,
 }
 
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
-{
-    pub fn new(
-        adapter: A,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
-        offset: usize,
-    ) -> Self {
-        Self {
-            adapter,
-            offset,
-            bitwise_lookup_chip,
-        }
-    }
+#[derive(derive_new::new)]
+pub struct BranchLessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+    pub offset: usize,
 }
 
 impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F, CTX>
@@ -219,14 +212,14 @@ impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F, CTX
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
-            F,
-            CTX,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData = (),
-            TraceContext<'a> = (),
-        >,
+        + for<'a> AdapterTraceStep<F, CTX, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
 {
+    type RecordLayout = EmptyLayout<A>;
+    type RecordMut<'a> = (
+        A::RecordMut<'a>,
+        &'a mut BranchLessThanCoreRecord<NUM_LIMBS, LIMB_BITS>,
+    );
+
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -234,122 +227,132 @@ where
         )
     }
 
-    fn execute(
+    fn execute<'buf, RA>(
         &mut self,
         state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        trace: &mut [F],
-        trace_offset: &mut usize,
-        width: usize,
-    ) -> Result<()> {
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let &Instruction { opcode, c: imm, .. } = instruction;
 
-        let blt_opcode = BranchLessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
 
-        let row_slice = &mut trace[*trace_offset..*trace_offset + width];
-        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-
-        A::start(*state.pc, state.memory, adapter_row);
+        A::start(*state.pc, state.memory, &mut adapter_record);
 
         let [rs1, rs2] = self
             .adapter
-            .read(state.memory, instruction, adapter_row)
+            .read(state.memory, instruction, &mut adapter_record)
             .into();
 
+        core_record.a = rs1;
+        core_record.b = rs2;
+        core_record.imm = imm.as_canonical_u32();
+        core_record.local_opcode = opcode.local_opcode_idx(self.offset) as u8;
+
+        if run_cmp::<NUM_LIMBS, LIMB_BITS>(core_record.local_opcode, &rs1, &rs2).0 {
+            *state.pc = (F::from_canonical_u32(*state.pc) + imm).as_canonical_u32();
+        } else {
+            *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        }
+
+        Ok(())
+    }
+}
+
+impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F, CTX>
+    for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F, CTX>,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        let record: &BranchLessThanCoreRecord<NUM_LIMBS, LIMB_BITS> =
+            unsafe { get_record_from_slice(&mut core_row, ()) };
+
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let core_row: &mut BranchLessThanCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
+
+        let signed = record.local_opcode == BranchLessThanOpcode::BLT as u8
+            || record.local_opcode == BranchLessThanOpcode::BGE as u8;
+        let ge_op = record.local_opcode == BranchLessThanOpcode::BGE as u8
+            || record.local_opcode == BranchLessThanOpcode::BGEU as u8;
+
         let (cmp_result, diff_idx, a_sign, b_sign) =
-            run_cmp::<NUM_LIMBS, LIMB_BITS>(blt_opcode, &rs1, &rs2);
+            run_cmp::<NUM_LIMBS, LIMB_BITS>(record.local_opcode, &record.a, &record.b);
 
-        let signed = matches!(
-            blt_opcode,
-            BranchLessThanOpcode::BLT | BranchLessThanOpcode::BGE
-        );
-        let ge_opcode = matches!(
-            blt_opcode,
-            BranchLessThanOpcode::BGE | BranchLessThanOpcode::BGEU
-        );
-        let cmp_lt = cmp_result ^ ge_opcode;
-
-        let a = rs1.map(u32::from);
-        let b = rs2.map(u32::from);
+        let cmp_lt = cmp_result ^ ge_op;
 
         // We range check (a_msb_f + 128) and (b_msb_f + 128) if signed,
         // a_msb_f and b_msb_f if not
         let (a_msb_f, a_msb_range) = if a_sign {
             (
-                -F::from_canonical_u32((1 << LIMB_BITS) - a[NUM_LIMBS - 1]),
-                a[NUM_LIMBS - 1] - (1 << (LIMB_BITS - 1)),
+                -F::from_canonical_u32((1 << LIMB_BITS) - record.a[NUM_LIMBS - 1] as u32),
+                record.a[NUM_LIMBS - 1] as u32 - (1 << (LIMB_BITS - 1)),
             )
         } else {
             (
-                F::from_canonical_u32(a[NUM_LIMBS - 1]),
-                a[NUM_LIMBS - 1] + ((signed as u32) << (LIMB_BITS - 1)),
+                F::from_canonical_u32(record.a[NUM_LIMBS - 1] as u32),
+                record.a[NUM_LIMBS - 1] as u32 + ((signed as u32) << (LIMB_BITS - 1)),
             )
         };
         let (b_msb_f, b_msb_range) = if b_sign {
             (
-                -F::from_canonical_u32((1 << LIMB_BITS) - b[NUM_LIMBS - 1]),
-                b[NUM_LIMBS - 1] - (1 << (LIMB_BITS - 1)),
+                -F::from_canonical_u32((1 << LIMB_BITS) - record.b[NUM_LIMBS - 1] as u32),
+                record.b[NUM_LIMBS - 1] as u32 - (1 << (LIMB_BITS - 1)),
             )
         } else {
             (
-                F::from_canonical_u32(b[NUM_LIMBS - 1]),
-                b[NUM_LIMBS - 1] + ((signed as u32) << (LIMB_BITS - 1)),
+                F::from_canonical_u32(record.b[NUM_LIMBS - 1] as u32),
+                record.b[NUM_LIMBS - 1] as u32 + ((signed as u32) << (LIMB_BITS - 1)),
             )
         };
 
-        let diff_val = if diff_idx == NUM_LIMBS {
-            0
+        core_row.diff_val = if diff_idx == NUM_LIMBS {
+            F::ZERO
         } else if diff_idx == (NUM_LIMBS - 1) {
             if cmp_lt {
                 b_msb_f - a_msb_f
             } else {
                 a_msb_f - b_msb_f
             }
-            .as_canonical_u32()
         } else if cmp_lt {
-            b[diff_idx] - a[diff_idx]
+            F::from_canonical_u8(record.b[diff_idx] - record.a[diff_idx])
         } else {
-            a[diff_idx] - b[diff_idx]
+            F::from_canonical_u8(record.a[diff_idx] - record.b[diff_idx])
         };
 
-        let core_row: &mut BranchLessThanCoreCols<_, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        core_row.a = rs1.map(F::from_canonical_u8);
-        core_row.b = rs2.map(F::from_canonical_u8);
-        core_row.cmp_result = F::from_bool(cmp_result);
-        core_row.cmp_lt = F::from_bool(cmp_lt);
-        core_row.imm = imm;
-        core_row.a_msb_f = a_msb_f;
-        core_row.b_msb_f = b_msb_f;
-        core_row.diff_marker = array::from_fn(|i| F::from_bool(i == diff_idx));
-        core_row.diff_val = F::from_canonical_u32(diff_val);
-        core_row.opcode_blt_flag = F::from_bool(blt_opcode == BranchLessThanOpcode::BLT);
-        core_row.opcode_bltu_flag = F::from_bool(blt_opcode == BranchLessThanOpcode::BLTU);
-        core_row.opcode_bge_flag = F::from_bool(blt_opcode == BranchLessThanOpcode::BGE);
-        core_row.opcode_bgeu_flag = F::from_bool(blt_opcode == BranchLessThanOpcode::BGEU);
-
-        if cmp_result {
-            *state.pc = (F::from_canonical_u32(*state.pc) + imm).as_canonical_u32();
-        } else {
-            *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        }
-
-        // TODO(ayush): move to fill_trace_row
         self.bitwise_lookup_chip
             .request_range(a_msb_range, b_msb_range);
 
+        core_row.diff_marker = [F::ZERO; NUM_LIMBS];
+
         if diff_idx != NUM_LIMBS {
-            self.bitwise_lookup_chip.request_range(diff_val - 1, 0);
+            self.bitwise_lookup_chip
+                .request_range(core_row.diff_val.as_canonical_u32() - 1, 0);
+            core_row.diff_marker[diff_idx] = F::ONE;
         }
 
-        *trace_offset += width;
+        core_row.cmp_lt = F::from_bool(cmp_lt);
+        core_row.b_msb_f = b_msb_f;
+        core_row.a_msb_f = a_msb_f;
+        core_row.opcode_bgeu_flag =
+            F::from_bool(record.local_opcode == BranchLessThanOpcode::BGEU as u8);
+        core_row.opcode_bge_flag =
+            F::from_bool(record.local_opcode == BranchLessThanOpcode::BGE as u8);
+        core_row.opcode_bltu_flag =
+            F::from_bool(record.local_opcode == BranchLessThanOpcode::BLTU as u8);
+        core_row.opcode_blt_flag =
+            F::from_bool(record.local_opcode == BranchLessThanOpcode::BLT as u8);
 
-        Ok(())
-    }
-
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let (adapter_row, _core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-
-        self.adapter.fill_trace_row(mem_helper, (), adapter_row);
+        core_row.imm = F::from_canonical_u32(record.imm);
+        core_row.cmp_result = F::from_bool(cmp_result);
+        core_row.b = record.b.map(F::from_canonical_u8);
+        core_row.a = record.a.map(F::from_canonical_u8);
     }
 }
 
@@ -368,13 +371,11 @@ where
         Ctx: E1E2ExecutionCtx,
     {
         let &Instruction { opcode, c: imm, .. } = instruction;
-
-        let blt_opcode = BranchLessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-
         let [rs1, rs2] = self.adapter.read(state, instruction).into();
 
         // TODO(ayush): probably don't need the other values
-        let (cmp_result, _, _, _) = run_cmp::<NUM_LIMBS, LIMB_BITS>(blt_opcode, &rs1, &rs2);
+        let (cmp_result, _, _, _) =
+            run_cmp::<NUM_LIMBS, LIMB_BITS>(opcode.local_opcode_idx(self.offset) as u8, &rs1, &rs2);
 
         if cmp_result {
             *state.pc = (F::from_canonical_u32(*state.pc) + imm).as_canonical_u32();
@@ -401,14 +402,14 @@ where
 // Returns (cmp_result, diff_idx, x_sign, y_sign)
 #[inline(always)]
 pub(super) fn run_cmp<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    local_opcode: BranchLessThanOpcode,
+    local_opcode: u8,
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],
 ) -> (bool, usize, bool, bool) {
-    let signed =
-        local_opcode == BranchLessThanOpcode::BLT || local_opcode == BranchLessThanOpcode::BGE;
-    let ge_op =
-        local_opcode == BranchLessThanOpcode::BGE || local_opcode == BranchLessThanOpcode::BGEU;
+    let signed = local_opcode == BranchLessThanOpcode::BLT as u8
+        || local_opcode == BranchLessThanOpcode::BGE as u8;
+    let ge_op = local_opcode == BranchLessThanOpcode::BGE as u8
+        || local_opcode == BranchLessThanOpcode::BGEU as u8;
     let x_sign = (x[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1) && signed;
     let y_sign = (y[NUM_LIMBS - 1] >> (LIMB_BITS - 1) == 1) && signed;
     for i in (0..NUM_LIMBS).rev() {

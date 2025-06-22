@@ -39,10 +39,11 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                         &mut self,
                         memory: &mut ::openvm_circuit::system::memory::MemoryController<F>,
                         streams: &mut ::openvm_circuit::arch::Streams<F>,
+                        rng: &mut ::rand::rngs::StdRng,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         from_state: ::openvm_circuit::arch::ExecutionState<u32>,
                     ) -> ::openvm_circuit::arch::Result<::openvm_circuit::arch::ExecutionState<u32>> {
-                        self.0.execute(memory, streams, instruction, from_state)
+                        self.0.execute(memory, streams, rng, instruction, from_state)
                     }
 
                     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -80,7 +81,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 multiunzip(variants.iter().map(|(variant_name, field)| {
                     let field_ty = &field.ty;
                     let execute_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#first_ty_generic>>::execute(x, memory, streams, instruction, from_state)
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#first_ty_generic>>::execute(x, memory, streams, rng, instruction, from_state)
                     };
                     let get_opcode_name_arm = quote! {
                         #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#first_ty_generic>>::get_opcode_name(x, opcode)
@@ -94,6 +95,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                         &mut self,
                         memory: &mut ::openvm_circuit::system::memory::MemoryController<#first_ty_generic>,
                         streams: &mut ::openvm_circuit::arch::Streams<F>,
+                        rng: &mut ::rand::rngs::StdRng,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
                         from_state: ::openvm_circuit::arch::ExecutionState<u32>,
                     ) -> ::openvm_circuit::arch::Result<::openvm_circuit::arch::ExecutionState<u32>> {

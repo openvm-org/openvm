@@ -24,10 +24,11 @@ openvm-sha256-circuit.workspace = true
 openvm-sha256-transpiler.workspace = true
 
 # bitcode.workspace = true
-clap = { version = "4.5.9", features = ["derive", "env"] }
+clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 tracing.workspace = true
 derive_more = { workspace = true, features = ["from"] }
+rand.workspace = true
 serde = { workspace = true, features = ["derive"] }
 
 tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }

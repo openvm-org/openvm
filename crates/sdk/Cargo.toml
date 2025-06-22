@@ -51,6 +51,7 @@ clap = { workspace = true, features = ["derive"] }
 serde_with = { workspace = true, features = ["hex"] }
 serde_json.workspace = true
 thiserror.workspace = true
+rand.workspace = true
 snark-verifier = { workspace = true, optional = true }
 snark-verifier-sdk = { workspace = true, optional = true }
 tempfile.workspace = true

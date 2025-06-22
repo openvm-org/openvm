@@ -3792,6 +3792,7 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
+ "rand 0.8.5",
  "serde",
  "signature 2.2.0",
 ]
@@ -4529,6 +4530,7 @@ dependencies = [
  "openvm-sha256-transpiler",
  "openvm-stark-sdk",
  "openvm-transpiler",
+ "rand 0.8.5",
  "serde",
  "tracing",
  "tracing-subscriber",
@@ -4563,6 +4565,7 @@ dependencies = [
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
+ "rand 0.8.5",
  "rand_chacha 0.3.1",
  "serde",
  "tiny-keccak",
@@ -4757,6 +4760,7 @@ dependencies = [
  "openvm-rv32im-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",
+ "rand 0.8.5",
  "serde",
  "serde_with",
  "strum",
@@ -4992,6 +4996,7 @@ dependencies = [
  "serde-big-array",
  "static_assertions",
  "strum",
+ "test-case",
  "tracing",
 ]
 
@@ -5236,6 +5241,7 @@ dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",
+ "itertools 0.14.0",
  "num-bigint 0.4.6",
  "num-integer",
  "openvm-circuit",
@@ -5339,6 +5345,7 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-transpiler",
  "p3-fri",
+ "rand 0.8.5",
  "rrs-lib",
  "serde",
  "serde_json",
@@ -5505,6 +5512,7 @@ dependencies = [
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
+ "rand 0.8.5",
  "serde",
  "tempfile",
  "test-case",
@@ -5605,6 +5613,7 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
+ "rand 0.8.5",
  "serde",
 ]
 

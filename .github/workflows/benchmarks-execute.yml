@@ -27,106 +27,15 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  execute-benchmarks:
-    runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=8cpu-linux-x64
-      - extras=s3-cache
-    steps:
-      - uses: runs-on/action@v1
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-
-      - name: Run execution benchmarks
-        working-directory: benchmarks/execute
-        run: cargo run | tee benchmark_output.log
-
-      - name: Parse benchmark results
-        working-directory: benchmarks/execute
-        run: |
-          # Determine if running in GitHub Actions environment
-          if [ -n "$GITHUB_STEP_SUMMARY" ]; then
-            SUMMARY_FILE="$GITHUB_STEP_SUMMARY"
-            echo "### Benchmark Results Summary" >> "$SUMMARY_FILE"
-          else
-            SUMMARY_FILE="benchmark_summary.md"
-            echo "### Benchmark Results Summary" > "$SUMMARY_FILE"
-            echo "Saving summary to $SUMMARY_FILE"
-          fi
-
-          # Set up summary table header
-          echo "| Program | Total Time (ms) |" >> "$SUMMARY_FILE"
-          echo "| ------- | --------------- |" >> "$SUMMARY_FILE"
-
-          # Variables to track current program and total time
-          current_program=""
-          total_time=0
-
-          # Process the output file line by line
-          while IFS= read -r line; do
-            # Check if line contains "Running program" message
-            if [[ $line =~ ｉ\ \[info\]:\ Running\ program:\ ([a-zA-Z0-9_-]+) ]]; then
-              # If we were processing a program, output its results
-              if [[ -n "$current_program" ]]; then
-                echo "| $current_program | $total_time |" >> "$SUMMARY_FILE"
-              fi
-
-              # Start tracking new program
-              current_program="${BASH_REMATCH[1]}"
-              total_time=0
-            fi
-
-            # Check for program completion to catch programs that might have no execution segments
-            if [[ $line =~ ｉ\ \[info\]:\ Completed\ program:\ ([a-zA-Z0-9_-]+) ]]; then
-              completed_program="${BASH_REMATCH[1]}"
-              # If no segments were found for this program, ensure it's still in the output
-              if [[ "$current_program" == "$completed_program" && $total_time == 0 ]]; then
-                echo "| $current_program | 0 |" >> "$SUMMARY_FILE"
-                current_program=""
-              fi
-            fi
-
-            # Check if line contains execution time (looking for the format with ms or s)
-            if [[ $line =~ execute_segment\ \[\ ([0-9.]+)(ms|s)\ \|\ [0-9.]+%\ \]\ segment ]]; then
-              segment_time="${BASH_REMATCH[1]}"
-              unit="${BASH_REMATCH[2]}"
-
-              # Convert to milliseconds if in seconds
-              if [[ "$unit" == "s" ]]; then
-                segment_time=$(echo "scale=6; $segment_time * 1000" | bc)
-              fi
-
-              # Add segment time to total
-              total_time=$(echo "scale=6; $total_time + $segment_time" | bc)
-            fi
-          done < benchmark_output.log
-
-          # Output the last program result if there was one
-          if [[ -n "$current_program" ]]; then
-            echo "| $current_program | $total_time |" >> "$SUMMARY_FILE"
-          fi
-
-          # If not in GitHub Actions, print the summary to the terminal
-          if [ -z "$GITHUB_STEP_SUMMARY" ]; then
-            echo -e "\nBenchmark Summary:"
-            cat "$SUMMARY_FILE"
-          fi
-
-  codspeed-benchmarks:
-    name: Run codspeed ${{ matrix.mode }} benchmarks
+  codspeed-walltime-benchmarks:
+    name: Run codspeed walltime benchmarks
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=8cpu-linux-x64
       - extras=s3-cache
 
-    strategy:
-      matrix:
-        mode: [instrumentation, walltime]
     env:
-      CODSPEED_RUNNER_MODE: ${{ matrix.mode }}
+      CODSPEED_RUNNER_MODE: walltime
 
     steps:
       - uses: runs-on/action@v1
@@ -151,4 +60,40 @@ jobs:
           run: cargo codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}
         env:
-          CODSPEED_RUNNER_MODE: ${{ matrix.mode }}
+          CODSPEED_RUNNER_MODE: walltime
+
+  codspeed-instrumentation-benchmarks:
+    name: Run codspeed instrumentation benchmarks
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=8cpu-linux-x64
+      - extras=s3-cache
+    if: github.event_name == 'workflow_dispatch'
+
+    env:
+      CODSPEED_RUNNER_MODE: instrumentation
+
+    steps:
+      - uses: runs-on/action@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+      - name: Install codspeed
+        run: cargo binstall --no-confirm --force cargo-codspeed
+
+      - name: Build benchmarks
+        working-directory: benchmarks/execute
+        run: cargo codspeed build
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v3
+        with:
+          working-directory: benchmarks/execute
+          run: cargo codspeed run
+          token: ${{ secrets.CODSPEED_TOKEN }}
+        env:
+          CODSPEED_RUNNER_MODE: instrumentation
