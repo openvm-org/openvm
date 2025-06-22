@@ -351,7 +351,7 @@ pub(crate) mod phantom {
             // - MEMORY_AS consists of `u8`s
             // - MEMORY_AS is in bounds
             let x_limbs: Vec<u8> =
-                unsafe { memory.memory.get_slice((RV32_MEMORY_AS, rs1), num_limbs) };
+                unsafe { memory.memory.get_slice((RV32_MEMORY_AS, rs1), num_limbs) }.to_vec();
             let x = BigUint::from_bytes_le(&x_limbs);
 
             let (success, sqrt) = match mod_sqrt(&x, modulus, &self.non_qrs[mod_idx]) {

@@ -1,17 +1,19 @@
-use std::{fmt::Debug, marker::PhantomData, mem::MaybeUninit, ptr::copy_nonoverlapping};
+use std::{
+    fmt::Debug,
+    marker::PhantomData,
+    mem::MaybeUninit,
+    ptr::{copy_nonoverlapping, slice_from_raw_parts},
+};
 
 use itertools::{zip_eq, Itertools};
 use memmap2::MmapMut;
 use openvm_instructions::exe::SparseMemoryImage;
 use openvm_stark_backend::p3_field::PrimeField32;
-use serde::{Deserialize, Serialize};
 
 use crate::arch::MemoryConfig;
 
 /// (address_space, pointer)
 pub type Address = (u32, u32);
-// use for serialization
-const PAGE_SIZE: usize = 1 << 12;
 pub const CELL_STRIDE: usize = 1;
 
 /// A wrapper around MmapMut that implements Clone and provides memory operations
@@ -211,82 +213,6 @@ pub struct AddressMap {
     pub cell_size: Vec<usize>, // TODO: move to MmapWrapper
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct AddressMapSerializeHelper {
-    compressed: Vec<Vec<(usize, Vec<u8>)>>,
-    lengths: Vec<usize>,
-    cell_size: Vec<usize>,
-}
-
-impl AddressMapSerializeHelper {
-    fn from(map: &AddressMap) -> Self {
-        assert!(map.mem.len() % PAGE_SIZE == 0);
-        let compressed = map
-            .mem
-            .iter()
-            .map(|space_mem| {
-                space_mem
-                    .iter::<u8>()
-                    .map(|(_, x)| x)
-                    .chunks(PAGE_SIZE)
-                    .into_iter()
-                    .enumerate()
-                    .flat_map(|(i, chunk)| {
-                        let cv = chunk.collect::<Vec<_>>();
-                        if cv.iter().all(|x| x == &0) {
-                            None
-                        } else {
-                            Some((i, cv))
-                        }
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-        let lengths = map.mem.iter().map(|m| m.len()).collect::<Vec<_>>();
-        Self {
-            compressed,
-            lengths,
-            cell_size: map.cell_size.clone(),
-        }
-    }
-
-    fn to(&self) -> AddressMap {
-        let mut mem = self
-            .lengths
-            .iter()
-            .map(|l| MmapWrapper::new(*l))
-            .collect::<Vec<_>>();
-        for (space_compr, space_mem) in self.compressed.iter().zip(mem.iter_mut()) {
-            for (i, chunk) in space_compr.iter() {
-                space_mem.as_mut_slice()[i * PAGE_SIZE..(i + 1) * PAGE_SIZE].copy_from_slice(chunk);
-            }
-        }
-        AddressMap {
-            mem,
-            cell_size: self.cell_size.clone(),
-        }
-    }
-}
-
-impl Serialize for AddressMap {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        AddressMapSerializeHelper::from(self).serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for AddressMap {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let helper = AddressMapSerializeHelper::deserialize(deserializer)?;
-        Ok(helper.to())
-    }
-}
-
 impl Default for AddressMap {
     fn default() -> Self {
         Self::from_mem_config(&MemoryConfig::default())
@@ -366,6 +292,22 @@ impl AddressMap {
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    /// - ASSUMES `ptr..ptr + len` must not be out of bounds
+    pub unsafe fn get_slice<T: Copy + Debug>(
+        &self,
+        (addr_space, ptr): Address,
+        len: usize,
+    ) -> &[T] {
+        debug_assert_eq!(size_of::<T>(), self.cell_size[addr_space as usize]);
+        let start = (ptr as usize) * size_of::<T>();
+        let mem = self.mem.get_unchecked(addr_space as usize);
+        let slice_ptr = mem.as_ptr().add(start);
+        &*slice_from_raw_parts(slice_ptr as *const T, len)
+    }
+
+    /// # Safety
+    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
+    /// - Assumes `addr_space` is within the configured memory and not out of bounds
     pub unsafe fn insert<T: Copy>(&mut self, (addr_space, ptr): Address, data: T) -> T {
         debug_assert_eq!(size_of::<T>(), self.cell_size[addr_space as usize]);
         self.mem[addr_space as usize].replace(ptr as usize, &data)
@@ -390,6 +332,31 @@ impl AddressMap {
             block.set_len(len);
         }
         block
+    }
+
+    /// Copies `data` into the memory at `(addr_space, ptr)`.
+    /// # Safety
+    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
+    /// - Assumes `addr_space` is within the configured memory and `ptr + size_of_val(data)` is not
+    ///   out of bounds
+    pub unsafe fn copy_slice_nonoverlapping<T: Copy>(
+        &mut self,
+        (addr_space, ptr): Address,
+        data: &[T],
+    ) {
+        let start = (ptr as usize) * size_of::<T>();
+        let len = size_of_val(data);
+
+        // SAFETY:
+        // - `data` size is correct by definition
+        // - we assume `mem` will not go out of bounds
+        // - aligment is trivial for u8
+        // - `data` and `self.mem` are non-overlapping
+        std::ptr::copy_nonoverlapping(
+            data.as_ptr() as *const u8,
+            self.mem[addr_space as usize].as_mut_ptr().add(start),
+            len,
+        );
     }
 
     // TODO[jpw]: stabilize the boundary memory image format and how to construct

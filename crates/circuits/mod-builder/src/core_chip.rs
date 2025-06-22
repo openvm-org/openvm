@@ -230,6 +230,7 @@ pub struct FieldExpressionStep<A> {
 }
 
 impl<A> FieldExpressionStep<A> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         adapter: A,
         expr: FieldExpr,
