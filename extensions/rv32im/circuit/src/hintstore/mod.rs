@@ -276,7 +276,7 @@ impl MultiRowMetadata for Rv32HintStoreMetadata {
     }
 }
 
-type Rv32HintStoreLayout = MultiRowLayout<Rv32HintStoreMetadata>;
+pub type Rv32HintStoreLayout = MultiRowLayout<Rv32HintStoreMetadata>;
 
 // This is the part of the record that we keep only once per instruction
 #[repr(C)]
