@@ -845,7 +845,6 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_R
             } else {
                 memory_read_native_from_state(state, input_register_2.as_canonical_u32())
             };
-            eprintln!("ACTUALLY READING {}", CHUNK);
             let data_1: [F; CHUNK] =
                 memory_read_native_from_state(state, input_pointer_1.as_canonical_u32());
             let data_2: [F; CHUNK] =
@@ -860,7 +859,6 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_R
             });
             let output = self.subchip.permute(p2_input);
             let output_pointer_u32 = output_pointer.as_canonical_u32();
-            eprintln!("ACTUALLY WRITING {}", CHUNK);
             memory_write_native_from_state::<_, F, CHUNK>(
                 state,
                 output_pointer_u32,
