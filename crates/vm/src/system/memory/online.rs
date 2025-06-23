@@ -1,10 +1,10 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, ptr::slice_from_raw_parts};
 
 use getset::Getters;
-use itertools::{izip, zip_eq};
+use itertools::{izip, zip_eq, Itertools};
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
+use openvm_instructions::exe::SparseMemoryImage;
 use openvm_stark_backend::p3_field::PrimeField32;
-use serde::{Deserialize, Serialize};
 
 use super::{adapter::AccessAdapterInventory, offline_checker::MemoryBus, MemoryAddress};
 use crate::{arch::MemoryConfig, system::memory::MemoryImage};
@@ -28,6 +28,182 @@ pub const INITIAL_TIMESTAMP: u32 = 0;
 /// (address_space, pointer)
 pub type Address = (u32, u32);
 
+/// Map from address space to linear memory.
+/// The underlying memory is typeless, stored as raw bytes, but usage implicitly assumes that each
+/// address space has memory cells of a fixed type (e.g., `u8, F`). We do not use a typemap for
+/// performance reasons, and it is up to the user to enforce types. Needless to say, this is a very
+/// `unsafe` API.
+#[derive(Debug, Clone)]
+pub struct AddressMap {
+    pub mem: Vec<MemoryBackend>,
+    /// byte size of cells per address space
+    pub cell_size: Vec<usize>, // TODO: move to MmapWrapper
+}
+
+impl Default for AddressMap {
+    fn default() -> Self {
+        Self::from_mem_config(&MemoryConfig::default())
+    }
+}
+
+impl AddressMap {
+    /// `mem_size` is the number of **cells** in each address space. It is required that
+    /// `mem_size[0] = 0`.
+    pub fn new(mem_size: Vec<usize>) -> Self {
+        // TMP: hardcoding for now
+        let mut cell_size = vec![1; 4];
+        cell_size.resize(mem_size.len(), 4);
+        let mem = zip_eq(&cell_size, &mem_size)
+            .map(|(cell_size, mem_size)| {
+                MemoryBackend::new(mem_size.checked_mul(*cell_size).unwrap())
+            })
+            .collect();
+        Self { mem, cell_size }
+    }
+
+    pub fn from_mem_config(mem_config: &MemoryConfig) -> Self {
+        Self::new(mem_config.addr_space_sizes.clone())
+    }
+
+    pub fn get_memory(&self) -> &Vec<MemoryBackend> {
+        &self.mem
+    }
+
+    pub fn get_memory_mut(&mut self) -> &mut Vec<MemoryBackend> {
+        &mut self.mem
+    }
+
+    pub fn items<F: PrimeField32>(&self) -> impl Iterator<Item = (Address, F)> + '_ {
+        zip_eq(&self.mem, &self.cell_size).enumerate().flat_map(
+            move |(as_idx, (space_mem, &cell_size))| {
+                // TODO: better way to handle address space conversions to F
+                if cell_size == 1 {
+                    space_mem
+                        .iter::<u8>()
+                        .map(move |(ptr_idx, x)| {
+                            ((as_idx as u32, ptr_idx as u32), F::from_canonical_u8(x))
+                        })
+                        .collect_vec()
+                } else {
+                    assert_eq!(cell_size, 4);
+                    space_mem
+                        .iter::<F>()
+                        .map(move |(ptr_idx, x)| ((as_idx as u32, ptr_idx as u32), x))
+                        .collect_vec()
+                }
+            },
+        )
+    }
+
+    pub fn get_f<F: PrimeField32>(&self, addr_space: u32, ptr: u32) -> F {
+        debug_assert_ne!(addr_space, 0);
+        // TODO: fix this
+        unsafe {
+            if self.cell_size[addr_space as usize] == 1 {
+                F::from_canonical_u8(self.get::<u8>((addr_space, ptr)))
+            } else {
+                debug_assert_eq!(self.cell_size[addr_space as usize], 4);
+                self.get::<F>((addr_space, ptr))
+            }
+        }
+    }
+
+    /// # Safety
+    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
+    /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    pub unsafe fn get<T: Copy>(&self, (addr_space, ptr): Address) -> T {
+        debug_assert_eq!(size_of::<T>(), self.cell_size[addr_space as usize]);
+        self.mem
+            .get_unchecked(addr_space as usize)
+            .get((ptr as usize) * size_of::<T>())
+    }
+
+    /// # Safety
+    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
+    /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    /// - ASSUMES `ptr..ptr + len` must not be out of bounds
+    pub unsafe fn get_slice<T: Copy + Debug>(
+        &self,
+        (addr_space, ptr): Address,
+        len: usize,
+    ) -> &[T] {
+        debug_assert_eq!(size_of::<T>(), self.cell_size[addr_space as usize]);
+        let start = (ptr as usize) * size_of::<T>();
+        let mem = self.mem.get_unchecked(addr_space as usize);
+        let slice_ptr = mem.as_ptr().add(start);
+        &*slice_from_raw_parts(slice_ptr as *const T, len)
+    }
+
+    /// # Safety
+    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
+    /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    pub unsafe fn insert<T: Copy>(&mut self, (addr_space, ptr): Address, data: T) -> T {
+        debug_assert_eq!(size_of::<T>(), self.cell_size[addr_space as usize]);
+        self.mem[addr_space as usize].replace(ptr as usize, &data)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.mem.iter().all(|mem| mem.is_empty())
+    }
+
+    pub fn read_range_generic<T: Copy + Debug>(
+        &self,
+        (addr_space, ptr): Address,
+        len: usize,
+    ) -> Vec<T> {
+        let mut block: Vec<T> = Vec::with_capacity(len);
+        unsafe {
+            self.mem[addr_space as usize].read_range_generic(
+                ptr as usize,
+                len,
+                block.as_mut_ptr() as *mut u8,
+            );
+            block.set_len(len);
+        }
+        block
+    }
+
+    /// Copies `data` into the memory at `(addr_space, ptr)`.
+    /// # Safety
+    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
+    /// - Assumes `addr_space` is within the configured memory and `ptr + size_of_val(data)` is not
+    ///   out of bounds
+    pub unsafe fn copy_slice_nonoverlapping<T: Copy>(
+        &mut self,
+        (addr_space, ptr): Address,
+        data: &[T],
+    ) {
+        let start = (ptr as usize) * size_of::<T>();
+        let len = size_of_val(data);
+
+        // SAFETY:
+        // - `data` size is correct by definition
+        // - we assume `mem` will not go out of bounds
+        // - aligment is trivial for u8
+        // - `data` and `self.mem` are non-overlapping
+        std::ptr::copy_nonoverlapping(
+            data.as_ptr() as *const u8,
+            self.mem[addr_space as usize].as_mut_ptr().add(start),
+            len,
+        );
+    }
+
+    // TODO[jpw]: stabilize the boundary memory image format and how to construct
+    /// # Safety
+    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
+    /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    pub fn from_sparse(mem_size: Vec<usize>, sparse_map: SparseMemoryImage) -> Self {
+        let mut vec = Self::new(mem_size);
+        for ((addr_space, index), data_byte) in sparse_map.into_iter() {
+            vec.mem[addr_space as usize].set(index as usize, &data_byte);
+        }
+        vec
+    }
+}
+
+/// API for guest memory conforming to OpenVM ISA
+// @dev Note we don't make this a trait because phantom executors currently need a concrete type for
+// guest memory
 #[derive(Debug, Clone, derive_new::new)]
 pub struct GuestMemory {
     pub memory: AddressMap,
@@ -94,72 +270,6 @@ impl GuestMemory {
         self.write(address_space, pointer, values);
         prev
     }
-}
-
-// /// API for guest memory conforming to OpenVM ISA
-// pub trait GuestMemory {
-//     /// Returns `[pointer:BLOCK_SIZE]_{address_space}`
-//     ///
-//     /// # Safety
-//     /// The type `T` must be stack-allocated `repr(C)` or `repr(transparent)`,
-//     /// and it must be the exact type used to represent a single memory cell in
-//     /// address space `address_space`. For standard usage,
-//     /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
-//     unsafe fn read<T, const BLOCK_SIZE: usize>(
-//         &self,
-//         address_space: u32,
-//         pointer: u32,
-//     ) -> [T; BLOCK_SIZE]
-//     where
-//         T: Copy + Debug;
-
-//     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}`
-//     ///
-//     /// # Safety
-//     /// See [`GuestMemory::read`].
-//     unsafe fn write<T, const BLOCK_SIZE: usize>(
-//         &mut self,
-//         address_space: u32,
-//         pointer: u32,
-//         values: &[T; BLOCK_SIZE],
-//     ) where
-//         T: Copy + Debug;
-
-//     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}` and returns
-//     /// the previous values.
-//     ///
-//     /// # Safety
-//     /// See [`GuestMemory::read`].
-//     #[inline(always)]
-//     unsafe fn replace<T, const BLOCK_SIZE: usize>(
-//         &mut self,
-//         address_space: u32,
-//         pointer: u32,
-//         values: &[T; BLOCK_SIZE],
-//     ) -> [T; BLOCK_SIZE]
-//     where
-//         T: Copy + Debug,
-//     {
-//         let prev = self.read(address_space, pointer);
-//         self.write(address_space, pointer, values);
-//         prev
-//     }
-// }
-
-// TO BE DELETED
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum MemoryLogEntry<T> {
-    Read {
-        address_space: u32,
-        pointer: u32,
-        len: usize,
-    },
-    Write {
-        address_space: u32,
-        pointer: u32,
-        data: Vec<T>,
-    },
-    IncrementTimestampBy(u32),
 }
 
 // perf[jpw]: since we restrict `timestamp < 2^29`, we could pack `timestamp, log2(block_size)`
