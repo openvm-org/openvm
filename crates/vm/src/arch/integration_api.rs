@@ -4,7 +4,7 @@ use std::{
     borrow::{Borrow, BorrowMut},
     io::Cursor,
     marker::PhantomData,
-    ptr::{copy_nonoverlapping, slice_from_raw_parts_mut},
+    ptr::{copy_nonoverlapping, slice_from_raw_parts, slice_from_raw_parts_mut},
     sync::Arc,
 };
 
@@ -723,20 +723,31 @@ where
         let len = self.buffer.len();
         arena.trace_offset = 0;
         let mut offset = 0;
+        println!("arena.width: {}", arena.width);
+        let (adapter_width, core_width) = Self::get_aligned_widths(&layout);
+        println!(
+            "adapter_width: {}, core_width: {}",
+            adapter_width, core_width
+        );
         while offset < len {
             let dst_buffer = arena.alloc_single_row();
             let (adapter_buf, core_buf) =
                 unsafe { dst_buffer.split_at_mut_unchecked(M::get_adapter_width()) };
-            let (adapter_width, core_width) = Self::get_aligned_widths(&layout);
+            println!("adapter_buf: {:?}, core_buf: {:?}", adapter_buf.len(), core_buf.len());
             unsafe {
                 let src_ptr = self.buffer.as_ptr().add(offset);
+                
                 copy_nonoverlapping(src_ptr, adapter_buf.as_mut_ptr(), adapter_width);
                 copy_nonoverlapping(
                     src_ptr.add(adapter_width),
                     core_buf.as_mut_ptr(),
                     core_width,
                 );
+                let sm = &*slice_from_raw_parts(src_ptr, adapter_width);
+                println!("sm: {:?}", sm);
+                println!("adapter_buf: {:?}", adapter_buf);
             }
+            println!("adapter_buf: {:?}, core_buf: {:?}", adapter_buf.len(), core_buf.len());
             offset += adapter_width + core_width;
         }
     }

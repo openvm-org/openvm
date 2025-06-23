@@ -342,12 +342,7 @@ impl<F, CTX, A> TraceStep<F, CTX> for FieldExpressionStep<A>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
-            F,
-            CTX,
-            ReadData: Into<DynArray<u8>>,
-            WriteData: From<DynArray<u8>>,
-        >,
+        + AdapterTraceStep<F, CTX, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
 {
     type RecordLayout = FieldExpressionRecordLayout<F, A>;
     type RecordMut<'a> = (A::RecordMut<'a>, FieldExpressionCoreRecordMut<'a>);

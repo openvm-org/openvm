@@ -498,13 +498,13 @@ impl<
         record
             .reads_aux
             .iter()
+            .zip(cols.reads_aux.iter_mut())
             .rev()
-            .zip(cols.reads_aux.iter_mut().rev())
             .for_each(|(reads, cols_reads)| {
                 reads
                     .iter()
+                    .zip(cols_reads.iter_mut())
                     .rev()
-                    .zip(cols_reads.iter_mut().rev())
                     .for_each(|(read, cols_read)| {
                         mem_helper.fill(read.prev_timestamp, timestamp_mm(), cols_read.as_mut());
                     });
@@ -519,8 +519,8 @@ impl<
         record
             .rs_read_aux
             .iter()
+            .zip(cols.rs_read_aux.iter_mut())
             .rev()
-            .zip(cols.rs_read_aux.iter_mut().rev())
             .for_each(|(aux, cols_aux)| {
                 mem_helper.fill(aux.prev_timestamp, timestamp_mm(), cols_aux.as_mut());
             });

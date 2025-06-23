@@ -42,7 +42,7 @@ mod addsubtests {
     use test_case::test_case;
 
     use super::*;
-    use crate::modular_chip::ModularDenseChip;
+    use crate::modular_chip::{ModularDenseChip, ModularStep};
 
     const ADD_LOCAL: usize = Rv32ModularArithmeticOpcode::ADD as usize;
 
@@ -180,6 +180,7 @@ mod addsubtests {
         );
         sparse_chip.0.set_trace_buffer_height(MAX_INS_CAPACITY);
 
+
         {
             // Using a trick to create a dense chip using the air and step of the sparse chip
             // doing 1xNUM_LIMBS reads and writes
@@ -206,6 +207,9 @@ mod addsubtests {
                 &'a mut Rv32VecHeapAdapterRecord<2, 1, 1, NUM_LIMBS, NUM_LIMBS>,
                 FieldExpressionCoreRecordMut<'a>,
             );
+
+            println!("dense_chip.step.get_record_layout::<F>() = {:?}", dense_chip.step.get_record_layout::<F>().metadata.total_input_limbs);
+            println!("sparse_chip.0.step.get_record_layout::<F>() = {:?}", sparse_chip.0.step.get_record_layout::<F>().metadata.total_input_limbs);
             let mut record_interpreter = dense_chip.arena.get_record_interpreter::<Record, _>();
             record_interpreter.transfer_to_matrix_arena(
                 &mut sparse_chip.0.arena,
