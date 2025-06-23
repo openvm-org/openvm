@@ -170,8 +170,8 @@ pub(crate) mod phantom {
                 let p = (0..p_len)
                     .map(|i| -> eyre::Result<_> {
                         let ptr = p_ptr + i * 2 * (N as u32);
-                        let x = read_fp::<N, F, Fq>(memory, ptr)?;
-                        let y = read_fp::<N, F, Fq>(memory, ptr + N as u32)?;
+                        let x = read_fp::<N, Fq>(memory, ptr)?;
+                        let y = read_fp::<N, Fq>(memory, ptr + N as u32)?;
                         Ok(AffinePoint::new(x, y))
                     })
                     .collect::<eyre::Result<Vec<_>>>()?;
@@ -179,8 +179,8 @@ pub(crate) mod phantom {
                     .map(|i| -> eyre::Result<_> {
                         let mut ptr = q_ptr + i * 4 * (N as u32);
                         let mut read_fp2 = || -> eyre::Result<_> {
-                            let c0 = read_fp::<N, F, Fq>(memory, ptr)?;
-                            let c1 = read_fp::<N, F, Fq>(memory, ptr + N as u32)?;
+                            let c0 = read_fp::<N, Fq>(memory, ptr)?;
+                            let c1 = read_fp::<N, Fq>(memory, ptr + N as u32)?;
                             ptr += 2 * N as u32;
                             Ok(Fq2::new(c0, c1))
                         };
@@ -212,8 +212,8 @@ pub(crate) mod phantom {
                 let p = (0..p_len)
                     .map(|i| -> eyre::Result<_> {
                         let ptr = p_ptr + i * 2 * (N as u32);
-                        let x = read_fp::<N, F, Fq>(memory, ptr)?;
-                        let y = read_fp::<N, F, Fq>(memory, ptr + N as u32)?;
+                        let x = read_fp::<N, Fq>(memory, ptr)?;
+                        let y = read_fp::<N, Fq>(memory, ptr + N as u32)?;
                         Ok(AffinePoint::new(x, y))
                     })
                     .collect::<eyre::Result<Vec<_>>>()?;
@@ -221,8 +221,8 @@ pub(crate) mod phantom {
                     .map(|i| -> eyre::Result<_> {
                         let mut ptr = q_ptr + i * 4 * (N as u32);
                         let mut read_fp2 = || -> eyre::Result<_> {
-                            let c0 = read_fp::<N, F, Fq>(memory, ptr)?;
-                            let c1 = read_fp::<N, F, Fq>(memory, ptr + N as u32)?;
+                            let c0 = read_fp::<N, Fq>(memory, ptr)?;
+                            let c1 = read_fp::<N, Fq>(memory, ptr + N as u32)?;
                             ptr += 2 * N as u32;
                             Ok(Fq2 { c0, c1 })
                         };
@@ -251,21 +251,21 @@ pub(crate) mod phantom {
         Ok(())
     }
 
-    fn read_fp<const N: usize, F: PrimeField32, Fp: ff::PrimeField>(
+    fn read_fp<const N: usize, Fp: ff::PrimeField>(
         memory: &GuestMemory,
         ptr: u32,
     ) -> eyre::Result<Fp>
     where
         Fp::Repr: From<[u8; N]>,
     {
-        let repr: [u8; N] = unsafe {
+        let repr: &[u8; N] = unsafe {
             memory
                 .memory
-                .get_slice((RV32_MEMORY_AS, ptr), N)
+                .get_slice::<u8>((RV32_MEMORY_AS, ptr), N)
                 .try_into()
                 .unwrap()
         };
-        Fp::from_repr(repr.into())
+        Fp::from_repr((*repr).into())
             .into_option()
             .ok_or(eyre::eyre!("bad ff::PrimeField repr"))
     }

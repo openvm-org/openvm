@@ -414,6 +414,7 @@ impl<
                 < (1 << self.pointer_max_bits)
         );
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..BLOCKS_PER_WRITE {
             tracing_write(
                 memory,

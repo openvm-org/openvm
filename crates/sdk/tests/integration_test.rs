@@ -5,7 +5,7 @@ use openvm_build::GuestOptions;
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, ContinuationVmProof, ExecutionError,
-        GenerationError, SingleSegmentVmExecutor, SystemConfig, VirtualMachine, VmConfig,
+        SingleSegmentVmExecutor, SystemConfig, VirtualMachine,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
@@ -25,11 +25,10 @@ use openvm_sdk::{
     keygen::AppProvingKey,
     Sdk, StdIn,
 };
-use openvm_stark_backend::{keygen::types::LinearConstraint, p3_matrix::Matrix};
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        setup_tracing, FriParameters,
+        FriParameters,
     },
     engine::{StarkEngine, StarkFriEngine},
     openvm_stark_backend::p3_field::FieldAlgebra,

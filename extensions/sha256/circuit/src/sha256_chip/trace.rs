@@ -345,6 +345,7 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Sha256VmStep {
 }
 
 impl Sha256VmStep {
+    #[allow(clippy::too_many_arguments)]
     fn fill_block_trace<F: PrimeField32>(
         &self,
         block_slice: &mut [F],
@@ -496,6 +497,7 @@ impl Sha256VmStep {
 
                 // Fill in the padding flags
                 if row_idx < SHA256_NUM_READ_ROWS {
+                    #[allow(clippy::comparison_chain)]
                     if (row_idx as i32) < first_padding_row {
                         control_cols.pad_flags = get_flag_pt_array(
                             &self.padding_encoder,
