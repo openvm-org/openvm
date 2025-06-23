@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, fmt::Debug};
+use std::fmt::Debug;
 
 use getset::Getters;
 use itertools::{izip, zip_eq};
@@ -10,15 +10,12 @@ use super::{
     adapter::AccessAdapterInventory,
     offline_checker::MemoryBus,
     paged_vec::{AddressMap, PAGE_SIZE},
-    Address, MemoryAddress, PagedVec,
+    Address, PagedVec,
 };
 use crate::{
     arch::MemoryConfig,
     system::memory::{
-        adapter::{
-            get_chip_index,
-            records::{AccessLayout, MERGE_BEFORE_FLAG, SPLIT_AFTER_FLAG},
-        },
+        adapter::records::{AccessLayout, MERGE_BEFORE_FLAG, SPLIT_AFTER_FLAG},
         MemoryImage,
     },
 };
@@ -260,89 +257,6 @@ impl<F: PrimeField32> TracingMemory<F> {
         );
     }
 
-    // pub(crate) fn execute_splits<const UPDATE_META: bool>(
-    //     &mut self,
-    //     address: MemoryAddress<u32, u32>,
-    //     align: usize,
-    //     values: &[F],
-    //     timestamp: u32,
-    // ) {
-    //     if UPDATE_META {
-    //         for i in 0..(values.len() / align) {
-    //             self.set_meta_block(
-    //                 address.address_space as usize,
-    //                 address.pointer as usize + i * align,
-    //                 align,
-    //                 align,
-    //                 timestamp,
-    //             );
-    //         }
-    //     }
-    //     let mut size = align;
-    //     let MemoryAddress {
-    //         address_space,
-    //         pointer,
-    //     } = address;
-    //     while size < values.len() {
-    //         size *= 2;
-    //         for i in (0..values.len()).step_by(size) {
-    //             self.access_adapter_inventory.execute_split(
-    //                 MemoryAddress {
-    //                     address_space,
-    //                     pointer: pointer + i as u32,
-    //                 },
-    //                 &values[i..i + size],
-    //                 timestamp,
-    //             );
-    //         }
-    //     }
-    // }
-
-    // pub(crate) fn execute_merges<const UPDATE_META: bool>(
-    //     &mut self,
-    //     address: MemoryAddress<u32, u32>,
-    //     align: usize,
-    //     values: &[F],
-    //     timestamps: &[u32],
-    // ) {
-    //     if UPDATE_META {
-    //         self.set_meta_block(
-    //             address.address_space as usize,
-    //             address.pointer as usize,
-    //             align,
-    //             values.len(),
-    //             *timestamps.iter().max().unwrap(),
-    //         );
-    //     }
-    //     let mut size = align;
-    //     let MemoryAddress {
-    //         address_space,
-    //         pointer,
-    //     } = address;
-    //     while size < values.len() {
-    //         size *= 2;
-    //         for i in (0..values.len()).step_by(size) {
-    //             let left_timestamp = timestamps[(i / align)..((i + size / 2) / align)]
-    //                 .iter()
-    //                 .max()
-    //                 .unwrap();
-    //             let right_timestamp = timestamps[((i + size / 2) / align)..((i + size) / align)]
-    //                 .iter()
-    //                 .max()
-    //                 .unwrap();
-    //             self.access_adapter_inventory.execute_merge(
-    //                 MemoryAddress {
-    //                     address_space,
-    //                     pointer: pointer + i as u32,
-    //                 },
-    //                 &values[i..i + size],
-    //                 *left_timestamp,
-    //                 *right_timestamp,
-    //             );
-    //         }
-    //     }
-    // }
-
     /// Updates the metadata with the given block.
     fn set_meta_block(
         &mut self,
@@ -573,101 +487,7 @@ impl<F: PrimeField32> TracingMemory<F> {
             true,
         );
 
-        // self.set_meta_block(
-        //     address_space,
-        //     pointer,
-        //     align,
-        //     BLOCK_SIZE,
-        //     self.timestamp,
-        //     if BLOCK_SIZE == 1 {
-        //         0
-        //     } else {
-        //         self.access_adapter_inventory.current_size::<BLOCK_SIZE>() as u32
-        //     },
-        // );
-
         *prev_ts.iter().max().unwrap()
-
-        // let end = begin + BLOCK_SIZE / align;
-
-        // let mut prev_ts = INITIAL_TIMESTAMP;
-        // let mut block_timestamps = vec![INITIAL_TIMESTAMP; num_segs];
-        // let mut cur_ptr = begin;
-        // let need_to_merge = loop {
-        //     if cur_ptr >= end {
-        //         break true;
-        //     }
-        //     let mut current_metadata = self.meta[address_space]
-        //         .get::<AccessMetadata>(cur_ptr * size_of::<AccessMetadata>());
-        //     if current_metadata.block_size == BLOCK_SIZE as u32 && cur_ptr + num_segs == end {
-        //         // We do not have to do anything
-        //         prev_ts = current_metadata.timestamp;
-        //         break false;
-        //     } else if current_metadata.block_size == 0 {
-        //         // Initialize
-        //         if self.initial_block_size < align {
-        //             // Only happens in volatile, so empty initial memory
-        //             self.set_meta_block(
-        //                 address_space,
-        //                 cur_ptr * align,
-        //                 align,
-        //                 align,
-        //                 INITIAL_TIMESTAMP,
-        //             );
-        //             current_metadata = AccessMetadata::new(INITIAL_TIMESTAMP, align as u32);
-        //         } else {
-        //             cur_ptr -= cur_ptr % (self.initial_block_size / align);
-        //             self.set_meta_block(
-        //                 address_space,
-        //                 cur_ptr * align,
-        //                 align,
-        //                 self.initial_block_size,
-        //                 INITIAL_TIMESTAMP,
-        //             );
-        //             current_metadata =
-        //                 AccessMetadata::new(INITIAL_TIMESTAMP, self.initial_block_size as u32);
-        //         }
-        //     }
-        //     prev_ts = prev_ts.max(current_metadata.timestamp);
-        //     while current_metadata.block_size == AccessMetadata::OCCUPIED {
-        //         cur_ptr -= 1;
-        //         current_metadata = self.meta[address_space]
-        //             .get::<AccessMetadata>(cur_ptr * size_of::<AccessMetadata>());
-        //     }
-        //     block_timestamps[cur_ptr.saturating_sub(begin)
-        //         ..((cur_ptr + (current_metadata.block_size as usize) / align).min(end) - begin)]
-        //         .fill(current_metadata.timestamp);
-        //     if current_metadata.block_size > align as u32 {
-        //         // Split
-        //         let address = MemoryAddress::new(address_space as u32, (cur_ptr * align) as u32);
-        //         let values = (0..current_metadata.block_size as usize)
-        //             .map(|i| {
-        //                 self.data
-        //                     .memory
-        //                     .get_f(address.address_space, address.pointer + (i as u32))
-        //             })
-        //             .collect::<Vec<_>>();
-        //         self.execute_splits::<true>(address, align, &values, current_metadata.timestamp);
-        //     }
-        //     cur_ptr += current_metadata.block_size as usize / align;
-        // };
-        // if need_to_merge {
-        //     // Merge
-        //     let values = (0..BLOCK_SIZE)
-        //         .map(|i| {
-        //             self.data
-        //                 .memory
-        //                 .get_f(address_space as u32, (pointer + i) as u32)
-        //         })
-        //         .collect::<Vec<_>>();
-        //     self.execute_merges::<true>(
-        //         MemoryAddress::new(address_space as u32, pointer as u32),
-        //         align,
-        //         &values,
-        //         &block_timestamps,
-        //     );
-        // }
-        // prev_ts
     }
 
     /// Atomic read operation which increments the timestamp by 1.

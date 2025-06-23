@@ -350,7 +350,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     /// Returns the equipartition of the touched blocks.
-    /// Has side effects.
+    /// Modifies records and adds new to account for the initial/final segments.
     fn touched_blocks_to_equipartition<const CHUNK: usize, const INITIAL_MERGES: bool>(
         &mut self,
         touched_blocks: Vec<((u32, u32), AccessMetadata)>,
@@ -387,19 +387,19 @@ impl<F: PrimeField32> MemoryController<F> {
                 block_size,
                 offset,
             } = metadata;
-            if current_cnt > 0
-                && (current_address.address_space != addr_space
-                    || current_address.pointer + CHUNK as u32 <= ptr)
-            {
-                panic!("How is the final touched thing not composed of chunks we created");
-            }
+            assert!(
+                current_cnt == 0
+                    || (current_address.address_space == addr_space
+                        && ptr == current_address.pointer),
+                "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`"
+            );
             if current_cnt == 0 {
-                let rem = ptr & (CHUNK as u32 - 1);
-                assert_eq!(rem, 0, "why why why");
+                assert_eq!(
+                    ptr & (CHUNK as u32 - 1),
+                    0,
+                    "The union of all touched blocks must consist of `CHUNK`-aligned blocks"
+                );
                 current_address = MemoryAddress::new(addr_space, ptr);
-            } else {
-                let offset = (ptr - current_address.pointer) as usize;
-                assert_eq!(offset, current_cnt, "why why why");
             }
             debug_assert!(block_size >= min_block_size as u32);
             debug_assert!(ptr % min_block_size as u32 == 0);
@@ -481,20 +481,16 @@ impl<F: PrimeField32> MemoryController<F> {
                 }
             }
         }
-        if current_cnt > 0 {
-            panic!("Again, why");
-        }
+        assert_eq!(current_cnt, 0, "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`");
     }
 
-    /// Returns the final memory state if persistent. TODO(AG): update this description
+    /// Finalize the boundary and merkle chips.
     #[allow(clippy::assertions_on_constants)]
     pub fn finalize<H>(&mut self, hasher: Option<&mut H>)
     where
         H: HasherChip<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
         let touched_blocks = self.memory.touched_blocks();
-        eprintln!("touched_blocks: {:?}", touched_blocks);
-
         let mut final_memory_volatile = None;
         let mut final_memory_persistent = None;
 

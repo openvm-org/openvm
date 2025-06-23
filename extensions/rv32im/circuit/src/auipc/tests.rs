@@ -161,7 +161,7 @@ fn rand_auipc_test() {
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, bitwise_chip) = create_test_chip(&tester);
 
-    let num_tests: usize = 1;
+    let num_tests: usize = 100;
     for _ in 0..num_tests {
         set_and_execute(&mut tester, &mut chip, &mut rng, AUIPC, None, None);
     }

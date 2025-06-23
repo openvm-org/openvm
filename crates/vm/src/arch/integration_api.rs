@@ -355,6 +355,7 @@ impl DenseRecordArena {
         }
     }
 
+    /// Allocates `count` bytes and returns as a mutable slice.
     pub fn alloc_bytes<'a>(&mut self, count: usize) -> &'a mut [u8] {
         let begin = self.records_buffer.position();
         let width = count;
