@@ -47,7 +47,7 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
 
     /// Sets the previous data **without** updating the less than auxiliary columns.
     pub fn set_prev_data(&mut self, data: [T; N]) {
-        unsafe { std::ptr::copy(data.as_ptr(), self.prev_data.as_mut_ptr(), N) };
+        self.prev_data = data;
     }
 }
 

@@ -283,7 +283,7 @@ fn run_auipc_sanity_test() {
 ///
 /// Ensure that the chip works as expected with dense records.
 /// We first execute some instructions with a [DenseRecordArena] and transfer the records
-/// to a [MatrixRecordArena]. After transfering we generate the trace and make sure that 
+/// to a [MatrixRecordArena]. After transfering we generate the trace and make sure that
 /// all the constraints pass.
 ///////////////////////////////////////////////////////////////////////////////////////
 type Rv32AuipcChipDense =
