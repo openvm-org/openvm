@@ -14,7 +14,7 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProofInput,
     AirRef, Chip, ChipUsageGetter,
 };
@@ -103,11 +103,12 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
     pub fn air_names(&self) -> Vec<String> {
         self.air_names.clone()
     }
-    pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>
+    pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(mut self) -> Vec<AirProofInput<SC>>
     where
         F: PrimeField32,
         Domain<SC>: PolynomialSpace<Val = F>,
     {
+        self.prepare_to_finalize();
         self.chips
             .into_iter()
             .map(|chip| chip.generate_air_proof_input())
@@ -213,6 +214,10 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
                             .unwrap();
                         *record.timestamp_and_mask & SPLIT_AFTER_FLAG != 0
                     });
+                    eprintln!(
+                        "next_data: {:?}, need_to_split: {}",
+                        next_data, need_to_split
+                    );
                     if need_to_split {
                         for &id in ids.iter() {
                             let (chip, ptr, layout) = &mut chip_data[id];

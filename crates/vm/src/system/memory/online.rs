@@ -600,7 +600,6 @@ impl<F: PrimeField32> TracingMemory<F> {
     /// If a block hasn't been explicitly accessed and is created by a split,
     /// the corresponding metadata has `offset` set to `AccessMetadata::UNSPLITTABLE`.
     pub fn touched_blocks(&mut self) -> Vec<(Address, AccessMetadata)> {
-        self.access_adapter_inventory.prepare_to_finalize();
         let mut blocks = Vec::new();
         for (addr_space, (page, &align)) in zip_eq(&self.meta, &self.min_block_size).enumerate() {
             let mut next_idx = 0;
