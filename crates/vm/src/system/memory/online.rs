@@ -380,6 +380,29 @@ impl<F: PrimeField32> TracingMemory<F> {
          * new blocks.
          * If any of the previous memory accesses turn out in need to be split,
          * this function sets their corresponding flags.
+         *
+         * The way metadata works is:
+         * - When we touch a block, it must be decomposable into aligned subsegments of length
+         *   `align`. We set the metadata for each of these subsegments, completely overwriting
+         *   the previous metadata.
+         * - If we overwrite a piece of metadata that belonged to another access, we **do not
+         *   care** about other pieces of the same access subsegment.
+         * - Whatever we overwrite, we mark the corresponding access to be split later.
+         *
+         * The way adapter records work is:
+         * - Every time we have an access, it has two values:
+         *   - The size of the access,
+         *   - The size of the subsegments we may want to split it into. At the time of the
+         *     access, we don't know yet if we want to split it afterwards. This small size is
+         *     usually equal to the `align` for this address space, but it can differ, e.g. if
+         *     we want to split `align=4` into final segments, which have size `1` in the
+         *     volatile memory interface.
+         * - We add one record to all the adapters with sizes from `(lowest_size, block_size]`.
+         * - When we want to mark an access to be split, we only modify the highest record (the
+         *   one with the largest size), which is considered the "master" record. The
+         *   corresponding metadatas will have the offset of this record in its arena.
+         * - Before finalization, we call `prepare_to_finalize` function that propagates the
+         *   split flag to all the smaller records for this access.
          */
         let num_segs = BLOCK_SIZE / align;
 
