@@ -1,4 +1,8 @@
-use std::{borrow::BorrowMut, marker::PhantomData, sync::Arc};
+use std::{
+    borrow::BorrowMut,
+    marker::PhantomData,
+    sync::{Arc, Mutex},
+};
 
 pub use air::*;
 pub use columns::*;
@@ -15,6 +19,7 @@ use openvm_stark_backend::{
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
     prover::types::AirProofInput,
     AirRef, Chip, ChipUsageGetter,
 };
@@ -370,135 +375,179 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
         };
         let padded_height = next_power_of_two_or_zero(padded_height);
         let mut trace = RowMajorMatrix::new(vec![F::ZERO; width * padded_height], width);
-        for (&(start_ptr, start_height), &(_, _)) in
-            milestones.iter().zip(milestones.iter().skip(1))
-        {
-            let mut ptr = start_ptr;
-            let layout = extract_metadata(&bytes[start_ptr..]);
 
-            // TODO(AG): get rid of this
+        // Extract the range checker and lt_air for parallel access
+        let range_checker = self.range_checker.clone();
+        let lt_air = self.air.lt_air;
 
-            // timestamp_and_mask: u32 (4 bytes)
-            let timestamp_and_mask = unsafe { *(bytes.as_ptr().add(ptr) as *const u32) };
-            ptr += 4;
+        // Extract milestone data for parallel processing
+        let milestone_data: Vec<_> = milestones
+            .iter()
+            .zip(milestones.iter().skip(1))
+            .map(|(&(start_ptr, start_height), &(_, _))| {
+                let mut ptr = start_ptr;
+                let layout = extract_metadata(&bytes[start_ptr..]);
 
-            // address_space: u32 (4 bytes)
-            let address_space = unsafe { *(bytes.as_ptr().add(ptr) as *const u32) };
-            ptr += 4;
+                // timestamp_and_mask: u32 (4 bytes)
+                let timestamp_and_mask = unsafe { *(bytes.as_ptr().add(ptr) as *const u32) };
+                ptr += 4;
 
-            // pointer: u32 (4 bytes)
-            let pointer = unsafe { *(bytes.as_ptr().add(ptr) as *const u32) };
-            ptr += 4;
+                // address_space: u32 (4 bytes)
+                let address_space = unsafe { *(bytes.as_ptr().add(ptr) as *const u32) };
+                ptr += 4;
 
-            // block_size: u32 (4 bytes)
-            let _block_size_field = unsafe { *(bytes.as_ptr().add(ptr) as *const u32) };
-            ptr += 4;
+                // pointer: u32 (4 bytes)
+                let pointer = unsafe { *(bytes.as_ptr().add(ptr) as *const u32) };
+                ptr += 4;
 
-            // data: [u8] (block_size * type_size bytes)
-            let data = unsafe {
-                std::slice::from_raw_parts(
-                    bytes.as_ptr().add(ptr),
-                    layout.block_size * layout.type_size,
+                // block_size: u32 (4 bytes)
+                let _block_size_field = unsafe { *(bytes.as_ptr().add(ptr) as *const u32) };
+                ptr += 4;
+
+                // data: [u8] (block_size * type_size bytes)
+                let data = unsafe {
+                    std::slice::from_raw_parts(
+                        bytes.as_ptr().add(ptr),
+                        layout.block_size * layout.type_size,
+                    )
+                };
+                ptr += layout.block_size * layout.type_size;
+
+                // prev_data: [u8] (block_size * type_size bytes)
+                let prev_data = unsafe {
+                    std::slice::from_raw_parts(
+                        bytes.as_ptr().add(ptr),
+                        layout.block_size * layout.type_size,
+                    )
+                };
+                ptr += layout.block_size * layout.type_size;
+
+                // timestamps: [u32] (block_size / cell_size * 4 bytes)
+                let timestamps = unsafe {
+                    std::slice::from_raw_parts(
+                        bytes.as_ptr().add(ptr) as *const u32,
+                        layout.block_size / layout.cell_size,
+                    )
+                };
+
+                (
+                    start_height,
+                    timestamp_and_mask,
+                    address_space,
+                    pointer,
+                    layout,
+                    data,
+                    prev_data,
+                    timestamps,
                 )
-            };
-            ptr += layout.block_size * layout.type_size;
+            })
+            .collect();
 
-            // prev_data: [u8] (block_size * type_size bytes)
-            let prev_data = unsafe {
-                std::slice::from_raw_parts(
-                    bytes.as_ptr().add(ptr),
-                    layout.block_size * layout.type_size,
-                )
-            };
-            ptr += layout.block_size * layout.type_size;
+        // Process all milestone windows in parallel
+        let trace_mutex = Arc::new(Mutex::new(&mut trace.values));
 
-            // timestamps: [u32] (block_size / cell_size * 4 bytes)
-            let timestamps = unsafe {
-                std::slice::from_raw_parts(
-                    bytes.as_ptr().add(ptr) as *const u32,
-                    layout.block_size / layout.cell_size,
-                )
-            };
+        milestone_data.par_iter().for_each(
+            |(
+                start_height,
+                timestamp_and_mask,
+                address_space,
+                pointer,
+                layout,
+                data,
+                prev_data,
+                timestamps,
+            )| {
+                let mut row_idx = *start_height;
+                let num_segs = layout.block_size / N;
 
-            let mut row_idx = start_height;
-            let num_segs = layout.block_size / N;
-            if timestamp_and_mask & MERGE_BEFORE_FLAG != 0 {
-                for i in 0..num_segs {
-                    let row: &mut AccessAdapterCols<F, N> = trace.row_mut(row_idx).borrow_mut();
-                    row.is_valid = F::ONE;
-                    row.is_split = F::ZERO;
-                    row.address = MemoryAddress::new(
-                        F::from_canonical_u32(address_space),
-                        F::from_canonical_u32(pointer + (i * N) as u32),
-                    );
-                    if address_space < NATIVE_AS {
-                        for j in 0..N {
-                            row.values[j] = F::from_canonical_u8(prev_data[i * N + j]);
+                if timestamp_and_mask & MERGE_BEFORE_FLAG != 0 {
+                    // Parallelize the row filling for merge before
+                    (0..num_segs).into_par_iter().for_each(|i| {
+                        let row_start = (row_idx + i) * width;
+                        let mut trace_guard = trace_mutex.lock().unwrap();
+                        let row_slice = &mut trace_guard[row_start..row_start + width];
+                        let row: &mut AccessAdapterCols<F, N> = row_slice.borrow_mut();
+
+                        row.is_valid = F::ONE;
+                        row.is_split = F::ZERO;
+                        row.address = MemoryAddress::new(
+                            F::from_canonical_u32(*address_space),
+                            F::from_canonical_u32(*pointer + (i * N) as u32),
+                        );
+                        if *address_space < NATIVE_AS {
+                            for j in 0..N {
+                                row.values[j] = F::from_canonical_u8(prev_data[i * N + j]);
+                            }
+                        } else {
+                            unsafe {
+                                std::ptr::copy_nonoverlapping(
+                                    prev_data.as_ptr().add(i * N * layout.type_size),
+                                    row.values.as_mut_ptr() as *mut u8,
+                                    N * layout.type_size,
+                                );
+                            }
                         }
-                    } else {
-                        unsafe {
-                            std::ptr::copy_nonoverlapping(
-                                prev_data.as_ptr().add(i * N * layout.type_size),
-                                row.values.as_mut_ptr() as *mut u8,
-                                N * layout.type_size,
-                            );
-                        }
-                    }
-                    let left_timestamp = *timestamps[2 * i * timestamps.len() / (2 * num_segs)
-                        ..((2 * i + 1) * timestamps.len()).div_ceil(2 * num_segs)]
-                        .iter()
-                        .max()
-                        .unwrap();
-                    let right_timestamp = *timestamps[(2 * i + 1) * timestamps.len()
-                        / (2 * num_segs)
-                        ..((2 * i + 2) * timestamps.len()).div_ceil(2 * num_segs)]
-                        .iter()
-                        .max()
-                        .unwrap();
-                    row.left_timestamp = F::from_canonical_u32(left_timestamp);
-                    row.right_timestamp = F::from_canonical_u32(right_timestamp);
-                    self.air.lt_air.generate_subrow(
-                        (self.range_checker.as_ref(), left_timestamp, right_timestamp),
-                        (&mut row.lt_aux, &mut row.is_right_larger),
-                    );
+                        let left_timestamp = timestamps[2 * i * timestamps.len() / (2 * num_segs)
+                            ..((2 * i + 1) * timestamps.len()).div_ceil(2 * num_segs)]
+                            .iter()
+                            .max()
+                            .unwrap();
+                        let right_timestamp = timestamps[(2 * i + 1) * timestamps.len()
+                            / (2 * num_segs)
+                            ..((2 * i + 2) * timestamps.len()).div_ceil(2 * num_segs)]
+                            .iter()
+                            .max()
+                            .unwrap();
+                        row.left_timestamp = F::from_canonical_u32(*left_timestamp);
+                        row.right_timestamp = F::from_canonical_u32(*right_timestamp);
 
-                    row_idx += 1;
+                        lt_air.generate_subrow(
+                            (range_checker.as_ref(), *left_timestamp, *right_timestamp),
+                            (&mut row.lt_aux, &mut row.is_right_larger),
+                        );
+                    });
+                    row_idx += num_segs;
                 }
-            }
-            if timestamp_and_mask & SPLIT_AFTER_FLAG != 0 {
-                for i in 0..num_segs {
-                    let row: &mut AccessAdapterCols<F, N> = trace.row_mut(row_idx).borrow_mut();
-                    row.is_valid = F::ONE;
-                    row.is_split = F::ONE;
-                    row.address = MemoryAddress::new(
-                        F::from_canonical_u32(address_space),
-                        F::from_canonical_u32(pointer + (i * N) as u32),
-                    );
-                    if address_space < NATIVE_AS {
-                        for j in 0..N {
-                            row.values[j] = F::from_canonical_u8(data[i * N + j]);
-                        }
-                    } else {
-                        unsafe {
-                            std::ptr::copy_nonoverlapping(
-                                data.as_ptr().add(i * N * layout.type_size),
-                                row.values.as_mut_ptr() as *mut u8,
-                                N * layout.type_size,
-                            );
-                        }
-                    }
-                    let timestamp = timestamp_and_mask & !SPLIT_AFTER_FLAG & !MERGE_BEFORE_FLAG;
-                    row.left_timestamp = F::from_canonical_u32(timestamp);
-                    row.right_timestamp = F::from_canonical_u32(timestamp);
-                    self.air.lt_air.generate_subrow(
-                        (self.range_checker.as_ref(), timestamp, timestamp),
-                        (&mut row.lt_aux, &mut row.is_right_larger),
-                    );
+                if timestamp_and_mask & SPLIT_AFTER_FLAG != 0 {
+                    // Parallelize the row filling for split after
+                    (0..num_segs).into_par_iter().for_each(|i| {
+                        let row_start = (row_idx + i) * width;
+                        let mut trace_guard = trace_mutex.lock().unwrap();
+                        let row_slice = &mut trace_guard[row_start..row_start + width];
+                        let row: &mut AccessAdapterCols<F, N> = row_slice.borrow_mut();
 
-                    row_idx += 1;
+                        row.is_valid = F::ONE;
+                        row.is_split = F::ONE;
+                        row.address = MemoryAddress::new(
+                            F::from_canonical_u32(*address_space),
+                            F::from_canonical_u32(*pointer + (i * N) as u32),
+                        );
+                        if *address_space < NATIVE_AS {
+                            for j in 0..N {
+                                row.values[j] = F::from_canonical_u8(data[i * N + j]);
+                            }
+                        } else {
+                            unsafe {
+                                std::ptr::copy_nonoverlapping(
+                                    data.as_ptr().add(i * N * layout.type_size),
+                                    row.values.as_mut_ptr() as *mut u8,
+                                    N * layout.type_size,
+                                );
+                            }
+                        }
+                        let timestamp =
+                            *timestamp_and_mask & !SPLIT_AFTER_FLAG & !MERGE_BEFORE_FLAG;
+                        row.left_timestamp = F::from_canonical_u32(timestamp);
+                        row.right_timestamp = F::from_canonical_u32(timestamp);
+
+                        lt_air.generate_subrow(
+                            (range_checker.as_ref(), timestamp, timestamp),
+                            (&mut row.lt_aux, &mut row.is_right_larger),
+                        );
+                    });
                 }
-            }
-        }
+            },
+        );
 
         trace
     }
