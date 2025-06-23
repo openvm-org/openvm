@@ -2,7 +2,7 @@ use std::{fmt::Debug, marker::PhantomData};
 
 use memmap2::MmapMut;
 
-use crate::system::memory::online::LinearMemory;
+use super::LinearMemory;
 
 pub const CELL_STRIDE: usize = 1;
 /// Default mmap page size. Change this if using THB.

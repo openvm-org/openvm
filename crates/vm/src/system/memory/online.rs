@@ -9,19 +9,19 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use super::{adapter::AccessAdapterInventory, offline_checker::MemoryBus, MemoryAddress};
 use crate::{arch::MemoryConfig, system::memory::MemoryImage};
 
+mod basic;
 #[cfg(any(unix, windows))]
 mod memmap;
-mod paged_vec;
 
+#[cfg(not(any(unix, windows)))]
+pub use basic::*;
 #[cfg(any(unix, windows))]
 pub use memmap::*;
-#[cfg(not(any(unix, windows)))]
-pub use paged_vec::*;
 
-#[cfg(any(unix, windows))]
+#[cfg(all(any(unix, windows), not(feature = "basic-memory")))]
 pub type MemoryBackend = memmap::MmapMemory;
-#[cfg(not(any(unix, windows)))]
-pub type MemoryBackend = paged_vec::PagedVec;
+#[cfg(any(not(any(unix, windows)), feature = "basic-memory"))]
+pub type MemoryBackend = basic::BasicMemory;
 
 pub const INITIAL_TIMESTAMP: u32 = 0;
 

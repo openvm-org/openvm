@@ -55,6 +55,8 @@ parallel = ["openvm-stark-backend/parallel", "dashmap/rayon"]
 test-utils = ["dep:openvm-stark-sdk"]
 bench-metrics = ["dep:metrics", "openvm-stark-backend/bench-metrics"]
 function-span = ["bench-metrics"]
+# use basic memory instead of mmap:
+basic-memory = []
 # performance features:
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
