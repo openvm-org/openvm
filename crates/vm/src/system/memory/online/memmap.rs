@@ -10,10 +10,8 @@ use memmap2::MmapMut;
 use openvm_instructions::exe::SparseMemoryImage;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::arch::MemoryConfig;
+use super::{Address, MemoryConfig};
 
-/// (address_space, pointer)
-pub type Address = (u32, u32);
 pub const CELL_STRIDE: usize = 1;
 /// Default mmap page size. Change this if using THB.
 const PAGE_SIZE: usize = 4096;

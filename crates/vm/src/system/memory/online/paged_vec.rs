@@ -5,10 +5,9 @@ use openvm_instructions::exe::SparseMemoryImage;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
-use crate::arch::MemoryConfig;
+use super::{Address, MemoryConfig};
+use crate::arch::ADDR_SPACE_OFFSET;
 
-/// (address_space, pointer)
-pub type Address = (u32, u32);
 /// 4096 is the default page size on host architectures if huge pages is not enabled
 const PAGE_SIZE: usize = 1 << 12;
 pub const CELL_STRIDE: usize = 1 << 12;
@@ -429,7 +428,7 @@ impl AddressMap {
         let len = size_of_val(data);
 
         self.paged_vecs
-            .get_unchecked_mut((addr_space - self.as_offset) as usize)
+            .get_unchecked_mut((addr_space - ADDR_SPACE_OFFSET) as usize)
             .set_range_generic(start, len, data.as_ptr() as *const u8);
     }
 

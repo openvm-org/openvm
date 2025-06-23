@@ -6,13 +6,27 @@ use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
-use super::{
-    adapter::AccessAdapterInventory, offline_checker::MemoryBus, Address, AddressMap,
-    MemoryAddress, MemoryBackend, CELL_STRIDE,
-};
+use super::{adapter::AccessAdapterInventory, offline_checker::MemoryBus, MemoryAddress};
 use crate::{arch::MemoryConfig, system::memory::MemoryImage};
 
+#[cfg(any(unix, windows))]
+mod memmap;
+mod paged_vec;
+
+#[cfg(any(unix, windows))]
+pub use memmap::*;
+#[cfg(not(any(unix, windows)))]
+pub use paged_vec::*;
+
+#[cfg(any(unix, windows))]
+pub type MemoryBackend = memmap::MmapMemory;
+#[cfg(not(any(unix, windows)))]
+pub type MemoryBackend = paged_vec::PagedVec;
+
 pub const INITIAL_TIMESTAMP: u32 = 0;
+
+/// (address_space, pointer)
+pub type Address = (u32, u32);
 
 #[derive(Debug, Clone, derive_new::new)]
 pub struct GuestMemory {
