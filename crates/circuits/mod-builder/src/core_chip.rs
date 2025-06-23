@@ -218,13 +218,11 @@ impl<'a, F, A> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressio
         &'a mut self,
         layout: FieldExpressionRecordLayout<F, A>,
     ) -> FieldExpressionCoreRecordMut<'a> {
-        self[0] = layout.metadata.total_input_limbs as u8;
-        let record_buf = unsafe { self.split_at_mut_unchecked(1).1 };
-        let (opcode_buf, input_limbs_buf) = unsafe { record_buf.split_at_mut_unchecked(1) };
+        let (opcode_buf, input_limbs_buff) = unsafe { self.split_at_mut_unchecked(1) };
 
         FieldExpressionCoreRecordMut {
             opcode: &mut opcode_buf[0],
-            input_limbs: &mut input_limbs_buf[..layout.metadata.total_input_limbs],
+            input_limbs: &mut input_limbs_buff[..layout.metadata.total_input_limbs],
         }
     }
 
