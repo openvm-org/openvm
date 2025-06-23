@@ -15,37 +15,32 @@ use crate::arch::MemoryConfig;
 /// (address_space, pointer)
 pub type Address = (u32, u32);
 pub const CELL_STRIDE: usize = 1;
+/// Default mmap page size. Change this if using THB.
+const PAGE_SIZE: usize = 4096;
 
-/// A wrapper around MmapMut that implements Clone and provides memory operations
+/// Mmap-backed linear memory.
 #[derive(Debug)]
-pub struct MmapWrapper {
+pub struct MmapMemory {
     mmap: MmapMut,
-    highest_accessed: usize, // Track the highest byte index that has been accessed
 }
 
-impl Clone for MmapWrapper {
+impl Clone for MmapMemory {
     fn clone(&self) -> Self {
         let mut new_mmap = MmapMut::map_anon(self.mmap.len()).unwrap();
-        if self.highest_accessed > 0 {
-            new_mmap[..=self.highest_accessed]
-                .copy_from_slice(&self.mmap[..=self.highest_accessed]);
-        }
-        Self {
-            mmap: new_mmap,
-            highest_accessed: self.highest_accessed,
-        }
+        new_mmap.copy_from_slice(&self.mmap);
+        Self { mmap: new_mmap }
     }
 }
 
 /// Iterator over MmapWrapper that yields elements of type T
 pub struct MmapWrapperIter<'a, T: Copy> {
-    wrapper: &'a MmapWrapper,
+    wrapper: &'a MmapMemory,
     current_index: usize,
     phantom: PhantomData<T>,
 }
 
 impl<'a, T: Copy> MmapWrapperIter<'a, T> {
-    fn new(wrapper: &'a MmapWrapper) -> Self {
+    fn new(wrapper: &'a MmapMemory) -> Self {
         Self {
             wrapper,
             current_index: 0,
@@ -59,9 +54,7 @@ impl<T: Copy> Iterator for MmapWrapperIter<'_, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let size = std::mem::size_of::<T>();
-        if self.current_index + size <= self.wrapper.len()
-            && self.current_index <= self.wrapper.highest_accessed
-        {
+        if self.current_index + size <= self.wrapper.len() {
             let value = self.wrapper.get::<T>(self.current_index);
             let index = self.current_index / size;
             self.current_index += size;
@@ -72,11 +65,19 @@ impl<T: Copy> Iterator for MmapWrapperIter<'_, T> {
     }
 }
 
-impl MmapWrapper {
-    pub fn new(len: usize) -> Self {
+impl MmapMemory {
+    /// Create a new MmapMemory with the given `size` in bytes.
+    /// We require `size` to be a multiple of the mmap page size (4kb by default) so that OS-level
+    /// MMU protection corresponds to out of bounds protection.
+    pub fn new(size: usize) -> Self {
+        assert_eq!(
+            size % PAGE_SIZE,
+            0,
+            "size {size} is not a multiple of page size {PAGE_SIZE}"
+        );
+        // anonymous mapping means pages are zero-initialized on first use
         Self {
-            mmap: MmapMut::map_anon(len).unwrap(),
-            highest_accessed: 0,
+            mmap: MmapMut::map_anon(size).unwrap(),
         }
     }
 
@@ -156,12 +157,6 @@ impl MmapWrapper {
     #[inline(always)]
     pub fn set<BLOCK: Copy>(&mut self, start: usize, values: &BLOCK) {
         let size = std::mem::size_of::<BLOCK>();
-        let end = start + size - 1;
-
-        // Update highest accessed index if needed
-        if end > self.highest_accessed {
-            self.highest_accessed = end;
-        }
 
         unsafe {
             copy_nonoverlapping(
@@ -179,12 +174,6 @@ impl MmapWrapper {
     #[inline(always)]
     pub fn replace<BLOCK: Copy>(&mut self, from: usize, values: &BLOCK) -> BLOCK {
         let size = std::mem::size_of::<BLOCK>();
-        let end = from + size - 1;
-
-        // Update highest accessed index if needed
-        if end > self.highest_accessed {
-            self.highest_accessed = end;
-        }
 
         // Create an uninitialized array of MaybeUninit<BLOCK>
         let mut result: MaybeUninit<BLOCK> = MaybeUninit::uninit();
@@ -209,7 +198,7 @@ impl MmapWrapper {
 
 #[derive(Debug, Clone)]
 pub struct AddressMap {
-    pub mem: Vec<MmapWrapper>,
+    pub mem: Vec<MmapMemory>,
     pub cell_size: Vec<usize>, // TODO: move to MmapWrapper
 }
 
@@ -225,9 +214,7 @@ impl AddressMap {
         let mut cell_size = vec![1; 4];
         cell_size.resize(mem_size.len(), 4);
         let mem = zip_eq(&cell_size, &mem_size)
-            .map(|(cell_size, mem_size)| {
-                MmapWrapper::new(mem_size.checked_mul(*cell_size).unwrap())
-            })
+            .map(|(cell_size, mem_size)| MmapMemory::new(mem_size.checked_mul(*cell_size).unwrap()))
             .collect();
         Self { mem, cell_size }
     }
@@ -236,11 +223,11 @@ impl AddressMap {
         Self::new(mem_config.addr_space_sizes.clone())
     }
 
-    pub fn get_memory(&self) -> &Vec<MmapWrapper> {
+    pub fn get_memory(&self) -> &Vec<MmapMemory> {
         &self.mem
     }
 
-    pub fn get_memory_mut(&mut self) -> &mut Vec<MmapWrapper> {
+    pub fn get_memory_mut(&mut self) -> &mut Vec<MmapMemory> {
         &mut self.mem
     }
 

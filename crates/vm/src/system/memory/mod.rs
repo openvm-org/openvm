@@ -24,7 +24,7 @@ pub use online::INITIAL_TIMESTAMP;
 pub use paged_vec::*;
 
 #[cfg(any(unix, windows))]
-pub type MemoryBackend = MmapWrapper;
+pub type MemoryBackend = MmapMemory;
 #[cfg(not(any(unix, windows)))]
 pub type MemoryBackend = PagedVec;
 

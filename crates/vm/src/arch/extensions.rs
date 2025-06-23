@@ -932,34 +932,6 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         memory_controller.set_override_trace_heights(overridden_system_heights.memory);
     }
 
-    /// Return dynamic trace heights of all chips in order, or 0 if
-    /// chip has constant height.
-    // Used for continuation segmentation logic, so this is performance-sensitive.
-    // Return iterator so we can break early.
-    pub(crate) fn dynamic_trace_heights(&self) -> impl Iterator<Item = usize> + '_
-    where
-        E: ChipUsageGetter,
-        P: ChipUsageGetter,
-    {
-        // program_chip, connector_chip
-        [0, 0]
-            .into_iter()
-            .chain(self._public_values_chip().map(|c| c.current_trace_height()))
-            .chain(self.memory_controller().current_trace_heights())
-            .chain(self.chips_excluding_pv_chip().map(|c| match c {
-                // executor should never be constant height
-                Either::Executor(c) => c.current_trace_height(),
-                Either::Periphery(c) => {
-                    if c.constant_trace_height().is_some() {
-                        0
-                    } else {
-                        c.current_trace_height()
-                    }
-                }
-            }))
-            .chain([0]) // range_checker_chip
-    }
-
     /// Return trace cells of all chips in order.
     /// This returns 0 cells for chips with preprocessed trace because the number of trace cells is
     /// constant in those cases. This function is used to sample periodically and provided to
