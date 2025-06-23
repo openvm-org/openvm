@@ -233,7 +233,7 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        data: &Self::WriteData,
+        data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
     ) {
         let &Instruction { a, d, .. } = instruction;
@@ -245,7 +245,7 @@ where
             tracing_write_native(
                 memory,
                 a.as_canonical_u32(),
-                &data[0],
+                data[0],
                 &mut record.writes_aux[0].prev_timestamp,
                 &mut record.writes_aux[0].prev_data,
             );
@@ -341,7 +341,7 @@ where
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-        data: &Self::WriteData,
+        data: Self::WriteData,
     ) where
         Ctx: E1E2ExecutionCtx,
     {

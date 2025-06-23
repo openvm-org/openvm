@@ -160,7 +160,7 @@ where
         let x = run_castf(core_record.val);
 
         self.adapter
-            .write(state.memory, instruction, &x, &mut adapter_record);
+            .write(state.memory, instruction, x, &mut adapter_record);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -221,7 +221,7 @@ where
 
         let x = run_castf(y.as_canonical_u32());
 
-        self.adapter.write(state, instruction, &x);
+        self.adapter.write(state, instruction, x);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

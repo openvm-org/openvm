@@ -184,7 +184,7 @@ where
         &self,
         _memory: &mut TracingMemory<F>,
         _instruction: &Instruction<F>,
-        _data: &Self::WriteData,
+        _data: Self::WriteData,
         _record: &mut Self::RecordMut<'_>,
     ) {
         // This adapter doesn't write anything
@@ -266,7 +266,7 @@ where
         &self,
         _state: &mut VmStateMut<F, GuestMemory, Ctx>,
         _instruction: &Instruction<F>,
-        _data: &Self::WriteData,
+        _data: Self::WriteData,
     ) {
     }
 }

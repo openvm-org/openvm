@@ -281,12 +281,10 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
+    // TODO[jpw]: change MemoryImage interface here
     pub fn set_initial_memory(&mut self, memory: MemoryImage) {
         if self.timestamp() > INITIAL_TIMESTAMP + 1 {
             panic!("Cannot set initial memory after first timestamp");
-        }
-        if memory.is_empty() {
-            return;
         }
 
         match &mut self.interface_chip {
@@ -776,7 +774,7 @@ mod tests {
                 unsafe {
                     memory_controller
                         .memory
-                        .write::<F, 1, 1>(address_space, pointer, &[data]);
+                        .write::<F, 1, 1>(address_space, pointer, [data]);
                 }
             } else {
                 unsafe {

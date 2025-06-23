@@ -127,7 +127,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
         };
 
         let output = keccak256(&message);
-        memory_write(state.memory, RV32_MEMORY_AS, dst, &output);
+        memory_write(state.memory, RV32_MEMORY_AS, dst, output);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

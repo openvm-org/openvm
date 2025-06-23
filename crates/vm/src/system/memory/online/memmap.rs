@@ -1,12 +1,14 @@
-use std::{fmt::Debug, marker::PhantomData, mem::MaybeUninit, ptr::copy_nonoverlapping};
+use std::{fmt::Debug, marker::PhantomData};
 
 use memmap2::MmapMut;
+
+use crate::system::memory::online::LinearMemory;
 
 pub const CELL_STRIDE: usize = 1;
 /// Default mmap page size. Change this if using THB.
 const PAGE_SIZE: usize = 4096;
 
-/// Mmap-backed linear memory.
+/// Mmap-backed linear memory. OS-memory pages are paged in on-demand and zero-initialized.
 #[derive(Debug)]
 pub struct MmapMemory {
     mmap: MmapMut,
@@ -20,6 +22,129 @@ impl Clone for MmapMemory {
     }
 }
 
+impl MmapMemory {
+    #[inline(always)]
+    pub fn as_ptr(&self) -> *const u8 {
+        self.mmap.as_ptr()
+    }
+
+    #[inline(always)]
+    pub fn as_mut_ptr(&mut self) -> *mut u8 {
+        self.mmap.as_mut_ptr()
+    }
+}
+
+impl LinearMemory for MmapMemory {
+    /// Create a new MmapMemory with the given `size` in bytes.
+    /// We require `size` to be a multiple of the mmap page size (4kb by default) so that OS-level
+    /// MMU protection corresponds to out of bounds protection.
+    fn new(size: usize) -> Self {
+        assert_eq!(
+            size % PAGE_SIZE,
+            0,
+            "size {size} is not a multiple of page size {PAGE_SIZE}"
+        );
+        // anonymous mapping means pages are zero-initialized on first use
+        Self {
+            mmap: MmapMut::map_anon(size).unwrap(),
+        }
+    }
+
+    fn size(&self) -> usize {
+        self.mmap.len()
+    }
+
+    fn as_slice(&self) -> &[u8] {
+        &self.mmap
+    }
+
+    fn as_mut_slice(&mut self) -> &mut [u8] {
+        &mut self.mmap
+    }
+
+    #[inline(always)]
+    unsafe fn read<BLOCK: Copy>(&self, from: usize) -> BLOCK {
+        let src = self.as_ptr().add(from) as *const BLOCK;
+        // SAFETY:
+        // - MMU will segfault if `src` access is out of bounds.
+        // - We assume `src` is aligned to `BLOCK`
+        // - We assume `BLOCK` is "plain old data" so the underlying `src` bytes is valid to read as
+        //   an initialized value of `BLOCK`
+        core::ptr::read(src)
+    }
+
+    #[inline(always)]
+    unsafe fn read_unaligned<BLOCK: Copy>(&self, from: usize) -> BLOCK {
+        let src = self.as_ptr().add(from) as *const BLOCK;
+        // SAFETY:
+        // - MMU will segfault if `src` access is out of bounds.
+        // - We assume `BLOCK` is "plain old data" so the underlying `src` bytes is valid to read as
+        //   an initialized value of `BLOCK`
+        core::ptr::read_unaligned(src)
+    }
+
+    #[inline(always)]
+    unsafe fn write<BLOCK: Copy>(&mut self, start: usize, values: BLOCK) {
+        let dst = self.as_mut_ptr().add(start) as *mut BLOCK;
+        // SAFETY:
+        // - MMU will segfault if `dst` access is out of bounds.
+        // - We assume `dst` is aligned to `BLOCK`
+        core::ptr::write(dst, values);
+    }
+
+    #[inline(always)]
+    unsafe fn write_unaligned<BLOCK: Copy>(&mut self, start: usize, values: BLOCK) {
+        let dst = self.as_mut_ptr().add(start) as *mut BLOCK;
+        // SAFETY:
+        // - MMU will segfault if `dst` access is out of bounds.
+        core::ptr::write_unaligned(dst, values);
+    }
+
+    #[inline(always)]
+    unsafe fn swap<BLOCK: Copy>(&mut self, start: usize, values: &mut BLOCK) {
+        // SAFETY:
+        // - MMU will segfault if `start` access is out of bounds.
+        // - We assume `start` is aligned to `BLOCK`
+        core::ptr::swap(
+            self.as_mut_ptr().add(start) as *mut BLOCK,
+            values as *mut BLOCK,
+        );
+    }
+
+    #[inline(always)]
+    unsafe fn copy_nonoverlapping<T: Copy>(&mut self, to: usize, data: &[T]) {
+        debug_assert_eq!(PAGE_SIZE % align_of::<T>(), 0);
+        let src = data.as_ptr();
+        let dst = self.as_mut_ptr().add(to) as *mut T;
+        // SAFETY:
+        // - MMU will segfault if `dst..dst + size_of_val(data)` is out of bounds.
+        // - Assumes `to` is aligned to `T` and `self.as_mut_ptr()` is aligned to `T`, which implies
+        //   the same for `dst`.
+        core::ptr::copy_nonoverlapping::<T>(src, dst, data.len());
+    }
+
+    #[inline(always)]
+    unsafe fn get_aligned_slice<T: Copy>(&self, start: usize, len: usize) -> &[T] {
+        let data = self.as_ptr().add(start) as *const T;
+        // SAFETY:
+        // - MMU will segfault if `data..data + len * size_of::<T>()` is out of bounds.
+        // - Assumes `data` is aligned to `T`
+        // - `T` is "plain old data" (POD), so conversion from underlying bytes is properly
+        //   initialized
+        // - `self` will not be mutated while borrowed
+        core::slice::from_raw_parts(data, len)
+    }
+
+    /// Iterate over MmapWrapper as iterator of elements of type `T`.
+    /// Iterator is over `(index, element)` where `index` is the byte index divided by
+    /// `size_of::<T>()`.
+    ///
+    /// `T` must be stack allocated
+    unsafe fn iter<T: Copy>(&self) -> impl Iterator<Item = (usize, T)> {
+        MmapWrapperIter::new(self)
+    }
+}
+
 /// Iterator over MmapWrapper that yields elements of type T
 pub struct MmapWrapperIter<'a, T: Copy> {
     wrapper: &'a MmapMemory,
@@ -29,6 +154,7 @@ pub struct MmapWrapperIter<'a, T: Copy> {
 
 impl<'a, T: Copy> MmapWrapperIter<'a, T> {
     fn new(wrapper: &'a MmapMemory) -> Self {
+        assert_eq!(wrapper.as_ptr() as usize % align_of::<T>(), 0);
         Self {
             wrapper,
             current_index: 0,
@@ -42,144 +168,14 @@ impl<T: Copy> Iterator for MmapWrapperIter<'_, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let size = std::mem::size_of::<T>();
-        if self.current_index + size <= self.wrapper.len() {
-            let value = self.wrapper.get::<T>(self.current_index);
+        if self.current_index + size <= self.wrapper.size() {
+            // Asserted to be aligned in constructor
+            let value = unsafe { self.wrapper.read::<T>(self.current_index) };
             let index = self.current_index / size;
             self.current_index += size;
             Some((index, value))
         } else {
             None
         }
-    }
-}
-
-impl MmapMemory {
-    /// Create a new MmapMemory with the given `size` in bytes.
-    /// We require `size` to be a multiple of the mmap page size (4kb by default) so that OS-level
-    /// MMU protection corresponds to out of bounds protection.
-    pub fn new(size: usize) -> Self {
-        assert_eq!(
-            size % PAGE_SIZE,
-            0,
-            "size {size} is not a multiple of page size {PAGE_SIZE}"
-        );
-        // anonymous mapping means pages are zero-initialized on first use
-        Self {
-            mmap: MmapMut::map_anon(size).unwrap(),
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        self.mmap.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.mmap.is_empty()
-    }
-
-    pub fn as_ptr(&self) -> *const u8 {
-        self.mmap.as_ptr()
-    }
-
-    pub fn as_mut_ptr(&mut self) -> *mut u8 {
-        self.mmap.as_mut_ptr()
-    }
-
-    pub fn as_slice(&self) -> &[u8] {
-        &self.mmap
-    }
-
-    pub fn as_mut_slice(&mut self) -> &mut [u8] {
-        &mut self.mmap
-    }
-
-    /// Iterate over MmapWrapper as iterator of elements of type `T`.
-    /// Iterator is over `(index, element)` where `index` is the byte index divided by
-    /// `size_of::<T>()`.
-    ///
-    /// `T` must be stack allocated
-    pub fn iter<T: Copy>(&self) -> MmapWrapperIter<'_, T> {
-        MmapWrapperIter::new(self)
-    }
-
-    // Copies a range of length `len` starting at index `start`
-    // into the memory pointed to by `dst`. If the relevant range is not
-    // initialized, fills that range with `0u8`.
-    /// # Safety
-    /// - `dst` must be a valid pointer to a memory location
-    /// - `start` and `start + len` must be within the bounds of the memory
-    #[inline]
-    pub unsafe fn read_range_generic(&self, start: usize, len: usize, dst: *mut u8) {
-        // Calculate how much we can actually copy
-        let copy_len = std::cmp::min(len, self.len() - start);
-
-        // Copy the data
-        copy_nonoverlapping(self.as_ptr().add(start), dst, copy_len);
-
-        // If we couldn't copy everything, ensure the rest is zeroed
-        if copy_len < len {
-            std::slice::from_raw_parts_mut(dst.add(copy_len), len - copy_len).fill(0u8);
-        }
-    }
-
-    /// # Panics
-    /// If `from..from + size_of<BLOCK>()` is out of bounds.
-    #[inline(always)]
-    pub fn get<BLOCK: Copy>(&self, from: usize) -> BLOCK {
-        // Create an uninitialized array of MaybeUninit<BLOCK>
-        let mut result: MaybeUninit<BLOCK> = MaybeUninit::uninit();
-        unsafe {
-            self.read_range_generic(from, size_of::<BLOCK>(), result.as_mut_ptr() as *mut u8);
-        }
-        // SAFETY:
-        // - All elements have been initialized (zero-initialized if didn't exist).
-        // - `result` is aligned to `BLOCK`
-        unsafe { result.assume_init() }
-    }
-
-    /// # Panics
-    /// If `start..start + size_of<BLOCK>()` is out of bounds.
-    // @dev: `values` is passed by reference since the data is copied into memory. Even though the
-    // compiler probably optimizes it, we use reference to avoid any unnecessary copy of `values`
-    // onto the stack in the function call.
-    #[inline(always)]
-    pub fn set<BLOCK: Copy>(&mut self, start: usize, values: &BLOCK) {
-        let size = std::mem::size_of::<BLOCK>();
-
-        unsafe {
-            copy_nonoverlapping(
-                values as *const _ as *const u8,
-                self.as_mut_ptr().add(start),
-                size,
-            );
-        }
-    }
-
-    /// memcpy of new `values` into from..from + size_of<BLOCK>(), memcpy of old existing values
-    /// into new returned value.
-    /// # Panics
-    /// If `from..from + size_of<BLOCK>()` is out of bounds.
-    #[inline(always)]
-    pub fn replace<BLOCK: Copy>(&mut self, from: usize, values: &BLOCK) -> BLOCK {
-        let size = std::mem::size_of::<BLOCK>();
-
-        // Create an uninitialized array of MaybeUninit<BLOCK>
-        let mut result: MaybeUninit<BLOCK> = MaybeUninit::uninit();
-        unsafe {
-            copy_nonoverlapping(
-                self.as_ptr().add(from),
-                result.as_mut_ptr() as *mut u8,
-                size,
-            );
-            copy_nonoverlapping(
-                values as *const _ as *const u8,
-                self.as_mut_ptr().add(from),
-                size,
-            );
-        }
-        // SAFETY:
-        // - All elements have been initialized (zero-initialized if didn't exist).
-        // - `result` is aligned to `BLOCK`
-        unsafe { result.assume_init() }
     }
 }

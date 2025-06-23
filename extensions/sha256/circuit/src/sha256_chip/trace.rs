@@ -193,7 +193,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
             state.memory,
             RV32_MEMORY_AS,
             record.inner.dst_ptr,
-            &output,
+            output,
             &mut record.inner.write_aux.prev_timestamp,
             &mut record.inner.write_aux.prev_data,
         );

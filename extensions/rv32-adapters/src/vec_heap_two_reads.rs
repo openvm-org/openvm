@@ -459,7 +459,7 @@ impl<
         &self,
         memory: &mut TracingMemory<F>,
         _instruction: &Instruction<F>,
-        data: &Self::WriteData,
+        data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
     ) {
         assert!(
@@ -467,7 +467,7 @@ impl<
                 < (1 << self.pointer_max_bits)
         );
 
-        for (i, block) in data.iter().enumerate() {
+        for (i, block) in data.into_iter().enumerate() {
             tracing_write(
                 memory,
                 RV32_MEMORY_AS,
@@ -653,7 +653,7 @@ impl<
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-        data: &Self::WriteData,
+        data: Self::WriteData,
     ) where
         Ctx: E1E2ExecutionCtx,
     {
@@ -662,7 +662,7 @@ impl<
         let rd_val = read_rv32_register_from_state(state, a.as_canonical_u32());
         assert!(rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1 < (1 << self.pointer_max_bits));
 
-        for (i, block) in data.iter().enumerate() {
+        for (i, block) in data.into_iter().enumerate() {
             memory_write_from_state(
                 state,
                 RV32_MEMORY_AS,
