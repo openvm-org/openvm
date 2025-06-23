@@ -442,9 +442,10 @@ impl<F: PrimeField32> TracingMemory<F> {
                         } else {
                             let initial_values = (0..self.initial_block_size)
                                 .map(|i| {
-                                    self.data
-                                        .memory
-                                        .get_f(address_space as u32, (pointer + i) as u32)
+                                    self.data.memory.get_f(
+                                        address_space as u32,
+                                        (block_start * align + i) as u32,
+                                    )
                                 })
                                 .collect::<Vec<_>>();
                             self.record_access::<F, true>(

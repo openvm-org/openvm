@@ -214,10 +214,6 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
                             .unwrap();
                         *record.timestamp_and_mask & SPLIT_AFTER_FLAG != 0
                     });
-                    eprintln!(
-                        "next_data: {:?}, need_to_split: {}",
-                        next_data, need_to_split
-                    );
                     if need_to_split {
                         for &id in ids.iter() {
                             let (chip, ptr, layout) = &mut chip_data[id];
@@ -429,13 +425,12 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
                             row.values[j] = F::from_canonical_u8(prev_data[i * N + j]);
                         }
                     } else {
-                        for j in 0..N {
-                            row.values[j] = unsafe {
-                                std::ptr::read(
-                                    prev_data.as_ptr().add((i * N + j) * layout.type_size)
-                                        as *const F,
-                                )
-                            };
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(
+                                prev_data.as_ptr().add(i * N * layout.type_size),
+                                row.values.as_mut_ptr() as *mut u8,
+                                N * layout.type_size,
+                            );
                         }
                     }
                     let left_timestamp = *timestamps[2 * i * timestamps.len() / (2 * num_segs)
@@ -473,12 +468,12 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
                             row.values[j] = F::from_canonical_u8(data[i * N + j]);
                         }
                     } else {
-                        for j in 0..N {
-                            row.values[j] = unsafe {
-                                std::ptr::read(
-                                    data.as_ptr().add((i * N + j) * layout.type_size) as *const F
-                                )
-                            };
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(
+                                data.as_ptr().add(i * N * layout.type_size),
+                                row.values.as_mut_ptr() as *mut u8,
+                                N * layout.type_size,
+                            );
                         }
                     }
                     let timestamp = timestamp_and_mask & !SPLIT_AFTER_FLAG & !MERGE_BEFORE_FLAG;
