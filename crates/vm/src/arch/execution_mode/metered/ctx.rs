@@ -36,7 +36,6 @@ impl BitSet {
     }
 }
 
-// TODO(ayush): can segmentation also be triggered by timestamp overflow? should that be tracked?
 #[derive(Debug)]
 pub struct MeteredCtx<const PAGE_BITS: usize = 12> {
     pub trace_heights: Vec<u32>,
