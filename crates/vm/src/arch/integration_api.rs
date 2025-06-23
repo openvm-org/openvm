@@ -528,7 +528,7 @@ impl DenseRecordArena {
         let offset = (MAX_ALIGNMENT
             - (self.records_buffer.get_ref().as_ptr() as usize % MAX_ALIGNMENT))
             % MAX_ALIGNMENT;
-        &mut self.records_buffer.get_mut()[offset..offset + size]
+        &mut self.records_buffer.get_mut()[offset..size]
     }
 
     pub fn align_to(&mut self, alignment: usize) {
