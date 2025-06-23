@@ -213,10 +213,10 @@ jobs:
 
           # For PRs, get the latest commit from the target branch
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            if [[ "${{ github.base_ref }}" == "refs/heads/main" ]]; then
+            if [[ "${{ github.base_ref }}" == "main" ]]; then
               REF_HASH="main"
             else
-              REF_HASH=$(echo "${{ github.base_ref }}" | sha256sum | cut -d' ' -f1)
+              REF_HASH=$(echo "refs/heads/${{ github.base_ref }}" | sha256sum | cut -d' ' -f1)
             fi
             echo "Target branch REF_HASH: $REF_HASH"
           else
