@@ -1275,6 +1275,27 @@ where
             PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
         };
 
+        // Calculate adapter offset the same way as in MeteredCtx
+        let boundary_idx = if chip_complex.config().continuation_enabled {
+            PUBLIC_VALUES_AIR_ID
+        } else {
+            PUBLIC_VALUES_AIR_ID + 1
+        };
+        let adapter_offset = if chip_complex.config().continuation_enabled {
+            boundary_idx + 2
+        } else {
+            boundary_idx
+        };
+        // Set trace heights for memory adapters
+        let num_access_adapters = chip_complex
+            .memory_controller()
+            .memory
+            .access_adapter_inventory
+            .num_access_adapters();
+        chip_complex.set_adapter_heights(
+            &max_trace_heights[adapter_offset..adapter_offset + num_access_adapters],
+        );
+
         for (i, chip_id) in chip_complex
             .inventory
             .insertion_order

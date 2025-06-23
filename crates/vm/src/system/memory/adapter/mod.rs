@@ -67,13 +67,22 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         let air_names = (0..chips.len()).map(|i| air_name(1 << (i + 1))).collect();
         Self { chips, air_names }
     }
+
     pub fn num_access_adapters(&self) -> usize {
         self.chips.len()
     }
+
     pub fn set_override_trace_heights(&mut self, overridden_heights: Vec<usize>) {
         assert_eq!(overridden_heights.len(), self.chips.len());
         for (chip, oh) in self.chips.iter_mut().zip(overridden_heights) {
             chip.set_override_trace_heights(oh);
+        }
+    }
+
+    pub fn set_arenas_from_trace_heights(&mut self, trace_heights: &[u32]) {
+        assert_eq!(trace_heights.len(), self.chips.len());
+        for (chip, th) in self.chips.iter_mut().zip(trace_heights) {
+            chip.set_arena_from_trace_height(*th as usize);
         }
     }
 
@@ -237,6 +246,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
 #[enum_dispatch]
 pub(crate) trait GenericAccessAdapterChipTrait<F> {
     fn set_override_trace_heights(&mut self, overridden_height: usize);
+    fn set_arena_from_trace_height(&mut self, trace_height: usize);
     fn generate_trace(self) -> RowMajorMatrix<F>
     where
         F: PrimeField32;
@@ -292,8 +302,6 @@ pub(crate) struct AccessAdapterChip<F, const N: usize> {
     _marker: PhantomData<F>,
 }
 
-const MAX_ARENA_SIZE: usize = 1 << 22;
-
 impl<F: Clone + Send + Sync, const N: usize> AccessAdapterChip<F, N> {
     pub fn new(
         range_checker: SharedVariableRangeCheckerChip,
@@ -304,9 +312,7 @@ impl<F: Clone + Send + Sync, const N: usize> AccessAdapterChip<F, N> {
         Self {
             air: AccessAdapterAir::<N> { memory_bus, lt_air },
             range_checker,
-            arena: DenseRecordArena::with_capacity(
-                MAX_ARENA_SIZE * size_of::<AccessAdapterCols<F, N>>(),
-            ),
+            arena: DenseRecordArena::with_capacity(0),
             overridden_height: None,
             _marker: PhantomData,
         }
@@ -315,6 +321,11 @@ impl<F: Clone + Send + Sync, const N: usize> AccessAdapterChip<F, N> {
 impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F, N> {
     fn set_override_trace_heights(&mut self, overridden_height: usize) {
         self.overridden_height = Some(overridden_height);
+    }
+    fn set_arena_from_trace_height(&mut self, trace_height: usize) {
+        // The size of the arena can be bounded by the trace size
+        self.arena
+            .set_capacity(trace_height * size_of::<AccessAdapterCols<F, N>>());
     }
     fn generate_trace(self) -> RowMajorMatrix<F>
     where
