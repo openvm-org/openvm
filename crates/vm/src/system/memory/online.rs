@@ -281,6 +281,9 @@ impl<F: PrimeField32> TracingMemory<F> {
         }
     }
 
+    /// Given all the necessary information about an access,
+    /// adds a record for each of the relevant adapters about the access.
+    /// Updates the metadata if `UPDATE_META` is true.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn record_access<T, const UPDATE_META: bool>(
         &mut self,
@@ -294,16 +297,12 @@ impl<F: PrimeField32> TracingMemory<F> {
         prev_values: &[T],
         split_after: bool,
     ) {
-        eprintln!(
-            "recording access, block_size: {}, address_space: {}, pointer: {}, lowest_block_size: {}, timestamp: {}",
-            block_size, address_space, pointer, lowest_block_size, timestamp
-        );
         let mut adapter_block_size = lowest_block_size;
         let align = self.min_block_size[address_space] as usize;
-        let offset = if block_size > adapter_block_size {
+        let offset = if block_size > lowest_block_size {
             self.access_adapter_inventory.current_size(block_size) as u32
         } else {
-            0
+            AccessMetadata::UNSPLITTABLE
         };
         while adapter_block_size <= block_size / 2 {
             adapter_block_size *= 2;
@@ -373,6 +372,15 @@ impl<F: PrimeField32> TracingMemory<F> {
         values: &[T],
         prev_values: &[T],
     ) -> u32 {
+        /***
+         * Each element of meta contains the `block_size` and `timestamp` of the last access
+         * to the corresponding `[align]` block, as well as the offset of the corresponding
+         * record in the corresponding record arena. It also records the memory access it
+         * is called for, as well as all the required accesses corresponding to initializing
+         * new blocks.
+         * If any of the previous memory accesses turn out in need to be split,
+         * this function sets their corresponding flags.
+         */
         let num_segs = BLOCK_SIZE / align;
 
         let begin = pointer / align;
@@ -406,9 +414,6 @@ impl<F: PrimeField32> TracingMemory<F> {
             .map(|i| {
                 let meta = self.meta[address_space]
                     .get::<AccessMetadata>((begin + i) * size_of::<AccessMetadata>());
-                if meta != first_meta {
-                    need_to_merge = true;
-                }
                 if meta.block_size > 0 {
                     meta.timestamp
                 } else {
@@ -423,7 +428,6 @@ impl<F: PrimeField32> TracingMemory<F> {
                                     self.initial_block_size,
                                 )
                             };
-                            eprintln!("from {}: values {:?}", block_start * align, initial_values);
                             self.record_access::<u8, true>(
                                 self.initial_block_size,
                                 address_space,
@@ -484,7 +488,7 @@ impl<F: PrimeField32> TracingMemory<F> {
             if need_to_merge { Some(&prev_ts) } else { None },
             values,
             prev_values,
-            true,
+            false,
         );
 
         *prev_ts.iter().max().unwrap()
@@ -592,8 +596,11 @@ impl<F: PrimeField32> TracingMemory<F> {
         self.timestamp
     }
 
-    /// TODO: update this description
+    /// Returns the list of all touched blocks. The list is sorted by address.
+    /// If a block hasn't been explicitly accessed and is created by a split,
+    /// the corresponding metadata has `offset` set to `AccessMetadata::UNSPLITTABLE`.
     pub fn touched_blocks(&mut self) -> Vec<(Address, AccessMetadata)> {
+        self.access_adapter_inventory.prepare_to_finalize();
         let mut blocks = Vec::new();
         for (addr_space, (page, &align)) in zip_eq(&self.meta, &self.min_block_size).enumerate() {
             let mut next_idx = 0;
@@ -602,11 +609,15 @@ impl<F: PrimeField32> TracingMemory<F> {
                     continue;
                 }
                 if metadata.block_size != 0 {
-                    eprintln!(
-                        "addr_space: {}, idx: {}, metadata: {:?}",
-                        addr_space, idx, metadata
-                    );
-                    if idx >= next_idx {
+                    if idx >= next_idx
+                        && metadata.block_size > align
+                        && metadata.offset != AccessMetadata::UNSPLITTABLE
+                        && !self.access_adapter_inventory.is_marked_to_split(
+                            metadata.block_size as usize,
+                            metadata.offset as usize,
+                        )
+                    {
+                        // This block is only intact if it's not split after
                         blocks.push(((addr_space as u32, idx as u32 * align), metadata));
                         next_idx = idx + (metadata.block_size / align) as usize;
                     } else {

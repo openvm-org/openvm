@@ -103,12 +103,11 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
     pub fn air_names(&self) -> Vec<String> {
         self.air_names.clone()
     }
-    pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(mut self) -> Vec<AirProofInput<SC>>
+    pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>
     where
         F: PrimeField32,
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        self.prepare_to_finalize();
         self.chips
             .into_iter()
             .map(|chip| chip.generate_air_proof_input())
@@ -151,9 +150,15 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
     pub(crate) fn mark_to_split(&mut self, block_size: usize, offset: usize) {
         let index = get_chip_index(block_size);
         self.chips[index].mark_to_split(offset);
+        debug_assert!(self.is_marked_to_split(block_size, offset));
     }
 
-    fn prepare_to_finalize(&mut self) {
+    pub(crate) fn is_marked_to_split(&mut self, block_size: usize, offset: usize) -> bool {
+        let index = get_chip_index(block_size);
+        self.chips[index].is_marked_to_split(offset)
+    }
+
+    pub(crate) fn prepare_to_finalize(&mut self) {
         let mut chip_data: Vec<(
             &mut GenericAccessAdapterChip<F>,
             usize,
@@ -238,6 +243,7 @@ pub(crate) trait GenericAccessAdapterChipTrait<F> {
     fn current_size(&self) -> usize;
     fn alloc_record(&mut self, layout: AccessLayout) -> AccessRecordMut;
     fn mark_to_split(&mut self, offset: usize);
+    fn is_marked_to_split(&mut self, offset: usize) -> bool;
     fn extract_metadata_from(&self, offset: usize) -> Option<AccessLayout>;
     fn fancy_record_borrow_thing(
         &mut self,
@@ -482,8 +488,6 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
                 }
             }
         }
-        eprintln!("Trace size for {N}: {}x{}", trace.height(), trace.width());
-        eprintln!("Trace: {:?}", trace);
 
         trace
     }
@@ -499,6 +503,11 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
     fn mark_to_split(&mut self, offset: usize) {
         let timestamp_and_mask = self.arena.transmute_from::<u32>(offset);
         *timestamp_and_mask |= SPLIT_AFTER_FLAG;
+    }
+
+    fn is_marked_to_split(&mut self, offset: usize) -> bool {
+        let timestamp_and_mask = self.arena.transmute_from::<u32>(offset);
+        *timestamp_and_mask & SPLIT_AFTER_FLAG != 0
     }
 
     fn extract_metadata_from(&self, offset: usize) -> Option<AccessLayout> {

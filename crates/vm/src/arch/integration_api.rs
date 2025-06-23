@@ -343,16 +343,9 @@ impl DenseRecordArena {
     /// reference to it.
     // TODO(AG): remove this, replace with the record-based read we have in the near future
     pub fn transmute_from<'a, T>(&mut self, offset_bytes: usize) -> &'a mut T {
-        let begin = self.records_buffer.position() + offset_bytes as u64;
         let width = size_of::<T>();
-        debug_assert!(begin as usize + width <= self.records_buffer.get_ref().len());
-        unsafe {
-            &mut *(self
-                .records_buffer
-                .get_mut()
-                .as_mut_ptr()
-                .add(begin as usize) as *mut T)
-        }
+        debug_assert!(offset_bytes + width <= self.records_buffer.get_ref().len());
+        unsafe { &mut *(self.records_buffer.get_mut().as_mut_ptr().add(offset_bytes) as *mut T) }
     }
 
     /// Allocates `count` bytes and returns as a mutable slice.

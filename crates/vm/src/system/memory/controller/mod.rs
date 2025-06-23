@@ -390,7 +390,7 @@ impl<F: PrimeField32> MemoryController<F> {
             assert!(
                 current_cnt == 0
                     || (current_address.address_space == addr_space
-                        && ptr == current_address.pointer),
+                        && current_address.pointer + current_cnt as u32 == ptr),
                 "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`"
             );
             if current_cnt == 0 {

@@ -150,6 +150,7 @@ fn rand_rv32_alu_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
 
     // TODO(AG): make a more meaningful test for memory accesses
     tester.write(2, 1024, [F::ONE; 4]);
+    tester.write(2, 1024, [F::ONE; 8]);
     tester.write(2, 1028, [F::ONE; 4]);
     let sm = tester.read(2, 1024);
     assert_eq!(sm, [F::ONE; 8]);
