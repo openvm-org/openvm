@@ -75,7 +75,7 @@ fn memory_to_vec_partition<F: PrimeField32, const N: usize>(
             debug_assert_eq!(PAGE_SIZE % (cell_size * N), 0);
 
             let num_nonzero_pages = space_mem
-                .chunks(PAGE_SIZE)
+                .par_chunks(PAGE_SIZE)
                 .enumerate()
                 .flat_map(|(idx, page)| {
                     if page.iter().any(|x| *x != 0) {
@@ -87,10 +87,10 @@ fn memory_to_vec_partition<F: PrimeField32, const N: usize>(
                 .max()
                 .unwrap_or(0);
 
-            let space_mem = &space_mem[..(num_nonzero_pages * PAGE_SIZE)];
+            let space_mem = &space_mem[..(num_nonzero_pages * PAGE_SIZE).min(space_mem.len())];
             let mut num_elements = space_mem.len() / (cell_size * N);
             // virtual memory may be larger than dimensions due to rounding up to page size
-            num_elements = num_elements.min(md.address_height);
+            num_elements = num_elements.min(1 << md.address_height);
 
             // TODO: handle different cell sizes better
             if cell_size == 1 {
