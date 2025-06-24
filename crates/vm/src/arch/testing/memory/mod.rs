@@ -76,7 +76,7 @@ impl<F: PrimeField32> MemoryTester<F> {
                 controller.memory.write::<u8, N, 4>(
                     addr_space as u32,
                     ptr as u32,
-                    &data.map(|x| x.as_canonical_u32() as u8),
+                    data.map(|x| x.as_canonical_u32() as u8),
                 )
             };
             (t_prev, data_prev.map(F::from_canonical_u8))
@@ -84,7 +84,7 @@ impl<F: PrimeField32> MemoryTester<F> {
             unsafe {
                 controller
                     .memory
-                    .write::<F, N, 1>(addr_space as u32, ptr as u32, &data)
+                    .write::<F, N, 1>(addr_space as u32, ptr as u32, data)
             }
         };
         self.chip_for_block.get_mut(&N).unwrap().receive(

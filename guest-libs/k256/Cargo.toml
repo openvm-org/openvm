@@ -85,4 +85,5 @@ ignored = [
     "derive_more",
     "signature",
     "once_cell",
+    "rand",
 ]

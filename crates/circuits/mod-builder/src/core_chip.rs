@@ -329,7 +329,7 @@ where
         self.adapter.write(
             state.memory,
             instruction,
-            &writes.into(),
+            writes.into(),
             &mut adapter_record,
         );
 
@@ -405,7 +405,7 @@ where
         let (writes, _, _) =
             run_field_expression(self, data, instruction.opcode.local_opcode_idx(self.offset));
 
-        self.adapter.write(state, instruction, &writes.into());
+        self.adapter.write(state, instruction, writes.into());
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         Ok(())
     }

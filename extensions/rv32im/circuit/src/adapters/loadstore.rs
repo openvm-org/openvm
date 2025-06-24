@@ -435,7 +435,7 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        data: &Self::WriteData,
+        data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
     ) {
         let &Instruction {
@@ -463,9 +463,9 @@ where
                     let ptr = record.rs1_val.wrapping_add(imm_extended) & !3;
 
                     if record.mem_as == 4 {
-                        timed_write_native(memory, ptr, &data.map(F::from_canonical_u32)).0
+                        timed_write_native(memory, ptr, data.map(F::from_canonical_u32)).0
                     } else {
-                        timed_write(memory, record.mem_as as u32, ptr, &data.map(|x| x as u8)).0
+                        timed_write(memory, record.mem_as as u32, ptr, data.map(|x| x as u8)).0
                     }
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => {
@@ -473,7 +473,7 @@ where
                         memory,
                         RV32_REGISTER_AS,
                         record.rd_rs2_ptr,
-                        &data.map(|x| x as u8),
+                        data.map(|x| x as u8),
                     )
                     .0
                 }
@@ -633,7 +633,7 @@ where
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-        data: &Self::WriteData,
+        data: Self::WriteData,
     ) where
         Ctx: E1E2ExecutionCtx,
     {
@@ -662,21 +662,16 @@ where
                 let imm_extended = c.as_canonical_u32() + g.as_canonical_u32() * 0xffff0000;
                 let ptr = rs1.wrapping_add(imm_extended) & !3;
                 if e.as_canonical_u32() == 4 {
-                    memory_write_native_from_state(state, ptr, &data.map(F::from_canonical_u32));
+                    memory_write_native_from_state(state, ptr, data.map(F::from_canonical_u32));
                 } else {
-                    memory_write_from_state(
-                        state,
-                        e.as_canonical_u32(),
-                        ptr,
-                        &data.map(|x| x as u8),
-                    )
+                    memory_write_from_state(state, e.as_canonical_u32(), ptr, data.map(|x| x as u8))
                 }
             }
             LOADW | LOADB | LOADH | LOADBU | LOADHU => memory_write_from_state(
                 state,
                 RV32_REGISTER_AS,
                 a.as_canonical_u32(),
-                &data.map(|x| x as u8),
+                data.map(|x| x as u8),
             ),
         };
     }

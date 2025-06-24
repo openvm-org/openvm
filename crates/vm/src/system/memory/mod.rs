@@ -2,13 +2,9 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 
 pub mod adapter;
 mod controller;
-#[cfg(any(unix, windows))]
-pub mod memmap;
 pub mod merkle;
 pub mod offline_checker;
 pub mod online;
-#[cfg(not(any(unix, windows)))]
-pub mod paged_vec;
 mod persistent;
 // TODO: add back
 // #[cfg(test)]
@@ -17,16 +13,7 @@ pub mod tree;
 mod volatile;
 
 pub use controller::*;
-#[cfg(any(unix, windows))]
-pub use memmap::*;
-pub use online::INITIAL_TIMESTAMP;
-#[cfg(not(any(unix, windows)))]
-pub use paged_vec::*;
-
-#[cfg(any(unix, windows))]
-pub type MemoryBackend = MmapWrapper;
-#[cfg(not(any(unix, windows)))]
-pub type MemoryBackend = PagedVec;
+pub use online::{Address, AddressMap, INITIAL_TIMESTAMP};
 
 #[derive(PartialEq, Copy, Clone, Debug, Eq)]
 pub enum OpType {

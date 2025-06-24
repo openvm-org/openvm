@@ -233,7 +233,7 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        data: &Self::WriteData,
+        data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
     ) {
         let &Instruction { a, d, .. } = instruction;
@@ -296,7 +296,7 @@ where
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-        rd: &Self::WriteData,
+        rd: Self::WriteData,
     ) where
         Ctx: E1E2ExecutionCtx,
     {
@@ -349,7 +349,7 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        data: &Self::WriteData,
+        data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
     ) {
         let Instruction { f: enabled, .. } = instruction;
@@ -421,7 +421,7 @@ where
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-        rd: &Self::WriteData,
+        rd: Self::WriteData,
     ) where
         Ctx: E1E2ExecutionCtx,
     {

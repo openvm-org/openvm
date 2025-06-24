@@ -166,7 +166,7 @@ where
         let a_val = run_field_arithmetic(opcode, core_record.b, core_record.c);
 
         self.adapter
-            .write(state.memory, instruction, &[a_val], &mut adapter_record);
+            .write(state.memory, instruction, [a_val], &mut adapter_record);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -228,7 +228,7 @@ where
         let [b_val, c_val] = self.adapter.read(state, instruction);
         let a_val = run_field_arithmetic(local_opcode, b_val, c_val);
 
-        self.adapter.write(state, instruction, &[a_val]);
+        self.adapter.write(state, instruction, [a_val]);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

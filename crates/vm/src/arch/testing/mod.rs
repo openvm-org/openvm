@@ -3,7 +3,7 @@ use std::{borrow::Borrow, iter::zip};
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
-use openvm_instructions::instruction::Instruction;
+use openvm_instructions::{instruction::Instruction, NATIVE_AS};
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -278,7 +278,17 @@ impl VmChipTestBuilder<BabyBear> {
 
 impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn default_persistent() -> Self {
-        let mem_config = MemoryConfig::default();
+        let mut mem_config = MemoryConfig::default();
+        mem_config.addr_space_sizes[NATIVE_AS as usize] = 0;
+        Self::persistent(mem_config)
+    }
+
+    pub fn default_native() -> Self {
+        Self::volatile(MemoryConfig::aggregation())
+    }
+
+    pub fn persistent(mem_config: MemoryConfig) -> Self {
+        setup_tracing_with_log_level(Level::INFO);
         let range_checker = SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,
             mem_config.decomp,
@@ -301,12 +311,9 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
             default_pointer: 0,
         }
     }
-}
 
-impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
-    fn default() -> Self {
+    pub fn volatile(mem_config: MemoryConfig) -> Self {
         setup_tracing_with_log_level(Level::INFO);
-        let mem_config = MemoryConfig::default();
         let range_checker = SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,
             mem_config.decomp,
@@ -326,6 +333,14 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
             default_register: 0,
             default_pointer: 0,
         }
+    }
+}
+
+impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
+    fn default() -> Self {
+        let mut mem_config = MemoryConfig::default();
+        mem_config.addr_space_sizes[NATIVE_AS as usize] = 0;
+        Self::volatile(mem_config)
     }
 }
 

@@ -109,6 +109,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         debug_assert!(src + len <= (1 << self.pointer_max_bits));
         debug_assert!(dst < (1 << self.pointer_max_bits));
 
+        // SAFETY: RV32_MEMORY_AS is valid address space with type u8
         let message = unsafe {
             state
                 .memory
@@ -116,8 +117,8 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
                 .get_slice::<u8>((RV32_MEMORY_AS, src), len as usize)
         };
 
-        let output = sha256_solve(&message);
-        memory_write(state.memory, RV32_MEMORY_AS, dst, &output);
+        let output = sha256_solve(message);
+        memory_write(state.memory, RV32_MEMORY_AS, dst, output);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -172,7 +173,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         }
 
         let output = sha256_solve(&input);
-        memory_write_from_state(state, RV32_MEMORY_AS, dst, &output);
+        memory_write_from_state(state, RV32_MEMORY_AS, dst, output);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         state.ctx.trace_heights[chip_index] += (num_blocks * SHA256_ROWS_PER_BLOCK) as u32;

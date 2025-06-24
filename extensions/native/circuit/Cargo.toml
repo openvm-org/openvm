@@ -23,13 +23,11 @@ openvm-native-compiler = { workspace = true }
 
 strum.workspace = true
 itertools.workspace = true
-tracing.workspace = true
 derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
 eyre.workspace = true
 serde.workspace = true
-serde-big-array.workspace = true
 static_assertions.workspace = true
 
 [dev-dependencies]

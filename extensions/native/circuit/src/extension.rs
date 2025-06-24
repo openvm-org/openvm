@@ -45,10 +45,7 @@ impl NativeConfig {
         Self {
             system: SystemConfig::new(
                 max_constraint_degree,
-                MemoryConfig {
-                    max_access_adapter_n: 8,
-                    ..Default::default()
-                },
+                MemoryConfig::aggregation(),
                 num_public_values,
             )
             .with_max_segment_len((1 << 24) - 100),

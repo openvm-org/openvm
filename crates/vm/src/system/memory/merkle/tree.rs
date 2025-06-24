@@ -199,7 +199,7 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
     ) -> Self {
         let mut tree = Self::new(md.overall_height(), hasher);
         let layer: Vec<_> = memory_to_vec_partition(&initial_memory, md)
-            .iter()
+            .par_iter()
             .map(|(idx, v)| ((1 << tree.height) + idx, hasher.hash(v)))
             .collect();
         tree.process_layers(layer, md, None, |left, right| hasher.compress(left, right));

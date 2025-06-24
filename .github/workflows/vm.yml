@@ -40,3 +40,8 @@ jobs:
         working-directory: crates/vm
         run: |
           cargo nextest run --cargo-profile=fast --features parallel
+
+      - name: Run vm crate tests with basic memory
+        working-directory: crates/vm
+        run: |
+          cargo nextest run --cargo-profile=fast --features parallel,basic-memory

@@ -398,7 +398,7 @@ impl<
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        data: &Self::WriteData,
+        data: Self::WriteData,
         record: &mut &mut Rv32VecHeapAdapterRecord<
             NUM_READS,
             BLOCKS_PER_READ,
@@ -414,12 +414,13 @@ impl<
                 < (1 << self.pointer_max_bits)
         );
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..BLOCKS_PER_WRITE {
             tracing_write(
                 memory,
                 RV32_MEMORY_AS,
                 record.rd_val + (i * WRITE_SIZE) as u32,
-                &data[i],
+                data[i],
                 &mut record.writes_aux[i].prev_timestamp,
                 &mut record.writes_aux[i].prev_data,
             );
@@ -593,7 +594,7 @@ impl<
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-        data: &Self::WriteData,
+        data: Self::WriteData,
     ) where
         Ctx: E1E2ExecutionCtx,
     {
@@ -601,7 +602,7 @@ impl<
         let rd_val = read_rv32_register_from_state(state, a.as_canonical_u32());
         assert!(rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1 < (1 << self.pointer_max_bits));
 
-        for (i, block) in data.iter().enumerate() {
+        for (i, block) in data.into_iter().enumerate() {
             memory_write_from_state(
                 state,
                 RV32_MEMORY_AS,

@@ -53,7 +53,7 @@ fn fri_mat_opening_air_test() {
     let elem_range = || 1..=100;
     let length_range = || 1..=49;
 
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default_native();
 
     let mut chip = create_test_chip(&tester);
 

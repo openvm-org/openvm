@@ -1,12 +1,16 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
-use openvm_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
+use openvm_stark_backend::{
+    p3_field::PrimeField32, p3_maybe_rayon::prelude::*, p3_util::log2_strict_usize,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
     arch::{hasher::Hasher, ADDR_SPACE_OFFSET},
-    system::memory::{dimensions::MemoryDimensions, tree::MemoryNode, Address, MemoryImage},
+    system::memory::{
+        dimensions::MemoryDimensions, online::LinearMemory, tree::MemoryNode, MemoryImage,
+    },
 };
 
 pub const PUBLIC_VALUES_AS: u32 = 3;
@@ -168,30 +172,22 @@ pub fn extract_public_values<F: PrimeField32>(
     num_public_values: usize,
     final_memory: &MemoryImage,
 ) -> Vec<F> {
-    // All (addr, value) pairs in the public value address space.
-    let f_as_start = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + ADDR_SPACE_OFFSET;
-    let f_as_end = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + ADDR_SPACE_OFFSET + 1;
+    let mut public_values: Vec<F> = {
+        // TODO: make constant for public values cell size
+        assert_eq!(final_memory.cell_size[PUBLIC_VALUES_AS as usize], 1);
+        // SAFETY: PUBLIC_VALUES_AS is a valid address space and the type is u8.
+        unsafe { final_memory.mem[PUBLIC_VALUES_AS as usize].par_iter::<u8>() }
+            .map(move |(_, x)| F::from_canonical_u8(x))
+            .collect()
+    };
 
-    // This clones the entire memory. Ideally this should run in time proportional to
-    // the size of the PV address space, not entire memory.
-    let final_memory: BTreeMap<Address, F> = final_memory.items().collect();
-
-    let used_pvs: Vec<_> = final_memory
-        .range((f_as_start, 0)..(f_as_end, 0))
-        .map(|(&(_, pointer), &value)| (pointer as usize, value))
-        .collect();
-    if let Some(&last_pv) = used_pvs.last() {
-        assert!(
-            last_pv.0 < num_public_values || last_pv.1 == F::ZERO,
-            "Last public value is out of bounds"
-        );
-    }
-    let mut public_values = F::zero_vec(num_public_values);
-    for (i, pv) in used_pvs {
-        if i < num_public_values {
-            public_values[i] = pv;
-        }
-    }
+    assert!(
+        public_values.len() >= num_public_values,
+        "Public values address space has {} elements, but configuration has num_public_values={}",
+        public_values.len(),
+        num_public_values
+    );
+    public_values.truncate(num_public_values);
     public_values
 }
 

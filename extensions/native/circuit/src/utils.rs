@@ -50,9 +50,12 @@ pub mod test_utils {
             testing::{memory::gen_pointer, VmChipTestBuilder},
             Streams,
         },
-        utils::{test_system_config, test_system_config_with_continuations},
+        utils::test_system_config,
     };
-    use openvm_instructions::program::Program;
+    use openvm_instructions::{
+        program::Program,
+        riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    };
     use openvm_native_compiler::conversion::AS;
     use openvm_stark_backend::p3_field::PrimeField32;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -99,22 +102,26 @@ pub mod test_utils {
         program: Program<BabyBear>,
         input_stream: impl Into<Streams<BabyBear>>,
     ) {
-        let system_config = test_system_config()
+        let system_config = test_native_config()
+            .system
             .with_public_values(4)
             .with_max_segment_len((1 << 25) - 100);
         execute_program_with_system_config(program, input_stream, system_config);
     }
 
     pub fn test_native_config() -> NativeConfig {
+        let mut system = test_system_config();
+        system.memory_config.addr_space_sizes[RV32_REGISTER_AS as usize] = 0;
+        system.memory_config.addr_space_sizes[RV32_MEMORY_AS as usize] = 0;
         NativeConfig {
-            system: test_system_config(),
+            system,
             native: Default::default(),
         }
     }
 
     pub fn test_native_continuations_config() -> NativeConfig {
         NativeConfig {
-            system: test_system_config_with_continuations(),
+            system: test_system_config().with_continuations(),
             native: Default::default(),
         }
     }

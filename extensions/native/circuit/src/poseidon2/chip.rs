@@ -172,14 +172,14 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
             tracing_write_native_inplace(
                 state.memory,
                 output_pointer_u32,
-                &std::array::from_fn(|i| output[i]),
+                std::array::from_fn(|i| output[i]),
                 &mut simple_cols.write_data_1,
             );
             if instruction.opcode == PERM_POS2.global_opcode() {
                 tracing_write_native_inplace(
                     state.memory,
                     output_pointer_u32 + CHUNK as u32,
-                    &std::array::from_fn(|i| output[i + CHUNK]),
+                    std::array::from_fn(|i| output[i + CHUNK]),
                     &mut simple_cols.write_data_2,
                 );
             } else {
@@ -862,13 +862,13 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_R
             memory_write_native::<F, CHUNK>(
                 state.memory,
                 output_pointer_u32,
-                &std::array::from_fn(|i| output[i]),
+                std::array::from_fn(|i| output[i]),
             );
             if instruction.opcode == PERM_POS2.global_opcode() {
                 memory_write_native::<F, CHUNK>(
                     state.memory,
                     output_pointer_u32 + CHUNK as u32,
-                    &std::array::from_fn(|i| output[i + CHUNK]),
+                    std::array::from_fn(|i| output[i + CHUNK]),
                 );
             }
 

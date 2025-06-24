@@ -202,7 +202,7 @@ where
         core_record.is_jal = is_jal;
 
         self.adapter
-            .write(state.memory, instruction, &rd_data, &mut adapter_record);
+            .write(state.memory, instruction, rd_data, &mut adapter_record);
 
         *state.pc = to_pc;
 
@@ -258,10 +258,10 @@ where
         let signed_imm = get_signed_imm(is_jal, imm);
         let (to_pc, rd) = run_jal_lui(is_jal, *state.pc, signed_imm);
 
-        self.adapter.write(state, instruction, &rd);
+        self.adapter.write(state, instruction, rd);
 
         *state.pc = to_pc;
-        self.adapter.write(state, instruction, &rd);
+        self.adapter.write(state, instruction, rd);
 
         *state.pc = to_pc;
 
