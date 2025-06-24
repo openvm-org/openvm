@@ -460,7 +460,7 @@ where
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     inst: *const PreComputeInstruction<F, CTX>,
     vm_state: &mut VmSegmentState<F, CTX>,
-) -> Result<()> {
+) {
     let next_inst = unsafe { inst.offset(1) };
     let curr_inst = unsafe { &*inst };
     let pre_compute: &LoadStorePreCompute = curr_inst.pre_compute.borrow();
@@ -470,11 +470,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     let rs1_val = u32::from_le_bytes(rs1_bytes);
     let ptr_val = rs1_val.wrapping_add(pre_compute.imm_extended);
     // sign_extend([r32{c,g}(b):2]_e)`
-    // assert!(
-    //     ptr_val < (1 << self.pointer_max_bits),
-    //     "ptr_val: {ptr_val} = rs1_val: {rs1_val} + imm_extended: {imm_extended} >= 2 ** {}",
-    //     self.pointer_max_bits
-    // );
+    assert!(ptr_val < (1 << 29));
     let shift_amount = ptr_val % 4;
     let ptr_val = ptr_val - shift_amount; // aligned ptr
 

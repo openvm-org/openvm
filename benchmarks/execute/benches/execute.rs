@@ -37,9 +37,9 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 
 static AVAILABLE_PROGRAMS: &[&str] = &[
-    "fibonacci_recursive",
-    "fibonacci_iterative",
-    "quicksort",
+    // "fibonacci_recursive",
+    // "fibonacci_iterative",
+    // "quicksort",
     "bubblesort",
     // "factorial_iterative_u256",
     // "revm_snailtracer",
@@ -149,23 +149,24 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
         });
 }
 
-#[divan::bench(args = AVAILABLE_PROGRAMS, sample_count=5)]
-fn benchmark_execute_metered(bencher: Bencher, program: &str) {
-    bencher
-        .with_inputs(|| {
-            let vm = create_default_vm();
-            let exe = load_program_executable(program).expect("Failed to load program executable");
-            let state = create_initial_state(&vm.config().system.memory_config, &exe, vec![], 0);
-
-            let (widths, interactions) = shared_widths_and_interactions();
-            (vm.executor, exe, state, widths, interactions)
-        })
-        .bench_values(|(executor, exe, state, widths, interactions)| {
-            executor
-                .execute_metered_from_state(exe, state, widths, interactions)
-                .expect("Failed to execute program");
-        });
-}
+// #[divan::bench(args = AVAILABLE_PROGRAMS, sample_count=5)]
+// fn benchmark_execute_metered(bencher: Bencher, program: &str) {
+//     bencher
+//         .with_inputs(|| {
+//             let vm = create_default_vm();
+//             let exe = load_program_executable(program).expect("Failed to load program
+// executable");             let state = create_initial_state(&vm.config().system.memory_config,
+// &exe, vec![]);
+//
+//             let (widths, interactions) = shared_widths_and_interactions();
+//             (vm.executor, exe, state, widths, interactions)
+//         })
+//         .bench_values(|(executor, exe, state, widths, interactions)| {
+//             executor
+//                 .execute_metered_from_state(exe, state, widths, interactions)
+//                 .expect("Failed to execute program");
+//         });
+// }
 
 // #[divan::bench(args = AVAILABLE_PROGRAMS, sample_count=3)]
 // fn benchmark_execute_e3(bencher: Bencher, program: &str) {

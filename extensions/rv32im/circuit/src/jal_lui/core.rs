@@ -307,7 +307,7 @@ where
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     inst: *const PreComputeInstruction<F, CTX>,
     vm_state: &mut VmSegmentState<F, CTX>,
-) -> Result<()> {
+) {
     let curr_inst = unsafe { &*inst };
     let pre_compute: &JalLuiPreCompute = curr_inst.pre_compute.borrow();
     let JalLuiPreCompute {

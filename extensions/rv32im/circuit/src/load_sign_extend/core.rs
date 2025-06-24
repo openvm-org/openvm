@@ -384,7 +384,7 @@ where
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     inst: *const PreComputeInstruction<F, CTX>,
     vm_state: &mut VmSegmentState<F, CTX>,
-) -> Result<()> {
+) {
     let next_inst = unsafe { inst.offset(1) };
     let curr_inst = unsafe { &*inst };
     let pre_compute: &LoadSignExtendPreCompute = curr_inst.pre_compute.borrow();

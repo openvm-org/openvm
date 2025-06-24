@@ -281,8 +281,7 @@ where
 unsafe fn execute_e1_impl<F: PrimeField32, CTX>(
     inst: *const PreComputeInstruction<F, CTX>,
     state: &mut VmSegmentState<F, CTX>,
-) -> crate::arch::Result<()>
-where
+) where
     CTX: E1E2ExecutionCtx,
 {
     let next_inst = inst.offset(1);

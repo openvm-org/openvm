@@ -682,7 +682,7 @@ where
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     inst: *const PreComputeInstruction<F, CTX>,
     vm_state: &mut VmSegmentState<F, CTX>,
-) -> Result<()> {
+) {
     let next_inst = inst.offset(1);
     let inst = &*inst;
     let pre_compute: &HintStorePreCompute = inst.pre_compute.borrow();
@@ -699,7 +699,8 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     debug_assert_ne!(num_words, 0);
 
     if vm_state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
-        return Err(ExecutionError::HintOutOfBounds { pc: vm_state.pc });
+        panic!("hint out of bound")
+        // return Err(ExecutionError::HintOutOfBounds { pc: vm_state.pc });
     }
 
     for word_index in 0..num_words {

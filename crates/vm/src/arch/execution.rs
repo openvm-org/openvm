@@ -117,14 +117,75 @@ pub trait InstructionExecutor<F> {
 }
 
 pub type ExecuteFunc<F, CTX> =
-    unsafe fn(*const PreComputeInstruction<F, CTX>, &mut VmSegmentState<F, CTX>) -> Result<()>;
+    unsafe fn(*const PreComputeInstruction<F, CTX>, &mut VmSegmentState<F, CTX>);
 
+// Helper attribute macro for execute functions
+#[macro_export]
+macro_rules! execute_attributes {
+    () => {
+        #[inline(never)]
+        #[cold]
+    };
+}
 #[macro_export]
 macro_rules! next_instruction {
     ($next_inst: expr, $vm_state: expr) => {
-        ((*$next_inst).handler)($next_inst, $vm_state)
+        ();
     };
 }
+
+// #[macro_export]
+// macro_rules! next_instruction {
+//     ($next_inst: expr, $vm_state: expr) => {{
+//
+//         {
+//             println!(
+//                 "pc = {}, clk = {}",
+//                 $vm_state.pc,
+//                 $vm_state.instret,
+//             );
+//         }
+//         let handler = (*$next_inst).handler;
+//         #[cfg(target_arch = "aarch64")]
+//         unsafe {
+//             std::arch::asm!(
+//                 // Force compiler to deallocate stack frame
+//                 // "ldr x30, [x29, #8]",
+//                 // ".cfi_restore x30",
+//                 "add sp, x29, #16",
+//                 ".cfi_def_cfa sp, 0",    // Define new CFA relative to SP
+//                 // Tail call
+//                 "br {handler}",
+//                 ".cfi_endproc",
+//                 in("x0") $next_inst,
+//                 in("x1") $vm_state,
+//                 handler = in(reg) handler,
+//                 options(noreturn),
+//                 // clobber_abi("C"),
+//             );
+//         }
+//
+//         #[cfg(target_arch = "x86_64")]
+//         unsafe {
+//             std::arch::asm!(
+//                 // Force stack cleanup by resetting to frame pointer
+//                 "leave",
+//                 // Setup arguments
+//                 "mov rdi, {next_inst}",
+//                 "mov rsi, {vm_state}",
+//                 // Tail call
+//                 "jmp {handler}",
+//                 next_inst = in(reg) $next_inst,
+//                 vm_state = in(reg) $vm_state,
+//                 handler = in(reg) handler,
+//                 options(noreturn)
+//             );
+//         }
+//
+//         #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+//         compile_error!("Unsupported architecture for tail call optimization");
+//     }};
+// }
 
 #[inline]
 pub fn stack_frame_depth() -> usize {

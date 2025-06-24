@@ -422,7 +422,7 @@ where
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     inst: *const PreComputeInstruction<F, CTX>,
     vm_state: &mut VmSegmentState<F, CTX>,
-) -> Result<()> {
+) {
     let curr_inst = &*inst;
     let pre_compute: &BranchLePreCompute = curr_inst.pre_compute.borrow();
     let rs1 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);

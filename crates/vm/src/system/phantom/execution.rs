@@ -89,7 +89,7 @@ pub(super) struct PhantomStateMut<'a, F> {
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     inst: *const PreComputeInstruction<F, CTX>,
     vm_state: &mut VmSegmentState<F, CTX>,
-) -> crate::arch::Result<()> {
+) {
     let next_inst = inst.offset(1);
     let inst = &*inst;
     let pre_compute: &PhantomPreCompute<F> = inst.pre_compute.borrow();
@@ -103,7 +103,8 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
         },
         &pre_compute.operands,
         sub_executor,
-    )?;
+    )
+    .unwrap();
     vm_state.pc += DEFAULT_PC_STEP;
     vm_state.instret += 1;
     next_instruction!(next_inst, vm_state)

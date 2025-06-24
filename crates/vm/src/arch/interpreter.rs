@@ -192,9 +192,17 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
             })
             .collect();
 
-        let start_pc_index = get_pc_index(program, self.exe.pc_start)?;
-        let start_inst = &pre_compute_insts[start_pc_index];
-        unsafe { ((*start_inst).handler)(start_inst, &mut vm_state)? };
+        // while vm_state.exit_code.is_none() {
+        //     let pc_index = get_pc_index(program, vm_state.pc)?;
+        //     let inst = &pre_compute_insts[pc_index];
+        //     unsafe { (inst.handler)(inst, &mut vm_state) };
+        // }
+        unsafe {
+            execute_impl(program, &mut vm_state, &pre_compute_insts);
+        }
+        // let start_pc_index = get_pc_index(program, self.exe.pc_start)?;
+        // let start_inst = &pre_compute_insts[start_pc_index];
+        // unsafe { start_e1(start_inst, &mut vm_state) };
         if let Some(exit_code) = vm_state.exit_code {
             ctrl.on_terminate(&mut vm_state, &mut chip_complex, exit_code);
         } else {
@@ -228,6 +236,19 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
         //     }
         //     ctrl.execute_instruction(&mut vm_state, inst, &mut chip_complex)?;
         // }
+    }
+}
+
+#[inline(never)]
+unsafe fn execute_impl<F: PrimeField32, Ctx: E1E2ExecutionCtx>(
+    program: &Program<F>,
+    vm_state: &mut VmSegmentState<F, Ctx>,
+    pre_compute_insts: &[PreComputeInstruction<F, Ctx>],
+) {
+    while vm_state.exit_code.is_none() {
+        let pc_index = get_pc_index(program, vm_state.pc).unwrap();
+        let inst = &pre_compute_insts[pc_index];
+        unsafe { (inst.handler)(inst, vm_state) };
     }
 }
 
@@ -281,29 +302,40 @@ impl Drop for AlignedBuf {
         }
     }
 }
+
+#[inline(never)]
+unsafe fn start_e1<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+    inst: *const PreComputeInstruction<F, CTX>,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    next_instruction!(inst, vm_state);
+}
+
 unsafe fn terminate_execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     inst: *const PreComputeInstruction<F, CTX>,
     vm_state: &mut VmSegmentState<F, CTX>,
-) -> crate::arch::Result<()> {
+) {
+    // println!("Terminating VM execution");
+    // panic!();
     let inst = &*inst;
     let pre_compute: &TerminatePreCompute = inst.pre_compute.borrow();
     vm_state.exit_code = Some(pre_compute.exit_code);
-    Ok(())
+    // Ok(())
 }
 
 unsafe fn debug_panic_execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     inst: *const PreComputeInstruction<F, CTX>,
     _vm_state: &mut VmSegmentState<F, CTX>,
-) -> crate::arch::Result<()> {
+) {
     let inst = unsafe { &*inst };
     let pre_compute: &DebugPanicPreCompute = inst.pre_compute.borrow();
-    Err(ExecutionError::Fail { pc: pre_compute.pc })
+    // Err(ExecutionError::Fail { pc: pre_compute.pc })
 }
 
 unsafe fn nop_execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     inst: *const PreComputeInstruction<F, CTX>,
     vm_state: &mut VmSegmentState<F, CTX>,
-) -> crate::arch::Result<()> {
+) {
     let next_inst = unsafe { inst.offset(1) };
     vm_state.pc += DEFAULT_PC_STEP;
     vm_state.instret += 1;

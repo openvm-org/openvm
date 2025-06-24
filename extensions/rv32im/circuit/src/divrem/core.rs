@@ -629,7 +629,7 @@ where
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     inst: *const PreComputeInstruction<F, CTX>,
     vm_state: &mut VmSegmentState<F, CTX>,
-) -> Result<()> {
+) {
     let next_inst = inst.offset(1);
     let inst = &*inst;
     let pre_compute: &DivRemPreCompute = inst.pre_compute.borrow();

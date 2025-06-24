@@ -73,6 +73,7 @@ where
             .execute(E1ExecutionControl, input.clone())
             .expect("Failed to execute");
     }
+    return None;
     let mut log_blowup = 1;
     while config.system().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;

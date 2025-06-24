@@ -1,5 +1,3 @@
-#![feature(rustc_attrs)]
-
 extern crate self as openvm_circuit;
 
 pub use openvm_circuit_derive as derive;
