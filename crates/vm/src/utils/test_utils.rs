@@ -36,15 +36,7 @@ pub fn u32_sign_extend<const IMM_BITS: usize>(num: u32) -> u32 {
 pub fn test_system_config() -> SystemConfig {
     SystemConfig::new(
         3,
-        MemoryConfig::new(
-            2,
-            vec![0, 1 << 25, 1 << 25, 1 << 25, 1 << 25],
-            29,
-            29,
-            17,
-            32,
-            1 << 24,
-        ),
+        MemoryConfig::new(2, vec![0, 4096, 1 << 20, 4096, 1 << 20], 29, 29, 17, 32),
         32,
     )
 }

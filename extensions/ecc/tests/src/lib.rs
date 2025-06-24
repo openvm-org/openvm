@@ -37,8 +37,12 @@ mod tests {
 
     #[cfg(test)]
     fn test_rv32weierstrass_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
+        use openvm_circuit::arch::instructions::{riscv::RV32_MEMORY_AS, NATIVE_AS};
+
         let mut config = Rv32WeierstrassConfig::new(curves);
         config.system = test_system_config_with_continuations();
+        config.system.memory_config.addr_space_sizes[RV32_MEMORY_AS as usize] = 1 << 20; // 1mb
+        config.system.memory_config.addr_space_sizes[NATIVE_AS as usize] = 0; // native addr space is not used
         config
     }
 

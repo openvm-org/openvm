@@ -303,7 +303,7 @@ impl<F: PrimeField32> MemoryController<F> {
             self.memory_bus,
             CHUNK,
         )
-        .with_image(memory, self.mem_config.access_capacity);
+        .with_image(memory);
     }
 
     pub fn memory_bridge(&self) -> MemoryBridge {

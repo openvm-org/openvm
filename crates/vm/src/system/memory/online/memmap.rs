@@ -2,11 +2,9 @@ use std::{fmt::Debug, marker::PhantomData};
 
 use memmap2::MmapMut;
 
-use super::LinearMemory;
+use super::{LinearMemory, PAGE_SIZE};
 
 pub const CELL_STRIDE: usize = 1;
-/// Default mmap page size. Change this if using THB.
-const PAGE_SIZE: usize = 4096;
 
 /// Mmap-backed linear memory. OS-memory pages are paged in on-demand and zero-initialized.
 #[derive(Debug)]
@@ -36,14 +34,10 @@ impl MmapMemory {
 
 impl LinearMemory for MmapMemory {
     /// Create a new MmapMemory with the given `size` in bytes.
-    /// We require `size` to be a multiple of the mmap page size (4kb by default) so that OS-level
+    /// We round `size` up to be a multiple of the mmap page size (4kb by default) so that OS-level
     /// MMU protection corresponds to out of bounds protection.
-    fn new(size: usize) -> Self {
-        assert_eq!(
-            size % PAGE_SIZE,
-            0,
-            "size {size} is not a multiple of page size {PAGE_SIZE}"
-        );
+    fn new(mut size: usize) -> Self {
+        size = size.div_ceil(PAGE_SIZE) * PAGE_SIZE;
         // anonymous mapping means pages are zero-initialized on first use
         Self {
             mmap: MmapMut::map_anon(size).unwrap(),

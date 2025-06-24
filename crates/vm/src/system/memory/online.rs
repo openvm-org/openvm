@@ -24,6 +24,8 @@ pub type MemoryBackend = memmap::MmapMemory;
 pub type MemoryBackend = basic::BasicMemory;
 
 pub const INITIAL_TIMESTAMP: u32 = 0;
+/// Default mmap page size. Change this if using THB.
+pub const PAGE_SIZE: usize = 4096;
 
 /// (address_space, pointer)
 pub type Address = (u32, u32);
@@ -432,7 +434,7 @@ impl<F: PrimeField32> TracingMemory<F> {
     }
 
     /// Instantiates a new `Memory` data structure from an image.
-    pub fn with_image(mut self, image: MemoryImage, _access_capacity: usize) -> Self {
+    pub fn with_image(mut self, image: MemoryImage) -> Self {
         for (i, (mem, cell_size)) in izip!(image.get_memory(), &image.cell_size).enumerate() {
             let num_cells = mem.size() / cell_size;
 
