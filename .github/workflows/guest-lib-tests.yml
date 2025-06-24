@@ -33,6 +33,7 @@ jobs:
           - { name: "p256", path: "p256" }
           - { name: "ruint", path: "ruint" }
           - { name: "pairing", path: "pairing" }
+          - { name: "verify_stark", path: "verify_stark" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
