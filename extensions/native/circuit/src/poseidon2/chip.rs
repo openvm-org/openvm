@@ -104,8 +104,8 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize>
     }
 }
 
-impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> SizedRecord<NativePoseidon2RecordLayout>
-    for NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS>
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> SizedRecord<NativePoseidon2RecordLayout>
+    for NativePoseidon2RecordMut<'_, F, SBOX_REGISTERS>
 {
     fn size(layout: &NativePoseidon2RecordLayout) -> usize {
         layout.metadata.num_rows * NativePoseidon2Cols::<F, SBOX_REGISTERS>::width()

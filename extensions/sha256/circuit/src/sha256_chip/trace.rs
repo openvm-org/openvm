@@ -121,7 +121,7 @@ impl<'a> CustomBorrow<'a, Sha256VmRecordMut<'a>, Sha256VmRecordLayout> for [u8] 
     }
 }
 
-impl<'a> SizedRecord<Sha256VmRecordLayout> for Sha256VmRecordMut<'a> {
+impl SizedRecord<Sha256VmRecordLayout> for Sha256VmRecordMut<'_> {
     fn size(layout: &Sha256VmRecordLayout) -> usize {
         let mut total_len = size_of::<Sha256VmRecordHeader>();
         total_len += layout.metadata.num_blocks as usize * SHA256_BLOCK_CELLS;

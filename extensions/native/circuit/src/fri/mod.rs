@@ -663,7 +663,7 @@ impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpenin
     }
 }
 
-impl<'a, F> SizedRecord<FriReducedOpeningLayout> for FriReducedOpeningRecordMut<'a, F> {
+impl<F> SizedRecord<FriReducedOpeningLayout> for FriReducedOpeningRecordMut<'_, F> {
     fn size(layout: &FriReducedOpeningLayout) -> usize {
         let mut total_len = size_of::<FriReducedOpeningHeaderRecord>();
         total_len += layout.metadata.length * size_of::<FriReducedOpeningWorkloadRowRecord<F>>();

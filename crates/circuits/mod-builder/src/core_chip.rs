@@ -241,7 +241,7 @@ impl<'a, F, A> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressio
     }
 }
 
-impl<'a, F, A> SizedRecord<FieldExpressionRecordLayout<F, A>> for FieldExpressionCoreRecordMut<'a> {
+impl<F, A> SizedRecord<FieldExpressionRecordLayout<F, A>> for FieldExpressionCoreRecordMut<'_> {
     fn size(layout: &FieldExpressionRecordLayout<F, A>) -> usize {
         layout.metadata.total_input_limbs + 1
     }
