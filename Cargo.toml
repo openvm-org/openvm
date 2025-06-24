@@ -260,3 +260,6 @@ sha2 = { version = "0.10", default-features = false }
 # p3-poseidon2 = { path = "../Plonky3/poseidon2" }
 # p3-poseidon2-air = { path = "../Plonky3/poseidon2-air" }
 # p3-symmetric = { path = "../Plonky3/symmetric" }
+
+[workspace.metadata.cargo-shear]
+ignored = ["cargo-openvm"]

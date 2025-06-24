@@ -23,8 +23,6 @@ num-traits.workspace = true
 tracing.workspace = true
 
 itertools.workspace = true
-serde = { workspace = true, features = ["derive"] }
-serde_with.workspace = true
 
 [dev-dependencies]
 openvm-circuit-primitives = { workspace = true }

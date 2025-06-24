@@ -56,7 +56,7 @@ jemalloc-prof = ["openvm-sdk/jemalloc-prof"]
 nightly-features = ["openvm-sdk/nightly-features"]
 
 [package.metadata.cargo-shear]
-ignored = ["derive_more"]
+ignored = ["derive_more", "rand"]
 
 [[bin]]
 name = "fib_e2e"

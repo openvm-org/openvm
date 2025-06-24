@@ -14,4 +14,3 @@ openvm-transpiler = { workspace = true }
 rrs-lib = { workspace = true }
 strum = { workspace = true }
 openvm-pairing-guest = { workspace = true }
-openvm-instructions-derive = { workspace = true }

@@ -94,3 +94,6 @@ nightly-features = ["openvm-circuit/nightly-features"]
 name = "sdk_evm"
 path = "examples/sdk_evm.rs"
 required-features = ["evm-verify"]
+
+[package.metadata.cargo-shear]
+ignored = ["rand"]
