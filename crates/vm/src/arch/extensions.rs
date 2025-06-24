@@ -949,10 +949,10 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
                 .map(|c| c.constant_trace_height()),
         )
         .chain(std::iter::repeat(None).take(self.memory_controller().num_airs()))
-        .chain(
-            self.chips_excluding_pv_chip()
-                .map(|c| c.constant_trace_height()),
-        )
+        .chain(self.chips_excluding_pv_chip().map(|c| match c {
+            Either::Periphery(c) => c.constant_trace_height(),
+            Either::Executor(c) => c.constant_trace_height(),
+        }))
         .chain([self.range_checker_chip().constant_trace_height()])
     }
 

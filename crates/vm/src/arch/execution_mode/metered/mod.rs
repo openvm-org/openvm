@@ -4,12 +4,12 @@ pub mod segment_ctx;
 
 pub use ctx::MeteredCtx;
 use openvm_instructions::instruction::Instruction;
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 pub use segment_ctx::Segment;
 
 use crate::arch::{
-    execution_control::ExecutionControl, ExecutionError, InsExecutorE1, VmChipComplex, VmConfig,
-    VmSegmentState, VmStateMut, PUBLIC_VALUES_AIR_ID,
+    execution_control::ExecutionControl, ChipId, ExecutionError, InsExecutorE1, VmChipComplex,
+    VmConfig, VmSegmentState, VmStateMut, CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID,
 };
 
 #[derive(Default)]
@@ -37,9 +37,54 @@ where
 
     fn on_start(
         &self,
-        _state: &mut VmSegmentState<F, Self::Ctx>,
-        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        state: &mut VmSegmentState<F, Self::Ctx>,
+        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
+        // Program | Connector | Public Values | Memory ... | Executors (except Public Values) |
+        // Range Checker
+        assert_eq!(
+            state.ctx.trace_heights[PROGRAM_AIR_ID],
+            chip_complex
+                .program_chip()
+                .true_program_length
+                .next_power_of_two() as u32
+        );
+        assert!(state.ctx.is_trace_height_constant[PROGRAM_AIR_ID]);
+        assert_eq!(state.ctx.trace_heights[CONNECTOR_AIR_ID], 2);
+        assert!(state.ctx.is_trace_height_constant[CONNECTOR_AIR_ID]);
+
+        let offset = if chip_complex.config().has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
+        } else {
+            PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
+        };
+        // Periphery chips with constant heights
+        for (i, chip_id) in chip_complex
+            .inventory
+            .insertion_order
+            .iter()
+            .rev()
+            .enumerate()
+        {
+            if let &ChipId::Periphery(id) = chip_id {
+                if let Some(constant_height) =
+                    chip_complex.inventory.periphery[id].constant_trace_height()
+                {
+                    assert_eq!(state.ctx.trace_heights[offset + i], constant_height as u32);
+                    assert!(state.ctx.is_trace_height_constant[offset + i]);
+                }
+            }
+        }
+
+        // Range checker chip
+        if let (Some(range_checker_height), Some(last_height), Some(last_is_height_constant)) = (
+            chip_complex.range_checker_chip().constant_trace_height(),
+            state.ctx.trace_heights.last(),
+            state.ctx.is_trace_height_constant.last(),
+        ) {
+            assert_eq!(*last_height, range_checker_height as u32);
+            assert!(*last_is_height_constant);
+        }
     }
 
     fn on_suspend_or_terminate(
