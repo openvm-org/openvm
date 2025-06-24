@@ -5,6 +5,7 @@ use openvm_stark_backend::{
 };
 
 use super::{controller::dimensions::MemoryDimensions, online::LinearMemory, MemoryImage};
+use crate::system::memory::online::PAGE_SIZE;
 
 mod air;
 mod columns;
@@ -66,7 +67,6 @@ fn memory_to_vec_partition<F: PrimeField32, const N: usize>(
     memory: &MemoryImage,
     md: &MemoryDimensions,
 ) -> Vec<(u64, [F; N])> {
-    const PAGE_SIZE: usize = 1 << 12;
     (0..memory.mem.len())
         .into_par_iter()
         .map(move |as_idx| {
@@ -88,7 +88,9 @@ fn memory_to_vec_partition<F: PrimeField32, const N: usize>(
                 .unwrap_or(0);
 
             let space_mem = &space_mem[..(num_nonzero_pages * PAGE_SIZE)];
-            let num_elements = space_mem.len() / (cell_size * N);
+            let mut num_elements = space_mem.len() / (cell_size * N);
+            // virtual memory may be larger than dimensions due to rounding up to page size
+            num_elements = num_elements.min(md.address_height);
 
             // TODO: handle different cell sizes better
             if cell_size == 1 {
