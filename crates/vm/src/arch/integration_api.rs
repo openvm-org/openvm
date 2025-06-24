@@ -560,7 +560,6 @@ impl<'a, A, C, M> RecordArena<'a, AdapterCoreLayout<M>, (A, C)> for DenseRecordA
 where
     [u8]: CustomBorrow<'a, A, AdapterCoreLayout<M>> + CustomBorrow<'a, C, AdapterCoreLayout<M>>,
     M: Clone,
-    M: Clone,
     A: SizedRecord<AdapterCoreLayout<M>>,
     C: SizedRecord<AdapterCoreLayout<M>>,
 {
