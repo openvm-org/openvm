@@ -435,8 +435,6 @@ fn system_config_without_native() -> SystemConfig {
 #[cfg(feature = "evm-verify")]
 #[test]
 fn test_e2e_proof_generation_and_verification_with_pvs() {
-    use openvm_circuit::arch::instructions::NATIVE_AS;
-
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     pkg_dir.push("guest/fib");
 
