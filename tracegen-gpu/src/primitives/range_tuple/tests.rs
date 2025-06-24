@@ -1,87 +1,38 @@
-use core::array;
+use core::array::from_fn;
+use rand::Rng;
 use std::sync::Arc;
 
 use openvm_circuit_primitives::range_tuple::RangeTupleCheckerBus;
-use openvm_stark_sdk::{
-    config::{setup_tracing, FriParameters},
-    engine::{StarkEngine, StarkFriEngine},
-    openvm_stark_backend::prover::hal::DeviceDataTransporter,
-    utils::create_seeded_rng,
-};
-use rand::Rng;
-use stark_backend_gpu::{
-    engine::GpuBabyBearPoseidon2Engine,
-    prover_backend::GpuBackend,
-    types::{DeviceAirProofRawInput, DeviceProofInput},
-};
 
 use crate::{
     dummy::range_tuple::DummyInteractionChipGPU, primitives::range_tuple::RangeTupleCheckerChipGPU,
+    testing::GpuChipTestBuilder,
 };
-
-const LOG_BLOWUP: usize = 2;
-const LIST_LEN: usize = 16;
 
 #[test]
 fn range_tuple_test() {
-    setup_tracing();
+    let mut tester = GpuChipTestBuilder::default();
 
-    let mut rng = create_seeded_rng();
+    let sizes: [u32; 3] = from_fn(|_| 1 << tester.rng().gen_range(1..5));
+    let random_values = (0..64)
+        .flat_map(|_| {
+            sizes
+                .iter()
+                .map(|&size| tester.rng().gen_range(0..size))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
 
-    let bus_index = 0;
-    let sizes: [u32; 3] = array::from_fn(|_| 1 << rng.gen_range(1..5));
+    let range_tuple_checker = Arc::new(RangeTupleCheckerChipGPU::new(
+        RangeTupleCheckerBus::<3>::new(0, sizes),
+    ));
+    let dummy_chip = DummyInteractionChipGPU::new(range_tuple_checker.clone(), random_values);
 
-    let mut gen_tuple = || {
-        sizes
-            .iter()
-            .map(|&size| rng.gen_range(0..size))
-            .collect::<Vec<_>>()
-    };
-
-    let vals = (0..LIST_LEN).map(|_| gen_tuple()).collect::<Vec<_>>();
-
-    let bus = RangeTupleCheckerBus::new(bus_index, sizes);
-    let range_tuple_checker = Arc::new(RangeTupleCheckerChipGPU::new(bus));
-
-    let dummy_chip =
-        DummyInteractionChipGPU::new(range_tuple_checker.clone(), vals.concat().to_vec());
-    let dummy_trace = dummy_chip.generate_trace();
-    let range_tuple_trace = range_tuple_checker.generate_trace();
-
-    let engine = GpuBabyBearPoseidon2Engine::new(
-        FriParameters::standard_with_100_bits_conjectured_security(LOG_BLOWUP),
-    );
-
-    let mut keygen_builder = engine.keygen_builder();
-    let dummy_air_id = keygen_builder.add_air(Arc::new(dummy_chip.air));
-    let range_tuple_checker_id = keygen_builder.add_air(Arc::new(range_tuple_checker.air));
-    let pk = keygen_builder.generate_pk();
-
-    let proof_input = DeviceProofInput::<GpuBackend> {
-        per_air: vec![
-            (
-                dummy_air_id,
-                DeviceAirProofRawInput::<GpuBackend> {
-                    cached_mains: vec![],
-                    common_main: Some(dummy_trace),
-                    public_values: vec![],
-                },
-            ),
-            (
-                range_tuple_checker_id,
-                DeviceAirProofRawInput::<GpuBackend> {
-                    cached_mains: vec![],
-                    common_main: Some(range_tuple_trace),
-                    public_values: vec![],
-                },
-            ),
-        ],
-    };
-
-    let mpk_view = engine
-        .device()
-        .transport_pk_to_device(&pk, vec![dummy_air_id, range_tuple_checker_id]);
-    let gpu_proof = engine.gpu_prove(mpk_view, proof_input);
-
-    engine.verify(&pk.get_vk(), &gpu_proof).unwrap();
+    tester
+        .build()
+        .load(dummy_chip)
+        .load(range_tuple_checker)
+        .finalize()
+        .simple_test()
+        .expect("Verification failed");
 }

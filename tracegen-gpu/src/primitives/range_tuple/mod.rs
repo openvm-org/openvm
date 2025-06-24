@@ -3,9 +3,13 @@ use std::sync::Arc;
 use openvm_circuit_primitives::range_tuple::{
     RangeTupleCheckerAir, RangeTupleCheckerBus, NUM_RANGE_TUPLE_COLS,
 };
-use stark_backend_gpu::{base::DeviceMatrix, cuda::d_buffer::DeviceBuffer, prelude::F};
+use openvm_stark_backend::{rap::get_air_name, AirRef, ChipUsageGetter};
+use stark_backend_gpu::{
+    base::DeviceMatrix, cuda::d_buffer::DeviceBuffer, prelude::F, prover_backend::GpuBackend,
+    types::SC,
+};
 
-use crate::primitives::cuda::range_tuple::tracegen;
+use crate::{primitives::cuda::range_tuple::tracegen, DeviceChip};
 
 #[cfg(test)]
 mod tests;
@@ -25,8 +29,28 @@ impl<const N: usize> RangeTupleCheckerChipGPU<N> {
             count,
         }
     }
+}
 
-    pub fn generate_trace(&self) -> DeviceMatrix<F> {
+impl<const N: usize> ChipUsageGetter for RangeTupleCheckerChipGPU<N> {
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+
+    fn current_trace_height(&self) -> usize {
+        self.count.len()
+    }
+
+    fn trace_width(&self) -> usize {
+        NUM_RANGE_TUPLE_COLS
+    }
+}
+
+impl<const N: usize> DeviceChip<SC, GpuBackend> for RangeTupleCheckerChipGPU<N> {
+    fn air(&self) -> AirRef<SC> {
+        Arc::new(self.air)
+    }
+
+    fn generate_trace(&self) -> DeviceMatrix<F> {
         let trace =
             DeviceMatrix::<F>::new(self.count.clone(), self.count.len(), NUM_RANGE_TUPLE_COLS);
         unsafe {

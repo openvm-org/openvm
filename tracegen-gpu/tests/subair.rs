@@ -22,7 +22,7 @@ use tracegen_gpu::{
         is_equal, is_zero,
         less_than::{assert_less_than_tracegen, less_than_array_tracegen, less_than_tracegen},
     },
-    utils::{assert_eq_cpu_and_gpu_matrix, test_chip_whole_trace_output},
+    testing::{assert_eq_cpu_and_gpu_matrix, test_chip_whole_trace_output},
 };
 
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
