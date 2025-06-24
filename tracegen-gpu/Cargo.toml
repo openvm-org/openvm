@@ -7,6 +7,9 @@ edition.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+rand = { version = "0.8.5", default-features = false }
+tracing = { workspace = true }
+
 stark-backend-gpu = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
@@ -27,9 +30,12 @@ cc = { version = "1.0", features = ["parallel"] }  # For CUDA compilation
 
 [dev-dependencies]
 itertools = { version = "0.14.0", default-features = false, features = ["use_std"] }
-rand = { version = "0.8.5", default-features = false }
 p3-field = { workspace = true }
 p3-baby-bear = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32im-circuit = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", features = ["test-utils"] }
 openvm-instructions = { workspace = true }
+
+[features]
+default = ["test-utils"]
+test-utils = ["openvm-circuit/test-utils"]

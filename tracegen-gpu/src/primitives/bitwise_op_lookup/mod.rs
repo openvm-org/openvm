@@ -3,9 +3,13 @@ use std::sync::Arc;
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, NUM_BITWISE_OP_LOOKUP_COLS,
 };
-use stark_backend_gpu::{base::DeviceMatrix, cuda::d_buffer::DeviceBuffer, prelude::F};
+use openvm_stark_backend::{rap::get_air_name, AirRef, ChipUsageGetter};
+use stark_backend_gpu::{
+    base::DeviceMatrix, cuda::d_buffer::DeviceBuffer, prelude::F, prover_backend::GpuBackend,
+    types::SC,
+};
 
-use crate::primitives::cuda::bitwise_op_lookup::tracegen;
+use crate::{primitives::cuda::bitwise_op_lookup::tracegen, DeviceChip};
 
 #[cfg(test)]
 mod tests;
@@ -31,9 +35,28 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChipGPU<NUM_BITS> {
             count,
         }
     }
+}
 
-    /// Inplace generates the trace.
-    pub fn generate_trace(&self) -> DeviceMatrix<F> {
+impl<const NUM_BITS: usize> ChipUsageGetter for BitwiseOperationLookupChipGPU<NUM_BITS> {
+    fn air_name(&self) -> String {
+        get_air_name(&self.air)
+    }
+
+    fn current_trace_height(&self) -> usize {
+        Self::num_rows()
+    }
+
+    fn trace_width(&self) -> usize {
+        NUM_BITWISE_OP_LOOKUP_COLS
+    }
+}
+
+impl<const NUM_BITS: usize> DeviceChip<SC, GpuBackend> for BitwiseOperationLookupChipGPU<NUM_BITS> {
+    fn air(&self) -> AirRef<SC> {
+        Arc::new(self.air)
+    }
+
+    fn generate_trace(&self) -> DeviceMatrix<F> {
         debug_assert_eq!(
             Self::num_rows() * NUM_BITWISE_OP_LOOKUP_COLS,
             self.count.len()

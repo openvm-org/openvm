@@ -21,7 +21,7 @@ struct Rv32AuipcCoreRecord {
     uint32_t imm;
 };
 
-__device__ uint32_t run_auipc(uint32_t pc, uint32_t imm) { return (pc + imm) << RV32_CELL_BITS; }
+__device__ uint32_t run_auipc(uint32_t pc, uint32_t imm) { return pc + (imm << RV32_CELL_BITS); }
 
 struct Rv32AuipcCore {
     BitwiseOperationLookup bitwise_lookup;
@@ -40,7 +40,7 @@ struct Rv32AuipcCore {
         auto msl_shift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - PC_BITS;
         bitwise_lookup.add_range(pc_limbs[2], pc_limbs[3] << msl_shift);
 #pragma unroll
-        for (size_t i = 0; i < RV32_REGISTER_NUM_LIMBS; i++) {
+        for (size_t i = 0; i < RV32_REGISTER_NUM_LIMBS; i += 2) {
             bitwise_lookup.add_range(rd_data[i], rd_data[i + 1]);
         }
 

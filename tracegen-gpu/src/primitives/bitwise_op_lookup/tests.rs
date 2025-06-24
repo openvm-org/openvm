@@ -10,7 +10,7 @@ use stark_backend_gpu::cuda::copy::MemCopyH2D;
 use crate::{
     dummy::cuda::utils::send_bitwise_operation_lookups,
     primitives::bitwise_op_lookup::BitwiseOperationLookupChipGPU,
-    utils::assert_eq_cpu_and_gpu_matrix,
+    testing::assert_eq_cpu_and_gpu_matrix, DeviceChip,
 };
 
 #[test]

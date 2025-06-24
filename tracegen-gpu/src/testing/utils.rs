@@ -1,10 +1,15 @@
 use core::fmt::Debug;
 use std::sync::Arc;
 
-use openvm_stark_backend::{p3_matrix::dense::RowMajorMatrix, prover::hal::MatrixDimensions, Chip};
+use openvm_stark_backend::{
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    prover::hal::MatrixDimensions,
+    Chip,
+};
 use stark_backend_gpu::{
     base::DeviceMatrix,
     cuda::copy::MemCopyD2H,
+    data_transporter::transport_device_matrix_to_host,
     prelude::{F, SC},
 };
 
@@ -34,14 +39,26 @@ pub fn assert_eq_cpu_and_gpu_matrix<T: Clone + Send + Sync + PartialEq + Debug>(
     cpu: Arc<RowMajorMatrix<T>>,
     gpu: &DeviceMatrix<T>,
 ) {
-    let gpu_vec = gpu.to_host().unwrap();
-    let cpu_vec = &cpu.values;
     assert_eq!(gpu.width(), cpu.width());
     assert_eq!(gpu.height(), cpu.height());
-    assert_eq!(gpu_vec.len(), cpu_vec.len());
-    for c in 0..gpu.width() {
-        for r in 0..gpu.height() {
-            assert_eq!(gpu_vec[c * gpu.height() + r], cpu_vec[r * cpu.width() + c]);
+    let gpu = transport_device_matrix_to_host(gpu);
+    for r in 0..cpu.height() {
+        for c in 0..cpu.width() {
+            assert_eq!(
+                gpu.get(r, c),
+                cpu.get(r, c),
+                "Mismatch at row {} column {}",
+                r,
+                c
+            );
         }
     }
+}
+
+// Utility function to print out a DeviceMatrix as a RowMajorMatrix for easy
+// comparison during debugging
+pub fn print_gpu_matrix_as_row_major_matrix<T: Clone + Send + Sync + Debug>(
+    gpu_matrix: &DeviceMatrix<T>,
+) {
+    println!("{:?}", transport_device_matrix_to_host(gpu_matrix));
 }
