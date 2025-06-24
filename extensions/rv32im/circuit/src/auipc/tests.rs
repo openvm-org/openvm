@@ -1,9 +1,8 @@
 use std::borrow::BorrowMut;
 
-use itertools::izip;
 use openvm_circuit::arch::{
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    DenseRecordArena, NewVmChipWrapper, VmAirWrapper,
+    DenseRecordArena, EmptyAdapterCoreLayout, InstructionExecutor, NewVmChipWrapper, VmAirWrapper,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -58,78 +57,9 @@ fn create_test_chip(
     (chip, bitwise_chip)
 }
 
-type DenseChip<F> = NewVmChipWrapper<F, Rv32AuipcAir, Rv32AuipcStepWithAdapter, DenseRecordArena>;
-
-fn create_dense_chip(
-    tester: &VmChipTestBuilder<F>,
-) -> (
-    DenseChip<F>,
-    SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-) {
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-
-    let mut chip = DenseChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
-            Rv32AuipcCoreAir::new(bitwise_bus),
-        ),
-        Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_chip.clone()),
-        tester.memory_helper(),
-    );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-
-    (chip, bitwise_chip)
-}
-
-/// A toy example showing how the dense chip wrapper works with normal usual records
-/// that compose the row (not very efficiently, but works).
-#[test]
-fn rand_auipc_dense_test() {
-    let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
-    let (mut chip, _bitwise_chip) = create_dense_chip(&tester);
-
-    let num_tests: usize = 10;
-
-    let imms = (0..num_tests)
-        .map(|_| rng.gen_range(0..(1 << IMM_BITS)) as usize)
-        .collect::<Vec<_>>();
-    let args = (0..num_tests)
-        .map(|_| rng.gen_range(0..32) << 2)
-        .collect::<Vec<_>>();
-    let from_pcs = (0..num_tests)
-        .map(|_| rng.gen_range(0..(1 << PC_BITS)))
-        .collect::<Vec<_>>();
-
-    for (&imm, &a, &from_pc) in izip!(imms.iter(), args.iter(), from_pcs.iter()) {
-        tester.execute_with_pc(
-            &mut chip,
-            &Instruction::from_usize(AUIPC.global_opcode(), [a, 0, imm, 1, 0]),
-            from_pc,
-        );
-        let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
-        let rd_data = run_auipc(initial_pc, imm as u32);
-        assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
-    }
-
-    let records = chip
-        .arena
-        .extract_records::<(Rv32RdWriteAdapterRecord, Rv32AuipcCoreRecord)>();
-    eprintln!("{:?}", records);
-    assert_eq!(records.len(), num_tests);
-    for i in 0..num_tests {
-        assert_eq!(records[i].0.from_pc, from_pcs[i]);
-        assert_eq!(records[i].0.from_timestamp, 2 * i as u32 + 1);
-        assert_eq!(records[i].0.rd_ptr, args[i] as u32);
-        assert_eq!(records[i].1.from_pc, from_pcs[i]);
-        assert_eq!(records[i].1.imm, imms[i] as u32);
-    }
-}
-
-fn set_and_execute(
+fn set_and_execute<E: InstructionExecutor<F>>(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut Rv32AuipcChip<F>,
+    chip: &mut E,
     rng: &mut StdRng,
     opcode: Rv32AuipcOpcode,
     imm: Option<u32>,
@@ -346,4 +276,66 @@ fn run_auipc_sanity_test() {
     let rd_data = run_auipc(initial_pc, imm);
 
     assert_eq!(rd_data, [210, 107, 113, 186]);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+/// DENSE TESTS
+///
+/// Ensure that the chip works as expected with dense records.
+/// We first execute some instructions with a [DenseRecordArena] and transfer the records
+/// to a [MatrixRecordArena]. After transferring we generate the trace and make sure that
+/// all the constraints pass.
+///////////////////////////////////////////////////////////////////////////////////////
+type Rv32AuipcChipDense =
+    NewVmChipWrapper<F, Rv32AuipcAir, Rv32AuipcStepWithAdapter, DenseRecordArena>;
+
+fn create_test_chip_dense(tester: &mut VmChipTestBuilder<F>) -> Rv32AuipcChipDense {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+
+    let mut chip = Rv32AuipcChipDense::new(
+        Rv32AuipcAir::new(
+            Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
+            Rv32AuipcCoreAir::new(bitwise_bus),
+        ),
+        Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_chip.clone()),
+        tester.memory_helper(),
+    );
+
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+    chip
+}
+
+#[test]
+fn dense_record_arena_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut sparse_chip, bitwise_chip) = create_test_chip(&mut tester);
+
+    {
+        let mut dense_chip = create_test_chip_dense(&mut tester);
+
+        let num_ops: usize = 100;
+        for _ in 0..num_ops {
+            set_and_execute(&mut tester, &mut dense_chip, &mut rng, AUIPC, None, None);
+        }
+
+        type Record<'a> = (
+            &'a mut Rv32RdWriteAdapterRecord,
+            &'a mut Rv32AuipcCoreRecord,
+        );
+
+        let mut record_interpreter = dense_chip.arena.get_record_seeker::<Record, _>();
+        record_interpreter.transfer_to_matrix_arena(
+            &mut sparse_chip.arena,
+            EmptyAdapterCoreLayout::<F, Rv32RdWriteAdapterStep>::new(),
+        );
+    }
+
+    let tester = tester
+        .build()
+        .load(sparse_chip)
+        .load(bitwise_chip)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
 }

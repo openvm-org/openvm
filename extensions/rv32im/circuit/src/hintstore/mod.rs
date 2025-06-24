@@ -4,8 +4,8 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionError, ExecutionState,
-        MatrixRecordArena, MultiRowLayout, NewVmChipWrapper, RecordArena, Result, StepExecutorE1,
-        TraceFiller, TraceStep, VmStateMut,
+        MatrixRecordArena, MultiRowLayout, MultiRowMetadata, NewVmChipWrapper, RecordArena, Result,
+        SizedRecord, StepExecutorE1, TraceFiller, TraceStep, VmStateMut,
     },
     system::memory::{
         offline_checker::{
@@ -270,10 +270,19 @@ pub struct Rv32HintStoreMetadata {
     num_words: usize,
 }
 
+impl MultiRowMetadata for Rv32HintStoreMetadata {
+    #[inline(always)]
+    fn get_num_rows(&self) -> usize {
+        self.num_words
+    }
+}
+
+pub type Rv32HintStoreLayout = MultiRowLayout<Rv32HintStoreMetadata>;
+
 // This is the part of the record that we keep only once per instruction
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv32HintStoreRecord {
+pub struct Rv32HintStoreRecordHeader {
     pub num_words: u32,
 
     pub from_pc: u32,
@@ -301,7 +310,7 @@ pub struct Rv32HintStoreVar {
 /// `Rv32HintStoreCols` is bigger than `size_of::<Rv32HintStoreRecord>()`
 #[derive(Debug)]
 pub struct Rv32HintStoreRecordMut<'a> {
-    pub inner: &'a mut Rv32HintStoreRecord,
+    pub inner: &'a mut Rv32HintStoreRecordHeader,
     pub var: &'a mut [Rv32HintStoreVar],
 }
 
@@ -309,16 +318,37 @@ pub struct Rv32HintStoreRecordMut<'a> {
 /// followed by a slice of `Rv32HintStoreVar`'s of length `num_words` provided at runtime.
 /// Uses `align_to_mut()` to make sure the slice is properly aligned to `Rv32HintStoreVar`.
 /// Has debug assertions to make sure the above works as expected.
-impl<'a> CustomBorrow<'a, Rv32HintStoreRecordMut<'a>, Rv32HintStoreMetadata> for [u8] {
-    fn custom_borrow(&'a mut self, metadata: Rv32HintStoreMetadata) -> Rv32HintStoreRecordMut<'a> {
-        let (record_buf, rest) =
-            unsafe { self.split_at_mut_unchecked(size_of::<Rv32HintStoreRecord>()) };
+impl<'a> CustomBorrow<'a, Rv32HintStoreRecordMut<'a>, Rv32HintStoreLayout> for [u8] {
+    fn custom_borrow(&'a mut self, layout: Rv32HintStoreLayout) -> Rv32HintStoreRecordMut<'a> {
+        let (header_buf, rest) =
+            unsafe { self.split_at_mut_unchecked(size_of::<Rv32HintStoreRecordHeader>()) };
 
         let (_, vars, _) = unsafe { rest.align_to_mut::<Rv32HintStoreVar>() };
         Rv32HintStoreRecordMut {
-            inner: record_buf.borrow_mut(),
-            var: &mut vars[..metadata.num_words],
+            inner: header_buf.borrow_mut(),
+            var: &mut vars[..layout.metadata.num_words],
         }
+    }
+
+    unsafe fn extract_layout(&self) -> Rv32HintStoreLayout {
+        let header: &Rv32HintStoreRecordHeader = self.borrow();
+        MultiRowLayout::new(Rv32HintStoreMetadata {
+            num_words: header.num_words as usize,
+        })
+    }
+}
+
+impl SizedRecord<Rv32HintStoreLayout> for Rv32HintStoreRecordMut<'_> {
+    fn size(layout: &Rv32HintStoreLayout) -> usize {
+        let mut total_len = size_of::<Rv32HintStoreRecordHeader>();
+        // Align the pointer to the alignment of `Rv32HintStoreVar`
+        total_len = total_len.next_multiple_of(align_of::<Rv32HintStoreVar>());
+        total_len += size_of::<Rv32HintStoreVar>() * layout.metadata.num_words;
+        total_len
+    }
+
+    fn alignment(_layout: &Rv32HintStoreLayout) -> usize {
+        align_of::<Rv32HintStoreRecordHeader>()
     }
 }
 
@@ -386,12 +416,9 @@ where
             read_rv32_register(state.memory.data(), a)
         };
 
-        let record = arena.alloc(MultiRowLayout {
-            num_rows: num_words,
-            metadata: Rv32HintStoreMetadata {
-                num_words: num_words as usize,
-            },
-        });
+        let record = arena.alloc(MultiRowLayout::new(Rv32HintStoreMetadata {
+            num_words: num_words as usize,
+        }));
 
         record.inner.from_pc = *state.pc;
         record.inner.timestamp = state.memory.timestamp;
@@ -448,7 +475,6 @@ where
                 &mut record.var[idx].data_write_aux.prev_data,
             );
         }
-
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
@@ -472,7 +498,8 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep {
         let mut chunks = Vec::with_capacity(rows_used);
 
         while !trace.is_empty() {
-            let record: &Rv32HintStoreRecord = unsafe { get_record_from_slice(&mut trace, ()) };
+            let record: &Rv32HintStoreRecordHeader =
+                unsafe { get_record_from_slice(&mut trace, ()) };
             let (chunk, rest) = trace.split_at_mut(width * record.num_words as usize);
             sizes.push(record.num_words);
             chunks.push(chunk);
@@ -490,12 +517,11 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep {
                 let record: Rv32HintStoreRecordMut = unsafe {
                     get_record_from_slice(
                         chunk,
-                        Rv32HintStoreMetadata {
+                        MultiRowLayout::new(Rv32HintStoreMetadata {
                             num_words: num_words as usize,
-                        },
+                        }),
                     )
                 };
-
                 self.bitwise_lookup_chip.request_range(
                     (record.inner.mem_ptr >> msl_rshift) << msl_lshift,
                     (num_words >> msl_rshift) << msl_lshift,

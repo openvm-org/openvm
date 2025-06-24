@@ -6,9 +6,9 @@ use std::{
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, ExecutionBridge, ExecutionState, MatrixRecordArena, MultiRowLayout,
-        NewVmChipWrapper, PcIncOrSet, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
-        VmStateMut,
+        get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionState,
+        MatrixRecordArena, NewVmChipWrapper, PcIncOrSet, RecordArena, Result, StepExecutorE1,
+        TraceFiller, TraceStep, VmStateMut,
     },
     system::{
         memory::{
@@ -162,8 +162,7 @@ impl<F, CTX> TraceStep<F, CTX> for JalRangeCheckStep
 where
     F: PrimeField32,
 {
-    // Will use MultiRowLayout with `num_rows = 1`
-    type RecordLayout = MultiRowLayout<()>;
+    type RecordLayout = EmptyMultiRowLayout;
     type RecordMut<'a> = &'a mut JalRangeCheckRecord<F>;
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -198,7 +197,7 @@ where
                 || opcode == NativeRangeCheckOpcode::RANGE_CHECK.global_opcode()
         );
 
-        let record = arena.alloc(MultiRowLayout::default());
+        let record = arena.alloc(EmptyMultiRowLayout::default());
 
         record.from_pc = *state.pc;
         record.from_timestamp = state.memory.timestamp;

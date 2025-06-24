@@ -18,8 +18,8 @@ use crate::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, BasicAdapterInterface, EmptyLayout, MinimalInstruction, RecordArena,
-        Result, StepExecutorE1, TraceFiller, TraceStep, VmCoreAir, VmStateMut,
+        AdapterTraceStep, BasicAdapterInterface, EmptyAdapterCoreLayout, MinimalInstruction,
+        RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep, VmCoreAir, VmStateMut,
     },
     system::{
         memory::{
@@ -148,7 +148,7 @@ where
     F: PrimeField32,
     A: 'static + AdapterTraceStep<F, CTX, ReadData = [[F; 1]; 2], WriteData = [[F; 1]; 0]>,
 {
-    type RecordLayout = EmptyLayout<A>;
+    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
     type RecordMut<'a> = (A::RecordMut<'a>, &'a mut PublicValuesRecord<F>);
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -167,7 +167,7 @@ where
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
     {
-        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
+        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 

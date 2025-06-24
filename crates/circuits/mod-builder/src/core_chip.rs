@@ -1,13 +1,15 @@
+use std::marker::PhantomData;
+
 use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterExecutorE1,
-        AdapterTraceFiller, AdapterTraceStep, CustomBorrow, DynAdapterInterface, DynArray,
-        MinimalInstruction, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
-        VmAdapterInterface, VmCoreAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterCoreMetadata,
+        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, CustomBorrow, DynAdapterInterface,
+        DynArray, MinimalInstruction, RecordArena, Result, SizedRecord, StepExecutorE1,
+        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -170,41 +172,97 @@ where
     }
 }
 
-#[derive(Copy, Clone)]
-pub struct FieldExpressionMetadata {
+pub struct FieldExpressionMetadata<F, A> {
     pub total_input_limbs: usize, // num_inputs * limbs_per_input
+    _phantom: PhantomData<(F, A)>,
 }
+
+impl<F, A> Clone for FieldExpressionMetadata<F, A> {
+    fn clone(&self) -> Self {
+        Self {
+            total_input_limbs: self.total_input_limbs,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<F, A> Default for FieldExpressionMetadata<F, A> {
+    fn default() -> Self {
+        Self {
+            total_input_limbs: 0,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<F, A> FieldExpressionMetadata<F, A> {
+    pub fn new(total_input_limbs: usize) -> Self {
+        Self {
+            total_input_limbs,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<F, A> AdapterCoreMetadata for FieldExpressionMetadata<F, A>
+where
+    A: AdapterTraceStep<F, ()>,
+{
+    #[inline(always)]
+    fn get_adapter_width() -> usize {
+        A::WIDTH * size_of::<F>()
+    }
+}
+
+pub type FieldExpressionRecordLayout<F, A> = AdapterCoreLayout<FieldExpressionMetadata<F, A>>;
 
 pub struct FieldExpressionCoreRecordMut<'a> {
     pub opcode: &'a mut u8,
     pub input_limbs: &'a mut [u8],
 }
 
-impl<'a> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressionMetadata> for [u8] {
+impl<'a, F, A> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressionRecordLayout<F, A>>
+    for [u8]
+{
     fn custom_borrow(
         &'a mut self,
-        metadata: FieldExpressionMetadata,
+        layout: FieldExpressionRecordLayout<F, A>,
     ) -> FieldExpressionCoreRecordMut<'a> {
         let (opcode_buf, input_limbs_buff) = unsafe { self.split_at_mut_unchecked(1) };
 
         FieldExpressionCoreRecordMut {
             opcode: &mut opcode_buf[0],
-            input_limbs: &mut input_limbs_buff[..metadata.total_input_limbs],
+            input_limbs: &mut input_limbs_buff[..layout.metadata.total_input_limbs],
         }
+    }
+
+    unsafe fn extract_layout(&self) -> FieldExpressionRecordLayout<F, A> {
+        panic!("Should get the Layout information from FieldExpressionStep");
+    }
+}
+
+impl<'a, F, A> SizedRecord<FieldExpressionRecordLayout<F, A>> for FieldExpressionCoreRecordMut<'a> {
+    fn size(layout: &FieldExpressionRecordLayout<F, A>) -> usize {
+        layout.metadata.total_input_limbs + 1
+    }
+
+    fn alignment(_layout: &FieldExpressionRecordLayout<F, A>) -> usize {
+        align_of::<u8>()
     }
 }
 
 impl<'a> FieldExpressionCoreRecordMut<'a> {
+    // This method is only used in testing
     pub fn new_from_execution_data(
         buffer: &'a mut [u8],
         inputs: &[BigUint],
         limbs_per_input: usize,
     ) -> Self {
-        let record_info = FieldExpressionMetadata {
-            total_input_limbs: inputs.len() * limbs_per_input,
-        };
+        let record_info = FieldExpressionMetadata::<(), ()>::new(inputs.len() * limbs_per_input);
 
-        let record: Self = buffer.custom_borrow(record_info);
+        let record: Self = buffer.custom_borrow(FieldExpressionRecordLayout {
+            metadata: record_info,
+        });
         record
     }
 
@@ -278,20 +336,22 @@ impl<A> FieldExpressionStep<A> {
     pub fn output_indices(&self) -> &[usize] {
         &self.expr.builder.output_indices
     }
+    pub fn get_record_layout<F>(&self) -> FieldExpressionRecordLayout<F, A> {
+        FieldExpressionRecordLayout {
+            metadata: FieldExpressionMetadata::new(
+                self.num_inputs() * self.expr.canonical_num_limbs(),
+            ),
+        }
+    }
 }
 
 impl<F, CTX, A> TraceStep<F, CTX> for FieldExpressionStep<A>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
-            F,
-            CTX,
-            ReadData: Into<DynArray<u8>>,
-            WriteData: From<DynArray<u8>>,
-        >,
+        + AdapterTraceStep<F, CTX, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
 {
-    type RecordLayout = AdapterCoreLayout<A, FieldExpressionMetadata>;
+    type RecordLayout = FieldExpressionRecordLayout<F, A>;
     type RecordMut<'a> = (A::RecordMut<'a>, FieldExpressionCoreRecordMut<'a>);
 
     fn execute<'buf, RA>(
@@ -303,12 +363,7 @@ where
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
     {
-        let core_record_metadata = FieldExpressionMetadata {
-            total_input_limbs: self.num_inputs() * self.expr.canonical_num_limbs(),
-        };
-
-        let (mut adapter_record, mut core_record) =
-            arena.alloc(AdapterCoreLayout::with_metadata(core_record_metadata));
+        let (mut adapter_record, mut core_record) = arena.alloc(self.get_record_layout());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -352,14 +407,8 @@ where
 
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        let record: FieldExpressionCoreRecordMut = unsafe {
-            get_record_from_slice(
-                &mut core_row,
-                FieldExpressionMetadata {
-                    total_input_limbs: self.num_inputs() * self.expr.canonical_num_limbs(),
-                },
-            )
-        };
+        let record: FieldExpressionCoreRecordMut =
+            unsafe { get_record_from_slice(&mut core_row, self.get_record_layout::<F>()) };
 
         let (_, inputs, flags) =
             run_field_expression(self, record.input_limbs, *record.opcode as usize);

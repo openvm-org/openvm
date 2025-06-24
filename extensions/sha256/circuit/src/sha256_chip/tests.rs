@@ -3,7 +3,7 @@ use std::array;
 use openvm_circuit::{
     arch::{
         testing::{memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        InsExecutorE1,
+        DenseRecordArena, InsExecutorE1, InstructionExecutor, NewVmChipWrapper,
     },
     utils::get_random_message,
 };
@@ -17,7 +17,9 @@ use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::cre
 use rand::{rngs::StdRng, Rng};
 
 use super::{Sha256VmAir, Sha256VmChip, Sha256VmStep};
-use crate::{sha256_solve, Sha256VmDigestCols, Sha256VmRoundCols};
+use crate::{
+    sha256_chip::trace::Sha256VmRecordLayout, sha256_solve, Sha256VmDigestCols, Sha256VmRoundCols,
+};
 
 type F = BabyBear;
 const SELF_BUS_IDX: BusIndex = 28;
@@ -50,9 +52,9 @@ fn create_test_chips(
     (chip, bitwise_chip)
 }
 
-fn set_and_execute(
+fn set_and_execute<E: InstructionExecutor<F>>(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut Sha256VmChip<F>,
+    chip: &mut E,
     rng: &mut StdRng,
     opcode: Rv32Sha256Opcode,
     message: Option<&[u8]>,
@@ -153,4 +155,65 @@ fn sha256_solve_sanity_check() {
         46, 245, 169, 94, 255, 42, 136, 193, 15, 40, 133, 173, 22,
     ];
     assert_eq!(output, expected);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+/// DENSE TESTS
+///
+/// Ensure that the chip works as expected with dense records.
+/// We first execute some instructions with a [DenseRecordArena] and transfer the records
+/// to a [MatrixRecordArena]. After transferring we generate the trace and make sure that
+/// all the constraints pass.
+///////////////////////////////////////////////////////////////////////////////////////
+type Sha256VmChipDense = NewVmChipWrapper<F, Sha256VmAir, Sha256VmStep, DenseRecordArena>;
+
+fn create_test_chip_dense(tester: &mut VmChipTestBuilder<F>) -> Sha256VmChipDense {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+
+    let mut chip = Sha256VmChipDense::new(
+        Sha256VmAir::new(
+            tester.system_port(),
+            bitwise_chip.bus(),
+            tester.address_bits(),
+            SELF_BUS_IDX,
+        ),
+        Sha256VmStep::new(
+            bitwise_chip.clone(),
+            Rv32Sha256Opcode::CLASS_OFFSET,
+            tester.address_bits(),
+        ),
+        tester.memory_helper(),
+    );
+
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+    chip
+}
+
+#[test]
+fn dense_record_arena_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut sparse_chip, bitwise_chip) = create_test_chips(&mut tester);
+
+    {
+        let mut dense_chip = create_test_chip_dense(&mut tester);
+
+        let num_ops: usize = 10;
+        for _ in 0..num_ops {
+            set_and_execute(&mut tester, &mut dense_chip, &mut rng, SHA256, None, None);
+        }
+
+        let mut record_interpreter = dense_chip
+            .arena
+            .get_record_seeker::<_, Sha256VmRecordLayout>();
+        record_interpreter.transfer_to_matrix_arena(&mut sparse_chip.arena);
+    }
+
+    let tester = tester
+        .build()
+        .load(sparse_chip)
+        .load(bitwise_chip)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
 }

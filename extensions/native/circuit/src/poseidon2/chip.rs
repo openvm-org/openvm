@@ -3,8 +3,8 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        CustomBorrow, MultiRowLayout, RecordArena, StepExecutorE1, TraceFiller, TraceStep,
-        VmStateMut,
+        CustomBorrow, MultiRowLayout, MultiRowMetadata, RecordArena, SizedRecord, StepExecutorE1,
+        TraceFiller, TraceStep, VmStateMut,
     },
     system::{
         memory::{
@@ -66,25 +66,53 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_R
 pub(super) const NUM_INITIAL_READS: usize = 6;
 pub(super) const NUM_SIMPLE_ACCESSES: u32 = 7;
 
+#[derive(Debug, Clone, Default)]
 pub struct NativePoseidon2Metadata {
     num_rows: usize,
 }
+
+impl MultiRowMetadata for NativePoseidon2Metadata {
+    #[inline(always)]
+    fn get_num_rows(&self) -> usize {
+        self.num_rows
+    }
+}
+
+type NativePoseidon2RecordLayout = MultiRowLayout<NativePoseidon2Metadata>;
+
 pub struct NativePoseidon2RecordMut<'a, F, const SBOX_REGISTERS: usize>(
     &'a mut [NativePoseidon2Cols<F, SBOX_REGISTERS>],
 );
+
 impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize>
-    CustomBorrow<'a, NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS>, NativePoseidon2Metadata>
+    CustomBorrow<'a, NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS>, NativePoseidon2RecordLayout>
     for [u8]
 {
     fn custom_borrow(
         &'a mut self,
-        metadata: NativePoseidon2Metadata,
+        layout: NativePoseidon2RecordLayout,
     ) -> NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS> {
         let arr = unsafe {
             self.align_to_mut::<NativePoseidon2Cols<F, SBOX_REGISTERS>>()
                 .1
         };
-        NativePoseidon2RecordMut(&mut arr[..metadata.num_rows])
+        NativePoseidon2RecordMut(&mut arr[..layout.metadata.num_rows])
+    }
+
+    unsafe fn extract_layout(&self) -> NativePoseidon2RecordLayout {
+        todo!()
+    }
+}
+
+impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> SizedRecord<NativePoseidon2RecordLayout>
+    for NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS>
+{
+    fn size(layout: &NativePoseidon2RecordLayout) -> usize {
+        layout.metadata.num_rows * NativePoseidon2Cols::<F, SBOX_REGISTERS>::width()
+    }
+
+    fn alignment(_layout: &NativePoseidon2RecordLayout) -> usize {
+        align_of::<NativePoseidon2Cols<F, SBOX_REGISTERS>>()
     }
 }
 
@@ -107,10 +135,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
             || instruction.opcode == COMP_POS2.global_opcode()
         {
             let cols = &mut arena
-                .alloc(MultiRowLayout {
-                    num_rows: 1,
-                    metadata: NativePoseidon2Metadata { num_rows: 1 },
-                })
+                .alloc(MultiRowLayout::new(NativePoseidon2Metadata { num_rows: 1 }))
                 .0[0];
             let simple_cols: &mut SimplePoseidonSpecificCols<F> =
                 cols.specific[..SimplePoseidonSpecificCols::<u8>::width()].borrow_mut();
@@ -323,12 +348,9 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
 
             let total_num_row = num_inside_rows + num_non_inside_rows;
             let allocated_rows = arena
-                .alloc(MultiRowLayout {
-                    num_rows: total_num_row as u32,
-                    metadata: NativePoseidon2Metadata {
-                        num_rows: total_num_row,
-                    },
-                })
+                .alloc(MultiRowLayout::new(NativePoseidon2Metadata {
+                    num_rows: total_num_row,
+                }))
                 .0;
             let mut inside_row_idx = num_non_inside_rows;
             let mut non_inside_row_idx = 0;

@@ -2,7 +2,7 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    ExecutionBridge,
+    DenseRecordArena, ExecutionBridge, InstructionExecutor, NewVmChipWrapper,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -25,7 +25,9 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::{Rv32HintStoreAir, Rv32HintStoreChip, Rv32HintStoreCols, Rv32HintStoreStep};
-use crate::{adapters::decompose, test_utils::get_verification_error};
+use crate::{
+    adapters::decompose, hintstore::Rv32HintStoreLayout, test_utils::get_verification_error,
+};
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 4096;
@@ -55,9 +57,9 @@ fn create_test_chip(
     (chip, bitwise_chip)
 }
 
-fn set_and_execute(
+fn set_and_execute<E: InstructionExecutor<F>>(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut Rv32HintStoreChip<F>,
+    chip: &mut E,
     rng: &mut StdRng,
     opcode: Rv32HintStoreOpcode,
 ) {
@@ -206,4 +208,63 @@ fn execute_roundtrip_sanity_test() {
     for _ in 0..num_ops {
         set_and_execute(&mut tester, &mut chip, &mut rng, HINT_STOREW);
     }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+/// DENSE TESTS
+///
+/// Ensure that the chip works as expected with dense records.
+/// We first execute some instructions with a [DenseRecordArena] and transfer the records
+/// to a [MatrixRecordArena]. After transferring we generate the trace and make sure that
+/// all the constraints pass.
+///////////////////////////////////////////////////////////////////////////////////////
+type Rv32HintStoreChipDense =
+    NewVmChipWrapper<F, Rv32HintStoreAir, Rv32HintStoreStep, DenseRecordArena>;
+
+fn create_test_chip_dense(tester: &mut VmChipTestBuilder<F>) -> Rv32HintStoreChipDense {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+
+    let mut chip = Rv32HintStoreChipDense::new(
+        Rv32HintStoreAir::new(
+            ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
+            tester.memory_bridge(),
+            bitwise_chip.bus(),
+            0,
+            tester.address_bits(),
+        ),
+        Rv32HintStoreStep::new(bitwise_chip.clone(), tester.address_bits(), 0),
+        tester.memory_helper(),
+    );
+
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+    chip
+}
+
+#[test]
+fn dense_record_arena_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut sparse_chip, bitwise_chip) = create_test_chip(&mut tester);
+
+    {
+        let mut dense_chip = create_test_chip_dense(&mut tester);
+
+        let num_ops: usize = 100;
+        for _ in 0..num_ops {
+            set_and_execute(&mut tester, &mut dense_chip, &mut rng, HINT_STOREW);
+        }
+
+        let mut record_interpreter = dense_chip
+            .arena
+            .get_record_seeker::<_, Rv32HintStoreLayout>();
+        record_interpreter.transfer_to_matrix_arena(&mut sparse_chip.arena);
+    }
+
+    let tester = tester
+        .build()
+        .load(sparse_chip)
+        .load(bitwise_chip)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
 }

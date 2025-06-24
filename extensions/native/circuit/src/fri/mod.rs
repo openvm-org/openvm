@@ -9,8 +9,8 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionState, MatrixRecordArena,
-        MultiRowLayout, NewVmChipWrapper, RecordArena, Result, StepExecutorE1, TraceFiller,
-        TraceStep, VmStateMut,
+        MultiRowLayout, MultiRowMetadata, NewVmChipWrapper, RecordArena, Result, SizedRecord,
+        StepExecutorE1, TraceFiller, TraceStep, VmStateMut,
     },
     system::{
         memory::{
@@ -554,6 +554,16 @@ pub struct FriReducedOpeningMetadata {
     length: usize,
 }
 
+impl MultiRowMetadata for FriReducedOpeningMetadata {
+    #[inline(always)]
+    fn get_num_rows(&self) -> usize {
+        // Allocates `length` workload rows + 1 Instruction1 row + 1 Instruction2 row
+        self.length + 2
+    }
+}
+
+type FriReducedOpeningLayout = MultiRowLayout<FriReducedOpeningMetadata>;
+
 // Header of record that is common for all trace rows for an instruction
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
@@ -618,18 +628,19 @@ pub struct FriReducedOpeningRecordMut<'a, F> {
     pub common: &'a mut FriReducedOpeningCommonRecord<F>,
 }
 
-impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpeningMetadata>
+impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpeningLayout>
     for [u8]
 {
     fn custom_borrow(
         &'a mut self,
-        metadata: FriReducedOpeningMetadata,
+        layout: FriReducedOpeningLayout,
     ) -> FriReducedOpeningRecordMut<'a, F> {
         let (header_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<FriReducedOpeningHeaderRecord>()) };
         let header: &mut FriReducedOpeningHeaderRecord = header_buf.borrow_mut();
 
-        let workload_size = metadata.length * size_of::<FriReducedOpeningWorkloadRowRecord<F>>();
+        let workload_size =
+            layout.metadata.length * size_of::<FriReducedOpeningWorkloadRowRecord<F>>();
         let (workload_buf, common_buf) = unsafe { rest.split_at_mut_unchecked(workload_size) };
 
         let (_, workload_records, _) =
@@ -639,9 +650,29 @@ impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpenin
 
         FriReducedOpeningRecordMut {
             header,
-            workload: &mut workload_records[..metadata.length],
+            workload: &mut workload_records[..layout.metadata.length],
             common,
         }
+    }
+
+    unsafe fn extract_layout(&self) -> FriReducedOpeningLayout {
+        let header: &FriReducedOpeningHeaderRecord = self.borrow();
+        FriReducedOpeningLayout::new(FriReducedOpeningMetadata {
+            length: header.length as usize,
+        })
+    }
+}
+
+impl<'a, F> SizedRecord<FriReducedOpeningLayout> for FriReducedOpeningRecordMut<'a, F> {
+    fn size(layout: &FriReducedOpeningLayout) -> usize {
+        let mut total_len = size_of::<FriReducedOpeningHeaderRecord>();
+        total_len += layout.metadata.length * size_of::<FriReducedOpeningWorkloadRowRecord<F>>();
+        total_len += size_of::<FriReducedOpeningCommonRecord<F>>();
+        total_len
+    }
+
+    fn alignment(_layout: &FriReducedOpeningLayout) -> usize {
+        align_of::<FriReducedOpeningHeaderRecord>()
     }
 }
 
@@ -667,7 +698,7 @@ impl<F, CTX> TraceStep<F, CTX> for FriReducedOpeningStep<F>
 where
     F: PrimeField32,
 {
-    type RecordLayout = MultiRowLayout<FriReducedOpeningMetadata>;
+    type RecordLayout = FriReducedOpeningLayout;
     type RecordMut<'a> = FriReducedOpeningRecordMut<'a, F>;
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -705,11 +736,7 @@ where
         let metadata = FriReducedOpeningMetadata {
             length: length as usize,
         };
-        let record = arena.alloc(MultiRowLayout {
-            // Allocates `length` workload rows + 1 Instruction1 row + 1 Instruction2 row
-            num_rows: length + 2,
-            metadata,
-        });
+        let record = arena.alloc(MultiRowLayout::new(metadata));
 
         record.common.from_pc = *state.pc;
         record.common.timestamp = timestamp_start;
@@ -870,7 +897,7 @@ where
                 length: num_rows - 2,
             };
             let record: FriReducedOpeningRecordMut<F> =
-                unsafe { get_record_from_slice(&mut chunk, metadata) };
+                unsafe { get_record_from_slice(&mut chunk, MultiRowLayout::new(metadata)) };
 
             let timestamp = record.common.timestamp;
             let length = record.header.length as usize;
