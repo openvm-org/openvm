@@ -166,31 +166,6 @@ impl<M: LinearMemory> AddressMap<M> {
         &mut self.mem
     }
 
-    pub fn items<F: PrimeField32 + Send + Sync>(
-        &self,
-    ) -> impl ParallelIterator<Item = (Address, F)> + '_
-    where
-        M: Sync,
-    {
-        (0..self.mem.len()).into_par_iter().flat_map(move |as_idx| {
-            let space_mem = &self.mem[as_idx];
-            let cell_size = self.cell_size[as_idx];
-            // TODO: better way to handle address space conversions to F
-            if cell_size == 1 {
-                unsafe { space_mem.par_iter::<u8>() }
-                    .map(move |(ptr_idx, x)| {
-                        ((as_idx as u32, ptr_idx as u32), F::from_canonical_u8(x))
-                    })
-                    .collect::<Vec<_>>()
-            } else {
-                assert_eq!(cell_size, 4);
-                unsafe { space_mem.par_iter::<F>() }
-                    .map(move |(ptr_idx, x)| ((as_idx as u32, ptr_idx as u32), x))
-                    .collect::<Vec<_>>()
-            }
-        })
-    }
-
     pub fn get_f<F: PrimeField32>(&self, addr_space: u32, ptr: u32) -> F {
         debug_assert_ne!(addr_space, 0);
         // TODO: fix this
@@ -233,16 +208,6 @@ impl<M: LinearMemory> AddressMap<M> {
         // - alignment is automatic since we multiply by `size_of::<T>()`
         mem.get_aligned_slice(start, len)
     }
-
-    // /// # Safety
-    // /// - `T` **must** be the correct type for a single memory cell for `addr_space`
-    // /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    // pub unsafe fn insert<T: Copy>(&mut self, (addr_space, ptr): Address, data: T) -> T {
-    //     debug_assert_eq!(size_of::<T>(), self.cell_size[addr_space as usize]);
-    //     self.mem
-    //         .get_unchecked_mut(addr_space as usize)
-    //         .replace(ptr as usize, &data)
-    // }
 
     /// Copies `data` into the memory at `(addr_space, ptr)`.
     ///
