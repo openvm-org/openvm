@@ -206,7 +206,7 @@ mod addsubtests {
                 &'a mut Rv32VecHeapAdapterRecord<2, 1, 1, NUM_LIMBS, NUM_LIMBS>,
                 FieldExpressionCoreRecordMut<'a>,
             );
-            let mut record_interpreter = dense_chip.arena.get_record_interpreter::<Record, _>();
+            let mut record_interpreter = dense_chip.arena.get_record_seeker::<Record, _>();
             record_interpreter.transfer_to_matrix_arena(
                 &mut sparse_chip.0.arena,
                 dense_chip.step.get_record_layout::<F>(),

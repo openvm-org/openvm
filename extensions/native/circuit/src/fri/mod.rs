@@ -555,6 +555,7 @@ pub struct FriReducedOpeningMetadata {
 }
 
 impl MultiRowMetadata for FriReducedOpeningMetadata {
+    #[inline(always)]
     fn get_num_rows(&self) -> usize {
         // Allocates `length` workload rows + 1 Instruction1 row + 1 Instruction2 row
         self.length + 2

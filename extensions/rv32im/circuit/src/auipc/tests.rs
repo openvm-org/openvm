@@ -283,7 +283,7 @@ fn run_auipc_sanity_test() {
 ///
 /// Ensure that the chip works as expected with dense records.
 /// We first execute some instructions with a [DenseRecordArena] and transfer the records
-/// to a [MatrixRecordArena]. After transfering we generate the trace and make sure that
+/// to a [MatrixRecordArena]. After transferring we generate the trace and make sure that
 /// all the constraints pass.
 ///////////////////////////////////////////////////////////////////////////////////////
 type Rv32AuipcChipDense =
@@ -325,7 +325,7 @@ fn dense_record_arena_test() {
             &'a mut Rv32AuipcCoreRecord,
         );
 
-        let mut record_interpreter = dense_chip.arena.get_record_interpreter::<Record, _>();
+        let mut record_interpreter = dense_chip.arena.get_record_seeker::<Record, _>();
         record_interpreter.transfer_to_matrix_arena(
             &mut sparse_chip.arena,
             EmptyAdapterCoreLayout::<F, Rv32RdWriteAdapterStep>::new(),

@@ -195,10 +195,20 @@ impl<F, A> Default for FieldExpressionMetadata<F, A> {
     }
 }
 
+impl<F, A> FieldExpressionMetadata<F, A> {
+    pub fn new(total_input_limbs: usize) -> Self {
+        Self {
+            total_input_limbs,
+            _phantom: PhantomData,
+        }
+    }
+}
+
 impl<F, A> AdapterCoreMetadata for FieldExpressionMetadata<F, A>
 where
     A: AdapterTraceStep<F, ()>,
 {
+    #[inline(always)]
     fn get_adapter_width() -> usize {
         A::WIDTH * size_of::<F>()
     }
@@ -242,15 +252,13 @@ impl<'a, F, A> SizedRecord<FieldExpressionRecordLayout<F, A>> for FieldExpressio
 }
 
 impl<'a> FieldExpressionCoreRecordMut<'a> {
+    // This method is only used in testing
     pub fn new_from_execution_data(
         buffer: &'a mut [u8],
         inputs: &[BigUint],
         limbs_per_input: usize,
     ) -> Self {
-        let record_info = FieldExpressionMetadata::<(), ()> {
-            total_input_limbs: inputs.len() * limbs_per_input,
-            _phantom: PhantomData,
-        };
+        let record_info = FieldExpressionMetadata::<(), ()>::new(inputs.len() * limbs_per_input);
 
         let record: Self = buffer.custom_borrow(FieldExpressionRecordLayout {
             metadata: record_info,
@@ -330,10 +338,9 @@ impl<A> FieldExpressionStep<A> {
     }
     pub fn get_record_layout<F>(&self) -> FieldExpressionRecordLayout<F, A> {
         FieldExpressionRecordLayout {
-            metadata: FieldExpressionMetadata {
-                total_input_limbs: self.num_inputs() * self.expr.canonical_num_limbs(),
-                _phantom: PhantomData,
-            },
+            metadata: FieldExpressionMetadata::new(
+                self.num_inputs() * self.expr.canonical_num_limbs(),
+            ),
         }
     }
 }

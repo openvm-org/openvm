@@ -224,8 +224,8 @@ pub struct AdapterCoreLayout<M> {
     pub metadata: M,
 }
 
-// `Metadata` types need to implement this trait to be used with `AdapterCoreLayout`
-// **NOTE**: get_adapter_width returns the size in bytes
+/// `Metadata` types need to implement this trait to be used with `AdapterCoreLayout`
+/// **NOTE**: get_adapter_width returns the size in bytes
 pub trait AdapterCoreMetadata {
     fn get_adapter_width() -> usize;
 }
@@ -278,6 +278,7 @@ impl<F, AS> AdapterCoreMetadata for AdapterCoreEmptyMetadata<F, AS>
 where
     AS: AdapterTraceStep<F, ()>,
 {
+    #[inline(always)]
     fn get_adapter_width() -> usize {
         AS::WIDTH * size_of::<F>()
     }
@@ -307,6 +308,7 @@ pub trait MultiRowMetadata {
 pub struct EmptyMultiRowMetadata {}
 
 impl MultiRowMetadata for EmptyMultiRowMetadata {
+    #[inline(always)]
     fn get_num_rows(&self) -> usize {
         1
     }
@@ -538,11 +540,9 @@ impl DenseRecordArena {
         self.records_buffer.set_position(offset as u64);
     }
 
-    // Returns a [RecordInterpreter] on the allocated buffer
-    pub fn get_record_interpreter<'a, R, L>(
-        &'a mut self,
-    ) -> RecordInterpreter<'a, DenseRecordArena, R, L> {
-        RecordInterpreter::new(self.allocated())
+    // Returns a [RecordSeeker] on the allocated buffer
+    pub fn get_record_seeker<'a, R, L>(&'a mut self) -> RecordSeeker<'a, DenseRecordArena, R, L> {
+        RecordSeeker::new(self.allocated())
     }
 }
 
@@ -558,18 +558,18 @@ where
     fn alloc(&'a mut self, layout: AdapterCoreLayout<M>) -> (A, C) {
         let adapter_alignment = A::alignment(&layout);
         let core_alignment = C::alignment(&layout);
-        let adapter_width = A::size(&layout);
-        let aligned_adapter_width = adapter_width.next_multiple_of(core_alignment);
-        let core_width = C::size(&layout);
-        let aligned_core_width = (aligned_adapter_width + core_width)
+        let adapter_size = A::size(&layout);
+        let aligned_adapter_size = adapter_size.next_multiple_of(core_alignment);
+        let core_size = C::size(&layout);
+        let aligned_core_size = (aligned_adapter_size + core_size)
             .next_multiple_of(adapter_alignment)
-            - aligned_adapter_width;
+            - aligned_adapter_size;
         debug_assert_eq!(MAX_ALIGNMENT % adapter_alignment, 0);
         debug_assert_eq!(MAX_ALIGNMENT % core_alignment, 0);
-        let buffer = self.alloc_bytes(aligned_adapter_width + aligned_core_width);
+        let buffer = self.alloc_bytes(aligned_adapter_size + aligned_core_size);
         // Doing an unchecked split here for perf
         let (adapter_buffer, core_buffer) =
-            unsafe { buffer.split_at_mut_unchecked(aligned_adapter_width) };
+            unsafe { buffer.split_at_mut_unchecked(aligned_adapter_size) };
 
         let adapter_record: A = adapter_buffer.custom_borrow(layout.clone());
         let core_record: C = core_buffer.custom_borrow(layout);
@@ -597,12 +597,12 @@ where
 }
 
 // This is a helper struct that implements a few utility methods
-pub struct RecordInterpreter<'a, RA, RecordMut, Layout> {
+pub struct RecordSeeker<'a, RA, RecordMut, Layout> {
     pub buffer: &'a mut [u8], // The buffer that the records are written to
     _phantom: PhantomData<(RA, RecordMut, Layout)>,
 }
 
-impl<'a, RA, RecordMut, Layout> RecordInterpreter<'a, RA, RecordMut, Layout> {
+impl<'a, RA, RecordMut, Layout> RecordSeeker<'a, RA, RecordMut, Layout> {
     pub fn new(record_buffer: &'a mut [u8]) -> Self {
         Self {
             buffer: record_buffer,
@@ -611,9 +611,9 @@ impl<'a, RA, RecordMut, Layout> RecordInterpreter<'a, RA, RecordMut, Layout> {
     }
 }
 
-// `RecordInterpreter` implementation for [DenseRecordArena], with [MultiRowLayout]
+// `RecordSeeker` implementation for [DenseRecordArena], with [MultiRowLayout]
 // **NOTE** Assumes that `layout` can be extracted from the record alone
-impl<'a, R, M> RecordInterpreter<'a, DenseRecordArena, R, MultiRowLayout<M>>
+impl<'a, R, M> RecordSeeker<'a, DenseRecordArena, R, MultiRowLayout<M>>
 where
     [u8]: CustomBorrow<'a, R, MultiRowLayout<M>>,
     R: SizedRecord<MultiRowLayout<M>>,
@@ -678,10 +678,10 @@ where
     }
 }
 
-// `RecordInterpreter` implementation for [DenseRecordArena], with [AdapterCoreLayout]
+// `RecordSeeker` implementation for [DenseRecordArena], with [AdapterCoreLayout]
 // **NOTE** Assumes that `layout` is the same for all the records, so it is expected to be passed as
 // a parameter
-impl<'a, A, C, M> RecordInterpreter<'a, DenseRecordArena, (A, C), AdapterCoreLayout<M>>
+impl<'a, A, C, M> RecordSeeker<'a, DenseRecordArena, (A, C), AdapterCoreLayout<M>>
 where
     [u8]: CustomBorrow<'a, A, AdapterCoreLayout<M>> + CustomBorrow<'a, C, AdapterCoreLayout<M>>,
     A: SizedRecord<AdapterCoreLayout<M>>,
@@ -689,16 +689,16 @@ where
     M: AdapterCoreMetadata + Clone,
 {
     // A utility function to get the aligned widths of the adapter and core records
-    fn get_aligned_widths(layout: &AdapterCoreLayout<M>) -> (usize, usize) {
+    fn get_aligned_sizes(layout: &AdapterCoreLayout<M>) -> (usize, usize) {
         let adapter_alignment = A::alignment(&layout);
         let core_alignment = C::alignment(&layout);
-        let adapter_width = A::size(&layout);
-        let aligned_adapter_width = adapter_width.next_multiple_of(core_alignment);
-        let core_width = C::size(&layout);
-        let aligned_core_width = (aligned_adapter_width + core_width)
+        let adapter_size = A::size(&layout);
+        let aligned_adapter_size = adapter_size.next_multiple_of(core_alignment);
+        let core_size = C::size(&layout);
+        let aligned_core_size = (aligned_adapter_size + core_size)
             .next_multiple_of(adapter_alignment)
-            - aligned_adapter_width;
-        (aligned_adapter_width, aligned_core_width)
+            - aligned_adapter_size;
+        (aligned_adapter_size, aligned_core_size)
     }
 
     // Returns a record at the given offset in the buffer
@@ -709,11 +709,11 @@ where
         layout: AdapterCoreLayout<M>,
     ) -> (A, C) {
         let buffer = &mut buffer[*offset..];
-        let (adapter_width, core_width) = Self::get_aligned_widths(&layout);
-        let (adapter_buffer, core_buffer) = unsafe { buffer.split_at_mut_unchecked(adapter_width) };
+        let (adapter_size, core_size) = Self::get_aligned_sizes(&layout);
+        let (adapter_buffer, core_buffer) = unsafe { buffer.split_at_mut_unchecked(adapter_size) };
         let adapter_record: A = adapter_buffer.custom_borrow(layout.clone());
         let core_record: C = core_buffer.custom_borrow(layout);
-        *offset += adapter_width + core_width;
+        *offset += adapter_size + core_size;
         (adapter_record, core_record)
     }
 
@@ -742,21 +742,17 @@ where
         let len = self.buffer.len();
         arena.trace_offset = 0;
         let mut offset = 0;
-        let (adapter_width, core_width) = Self::get_aligned_widths(&layout);
+        let (adapter_size, core_size) = Self::get_aligned_sizes(&layout);
         while offset < len {
             let dst_buffer = arena.alloc_single_row();
             let (adapter_buf, core_buf) =
                 unsafe { dst_buffer.split_at_mut_unchecked(M::get_adapter_width()) };
             unsafe {
                 let src_ptr = self.buffer.as_ptr().add(offset);
-                copy_nonoverlapping(src_ptr, adapter_buf.as_mut_ptr(), adapter_width);
-                copy_nonoverlapping(
-                    src_ptr.add(adapter_width),
-                    core_buf.as_mut_ptr(),
-                    core_width,
-                );
+                copy_nonoverlapping(src_ptr, adapter_buf.as_mut_ptr(), adapter_size);
+                copy_nonoverlapping(src_ptr.add(adapter_size), core_buf.as_mut_ptr(), core_size);
             }
-            offset += adapter_width + core_width;
+            offset += adapter_size + core_size;
         }
     }
 }

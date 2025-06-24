@@ -162,7 +162,7 @@ fn sha256_solve_sanity_check() {
 ///
 /// Ensure that the chip works as expected with dense records.
 /// We first execute some instructions with a [DenseRecordArena] and transfer the records
-/// to a [MatrixRecordArena]. After transfering we generate the trace and make sure that
+/// to a [MatrixRecordArena]. After transferring we generate the trace and make sure that
 /// all the constraints pass.
 ///////////////////////////////////////////////////////////////////////////////////////
 type Sha256VmChipDense = NewVmChipWrapper<F, Sha256VmAir, Sha256VmStep, DenseRecordArena>;
@@ -206,7 +206,7 @@ fn dense_record_arena_test() {
 
         let mut record_interpreter = dense_chip
             .arena
-            .get_record_interpreter::<_, Sha256VmRecordLayout>();
+            .get_record_seeker::<_, Sha256VmRecordLayout>();
         record_interpreter.transfer_to_matrix_arena(&mut sparse_chip.arena);
     }
 

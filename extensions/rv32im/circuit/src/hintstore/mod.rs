@@ -271,6 +271,7 @@ pub struct Rv32HintStoreMetadata {
 }
 
 impl MultiRowMetadata for Rv32HintStoreMetadata {
+    #[inline(always)]
     fn get_num_rows(&self) -> usize {
         self.num_words
     }

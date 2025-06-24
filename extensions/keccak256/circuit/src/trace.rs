@@ -50,6 +50,7 @@ pub struct KeccakVmMetadata {
 }
 
 impl MultiRowMetadata for KeccakVmMetadata {
+    #[inline(always)]
     fn get_num_rows(&self) -> usize {
         num_keccak_f(self.len) * NUM_ROUNDS
     }

@@ -50,6 +50,7 @@ pub struct Sha256VmMetadata {
 }
 
 impl MultiRowMetadata for Sha256VmMetadata {
+    #[inline(always)]
     fn get_num_rows(&self) -> usize {
         self.num_blocks as usize * SHA256_ROWS_PER_BLOCK
     }

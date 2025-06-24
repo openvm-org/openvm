@@ -72,6 +72,7 @@ pub struct NativePoseidon2Metadata {
 }
 
 impl MultiRowMetadata for NativePoseidon2Metadata {
+    #[inline(always)]
     fn get_num_rows(&self) -> usize {
         self.num_rows
     }
