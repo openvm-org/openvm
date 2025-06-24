@@ -525,7 +525,7 @@ impl DenseRecordArena {
         let offset = (MAX_ALIGNMENT
             - (self.records_buffer.get_ref().as_ptr() as usize % MAX_ALIGNMENT))
             % MAX_ALIGNMENT;
-        &self.records_buffer.get_mut()[offset..size]
+        &self.records_buffer.get_ref()[offset..size]
     }
 
     pub fn allocated_mut(&mut self) -> &mut [u8] {
