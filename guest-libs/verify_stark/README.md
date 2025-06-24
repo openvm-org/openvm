@@ -1,5 +1,5 @@
 # Introduction
-A guest library to verify OpenVM stark proofs. The library could be used for Rollup state transition functions or other purposes.
+A library to facilitate the recursive verification of OpenVM STARK proofs within a guest program.
 
 # Details 
 ## Function definition Macro
