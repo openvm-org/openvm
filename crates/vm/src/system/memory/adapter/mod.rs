@@ -326,6 +326,8 @@ impl<F: Clone + Send + Sync, const N: usize> AccessAdapterChip<F, N> {
 impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F, N> {
     fn set_override_trace_heights(&mut self, overridden_height: usize) {
         self.overridden_height = Some(overridden_height);
+        // In the root verifier, we don't run e2 and just use those to bound the trace heights
+        self.set_arena_from_trace_height(overridden_height);
     }
     fn set_arena_from_trace_height(&mut self, trace_height: usize) {
         // The size of the arena can be bounded by the trace size
