@@ -1,6 +1,7 @@
-use std::{fmt::Debug, marker::PhantomData};
+use std::fmt::Debug;
 
 use memmap2::MmapMut;
+use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 
 use super::{LinearMemory, PAGE_SIZE};
 
@@ -129,47 +130,20 @@ impl LinearMemory for MmapMemory {
         core::slice::from_raw_parts(data, len)
     }
 
-    /// Iterate over MmapWrapper as iterator of elements of type `T`.
-    /// Iterator is over `(index, element)` where `index` is the byte index divided by
-    /// `size_of::<T>()`.
-    ///
-    /// `T` must be stack allocated
-    unsafe fn iter<T: Copy>(&self) -> impl Iterator<Item = (usize, T)> {
-        MmapWrapperIter::new(self)
-    }
-}
-
-/// Iterator over MmapWrapper that yields elements of type T
-pub struct MmapWrapperIter<'a, T: Copy> {
-    wrapper: &'a MmapMemory,
-    current_index: usize,
-    phantom: PhantomData<T>,
-}
-
-impl<'a, T: Copy> MmapWrapperIter<'a, T> {
-    fn new(wrapper: &'a MmapMemory) -> Self {
-        assert_eq!(wrapper.as_ptr() as usize % align_of::<T>(), 0);
-        Self {
-            wrapper,
-            current_index: 0,
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<T: Copy> Iterator for MmapWrapperIter<'_, T> {
-    type Item = (usize, T);
-
-    fn next(&mut self) -> Option<Self::Item> {
+    unsafe fn par_iter<T: Copy + Send + Sync>(&self) -> impl ParallelIterator<Item = (usize, T)> {
         let size = std::mem::size_of::<T>();
-        if self.current_index + size <= self.wrapper.size() {
-            // Asserted to be aligned in constructor
-            let value = unsafe { self.wrapper.read::<T>(self.current_index) };
-            let index = self.current_index / size;
-            self.current_index += size;
-            Some((index, value))
-        } else {
-            None
-        }
+        let num_elements = self.size() / size;
+        // Convert to usize to make it Send + Sync
+        let ptr_addr = self.as_ptr() as usize;
+
+        (0..num_elements).into_par_iter().map(move |index| {
+            let byte_index = index * size;
+            let value = unsafe {
+                let ptr = ptr_addr as *const u8;
+                let src = ptr.add(byte_index) as *const T;
+                core::ptr::read(src)
+            };
+            (index, value)
+        })
     }
 }

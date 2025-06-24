@@ -1,4 +1,6 @@
-use openvm_stark_backend::{interaction::PermutationCheckBus, p3_field::PrimeField32};
+use openvm_stark_backend::{
+    interaction::PermutationCheckBus, p3_field::PrimeField32, p3_maybe_rayon::prelude::*,
+};
 
 use super::{controller::dimensions::MemoryDimensions, MemoryImage};
 mod air;
@@ -54,12 +56,13 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     }
 }
 
+#[tracing::instrument(level = "info", skip_all)]
 fn memory_to_vec_partition<F: PrimeField32, const N: usize>(
     memory: &MemoryImage,
     md: &MemoryDimensions,
 ) -> Vec<(u64, [F; N])> {
     let mut memory_partition = Vec::new();
-    for ((address_space, pointer), value) in memory.items() {
+    for ((address_space, pointer), value) in memory.items().collect::<Vec<_>>() {
         let label = md.label_to_index((address_space, pointer / N as u32));
         if memory_partition
             .last()

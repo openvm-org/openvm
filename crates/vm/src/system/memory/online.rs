@@ -1,10 +1,10 @@
 use std::fmt::Debug;
 
 use getset::Getters;
-use itertools::{izip, zip_eq, Itertools};
+use itertools::{izip, zip_eq};
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_instructions::exe::SparseMemoryImage;
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{p3_field::PrimeField32, p3_maybe_rayon::prelude::*};
 
 use super::{adapter::AccessAdapterInventory, offline_checker::MemoryBus, MemoryAddress};
 use crate::{arch::MemoryConfig, system::memory::MemoryImage};
@@ -110,7 +110,7 @@ pub trait LinearMemory {
     ///   We do not add a trait bound due to Plonky3 types not implementing the trait.
     /// - Memory at `start` must be properly aligned for `T`.
     unsafe fn get_aligned_slice<T: Copy>(&self, start: usize, len: usize) -> &[T];
-    /// Iterate over `Self` as iterator of elements of type `T`.
+    /// Parallel iterator over `Self` as iterator of elements of type `T`.
     /// Iterator is over `(index, element)` where `index` is the byte index divided by
     /// `size_of::<T>()`.
     ///
@@ -118,7 +118,7 @@ pub trait LinearMemory {
     /// - `T` should be "plain old data" (see [`Pod`](https://docs.rs/bytemuck/latest/bytemuck/trait.Pod.html)).
     ///   We do not add a trait bound due to Plonky3 types not implementing the trait.
     /// - Memory slice must be properly aligned for `T`.
-    unsafe fn iter<T: Copy>(&self) -> impl Iterator<Item = (usize, T)>;
+    unsafe fn par_iter<T: Copy + Send + Sync>(&self) -> impl ParallelIterator<Item = (usize, T)>;
 }
 
 /// Map from address space to linear memory.
@@ -166,24 +166,29 @@ impl<M: LinearMemory> AddressMap<M> {
         &mut self.mem
     }
 
-    pub fn items<F: PrimeField32>(&self) -> impl Iterator<Item = (Address, F)> + '_ {
-        zip_eq(&self.mem, &self.cell_size).enumerate().flat_map(
-            move |(as_idx, (space_mem, &cell_size))| {
-                // TODO: better way to handle address space conversions to F
-                if cell_size == 1 {
-                    unsafe { space_mem.iter::<u8>() }
-                        .map(move |(ptr_idx, x)| {
-                            ((as_idx as u32, ptr_idx as u32), F::from_canonical_u8(x))
-                        })
-                        .collect_vec()
-                } else {
-                    assert_eq!(cell_size, 4);
-                    unsafe { space_mem.iter::<F>() }
-                        .map(move |(ptr_idx, x)| ((as_idx as u32, ptr_idx as u32), x))
-                        .collect_vec()
-                }
-            },
-        )
+    pub fn items<F: PrimeField32 + Send + Sync>(
+        &self,
+    ) -> impl ParallelIterator<Item = (Address, F)> + '_
+    where
+        M: Sync,
+    {
+        (0..self.mem.len()).into_par_iter().flat_map(move |as_idx| {
+            let space_mem = &self.mem[as_idx];
+            let cell_size = self.cell_size[as_idx];
+            // TODO: better way to handle address space conversions to F
+            if cell_size == 1 {
+                unsafe { space_mem.par_iter::<u8>() }
+                    .map(move |(ptr_idx, x)| {
+                        ((as_idx as u32, ptr_idx as u32), F::from_canonical_u8(x))
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                assert_eq!(cell_size, 4);
+                unsafe { space_mem.par_iter::<F>() }
+                    .map(move |(ptr_idx, x)| ((as_idx as u32, ptr_idx as u32), x))
+                    .collect::<Vec<_>>()
+            }
+        })
     }
 
     pub fn get_f<F: PrimeField32>(&self, addr_space: u32, ptr: u32) -> F {
@@ -798,11 +803,13 @@ impl<F: PrimeField32> TracingMemory<F> {
     /// all future accesses are marked as "dirty".
     // block_size is initialized to 0, so nonzero block_size happens to also mark "dirty" cells
     // **Assuming** for now that only the start of a block has nonzero block_size
-    pub fn touched_blocks(&self) -> impl Iterator<Item = (Address, AccessMetadata)> + '_ {
-        zip_eq(&self.meta, &self.min_block_size)
+    pub fn touched_blocks(&self) -> impl ParallelIterator<Item = (Address, AccessMetadata)> + '_ {
+        self.meta
+            .par_iter()
+            .zip_eq(self.min_block_size.par_iter())
             .enumerate()
             .flat_map(move |(addr_space, (mem, &align))| {
-                unsafe { mem.iter::<AccessMetadata>() }.filter_map(move |(idx, metadata)| {
+                unsafe { mem.par_iter::<AccessMetadata>() }.filter_map(move |(idx, metadata)| {
                     (metadata.block_size != 0 && metadata.block_size != AccessMetadata::OCCUPIED)
                         .then_some(((addr_space as u32, idx as u32 * align), metadata))
                 })
