@@ -25,7 +25,7 @@ struct RowSlice {
         const {
 #pragma unroll
         for (size_t i = 0; i < length; i++) {
-            ptr[column_index * stride + i] = values[i];
+            ptr[(column_index + i) * stride] = values[i];
         }
     }
 
