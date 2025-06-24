@@ -58,7 +58,7 @@ pub const BYTE_XOR_BUS: BusIndex = 10;
 pub const RANGE_TUPLE_CHECKER_BUS: BusIndex = 11;
 pub const MEMORY_MERKLE_BUS: BusIndex = 12;
 
-const RANGE_CHECKER_BUS: BusIndex = 4;
+pub const RANGE_CHECKER_BUS: BusIndex = 4;
 
 pub struct VmChipTestBuilder<F: PrimeField32> {
     pub memory: MemoryTester<F>,

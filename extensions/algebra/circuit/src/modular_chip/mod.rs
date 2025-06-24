@@ -30,6 +30,15 @@ pub(crate) type ModularChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> = N
     MatrixRecordArena<F>,
 >;
 
+#[cfg(test)]
+pub(crate) type ModularDenseChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> =
+    NewVmChipWrapper<
+        F,
+        ModularAir<BLOCKS, BLOCK_SIZE>,
+        ModularStep<BLOCKS, BLOCK_SIZE>,
+        openvm_circuit::arch::DenseRecordArena,
+    >;
+
 // Must have TOTAL_LIMBS = NUM_LANES * LANE_SIZE
 pub type ModularIsEqualAir<
     const NUM_LANES: usize,

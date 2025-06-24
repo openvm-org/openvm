@@ -4,7 +4,8 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep,
-        EmptyLayout, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep, VmStateMut,
+        EmptyAdapterCoreLayout, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
+        VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -40,7 +41,7 @@ where
     F: PrimeField32,
     A: 'static + AdapterTraceStep<F, CTX, ReadData: Into<[F; 2]>, WriteData = ()>,
 {
-    type RecordLayout = EmptyLayout<A>;
+    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
     type RecordMut<'a> = (A::RecordMut<'a>, &'a mut NativeBranchEqualCoreRecord<F>);
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -60,7 +61,7 @@ where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
     {
         let &Instruction { opcode, c: imm, .. } = instruction;
-        let (mut adapter_record, core_record) = arena.alloc(EmptyLayout::new());
+        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 

@@ -1,9 +1,13 @@
-use std::{array, borrow::BorrowMut, cmp::min};
+use std::{
+    array,
+    borrow::{Borrow, BorrowMut},
+    cmp::min,
+};
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, CustomBorrow, MultiRowLayout, RecordArena, Result, TraceFiller,
-        TraceStep, VmStateMut,
+        get_record_from_slice, CustomBorrow, MultiRowLayout, MultiRowMetadata, RecordArena, Result,
+        SizedRecord, TraceFiller, TraceStep, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
@@ -45,6 +49,15 @@ pub struct Sha256VmMetadata {
     pub num_blocks: u32,
 }
 
+impl MultiRowMetadata for Sha256VmMetadata {
+    #[inline(always)]
+    fn get_num_rows(&self) -> usize {
+        self.num_blocks as usize * SHA256_ROWS_PER_BLOCK
+    }
+}
+
+pub(crate) type Sha256VmRecordLayout = MultiRowLayout<Sha256VmMetadata>;
+
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug, Clone)]
 pub struct Sha256VmRecordHeader {
@@ -74,16 +87,16 @@ pub struct Sha256VmRecordMut<'a> {
 /// `SHA256_NUM_READ_ROWS * num_blocks`. Uses `align_to_mut()` to make sure the slice is properly
 /// aligned to `MemoryReadAuxRecord`. Has debug assertions that check the size and alignment of the
 /// slices.
-impl<'a> CustomBorrow<'a, Sha256VmRecordMut<'a>, Sha256VmMetadata> for [u8] {
-    fn custom_borrow(&'a mut self, metadata: Sha256VmMetadata) -> Sha256VmRecordMut<'a> {
-        let (record_buf, rest) =
+impl<'a> CustomBorrow<'a, Sha256VmRecordMut<'a>, Sha256VmRecordLayout> for [u8] {
+    fn custom_borrow(&'a mut self, layout: Sha256VmRecordLayout) -> Sha256VmRecordMut<'a> {
+        let (header_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<Sha256VmRecordHeader>()) };
 
         // Using `split_at_mut_unchecked` for perf reasons
         // input is a slice of `u8`'s of length `SHA256_BLOCK_CELLS * num_blocks`, so the alignment
         // is always satisfied
         let (input, rest) = unsafe {
-            rest.split_at_mut_unchecked((metadata.num_blocks as usize) * SHA256_BLOCK_CELLS)
+            rest.split_at_mut_unchecked((layout.metadata.num_blocks as usize) * SHA256_BLOCK_CELLS)
         };
 
         // Using `align_to_mut` to make sure the returned slice is properly aligned to
@@ -91,15 +104,42 @@ impl<'a> CustomBorrow<'a, Sha256VmRecordMut<'a>, Sha256VmMetadata> for [u8] {
         // will verify that the buffer has enough capacity
         let (_, read_aux_buf, _) = unsafe { rest.align_to_mut::<MemoryReadAuxRecord>() };
         Sha256VmRecordMut {
-            inner: record_buf.borrow_mut(),
+            inner: header_buf.borrow_mut(),
             input,
-            read_aux: &mut read_aux_buf[..(metadata.num_blocks as usize) * SHA256_NUM_READ_ROWS],
+            read_aux: &mut read_aux_buf
+                [..(layout.metadata.num_blocks as usize) * SHA256_NUM_READ_ROWS],
+        }
+    }
+
+    unsafe fn extract_layout(&self) -> Sha256VmRecordLayout {
+        let header: &Sha256VmRecordHeader = self.borrow();
+        Sha256VmRecordLayout {
+            metadata: Sha256VmMetadata {
+                num_blocks: get_sha256_num_blocks(header.len),
+            },
         }
     }
 }
 
+impl<'a> SizedRecord<Sha256VmRecordLayout> for Sha256VmRecordMut<'a> {
+    fn size(layout: &Sha256VmRecordLayout) -> usize {
+        let mut total_len = size_of::<Sha256VmRecordHeader>();
+        total_len += layout.metadata.num_blocks as usize * SHA256_BLOCK_CELLS;
+        // Align the pointer to the alignment of `MemoryReadAuxRecord`
+        total_len = total_len.next_multiple_of(align_of::<MemoryReadAuxRecord>());
+        total_len += layout.metadata.num_blocks as usize
+            * SHA256_NUM_READ_ROWS
+            * size_of::<MemoryReadAuxRecord>();
+        total_len
+    }
+
+    fn alignment(_layout: &Sha256VmRecordLayout) -> usize {
+        align_of::<Sha256VmRecordHeader>()
+    }
+}
+
 impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
-    type RecordLayout = MultiRowLayout<Sha256VmMetadata>;
+    type RecordLayout = Sha256VmRecordLayout;
     type RecordMut<'a> = Sha256VmRecordMut<'a>;
 
     fn get_opcode_name(&self, _: usize) -> String {
@@ -133,7 +173,6 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
 
         let num_blocks = get_sha256_num_blocks(len);
         let record = arena.alloc(MultiRowLayout {
-            num_rows: num_blocks * SHA256_ROWS_PER_BLOCK as u32,
             metadata: Sha256VmMetadata { num_blocks },
         });
 
@@ -268,8 +307,10 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Sha256VmStep {
                 let record: Sha256VmRecordMut = unsafe {
                     get_record_from_slice(
                         slice,
-                        Sha256VmMetadata {
-                            num_blocks: *num_blocks as u32,
+                        Sha256VmRecordLayout {
+                            metadata: Sha256VmMetadata {
+                                num_blocks: *num_blocks as u32,
+                            },
                         },
                     )
                 };

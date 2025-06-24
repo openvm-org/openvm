@@ -1,13 +1,13 @@
 use std::{
     array::{self, from_fn},
-    borrow::BorrowMut,
+    borrow::{Borrow, BorrowMut},
     cmp::min,
 };
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, CustomBorrow, MultiRowLayout, RecordArena, Result, TraceFiller,
-        TraceStep, VmStateMut,
+        get_record_from_slice, CustomBorrow, MultiRowLayout, MultiRowMetadata, RecordArena, Result,
+        SizedRecord, TraceFiller, TraceStep, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
@@ -46,12 +46,21 @@ use crate::{
 
 #[derive(Clone, Copy)]
 pub struct KeccakVmMetadata {
-    pub num_reads: usize,
+    pub len: usize,
 }
+
+impl MultiRowMetadata for KeccakVmMetadata {
+    #[inline(always)]
+    fn get_num_rows(&self) -> usize {
+        num_keccak_f(self.len) * NUM_ROUNDS
+    }
+}
+
+pub(crate) type KeccakVmRecordLayout = MultiRowLayout<KeccakVmMetadata>;
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug, Clone)]
-pub struct KeccakVmRecord {
+pub struct KeccakVmRecordHeader {
     pub from_pc: u32,
     pub timestamp: u32,
     pub rd_ptr: u32,
@@ -66,7 +75,7 @@ pub struct KeccakVmRecord {
 }
 
 pub struct KeccakVmRecordMut<'a> {
-    pub inner: &'a mut KeccakVmRecord,
+    pub inner: &'a mut KeccakVmRecordHeader,
     // Having a continuous slice of the input is useful for fast hashing in `execute`
     pub input: &'a mut [u8],
     pub read_aux: &'a mut [MemoryReadAuxRecord],
@@ -77,25 +86,50 @@ pub struct KeccakVmRecordMut<'a> {
 /// provided at runtime, followed by a slice of `MemoryReadAuxRecord`'s of length `num_reads`.
 /// Uses `align_to_mut()` to make sure the slice is properly aligned to `MemoryReadAuxRecord`.
 /// Has debug assertions that check the size and alignment of the slices.
-impl<'a> CustomBorrow<'a, KeccakVmRecordMut<'a>, KeccakVmMetadata> for [u8] {
-    fn custom_borrow(&'a mut self, metadata: KeccakVmMetadata) -> KeccakVmRecordMut<'a> {
+impl<'a> CustomBorrow<'a, KeccakVmRecordMut<'a>, KeccakVmRecordLayout> for [u8] {
+    fn custom_borrow(&'a mut self, layout: KeccakVmRecordLayout) -> KeccakVmRecordMut<'a> {
         let (record_buf, rest) =
-            unsafe { self.split_at_mut_unchecked(size_of::<KeccakVmRecord>()) };
+            unsafe { self.split_at_mut_unchecked(size_of::<KeccakVmRecordHeader>()) };
 
+        let num_reads = (layout.metadata.len as usize).div_ceil(KECCAK_WORD_SIZE);
         // Note: each read is `KECCAK_WORD_SIZE` bytes
-        let (input, rest) =
-            unsafe { rest.split_at_mut_unchecked(metadata.num_reads * KECCAK_WORD_SIZE) };
+        let (input, rest) = unsafe { rest.split_at_mut_unchecked(num_reads * KECCAK_WORD_SIZE) };
         let (_, read_aux_buf, _) = unsafe { rest.align_to_mut::<MemoryReadAuxRecord>() };
         KeccakVmRecordMut {
             inner: record_buf.borrow_mut(),
             input,
-            read_aux: &mut read_aux_buf[..metadata.num_reads],
+            read_aux: &mut read_aux_buf[..num_reads],
+        }
+    }
+
+    unsafe fn extract_layout(&self) -> KeccakVmRecordLayout {
+        let header: &KeccakVmRecordHeader = self.borrow();
+        KeccakVmRecordLayout {
+            metadata: KeccakVmMetadata {
+                len: header.len as usize,
+            },
         }
     }
 }
 
+impl SizedRecord<KeccakVmRecordLayout> for KeccakVmRecordMut<'_> {
+    fn size(layout: &KeccakVmRecordLayout) -> usize {
+        let num_reads = (layout.metadata.len as usize).div_ceil(KECCAK_WORD_SIZE);
+        let mut total_len = size_of::<KeccakVmRecordHeader>();
+        total_len += num_reads * KECCAK_WORD_SIZE;
+        // Align the pointer to the alignment of `MemoryReadAuxRecord`
+        total_len = total_len.next_multiple_of(align_of::<MemoryReadAuxRecord>());
+        total_len += num_reads * size_of::<MemoryReadAuxRecord>();
+        total_len
+    }
+
+    fn alignment(_layout: &KeccakVmRecordLayout) -> usize {
+        align_of::<KeccakVmRecordHeader>()
+    }
+}
+
 impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
-    type RecordLayout = MultiRowLayout<KeccakVmMetadata>;
+    type RecordLayout = KeccakVmRecordLayout;
     type RecordMut<'a> = KeccakVmRecordMut<'a>;
 
     fn get_opcode_name(&self, _: usize) -> String {
@@ -129,10 +163,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
 
         let num_reads = len.div_ceil(KECCAK_WORD_SIZE);
         let num_blocks = num_keccak_f(len);
-        let record = arena.alloc(MultiRowLayout {
-            num_rows: (num_blocks * NUM_ROUNDS) as u32,
-            metadata: KeccakVmMetadata { num_reads },
-        });
+        let record = arena.alloc(KeccakVmRecordLayout::new(KeccakVmMetadata { len }));
 
         record.inner.from_pc = *state.pc;
         record.inner.timestamp = state.memory.timestamp();
@@ -233,7 +264,8 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for KeccakVmStep {
                 sizes.push((0, 0));
                 break;
             } else {
-                let record: &KeccakVmRecord = unsafe { get_record_from_slice(&mut trace, ()) };
+                let record: &KeccakVmRecordHeader =
+                    unsafe { get_record_from_slice(&mut trace, ()) };
                 let num_blocks = num_keccak_f(record.len as usize);
                 let (chunk, rest) =
                     trace.split_at_mut(NUM_KECCAK_VM_COLS * NUM_ROUNDS * num_blocks);
@@ -293,8 +325,12 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for KeccakVmStep {
                 let num_reads = len.div_ceil(KECCAK_WORD_SIZE);
                 let read_len = num_reads * KECCAK_WORD_SIZE;
 
-                let record: KeccakVmRecordMut =
-                    unsafe { get_record_from_slice(slice, KeccakVmMetadata { num_reads }) };
+                let record: KeccakVmRecordMut = unsafe {
+                    get_record_from_slice(
+                        slice,
+                        KeccakVmRecordLayout::new(KeccakVmMetadata { len: *len }),
+                    )
+                };
 
                 // Copy the read aux records and inner record to another place
                 // to safely fill in the trace matrix without overwriting the record

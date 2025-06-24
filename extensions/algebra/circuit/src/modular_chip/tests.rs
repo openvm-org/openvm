@@ -36,17 +36,22 @@ type F = BabyBear;
 
 #[cfg(test)]
 mod addsubtests {
+    use openvm_circuit::arch::InstructionExecutor;
+    use openvm_mod_circuit_builder::FieldExpressionCoreRecordMut;
+    use openvm_rv32_adapters::Rv32VecHeapAdapterRecord;
     use test_case::test_case;
 
     use super::*;
+    use crate::modular_chip::ModularDenseChip;
 
     const ADD_LOCAL: usize = Rv32ModularArithmeticOpcode::ADD as usize;
 
-    fn set_and_execute_addsub(
+    fn set_and_execute_addsub<E: InstructionExecutor<F>>(
         tester: &mut VmChipTestBuilder<F>,
-        chip: &mut ModularAddSubChip<F, 1, NUM_LIMBS>,
+        chip: &mut E,
         modulus: &BigUint,
         is_setup: bool,
+        offset: usize,
     ) {
         let mut rng = create_seeded_rng();
 
@@ -102,7 +107,7 @@ mod addsubtests {
         tester.write(data_as, address2 as usize, b_limbs);
 
         let instruction = Instruction::from_isize(
-            VmOpcode::from_usize(chip.0.step.offset + op),
+            VmOpcode::from_usize(offset + op),
             addr_ptr3 as isize,
             addr_ptr1 as isize,
             addr_ptr2 as isize,
@@ -125,27 +130,94 @@ mod addsubtests {
             num_limbs: NUM_LIMBS,
             limb_bits: LIMB_BITS,
         };
+        let offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
         let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
         // doing 1xNUM_LIMBS reads and writes
-        let mut chip = ModularAddSubChip::new(
+        let mut chip = ModularAddSubChip::<F, 1, NUM_LIMBS>::new(
             tester.execution_bridge(),
             tester.memory_bridge(),
             tester.memory_helper(),
             tester.address_bits(),
             config,
-            Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset,
+            offset,
             bitwise_chip.clone(),
             tester.range_checker(),
         );
         chip.0.set_trace_buffer_height(MAX_INS_CAPACITY);
 
         for i in 0..num_ops {
-            set_and_execute_addsub(&mut tester, &mut chip, &modulus, i == 0);
+            set_and_execute_addsub(&mut tester, &mut chip, &modulus, i == 0, offset);
         }
 
         let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+        tester.simple_test().expect("Verification failed");
+    }
+
+    #[test_case(0, secp256k1_coord_prime(), 50)]
+    #[test_case(4, secp256k1_scalar_prime(), 50)]
+    fn dense_record_arena_test(opcode_offset: usize, modulus: BigUint, num_ops: usize) {
+        let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+        let config = ExprBuilderConfig {
+            modulus: modulus.clone(),
+            num_limbs: NUM_LIMBS,
+            limb_bits: LIMB_BITS,
+        };
+        let offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
+
+        let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+        let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+        let mut sparse_chip = ModularAddSubChip::<F, 1, NUM_LIMBS>::new(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            tester.memory_helper(),
+            tester.address_bits(),
+            config.clone(),
+            offset,
+            bitwise_chip.clone(),
+            tester.range_checker(),
+        );
+        sparse_chip.0.set_trace_buffer_height(MAX_INS_CAPACITY);
+
+        {
+            // Using a trick to create a dense chip using the air and step of the sparse chip
+            // doing 1xNUM_LIMBS reads and writes
+            let tmp_chip = ModularAddSubChip::<F, 1, NUM_LIMBS>::new(
+                tester.execution_bridge(),
+                tester.memory_bridge(),
+                tester.memory_helper(),
+                tester.address_bits(),
+                config,
+                offset,
+                bitwise_chip.clone(),
+                tester.range_checker(),
+            );
+
+            let mut dense_chip =
+                ModularDenseChip::new(tmp_chip.0.air, tmp_chip.0.step, tester.memory_helper());
+            dense_chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
+            for i in 0..num_ops {
+                set_and_execute_addsub(&mut tester, &mut dense_chip, &modulus, i == 0, offset);
+            }
+
+            type Record<'a> = (
+                &'a mut Rv32VecHeapAdapterRecord<2, 1, 1, NUM_LIMBS, NUM_LIMBS>,
+                FieldExpressionCoreRecordMut<'a>,
+            );
+            let mut record_interpreter = dense_chip.arena.get_record_seeker::<Record, _>();
+            record_interpreter.transfer_to_matrix_arena(
+                &mut sparse_chip.0.arena,
+                dense_chip.step.get_record_layout::<F>(),
+            );
+        }
+
+        let tester = tester
+            .build()
+            .load(sparse_chip)
+            .load(bitwise_chip)
+            .finalize();
         tester.simple_test().expect("Verification failed");
     }
 }
