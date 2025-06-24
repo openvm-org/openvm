@@ -109,7 +109,7 @@ fn set_and_execute(
 #[test_case(BranchEqualOpcode::BNE, 100)]
 fn rand_rv32_branch_eq_test(opcode: BranchEqualOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default_native();
     let mut chip = create_test_chip(&mut tester);
     let opcode = NativeBranchEqualOpcode(opcode);
     for _ in 0..num_ops {
@@ -138,7 +138,7 @@ fn run_negative_branch_eq_test(
 ) {
     let imm = 16i32;
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default_native();
     let mut chip = create_test_chip(&mut tester);
 
     set_and_execute(
@@ -272,7 +272,7 @@ fn rv32_bne_invalid_inv_marker_negative_test() {
 #[test]
 fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default_native();
     let mut chip = create_test_chip(&mut tester);
 
     let x = F::from_canonical_u32(u32::from_le_bytes([19, 4, 179, 60]));

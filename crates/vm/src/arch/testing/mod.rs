@@ -280,6 +280,17 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn default_persistent() -> Self {
         let mut mem_config = MemoryConfig::default();
         mem_config.addr_space_sizes[NATIVE_AS as usize] = 0;
+        Self::persistent(mem_config)
+    }
+
+    pub fn default_native() -> Self {
+        let mut mem_config = MemoryConfig::default();
+        mem_config.addr_space_sizes[0..NATIVE_AS as usize].fill(0);
+        Self::volatile(mem_config)
+    }
+
+    pub fn persistent(mem_config: MemoryConfig) -> Self {
+        setup_tracing_with_log_level(Level::INFO);
         let range_checker = SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,
             mem_config.decomp,
@@ -302,12 +313,9 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
             default_pointer: 0,
         }
     }
-}
 
-impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
-    fn default() -> Self {
+    pub fn volatile(mem_config: MemoryConfig) -> Self {
         setup_tracing_with_log_level(Level::INFO);
-        let mem_config = MemoryConfig::default();
         let range_checker = SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,
             mem_config.decomp,
@@ -327,6 +335,14 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
             default_register: 0,
             default_pointer: 0,
         }
+    }
+}
+
+impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
+    fn default() -> Self {
+        let mut mem_config = MemoryConfig::default();
+        mem_config.addr_space_sizes[NATIVE_AS as usize] = 0;
+        Self::volatile(mem_config)
     }
 }
 

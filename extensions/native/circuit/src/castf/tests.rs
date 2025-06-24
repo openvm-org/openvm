@@ -1,6 +1,9 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, VmChipTestBuilder},
+    MemoryConfig,
+};
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
@@ -82,7 +85,7 @@ fn set_and_execute(
 #[test]
 fn castf_rand_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::volatile(MemoryConfig::default());
     let mut chip = create_test_chip(&tester);
     let num_ops = 100;
 
@@ -113,7 +116,7 @@ struct CastFPrankValues {
 
 fn run_negative_castf_test(prank_vals: CastFPrankValues, b: Option<F>, error: VerificationError) {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::volatile(MemoryConfig::default());
 
     let mut chip = create_test_chip(&tester);
     set_and_execute(&mut tester, &mut chip, &mut rng, b);
@@ -200,7 +203,7 @@ fn negative_convert_adapter_test() {
 #[test]
 fn castf_overflow_in_val_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::volatile(MemoryConfig::default());
     let mut chip = create_test_chip(&tester);
     set_and_execute(&mut tester, &mut chip, &mut rng, Some(F::NEG_ONE));
 }

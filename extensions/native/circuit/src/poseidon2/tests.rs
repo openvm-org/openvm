@@ -151,7 +151,7 @@ fn test<const N: usize>(cases: [Case; N]) {
     // single op
     let address_space = AS::Native as usize;
 
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default_native();
     let mut chip = new_native_poseidon2_chip::<F, SBOX_REGISTERS>(
         tester.system_port(),
         Poseidon2Config::default(),
@@ -379,7 +379,7 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
 fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlake3Config> {
     let elem_range = || 1..=100;
 
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default_native();
     let mut chip = new_native_poseidon2_chip::<F, SBOX_REGISTERS>(
         tester.system_port(),
         Poseidon2Config::default(),

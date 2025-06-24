@@ -105,7 +105,7 @@ fn set_and_execute(
 #[test_case(RANGE_CHECK.global_opcode(), 100)]
 fn rand_jal_range_check_test(opcode: VmOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default_native();
     let mut chip = create_test_chip(&tester);
 
     for _ in 0..num_ops {
@@ -118,7 +118,7 @@ fn rand_jal_range_check_test(opcode: VmOpcode, num_ops: usize) {
 #[test]
 fn range_check_edge_cases_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default_native();
     let mut chip = create_test_chip(&tester);
 
     set_and_execute(
@@ -193,7 +193,7 @@ fn run_negative_jal_range_check_test(
     error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default_native();
     let mut chip = create_test_chip(&tester);
     set_and_execute(&mut tester, &mut chip, &mut rng, opcode, a_val, b, c);
 
