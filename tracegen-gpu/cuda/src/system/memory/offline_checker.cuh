@@ -39,7 +39,7 @@ template <size_t NUM_LIMBS> struct MemoryWriteAuxAdapter {
         COL_WRITE_VALUE(row, MemoryWriteAuxCols, base.prev_timestamp, record.prev_timestamp);
         mem_helper.fill(
             row.slice_from(COL_INDEX(MemoryWriteAuxCols, base.timestamp_lt_aux)),
-            NUM_LIMBS,
+            AUX_LEN,
             record.prev_timestamp,
             timestamp
         );
