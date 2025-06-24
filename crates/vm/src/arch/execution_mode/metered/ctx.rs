@@ -1,11 +1,10 @@
 use openvm_instructions::riscv::RV32_IMM_AS;
 
-use crate::{arch::execution_mode::E1E2ExecutionCtx, system::memory::dimensions::MemoryDimensions};
-
 use super::{
     memory_ctx::MemoryCtx,
     segment_ctx::{Segment, SegmentationCtx},
 };
+use crate::{arch::execution_mode::E1E2ExecutionCtx, system::memory::dimensions::MemoryDimensions};
 
 #[derive(Debug)]
 pub struct MeteredCtx<const PAGE_BITS: usize = 12> {

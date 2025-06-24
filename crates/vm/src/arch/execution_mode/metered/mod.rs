@@ -3,10 +3,9 @@ pub mod memory_ctx;
 pub mod segment_ctx;
 
 pub use ctx::MeteredCtx;
-pub use segment_ctx::Segment;
-
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::p3_field::PrimeField32;
+pub use segment_ctx::Segment;
 
 use crate::arch::{
     execution_control::ExecutionControl, ExecutionError, InsExecutorE1, VmChipComplex, VmConfig,
