@@ -3,8 +3,10 @@ use openvm_stark_backend::{
 };
 
 use super::{controller::dimensions::MemoryDimensions, MemoryImage};
+
 mod air;
 mod columns;
+pub mod public_values;
 mod trace;
 mod tree;
 

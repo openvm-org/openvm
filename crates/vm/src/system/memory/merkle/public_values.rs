@@ -8,9 +8,7 @@ use thiserror::Error;
 
 use crate::{
     arch::{hasher::Hasher, ADDR_SPACE_OFFSET},
-    system::memory::{
-        dimensions::MemoryDimensions, online::LinearMemory, tree::MemoryNode, MemoryImage,
-    },
+    system::memory::{dimensions::MemoryDimensions, online::LinearMemory, MemoryImage},
 };
 
 pub const PUBLIC_VALUES_AS: u32 = 3;
