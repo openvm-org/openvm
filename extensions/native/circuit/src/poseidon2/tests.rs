@@ -420,15 +420,16 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
             tester.write(d, c, [BabyBear::from_canonical_usize(rhs)]);
         }
 
+        let data_left: [_; CHUNK] = std::array::from_fn(|i| data[i]);
+        let data_right: [_; CHUNK] = std::array::from_fn(|i| data[CHUNK + i]);
         match opcode {
             COMP_POS2 => {
-                let data_left: [_; CHUNK] = std::array::from_fn(|i| data[i]);
-                let data_right: [_; CHUNK] = std::array::from_fn(|i| data[CHUNK + i]);
                 tester.write(e, lhs, data_left);
                 tester.write(e, rhs, data_right);
             }
             PERM_POS2 => {
-                tester.write(e, lhs, data);
+                tester.write(e, lhs, data_left);
+                tester.write(e, lhs + CHUNK, data_right);
             }
         }
 
@@ -441,8 +442,10 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
                 assert_eq!(expected, actual);
             }
             PERM_POS2 => {
-                let actual = tester.read::<{ 2 * CHUNK }>(e, dst);
-                assert_eq!(hash, actual);
+                let actual_0 = tester.read::<{ CHUNK }>(e, dst);
+                let actual_1 = tester.read::<{ CHUNK }>(e, dst + CHUNK);
+                let actual = [actual_0, actual_1].concat();
+                assert_eq!(&hash, &actual[..]);
             }
         }
     }
