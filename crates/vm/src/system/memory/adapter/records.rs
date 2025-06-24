@@ -46,7 +46,7 @@ impl SizedRecord<AccessLayout, AccessRecordMut<'_>> for DenseRecordArena {
 
     fn alignment(&self, layout: &AccessLayout) -> usize {
         debug_assert_eq!(layout.cell_size * layout.type_size, 4);
-        4
+        align_of::<32>()
     }
 }
 
