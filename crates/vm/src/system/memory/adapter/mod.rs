@@ -28,8 +28,7 @@ use crate::{
     arch::{CustomBorrow, DenseRecordArena, RecordArena, SizedRecord},
     system::memory::{
         adapter::records::{
-            extract_metadata, size_by_layout, AccessLayout, AccessRecordMut, MERGE_BEFORE_FLAG,
-            SPLIT_AFTER_FLAG,
+            size_by_layout, AccessLayout, AccessRecordMut, MERGE_BEFORE_FLAG, SPLIT_AFTER_FLAG,
         },
         offline_checker::MemoryBus,
         MemoryAddress,
@@ -334,7 +333,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
         self.arena
             .set_capacity(trace_height * size_of::<AccessAdapterCols<F, N>>());
     }
-    fn generate_trace(self) -> RowMajorMatrix<F>
+    fn generate_trace(mut self) -> RowMajorMatrix<F>
     where
         F: PrimeField32,
     {
@@ -342,6 +341,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
         // TODO(AG): replace all this with nice records reading function we will have,
         // or even move it to GPU idk
         let mut cur_height = 0;
+        let width = self.trace_width();
         let bytes = self.arena.allocated();
         let mut ptr = 0;
         while ptr < bytes.len() {
@@ -356,15 +356,14 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
             } else {
                 0
             };
-            let layout = extract_metadata(&bytes[ptr..]);
+            let layout: AccessLayout = unsafe { bytes[ptr..].extract_layout() };
             let num_rows = num_rows * (layout.block_size / N);
-            ptr += SizedRecord::<AccessLayout, AccessRecordMut<'_>>::size(&self.arena, &layout);
+            ptr += <AccessRecordMut<'_> as SizedRecord<AccessLayout>>::size(&layout);
 
             cur_height += num_rows;
             milestones.push((ptr, cur_height));
         }
 
-        let width = self.trace_width();
         let height = cur_height;
         let padded_height = if let Some(oh) = self.overridden_height {
             assert!(
@@ -388,7 +387,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
             .zip(milestones.iter().skip(1))
             .map(|(&(start_ptr, start_height), &(_, _))| {
                 let mut ptr = start_ptr;
-                let layout = extract_metadata(&bytes[start_ptr..]);
+                let layout: AccessLayout = unsafe { bytes[start_ptr..].extract_layout() };
 
                 // timestamp_and_mask: u32 (4 bytes)
                 let timestamp_and_mask = unsafe { *(bytes.as_ptr().add(ptr) as *const u32) };
@@ -574,9 +573,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
 
     fn extract_metadata_from(&self, offset: usize) -> Option<AccessLayout> {
         if offset < self.arena.records_buffer.position() as usize {
-            Some(extract_metadata(
-                &self.arena.records_buffer.get_ref()[offset..],
-            ))
+            Some(unsafe { self.arena.records_buffer.get_ref()[offset..].extract_layout() })
         } else {
             None
         }

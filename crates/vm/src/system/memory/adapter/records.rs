@@ -39,14 +39,14 @@ pub(crate) fn size_by_layout(layout: &AccessLayout) -> usize {
         + (layout.block_size / layout.cell_size) * size_of::<u32>() // timestamps
 }
 
-impl SizedRecord<AccessLayout, AccessRecordMut<'_>> for DenseRecordArena {
-    fn size(&self, layout: &AccessLayout) -> usize {
+impl SizedRecord<AccessLayout> for AccessRecordMut<'_> {
+    fn size(layout: &AccessLayout) -> usize {
         size_by_layout(layout)
     }
 
-    fn alignment(&self, layout: &AccessLayout) -> usize {
+    fn alignment(layout: &AccessLayout) -> usize {
         debug_assert_eq!(layout.cell_size * layout.type_size, 4);
-        align_of::<32>()
+        align_of::<u32>()
     }
 }
 
@@ -106,24 +106,24 @@ impl<'a> CustomBorrow<'a, AccessRecordMut<'a>, AccessLayout> for [u8] {
             timestamps,
         }
     }
+
+    unsafe fn extract_layout(&self) -> AccessLayout {
+        let address_space = unsafe { std::ptr::read(self.as_ptr().add(4) as *const u32) };
+        let block_size = unsafe { std::ptr::read(self.as_ptr().add(12) as *const u32) };
+        let type_size = if address_space < 4 { 1 } else { 4 };
+        AccessLayout {
+            block_size: block_size as usize,
+            cell_size: 4 / type_size,
+            type_size,
+        }
+    }
 }
 
 impl<'a> RecordArena<'a, AccessLayout, AccessRecordMut<'a>> for DenseRecordArena {
     fn alloc(&'a mut self, layout: AccessLayout) -> AccessRecordMut<'a> {
-        let bytes = self.alloc_bytes(SizedRecord::<AccessLayout, AccessRecordMut<'a>>::size(
-            self, &layout,
+        let bytes = self.alloc_bytes(<AccessRecordMut<'a> as SizedRecord<AccessLayout>>::size(
+            &layout,
         ));
         <[u8] as CustomBorrow<AccessRecordMut<'a>, AccessLayout>>::custom_borrow(bytes, layout)
-    }
-}
-
-pub(crate) fn extract_metadata(bytes: &[u8]) -> AccessLayout {
-    let address_space = unsafe { std::ptr::read(bytes.as_ptr().add(4) as *const u32) };
-    let block_size = unsafe { std::ptr::read(bytes.as_ptr().add(12) as *const u32) };
-    let type_size = if address_space < 4 { 1 } else { 4 };
-    AccessLayout {
-        block_size: block_size as usize,
-        cell_size: 4 / type_size,
-        type_size,
     }
 }
