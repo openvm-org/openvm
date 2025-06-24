@@ -525,12 +525,12 @@ impl DenseRecordArena {
         self.alloc_many::<u8>(count)
     }
 
-    pub fn allocated(&mut self) -> &[u8] {
+    pub fn allocated(&self) -> &[u8] {
         let size = self.records_buffer.position() as usize;
         let offset = (MAX_ALIGNMENT
             - (self.records_buffer.get_ref().as_ptr() as usize % MAX_ALIGNMENT))
             % MAX_ALIGNMENT;
-        &mut self.records_buffer.get_mut()[offset..size]
+        &self.records_buffer.get_ref()[offset..size]
     }
 
     pub fn allocated_mut(&mut self) -> &mut [u8] {
