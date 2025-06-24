@@ -48,9 +48,9 @@ pub mod test_utils {
     use openvm_circuit::{
         arch::{
             testing::{memory::gen_pointer, VmChipTestBuilder},
-            MemoryConfig, Streams, SystemConfig,
+            Streams,
         },
-        utils::{test_system_config, test_system_config_with_continuations},
+        utils::test_system_config,
     };
     use openvm_instructions::{
         program::Program,
