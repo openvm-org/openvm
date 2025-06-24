@@ -804,6 +804,8 @@ impl<F: PrimeField32> TracingMemory<F> {
     // block_size is initialized to 0, so nonzero block_size happens to also mark "dirty" cells
     // **Assuming** for now that only the start of a block has nonzero block_size
     pub fn touched_blocks(&self) -> impl ParallelIterator<Item = (Address, AccessMetadata)> + '_ {
+        #[cfg(not(feature = "parallel"))]
+        use itertools::Itertools;
         self.meta
             .par_iter()
             .zip_eq(self.min_block_size.par_iter())
