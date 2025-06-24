@@ -18,7 +18,7 @@ use openvm_circuit::{
         PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
     },
     system::{
-        memory::{tree::public_values::extract_public_values, CHUNK},
+        memory::{merkle::public_values::extract_public_values, CHUNK},
         program::trace::{compute_exe_commit, VmCommittedExe},
     },
 };

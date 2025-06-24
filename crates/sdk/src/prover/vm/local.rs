@@ -6,7 +6,9 @@ use openvm_circuit::{
         hasher::poseidon2::vm_poseidon2_hasher, GenerationError, InsExecutorE1,
         SingleSegmentVmExecutor, Streams, VirtualMachine, VmComplexTraceHeights, VmConfig,
     },
-    system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
+    system::{
+        memory::merkle::public_values::UserPublicValuesProof, program::trace::VmCommittedExe,
+    },
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},

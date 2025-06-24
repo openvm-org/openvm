@@ -9,7 +9,6 @@ mod persistent;
 // TODO: add back
 // #[cfg(test)]
 // mod tests;
-pub mod tree;
 mod volatile;
 
 pub use controller::*;

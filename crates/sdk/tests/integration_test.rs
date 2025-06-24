@@ -7,7 +7,9 @@ use openvm_circuit::{
         hasher::poseidon2::vm_poseidon2_hasher, ContinuationVmProof, ExecutionError,
         SingleSegmentVmExecutor, VirtualMachine,
     },
-    system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
+    system::{
+        memory::merkle::public_values::UserPublicValuesProof, program::trace::VmCommittedExe,
+    },
     utils::test_system_config_with_continuations,
 };
 use openvm_continuations::verifier::{

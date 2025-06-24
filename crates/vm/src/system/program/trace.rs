@@ -23,7 +23,7 @@ use crate::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         MemoryConfig,
     },
-    system::memory::{tree::MemoryNode, AddressMap, CHUNK},
+    system::memory::{merkle::MerkleTree, AddressMap, CHUNK},
 };
 
 #[derive(Serialize, Deserialize, Derivative)]
@@ -87,7 +87,7 @@ where
             self.exe.init_memory.clone(),
         );
         let init_memory_commit =
-            MemoryNode::tree_from_memory(memory_dimensions, &memory_image, &hasher).hash();
+            MerkleTree::from_memory(&memory_image, &memory_dimensions, &hasher).root();
         Com::<SC>::from(compute_exe_commit(
             &hasher,
             app_program_commit,

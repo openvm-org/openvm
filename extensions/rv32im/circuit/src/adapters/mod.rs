@@ -3,8 +3,8 @@ use std::ops::Mul;
 use openvm_circuit::{
     arch::{execution_mode::E1E2ExecutionCtx, VmStateMut},
     system::memory::{
+        merkle::public_values::PUBLIC_VALUES_AS,
         online::{GuestMemory, TracingMemory},
-        tree::public_values::PUBLIC_VALUES_AS,
     },
 };
 use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
