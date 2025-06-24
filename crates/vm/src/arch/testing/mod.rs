@@ -284,9 +284,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     }
 
     pub fn default_native() -> Self {
-        let mut mem_config = MemoryConfig::default();
-        mem_config.addr_space_sizes[0..NATIVE_AS as usize].fill(0);
-        Self::volatile(mem_config)
+        Self::volatile(MemoryConfig::aggregation())
     }
 
     pub fn persistent(mem_config: MemoryConfig) -> Self {

@@ -98,6 +98,15 @@ impl Default for MemoryConfig {
     }
 }
 
+impl MemoryConfig {
+    /// Config for aggregation usage with only native address space.
+    pub fn aggregation() -> Self {
+        let mut addr_space_sizes = vec![0; (1 << 3) + ADDR_SPACE_OFFSET as usize];
+        addr_space_sizes[NATIVE_AS as usize] = 1 << 29;
+        Self::new(3, addr_space_sizes, 29, 29, 17, 8)
+    }
+}
+
 /// System-level configuration for the virtual machine. Contains all configuration parameters that
 /// are managed by the architecture, including configuration for continuations support.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -162,6 +171,14 @@ impl SystemConfig {
         }
     }
 
+    pub fn default_from_memory(memory_config: MemoryConfig) -> Self {
+        Self::new(
+            DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
+            memory_config,
+            DEFAULT_MAX_NUM_PUBLIC_VALUES,
+        )
+    }
+
     pub fn with_max_constraint_degree(mut self, max_constraint_degree: usize) -> Self {
         self.max_constraint_degree = max_constraint_degree;
         self
@@ -221,11 +238,7 @@ impl SystemConfig {
 
 impl Default for SystemConfig {
     fn default() -> Self {
-        Self::new(
-            DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
-            MemoryConfig::default(),
-            DEFAULT_MAX_NUM_PUBLIC_VALUES,
-        )
+        Self::default_from_memory(MemoryConfig::default())
     }
 }
 
