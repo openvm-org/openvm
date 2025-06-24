@@ -13,6 +13,7 @@ mod tree;
 pub use air::*;
 pub use columns::*;
 pub(super) use trace::SerialReceiver;
+pub use tree::*;
 
 // TODO: add back
 // #[cfg(test)]
@@ -26,7 +27,7 @@ pub struct MemoryMerkleChip<const CHUNK: usize, F> {
     overridden_height: Option<usize>,
 }
 #[derive(Debug)]
-struct FinalState<const CHUNK: usize, F> {
+pub struct FinalState<const CHUNK: usize, F> {
     rows: Vec<MemoryMerkleCols<F, CHUNK>>,
     init_root: [F; CHUNK],
     final_root: [F; CHUNK],
@@ -65,6 +66,11 @@ fn memory_to_vec_partition<F: PrimeField32, const N: usize>(
 ) -> Vec<(u64, [F; N])> {
     let mut memory_partition = Vec::new();
     for ((address_space, pointer), value) in memory.items().collect::<Vec<_>>() {
+        if pointer as usize / N >= md.address_height {
+            // the memory image may be larger than the memory dimensions due to rounding up to page
+            // sizes
+            continue;
+        }
         let label = md.label_to_index((address_space, pointer / N as u32));
         if memory_partition
             .last()

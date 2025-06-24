@@ -28,7 +28,11 @@ impl MemoryDimensions {
     /// This function is primarily for internal use for accessing the memory merkle tree.
     /// Users should use a higher-level API when possible.
     pub fn label_to_index(&self, (addr_space, block_id): (u32, u32)) -> u64 {
-        debug_assert!(block_id < (1 << self.address_height));
+        debug_assert!(
+            block_id < (1 << self.address_height),
+            "block_id={block_id} exceeds address_height={}",
+            self.address_height
+        );
         (((addr_space - ADDR_SPACE_OFFSET) as u64) << self.address_height) + block_id as u64
     }
 

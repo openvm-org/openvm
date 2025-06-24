@@ -1,6 +1,6 @@
 use openvm_circuit::{
     arch::{instructions::program::Program, SystemConfig, ADDR_SPACE_OFFSET},
-    system::memory::tree::public_values::PUBLIC_VALUES_ADDRESS_SPACE_OFFSET,
+    system::memory::merkle::public_values::PUBLIC_VALUES_ADDRESS_SPACE_OFFSET,
 };
 use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use openvm_native_recursion::{

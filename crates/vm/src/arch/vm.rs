@@ -47,9 +47,11 @@ use crate::{
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{
-            merkle::MemoryMerklePvs,
+            merkle::{
+                public_values::{UserPublicValuesProof, UserPublicValuesProofError},
+                MemoryMerklePvs,
+            },
             online::GuestMemory,
-            tree::public_values::{UserPublicValuesProof, UserPublicValuesProofError},
             AddressMap, MemoryImage, CHUNK,
         },
         program::trace::VmCommittedExe,

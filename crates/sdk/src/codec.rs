@@ -1,7 +1,7 @@
 use std::io::{self, Cursor, Read, Result, Write};
 
 use openvm_circuit::{
-    arch::ContinuationVmProof, system::memory::tree::public_values::UserPublicValuesProof,
+    arch::ContinuationVmProof, system::memory::merkle::public_values::UserPublicValuesProof,
 };
 use openvm_continuations::verifier::{
     internal::types::VmStarkProof, root::types::RootVmVerifierInput,

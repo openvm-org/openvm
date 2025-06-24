@@ -5,7 +5,7 @@ use openvm_circuit::{
         testing::{memory::gen_pointer, VmChipTestBuilder},
         MemoryConfig, VmAirWrapper,
     },
-    system::memory::tree::public_values::PUBLIC_VALUES_AS,
+    system::memory::merkle::public_values::PUBLIC_VALUES_AS,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};

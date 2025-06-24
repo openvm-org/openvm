@@ -8,7 +8,7 @@ mod tests {
             hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, Streams, VirtualMachine,
             VmExecutor,
         },
-        system::memory::tree::public_values::UserPublicValuesProof,
+        system::memory::merkle::public_values::UserPublicValuesProof,
         utils::{air_test, air_test_with_min_segments, test_system_config_with_continuations},
     };
     use openvm_instructions::exe::VmExe;
