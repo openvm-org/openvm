@@ -932,6 +932,30 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         memory_controller.set_override_trace_heights(overridden_system_heights.memory);
     }
 
+    /// Return constant trace heights of all chips in order, or None if
+    /// chip has dynamic height.
+    pub(crate) fn constant_trace_heights(&self) -> impl Iterator<Item = Option<usize>> + '_
+    where
+        E: ChipUsageGetter,
+        P: ChipUsageGetter,
+    {
+        [
+            self.program_chip().constant_trace_height(),
+            self.connector_chip().constant_trace_height(),
+        ]
+        .into_iter()
+        .chain(
+            self._public_values_chip()
+                .map(|c| c.constant_trace_height()),
+        )
+        .chain(std::iter::repeat(None).take(self.memory_controller().num_airs()))
+        .chain(
+            self.chips_excluding_pv_chip()
+                .map(|c| c.constant_trace_height()),
+        )
+        .chain([self.range_checker_chip().constant_trace_height()])
+    }
+
     /// Return dynamic trace heights of all chips in order, or 0 if
     /// chip has constant height.
     // Used for continuation segmentation logic, so this is performance-sensitive.
