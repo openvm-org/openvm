@@ -32,9 +32,18 @@ serde = { workspace = true, features = ["derive"] }
 
 tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }
 
+openvm-circuit-primitives-derive.workspace = true
+openvm-instructions.workspace = true
+
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 divan = { package = "codspeed-divan-compat", version = "*" }
+
+openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-stark-sdk.workspace = true
+#openvm-native-circuit.workspace = true
+#openvm-native-compiler.workspace = true
+openvm-rv32im-transpiler.workspace = true
 
 [features]
 default = ["jemalloc"]

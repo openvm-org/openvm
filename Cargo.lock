@@ -5084,6 +5084,8 @@ dependencies = [
  "eyre",
  "openvm-benchmarks-utils",
  "openvm-circuit",
+ "openvm-circuit-primitives-derive",
+ "openvm-instructions",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
  "openvm-stark-sdk",

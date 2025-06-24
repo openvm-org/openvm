@@ -116,10 +116,17 @@ pub trait InstructionExecutor<F> {
 pub type ExecuteFunc<F, CTX> =
     unsafe fn(*const PreComputeInstruction<F, CTX>, &mut VmSegmentState<F, CTX>) -> Result<()>;
 
+// #[macro_export]
+// macro_rules! next_instruction {
+//     ($next_inst: expr, $vm_state: expr) => {
+//         ((*$next_inst).handler)($next_inst, $vm_state)
+//     };
+// }
+
 #[macro_export]
 macro_rules! next_instruction {
     ($next_inst: expr, $vm_state: expr) => {
-        ((*$next_inst).handler)($next_inst, $vm_state)
+        Ok(());
     };
 }
 

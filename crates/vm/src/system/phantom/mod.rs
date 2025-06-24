@@ -36,7 +36,7 @@ use crate::{
     },
 };
 
-mod execution;
+pub mod execution;
 #[cfg(test)]
 mod tests;
 

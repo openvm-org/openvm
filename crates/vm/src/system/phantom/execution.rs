@@ -86,7 +86,7 @@ pub(super) struct PhantomStateMut<'a, F> {
 // }
 
 #[inline(never)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+pub unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     inst: *const PreComputeInstruction<F, CTX>,
     vm_state: &mut VmSegmentState<F, CTX>,
 ) -> crate::arch::Result<()> {

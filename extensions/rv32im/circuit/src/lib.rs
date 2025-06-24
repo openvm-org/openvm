@@ -1,19 +1,19 @@
 pub mod adapters;
 
-mod auipc;
-mod base_alu;
-mod branch_eq;
-mod branch_lt;
-mod divrem;
-mod hintstore;
-mod jal_lui;
-mod jalr;
-mod less_than;
-mod load_sign_extend;
-mod loadstore;
-mod mul;
-mod mulh;
-mod shift;
+pub mod auipc;
+pub mod base_alu;
+pub mod branch_eq;
+pub mod branch_lt;
+pub mod divrem;
+pub mod hintstore;
+pub mod jal_lui;
+pub mod jalr;
+pub mod less_than;
+pub mod load_sign_extend;
+pub mod loadstore;
+pub mod mul;
+pub mod mulh;
+pub mod shift;
 
 pub use auipc::*;
 pub use base_alu::*;
