@@ -3,14 +3,13 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use crate::adapters::LoadStoreInstruction;
-use openvm_circuit::arch::{ExecuteFunc, PreComputeInstruction, VmSegmentState};
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, RecordArena, Result, StepExecutorE1, TraceFiller,
-        TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc, PreComputeInstruction, RecordArena,
+        Result, StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir,
+        VmSegmentState, VmStateMut,
     },
     next_instruction,
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
@@ -34,6 +33,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+
+use crate::adapters::LoadStoreInstruction;
 
 /// LoadSignExtend Core Chip handles byte/halfword into word conversions through sign extend
 /// This chip uses read_data to construct write_data

@@ -43,14 +43,16 @@ enum InstructionOpcode {
 }
 
 use openvm_circuit::{
-    arch::{ExecuteFunc, PreComputeInstruction, VmSegmentState},
+    arch::{
+        get_record_from_slice, AdapterTraceFiller, EmptyAdapterCoreLayout, ExecuteFunc,
+        PreComputeInstruction, RecordArena, TraceFiller, VmSegmentState,
+    },
     next_instruction,
 };
 use openvm_instructions::riscv::{
     RV32_CELL_BITS, RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
 };
 use InstructionOpcode::*;
-use openvm_circuit::arch::{get_record_from_slice, AdapterTraceFiller, EmptyAdapterCoreLayout, RecordArena, TraceFiller};
 
 /// LoadStore Core Chip handles byte/halfword into word conversions and unsigned extends
 /// This chip uses read_data and prev_data to constrain the write_data

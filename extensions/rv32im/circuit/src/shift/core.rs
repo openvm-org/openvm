@@ -3,14 +3,13 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use crate::adapters::imm_to_bytes;
-use openvm_circuit::arch::{ExecuteFunc, PreComputeInstruction, VmSegmentState};
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, MinimalInstruction, RecordArena, Result,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc, MinimalInstruction,
+        PreComputeInstruction, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
+        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
     next_instruction,
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
@@ -36,6 +35,8 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
+
+use crate::adapters::imm_to_bytes;
 
 #[repr(C)]
 #[derive(AlignedBorrow, Clone, Copy, Debug)]

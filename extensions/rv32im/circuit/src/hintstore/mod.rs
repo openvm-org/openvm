@@ -1,18 +1,23 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::{arch::{
-    execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-    get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionError, ExecutionState,
-    MatrixRecordArena, MultiRowLayout, MultiRowMetadata, NewVmChipWrapper, RecordArena, Result,
-    SizedRecord, StepExecutorE1, TraceFiller, TraceStep, VmStateMut,
-}, next_instruction, system::memory::{
-    offline_checker::{
-        MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
-        MemoryWriteBytesAuxRecord,
+use openvm_circuit::{
+    arch::{
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        get_record_from_slice, CustomBorrow, ExecuteFunc, ExecutionBridge, ExecutionError,
+        ExecutionState, MatrixRecordArena, MultiRowLayout, MultiRowMetadata, NewVmChipWrapper,
+        PreComputeInstruction, RecordArena, Result, SizedRecord, StepExecutorE1, TraceFiller,
+        TraceStep, VmSegmentState, VmStateMut,
     },
-    online::{GuestMemory, TracingMemory},
-    MemoryAddress, MemoryAuxColsFactory,
-}};
+    next_instruction,
+    system::memory::{
+        offline_checker::{
+            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+            MemoryWriteBytesAuxRecord,
+        },
+        online::{GuestMemory, TracingMemory},
+        MemoryAddress, MemoryAuxColsFactory,
+    },
+};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     utils::not,
@@ -36,7 +41,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use openvm_circuit::arch::{ExecuteFunc, PreComputeInstruction, VmSegmentState};
+
 use crate::adapters::{
     memory_write_from_state, read_rv32_register, read_rv32_register_from_state, tracing_read,
     tracing_write,

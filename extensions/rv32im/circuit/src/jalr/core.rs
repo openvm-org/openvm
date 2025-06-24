@@ -3,14 +3,13 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-use openvm_circuit::arch::{ExecuteFunc, PreComputeInstruction, VmSegmentState};
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, RecordArena, Result, SignedImmInstruction,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc, PreComputeInstruction, RecordArena,
+        Result, SignedImmInstruction, StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface,
+        VmCoreAir, VmSegmentState, VmStateMut,
     },
     next_instruction,
     system::memory::{
@@ -37,6 +36,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+
+use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]

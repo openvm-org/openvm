@@ -4,14 +4,6 @@ use std::{
     ptr::NonNull,
 };
 
-use crate::{
-    arch::{
-        execution_control::ExecutionControl, execution_mode::E1E2ExecutionCtx, ExecutionError,
-        InsExecutorE1, PreComputeInstruction, Streams, VmConfig, VmSegmentState,
-    },
-    next_instruction,
-    system::memory::{online::GuestMemory, AddressMap},
-};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     exe::VmExe,
@@ -22,8 +14,16 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
     p3_maybe_rayon::prelude::ParallelIterator,
 };
-use rand::rngs::StdRng;
-use rand::SeedableRng;
+use rand::{rngs::StdRng, SeedableRng};
+
+use crate::{
+    arch::{
+        execution_control::ExecutionControl, execution_mode::E1E2ExecutionCtx, ExecutionError,
+        InsExecutorE1, PreComputeInstruction, Streams, VmConfig, VmSegmentState,
+    },
+    next_instruction,
+    system::memory::{online::GuestMemory, AddressMap},
+};
 
 /// VM pure executor(E1/E2 executor) which doesn't consider trace generation.
 /// Note: This executor doesn't hold any VM state and can be used for multiple execution.

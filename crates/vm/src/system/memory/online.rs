@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, mem::swap};
 
 use getset::Getters;
 use itertools::{izip, zip_eq};
@@ -244,12 +244,20 @@ impl<M: LinearMemory> AddressMap<M> {
 /// API for guest memory conforming to OpenVM ISA
 // @dev Note we don't make this a trait because phantom executors currently need a concrete type for
 // guest memory
-#[derive(Debug, Clone, derive_new::new)]
+#[derive(Debug, Clone)]
 pub struct GuestMemory {
     pub memory: AddressMap,
+    pub r1_mem: [u8; 256],
 }
 
 impl GuestMemory {
+    pub fn new(addr: AddressMap) -> Self {
+        let r1_mem = unsafe { std::array::from_fn(|i| addr.get::<u8>((1, i as u32))) };
+        Self {
+            memory: addr,
+            r1_mem,
+        }
+    }
     /// Returns `[pointer:BLOCK_SIZE]_{address_space}`
     ///
     /// # Safety
@@ -269,10 +277,18 @@ impl GuestMemory {
         // SAFETY:
         // - `T` should be "plain old data"
         // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
-        self.memory
-            .get_memory()
-            .get_unchecked(addr_space as usize)
-            .read((ptr as usize) * size_of::<T>())
+        if addr_space == 1 {
+            let tmp = std::slice::from_raw_parts(
+                self.r1_mem.as_ptr().offset(ptr as isize) as *const T,
+                BLOCK_SIZE,
+            );
+            std::array::from_fn(|i| *tmp.get_unchecked(i))
+        } else {
+            self.memory
+                .get_memory()
+                .get_unchecked(addr_space as usize)
+                .read((ptr as usize) * size_of::<T>())
+        }
     }
 
     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}`
@@ -288,12 +304,22 @@ impl GuestMemory {
         T: Copy + Debug,
     {
         debug_assert_eq!(size_of::<T>(), self.memory.cell_size[addr_space as usize]);
-        // SAFETY:
-        // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
-        self.memory
-            .get_memory_mut()
-            .get_unchecked_mut(addr_space as usize)
-            .write((ptr as usize) * size_of::<T>(), values);
+        if addr_space == 1 {
+            let values_u8 = std::slice::from_raw_parts(
+                values.as_ptr() as *const u8,
+                BLOCK_SIZE * std::mem::size_of::<T>(),
+            );
+            for i in 0..BLOCK_SIZE {
+                *self.r1_mem.get_unchecked_mut(ptr as usize + i) = *values_u8.get_unchecked(i);
+            }
+        } else {
+            // SAFETY:
+            // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
+            self.memory
+                .get_memory_mut()
+                .get_unchecked_mut(addr_space as usize)
+                .write((ptr as usize) * size_of::<T>(), values);
+        }
     }
 
     /// Swaps `values` with `[pointer:BLOCK_SIZE]_{address_space}`.
@@ -310,12 +336,25 @@ impl GuestMemory {
         T: Copy + Debug,
     {
         debug_assert_eq!(size_of::<T>(), self.memory.cell_size[addr_space as usize]);
-        // SAFETY:
-        // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
-        self.memory
-            .get_memory_mut()
-            .get_unchecked_mut(addr_space as usize)
-            .swap((ptr as usize) * size_of::<T>(), values);
+        if addr_space == 1 {
+            let values_u8 = std::slice::from_raw_parts_mut(
+                values.as_ptr() as *mut u8,
+                BLOCK_SIZE * std::mem::size_of::<T>(),
+            );
+            for i in 0..BLOCK_SIZE {
+                swap(
+                    self.r1_mem.get_unchecked_mut(ptr as usize + i),
+                    values_u8.get_unchecked_mut(i),
+                );
+            }
+        } else {
+            // SAFETY:
+            // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
+            self.memory
+                .get_memory_mut()
+                .get_unchecked_mut(addr_space as usize)
+                .swap((ptr as usize) * size_of::<T>(), values);
+        }
     }
 }
 

@@ -83,8 +83,9 @@ panic = "unwind"
 codegen-units = 16
 
 [profile.profiling]
-inherits = "release"
+inherits = "maxperf"
 debug = 2
+debug-assertions = false
 strip = false
 
 # Make sure debug symbols are in the bench profile for flamegraphs

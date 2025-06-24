@@ -8,8 +8,8 @@ use openvm_circuit::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterCoreMetadata,
         AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, CustomBorrow, DynAdapterInterface,
-        DynArray, MinimalInstruction, RecordArena, Result, SizedRecord, StepExecutorE1,
-        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        DynArray, ExecuteFunc, MinimalInstruction, RecordArena, Result, SizedRecord,
+        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -27,7 +27,7 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
-use openvm_circuit::arch::ExecuteFunc;
+
 use crate::{
     builder::{FieldExpr, FieldExprCols},
     utils::biguint_to_limbs_vec,
@@ -444,7 +444,7 @@ where
 {
     fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
     where
-        Ctx: E1E2ExecutionCtx
+        Ctx: E1E2ExecutionCtx,
     {
         todo!()
         // let data: &[u8] = &self.adapter.read(state, instruction).into().0;

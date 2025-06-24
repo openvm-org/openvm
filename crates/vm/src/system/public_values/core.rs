@@ -21,8 +21,9 @@ use crate::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, BasicAdapterInterface, EmptyAdapterCoreLayout, MinimalInstruction,
-        RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep, VmCoreAir, VmStateMut,
+        AdapterTraceStep, BasicAdapterInterface, EmptyAdapterCoreLayout, ExecuteFunc,
+        MinimalInstruction, PreComputeInstruction, RecordArena, Result, StepExecutorE1,
+        TraceFiller, TraceStep, VmCoreAir, VmSegmentState, VmStateMut,
     },
     next_instruction,
     system::{
@@ -30,7 +31,6 @@ use crate::{
         public_values::columns::PublicValuesCoreColsView,
     },
 };
-use crate::arch::{ExecuteFunc, PreComputeInstruction, VmSegmentState};
 
 pub(crate) type AdapterInterface<F> = BasicAdapterInterface<F, MinimalInstruction<F>, 2, 0, 1, 1>;
 

@@ -144,7 +144,7 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
         })
         .bench_values(|(interpreter, input)| {
             interpreter
-                .execute(E1ExecutionControl::new(None), input)
+                .execute(E1ExecutionControl, input)
                 .expect("Failed to execute program in interpreted mode");
         });
 }

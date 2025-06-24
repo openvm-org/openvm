@@ -5,7 +5,7 @@ use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use p3_baby_bear::BabyBear;
+use rand::rngs::StdRng;
 
 use crate::{
     arch::{
@@ -15,12 +15,6 @@ use crate::{
     next_instruction,
     system::{memory::online::GuestMemory, phantom::PhantomChip},
 };
-use openvm_circuit_primitives_derive::AlignedBytesBorrow;
-use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
-};
-use openvm_stark_backend::p3_field::PrimeField32;
-use rand::rngs::StdRng;
 
 #[derive(Clone, AlignedBytesBorrow)]
 #[repr(C)]
