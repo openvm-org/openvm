@@ -5,8 +5,8 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-openvm = { path = "../../../../../crates/toolchain/openvm", features = ["std"] }
-openvm-verify-stark = { path = "../../../guest" }
+openvm = { path = "../../../../crates/toolchain/openvm", features = ["std"] }
+openvm-verify-stark = { path = "../../" }
 
 [features]
 default = []
