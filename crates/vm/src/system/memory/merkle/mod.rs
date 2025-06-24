@@ -1,8 +1,11 @@
+use std::array;
+
 use openvm_stark_backend::{
     interaction::PermutationCheckBus, p3_field::PrimeField32, p3_maybe_rayon::prelude::*,
 };
 
 use super::{controller::dimensions::MemoryDimensions, MemoryImage};
+use crate::system::memory::online::LinearMemory;
 mod air;
 mod columns;
 mod trace;
@@ -61,16 +64,67 @@ fn memory_to_vec_partition<F: PrimeField32, const N: usize>(
     memory: &MemoryImage,
     md: &MemoryDimensions,
 ) -> Vec<(u64, [F; N])> {
-    let mut memory_partition = Vec::new();
-    for ((address_space, pointer), value) in memory.items().collect::<Vec<_>>() {
-        let label = md.label_to_index((address_space, pointer / N as u32));
-        if memory_partition
-            .last()
-            .is_none_or(|(last_label, _)| *last_label < label)
-        {
-            memory_partition.push((label, [F::ZERO; N]));
-        }
-        memory_partition.last_mut().unwrap().1[(pointer % N as u32) as usize] = value;
-    }
-    memory_partition
+    const PAGE_SIZE: usize = 1 << 12;
+    (0..memory.mem.len())
+        .into_par_iter()
+        .map(move |as_idx| {
+            let space_mem = memory.mem[as_idx].as_slice();
+            let cell_size = memory.cell_size[as_idx];
+            debug_assert_eq!(PAGE_SIZE % (cell_size * N), 0);
+
+            let num_nonzero_pages = space_mem
+                .chunks(PAGE_SIZE)
+                .enumerate()
+                .flat_map(|(idx, page)| {
+                    if page.iter().any(|x| *x != 0) {
+                        Some(idx + 1)
+                    } else {
+                        None
+                    }
+                })
+                .max()
+                .unwrap_or(0);
+
+            let space_mem = &space_mem[..(num_nonzero_pages * PAGE_SIZE)];
+            let num_elements = space_mem.len() / (cell_size * N);
+
+            if cell_size == 1 {
+                (0..num_elements)
+                    .into_par_iter()
+                    .map(move |idx| {
+                        let byte_index = idx * cell_size * N;
+                        unsafe {
+                            let ptr = space_mem.as_ptr();
+                            let src = ptr.add(byte_index);
+                            (
+                                md.label_to_index((as_idx as u32, idx as u32)),
+                                array::from_fn(|i| {
+                                    F::from_canonical_u8(core::ptr::read(src.add(i)))
+                                }),
+                            )
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                assert_eq!(cell_size, 4);
+                (0..num_elements)
+                    .into_par_iter()
+                    .map(move |idx| {
+                        let byte_index = idx * cell_size * N;
+                        unsafe {
+                            let ptr = space_mem.as_ptr();
+                            let src = ptr.add(byte_index) as *const F;
+                            (
+                                md.label_to_index((as_idx as u32, idx as u32)),
+                                array::from_fn(|i| core::ptr::read(src.add(i))),
+                            )
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            }
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
 }
