@@ -2,7 +2,7 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, VmChipTestBuilder},
-    VmAirWrapper,
+    MemoryConfig, VmAirWrapper,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
@@ -174,7 +174,7 @@ fn set_and_execute(
 #[test_case(STOREH, 100)]
 fn rand_loadstore_test(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::volatile(MemoryConfig::default());
     let mut chip = create_test_chip(&mut tester);
 
     for _ in 0..num_ops {
@@ -221,7 +221,7 @@ fn run_negative_loadstore_test(
     interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::volatile(MemoryConfig::default());
     let mut chip = create_test_chip(&mut tester);
 
     set_and_execute(

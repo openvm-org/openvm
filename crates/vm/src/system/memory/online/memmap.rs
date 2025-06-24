@@ -59,6 +59,12 @@ impl LinearMemory for MmapMemory {
 
     #[inline(always)]
     unsafe fn read<BLOCK: Copy>(&self, from: usize) -> BLOCK {
+        debug_assert!(
+            from + size_of::<BLOCK>() <= self.size(),
+            "read from={from} of size={} out of bounds: memory size={}",
+            size_of::<BLOCK>(),
+            self.size()
+        );
         let src = self.as_ptr().add(from) as *const BLOCK;
         // SAFETY:
         // - MMU will segfault if `src` access is out of bounds.
@@ -70,6 +76,12 @@ impl LinearMemory for MmapMemory {
 
     #[inline(always)]
     unsafe fn read_unaligned<BLOCK: Copy>(&self, from: usize) -> BLOCK {
+        debug_assert!(
+            from + size_of::<BLOCK>() <= self.size(),
+            "read_unaligned from={from} of size={} out of bounds: memory size={}",
+            size_of::<BLOCK>(),
+            self.size()
+        );
         let src = self.as_ptr().add(from) as *const BLOCK;
         // SAFETY:
         // - MMU will segfault if `src` access is out of bounds.
@@ -80,6 +92,12 @@ impl LinearMemory for MmapMemory {
 
     #[inline(always)]
     unsafe fn write<BLOCK: Copy>(&mut self, start: usize, values: BLOCK) {
+        debug_assert!(
+            start + size_of::<BLOCK>() <= self.size(),
+            "write start={start} of size={} out of bounds: memory size={}",
+            size_of::<BLOCK>(),
+            self.size()
+        );
         let dst = self.as_mut_ptr().add(start) as *mut BLOCK;
         // SAFETY:
         // - MMU will segfault if `dst` access is out of bounds.
@@ -89,6 +107,12 @@ impl LinearMemory for MmapMemory {
 
     #[inline(always)]
     unsafe fn write_unaligned<BLOCK: Copy>(&mut self, start: usize, values: BLOCK) {
+        debug_assert!(
+            start + size_of::<BLOCK>() <= self.size(),
+            "write_unaligned start={start} of size={} out of bounds: memory size={}",
+            size_of::<BLOCK>(),
+            self.size()
+        );
         let dst = self.as_mut_ptr().add(start) as *mut BLOCK;
         // SAFETY:
         // - MMU will segfault if `dst` access is out of bounds.
@@ -97,6 +121,12 @@ impl LinearMemory for MmapMemory {
 
     #[inline(always)]
     unsafe fn swap<BLOCK: Copy>(&mut self, start: usize, values: &mut BLOCK) {
+        debug_assert!(
+            start + size_of::<BLOCK>() <= self.size(),
+            "swap start={start} of size={} out of bounds: memory size={}",
+            size_of::<BLOCK>(),
+            self.size()
+        );
         // SAFETY:
         // - MMU will segfault if `start` access is out of bounds.
         // - We assume `start` is aligned to `BLOCK`
@@ -108,6 +138,12 @@ impl LinearMemory for MmapMemory {
 
     #[inline(always)]
     unsafe fn copy_nonoverlapping<T: Copy>(&mut self, to: usize, data: &[T]) {
+        debug_assert!(
+            to + size_of_val(data) <= self.size(),
+            "copy_nonoverlapping to={to} of size={} out of bounds: memory size={}",
+            size_of_val(data),
+            self.size()
+        );
         debug_assert_eq!(PAGE_SIZE % align_of::<T>(), 0);
         let src = data.as_ptr();
         let dst = self.as_mut_ptr().add(to) as *mut T;
@@ -120,6 +156,12 @@ impl LinearMemory for MmapMemory {
 
     #[inline(always)]
     unsafe fn get_aligned_slice<T: Copy>(&self, start: usize, len: usize) -> &[T] {
+        debug_assert!(
+            start + len * size_of::<T>() <= self.size(),
+            "get_aligned_slice start={start} of size={} out of bounds: memory size={}",
+            len * size_of::<T>(),
+            self.size()
+        );
         let data = self.as_ptr().add(start) as *const T;
         // SAFETY:
         // - MMU will segfault if `data..data + len * size_of::<T>()` is out of bounds.
