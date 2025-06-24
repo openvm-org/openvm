@@ -419,7 +419,7 @@ impl<F: PrimeField32> TracingMemory<F> {
                     num_cells
                         .checked_mul(size_of::<AccessMetadata>())
                         .unwrap()
-                        .div_ceil(CELL_STRIDE * *min_block_size as usize),
+                        .div_ceil(*min_block_size as usize),
                 )
             })
             .collect();
