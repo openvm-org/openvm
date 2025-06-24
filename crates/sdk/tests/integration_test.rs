@@ -4,8 +4,8 @@ use eyre::Result;
 use openvm_build::GuestOptions;
 use openvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, ContinuationVmProof, ExecutionError,
-        SingleSegmentVmExecutor, SystemConfig, VirtualMachine,
+        hasher::poseidon2::vm_poseidon2_hasher, instructions::NATIVE_AS, ContinuationVmProof,
+        ExecutionError, SingleSegmentVmExecutor, SystemConfig, VirtualMachine,
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
@@ -423,19 +423,26 @@ fn test_static_verifier_custom_pv_handler() {
     Halo2WrapperProvingKey::evm_verify(&evm_verifier, &evm_proof).unwrap();
 }
 
+fn system_config_without_native() -> SystemConfig {
+    let mut config = SystemConfig::default()
+        .with_max_segment_len(200)
+        .with_continuations()
+        .with_public_values(NUM_PUB_VALUES);
+    config.memory_config.addr_space_sizes[NATIVE_AS as usize] = 0;
+    config
+}
+
 #[cfg(feature = "evm-verify")]
 #[test]
 fn test_e2e_proof_generation_and_verification_with_pvs() {
+    use openvm_circuit::arch::instructions::NATIVE_AS;
+
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     pkg_dir.push("guest/fib");
 
+    let config = system_config_without_native();
     let vm_config = SdkVmConfig::builder()
-        .system(SdkSystemConfig {
-            config: SystemConfig::default()
-                .with_max_segment_len(200)
-                .with_continuations()
-                .with_public_values(NUM_PUB_VALUES),
-        })
+        .system(SdkSystemConfig { config })
         .rv32i(Default::default())
         .rv32m(Default::default())
         .io(Default::default())
@@ -505,13 +512,9 @@ fn test_sdk_guest_build_and_transpile() {
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     pkg_dir.push("guest/fib");
 
+    let config = system_config_without_native();
     let vm_config = SdkVmConfig::builder()
-        .system(SdkSystemConfig {
-            config: SystemConfig::default()
-                .with_max_segment_len(200)
-                .with_continuations()
-                .with_public_values(NUM_PUB_VALUES),
-        })
+        .system(SdkSystemConfig { config })
         .rv32i(Default::default())
         .rv32m(Default::default())
         .io(Default::default())
@@ -552,13 +555,9 @@ fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     pkg_dir.push("guest/fib");
 
+    let config = system_config_without_native();
     let vm_config = SdkVmConfig::builder()
-        .system(SdkSystemConfig {
-            config: SystemConfig::default()
-                .with_max_segment_len(200)
-                .with_continuations()
-                .with_public_values(NUM_PUB_VALUES),
-        })
+        .system(SdkSystemConfig { config })
         .rv32i(Default::default())
         .rv32m(Default::default())
         .io(Default::default())

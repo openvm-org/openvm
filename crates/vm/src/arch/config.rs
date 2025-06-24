@@ -223,7 +223,7 @@ impl Default for SystemConfig {
     fn default() -> Self {
         Self::new(
             DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
-            Default::default(),
+            MemoryConfig::default(),
             DEFAULT_MAX_NUM_PUBLIC_VALUES,
         )
     }

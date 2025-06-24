@@ -78,4 +78,4 @@ jobs:
       - name: Run CLI tests
         working-directory: crates/cli
         run: |
-          cargo nextest run --cargo-profile=fast
+          cargo nextest run --cargo-profile=fast --test-threads=2
