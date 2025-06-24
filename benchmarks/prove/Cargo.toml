@@ -37,6 +37,7 @@ tiny-keccak.workspace = true
 derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 num-bigint = { workspace = true, features = ["std", "serde"] }
+rand.workspace = true
 serde.workspace = true
 tracing.workspace = true
 

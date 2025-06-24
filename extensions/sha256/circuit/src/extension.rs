@@ -6,7 +6,7 @@ use openvm_circuit::{
     },
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
@@ -22,6 +22,8 @@ use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
 use crate::*;
+
+// TODO: this should be decided after e2 execution
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Sha256Rv32Config {
@@ -55,7 +57,7 @@ impl InitFileGenerator for Sha256Rv32Config {}
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Sha256;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum)]
+#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, InsExecutorE1)]
 pub enum Sha256Executor<F: PrimeField32> {
     Sha256(Sha256VmChip<F>),
 }
@@ -75,6 +77,8 @@ impl<F: PrimeField32> VmExtension<F> for Sha256 {
         builder: &mut VmInventoryBuilder<F>,
     ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
         let mut inventory = VmInventory::new();
+        let pointer_max_bits = builder.system_config().memory_config.pointer_max_bits;
+
         let bitwise_lu_chip = if let Some(&chip) = builder
             .find_chip::<SharedBitwiseOperationLookupChip<8>>()
             .first()
@@ -88,12 +92,18 @@ impl<F: PrimeField32> VmExtension<F> for Sha256 {
         };
 
         let sha256_chip = Sha256VmChip::new(
-            builder.system_port(),
-            builder.system_config().memory_config.pointer_max_bits,
-            bitwise_lu_chip,
-            builder.new_bus_idx(),
-            Rv32Sha256Opcode::CLASS_OFFSET,
-            builder.system_base().offline_memory(),
+            Sha256VmAir::new(
+                builder.system_port(),
+                bitwise_lu_chip.bus(),
+                pointer_max_bits,
+                builder.new_bus_idx(),
+            ),
+            Sha256VmStep::new(
+                bitwise_lu_chip.clone(),
+                Rv32Sha256Opcode::CLASS_OFFSET,
+                pointer_max_bits,
+            ),
+            builder.system_base().memory_controller.helper(),
         );
         inventory.add_executor(
             sha256_chip,

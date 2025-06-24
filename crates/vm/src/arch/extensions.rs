@@ -2,7 +2,7 @@ use std::{
     any::{Any, TypeId},
     cell::RefCell,
     iter::once,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use derive_more::derive::From;
@@ -10,7 +10,7 @@ use getset::Getters;
 use itertools::{zip_eq, Itertools};
 #[cfg(feature = "bench-metrics")]
 use metrics::counter;
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
 use openvm_circuit_primitives::{
     utils::next_power_of_two_or_zero,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
@@ -28,6 +28,7 @@ use openvm_stark_backend::{
     p3_matrix::Matrix,
     p3_util::log2_ceil_usize,
     prover::types::{AirProofInput, CommittedTraceData, ProofInput},
+    utils::metrics_span,
     AirRef, Chip, ChipUsageGetter,
 };
 use p3_baby_bear::BabyBear;
@@ -36,21 +37,27 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     vm_poseidon2_config, ExecutionBus, GenerationError, InstructionExecutor, PhantomSubExecutor,
-    Streams, SystemConfig, SystemTraceHeights,
+    SystemConfig, SystemTraceHeights,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
-use crate::system::{
-    connector::VmConnectorChip,
-    memory::{
-        offline_checker::{MemoryBridge, MemoryBus},
-        MemoryController, MemoryImage, OfflineMemory, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
+use crate::{
+    arch::{ExecutionBridge, VmAirWrapper},
+    system::{
+        connector::VmConnectorChip,
+        memory::{
+            offline_checker::{MemoryBridge, MemoryBus},
+            MemoryController, MemoryImage, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
+        },
+        native_adapter::{NativeAdapterAir, NativeAdapterStep},
+        phantom::PhantomChip,
+        poseidon2::Poseidon2PeripheryChip,
+        program::{ProgramBus, ProgramChip},
+        public_values::{
+            core::{PublicValuesCoreAir, PublicValuesCoreStep},
+            PublicValuesChip,
+        },
     },
-    native_adapter::NativeAdapterChip,
-    phantom::PhantomChip,
-    poseidon2::Poseidon2PeripheryChip,
-    program::{ProgramBus, ProgramChip},
-    public_values::{core::PublicValuesCoreChip, PublicValuesChip},
 };
 
 /// Global AIR ID in the VM circuit verifying key.
@@ -116,7 +123,6 @@ pub struct SystemPort {
 pub struct VmInventoryBuilder<'a, F: PrimeField32> {
     system_config: &'a SystemConfig,
     system: &'a SystemBase<F>,
-    streams: &'a Arc<Mutex<Streams<F>>>,
     bus_idx_mgr: BusIndexManager,
     /// Chips that are already included in the chipset and may be used
     /// as dependencies. The order should be that depended-on chips are ordered
@@ -128,13 +134,11 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
     pub fn new(
         system_config: &'a SystemConfig,
         system: &'a SystemBase<F>,
-        streams: &'a Arc<Mutex<Streams<F>>>,
         bus_idx_mgr: BusIndexManager,
     ) -> Self {
         Self {
             system_config,
             system,
-            streams,
             bus_idx_mgr,
             chips: Vec::new(),
         }
@@ -187,11 +191,6 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
         Ok(())
     }
 
-    /// Shareable streams. Clone to get a shared mutable reference.
-    pub fn streams(&self) -> &Arc<Mutex<Streams<F>>> {
-        self.streams
-    }
-
     fn add_chip<E: AnyEnum>(&mut self, chip: &'a E) {
         self.chips.push(chip);
     }
@@ -205,7 +204,7 @@ pub struct VmInventory<E, P> {
     pub periphery: Vec<P>,
     /// Order of insertion. The reverse of this will be the order the chips are destroyed
     /// to generate trace.
-    insertion_order: Vec<ChipId>,
+    pub insertion_order: Vec<ChipId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -331,6 +330,25 @@ impl<E, P> VmInventory<E, P> {
         self.executors.get_mut(*id)
     }
 
+    pub fn get_mut_executor_with_index(&mut self, opcode: &VmOpcode) -> Option<(&mut E, usize)> {
+        let id = *self.instruction_lookup.get(opcode)?;
+
+        self.executors.get_mut(id).map(|executor| {
+            // TODO(ayush): cache this somewhere
+            let insertion_id = self
+                .insertion_order
+                .iter()
+                .rev()
+                .position(|chip_id| match chip_id {
+                    ChipId::Executor(exec_id) => *exec_id == id,
+                    _ => false,
+                })
+                .unwrap();
+
+            (executor, insertion_id)
+        })
+    }
+
     pub fn executors(&self) -> &[E] {
         &self.executors
     }
@@ -441,7 +459,6 @@ pub struct VmChipComplex<F: PrimeField32, E, P> {
     /// Absolute maximum value a trace height can be and still be provable.
     max_trace_height: usize,
 
-    streams: Arc<Mutex<Streams<F>>>,
     bus_idx_mgr: BusIndexManager,
 }
 
@@ -494,10 +511,6 @@ impl<F: PrimeField32> SystemBase<F> {
         self.memory_controller.memory_bridge()
     }
 
-    pub fn offline_memory(&self) -> Arc<Mutex<OfflineMemory<F>>> {
-        self.memory_controller.offline_memory().clone()
-    }
-
     pub fn execution_bus(&self) -> ExecutionBus {
         self.connector_chip.air.execution_bus
     }
@@ -519,7 +532,7 @@ impl<F: PrimeField32> SystemBase<F> {
     }
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor, InsExecutorE1)]
 pub enum SystemExecutor<F: PrimeField32> {
     PublicValues(PublicValuesChip<F>),
     Phantom(RefCell<PhantomChip<F>>),
@@ -557,7 +570,6 @@ impl<F: PrimeField32> SystemComplex<F> {
             )
         };
         let memory_bridge = memory_controller.memory_bridge();
-        let offline_memory = memory_controller.offline_memory();
         let program_chip = ProgramChip::new(program_bus);
         let connector_chip = VmConnectorChip::new(
             execution_bus,
@@ -570,14 +582,26 @@ impl<F: PrimeField32> SystemComplex<F> {
         // PublicValuesChip is required when num_public_values > 0 in single segment mode.
         if config.has_public_values_chip() {
             assert_eq!(inventory.executors().len(), Self::PV_EXECUTOR_IDX);
+
             let chip = PublicValuesChip::new(
-                NativeAdapterChip::new(execution_bus, program_bus, memory_bridge),
-                PublicValuesCoreChip::new(
+                VmAirWrapper::new(
+                    NativeAdapterAir::new(
+                        ExecutionBridge::new(execution_bus, program_bus),
+                        memory_bridge,
+                    ),
+                    PublicValuesCoreAir::new(
+                        config.num_public_values,
+                        config.max_constraint_degree as u32 - 1,
+                    ),
+                ),
+                PublicValuesCoreStep::new(
+                    NativeAdapterStep::new(),
                     config.num_public_values,
                     config.max_constraint_degree as u32 - 1,
                 ),
-                offline_memory,
+                memory_controller.helper(),
             );
+
             inventory
                 .add_executor(chip, [PublishOpcode::PUBLISH.global_opcode()])
                 .unwrap();
@@ -600,11 +624,8 @@ impl<F: PrimeField32> SystemComplex<F> {
             );
             inventory.add_periphery_chip(chip);
         }
-        let streams = Arc::new(Mutex::new(Streams::default()));
         let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
-        let mut phantom_chip =
-            PhantomChip::new(execution_bus, program_bus, SystemOpcode::CLASS_OFFSET);
-        phantom_chip.set_streams(streams.clone());
+        let phantom_chip = PhantomChip::new(execution_bus, program_bus, SystemOpcode::CLASS_OFFSET);
         inventory
             .add_executor(RefCell::new(phantom_chip), [phantom_opcode])
             .unwrap();
@@ -631,7 +652,6 @@ impl<F: PrimeField32> SystemComplex<F> {
             base,
             inventory,
             bus_idx_mgr,
-            streams,
             overridden_inventory_heights: None,
             max_trace_height,
         }
@@ -650,8 +670,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         E: AnyEnum,
         P: AnyEnum,
     {
-        let mut builder =
-            VmInventoryBuilder::new(&self.config, &self.base, &self.streams, self.bus_idx_mgr);
+        let mut builder = VmInventoryBuilder::new(&self.config, &self.base, self.bus_idx_mgr);
         // Add range checker for convenience, the other system base chips aren't included - they can
         // be accessed directly from builder
         builder.add_chip(&self.base.range_checker_chip);
@@ -696,7 +715,6 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             base: self.base,
             inventory: self.inventory.transmute(),
             bus_idx_mgr: self.bus_idx_mgr,
-            streams: self.streams,
             overridden_inventory_heights: self.overridden_inventory_heights,
             max_trace_height: self.max_trace_height,
         }
@@ -776,11 +794,15 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
                 .as_any_kind_mut()
                 .downcast_mut()
                 .expect("Poseidon2 chip required for persistent memory");
-            self.base.memory_controller.finalize(Some(hasher))
+            metrics_span("memory_finalize_time_ms", || {
+                self.base.memory_controller.finalize(Some(hasher))
+            });
         } else {
-            self.base
-                .memory_controller
-                .finalize(None::<&mut Poseidon2PeripheryChip<F>>)
+            metrics_span("memory_finalize_time_ms", || {
+                self.base
+                    .memory_controller
+                    .finalize(None::<&mut Poseidon2PeripheryChip<F>>)
+            });
         };
     }
 
@@ -788,19 +810,8 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         self.base.program_chip.set_program(program);
     }
 
-    pub(crate) fn set_initial_memory(&mut self, memory: MemoryImage<F>) {
+    pub(crate) fn set_initial_memory(&mut self, memory: MemoryImage) {
         self.base.memory_controller.set_initial_memory(memory);
-    }
-
-    /// Warning: this sets the stream in all chips which have a shared mutable reference to the
-    /// streams.
-    pub(crate) fn set_streams(&mut self, streams: Streams<F>) {
-        *self.streams.lock().unwrap() = streams;
-    }
-
-    /// This should **only** be called after segment execution has finished.
-    pub fn take_streams(&mut self) -> Streams<F> {
-        std::mem::take(&mut self.streams.lock().unwrap())
     }
 
     // This is O(1).
@@ -809,7 +820,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     }
 
     // we always need to special case it because we need to fix the air id.
-    fn public_values_chip_idx(&self) -> Option<ExecutorId> {
+    pub(crate) fn public_values_chip_idx(&self) -> Option<ExecutorId> {
         self.config
             .has_public_values_chip()
             .then_some(Self::PV_EXECUTOR_IDX)
@@ -838,7 +849,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     }
 
     /// Return air names of all chips in order.
-    pub(crate) fn air_names(&self) -> Vec<String>
+    pub fn air_names(&self) -> Vec<String>
     where
         E: ChipUsageGetter,
         P: ChipUsageGetter,
@@ -851,6 +862,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .chain([self.range_checker_chip().air_name()])
             .collect()
     }
+
     /// Return trace heights of all chips in order corresponding to `air_names`.
     pub(crate) fn current_trace_heights(&self) -> Vec<usize>
     where
@@ -952,6 +964,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     /// This returns 0 cells for chips with preprocessed trace because the number of trace cells is
     /// constant in those cases. This function is used to sample periodically and provided to
     /// the segmentation strategy to decide whether to segment during execution.
+    #[cfg(feature = "bench-metrics")]
     pub(crate) fn current_trace_cells(&self) -> Vec<usize>
     where
         E: ChipUsageGetter,

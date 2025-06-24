@@ -184,11 +184,11 @@ fn test_optional_air() {
             .verify(&pk.get_vk(), &proof)
             .expect("Verification failed");
         // The VM program will panic when the program cannot verify the proof.
-        gen_vm_program_test_proof_input::<BabyBearPoseidon2Config, NativeConfig>(
-            program.clone(),
-            proof.write(),
-            vm_config.clone(),
-        );
+        gen_vm_program_test_proof_input::<
+            BabyBearPoseidon2Config,
+            NativeConfig,
+            BabyBearPoseidon2Engine,
+        >(program.clone(), proof.write(), vm_config.clone());
     }
     // Case 2: The second AIR is not presented.
     {
@@ -215,11 +215,11 @@ fn test_optional_air() {
             .verify(&pk.get_vk(), &proof)
             .expect("Verification failed");
         // The VM program will panic when the program cannot verify the proof.
-        gen_vm_program_test_proof_input::<BabyBearPoseidon2Config, NativeConfig>(
-            program.clone(),
-            proof.write(),
-            vm_config.clone(),
-        );
+        gen_vm_program_test_proof_input::<
+            BabyBearPoseidon2Config,
+            NativeConfig,
+            BabyBearPoseidon2Engine,
+        >(program.clone(), proof.write(), vm_config.clone());
     }
     // Case 3: Negative - unbalanced interactions.
     {
@@ -238,11 +238,11 @@ fn test_optional_air() {
         assert!(engine.verify(&pk.get_vk(), &proof).is_err());
         // The VM program should panic when the proof cannot be verified.
         let unwind_res = catch_unwind(|| {
-            gen_vm_program_test_proof_input::<BabyBearPoseidon2Config, NativeConfig>(
-                program.clone(),
-                proof.write(),
-                vm_config,
-            )
+            gen_vm_program_test_proof_input::<
+                BabyBearPoseidon2Config,
+                NativeConfig,
+                BabyBearPoseidon2Engine,
+            >(program.clone(), proof.write(), vm_config)
         });
         assert!(unwind_res.is_err());
     }

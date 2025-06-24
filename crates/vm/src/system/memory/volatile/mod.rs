@@ -183,7 +183,7 @@ pub struct VolatileBoundaryChip<F> {
     pub air: VolatileBoundaryAir,
     range_checker: SharedVariableRangeCheckerChip,
     overridden_height: Option<usize>,
-    final_memory: Option<TimestampedEquipartition<F, 1>>,
+    pub final_memory: Option<TimestampedEquipartition<F, 1>>,
     addr_space_max_bits: usize,
     pointer_max_bits: usize,
 }

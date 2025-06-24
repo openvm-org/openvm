@@ -3,10 +3,9 @@ use std::borrow::BorrowMut;
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_pointer, TestAdapterChip, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
-            RANGE_TUPLE_CHECKER_BUS,
+            memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
-        ExecutionBridge, InstructionExecutor, VmAdapterChip, VmChipWrapper,
+        InstructionExecutor, VmAirWrapper,
     },
     utils::generate_long_number,
 };
@@ -15,7 +14,7 @@ use openvm_circuit_primitives::{
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
-use openvm_rv32im_transpiler::MulHOpcode;
+use openvm_rv32im_transpiler::MulHOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::FieldAlgebra,
@@ -24,60 +23,31 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
-    verifier::VerificationError,
-    ChipUsageGetter,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::rngs::StdRng;
+use test_case::test_case;
 
 use super::core::run_mulh;
 use crate::{
-    adapters::{Rv32MultAdapterChip, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-    mulh::{MulHCoreChip, MulHCoreCols, Rv32MulHChip},
+    adapters::{Rv32MultAdapterAir, Rv32MultAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+    mulh::{MulHCoreCols, MulHStep, Rv32MulHChip},
+    test_utils::get_verification_error,
+    MulHCoreAir,
 };
 
+const MAX_INS_CAPACITY: usize = 128;
+// the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
+const MAX_NUM_LIMBS: u32 = 32;
 type F = BabyBear;
 
-//////////////////////////////////////////////////////////////////////////////////////
-// POSITIVE TESTS
-//
-// Randomly generate computations and execute, ensuring that the generated trace
-// passes all constraints.
-//////////////////////////////////////////////////////////////////////////////////////
-
-#[allow(clippy::too_many_arguments)]
-fn run_rv32_mulh_rand_write_execute<E: InstructionExecutor<F>>(
-    opcode: MulHOpcode,
+fn create_test_chip(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut E,
-    b: [u32; RV32_REGISTER_NUM_LIMBS],
-    c: [u32; RV32_REGISTER_NUM_LIMBS],
-    rng: &mut StdRng,
+) -> (
+    Rv32MulHChip<F>,
+    SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    SharedRangeTupleCheckerChip<2>,
 ) {
-    let rs1 = gen_pointer(rng, 4);
-    let rs2 = gen_pointer(rng, 4);
-    let rd = gen_pointer(rng, 4);
-
-    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
-    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
-
-    let (a, _, _, _, _) = run_mulh::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
-    tester.execute(
-        chip,
-        &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 0]),
-    );
-
-    assert_eq!(
-        a.map(F::from_canonical_u32),
-        tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
-    );
-}
-
-fn run_rv32_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
-    // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
-    const MAX_NUM_LIMBS: u32 = 32;
-    let mut rng = create_seeded_rng();
-
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let range_tuple_bus = RangeTupleCheckerBus::new(
         RANGE_TUPLE_CHECKER_BUS,
@@ -87,21 +57,77 @@ fn run_rv32_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let range_tuple_checker = SharedRangeTupleCheckerChip::new(range_tuple_bus);
 
-    let mut tester = VmChipTestBuilder::default();
     let mut chip = Rv32MulHChip::<F>::new(
-        Rv32MultAdapterChip::new(
-            tester.execution_bus(),
-            tester.program_bus(),
-            tester.memory_bridge(),
+        VmAirWrapper::new(
+            Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+            MulHCoreAir::new(bitwise_bus, range_tuple_bus),
         ),
-        MulHCoreChip::new(bitwise_chip.clone(), range_tuple_checker.clone()),
-        tester.offline_memory_mutex_arc(),
+        MulHStep::new(
+            Rv32MultAdapterStep::new(),
+            bitwise_chip.clone(),
+            range_tuple_checker.clone(),
+        ),
+        tester.memory_helper(),
+    );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
+    (chip, bitwise_chip, range_tuple_checker)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn set_and_execute<E: InstructionExecutor<F>>(
+    tester: &mut VmChipTestBuilder<F>,
+    chip: &mut E,
+    rng: &mut StdRng,
+    opcode: MulHOpcode,
+    b: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+    c: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+) {
+    let b = b.unwrap_or(generate_long_number::<
+        RV32_REGISTER_NUM_LIMBS,
+        RV32_CELL_BITS,
+    >(rng));
+    let c = c.unwrap_or(generate_long_number::<
+        RV32_REGISTER_NUM_LIMBS,
+        RV32_CELL_BITS,
+    >(rng));
+
+    let rs1 = gen_pointer(rng, 4);
+    let rs2 = gen_pointer(rng, 4);
+    let rd = gen_pointer(rng, 4);
+
+    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
+    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
+
+    tester.execute(
+        chip,
+        &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 0]),
     );
 
+    let (a, _, _, _, _) = run_mulh::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
+    assert_eq!(
+        a.map(F::from_canonical_u32),
+        tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
+    );
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+// POSITIVE TESTS
+//
+// Randomly generate computations and execute, ensuring that the generated trace
+// passes all constraints.
+//////////////////////////////////////////////////////////////////////////////////////
+
+#[test_case(MULH, 100)]
+#[test_case(MULHSU, 100)]
+#[test_case(MULHU, 100)]
+fn run_rv32_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut chip, bitwise_chip, range_tuple_checker) = create_test_chip(&mut tester);
+
     for _ in 0..num_ops {
-        let b = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
-        let c = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&mut rng);
-        run_rv32_mulh_rand_write_execute(opcode, &mut tester, &mut chip, b, c, &mut rng);
+        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
     }
 
     let tester = tester
@@ -113,88 +139,40 @@ fn run_rv32_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
     tester.simple_test().expect("Verification failed");
 }
 
-#[test]
-fn rv32_mulh_rand_test() {
-    run_rv32_mulh_rand_test(MulHOpcode::MULH, 100);
-}
-
-#[test]
-fn rv32_mulhsu_rand_test() {
-    run_rv32_mulh_rand_test(MulHOpcode::MULHSU, 100);
-}
-
-#[test]
-fn rv32_mulhu_rand_test() {
-    run_rv32_mulh_rand_test(MulHOpcode::MULHU, 100);
-}
-
 //////////////////////////////////////////////////////////////////////////////////////
 // NEGATIVE TESTS
 //
 // Given a fake trace of a single operation, setup a chip and run the test. We replace
-// the write part of the trace and check that the core chip throws the expected error.
-// A dummy adapter is used so memory interactions don't indirectly cause false passes.
+// part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
-type Rv32MulHTestChip<F> =
-    VmChipWrapper<F, TestAdapterChip<F>, MulHCoreChip<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
-
 #[allow(clippy::too_many_arguments)]
-fn run_rv32_mulh_negative_test(
+fn run_negative_mulh_test(
     opcode: MulHOpcode,
-    a: [u32; RV32_REGISTER_NUM_LIMBS],
+    prank_a: [u32; RV32_REGISTER_NUM_LIMBS],
     b: [u32; RV32_REGISTER_NUM_LIMBS],
     c: [u32; RV32_REGISTER_NUM_LIMBS],
-    a_mul: [u32; RV32_REGISTER_NUM_LIMBS],
-    b_ext: u32,
-    c_ext: u32,
+    prank_a_mul: [u32; RV32_REGISTER_NUM_LIMBS],
+    prank_b_ext: u32,
+    prank_c_ext: u32,
     interaction_error: bool,
 ) {
-    const MAX_NUM_LIMBS: u32 = 32;
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let range_tuple_bus = RangeTupleCheckerBus::new(
-        RANGE_TUPLE_CHECKER_BUS,
-        [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
-    );
-
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let range_tuple_chip = SharedRangeTupleCheckerChip::new(range_tuple_bus);
-
+    let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = Rv32MulHTestChip::<F>::new(
-        TestAdapterChip::new(
-            vec![[b.map(F::from_canonical_u32), c.map(F::from_canonical_u32)].concat()],
-            vec![None],
-            ExecutionBridge::new(tester.execution_bus(), tester.program_bus()),
-        ),
-        MulHCoreChip::new(bitwise_chip.clone(), range_tuple_chip.clone()),
-        tester.offline_memory_mutex_arc(),
-    );
+    let (mut chip, bitwise_chip, range_tuple_chip) = create_test_chip(&mut tester);
 
-    tester.execute(
-        &mut chip,
-        &Instruction::from_usize(opcode.global_opcode(), [0, 0, 0, 1, 0]),
-    );
+    set_and_execute(&mut tester, &mut chip, &mut rng, opcode, Some(b), Some(c));
 
-    let trace_width = chip.trace_width();
-    let adapter_width = BaseAir::<F>::width(chip.adapter.air());
-    let (_, _, carry, _, _) = run_mulh::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
-
-    range_tuple_chip.clear();
-    for i in 0..RV32_REGISTER_NUM_LIMBS {
-        range_tuple_chip.add_count(&[a_mul[i], carry[i]]);
-        range_tuple_chip.add_count(&[a[i], carry[RV32_REGISTER_NUM_LIMBS + i]]);
-    }
-
+    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
         let cols: &mut MulHCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
-        cols.a = a.map(F::from_canonical_u32);
-        cols.a_mul = a_mul.map(F::from_canonical_u32);
-        cols.b_ext = F::from_canonical_u32(b_ext);
-        cols.c_ext = F::from_canonical_u32(c_ext);
-        *trace = RowMajorMatrix::new(values, trace_width);
+        cols.a = prank_a.map(F::from_canonical_u32);
+        cols.a_mul = prank_a_mul.map(F::from_canonical_u32);
+        cols.b_ext = F::from_canonical_u32(prank_b_ext);
+        cols.c_ext = F::from_canonical_u32(prank_c_ext);
+        *trace = RowMajorMatrix::new(values, trace.width());
     };
 
     disable_debug_builder();
@@ -204,17 +182,13 @@ fn run_rv32_mulh_negative_test(
         .load(bitwise_chip)
         .load(range_tuple_chip)
         .finalize();
-    tester.simple_test_with_expected_error(if interaction_error {
-        VerificationError::ChallengePhaseError
-    } else {
-        VerificationError::OodEvaluationMismatch
-    });
+    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
 }
 
 #[test]
 fn rv32_mulh_wrong_a_mul_negative_test() {
-    run_rv32_mulh_negative_test(
-        MulHOpcode::MULH,
+    run_negative_mulh_test(
+        MULH,
         [130, 9, 135, 241],
         [197, 85, 150, 32],
         [51, 109, 78, 142],
@@ -227,8 +201,8 @@ fn rv32_mulh_wrong_a_mul_negative_test() {
 
 #[test]
 fn rv32_mulh_wrong_a_negative_test() {
-    run_rv32_mulh_negative_test(
-        MulHOpcode::MULH,
+    run_negative_mulh_test(
+        MULH,
         [130, 9, 135, 242],
         [197, 85, 150, 32],
         [51, 109, 78, 142],
@@ -241,8 +215,8 @@ fn rv32_mulh_wrong_a_negative_test() {
 
 #[test]
 fn rv32_mulh_wrong_ext_negative_test() {
-    run_rv32_mulh_negative_test(
-        MulHOpcode::MULH,
+    run_negative_mulh_test(
+        MULH,
         [1, 0, 0, 0],
         [0, 0, 0, 128],
         [2, 0, 0, 0],
@@ -255,8 +229,8 @@ fn rv32_mulh_wrong_ext_negative_test() {
 
 #[test]
 fn rv32_mulh_invalid_ext_negative_test() {
-    run_rv32_mulh_negative_test(
-        MulHOpcode::MULH,
+    run_negative_mulh_test(
+        MULH,
         [3, 2, 2, 2],
         [0, 0, 0, 128],
         [2, 0, 0, 0],
@@ -269,8 +243,8 @@ fn rv32_mulh_invalid_ext_negative_test() {
 
 #[test]
 fn rv32_mulhsu_wrong_a_mul_negative_test() {
-    run_rv32_mulh_negative_test(
-        MulHOpcode::MULHSU,
+    run_negative_mulh_test(
+        MULHSU,
         [174, 40, 246, 202],
         [197, 85, 150, 160],
         [51, 109, 78, 142],
@@ -283,8 +257,8 @@ fn rv32_mulhsu_wrong_a_mul_negative_test() {
 
 #[test]
 fn rv32_mulhsu_wrong_a_negative_test() {
-    run_rv32_mulh_negative_test(
-        MulHOpcode::MULHSU,
+    run_negative_mulh_test(
+        MULHSU,
         [174, 40, 246, 201],
         [197, 85, 150, 160],
         [51, 109, 78, 142],
@@ -297,8 +271,8 @@ fn rv32_mulhsu_wrong_a_negative_test() {
 
 #[test]
 fn rv32_mulhsu_wrong_b_ext_negative_test() {
-    run_rv32_mulh_negative_test(
-        MulHOpcode::MULHSU,
+    run_negative_mulh_test(
+        MULHSU,
         [1, 0, 0, 0],
         [0, 0, 0, 128],
         [2, 0, 0, 0],
@@ -311,8 +285,8 @@ fn rv32_mulhsu_wrong_b_ext_negative_test() {
 
 #[test]
 fn rv32_mulhsu_wrong_c_ext_negative_test() {
-    run_rv32_mulh_negative_test(
-        MulHOpcode::MULHSU,
+    run_negative_mulh_test(
+        MULHSU,
         [0, 0, 0, 64],
         [0, 0, 0, 128],
         [0, 0, 0, 128],
@@ -325,8 +299,8 @@ fn rv32_mulhsu_wrong_c_ext_negative_test() {
 
 #[test]
 fn rv32_mulhu_wrong_a_mul_negative_test() {
-    run_rv32_mulh_negative_test(
-        MulHOpcode::MULHU,
+    run_negative_mulh_test(
+        MULHU,
         [130, 9, 135, 241],
         [197, 85, 150, 32],
         [51, 109, 78, 142],
@@ -339,8 +313,8 @@ fn rv32_mulhu_wrong_a_mul_negative_test() {
 
 #[test]
 fn rv32_mulhu_wrong_a_negative_test() {
-    run_rv32_mulh_negative_test(
-        MulHOpcode::MULHU,
+    run_negative_mulh_test(
+        MULHU,
         [130, 9, 135, 240],
         [197, 85, 150, 32],
         [51, 109, 78, 142],
@@ -353,8 +327,8 @@ fn rv32_mulhu_wrong_a_negative_test() {
 
 #[test]
 fn rv32_mulhu_wrong_ext_negative_test() {
-    run_rv32_mulh_negative_test(
-        MulHOpcode::MULHU,
+    run_negative_mulh_test(
+        MULHU,
         [255, 255, 255, 255],
         [0, 0, 0, 128],
         [2, 0, 0, 0],
@@ -380,7 +354,7 @@ fn run_mulh_sanity_test() {
     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [303, 375, 449, 463];
     let c_mul: [u32; RV32_REGISTER_NUM_LIMBS] = [39, 100, 126, 205];
     let (res, res_mul, carry, x_ext, y_ext) =
-        run_mulh::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(MulHOpcode::MULH, &x, &y);
+        run_mulh::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(MULH, &x, &y);
     for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], res[i]);
         assert_eq!(z_mul[i], res_mul[i]);
@@ -400,7 +374,7 @@ fn run_mulhu_sanity_test() {
     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [107, 93, 18, 0];
     let c_mul: [u32; RV32_REGISTER_NUM_LIMBS] = [39, 100, 126, 205];
     let (res, res_mul, carry, x_ext, y_ext) =
-        run_mulh::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(MulHOpcode::MULHU, &x, &y);
+        run_mulh::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(MULHU, &x, &y);
     for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], res[i]);
         assert_eq!(z_mul[i], res_mul[i]);
@@ -420,7 +394,7 @@ fn run_mulhsu_pos_sanity_test() {
     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [107, 93, 18, 0];
     let c_mul: [u32; RV32_REGISTER_NUM_LIMBS] = [39, 100, 126, 205];
     let (res, res_mul, carry, x_ext, y_ext) =
-        run_mulh::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(MulHOpcode::MULHSU, &x, &y);
+        run_mulh::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(MULHSU, &x, &y);
     for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], res[i]);
         assert_eq!(z_mul[i], res_mul[i]);
@@ -440,7 +414,7 @@ fn run_mulhsu_neg_sanity_test() {
     let c: [u32; RV32_REGISTER_NUM_LIMBS] = [212, 292, 326, 379];
     let c_mul: [u32; RV32_REGISTER_NUM_LIMBS] = [39, 100, 126, 231];
     let (res, res_mul, carry, x_ext, y_ext) =
-        run_mulh::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(MulHOpcode::MULHSU, &x, &y);
+        run_mulh::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(MULHSU, &x, &y);
     for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], res[i]);
         assert_eq!(z_mul[i], res_mul[i]);

@@ -222,10 +222,11 @@ pub fn wrap_e2e_stark_proof<E: StarkFriEngine<SC>>(
     } = e2e_stark_proof;
     let mut wrapper_layers = 0;
     loop {
-        let actual_air_heights = root_prover.execute_for_air_heights(RootVmVerifierInput {
+        let input = RootVmVerifierInput {
             proofs: vec![proof.clone()],
             public_values: user_public_values.clone(),
-        });
+        };
+        let actual_air_heights = root_prover.execute_for_air_heights(input);
         // Root verifier can handle the internal proof. We can stop here.
         if heights_le(
             &actual_air_heights,

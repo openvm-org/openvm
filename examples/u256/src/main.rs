@@ -1,4 +1,6 @@
 #![allow(clippy::needless_range_loop)]
+openvm::entry!(main);
+
 use core::array;
 
 use openvm_ruint::aliases::U256;

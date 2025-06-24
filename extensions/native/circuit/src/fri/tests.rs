@@ -1,10 +1,5 @@
-use std::sync::{Arc, Mutex};
-
 use itertools::Itertools;
-use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, VmChipTestBuilder},
-    Streams,
-};
+use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::FriOpcode::FRI_REDUCED_OPENING;
 use openvm_stark_backend::{
@@ -15,8 +10,25 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 
-use super::{super::field_extension::FieldExtension, elem_to_ext, FriReducedOpeningChip, EXT_DEG};
-use crate::OVERALL_WIDTH;
+use super::{
+    super::field_extension::FieldExtension, elem_to_ext, FriReducedOpeningAir,
+    FriReducedOpeningChip, FriReducedOpeningStep, EXT_DEG,
+};
+use crate::fri::OVERALL_WIDTH;
+
+const MAX_INS_CAPACITY: usize = 1024;
+type F = BabyBear;
+
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FriReducedOpeningChip<F> {
+    let mut chip = FriReducedOpeningChip::<F>::new(
+        FriReducedOpeningAir::new(tester.execution_bridge(), tester.memory_bridge()),
+        FriReducedOpeningStep::new(),
+        tester.memory_helper(),
+    );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
+    chip
+}
 
 fn compute_fri_mat_opening<F: Field>(
     alpha: [F; EXT_DEG],
@@ -43,14 +55,7 @@ fn fri_mat_opening_air_test() {
 
     let mut tester = VmChipTestBuilder::default();
 
-    let streams = Arc::new(Mutex::new(Streams::default()));
-    let mut chip = FriReducedOpeningChip::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        tester.memory_bridge(),
-        tester.offline_memory_mutex_arc(),
-        streams.clone(),
-    );
+    let mut chip = create_test_chip(&tester);
 
     let mut rng = create_seeded_rng();
 
@@ -62,7 +67,7 @@ fn fri_mat_opening_air_test() {
         };
     }
 
-    streams.lock().unwrap().hint_space = vec![vec![]];
+    tester.streams.hint_space = vec![vec![]];
 
     for _ in 0..num_ops {
         let alpha = gen_ext!();
@@ -85,39 +90,39 @@ fn fri_mat_opening_air_test() {
 
         let address_space = 4usize;
 
-        /*tracing::debug!(
-            "{opcode:?} d = {}, e = {}, f = {}, result_addr = {}, addr1 = {}, addr2 = {}, z = {}, x = {}, y = {}",
-            result_as, as1, as2, result_pointer, address1, address2, result, operand1, operand2,
-        );*/
+        // tracing::debug!(
+        //     "{opcode:?} d = {}, e = {}, f = {}, result_addr = {}, addr1 = {}, addr2 = {}, z = {},
+        // x = {}, y = {}",     result_as, as1, as2, result_pointer, address1, address2,
+        // result, operand1, operand2, );
 
         tester.write(address_space, alpha_pointer, alpha);
-        tester.write_cell(
+        tester.write(
             address_space,
             length_pointer,
-            BabyBear::from_canonical_usize(length),
+            [BabyBear::from_canonical_usize(length)],
         );
-        tester.write_cell(
+        tester.write(
             address_space,
             a_pointer_pointer,
-            BabyBear::from_canonical_usize(a_pointer),
+            [BabyBear::from_canonical_usize(a_pointer)],
         );
-        tester.write_cell(
+        tester.write(
             address_space,
             b_pointer_pointer,
-            BabyBear::from_canonical_usize(b_pointer),
+            [BabyBear::from_canonical_usize(b_pointer)],
         );
         let is_init = rng.gen_range(0..2);
-        tester.write_cell(
+        tester.write(
             address_space,
             is_init_ptr,
-            BabyBear::from_canonical_u32(is_init),
+            [BabyBear::from_canonical_u32(is_init)],
         );
 
         if is_init == 0 {
-            streams.lock().unwrap().hint_space[0].extend_from_slice(&a);
+            tester.streams.hint_space[0].extend_from_slice(&a);
         } else {
             for (i, ai) in a.iter().enumerate() {
-                tester.write_cell(address_space, a_pointer + i, *ai);
+                tester.write(address_space, a_pointer + i, [*ai]);
             }
         }
         for (i, bi) in b.iter().enumerate() {
@@ -142,7 +147,7 @@ fn fri_mat_opening_air_test() {
         assert_eq!(result, tester.read(address_space, result_pointer));
         // Check that `a` was populated.
         for (i, ai) in a.iter().enumerate() {
-            let found = tester.read_cell(address_space, a_pointer + i);
+            let [found] = tester.read(address_space, a_pointer + i);
             assert_eq!(*ai, found);
         }
     }

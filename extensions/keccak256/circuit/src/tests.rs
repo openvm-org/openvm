@@ -1,12 +1,22 @@
-use std::borrow::BorrowMut;
+use std::{array, borrow::BorrowMut};
 
 use hex::FromHex;
-use openvm_circuit::arch::testing::{VmChipTestBuilder, VmChipTester, BITWISE_OP_LOOKUP_BUS};
+use openvm_circuit::{
+    arch::{
+        testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester, BITWISE_OP_LOOKUP_BUS},
+        DenseRecordArena, InstructionExecutor, NewVmChipWrapper,
+    },
+    utils::get_random_message,
+};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
-use openvm_keccak256_transpiler::Rv32KeccakOpcode;
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    LocalOpcode,
+};
+use openvm_keccak256_transpiler::Rv32KeccakOpcode::{self, *};
 use openvm_stark_backend::{
     p3_field::FieldAlgebra, utils::disable_debug_builder, verifier::VerificationError,
 };
@@ -15,38 +25,107 @@ use openvm_stark_sdk::{
     utils::create_seeded_rng,
 };
 use p3_keccak_air::NUM_ROUNDS;
-use rand::Rng;
+use rand::{rngs::StdRng, Rng};
 use tiny_keccak::Hasher;
 
 use super::{columns::KeccakVmCols, utils::num_keccak_f, KeccakVmChip};
+use crate::{trace::KeccakVmRecordLayout, utils::keccak256, KeccakVmAir, KeccakVmStep};
 
 type F = BabyBear;
+const MAX_INS_CAPACITY: usize = 8192;
+
+fn create_test_chips(
+    tester: &mut VmChipTestBuilder<F>,
+) -> (KeccakVmChip<F>, SharedBitwiseOperationLookupChip<8>) {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<8>::new(bitwise_bus);
+    let mut chip = KeccakVmChip::new(
+        KeccakVmAir::new(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            bitwise_bus,
+            tester.address_bits(),
+            Rv32KeccakOpcode::CLASS_OFFSET,
+        ),
+        KeccakVmStep::new(
+            bitwise_chip.clone(),
+            Rv32KeccakOpcode::CLASS_OFFSET,
+            tester.address_bits(),
+        ),
+        tester.memory_helper(),
+    );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+
+    (chip, bitwise_chip)
+}
+
+fn set_and_execute<E: InstructionExecutor<F>>(
+    tester: &mut VmChipTestBuilder<F>,
+    chip: &mut E,
+    rng: &mut StdRng,
+    opcode: Rv32KeccakOpcode,
+    message: Option<&[u8]>,
+    len: Option<usize>,
+) {
+    let len = len.unwrap_or(rng.gen_range(1..3000));
+    let tmp = get_random_message(rng, len);
+    let message: &[u8] = message.unwrap_or(&tmp);
+
+    let rd = gen_pointer(rng, 4);
+    let rs1 = gen_pointer(rng, 4);
+    let rs2 = gen_pointer(rng, 4);
+
+    let max_mem_ptr: u32 = 1 << tester.address_bits();
+    let dst_ptr = rng.gen_range(0..max_mem_ptr);
+    let dst_ptr = dst_ptr ^ (dst_ptr & 3);
+    tester.write(1, rd, dst_ptr.to_le_bytes().map(F::from_canonical_u8));
+    let src_ptr = rng.gen_range(0..(max_mem_ptr - len as u32));
+    let src_ptr = src_ptr ^ (src_ptr & 3);
+    tester.write(1, rs1, src_ptr.to_le_bytes().map(F::from_canonical_u8));
+    tester.write(1, rs2, len.to_le_bytes().map(F::from_canonical_u8));
+
+    message.chunks(4).enumerate().for_each(|(i, chunk)| {
+        let chunk: [&u8; 4] = array::from_fn(|i| chunk.get(i).unwrap_or(&0));
+        tester.write(
+            2,
+            src_ptr as usize + i * 4,
+            chunk.map(|&x| F::from_canonical_u8(x)),
+        );
+    });
+
+    tester.execute(
+        chip,
+        &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 2]),
+    );
+
+    let output = keccak256(message);
+    assert_eq!(
+        output.map(F::from_canonical_u8),
+        tester.read::<32>(2, dst_ptr as usize)
+    );
+}
+
 // io is vector of (input, expected_output, prank_output) where prank_output is Some if the trace
 // will be replaced
 #[allow(clippy::type_complexity)]
 fn build_keccak256_test(
     io: Vec<(Vec<u8>, Option<[u8; 32]>, Option<[u8; 32]>)>,
 ) -> VmChipTester<BabyBearBlake3Config> {
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<8>::new(bitwise_bus);
-
+    let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = KeccakVmChip::new(
-        tester.execution_bus(),
-        tester.program_bus(),
-        tester.memory_bridge(),
-        tester.address_bits(),
-        bitwise_chip.clone(),
-        Rv32KeccakOpcode::CLASS_OFFSET,
-        tester.offline_memory_mutex_arc(),
-    );
+    let (mut chip, bitwise_chip) = create_test_chips(&mut tester);
 
-    let mut dst = 0;
-    let src = 0;
+    let max_mem_ptr = 1 << (tester.address_bits() - 3);
+    let mut dst = rng.gen_range(0..max_mem_ptr) << 2;
+    let src = rng.gen_range(0..max_mem_ptr) << 2;
 
     for (input, expected_output, _) in &io {
-        let [a, b, c] = [0, 4, 8]; // space apart for register limbs
-        let [d, e] = [1, 2];
+        let [a, b, c] = [
+            gen_pointer(&mut rng, 4),
+            gen_pointer(&mut rng, 4),
+            gen_pointer(&mut rng, 4),
+        ]; // space apart for register limbs
+        let [d, e] = [RV32_REGISTER_AS as usize, RV32_MEMORY_AS as usize];
 
         tester.write(d, a, (dst as u32).to_le_bytes().map(F::from_canonical_u8));
         tester.write(d, b, (src as u32).to_le_bytes().map(F::from_canonical_u8));
@@ -55,9 +134,15 @@ fn build_keccak256_test(
             c,
             (input.len() as u32).to_le_bytes().map(F::from_canonical_u8),
         );
-        for (i, byte) in input.iter().enumerate() {
-            tester.write_cell(e, src + i, F::from_canonical_u8(*byte));
-        }
+
+        input.chunks(4).enumerate().for_each(|(i, chunk)| {
+            let chunk: [&u8; 4] = array::from_fn(|i| chunk.get(i).unwrap_or(&0));
+            tester.write(
+                2,
+                src as usize + i * 4,
+                chunk.map(|&x| F::from_canonical_u8(x)),
+            );
+        });
 
         tester.execute(
             &mut chip,
@@ -71,13 +156,15 @@ fn build_keccak256_test(
             ),
         );
         if let Some(output) = expected_output {
-            for (i, byte) in output.iter().enumerate() {
-                assert_eq!(tester.read_cell(e, dst + i), F::from_canonical_u8(*byte));
-            }
+            assert_eq!(
+                output.map(F::from_canonical_u8),
+                tester.read::<32>(e, dst as usize)
+            );
         }
         // shift dst to not deal with timestamps for pranking
         dst += 32;
     }
+
     let mut tester = tester.build().load(chip).load(bitwise_chip).finalize();
 
     let keccak_trace = tester.air_proof_inputs[2]
@@ -113,21 +200,34 @@ fn build_keccak256_test(
     tester
 }
 
+///////////////////////////////////////////////////////////////////////////////////////
+/// POSITIVE TESTS
+///
+/// Randomly generate computations and execute, ensuring that the generated trace
+/// passes all constraints.
+///////////////////////////////////////////////////////////////////////////////////////
 #[test]
-fn test_keccak256_negative() {
+fn rand_keccak256_test() {
     let mut rng = create_seeded_rng();
-    let mut hasher = tiny_keccak::Keccak::v256();
-    let input: Vec<_> = vec![0; 137];
-    hasher.update(&input);
-    let mut out = [0u8; 32];
-    hasher.finalize(&mut out);
-    out[0] = rng.gen();
-    let tester = build_keccak256_test(vec![(input, None, Some(out))]);
-    disable_debug_builder();
-    assert_eq!(
-        tester.simple_test().err(),
-        Some(VerificationError::OodEvaluationMismatch)
+    let mut tester = VmChipTestBuilder::default();
+    let (mut chip, bitwise_chip) = create_test_chips(&mut tester);
+
+    let num_ops: usize = 10;
+    for _ in 0..num_ops {
+        set_and_execute(&mut tester, &mut chip, &mut rng, KECCAK256, None, None);
+    }
+
+    set_and_execute(
+        &mut tester,
+        &mut chip,
+        &mut rng,
+        KECCAK256,
+        None,
+        Some(10000),
     );
+
+    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    tester.simple_test().expect("Verification failed");
 }
 
 // Keccak Known Answer Test (KAT) vectors from https://keccak.team/obsolete/KeccakKAT-3.zip.
@@ -152,7 +252,98 @@ fn test_keccak256_positive_kat_vectors() {
         let output = Vec::from_hex(output).unwrap();
         io.push((input, Some(output.try_into().unwrap()), None));
     }
-
     let tester = build_keccak256_test(io);
+
+    tester.simple_test().expect("Verification failed");
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+// NEGATIVE TESTS
+//
+// Given a fake trace of a single operation, setup a chip and run the test. We replace
+// part of the trace and check that the chip throws the expected error.
+//////////////////////////////////////////////////////////////////////////////////////
+#[test]
+fn test_keccak256_negative() {
+    let mut rng = create_seeded_rng();
+    let mut hasher = tiny_keccak::Keccak::v256();
+    let input: Vec<_> = vec![0; 137];
+    hasher.update(&input);
+    let mut out = [0u8; 32];
+    hasher.finalize(&mut out);
+    out[0] = rng.gen();
+    let tester = build_keccak256_test(vec![(input, None, Some(out))]);
+    disable_debug_builder();
+    assert_eq!(
+        tester.simple_test().err(),
+        Some(VerificationError::OodEvaluationMismatch)
+    );
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+/// DENSE TESTS
+///
+/// Ensure that the chip works as expected with dense records.
+/// We first execute some instructions with a [DenseRecordArena] and transfer the records
+/// to a [MatrixRecordArena]. After transferring we generate the trace and make sure that
+/// all the constraints pass.
+///////////////////////////////////////////////////////////////////////////////////////
+type KeccakVmChipDense = NewVmChipWrapper<F, KeccakVmAir, KeccakVmStep, DenseRecordArena>;
+
+fn create_test_chip_dense(tester: &mut VmChipTestBuilder<F>) -> KeccakVmChipDense {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = SharedBitwiseOperationLookupChip::<8>::new(bitwise_bus);
+
+    let mut chip = KeccakVmChipDense::new(
+        KeccakVmAir::new(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            bitwise_bus,
+            tester.address_bits(),
+            Rv32KeccakOpcode::CLASS_OFFSET,
+        ),
+        KeccakVmStep::new(
+            bitwise_chip.clone(),
+            Rv32KeccakOpcode::CLASS_OFFSET,
+            tester.address_bits(),
+        ),
+        tester.memory_helper(),
+    );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+    chip
+}
+
+#[test]
+fn dense_record_arena_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut sparse_chip, bitwise_chip) = create_test_chips(&mut tester);
+
+    {
+        let mut dense_chip = create_test_chip_dense(&mut tester);
+
+        let num_ops: usize = 10;
+        for _ in 0..num_ops {
+            set_and_execute(
+                &mut tester,
+                &mut dense_chip,
+                &mut rng,
+                KECCAK256,
+                None,
+                None,
+            );
+        }
+
+        let mut record_interpreter = dense_chip
+            .arena
+            .get_record_seeker::<_, KeccakVmRecordLayout>();
+        record_interpreter.transfer_to_matrix_arena(&mut sparse_chip.arena);
+    }
+
+    let tester = tester
+        .build()
+        .load(sparse_chip)
+        .load(bitwise_chip)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
