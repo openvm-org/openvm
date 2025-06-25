@@ -190,7 +190,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         let extract_data = |chip: &mut GenericAccessAdapterChip<F>,
                             ptr: usize,
                             layout: &AccessLayout| {
-            let record = chip.fancy_record_borrow_thing(ptr, layout.clone()).unwrap();
+            let record = chip.get_record_at_or_none(ptr, layout.clone()).unwrap();
             let timestamp = (*record.timestamp_and_mask) & !SPLIT_AFTER_FLAG & !MERGE_BEFORE_FLAG;
             let address_space = *record.address_space;
             let pointer = *record.pointer;
@@ -223,7 +223,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
                     let need_to_split = ids.iter().any(|&id| {
                         let (chip, ptr, layout) = &mut chip_data[id];
                         let record = chip
-                            .fancy_record_borrow_thing(*ptr, layout.as_ref().unwrap().clone())
+                            .get_record_at_or_none(*ptr, layout.as_ref().unwrap().clone())
                             .unwrap();
                         *record.timestamp_and_mask & SPLIT_AFTER_FLAG != 0
                     });
@@ -231,7 +231,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
                         for &id in ids.iter() {
                             let (chip, ptr, layout) = &mut chip_data[id];
                             let record = chip
-                                .fancy_record_borrow_thing(*ptr, layout.as_ref().unwrap().clone())
+                                .get_record_at_or_none(*ptr, layout.as_ref().unwrap().clone())
                                 .unwrap();
                             *record.timestamp_and_mask |= SPLIT_AFTER_FLAG;
                         }
@@ -260,7 +260,7 @@ pub(crate) trait GenericAccessAdapterChipTrait<F> {
     fn mark_to_split(&mut self, offset: usize);
     fn is_marked_to_split(&mut self, offset: usize) -> bool;
     fn extract_metadata_from(&self, offset: usize) -> Option<AccessLayout>;
-    fn fancy_record_borrow_thing(
+    fn get_record_at_or_none(
         &mut self,
         offset: usize,
         layout: AccessLayout,
@@ -579,7 +579,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
         }
     }
 
-    fn fancy_record_borrow_thing(
+    fn get_record_at_or_none(
         &mut self,
         offset: usize,
         layout: AccessLayout,
