@@ -550,13 +550,17 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
     }
 
     fn mark_to_split(&mut self, offset: usize) {
-        let header = self.arena.transmute_from::<AccessRecordHeader>(offset);
-        header.timestamp_and_mask |= SPLIT_AFTER_FLAG;
+        self.get_record_at_or_none(offset)
+            .unwrap()
+            .timestamp_and_mask |= SPLIT_AFTER_FLAG;
     }
 
     fn is_marked_to_split(&mut self, offset: usize) -> bool {
-        let header = self.arena.transmute_from::<AccessRecordHeader>(offset);
-        header.timestamp_and_mask & SPLIT_AFTER_FLAG != 0
+        self.get_record_at_or_none(offset)
+            .unwrap()
+            .timestamp_and_mask
+            & SPLIT_AFTER_FLAG
+            != 0
     }
 
     fn extract_metadata_from(&self, offset: usize) -> Option<AccessLayout> {

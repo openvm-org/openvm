@@ -496,15 +496,6 @@ impl DenseRecordArena {
         self.records_buffer.position() as usize
     }
 
-    /// Transmutes a single record of the given type from some offset and returns a mutable
-    /// reference to it.
-    // TODO(AG): remove this, replace with the record-based read we have in the near future
-    pub fn transmute_from<'a, T>(&mut self, offset_bytes: usize) -> &'a mut T {
-        let width = size_of::<T>();
-        debug_assert!(offset_bytes + width <= self.records_buffer.get_ref().len());
-        unsafe { &mut *(self.records_buffer.get_mut().as_mut_ptr().add(offset_bytes) as *mut T) }
-    }
-
     /// Allocates `count` bytes and returns as a mutable slice.
     pub fn alloc_bytes<'a>(&mut self, count: usize) -> &'a mut [u8] {
         let begin = self.records_buffer.position();
