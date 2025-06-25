@@ -9,12 +9,13 @@ use crate::{
     system::memory::INITIAL_TIMESTAMP,
 };
 
-pub type TracegenCtx = ();
-
 #[derive(Default, derive_new::new)]
-pub struct TracegenExecutionControl {
+pub struct TracegenCtx {
     pub instret_end: Option<u64>,
 }
+
+#[derive(Default)]
+pub struct TracegenExecutionControl;
 
 impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControl
 where
@@ -23,14 +24,18 @@ where
 {
     type Ctx = TracegenCtx;
 
-    fn initialize_context(&self) -> Self::Ctx {}
+    fn initialize_context(&self) -> Self::Ctx {
+        TracegenCtx { instret_end: None }
+    }
 
     fn should_suspend(
         &self,
         state: &mut VmSegmentState<F, Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
-        self.instret_end
+        state
+            .ctx
+            .instret_end
             .is_some_and(|instret_end| state.instret >= instret_end)
     }
 
