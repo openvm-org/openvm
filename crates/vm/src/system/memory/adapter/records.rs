@@ -1,9 +1,11 @@
-use crate::arch::{CustomBorrow, DenseRecordArena, RecordArena, SizedRecord};
-use openvm_circuit_primitives::AlignedBytesBorrow;
 use std::{
     borrow::{Borrow, BorrowMut},
     mem::{align_of, size_of},
 };
+
+use openvm_circuit_primitives::AlignedBytesBorrow;
+
+use crate::arch::{CustomBorrow, DenseRecordArena, RecordArena, SizedRecord};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, AlignedBytesBorrow, PartialEq, Eq, PartialOrd, Ord)]
