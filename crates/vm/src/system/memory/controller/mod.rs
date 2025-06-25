@@ -358,10 +358,10 @@ impl<F: PrimeField32> MemoryController<F> {
             .into_iter()
             .partition(|((addr_sp, _), _)| *addr_sp < NATIVE_AS);
 
-        self.handle_touched_blocks::<u8, CHUNK>(&mut final_memory, bytes, |x| {
+        self.handle_touched_blocks::<u8, CHUNK>(&mut final_memory, bytes, 4, |x| {
             F::from_canonical_u8(x)
         });
-        self.handle_touched_blocks::<F, CHUNK>(&mut final_memory, fs, |x| x);
+        self.handle_touched_blocks::<F, CHUNK>(&mut final_memory, fs, 1, |x| x);
 
         final_memory.into_iter().collect()
     }
@@ -370,13 +370,13 @@ impl<F: PrimeField32> MemoryController<F> {
         &mut self,
         final_memory: &mut Vec<((u32, u32), TimestampedValues<F, CHUNK>)>,
         touched_blocks: Vec<((u32, u32), AccessMetadata)>,
+        min_block_size: usize,
         convert: impl Fn(T) -> F,
     ) {
         let mut current_values = [T::default(); CHUNK];
         let mut current_cnt = 0;
         let mut current_address = MemoryAddress::new(0, 0);
         let mut current_timestamps = vec![0; CHUNK];
-        let min_block_size = 4 / size_of::<T>(); // TODO(AG): is this always the case?
         for ((addr_space, ptr), metadata) in touched_blocks {
             let AccessMetadata {
                 timestamp,

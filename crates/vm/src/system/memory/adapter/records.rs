@@ -36,7 +36,6 @@ pub(crate) struct AccessLayout {
     /// The size of the minimal block (1 or 4 depending on the address space)
     pub cell_size: usize,
     /// The size of the type in bytes (1 for u8, 4 for F).
-    // TODO(AG): is it true that cell_size * type_size = 4?
     pub type_size: usize,
 }
 
@@ -44,7 +43,7 @@ pub(crate) const MERGE_BEFORE_FLAG: u32 = 1 << 30;
 pub(crate) const SPLIT_AFTER_FLAG: u32 = 1 << 31;
 
 pub(crate) fn size_by_layout(layout: &AccessLayout) -> usize {
-    debug_assert_eq!(layout.cell_size * layout.type_size, 4);
+    debug_assert_eq!(layout.cell_size * layout.type_size % 4, 0);
     size_of::<AccessRecordHeader>() // header struct
         + layout.block_size * 2 * layout.type_size // data and prev_data
         + (layout.block_size / layout.cell_size) * size_of::<u32>() // timestamps
@@ -56,7 +55,7 @@ impl SizedRecord<AccessLayout> for AccessRecordMut<'_> {
     }
 
     fn alignment(layout: &AccessLayout) -> usize {
-        debug_assert_eq!(layout.cell_size * layout.type_size, 4);
+        debug_assert_eq!(layout.cell_size * layout.type_size % 4, 0);
         align_of::<AccessRecordHeader>()
     }
 }
