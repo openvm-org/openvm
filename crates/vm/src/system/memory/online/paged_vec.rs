@@ -21,6 +21,8 @@ impl<T: Copy + Default> PagedVec<T> {
         }
     }
 
+    /// Panics if the index is out of bounds. Creates a new page with default values if no page
+    /// exists.
     #[inline]
     pub fn get(&mut self, index: usize) -> &T {
         let page_idx = index / self.page_size;
@@ -50,6 +52,7 @@ impl<T: Copy + Default> PagedVec<T> {
         }
     }
 
+    /// Panics if the index is out of bounds. Creates new page before write when necessary.
     #[inline]
     pub fn set(&mut self, index: usize, value: T) {
         let page_idx = index / self.page_size;
