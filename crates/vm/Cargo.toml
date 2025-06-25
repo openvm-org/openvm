@@ -37,12 +37,15 @@ static_assertions.workspace = true
 getset.workspace = true
 dashmap.workspace = true
 
+[target.'cfg(any(unix, windows))'.dependencies]
+memmap2.workspace = true
+
 [dev-dependencies]
 test-log.workspace = true
 
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-stark-sdk.workspace = true
-openvm-native-circuit.workspace = true
+openvm-native-circuit = { workspace = true, features = ["test-utils"] }
 openvm-native-compiler.workspace = true
 openvm-rv32im-transpiler.workspace = true
 
@@ -52,6 +55,8 @@ parallel = ["openvm-stark-backend/parallel", "dashmap/rayon"]
 test-utils = ["dep:openvm-stark-sdk"]
 bench-metrics = ["dep:metrics", "openvm-stark-backend/bench-metrics"]
 function-span = ["bench-metrics"]
+# use basic memory instead of mmap:
+basic-memory = []
 # performance features:
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]

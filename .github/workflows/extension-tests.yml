@@ -39,6 +39,7 @@ jobs:
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=64cpu-linux-arm64
+      - image=ubuntu24-full-arm64
       - tag=extension-${{ matrix.extension.name }}
       - extras=s3-cache
 
@@ -67,7 +68,7 @@ jobs:
 
       - name: Run ${{ matrix.extension.name }} circuit crate tests
         working-directory: extensions/${{ matrix.extension.path }}/circuit
-        run: cargo nextest run --cargo-profile=fast
+        run: cargo nextest run --cargo-profile=fast --test-threads=32
 
       - name: Run ${{ matrix.extension.name }} guest crate tests
         if: hashFiles(format('extensions/{0}/guest', matrix.extension.path)) != ''
@@ -84,4 +85,4 @@ jobs:
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
           rustup component add rust-src --toolchain nightly-2025-02-14
-          cargo nextest run --cargo-profile=fast --no-tests=pass
+          cargo nextest run --cargo-profile=fast --profile=heavy --no-tests=pass

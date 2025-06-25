@@ -21,13 +21,16 @@ use rand::RngCore;
 
 use super::memory_to_partition;
 use crate::{
-    arch::testing::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
+    arch::{
+        ADDR_SPACE_OFFSET,
+        testing::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
+    },
     system::memory::{
         merkle::{
             columns::MemoryMerkleCols, tests::util::HashTestChip, MemoryDimensions,
             MemoryMerkleChip,
         },
-        paged_vec::{AddressMap, PAGE_SIZE},
+        AddressMap,
         tree::MemoryNode,
         Equipartition, MemoryImage,
     },
@@ -45,17 +48,16 @@ fn test<const CHUNK: usize>(
     final_memory: &MemoryImage,
 ) {
     let MemoryDimensions {
-        as_height,
+        addr_space_height,
         address_height,
-        as_offset,
     } = memory_dimensions;
     let merkle_bus = PermutationCheckBus::new(MEMORY_MERKLE_BUS);
 
     // checking validity of test data
     for ((address_space, pointer), value) in final_memory.items::<BabyBear>() {
         let label = pointer / CHUNK as u32;
-        assert!(address_space - as_offset < (1 << as_height));
-        assert!(pointer < ((CHUNK << address_height).div_ceil(PAGE_SIZE) * PAGE_SIZE) as u32);
+        assert!(address_space - ADDR_SPACE_OFFSET < (1 << addr_space_height));
+        assert!(pointer < (CHUNK << address_height) as u32);
         if unsafe { initial_memory.get::<BabyBear>((address_space, pointer)) } != value {
             assert!(touched_labels.contains(&(address_space, label)));
         }
@@ -133,7 +135,7 @@ fn test<const CHUNK: usize>(
                 initial_memory.get((address_space, address_label * CHUNK as u32 + i as u32))
             })
         };
-        let as_label = address_space - as_offset;
+        let as_label = address_space;
         interaction(
             PermutationInteractionType::Send,
             false,
@@ -191,8 +193,8 @@ fn random_test<const CHUNK: usize>(
     let mut next_u32 = || rng.next_u64() as u32;
 
     let as_cnt = 2;
-    let mut initial_memory = AddressMap::new(1, as_cnt, CHUNK << height);
-    let mut final_memory = AddressMap::new(1, as_cnt, CHUNK << height);
+    let mut initial_memory = AddressMap::new(vec![CHUNK << height; as_cnt]);
+    let mut final_memory = AddressMap::new(vec![CHUNK << height; as_cnt]);
     // TEMP[jpw]: override so address space uses field element
     initial_memory.cell_size = vec![4; as_cnt];
     final_memory.cell_size = vec![4; as_cnt];
@@ -232,9 +234,8 @@ fn random_test<const CHUNK: usize>(
 
     test::<CHUNK>(
         MemoryDimensions {
-            as_height: 1,
+            addr_space_height: 1,
             address_height: height,
-            as_offset: 1,
         },
         &initial_memory,
         touched_labels,
@@ -260,16 +261,13 @@ fn expand_test_2() {
 #[test]
 fn expand_test_no_accesses() {
     let memory_dimensions = MemoryDimensions {
-        as_height: 2,
+        addr_space_height: 2,
         address_height: 1,
-        as_offset: 7,
     };
     let mut hash_test_chip = HashTestChip::new();
 
     let memory = AddressMap::new(
-        memory_dimensions.as_offset,
-        1 << memory_dimensions.as_height,
-        1 << memory_dimensions.address_height,
+        vec![1 << memory_dimensions.address_height; 1 + (1 << memory_dimensions.addr_space_height)],
     );
     let tree = MemoryNode::<DEFAULT_CHUNK, _>::tree_from_memory(
         memory_dimensions,
@@ -299,17 +297,14 @@ fn expand_test_no_accesses() {
 #[should_panic]
 fn expand_test_negative() {
     let memory_dimensions = MemoryDimensions {
-        as_height: 2,
+        addr_space_height: 2,
         address_height: 1,
-        as_offset: 7,
     };
 
     let mut hash_test_chip = HashTestChip::new();
 
     let memory = AddressMap::new(
-        memory_dimensions.as_offset,
-        1 << memory_dimensions.as_height,
-        1 << memory_dimensions.address_height,
+        vec![1 << memory_dimensions.address_height; 1 + (1 << memory_dimensions.addr_space_height)],
     );
     let tree = MemoryNode::<DEFAULT_CHUNK, _>::tree_from_memory(
         memory_dimensions,

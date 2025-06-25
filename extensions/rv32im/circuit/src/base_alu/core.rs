@@ -235,7 +235,7 @@ where
         core_record.local_opcode = local_opcode as u8;
 
         self.adapter
-            .write(state.memory, instruction, &[rd].into(), &mut adapter_record);
+            .write(state.memory, instruction, [rd].into(), &mut adapter_record);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -316,7 +316,7 @@ where
 
         let [rs1, rs2] = self.adapter.read(state, instruction).into();
         let rd = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
-        self.adapter.write(state, instruction, &[rd].into());
+        self.adapter.write(state, instruction, [rd].into());
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

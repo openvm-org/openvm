@@ -39,4 +39,4 @@ default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
 
 [package.metadata.cargo-shear]
-ignored = ["derive_more", "openvm-stark-backend"]
+ignored = ["derive_more", "openvm-stark-backend", "rand"]

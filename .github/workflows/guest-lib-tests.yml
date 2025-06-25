@@ -39,6 +39,7 @@ jobs:
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=64cpu-linux-arm64
+      - image=ubuntu24-full-arm64
       - tag=crate-${{ matrix.crate.name }}
       - extras=s3-cache
 

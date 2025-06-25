@@ -5,17 +5,19 @@ use openvm_build::GuestOptions;
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher, ContinuationVmProof, ExecutionError,
-        GenerationError, SingleSegmentVmExecutor, SystemConfig, VirtualMachine, VmConfig,
+        SingleSegmentVmExecutor, VirtualMachine,
     },
-    system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
+    system::{
+        memory::merkle::public_values::UserPublicValuesProof, program::trace::VmCommittedExe,
+    },
+    utils::test_system_config_with_continuations,
 };
 use openvm_continuations::verifier::{
     common::types::VmVerifierPvs,
     leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
 };
-use openvm_native_circuit::{Native, NativeConfig};
+use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
-use openvm_native_recursion::types::InnerConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
@@ -25,11 +27,10 @@ use openvm_sdk::{
     keygen::AppProvingKey,
     Sdk, StdIn,
 };
-use openvm_stark_backend::{keygen::types::LinearConstraint, p3_matrix::Matrix};
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        setup_tracing, FriParameters,
+        FriParameters,
     },
     engine::{StarkEngine, StarkFriEngine},
     openvm_stark_backend::p3_field::FieldAlgebra,
@@ -65,7 +66,6 @@ use {
 };
 
 type SC = BabyBearPoseidon2Config;
-type C = InnerConfig;
 type F = BabyBear;
 
 const NUM_PUB_VALUES: usize = 16;
@@ -123,25 +123,21 @@ fn run_leaf_verifier(
 }
 
 fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<VmCommittedExe<SC>> {
-    let program = {
-        let n = 200;
-        let mut builder = Builder::<C>::default();
-        let a: Felt<F> = builder.eval(F::ZERO);
-        let b: Felt<F> = builder.eval(F::ONE);
-        let c: Felt<F> = builder.uninit();
-        builder.range(0, n).for_each(|_, builder| {
-            builder.assign(&c, a + b);
-            builder.assign(&a, b);
-            builder.assign(&b, c);
-        });
-        builder.halt();
-        builder.compile_isa()
-    };
-    Sdk::new()
-        .commit_app_exe(
-            FriParameters::new_for_testing(app_log_blowup),
-            program.into(),
+    let sdk = Sdk::new();
+    let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
+    pkg_dir.push("guest/fib");
+    let vm_config = app_vm_config_for_test();
+    let elf = sdk
+        .build(
+            Default::default(),
+            &vm_config,
+            pkg_dir,
+            &Default::default(),
+            None,
         )
+        .unwrap();
+    let exe = sdk.transpile(elf, vm_config.transpiler()).unwrap();
+    sdk.commit_app_exe(FriParameters::new_for_testing(app_log_blowup), exe)
         .unwrap()
 }
 
@@ -172,16 +168,22 @@ fn agg_stark_config_for_test() -> AggStarkConfig {
     }
 }
 
-fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
+fn app_vm_config_for_test() -> SdkVmConfig {
+    let config = test_system_config_with_continuations()
+        .with_max_segment_len(200)
+        .with_public_values(NUM_PUB_VALUES);
+    SdkVmConfig::builder()
+        .system(SdkSystemConfig { config })
+        .rv32i(Default::default())
+        .rv32m(Default::default())
+        .io(Default::default())
+        .build()
+}
+
+fn small_test_app_config(app_log_blowup: usize) -> AppConfig<SdkVmConfig> {
     AppConfig {
         app_fri_params: FriParameters::new_for_testing(app_log_blowup).into(),
-        app_vm_config: NativeConfig::new(
-            SystemConfig::default()
-                .with_max_segment_len(200)
-                .with_continuations()
-                .with_public_values(NUM_PUB_VALUES),
-            Native,
-        ),
+        app_vm_config: app_vm_config_for_test(),
         leaf_fri_params: FriParameters::new_for_testing(LEAF_LOG_BLOWUP).into(),
         compiler_options: CompilerOptions {
             enable_cycle_tracker: true,
@@ -192,10 +194,11 @@ fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
 
 #[test]
 fn test_public_values_and_leaf_verification() {
-    let app_log_blowup = 3;
+    let app_log_blowup = 1;
     let app_config = small_test_app_config(app_log_blowup);
     let app_pk = AppProvingKey::keygen(app_config);
     let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
+    let pc_start = app_committed_exe.exe.pc_start;
 
     let agg_stark_config = agg_stark_config_for_test();
     let leaf_vm_config = agg_stark_config.leaf_vm_config();
@@ -248,7 +251,10 @@ fn test_public_values_and_leaf_verification() {
 
         assert_eq!(leaf_vm_pvs.app_commit, expected_app_commit);
         assert_eq!(leaf_vm_pvs.connector.is_terminate, F::ZERO);
-        assert_eq!(leaf_vm_pvs.connector.initial_pc, F::ZERO);
+        assert_eq!(
+            leaf_vm_pvs.connector.initial_pc,
+            F::from_canonical_u32(pc_start)
+        );
         (
             leaf_vm_pvs.connector.final_pc,
             leaf_vm_pvs.memory.final_root,
@@ -256,7 +262,12 @@ fn test_public_values_and_leaf_verification() {
     };
 
     let pv_proof = UserPublicValuesProof::compute(
-        app_vm.config().system.memory_config.memory_dimensions(),
+        app_vm
+            .config()
+            .system
+            .config
+            .memory_config
+            .memory_dimensions(),
         NUM_PUB_VALUES,
         &vm_poseidon2_hasher(),
         app_vm_result.final_memory.as_ref().unwrap(),
@@ -427,33 +438,8 @@ fn test_static_verifier_custom_pv_handler() {
 #[cfg(feature = "evm-verify")]
 #[test]
 fn test_e2e_proof_generation_and_verification_with_pvs() {
-    let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    pkg_dir.push("guest/fib");
-
-    let vm_config = SdkVmConfig::builder()
-        .system(SdkSystemConfig {
-            config: SystemConfig::default()
-                .with_max_segment_len(200)
-                .with_continuations()
-                .with_public_values(NUM_PUB_VALUES),
-        })
-        .rv32i(Default::default())
-        .rv32m(Default::default())
-        .io(Default::default())
-        .native(Default::default())
-        .build();
-
+    let vm_config = app_vm_config_for_test();
     let sdk = Sdk::new();
-    let elf = sdk
-        .build(
-            Default::default(),
-            &vm_config,
-            pkg_dir,
-            &Default::default(),
-            None,
-        )
-        .unwrap();
-    let exe = sdk.transpile(elf, vm_config.transpiler()).unwrap();
 
     let app_log_blowup = 1;
     let app_fri_params = FriParameters::new_for_testing(app_log_blowup);
@@ -462,10 +448,7 @@ fn test_e2e_proof_generation_and_verification_with_pvs() {
         AppConfig::new_with_leaf_fri_params(app_fri_params, vm_config, leaf_fri_params);
     app_config.compiler_options.enable_cycle_tracker = true;
 
-    let app_committed_exe = sdk
-        .commit_app_exe(app_fri_params, exe)
-        .expect("failed to commit exe");
-
+    let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
     let app_pk = sdk.app_keygen(app_config).unwrap();
 
     let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
@@ -499,25 +482,11 @@ fn test_e2e_proof_generation_and_verification_with_pvs() {
 #[test]
 fn test_sdk_guest_build_and_transpile() {
     let sdk = Sdk::new();
-    let guest_opts = GuestOptions::default()
-        // .with_features(vec!["zkvm"])
-        // .with_options(vec!["--release"]);
-        ;
+    let guest_opts = GuestOptions::default();
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     pkg_dir.push("guest/fib");
 
-    let vm_config = SdkVmConfig::builder()
-        .system(SdkSystemConfig {
-            config: SystemConfig::default()
-                .with_max_segment_len(200)
-                .with_continuations()
-                .with_public_values(NUM_PUB_VALUES),
-        })
-        .rv32i(Default::default())
-        .rv32m(Default::default())
-        .io(Default::default())
-        .native(Default::default())
-        .build();
+    let vm_config = app_vm_config_for_test();
 
     let one = sdk
         .build(
@@ -550,33 +519,11 @@ fn test_sdk_guest_build_and_transpile() {
 fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
     // generate a proof
     let sdk = Sdk::new();
-    let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    pkg_dir.push("guest/fib");
-
-    let vm_config = SdkVmConfig::builder()
-        .system(SdkSystemConfig {
-            config: SystemConfig::default()
-                .with_max_segment_len(200)
-                .with_continuations()
-                .with_public_values(NUM_PUB_VALUES),
-        })
-        .rv32i(Default::default())
-        .rv32m(Default::default())
-        .io(Default::default())
-        .native(Default::default())
-        .build();
-    let elf = sdk.build(
-        Default::default(),
-        &vm_config,
-        pkg_dir,
-        &Default::default(),
-        None,
-    )?;
+    let vm_config = app_vm_config_for_test();
     assert!(vm_config.system.config.continuation_enabled);
-    let exe = sdk.transpile(elf, vm_config.transpiler())?;
     let fri_params = FriParameters::standard_fast();
     let app_config = AppConfig::new(fri_params, vm_config);
-    let committed_exe = sdk.commit_app_exe(fri_params, exe)?;
+    let committed_exe = app_committed_exe_for_test(fri_params.log_blowup);
     let app_pk = Arc::new(sdk.app_keygen(app_config)?);
     let app_proof = sdk.generate_app_proof(app_pk.clone(), committed_exe, StdIn::default())?;
     let mut app_proof_bytes = Vec::new();

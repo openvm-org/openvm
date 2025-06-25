@@ -11,15 +11,14 @@ use openvm_circuit::{
         execution_mode::{e1::E1ExecutionControl, tracegen::TracegenExecutionControl},
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         interpreter::InterpretedInstance,
-        ChipId, MemoryConfig, SingleSegmentVmExecutor, SystemConfig, SystemTraceHeights,
-        VirtualMachine, VmComplexTraceHeights, VmConfig, VmInventoryTraceHeights,
-        VmSegmentExecutor, VmSegmentState,
+        ChipId, SingleSegmentVmExecutor, SystemTraceHeights, VirtualMachine, VmComplexTraceHeights,
+        VmConfig, VmInventoryTraceHeights, VmSegmentExecutor, VmSegmentState,
     },
     system::{
         memory::{MemoryTraceHeights, VolatileMemoryTraceHeights, CHUNK},
         program::trace::VmCommittedExe,
     },
-    utils::{air_test, air_test_with_min_segments},
+    utils::{air_test, air_test_with_min_segments, test_system_config},
 };
 use openvm_instructions::{
     exe::VmExe,
@@ -30,7 +29,7 @@ use openvm_instructions::{
     SysPhantom,
     SystemOpcode::*,
 };
-use openvm_native_circuit::NativeConfig;
+use openvm_native_circuit::{test_native_config, test_native_continuations_config, NativeConfig};
 use openvm_native_compiler::{
     FieldArithmeticOpcode::*, FieldExtensionOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*,
     NativeLoadStoreOpcode::*, NativePhantom,
@@ -57,19 +56,6 @@ where
 {
     const MAX_MEMORY: usize = 1 << 29;
     rng.gen_range(0..MAX_MEMORY - len) / len * len
-}
-
-fn test_native_config() -> NativeConfig {
-    NativeConfig {
-        system: SystemConfig::new(3, MemoryConfig::new(2, 1, 16, 29, 15, 32, 1024), 0),
-        native: Default::default(),
-    }
-}
-
-fn test_native_continuations_config() -> NativeConfig {
-    let mut config = test_native_config();
-    config.system = config.system.with_continuations();
-    config
 }
 
 #[test]
@@ -286,7 +272,7 @@ fn test_vm_1_optional_air() {
 fn test_vm_public_values() {
     setup_tracing();
     let num_public_values = 100;
-    let config = SystemConfig::default().with_public_values(num_public_values);
+    let config = test_system_config().with_public_values(num_public_values);
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
     let vm = VirtualMachine::new(engine, config.clone());
@@ -376,7 +362,7 @@ fn test_vm_1_persistent() {
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let config = test_native_continuations_config();
     let ptr_max_bits = config.system.memory_config.pointer_max_bits;
-    let as_height = config.system.memory_config.as_height;
+    let addr_space_height = config.system.memory_config.addr_space_height;
     let airs = VmConfig::<BabyBear>::create_chip_complex(&config)
         .unwrap()
         .airs::<BabyBearPoseidon2Config>();
@@ -428,15 +414,15 @@ fn test_vm_1_persistent() {
         );
         let mut digest = [BabyBear::ZERO; CHUNK];
         let compression = vm_poseidon2_hasher();
-        for _ in 0..ptr_max_bits + as_height - 2 {
+        for _ in 0..ptr_max_bits + addr_space_height - 2 {
             digest = compression.compress(&digest, &digest);
         }
         assert_eq!(
             merkle_air_proof_input.raw.public_values[..8],
             // The value when you start with zeros and repeatedly hash the value with itself
-            // ptr_max_bits + as_height - 2 times.
-            // The height of the tree is ptr_max_bits + as_height - log2(8). The leaf also must be
-            // hashed once with padding for security.
+            // ptr_max_bits + addr_space_height - 2 times.
+            // The height of the tree is ptr_max_bits + addr_space_height - log2(8). The leaf also
+            // must be hashed once with padding for security.
             digest
         );
     }
@@ -748,7 +734,7 @@ fn test_vm_hint() {
     type F = BabyBear;
 
     let input_stream: Vec<Vec<F>> = vec![vec![F::TWO]];
-    let config = NativeConfig::new(SystemConfig::default(), Default::default());
+    let config = test_native_config();
     air_test_with_min_segments(config, program, input_stream, 1);
 }
 

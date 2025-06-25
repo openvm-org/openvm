@@ -1,6 +1,6 @@
 use openvm_circuit::{
-    arch::{instructions::program::Program, SystemConfig},
-    system::memory::tree::public_values::PUBLIC_VALUES_ADDRESS_SPACE_OFFSET,
+    arch::{instructions::program::Program, SystemConfig, ADDR_SPACE_OFFSET},
+    system::memory::merkle::public_values::PUBLIC_VALUES_ADDRESS_SPACE_OFFSET,
 };
 use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use openvm_native_recursion::{
@@ -113,7 +113,7 @@ impl LeafVmVerifierConfig {
         builder: &mut Builder<C>,
     ) -> ([Felt<F>; DIGEST_SIZE], [Felt<F>; DIGEST_SIZE]) {
         let memory_dimensions = self.app_system_config.memory_config.memory_dimensions();
-        let pv_as = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + memory_dimensions.as_offset;
+        let pv_as = PUBLIC_VALUES_ADDRESS_SPACE_OFFSET + ADDR_SPACE_OFFSET;
         let pv_start_idx = memory_dimensions.label_to_index((pv_as, 0));
         let pv_height = log2_strict_usize(self.app_system_config.num_public_values / DIGEST_SIZE);
         let proof_len = memory_dimensions.overall_height() - pv_height;

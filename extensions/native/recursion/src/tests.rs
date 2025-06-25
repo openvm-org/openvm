@@ -1,7 +1,7 @@
 use std::{panic::catch_unwind, sync::Arc};
 
 use openvm_circuit::utils::gen_vm_program_test_proof_input;
-use openvm_native_circuit::NativeConfig;
+use openvm_native_circuit::{test_native_config, NativeConfig};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::BusIndex,
@@ -148,7 +148,7 @@ fn test_optional_air() {
     let pk = keygen_builder.generate_pk();
 
     let m_advice = new_from_inner_multi_vk(&pk.get_vk());
-    let vm_config = NativeConfig::aggregation(4, 7);
+    let vm_config = test_native_config();
     let program = VerifierProgram::build(m_advice, &fri_params);
 
     // Case 1: All AIRs are present.

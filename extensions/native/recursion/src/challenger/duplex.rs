@@ -189,7 +189,7 @@ impl<C: Config> ChallengerVariable<C> for DuplexChallengerVariable<C> {
 
 #[cfg(test)]
 mod tests {
-    use openvm_native_circuit::execute_program;
+    use openvm_native_circuit::test_execute_program;
     use openvm_native_compiler::{
         asm::{AsmBuilder, AsmConfig},
         ir::Felt,
@@ -241,7 +241,7 @@ mod tests {
         builder.halt();
 
         let program = builder.compile_isa();
-        execute_program(program, vec![]);
+        test_execute_program(program, vec![]);
     }
 
     #[test]

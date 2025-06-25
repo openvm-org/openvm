@@ -557,7 +557,7 @@ impl<F: PrimeField32> SystemComplex<F> {
         let memory_controller = if config.continuation_enabled {
             MemoryController::with_persistent_memory(
                 memory_bus,
-                config.memory_config,
+                config.memory_config.clone(),
                 range_checker.clone(),
                 PermutationCheckBus::new(bus_idx_mgr.new_bus_idx()),
                 PermutationCheckBus::new(bus_idx_mgr.new_bus_idx()),
@@ -565,7 +565,7 @@ impl<F: PrimeField32> SystemComplex<F> {
         } else {
             MemoryController::with_volatile_memory(
                 memory_bus,
-                config.memory_config,
+                config.memory_config.clone(),
                 range_checker.clone(),
             )
         };
@@ -938,34 +938,6 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     ) {
         let memory_controller = &mut self.base.memory_controller;
         memory_controller.set_override_trace_heights(overridden_system_heights.memory);
-    }
-
-    /// Return dynamic trace heights of all chips in order, or 0 if
-    /// chip has constant height.
-    // Used for continuation segmentation logic, so this is performance-sensitive.
-    // Return iterator so we can break early.
-    pub(crate) fn dynamic_trace_heights(&self) -> impl Iterator<Item = usize> + '_
-    where
-        E: ChipUsageGetter,
-        P: ChipUsageGetter,
-    {
-        // program_chip, connector_chip
-        [0, 0]
-            .into_iter()
-            .chain(self._public_values_chip().map(|c| c.current_trace_height()))
-            .chain(self.memory_controller().current_trace_heights())
-            .chain(self.chips_excluding_pv_chip().map(|c| match c {
-                // executor should never be constant height
-                Either::Executor(c) => c.current_trace_height(),
-                Either::Periphery(c) => {
-                    if c.constant_trace_height().is_some() {
-                        0
-                    } else {
-                        c.current_trace_height()
-                    }
-                }
-            }))
-            .chain([0]) // range_checker_chip
     }
 
     /// Return trace cells of all chips in order.

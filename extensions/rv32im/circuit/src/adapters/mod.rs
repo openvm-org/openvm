@@ -3,8 +3,8 @@ use std::ops::Mul;
 use openvm_circuit::{
     arch::{execution_mode::E1E2ExecutionCtx, VmStateMut},
     system::memory::{
+        merkle::public_values::PUBLIC_VALUES_AS,
         online::{GuestMemory, TracingMemory},
-        tree::public_values::PUBLIC_VALUES_AS,
     },
 };
 use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
@@ -81,7 +81,7 @@ pub fn memory_write<const N: usize>(
     memory: &mut GuestMemory,
     address_space: u32,
     ptr: u32,
-    data: &[u8; N],
+    data: [u8; N],
 ) {
     debug_assert!(
         address_space == RV32_REGISTER_AS
@@ -122,7 +122,7 @@ pub fn timed_write<F: PrimeField32, const N: usize>(
     memory: &mut TracingMemory<F>,
     address_space: u32,
     ptr: u32,
-    data: &[u8; N],
+    data: [u8; N],
 ) -> (u32, [u8; N]) {
     // TODO(ayush): should this allow public values address space
     debug_assert!(
@@ -182,7 +182,7 @@ pub fn tracing_write<F, const N: usize>(
     memory: &mut TracingMemory<F>,
     address_space: u32,
     ptr: u32,
-    data: &[u8; N],
+    data: [u8; N],
     prev_timestamp: &mut u32,
     prev_data: &mut [u8; N],
 ) where
@@ -212,7 +212,7 @@ pub fn memory_write_from_state<F, Ctx, const N: usize>(
     state: &mut VmStateMut<F, GuestMemory, Ctx>,
     address_space: u32,
     ptr: u32,
-    data: &[u8; N],
+    data: [u8; N],
 ) where
     Ctx: E1E2ExecutionCtx,
 {

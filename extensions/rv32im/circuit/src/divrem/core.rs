@@ -459,7 +459,7 @@ where
         };
 
         self.adapter
-            .write(state.memory, instruction, &[rd].into(), &mut adapter_record);
+            .write(state.memory, instruction, [rd].into(), &mut adapter_record);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -607,7 +607,7 @@ where
             r.map(|x| x as u8)
         };
 
-        self.adapter.write(state, instruction, &[rd].into());
+        self.adapter.write(state, instruction, [rd].into());
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

@@ -58,6 +58,7 @@ pub struct Fp2AddSubChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE:
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
     Fp2AddSubChip<F, BLOCKS, BLOCK_SIZE>
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         execution_bridge: ExecutionBridge,
         memory_bridge: MemoryBridge,

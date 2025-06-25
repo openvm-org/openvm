@@ -1,4 +1,4 @@
-use openvm_native_circuit::execute_program;
+use openvm_native_circuit::test_execute_program;
 use openvm_native_compiler::{asm::AsmBuilder, ir::Felt};
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, Field, FieldAlgebra};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -29,5 +29,5 @@ fn test_hint_bits_felt() {
 
     let program = builder.compile_isa();
     println!("{}", program);
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }

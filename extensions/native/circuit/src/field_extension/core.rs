@@ -197,7 +197,7 @@ where
         );
 
         self.adapter
-            .write(state.memory, instruction, &x, &mut adapter_record);
+            .write(state.memory, instruction, x, &mut adapter_record);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -261,7 +261,7 @@ where
             z_val,
         );
 
-        self.adapter.write(state, instruction, &x_val);
+        self.adapter.write(state, instruction, x_val);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

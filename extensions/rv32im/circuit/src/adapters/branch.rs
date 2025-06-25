@@ -171,7 +171,7 @@ where
         &self,
         _memory: &mut TracingMemory<F>,
         _instruction: &Instruction<F>,
-        _data: &Self::WriteData,
+        _data: Self::WriteData,
         _record: &mut Self::RecordMut<'_>,
     ) {
         // This function is intentionally left empty
@@ -241,7 +241,7 @@ where
         &self,
         _state: &mut VmStateMut<F, GuestMemory, Ctx>,
         _instruction: &Instruction<F>,
-        _data: &Self::WriteData,
+        _data: Self::WriteData,
     ) where
         Ctx: E1E2ExecutionCtx,
     {

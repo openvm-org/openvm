@@ -1,4 +1,4 @@
-use openvm_native_circuit::execute_program;
+use openvm_native_circuit::test_execute_program;
 use openvm_native_compiler::{asm::AsmBuilder, ir::Var};
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -50,7 +50,7 @@ fn test_compiler_conditionals() {
     builder.halt();
 
     let program = builder.compile_isa();
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }
 
 #[test]
@@ -79,7 +79,7 @@ fn test_compiler_conditionals_v2() {
     builder.halt();
 
     let program = builder.compile_isa();
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }
 
 #[test]

@@ -106,7 +106,7 @@ fn set_and_execute(
 #[test_case(LOADW, 100)]
 fn rand_native_loadstore_test(opcode: NativeLoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default_native();
     let mut chip = create_test_chip(&tester);
 
     for _ in 0..num_ops {
@@ -139,7 +139,7 @@ fn run_negative_native_loadstore_test(
     error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default_native();
     let mut chip = create_test_chip(&tester);
 
     set_and_execute(&mut tester, &mut chip, &mut rng, opcode);

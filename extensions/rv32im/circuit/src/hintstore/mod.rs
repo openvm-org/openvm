@@ -470,7 +470,7 @@ where
                 state.memory,
                 RV32_MEMORY_AS,
                 record.inner.mem_ptr + (RV32_REGISTER_NUM_LIMBS * idx) as u32,
-                &data,
+                data,
                 &mut record.var[idx].data_write_aux.prev_timestamp,
                 &mut record.var[idx].data_write_aux.prev_data,
             );
@@ -700,7 +700,7 @@ where
                     state,
                     RV32_MEMORY_AS,
                     mem_ptr + (idx * RV32_REGISTER_NUM_LIMBS) as u32,
-                    &chunk.try_into().unwrap(),
+                    chunk.try_into().unwrap(),
                 );
             });
 

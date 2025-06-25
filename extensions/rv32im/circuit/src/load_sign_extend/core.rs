@@ -250,7 +250,7 @@ where
         self.adapter.write(
             state.memory,
             instruction,
-            &write_data.map(u32::from),
+            write_data.map(u32::from),
             &mut adapter_record,
         );
 
@@ -324,7 +324,7 @@ where
         let write_data = run_write_data_sign_extend(local_opcode, read_data, shift_amount as usize);
 
         self.adapter
-            .write(state, instruction, &write_data.map(u32::from));
+            .write(state, instruction, write_data.map(u32::from));
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())

@@ -27,7 +27,7 @@ use crate::{
 impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     pub fn finalize(
         &mut self,
-        initial_memory: MemoryImage,
+        initial_memory: &MemoryImage,
         final_memory: &Equipartition<F, CHUNK>,
         hasher: &mut impl HasherChip<CHUNK, F>,
     ) {

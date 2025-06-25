@@ -310,7 +310,7 @@ fn create_test_chip_dense(tester: &mut VmChipTestBuilder<F>) -> Rv32AuipcChipDen
 fn dense_record_arena_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut sparse_chip, bitwise_chip) = create_test_chip(&mut tester);
+    let (mut sparse_chip, bitwise_chip) = create_test_chip(&tester);
 
     {
         let mut dense_chip = create_test_chip_dense(&mut tester);

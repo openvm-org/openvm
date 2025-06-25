@@ -9,8 +9,8 @@ use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
     arch::{
-        InitFileGenerator, SystemConfig, SystemExecutor, SystemPeriphery, VmChipComplex, VmConfig,
-        VmInventoryError,
+        instructions::NATIVE_AS, InitFileGenerator, SystemConfig, SystemExecutor, SystemPeriphery,
+        VmChipComplex, VmConfig, VmInventoryError,
     },
     circuit_derive::{Chip, ChipUsageGetter},
     derive::{AnyEnum, InsExecutorE1, InstructionExecutor},
@@ -46,8 +46,8 @@ use serde::{Deserialize, Serialize};
 use crate::F;
 
 #[derive(Builder, Clone, Debug, Serialize, Deserialize)]
+#[serde(from = "SdkVmConfigWithDefaultDeser")]
 pub struct SdkVmConfig {
-    #[serde(default)]
     pub system: SdkSystemConfig,
 
     pub rv32i: Option<UnitStruct>,
@@ -333,5 +333,51 @@ impl From<Native> for UnitStruct {
 impl From<CastFExtension> for UnitStruct {
     fn from(_: CastFExtension) -> Self {
         UnitStruct {}
+    }
+}
+
+#[derive(Deserialize)]
+struct SdkVmConfigWithDefaultDeser {
+    #[serde(default)]
+    pub system: SdkSystemConfig,
+
+    pub rv32i: Option<UnitStruct>,
+    pub io: Option<UnitStruct>,
+    pub keccak: Option<UnitStruct>,
+    pub sha256: Option<UnitStruct>,
+    pub native: Option<UnitStruct>,
+    pub castf: Option<UnitStruct>,
+
+    pub rv32m: Option<Rv32M>,
+    pub bigint: Option<Int256>,
+    pub modular: Option<ModularExtension>,
+    pub fp2: Option<Fp2Extension>,
+    pub pairing: Option<PairingExtension>,
+    pub ecc: Option<WeierstrassExtension>,
+}
+
+impl From<SdkVmConfigWithDefaultDeser> for SdkVmConfig {
+    fn from(config: SdkVmConfigWithDefaultDeser) -> Self {
+        let mut system = config.system;
+        if config.native.is_none() && config.castf.is_none() {
+            // There should be no need to write to native address space if Native extension and
+            // CastF extension are not enabled.
+            system.config.memory_config.addr_space_sizes[NATIVE_AS as usize] = 0;
+        }
+        Self {
+            system,
+            rv32i: config.rv32i,
+            io: config.io,
+            keccak: config.keccak,
+            sha256: config.sha256,
+            native: config.native,
+            castf: config.castf,
+            rv32m: config.rv32m,
+            bigint: config.bigint,
+            modular: config.modular,
+            fp2: config.fp2,
+            pairing: config.pairing,
+            ecc: config.ecc,
+        }
     }
 }

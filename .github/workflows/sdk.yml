@@ -25,6 +25,7 @@ jobs:
     runs-on:
       - runs-on=${{ github.run_id }}
       - family=m7a.24xlarge
+      - image=ubuntu24-full-x64
       - disk=large
       - extras=s3-cache
 
@@ -96,4 +97,4 @@ jobs:
         working-directory: crates/sdk
         run: |
           export RUST_BACKTRACE=1
-          cargo nextest run --cargo-profile=fast --test-threads=2 --features parallel,evm-verify
+          cargo nextest run --cargo-profile=fast --features parallel,evm-verify

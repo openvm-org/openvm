@@ -289,7 +289,7 @@ where
         // TODO(ayush): avoid this conversion
         let a = a.map(|x| x as u8);
         self.adapter
-            .write(state.memory, instruction, &[a].into(), &mut adapter_record);
+            .write(state.memory, instruction, [a].into(), &mut adapter_record);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -376,7 +376,7 @@ where
         let (rd, _, _, _, _) = run_mulh::<NUM_LIMBS, LIMB_BITS>(mulh_opcode, &rs1, &rs2);
         let rd = rd.map(|x| x as u8);
 
-        self.adapter.write(state, instruction, &[rd].into());
+        self.adapter.write(state, instruction, [rd].into());
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

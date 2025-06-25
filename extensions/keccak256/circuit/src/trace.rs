@@ -91,7 +91,7 @@ impl<'a> CustomBorrow<'a, KeccakVmRecordMut<'a>, KeccakVmRecordLayout> for [u8] 
         let (record_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<KeccakVmRecordHeader>()) };
 
-        let num_reads = (layout.metadata.len as usize).div_ceil(KECCAK_WORD_SIZE);
+        let num_reads = layout.metadata.len.div_ceil(KECCAK_WORD_SIZE);
         // Note: each read is `KECCAK_WORD_SIZE` bytes
         let (input, rest) = unsafe { rest.split_at_mut_unchecked(num_reads * KECCAK_WORD_SIZE) };
         let (_, read_aux_buf, _) = unsafe { rest.align_to_mut::<MemoryReadAuxRecord>() };
@@ -114,7 +114,7 @@ impl<'a> CustomBorrow<'a, KeccakVmRecordMut<'a>, KeccakVmRecordLayout> for [u8] 
 
 impl SizedRecord<KeccakVmRecordLayout> for KeccakVmRecordMut<'_> {
     fn size(layout: &KeccakVmRecordLayout) -> usize {
-        let num_reads = (layout.metadata.len as usize).div_ceil(KECCAK_WORD_SIZE);
+        let num_reads = layout.metadata.len.div_ceil(KECCAK_WORD_SIZE);
         let mut total_len = size_of::<KeccakVmRecordHeader>();
         total_len += num_reads * KECCAK_WORD_SIZE;
         // Align the pointer to the alignment of `MemoryReadAuxRecord`

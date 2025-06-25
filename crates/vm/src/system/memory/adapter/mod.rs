@@ -333,7 +333,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
         self.arena
             .set_capacity(trace_height * size_of::<AccessAdapterCols<F, N>>());
     }
-    fn generate_trace(mut self) -> RowMajorMatrix<F>
+    fn generate_trace(self) -> RowMajorMatrix<F>
     where
         F: PrimeField32,
     {

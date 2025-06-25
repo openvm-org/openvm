@@ -239,7 +239,7 @@ where
         let rd = run_auipc(*state.pc, core_record.imm);
 
         self.adapter
-            .write(state.memory, instruction, &rd, &mut adapter_record);
+            .write(state.memory, instruction, rd, &mut adapter_record);
 
         // TODO(ayush): add increment_pc function to vmstate
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
@@ -308,7 +308,7 @@ where
 
         let rd = run_auipc(*state.pc, imm.as_canonical_u32());
 
-        self.adapter.write(state, instruction, &rd);
+        self.adapter.write(state, instruction, rd);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

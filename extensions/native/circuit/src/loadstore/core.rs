@@ -182,7 +182,7 @@ where
         };
 
         self.adapter
-            .write(state.memory, instruction, &data, &mut adapter_record);
+            .write(state.memory, instruction, data, &mut adapter_record);
 
         core_record.pointer_read = pointer_read;
         core_record.data = data;
@@ -248,7 +248,7 @@ where
             data_read
         };
 
-        self.adapter.write(state, instruction, &data);
+        self.adapter.write(state, instruction, data);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

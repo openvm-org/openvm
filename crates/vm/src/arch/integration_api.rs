@@ -218,6 +218,7 @@ where
 /// in scenarios involving chips that:
 /// - have a single row per record, and
 /// - have trace row = [adapter_row, core_row]
+///
 /// **NOTE**: `M` is the metadata type that implements `AdapterCoreMetadata`
 #[derive(Debug, Clone, Default)]
 pub struct AdapterCoreLayout<M> {
@@ -292,6 +293,7 @@ pub type EmptyAdapterCoreLayout<F, AS> = AdapterCoreLayout<AdapterCoreEmptyMetad
 /// in scenarios involving chips that:
 /// - can have multiple rows per record, and
 /// - have possibly variable length records
+///
 /// **NOTE**: `M` is the metadata type that implements `MultiRowMetadata`
 #[derive(Debug, Clone, Default, derive_new::new)]
 pub struct MultiRowLayout<M> {
@@ -544,7 +546,7 @@ impl DenseRecordArena {
     }
 
     // Returns a [RecordSeeker] on the allocated buffer
-    pub fn get_record_seeker<'a, R, L>(&'a mut self) -> RecordSeeker<'a, DenseRecordArena, R, L> {
+    pub fn get_record_seeker<R, L>(&mut self) -> RecordSeeker<DenseRecordArena, R, L> {
         RecordSeeker::new(self.allocated_mut())
     }
 }
@@ -692,11 +694,11 @@ where
 {
     // A utility function to get the aligned widths of the adapter and core records
     fn get_aligned_sizes(layout: &AdapterCoreLayout<M>) -> (usize, usize) {
-        let adapter_alignment = A::alignment(&layout);
-        let core_alignment = C::alignment(&layout);
-        let adapter_size = A::size(&layout);
+        let adapter_alignment = A::alignment(layout);
+        let core_alignment = C::alignment(layout);
+        let adapter_size = A::size(layout);
         let aligned_adapter_size = adapter_size.next_multiple_of(core_alignment);
-        let core_size = C::size(&layout);
+        let core_size = C::size(layout);
         let aligned_core_size = (aligned_adapter_size + core_size)
             .next_multiple_of(adapter_alignment)
             - aligned_adapter_size;
@@ -934,7 +936,7 @@ pub trait AdapterTraceStep<F, CTX> {
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        data: &Self::WriteData,
+        data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
     );
 }
@@ -965,7 +967,7 @@ where
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-        data: &Self::WriteData,
+        data: Self::WriteData,
     ) where
         Ctx: E1E2ExecutionCtx;
 }

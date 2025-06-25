@@ -241,7 +241,7 @@ impl<'a, F, A> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressio
     }
 }
 
-impl<'a, F, A> SizedRecord<FieldExpressionRecordLayout<F, A>> for FieldExpressionCoreRecordMut<'a> {
+impl<F, A> SizedRecord<FieldExpressionRecordLayout<F, A>> for FieldExpressionCoreRecordMut<'_> {
     fn size(layout: &FieldExpressionRecordLayout<F, A>) -> usize {
         layout.metadata.total_input_limbs + 1
     }
@@ -288,6 +288,7 @@ pub struct FieldExpressionStep<A> {
 }
 
 impl<A> FieldExpressionStep<A> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         adapter: A,
         expr: FieldExpr,
@@ -383,7 +384,7 @@ where
         self.adapter.write(
             state.memory,
             instruction,
-            &writes.into(),
+            writes.into(),
             &mut adapter_record,
         );
 
@@ -453,7 +454,7 @@ where
         let (writes, _, _) =
             run_field_expression(self, data, instruction.opcode.local_opcode_idx(self.offset));
 
-        self.adapter.write(state, instruction, &writes.into());
+        self.adapter.write(state, instruction, writes.into());
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         Ok(())
     }
