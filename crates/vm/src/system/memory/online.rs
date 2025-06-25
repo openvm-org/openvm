@@ -10,7 +10,7 @@ use super::{adapter::AccessAdapterInventory, offline_checker::MemoryBus};
 use crate::{
     arch::MemoryConfig,
     system::memory::{
-        adapter::records::{AccessLayout, MERGE_BEFORE_FLAG, SPLIT_AFTER_FLAG},
+        adapter::records::{AccessLayout, AccessRecordHeader, MERGE_BEFORE_FLAG, SPLIT_AFTER_FLAG},
         MemoryImage,
     },
 };
@@ -496,16 +496,18 @@ impl<F: PrimeField32> TracingMemory<F> {
                     type_size: size_of::<T>(),
                 },
             );
-            *record_mut.timestamp_and_mask = timestamp
-                | (if prev_timestamps.is_some() {
-                    MERGE_BEFORE_FLAG
-                } else {
-                    0
-                })
-                | (if split_after { SPLIT_AFTER_FLAG } else { 0 });
-            *record_mut.address_space = address_space as u32;
-            *record_mut.pointer = pointer as u32;
-            *record_mut.block_size = block_size as u32;
+            *record_mut.header = AccessRecordHeader {
+                timestamp_and_mask: timestamp
+                    | (if prev_timestamps.is_some() {
+                        MERGE_BEFORE_FLAG
+                    } else {
+                        0
+                    })
+                    | (if split_after { SPLIT_AFTER_FLAG } else { 0 }),
+                address_space: address_space as u32,
+                pointer: pointer as u32,
+                block_size: block_size as u32,
+            };
             let data_slice = unsafe {
                 std::slice::from_raw_parts(
                     values.as_ptr() as *const u8,

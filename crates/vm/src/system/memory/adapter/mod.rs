@@ -28,7 +28,8 @@ use crate::{
     arch::{CustomBorrow, DenseRecordArena, RecordArena, SizedRecord},
     system::memory::{
         adapter::records::{
-            size_by_layout, AccessLayout, AccessRecordMut, MERGE_BEFORE_FLAG, SPLIT_AFTER_FLAG,
+            size_by_layout, AccessLayout, AccessRecordHeader, AccessRecordMut, MERGE_BEFORE_FLAG,
+            SPLIT_AFTER_FLAG,
         },
         offline_checker::MemoryBus,
         MemoryAddress,
@@ -187,24 +188,21 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
             })
             .collect();
 
-        let extract_data = |chip: &mut GenericAccessAdapterChip<F>,
-                            ptr: usize,
-                            layout: &AccessLayout| {
-            let record = chip.get_record_at_or_none(ptr, layout.clone()).unwrap();
-            let timestamp = (*record.timestamp_and_mask) & !SPLIT_AFTER_FLAG & !MERGE_BEFORE_FLAG;
-            let address_space = *record.address_space;
-            let pointer = *record.pointer;
-            let block_size = *record.block_size;
-            (timestamp, address_space, pointer, block_size)
+        let extract_data = |chip: &mut GenericAccessAdapterChip<F>, ptr: usize| {
+            let record_header = chip.get_record_at_or_none(ptr).unwrap();
+            AccessRecordHeader {
+                timestamp_and_mask: record_header.timestamp_and_mask
+                    & !SPLIT_AFTER_FLAG
+                    & !MERGE_BEFORE_FLAG,
+                ..*record_header
+            }
         };
 
         loop {
             let next_data = chip_data
                 .iter_mut()
                 .flat_map(|(chip, ptr, layout)| {
-                    layout
-                        .as_mut()
-                        .map(|layout| extract_data(chip, *ptr, layout))
+                    layout.as_ref().map(|_layout| extract_data(chip, *ptr))
                 })
                 .min();
             match next_data {
@@ -214,26 +212,20 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
                         .iter_mut()
                         .enumerate()
                         .filter_map(|(i, (chip, ptr, layout))| match layout {
-                            Some(layout) if extract_data(chip, *ptr, layout) == next_data => {
-                                Some(i)
-                            }
+                            Some(_layout) if extract_data(chip, *ptr) == next_data => Some(i),
                             _ => None,
                         })
                         .collect();
                     let need_to_split = ids.iter().any(|&id| {
-                        let (chip, ptr, layout) = &mut chip_data[id];
-                        let record = chip
-                            .get_record_at_or_none(*ptr, layout.as_ref().unwrap().clone())
-                            .unwrap();
-                        *record.timestamp_and_mask & SPLIT_AFTER_FLAG != 0
+                        let (chip, ptr, _layout) = &mut chip_data[id];
+                        let record_header = chip.get_record_at_or_none(*ptr).unwrap();
+                        record_header.timestamp_and_mask & SPLIT_AFTER_FLAG != 0
                     });
                     if need_to_split {
                         for &id in ids.iter() {
-                            let (chip, ptr, layout) = &mut chip_data[id];
-                            let record = chip
-                                .get_record_at_or_none(*ptr, layout.as_ref().unwrap().clone())
-                                .unwrap();
-                            *record.timestamp_and_mask |= SPLIT_AFTER_FLAG;
+                            let (chip, ptr, _layout) = &mut chip_data[id];
+                            let record_header = chip.get_record_at_or_none(*ptr).unwrap();
+                            record_header.timestamp_and_mask |= SPLIT_AFTER_FLAG;
                         }
                     }
                     for id in ids {
@@ -260,11 +252,7 @@ pub(crate) trait GenericAccessAdapterChipTrait<F> {
     fn mark_to_split(&mut self, offset: usize);
     fn is_marked_to_split(&mut self, offset: usize) -> bool;
     fn extract_metadata_from(&self, offset: usize) -> Option<AccessLayout>;
-    fn get_record_at_or_none(
-        &mut self,
-        offset: usize,
-        layout: AccessLayout,
-    ) -> Option<AccessRecordMut<'_>>;
+    fn get_record_at_or_none(&mut self, offset: usize) -> Option<&mut AccessRecordHeader>;
 }
 
 #[derive(Chip, ChipUsageGetter)]
@@ -562,13 +550,13 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
     }
 
     fn mark_to_split(&mut self, offset: usize) {
-        let timestamp_and_mask = self.arena.transmute_from::<u32>(offset);
-        *timestamp_and_mask |= SPLIT_AFTER_FLAG;
+        let header = self.arena.transmute_from::<AccessRecordHeader>(offset);
+        header.timestamp_and_mask |= SPLIT_AFTER_FLAG;
     }
 
     fn is_marked_to_split(&mut self, offset: usize) -> bool {
-        let timestamp_and_mask = self.arena.transmute_from::<u32>(offset);
-        *timestamp_and_mask & SPLIT_AFTER_FLAG != 0
+        let header = self.arena.transmute_from::<AccessRecordHeader>(offset);
+        header.timestamp_and_mask & SPLIT_AFTER_FLAG != 0
     }
 
     fn extract_metadata_from(&self, offset: usize) -> Option<AccessLayout> {
@@ -579,13 +567,9 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
         }
     }
 
-    fn get_record_at_or_none(
-        &mut self,
-        offset: usize,
-        layout: AccessLayout,
-    ) -> Option<AccessRecordMut<'_>> {
+    fn get_record_at_or_none(&mut self, offset: usize) -> Option<&mut AccessRecordHeader> {
         if offset < self.arena.records_buffer.position() as usize {
-            Some(self.arena.records_buffer.get_mut()[offset..].custom_borrow(layout))
+            Some(self.arena.records_buffer.get_mut()[offset..].borrow_mut())
         } else {
             None
         }

@@ -1,17 +1,28 @@
 use crate::arch::{CustomBorrow, DenseRecordArena, RecordArena, SizedRecord};
+use openvm_circuit_primitives::AlignedBytesBorrow;
+use std::{
+    borrow::{Borrow, BorrowMut},
+    mem::{align_of, size_of},
+};
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, AlignedBytesBorrow, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct AccessRecordHeader {
+    /// If we need to merge before, this has the 31st bit set.
+    /// If we need to split after, this has the 30th bit set.
+    pub timestamp_and_mask: u32,
+    pub address_space: u32,
+    pub pointer: u32,
+    /// The block size is not defined by the access adapter's `N`,
+    /// because the record denotes an operation of sort
+    /// "split/merge every `block_size` chunk of this data"
+    pub block_size: u32,
+}
 
 #[repr(C)]
 #[derive(Debug)]
 pub(crate) struct AccessRecordMut<'a> {
-    /// If we need to merge before, this has the 31st bit set.
-    /// If we need to split after, this has the 30th bit set.
-    pub timestamp_and_mask: &'a mut u32,
-    pub address_space: &'a mut u32,
-    pub pointer: &'a mut u32,
-    /// The block size is not defined by the access adapter's `N`,
-    /// because the record denotes an operation of sort
-    /// "split/merge every `block_size` chunk of this data"
-    pub block_size: &'a mut u32,
+    pub header: &'a mut AccessRecordHeader,
     // TODO(AG): optimize with some `Option` serialization stuff
     pub timestamps: &'a mut [u32],
     pub data: &'a mut [u8],
@@ -34,7 +45,7 @@ pub(crate) const SPLIT_AFTER_FLAG: u32 = 1 << 31;
 
 pub(crate) fn size_by_layout(layout: &AccessLayout) -> usize {
     debug_assert_eq!(layout.cell_size * layout.type_size, 4);
-    4 * size_of::<u32>() // all individual u32 fields
+    size_of::<AccessRecordHeader>() // header struct
         + layout.block_size * 2 * layout.type_size // data and prev_data
         + (layout.block_size / layout.cell_size) * size_of::<u32>() // timestamps
 }
@@ -46,34 +57,23 @@ impl SizedRecord<AccessLayout> for AccessRecordMut<'_> {
 
     fn alignment(layout: &AccessLayout) -> usize {
         debug_assert_eq!(layout.cell_size * layout.type_size, 4);
-        align_of::<u32>()
+        align_of::<AccessRecordHeader>()
     }
 }
 
 impl<'a> CustomBorrow<'a, AccessRecordMut<'a>, AccessLayout> for [u8] {
     fn custom_borrow(&'a mut self, layout: AccessLayout) -> AccessRecordMut<'a> {
+        // header: AccessRecordHeader (using trivial borrowing)
+        let (header_buf, rest) =
+            unsafe { self.split_at_mut_unchecked(size_of::<AccessRecordHeader>()) };
+        let header = header_buf.borrow_mut();
+
         let mut offset = 0;
-
-        // timestamp_and_mask: u32 (4 bytes)
-        let timestamp_and_mask = unsafe { &mut *(self.as_mut_ptr().add(offset) as *mut u32) };
-        offset += size_of::<u32>();
-
-        // address_space: u32 (4 bytes)
-        let address_space = unsafe { &mut *(self.as_mut_ptr().add(offset) as *mut u32) };
-        offset += size_of::<u32>();
-
-        // pointer: u32 (4 bytes)
-        let pointer = unsafe { &mut *(self.as_mut_ptr().add(offset) as *mut u32) };
-        offset += size_of::<u32>();
-
-        // block_size: u32 (4 bytes)
-        let block_size_field = unsafe { &mut *(self.as_mut_ptr().add(offset) as *mut u32) };
-        offset += size_of::<u32>();
 
         // timestamps: [u32] (block_size / cell_size * 4 bytes)
         let timestamps = unsafe {
             std::slice::from_raw_parts_mut(
-                self.as_mut_ptr().add(offset) as *mut u32,
+                rest.as_mut_ptr().add(offset) as *mut u32,
                 layout.block_size / layout.cell_size,
             )
         };
@@ -82,7 +82,7 @@ impl<'a> CustomBorrow<'a, AccessRecordMut<'a>, AccessLayout> for [u8] {
         // data: [u8] (block_size * type_size bytes)
         let data = unsafe {
             std::slice::from_raw_parts_mut(
-                self.as_mut_ptr().add(offset),
+                rest.as_mut_ptr().add(offset),
                 layout.block_size * layout.type_size,
             )
         };
@@ -91,16 +91,13 @@ impl<'a> CustomBorrow<'a, AccessRecordMut<'a>, AccessLayout> for [u8] {
         // prev_data: [u8] (block_size * type_size bytes)
         let prev_data = unsafe {
             std::slice::from_raw_parts_mut(
-                self.as_mut_ptr().add(offset),
+                rest.as_mut_ptr().add(offset),
                 layout.block_size * layout.type_size,
             )
         };
 
         AccessRecordMut {
-            timestamp_and_mask,
-            address_space,
-            pointer,
-            block_size: block_size_field,
+            header,
             data,
             prev_data,
             timestamps,
@@ -108,11 +105,10 @@ impl<'a> CustomBorrow<'a, AccessRecordMut<'a>, AccessLayout> for [u8] {
     }
 
     unsafe fn extract_layout(&self) -> AccessLayout {
-        let address_space = unsafe { std::ptr::read(self.as_ptr().add(4) as *const u32) };
-        let block_size = unsafe { std::ptr::read(self.as_ptr().add(12) as *const u32) };
-        let type_size = if address_space < 4 { 1 } else { 4 };
+        let header: &AccessRecordHeader = self.borrow();
+        let type_size = if header.address_space < 4 { 1 } else { 4 };
         AccessLayout {
-            block_size: block_size as usize,
+            block_size: header.block_size as usize,
             cell_size: 4 / type_size,
             type_size,
         }
