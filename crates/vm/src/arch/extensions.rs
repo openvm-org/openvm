@@ -28,7 +28,6 @@ use openvm_stark_backend::{
     p3_matrix::Matrix,
     p3_util::log2_ceil_usize,
     prover::types::{AirProofInput, CommittedTraceData, ProofInput},
-    utils::metrics_span,
     AirRef, Chip, ChipUsageGetter,
 };
 use p3_baby_bear::BabyBear;
@@ -794,15 +793,11 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
                 .as_any_kind_mut()
                 .downcast_mut()
                 .expect("Poseidon2 chip required for persistent memory");
-            metrics_span("memory_finalize_time_ms", || {
-                self.base.memory_controller.finalize(Some(hasher))
-            });
+            self.base.memory_controller.finalize(Some(hasher));
         } else {
-            metrics_span("memory_finalize_time_ms", || {
-                self.base
-                    .memory_controller
-                    .finalize(None::<&mut Poseidon2PeripheryChip<F>>)
-            });
+            self.base
+                .memory_controller
+                .finalize(None::<&mut Poseidon2PeripheryChip<F>>);
         };
     }
 
@@ -938,6 +933,30 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
     ) {
         let memory_controller = &mut self.base.memory_controller;
         memory_controller.set_override_trace_heights(overridden_system_heights.memory);
+    }
+
+    /// Return constant trace heights of all chips in order, or None if
+    /// chip has dynamic height.
+    pub(crate) fn constant_trace_heights(&self) -> impl Iterator<Item = Option<usize>> + '_
+    where
+        E: ChipUsageGetter,
+        P: ChipUsageGetter,
+    {
+        [
+            self.program_chip().constant_trace_height(),
+            self.connector_chip().constant_trace_height(),
+        ]
+        .into_iter()
+        .chain(
+            self._public_values_chip()
+                .map(|c| c.constant_trace_height()),
+        )
+        .chain(std::iter::repeat(None).take(self.memory_controller().num_airs()))
+        .chain(self.chips_excluding_pv_chip().map(|c| match c {
+            Either::Periphery(c) => c.constant_trace_height(),
+            Either::Executor(c) => c.constant_trace_height(),
+        }))
+        .chain([self.range_checker_chip().constant_trace_height()])
     }
 
     /// Return trace cells of all chips in order.

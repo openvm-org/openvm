@@ -1,12 +1,22 @@
-use std::{env, process::Command};
+use std::{env, process::Command, sync::OnceLock};
 
 use eyre::Result;
 use tempfile::tempdir;
 
+fn install_cli() {
+    static FORCE_INSTALL: OnceLock<bool> = OnceLock::new();
+    FORCE_INSTALL.get_or_init(|| {
+        if !matches!(env::var("SKIP_INSTALL"), Ok(x) if !x.is_empty()) {
+            run_cmd("cargo", &["install", "--path", ".", "--force"]).unwrap();
+        }
+        true
+    });
+}
+
 #[test]
 fn test_cli_app_e2e() -> Result<()> {
     let temp_dir = tempdir()?;
-    run_cmd("cargo", &["install", "--path", ".", "--force"])?;
+    install_cli();
     let exe_path = "tests/programs/fibonacci/target/openvm/release/openvm-cli-example-test.vmexe";
     let temp_pk = temp_dir.path().join("app.pk");
     let temp_vk = temp_dir.path().join("app.vk");
@@ -81,7 +91,7 @@ fn test_cli_app_e2e() -> Result<()> {
 
 #[test]
 fn test_cli_app_e2e_simplified() -> Result<()> {
-    run_cmd("cargo", &["install", "--path", ".", "--force"])?;
+    install_cli();
     run_cmd(
         "cargo",
         &[
@@ -122,7 +132,7 @@ fn test_cli_init_build() -> Result<()> {
     let temp_path = temp_dir.path();
     let config_path = temp_path.join("openvm.toml");
     let manifest_path = temp_path.join("Cargo.toml");
-    run_cmd("cargo", &["install", "--path", ".", "--force"])?;
+    install_cli();
 
     run_cmd(
         "cargo",

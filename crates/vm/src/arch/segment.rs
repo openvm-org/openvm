@@ -9,10 +9,10 @@ use openvm_stark_backend::{
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     prover::types::{CommittedTraceData, ProofInput},
-    utils::metrics_span,
     Chip,
 };
 use rand::rngs::StdRng;
+use tracing::instrument;
 
 #[cfg(feature = "bench-metrics")]
 use super::InstructionExecutor;
@@ -114,30 +114,6 @@ where
             .set_override_system_trace_heights(overridden_heights.system);
         self.chip_complex
             .set_override_inventory_trace_heights(overridden_heights.inventory);
-    }
-
-    pub fn execute_spanned(
-        &mut self,
-        _name: &str,
-        state: &mut VmSegmentState<F, Ctrl::Ctx>,
-    ) -> Result<(), ExecutionError> {
-        #[cfg(feature = "bench-metrics")]
-        let start = std::time::Instant::now();
-        #[cfg(feature = "bench-metrics")]
-        let start_instret = state.instret;
-
-        self.execute_from_state(state)?;
-
-        #[cfg(feature = "bench-metrics")]
-        {
-            let elapsed = start.elapsed();
-            let insns = state.instret - start_instret;
-            metrics::gauge!(format!("{_name}_time_ms")).set(elapsed.as_millis() as f64);
-            metrics::counter!("insns").absolute(insns);
-            metrics::gauge!(format!("{_name}_insn_mi/s"))
-                .set(insns as f64 / elapsed.as_micros() as f64);
-        }
-        Ok(())
     }
 
     /// Stopping is triggered by should_stop() or if VM is terminated
@@ -257,6 +233,7 @@ where
     }
 
     /// Generate ProofInput to prove the segment. Should be called after ::execute
+    #[instrument(name = "trace_gen", skip_all)]
     pub fn generate_proof_input<SC: StarkGenericConfig>(
         #[allow(unused_mut)] mut self,
         cached_program: Option<CommittedTraceData<SC>>,
@@ -266,14 +243,12 @@ where
         VC::Executor: Chip<SC>,
         VC::Periphery: Chip<SC>,
     {
-        metrics_span("trace_gen_time_ms", || {
-            self.chip_complex.generate_proof_input(
-                cached_program,
-                &self.trace_height_constraints,
-                #[cfg(feature = "bench-metrics")]
-                &mut self.metrics,
-            )
-        })
+        self.chip_complex.generate_proof_input(
+            cached_program,
+            &self.trace_height_constraints,
+            #[cfg(feature = "bench-metrics")]
+            &mut self.metrics,
+        )
     }
 
     #[cfg(feature = "bench-metrics")]
@@ -300,4 +275,27 @@ where
             self.metrics.update_current_fn(pc);
         }
     }
+}
+
+/// Macro for executing with a compile-time span name for better tracing performance
+#[macro_export]
+macro_rules! execute_spanned {
+    ($name:literal, $executor:expr, $state:expr) => {{
+        #[cfg(feature = "bench-metrics")]
+        let start = std::time::Instant::now();
+        #[cfg(feature = "bench-metrics")]
+        let start_instret = $state.instret;
+
+        let result = tracing::info_span!($name).in_scope(|| $executor.execute_from_state($state));
+
+        #[cfg(feature = "bench-metrics")]
+        {
+            let elapsed = start.elapsed();
+            let insns = $state.instret - start_instret;
+            metrics::counter!("insns").absolute(insns);
+            metrics::gauge!(concat!($name, "_insn_mi/s"))
+                .set(insns as f64 / elapsed.as_micros() as f64);
+        }
+        result
+    }};
 }

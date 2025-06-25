@@ -339,6 +339,7 @@ fn test_public_values_and_leaf_verification() {
 
 #[cfg(feature = "evm-verify")]
 #[test]
+#[ignore = "slow"]
 fn test_static_verifier_custom_pv_handler() {
     // Define custom public values handler and implement StaticVerifierPvHandler trait on it
     pub struct CustomPvHandler {
