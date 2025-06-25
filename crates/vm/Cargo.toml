@@ -51,9 +51,17 @@ openvm-rv32im-transpiler.workspace = true
 
 [features]
 default = ["parallel", "jemalloc"]
-parallel = ["openvm-stark-backend/parallel", "dashmap/rayon"]
-test-utils = ["dep:openvm-stark-sdk"]
-bench-metrics = ["dep:metrics", "openvm-stark-backend/bench-metrics"]
+parallel = [
+    "openvm-stark-backend/parallel",
+    "dashmap/rayon",
+    "openvm-stark-sdk?/parallel",
+]
+test-utils = ["openvm-stark-sdk"]
+bench-metrics = [
+    "dep:metrics",
+    "openvm-stark-backend/bench-metrics",
+    "openvm-stark-sdk?/bench-metrics",
+]
 function-span = ["bench-metrics"]
 # use basic memory instead of mmap:
 basic-memory = []
@@ -61,4 +69,4 @@ basic-memory = []
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
 jemalloc-prof = ["openvm-stark-backend/jemalloc-prof"]
-nightly-features = ["openvm-stark-sdk/nightly-features"]
+nightly-features = ["openvm-stark-sdk?/nightly-features"]
