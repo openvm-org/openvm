@@ -185,7 +185,7 @@ impl<const PAGE_BITS: usize> E1E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
     }
 }
 
-#[derive(derive_new::new, Debug, Serialize, Deserialize)]
+#[derive(derive_new::new, Clone, Debug, Serialize, Deserialize)]
 pub struct Segment {
     pub instret_start: u64,
     pub num_insns: u64,
