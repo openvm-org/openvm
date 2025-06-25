@@ -1,6 +1,4 @@
-use openvm_stark_backend::{
-    p3_field::PrimeField32, p3_maybe_rayon::prelude::*, p3_util::log2_strict_usize,
-};
+use openvm_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -168,9 +166,10 @@ pub fn extract_public_values<F: PrimeField32>(
     let mut public_values: Vec<F> = {
         // TODO: make constant for public values cell size
         assert_eq!(final_memory.cell_size[PUBLIC_VALUES_AS as usize], 1);
-        // SAFETY: PUBLIC_VALUES_AS is a valid address space and the type is u8.
-        unsafe { final_memory.mem[PUBLIC_VALUES_AS as usize].par_iter::<u8>() }
-            .map(move |(_, x)| F::from_canonical_u8(x))
+        final_memory.mem[PUBLIC_VALUES_AS as usize]
+            .as_slice()
+            .iter()
+            .map(|&x| F::from_canonical_u8(x))
             .collect()
     };
 

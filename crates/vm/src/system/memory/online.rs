@@ -110,15 +110,6 @@ pub trait LinearMemory {
     ///   We do not add a trait bound due to Plonky3 types not implementing the trait.
     /// - Memory at `start` must be properly aligned for `T`.
     unsafe fn get_aligned_slice<T: Copy>(&self, start: usize, len: usize) -> &[T];
-    /// Parallel iterator over `Self` as iterator of elements of type `T`.
-    /// Iterator is over `(index, element)` where `index` is the byte index divided by
-    /// `size_of::<T>()`.
-    ///
-    /// # Safety
-    /// - `T` should be "plain old data" (see [`Pod`](https://docs.rs/bytemuck/latest/bytemuck/trait.Pod.html)).
-    ///   We do not add a trait bound due to Plonky3 types not implementing the trait.
-    /// - Memory slice must be properly aligned for `T`.
-    unsafe fn par_iter<T: Copy + Send + Sync>(&self) -> impl ParallelIterator<Item = (usize, T)>;
 }
 
 /// Map from address space to linear memory.
@@ -355,7 +346,8 @@ pub struct TracingMemory<F> {
     #[getset(get = "pub")]
     pub data: GuestMemory,
     /// A map of `addr_space -> (ptr / min_block_size[addr_space] -> (timestamp: u32, block_size:
-    /// u32))` for the timestamp and block size of the latest access.
+    /// u32))` for the timestamp and block size of the latest access. Each `MemoryBackend` is
+    /// equivalent to `Vec<AccessMetadata>`.
     pub(super) meta: Vec<MemoryBackend>,
     /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
     /// all memory accesses in `addr_space` must be aligned to this block size.
@@ -775,11 +767,20 @@ impl<F: PrimeField32> TracingMemory<F> {
             .par_iter()
             .zip_eq(self.min_block_size.par_iter())
             .enumerate()
-            .flat_map(move |(addr_space, (mem, &align))| {
-                unsafe { mem.par_iter::<AccessMetadata>() }.filter_map(move |(idx, metadata)| {
-                    (metadata.block_size != 0 && metadata.block_size != AccessMetadata::OCCUPIED)
-                        .then_some(((addr_space as u32, idx as u32 * align), metadata))
-                })
+            .flat_map(move |(addr_space, (meta, &align))| {
+                let raw = meta.as_slice();
+                // SAFETY:
+                // - by construction, `raw` was created to consist of `AccessMetadata`
+                let (prefix, meta, suffix) = unsafe { raw.align_to::<AccessMetadata>() };
+                debug_assert_eq!(prefix.len(), 0);
+                debug_assert_eq!(suffix.len(), 0);
+                meta.par_iter()
+                    .enumerate()
+                    .filter_map(move |(idx, &metadata)| {
+                        (metadata.block_size != 0
+                            && metadata.block_size != AccessMetadata::OCCUPIED)
+                            .then_some(((addr_space as u32, idx as u32 * align), metadata))
+                    })
             })
     }
 }

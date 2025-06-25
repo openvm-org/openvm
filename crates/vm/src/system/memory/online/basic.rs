@@ -3,8 +3,6 @@ use std::{
     ptr::NonNull,
 };
 
-use openvm_stark_backend::p3_maybe_rayon::prelude::*;
-
 use crate::system::memory::online::{LinearMemory, PAGE_SIZE};
 
 pub struct BasicMemory {
@@ -236,23 +234,6 @@ impl LinearMemory for BasicMemory {
         //   initialized
         // - `self` will not be mutated while borrowed
         core::slice::from_raw_parts(data, len)
-    }
-
-    unsafe fn par_iter<T: Copy + Send + Sync>(&self) -> impl ParallelIterator<Item = (usize, T)> {
-        let size = std::mem::size_of::<T>();
-        let num_elements = self.size() / size;
-        // Convert to usize to make it Send + Sync
-        let ptr_addr = self.as_ptr() as usize;
-
-        (0..num_elements).into_par_iter().map(move |index| {
-            let byte_index = index * size;
-            let value = unsafe {
-                let ptr = ptr_addr as *const u8;
-                let src = ptr.add(byte_index) as *const T;
-                core::ptr::read(src)
-            };
-            (index, value)
-        })
     }
 }
 

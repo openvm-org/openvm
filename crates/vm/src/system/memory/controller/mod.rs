@@ -485,7 +485,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     /// Returns the final memory state if persistent.
-    #[allow(clippy::assertions_on_constants)]
+    #[tracing::instrument(name = "memory_finalize", skip_all)]
     pub fn finalize<H>(&mut self, hasher: Option<&mut H>)
     where
         H: HasherChip<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
@@ -529,7 +529,7 @@ impl<F: PrimeField32> MemoryController<F> {
                     .map(|(key, value)| (key, value.values))
                     .collect();
                 metrics_span("merkle_finalize_time_ms", || {
-                    merkle_chip.finalize(initial_memory.clone(), &final_memory_values, hasher)
+                    merkle_chip.finalize(initial_memory, &final_memory_values, hasher)
                 });
             }
         }
