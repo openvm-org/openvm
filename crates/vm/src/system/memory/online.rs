@@ -12,11 +12,13 @@ use crate::{arch::MemoryConfig, system::memory::MemoryImage};
 mod basic;
 #[cfg(any(unix, windows))]
 mod memmap;
+mod paged_vec;
 
 #[cfg(not(any(unix, windows)))]
 pub use basic::*;
 #[cfg(any(unix, windows))]
 pub use memmap::*;
+pub use paged_vec::PagedVec;
 
 #[cfg(all(any(unix, windows), not(feature = "basic-memory")))]
 pub type MemoryBackend = memmap::MmapMemory;
@@ -323,7 +325,7 @@ impl GuestMemory {
 // into a single u32 to save half the memory, since `block_size` is a power of 2 and its log2
 // is less than 2^3.
 #[repr(C)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug, derive_new::new)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, derive_new::new)]
 pub struct AccessMetadata {
     pub timestamp: u32,
     pub block_size: u32,
@@ -346,9 +348,9 @@ pub struct TracingMemory<F> {
     #[getset(get = "pub")]
     pub data: GuestMemory,
     /// A map of `addr_space -> (ptr / min_block_size[addr_space] -> (timestamp: u32, block_size:
-    /// u32))` for the timestamp and block size of the latest access. Each `MemoryBackend` is
-    /// equivalent to `Vec<AccessMetadata>`.
-    pub(super) meta: Vec<MemoryBackend>,
+    /// u32))` for the timestamp and block size of the latest access. Each
+    /// `PagedVec<AccessMetadata>` stores metadata in a paged manner for memory efficiency.
+    pub(super) meta: Vec<PagedVec<AccessMetadata>>,
     /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
     /// all memory accesses in `addr_space` must be aligned to this block size.
     pub min_block_size: Vec<u32>,
@@ -372,12 +374,8 @@ impl<F: PrimeField32> TracingMemory<F> {
         min_block_size[3] = 4;
         let meta = zip_eq(&min_block_size, &num_cells)
             .map(|(min_block_size, num_cells)| {
-                MemoryBackend::new(
-                    num_cells
-                        .checked_mul(size_of::<AccessMetadata>())
-                        .unwrap()
-                        .div_ceil(*min_block_size as usize),
-                )
+                let total_metadata_cells = num_cells.div_ceil(*min_block_size as usize);
+                PagedVec::new(total_metadata_cells, PAGE_SIZE)
             })
             .collect();
         Self {
@@ -400,12 +398,8 @@ impl<F: PrimeField32> TracingMemory<F> {
         for (i, (mem, cell_size)) in izip!(image.get_memory(), &image.cell_size).enumerate() {
             let num_cells = mem.size() / cell_size;
 
-            self.meta[i] = MemoryBackend::new(
-                num_cells
-                    .checked_mul(size_of::<AccessMetadata>())
-                    .unwrap()
-                    .div_ceil(self.min_block_size[i] as usize),
-            );
+            let total_metadata_cells = num_cells.div_ceil(self.min_block_size[i] as usize);
+            self.meta[i] = PagedVec::new(total_metadata_cells, PAGE_SIZE);
         }
         self.data = GuestMemory::new(image);
         self
@@ -508,6 +502,7 @@ impl<F: PrimeField32> TracingMemory<F> {
     }
 
     /// Updates the metadata with the given block.
+    #[inline]
     fn set_meta_block(
         &mut self,
         address_space: usize,
@@ -517,26 +512,23 @@ impl<F: PrimeField32> TracingMemory<F> {
         timestamp: u32,
     ) {
         let ptr = pointer / align;
-        // SAFETY:
-        // - alignment is automatic since we multiply by `size_of::<AccessMetadata>()`
-        unsafe {
-            let meta = self.meta.get_unchecked_mut(address_space);
-            meta.write(
-                ptr * size_of::<AccessMetadata>(),
+        // SAFETY: address_space is assumed to be valid and within bounds
+        let meta = unsafe { self.meta.get_unchecked_mut(address_space) };
+        meta.set(
+            ptr,
+            AccessMetadata {
+                timestamp,
+                block_size: block_size as u32,
+            },
+        );
+        for i in 1..(block_size / align) {
+            meta.set(
+                ptr + i,
                 AccessMetadata {
                     timestamp,
-                    block_size: block_size as u32,
+                    block_size: AccessMetadata::OCCUPIED,
                 },
             );
-            for i in 1..(block_size / align) {
-                meta.write(
-                    (ptr + i) * size_of::<AccessMetadata>(),
-                    AccessMetadata {
-                        timestamp,
-                        block_size: AccessMetadata::OCCUPIED,
-                    },
-                );
-            }
         }
     }
 
@@ -563,13 +555,9 @@ impl<F: PrimeField32> TracingMemory<F> {
             if cur_ptr >= end {
                 break true;
             }
-            // SAFETY:
-            // - alignment is automatic since we multiply by `size_of::<AccessMetadata>()`
-            let mut current_metadata = unsafe {
-                self.meta
-                    .get_unchecked(address_space)
-                    .read::<AccessMetadata>(cur_ptr * size_of::<AccessMetadata>())
-            };
+            // SAFETY: address_space is assumed to be valid and within bounds
+            let mut current_metadata =
+                unsafe { *self.meta.get_unchecked_mut(address_space).get(cur_ptr) };
             if current_metadata.block_size == BLOCK_SIZE as u32 && cur_ptr + num_segs == end {
                 // We do not have to do anything
                 prev_ts = current_metadata.timestamp;
@@ -602,11 +590,9 @@ impl<F: PrimeField32> TracingMemory<F> {
             prev_ts = prev_ts.max(current_metadata.timestamp);
             while current_metadata.block_size == AccessMetadata::OCCUPIED {
                 cur_ptr -= 1;
-                current_metadata = unsafe {
-                    self.meta
-                        .get_unchecked(address_space)
-                        .read::<AccessMetadata>(cur_ptr * size_of::<AccessMetadata>())
-                };
+                // SAFETY: address_space is assumed to be valid and within bounds
+                current_metadata =
+                    unsafe { *self.meta.get_unchecked_mut(address_space).get(cur_ptr) };
             }
             block_timestamps[cur_ptr.saturating_sub(begin)
                 ..((cur_ptr + (current_metadata.block_size as usize) / align).min(end) - begin)]
@@ -763,24 +749,16 @@ impl<F: PrimeField32> TracingMemory<F> {
     pub fn touched_blocks(&self) -> impl ParallelIterator<Item = (Address, AccessMetadata)> + '_ {
         #[cfg(not(feature = "parallel"))]
         use itertools::Itertools;
+
         self.meta
             .par_iter()
             .zip_eq(self.min_block_size.par_iter())
             .enumerate()
             .flat_map(move |(addr_space, (meta, &align))| {
-                let raw = meta.as_slice();
-                // SAFETY:
-                // - by construction, `raw` was created to consist of `AccessMetadata`
-                let (prefix, meta, suffix) = unsafe { raw.align_to::<AccessMetadata>() };
-                debug_assert_eq!(prefix.len(), 0);
-                debug_assert_eq!(suffix.len(), 0);
-                meta.par_iter()
-                    .enumerate()
-                    .filter_map(move |(idx, &metadata)| {
-                        (metadata.block_size != 0
-                            && metadata.block_size != AccessMetadata::OCCUPIED)
-                            .then_some(((addr_space as u32, idx as u32 * align), metadata))
-                    })
+                meta.par_iter().filter_map(move |(idx, metadata)| {
+                    (metadata.block_size != 0 && metadata.block_size != AccessMetadata::OCCUPIED)
+                        .then_some(((addr_space as u32, idx as u32 * align), metadata))
+                })
             })
     }
 }
