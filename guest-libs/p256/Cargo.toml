@@ -71,4 +71,4 @@ voprf = ["elliptic-curve/voprf"]
 num-bigint = { workspace = true }
 
 [package.metadata.cargo-shear]
-ignored = ["openvm", "serde", "num-bigint", "derive_more"]
+ignored = ["openvm", "serde", "num-bigint", "derive_more", "rand"]

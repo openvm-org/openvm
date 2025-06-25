@@ -2,6 +2,7 @@ use std::{fs::File, io::Write, path::Path, sync::Arc};
 
 use derive_new::new;
 use openvm_circuit::system::memory::MemoryTraceHeights;
+use openvm_instructions::NATIVE_AS;
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -11,7 +12,7 @@ use super::{
     AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,
     VmInventoryError, PUBLIC_VALUES_AIR_ID,
 };
-use crate::system::memory::BOUNDARY_AIR_OFFSET;
+use crate::system::memory::{merkle::public_values::PUBLIC_VALUES_AS, BOUNDARY_AIR_OFFSET};
 
 // sbox is decomposed to have this max degree for Poseidon2. We set to 3 so quotient_degree = 2
 // allows log_blowup = 1
@@ -19,6 +20,8 @@ const DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE: usize = 3;
 pub const DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
 /// Width of Poseidon2 VM uses.
 pub const POSEIDON2_WIDTH: usize = 16;
+/// Offset for address space indices. This is used to distinguish between different memory spaces.
+pub const ADDR_SPACE_OFFSET: u32 = 1;
 /// Returns a Poseidon2 config for the VM.
 pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<F> {
     Poseidon2Config::default()
@@ -68,16 +71,15 @@ pub trait InitFileGenerator {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, new, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, new)]
 pub struct MemoryConfig {
-    /// The maximum height of the address space. This means the trie has `as_height` layers for
-    /// searching the address space. The allowed address spaces are those in the range `[as_offset,
-    /// as_offset + 2^as_height)` where `as_offset` is currently fixed to `1` to not allow address
-    /// space `0` in memory.
-    pub as_height: usize,
-    /// The offset of the address space. Should be fixed to equal `1`.
-    // TODO[jpw]: remove this and make constant
-    pub as_offset: u32,
+    /// The maximum height of the address space. This means the trie has `addr_space_height` layers
+    /// for searching the address space. The allowed address spaces are those in the range `[1,
+    /// 1 + 2^addr_space_height)` where it starts from 1 to not allow address space 0 in memory.
+    pub addr_space_height: usize,
+    /// The number of cells in each address space. It is expected that the size of the list is
+    /// `1 << addr_space_height + 1` and the first element is 0, which means no address space.
+    pub addr_space_sizes: Vec<usize>,
     pub pointer_max_bits: usize,
     /// All timestamps must be in the range `[0, 2^clk_max_bits)`. Maximum allowed: 29.
     pub clk_max_bits: usize,
@@ -85,13 +87,23 @@ pub struct MemoryConfig {
     pub decomp: usize,
     /// Maximum N AccessAdapter AIR to support.
     pub max_access_adapter_n: usize,
-    /// An expected upper bound on the number of memory accesses.
-    pub access_capacity: usize,
 }
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        Self::new(3, 1, 29, 29, 17, 32, 1 << 24)
+        let mut addr_space_sizes = vec![0; (1 << 3) + ADDR_SPACE_OFFSET as usize];
+        addr_space_sizes[ADDR_SPACE_OFFSET as usize..=NATIVE_AS as usize].fill(1 << 29);
+        addr_space_sizes[PUBLIC_VALUES_AS as usize] = DEFAULT_MAX_NUM_PUBLIC_VALUES;
+        Self::new(3, addr_space_sizes, 29, 29, 17, 32)
+    }
+}
+
+impl MemoryConfig {
+    /// Config for aggregation usage with only native address space.
+    pub fn aggregation() -> Self {
+        let mut addr_space_sizes = vec![0; (1 << 3) + ADDR_SPACE_OFFSET as usize];
+        addr_space_sizes[NATIVE_AS as usize] = 1 << 29;
+        Self::new(3, addr_space_sizes, 29, 29, 17, 8)
     }
 }
 
@@ -140,7 +152,7 @@ pub struct SystemTraceHeights {
 impl SystemConfig {
     pub fn new(
         max_constraint_degree: usize,
-        memory_config: MemoryConfig,
+        mut memory_config: MemoryConfig,
         num_public_values: usize,
     ) -> Self {
         let segmentation_strategy = get_default_segmentation_strategy();
@@ -148,6 +160,7 @@ impl SystemConfig {
             memory_config.clk_max_bits <= 29,
             "Timestamp max bits must be <= 29 for LessThan to work in 31-bit field"
         );
+        memory_config.addr_space_sizes[PUBLIC_VALUES_AS as usize] = num_public_values;
         Self {
             max_constraint_degree,
             continuation_enabled: false,
@@ -156,6 +169,14 @@ impl SystemConfig {
             segmentation_strategy,
             profiling: false,
         }
+    }
+
+    pub fn default_from_memory(memory_config: MemoryConfig) -> Self {
+        Self::new(
+            DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
+            memory_config,
+            DEFAULT_MAX_NUM_PUBLIC_VALUES,
+        )
     }
 
     pub fn with_max_constraint_degree(mut self, max_constraint_degree: usize) -> Self {
@@ -175,6 +196,7 @@ impl SystemConfig {
 
     pub fn with_public_values(mut self, num_public_values: usize) -> Self {
         self.num_public_values = num_public_values;
+        self.memory_config.addr_space_sizes[PUBLIC_VALUES_AS as usize] = num_public_values;
         self
     }
 
@@ -216,11 +238,7 @@ impl SystemConfig {
 
 impl Default for SystemConfig {
     fn default() -> Self {
-        Self::new(
-            DEFAULT_POSEIDON2_MAX_CONSTRAINT_DEGREE,
-            Default::default(),
-            DEFAULT_MAX_NUM_PUBLIC_VALUES,
-        )
+        Self::default_from_memory(MemoryConfig::default())
     }
 }
 

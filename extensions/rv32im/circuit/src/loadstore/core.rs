@@ -312,7 +312,7 @@ where
             core_record.shift_amount as usize,
         );
         self.adapter
-            .write(state.memory, instruction, &write_data, &mut adapter_record);
+            .write(state.memory, instruction, write_data, &mut adapter_record);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -391,7 +391,7 @@ where
         let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         let write_data = run_write_data(local_opcode, read_data, prev_data, shift_amount as usize);
 
-        self.adapter.write(state, instruction, &write_data);
+        self.adapter.write(state, instruction, write_data);
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())

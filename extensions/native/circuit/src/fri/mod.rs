@@ -663,7 +663,7 @@ impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpenin
     }
 }
 
-impl<'a, F> SizedRecord<FriReducedOpeningLayout> for FriReducedOpeningRecordMut<'a, F> {
+impl<F> SizedRecord<FriReducedOpeningLayout> for FriReducedOpeningRecordMut<'_, F> {
     fn size(layout: &FriReducedOpeningLayout) -> usize {
         let mut total_len = size_of::<FriReducedOpeningHeaderRecord>();
         total_len += layout.metadata.length * size_of::<FriReducedOpeningWorkloadRowRecord<F>>();
@@ -810,7 +810,7 @@ where
                 tracing_write_native(
                     state.memory,
                     a_ptr_i,
-                    &[data[i]],
+                    [data[i]],
                     &mut workload_row.a_aux.prev_timestamp,
                     &mut workload_row.a_aux.prev_data,
                 );
@@ -850,7 +850,7 @@ where
         tracing_write_native(
             state.memory,
             result_ptr,
-            &result,
+            result,
             &mut record.common.result_aux.prev_timestamp,
             &mut record.common.result_aux.prev_data,
         );
@@ -1117,7 +1117,7 @@ where
         for i in 0..length {
             let a_ptr_i = (a_ptr + F::from_canonical_usize(i)).as_canonical_u32();
             let [a]: [F; 1] = if is_init == 0 {
-                memory_write_native_from_state(state, a_ptr_i, &[data[i]]);
+                memory_write_native_from_state(state, a_ptr_i, [data[i]]);
                 [data[i]]
             } else {
                 memory_read_native_from_state(state, a_ptr_i)
@@ -1137,7 +1137,7 @@ where
             );
         }
 
-        memory_write_native_from_state(state, result_ptr, &result);
+        memory_write_native_from_state(state, result_ptr, result);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

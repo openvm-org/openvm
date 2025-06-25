@@ -19,9 +19,6 @@ openvm-instructions = { workspace = true }
 itertools.workspace = true
 derive-new.workspace = true
 rand.workspace = true
-serde = { workspace = true, features = ["derive"] }
-serde-big-array.workspace = true
-serde_with.workspace = true
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }

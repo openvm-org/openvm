@@ -6,10 +6,9 @@ use rustc_hash::FxHashMap;
 
 use super::{FinalState, MemoryMerkleCols};
 use crate::{
-    arch::hasher::HasherChip,
+    arch::hasher::{Hasher, HasherChip},
     system::memory::{
         dimensions::MemoryDimensions, merkle::memory_to_vec_partition, AddressMap, Equipartition,
-        PAGE_SIZE,
     },
 };
 
@@ -25,7 +24,7 @@ pub struct MerkleTree<F, const CHUNK: usize> {
 }
 
 impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
-    pub fn new(height: usize, hasher: &impl HasherChip<CHUNK, F>) -> Self {
+    pub fn new(height: usize, hasher: &impl Hasher<CHUNK, F>) -> Self {
         Self {
             height,
             zero_nodes: (0..height + 1)
@@ -37,6 +36,17 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                 .collect(),
             nodes: FxHashMap::default(),
         }
+    }
+
+    pub fn root(&self) -> [F; CHUNK] {
+        self.get_node(1)
+    }
+
+    pub fn get_node(&self, index: u64) -> [F; CHUNK] {
+        self.nodes
+            .get(&index)
+            .cloned()
+            .unwrap_or(self.zero_nodes[self.height - index.ilog2() as usize])
     }
 
     #[allow(clippy::type_complexity)]
@@ -194,13 +204,13 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
     }
 
     pub fn from_memory(
-        initial_memory: AddressMap<PAGE_SIZE>,
+        memory: &AddressMap,
         md: &MemoryDimensions,
-        hasher: &impl HasherChip<CHUNK, F>,
+        hasher: &(impl Hasher<CHUNK, F> + Sync),
     ) -> Self {
         let mut tree = Self::new(md.overall_height(), hasher);
-        let layer: Vec<_> = memory_to_vec_partition(&initial_memory, md)
-            .iter()
+        let layer: Vec<_> = memory_to_vec_partition(memory, md)
+            .par_iter()
             .map(|(idx, v)| ((1 << tree.height) + idx, hasher.hash(v)))
             .collect();
         tree.process_layers(layer, md, None, |left, right| hasher.compress(left, right));
@@ -253,12 +263,5 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
             init_root,
             final_root,
         }
-    }
-
-    fn get_node(&self, index: u64) -> [F; CHUNK] {
-        self.nodes
-            .get(&index)
-            .cloned()
-            .unwrap_or(self.zero_nodes[self.height - index.ilog2() as usize])
     }
 }

@@ -121,7 +121,7 @@ jobs:
       - runs-on
       - runner=${{ inputs.instance_type }}
       - run-id=${{ github.run_id }}
-      - family=r7
+      - family=m7
       - tag=bench-${{ inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
       - extras=s3-cache
     steps:

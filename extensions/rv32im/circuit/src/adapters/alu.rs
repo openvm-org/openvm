@@ -250,7 +250,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        data: &Self::WriteData,
+        data: Self::WriteData,
         record: &mut &mut Rv32BaseAluAdapterRecord,
     ) {
         let &Instruction { a, d, .. } = instruction;
@@ -262,7 +262,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
             memory,
             RV32_REGISTER_AS,
             record.rd_ptr,
-            &data[0],
+            data[0],
             &mut record.writes_aux.prev_timestamp,
             &mut record.writes_aux.prev_data,
         );
@@ -372,7 +372,7 @@ where
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-        rd: &Self::WriteData,
+        rd: Self::WriteData,
     ) where
         Ctx: E1E2ExecutionCtx,
     {
@@ -380,6 +380,6 @@ where
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        memory_write_from_state(state, d.as_canonical_u32(), a.as_canonical_u32(), &rd[0]);
+        memory_write_from_state(state, d.as_canonical_u32(), a.as_canonical_u32(), rd[0]);
     }
 }

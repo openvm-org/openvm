@@ -23,7 +23,6 @@ openvm-mod-circuit-builder = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
-openvm-rv32-adapters = { workspace = true }
 openvm-ecc-circuit = { workspace = true }
 openvm-pairing-transpiler = { workspace = true }
 
@@ -33,7 +32,6 @@ strum = { workspace = true }
 derive_more = { workspace = true }
 derive-new = { workspace = true }
 rand = { workspace = true }
-itertools = { workspace = true }
 eyre = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 halo2curves-axiom = { workspace = true }
@@ -45,7 +43,6 @@ openvm-pairing-guest = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
-openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 halo2curves-axiom = { workspace = true }
 openvm-ecc-guest = { workspace = true }
 openvm-pairing-guest = { workspace = true, features = [

@@ -1,5 +1,7 @@
 use std::array;
 
+use openvm_circuit::arch::{MemoryConfig, SystemConfig};
+use openvm_instructions::NATIVE_AS;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, Rng};
 
@@ -30,6 +32,21 @@ pub fn u32_sign_extend<const IMM_BITS: usize>(num: u32) -> u32 {
     } else {
         num
     }
+}
+
+pub fn test_system_config() -> SystemConfig {
+    SystemConfig::new(
+        3,
+        MemoryConfig::new(2, vec![0, 4096, 1 << 22, 4096, 1 << 25], 29, 29, 17, 32),
+        32,
+    )
+}
+
+// Testing config when native address space is not needed
+pub fn test_system_config_with_continuations() -> SystemConfig {
+    let mut config = test_system_config();
+    config.memory_config.addr_space_sizes[NATIVE_AS as usize] = 0;
+    config.with_continuations()
 }
 
 /// Generate a random message of a given length in bytes

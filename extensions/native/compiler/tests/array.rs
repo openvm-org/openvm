@@ -1,4 +1,4 @@
-use openvm_native_circuit::execute_program;
+use openvm_native_circuit::test_execute_program;
 use openvm_native_compiler::{
     asm::{AsmBuilder, AsmConfig},
     ir::{Array, Config, Ext, Felt, RVar, Usize, Var},
@@ -104,7 +104,7 @@ fn test_array_eq() {
     builder.halt();
 
     let program = builder.compile_isa();
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }
 
 #[should_panic]
@@ -125,7 +125,7 @@ fn test_array_eq_neg() {
     builder.halt();
 
     let program = builder.compile_isa();
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }
 
 #[test]
@@ -161,7 +161,7 @@ fn test_slice_variable_impl_happy_path() {
     builder.halt();
 
     let program = builder.compile_isa();
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }
 
 #[test]
@@ -183,5 +183,5 @@ fn test_slice_assert_eq_neg() {
     builder.halt();
 
     let program = builder.compile_isa();
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }

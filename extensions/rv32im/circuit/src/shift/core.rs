@@ -329,7 +329,7 @@ where
         self.adapter.write(
             state.memory,
             instruction,
-            &[output].into(),
+            [output].into(),
             &mut adapter_record,
         );
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
@@ -442,7 +442,7 @@ where
 
         let (rd, _, _) = run_shift::<NUM_LIMBS, LIMB_BITS>(shift_opcode, &rs1, &rs2);
 
-        self.adapter.write(state, instruction, &[rd].into());
+        self.adapter.write(state, instruction, [rd].into());
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

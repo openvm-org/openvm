@@ -3,22 +3,250 @@ use std::fmt::Debug;
 use getset::Getters;
 use itertools::{izip, zip_eq};
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
-use openvm_stark_backend::p3_field::PrimeField32;
-use serde::{Deserialize, Serialize};
+use openvm_instructions::exe::SparseMemoryImage;
+use openvm_stark_backend::{p3_field::PrimeField32, p3_maybe_rayon::prelude::*};
 
-use super::{
-    adapter::AccessAdapterInventory,
-    offline_checker::MemoryBus,
-    paged_vec::{AddressMap, PAGE_SIZE},
-    Address, MemoryAddress, PagedVec,
-};
+use super::{adapter::AccessAdapterInventory, offline_checker::MemoryBus, MemoryAddress};
 use crate::{arch::MemoryConfig, system::memory::MemoryImage};
 
-pub const INITIAL_TIMESTAMP: u32 = 0;
+mod basic;
+#[cfg(any(unix, windows))]
+mod memmap;
 
+#[cfg(not(any(unix, windows)))]
+pub use basic::*;
+#[cfg(any(unix, windows))]
+pub use memmap::*;
+
+#[cfg(all(any(unix, windows), not(feature = "basic-memory")))]
+pub type MemoryBackend = memmap::MmapMemory;
+#[cfg(any(not(any(unix, windows)), feature = "basic-memory"))]
+pub type MemoryBackend = basic::BasicMemory;
+
+pub const INITIAL_TIMESTAMP: u32 = 0;
+/// Default mmap page size. Change this if using THB.
+pub const PAGE_SIZE: usize = 4096;
+
+/// (address_space, pointer)
+pub type Address = (u32, u32);
+
+/// API for any memory implementation that allocates a contiguous region of memory.
+pub trait LinearMemory {
+    /// Create instance of `Self` with `size` bytes.
+    fn new(size: usize) -> Self;
+    /// Allocated size of the memory in bytes.
+    fn size(&self) -> usize;
+    /// Returns the entire memory as a raw byte slice.
+    fn as_slice(&self) -> &[u8];
+    /// Returns the entire memory as a raw byte slice.
+    fn as_mut_slice(&mut self) -> &mut [u8];
+    /// Read `BLOCK` from `self` at `from` address without moving it.
+    ///
+    /// Panics or segfaults if `from..from + size_of::<BLOCK>()` is out of bounds.
+    ///
+    /// # Safety
+    /// - `BLOCK` should be "plain old data" (see [`Pod`](https://docs.rs/bytemuck/latest/bytemuck/trait.Pod.html)).
+    ///   We do not add a trait bound due to Plonky3 types not implementing the trait.
+    /// - See [`core::ptr::read`] for similar considerations.
+    /// - Memory at `from` must be properly aligned for `BLOCK`. Use [`Self::read_unaligned`] if
+    ///   alignment is not guaranteed.
+    unsafe fn read<BLOCK: Copy>(&self, from: usize) -> BLOCK;
+    /// Read `BLOCK` from `self` at `from` address without moving it.
+    /// Same as [`Self::read`] except that it does not require alignment.
+    ///
+    /// Panics or segfaults if `from..from + size_of::<BLOCK>()` is out of bounds.
+    ///
+    /// # Safety
+    /// - `BLOCK` should be "plain old data" (see [`Pod`](https://docs.rs/bytemuck/latest/bytemuck/trait.Pod.html)).
+    ///   We do not add a trait bound due to Plonky3 types not implementing the trait.
+    /// - See [`core::ptr::read`] for similar considerations.
+    unsafe fn read_unaligned<BLOCK: Copy>(&self, from: usize) -> BLOCK;
+    /// Write `BLOCK` to `self` at `start` address without reading the old value. Does not drop
+    /// `values`. Semantically, `values` is moved into the location pointed to by `start`.
+    ///
+    /// Panics or segfaults if `start..start + size_of::<BLOCK>()` is out of bounds.
+    ///
+    /// # Safety
+    /// - See [`core::ptr::write`] for similar considerations.
+    /// - Memory at `start` must be properly aligned for `BLOCK`. Use [`Self::write_unaligned`] if
+    ///   alignment is not guaranteed.
+    unsafe fn write<BLOCK: Copy>(&mut self, start: usize, values: BLOCK);
+    /// Write `BLOCK` to `self` at `start` address without reading the old value. Does not drop
+    /// `values`. Semantically, `values` is moved into the location pointed to by `start`.
+    /// Same as [`Self::write`] but without alignment requirement.
+    ///
+    /// Panics or segfaults if `start..start + size_of::<BLOCK>()` is out of bounds.
+    ///
+    /// # Safety
+    /// - See [`core::ptr::write`] for similar considerations.
+    unsafe fn write_unaligned<BLOCK: Copy>(&mut self, start: usize, values: BLOCK);
+    /// Swaps `values` with memory at `start..start + size_of::<BLOCK>()`.
+    ///
+    /// Panics or segfaults if `start..start + size_of::<BLOCK>()` is out of bounds.
+    ///
+    /// # Safety
+    /// - `BLOCK` should be "plain old data" (see [`Pod`](https://docs.rs/bytemuck/latest/bytemuck/trait.Pod.html)).
+    ///   We do not add a trait bound due to Plonky3 types not implementing the trait.
+    /// - Memory at `start` must be properly aligned for `BLOCK`.
+    /// - The data in `values` should not overlap with memory in `self`.
+    unsafe fn swap<BLOCK: Copy>(&mut self, start: usize, values: &mut BLOCK);
+    /// Copies `data` into memory at `to` address.
+    ///
+    /// Panics or segfaults if `to..to + size_of_val(data)` is out of bounds.
+    ///
+    /// # Safety
+    /// - `T` should be "plain old data" (see [`Pod`](https://docs.rs/bytemuck/latest/bytemuck/trait.Pod.html)).
+    ///   We do not add a trait bound due to Plonky3 types not implementing the trait.
+    /// - The underlying memory of `data` should not overlap with `self`.
+    /// - The starting pointer of `self` should be aligned to `T`.
+    /// - The memory pointer at `to` should be aligned to `T`.
+    unsafe fn copy_nonoverlapping<T: Copy>(&mut self, to: usize, data: &[T]);
+    /// Returns a slice `&[T]` for the memory region `start..start + len`.
+    ///
+    /// Panics or segfaults if `start..start + len * size_of::<T>()` is out of bounds.
+    ///
+    /// # Safety
+    /// - `T` should be "plain old data" (see [`Pod`](https://docs.rs/bytemuck/latest/bytemuck/trait.Pod.html)).
+    ///   We do not add a trait bound due to Plonky3 types not implementing the trait.
+    /// - Memory at `start` must be properly aligned for `T`.
+    unsafe fn get_aligned_slice<T: Copy>(&self, start: usize, len: usize) -> &[T];
+}
+
+/// Map from address space to linear memory.
+/// The underlying memory is typeless, stored as raw bytes, but usage implicitly assumes that each
+/// address space has memory cells of a fixed type (e.g., `u8, F`). We do not use a typemap for
+/// performance reasons, and it is up to the user to enforce types. Needless to say, this is a very
+/// `unsafe` API.
+#[derive(Debug, Clone)]
+pub struct AddressMap<M: LinearMemory = MemoryBackend> {
+    pub mem: Vec<M>,
+    /// byte size of cells per address space
+    pub cell_size: Vec<usize>, // TODO: move to MmapWrapper
+}
+
+impl Default for AddressMap {
+    fn default() -> Self {
+        Self::from_mem_config(&MemoryConfig::default())
+    }
+}
+
+impl<M: LinearMemory> AddressMap<M> {
+    /// `mem_size` is the number of **cells** in each address space. It is required that
+    /// `mem_size[0] = 0`.
+    pub fn new(mem_size: Vec<usize>) -> Self {
+        // TMP: hardcoding for now
+        let mut cell_size = vec![1; 4];
+        cell_size.resize(mem_size.len(), 4);
+        let mem = zip_eq(&cell_size, &mem_size)
+            .map(|(cell_size, mem_size)| M::new(mem_size.checked_mul(*cell_size).unwrap()))
+            .collect();
+        Self { mem, cell_size }
+    }
+
+    pub fn from_mem_config(mem_config: &MemoryConfig) -> Self {
+        Self::new(mem_config.addr_space_sizes.clone())
+    }
+
+    #[inline(always)]
+    pub fn get_memory(&self) -> &Vec<M> {
+        &self.mem
+    }
+
+    #[inline(always)]
+    pub fn get_memory_mut(&mut self) -> &mut Vec<M> {
+        &mut self.mem
+    }
+
+    pub fn get_f<F: PrimeField32>(&self, addr_space: u32, ptr: u32) -> F {
+        debug_assert_ne!(addr_space, 0);
+        // TODO: fix this
+        unsafe {
+            if self.cell_size[addr_space as usize] == 1 {
+                F::from_canonical_u8(self.get::<u8>((addr_space, ptr)))
+            } else {
+                debug_assert_eq!(self.cell_size[addr_space as usize], 4);
+                self.get::<F>((addr_space, ptr))
+            }
+        }
+    }
+
+    /// # Safety
+    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
+    /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    pub unsafe fn get<T: Copy>(&self, (addr_space, ptr): Address) -> T {
+        debug_assert_eq!(size_of::<T>(), self.cell_size[addr_space as usize]);
+        // SAFETY:
+        // - alignment is automatic since we multiply by `size_of::<T>()`
+        self.mem
+            .get_unchecked(addr_space as usize)
+            .read((ptr as usize) * size_of::<T>())
+    }
+
+    /// Panics or segfaults if `ptr..ptr + len` is out of bounds
+    ///
+    /// # Safety
+    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
+    /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    pub unsafe fn get_slice<T: Copy + Debug>(
+        &self,
+        (addr_space, ptr): Address,
+        len: usize,
+    ) -> &[T] {
+        debug_assert_eq!(size_of::<T>(), self.cell_size[addr_space as usize]);
+        let start = (ptr as usize) * size_of::<T>();
+        let mem = self.mem.get_unchecked(addr_space as usize);
+        // SAFETY:
+        // - alignment is automatic since we multiply by `size_of::<T>()`
+        mem.get_aligned_slice(start, len)
+    }
+
+    /// Copies `data` into the memory at `(addr_space, ptr)`.
+    ///
+    /// Panics or segfaults if `ptr + size_of_val(data)` is out of bounds.
+    ///
+    /// # Safety
+    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
+    /// - The linear memory in `addr_space` is aligned to `T`.
+    pub unsafe fn copy_slice_nonoverlapping<T: Copy>(
+        &mut self,
+        (addr_space, ptr): Address,
+        data: &[T],
+    ) {
+        let start = (ptr as usize) * size_of::<T>();
+        // SAFETY:
+        // - Linear memory is aligned to `T` and `start` is multiple of `size_of::<T>()` so
+        //   alignment is satisfied.
+        // - `data` and `self.mem` are non-overlapping
+        self.mem
+            .get_unchecked_mut(addr_space as usize)
+            .copy_nonoverlapping(start, data);
+    }
+
+    // TODO[jpw]: stabilize the boundary memory image format and how to construct
+    /// # Safety
+    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
+    /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    pub fn from_sparse(mem_size: Vec<usize>, sparse_map: SparseMemoryImage) -> Self {
+        let mut vec = Self::new(mem_size);
+        for ((addr_space, index), data_byte) in sparse_map.into_iter() {
+            // SAFETY:
+            // - safety assumptions in function doc comments
+            unsafe {
+                vec.mem
+                    .get_unchecked_mut(addr_space as usize)
+                    .write_unaligned(index as usize, data_byte);
+            }
+        }
+        vec
+    }
+}
+
+/// API for guest memory conforming to OpenVM ISA
+// @dev Note we don't make this a trait because phantom executors currently need a concrete type for
+// guest memory
 #[derive(Debug, Clone, derive_new::new)]
 pub struct GuestMemory {
-    pub memory: AddressMap<PAGE_SIZE>,
+    pub memory: AddressMap,
 }
 
 impl GuestMemory {
@@ -37,16 +265,14 @@ impl GuestMemory {
     where
         T: Copy + Debug,
     {
-        debug_assert_eq!(
-            size_of::<T>(),
-            self.memory.cell_size[(addr_space - self.memory.as_offset) as usize]
-        );
-        let read = self
-            .memory
-            .paged_vecs
-            .get_unchecked((addr_space - self.memory.as_offset) as usize)
-            .get((ptr as usize) * size_of::<T>());
-        read
+        debug_assert_eq!(size_of::<T>(), self.memory.cell_size[addr_space as usize]);
+        // SAFETY:
+        // - `T` should be "plain old data"
+        // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
+        self.memory
+            .get_memory()
+            .get_unchecked(addr_space as usize)
+            .read((ptr as usize) * size_of::<T>())
     }
 
     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}`
@@ -57,106 +283,40 @@ impl GuestMemory {
         &mut self,
         addr_space: u32,
         ptr: u32,
-        values: &[T; BLOCK_SIZE],
+        values: [T; BLOCK_SIZE],
     ) where
         T: Copy + Debug,
     {
-        debug_assert_eq!(
-            size_of::<T>(),
-            self.memory.cell_size[(addr_space - self.memory.as_offset) as usize],
-            "addr_space={addr_space}"
-        );
+        debug_assert_eq!(size_of::<T>(), self.memory.cell_size[addr_space as usize]);
+        // SAFETY:
+        // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
         self.memory
-            .paged_vecs
-            .get_unchecked_mut((addr_space - self.memory.as_offset) as usize)
-            .set((ptr as usize) * size_of::<T>(), values);
+            .get_memory_mut()
+            .get_unchecked_mut(addr_space as usize)
+            .write((ptr as usize) * size_of::<T>(), values);
     }
 
-    /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}` and returns
-    /// the previous values.
+    /// Swaps `values` with `[pointer:BLOCK_SIZE]_{address_space}`.
     ///
     /// # Safety
-    /// See [`GuestMemory::read`].
+    /// See [`GuestMemory::read`] and [`LinearMemory::swap`].
     #[inline(always)]
-    pub unsafe fn replace<T, const BLOCK_SIZE: usize>(
+    pub unsafe fn swap<T, const BLOCK_SIZE: usize>(
         &mut self,
-        address_space: u32,
-        pointer: u32,
-        values: &[T; BLOCK_SIZE],
-    ) -> [T; BLOCK_SIZE]
-    where
+        addr_space: u32,
+        ptr: u32,
+        values: &mut [T; BLOCK_SIZE],
+    ) where
         T: Copy + Debug,
     {
-        let prev = self.read(address_space, pointer);
-        self.write(address_space, pointer, values);
-        prev
+        debug_assert_eq!(size_of::<T>(), self.memory.cell_size[addr_space as usize]);
+        // SAFETY:
+        // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
+        self.memory
+            .get_memory_mut()
+            .get_unchecked_mut(addr_space as usize)
+            .swap((ptr as usize) * size_of::<T>(), values);
     }
-}
-
-// /// API for guest memory conforming to OpenVM ISA
-// pub trait GuestMemory {
-//     /// Returns `[pointer:BLOCK_SIZE]_{address_space}`
-//     ///
-//     /// # Safety
-//     /// The type `T` must be stack-allocated `repr(C)` or `repr(transparent)`,
-//     /// and it must be the exact type used to represent a single memory cell in
-//     /// address space `address_space`. For standard usage,
-//     /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
-//     unsafe fn read<T, const BLOCK_SIZE: usize>(
-//         &self,
-//         address_space: u32,
-//         pointer: u32,
-//     ) -> [T; BLOCK_SIZE]
-//     where
-//         T: Copy + Debug;
-
-//     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}`
-//     ///
-//     /// # Safety
-//     /// See [`GuestMemory::read`].
-//     unsafe fn write<T, const BLOCK_SIZE: usize>(
-//         &mut self,
-//         address_space: u32,
-//         pointer: u32,
-//         values: &[T; BLOCK_SIZE],
-//     ) where
-//         T: Copy + Debug;
-
-//     /// Writes `values` to `[pointer:BLOCK_SIZE]_{address_space}` and returns
-//     /// the previous values.
-//     ///
-//     /// # Safety
-//     /// See [`GuestMemory::read`].
-//     #[inline(always)]
-//     unsafe fn replace<T, const BLOCK_SIZE: usize>(
-//         &mut self,
-//         address_space: u32,
-//         pointer: u32,
-//         values: &[T; BLOCK_SIZE],
-//     ) -> [T; BLOCK_SIZE]
-//     where
-//         T: Copy + Debug,
-//     {
-//         let prev = self.read(address_space, pointer);
-//         self.write(address_space, pointer, values);
-//         prev
-//     }
-// }
-
-// TO BE DELETED
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum MemoryLogEntry<T> {
-    Read {
-        address_space: u32,
-        pointer: u32,
-        len: usize,
-    },
-    Write {
-        address_space: u32,
-        pointer: u32,
-        data: Vec<T>,
-    },
-    IncrementTimestampBy(u32),
 }
 
 // perf[jpw]: since we restrict `timestamp < 2^29`, we could pack `timestamp, log2(block_size)`
@@ -186,8 +346,9 @@ pub struct TracingMemory<F> {
     #[getset(get = "pub")]
     pub data: GuestMemory,
     /// A map of `addr_space -> (ptr / min_block_size[addr_space] -> (timestamp: u32, block_size:
-    /// u32))` for the timestamp and block size of the latest access.
-    pub(super) meta: Vec<PagedVec<PAGE_SIZE>>,
+    /// u32))` for the timestamp and block size of the latest access. Each `MemoryBackend` is
+    /// equivalent to `Vec<AccessMetadata>`.
+    pub(super) meta: Vec<MemoryBackend>,
     /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
     /// all memory accesses in `addr_space` must be aligned to this block size.
     pub min_block_size: Vec<u32>,
@@ -202,22 +363,20 @@ impl<F: PrimeField32> TracingMemory<F> {
         memory_bus: MemoryBus,
         initial_block_size: usize,
     ) -> Self {
-        assert_eq!(mem_config.as_offset, 1);
-        let num_cells = 1usize << mem_config.pointer_max_bits; // max cells per address space
-        let num_addr_sp = 1 + (1 << mem_config.as_height);
+        let num_cells = mem_config.addr_space_sizes.clone();
+        let num_addr_sp = 1 + (1 << mem_config.addr_space_height);
         let mut min_block_size = vec![1; num_addr_sp];
         // TMP: hardcoding for now
         min_block_size[1] = 4;
         min_block_size[2] = 4;
         min_block_size[3] = 4;
-        let meta = min_block_size
-            .iter()
-            .map(|&min_block_size| {
-                PagedVec::new(
+        let meta = zip_eq(&min_block_size, &num_cells)
+            .map(|(min_block_size, num_cells)| {
+                MemoryBackend::new(
                     num_cells
                         .checked_mul(size_of::<AccessMetadata>())
                         .unwrap()
-                        .div_ceil(PAGE_SIZE * min_block_size as usize),
+                        .div_ceil(*min_block_size as usize),
                 )
             })
             .collect();
@@ -237,15 +396,15 @@ impl<F: PrimeField32> TracingMemory<F> {
     }
 
     /// Instantiates a new `Memory` data structure from an image.
-    pub fn with_image(mut self, image: MemoryImage, _access_capacity: usize) -> Self {
-        for (i, (paged_vec, cell_size)) in izip!(&image.paged_vecs, &image.cell_size).enumerate() {
-            let num_cells = paged_vec.bytes_capacity() / cell_size;
+    pub fn with_image(mut self, image: MemoryImage) -> Self {
+        for (i, (mem, cell_size)) in izip!(image.get_memory(), &image.cell_size).enumerate() {
+            let num_cells = mem.size() / cell_size;
 
-            self.meta[i] = PagedVec::new(
+            self.meta[i] = MemoryBackend::new(
                 num_cells
                     .checked_mul(size_of::<AccessMetadata>())
                     .unwrap()
-                    .div_ceil(PAGE_SIZE * self.min_block_size[i] as usize),
+                    .div_ceil(self.min_block_size[i] as usize),
             );
         }
         self.data = GuestMemory::new(image);
@@ -358,22 +517,26 @@ impl<F: PrimeField32> TracingMemory<F> {
         timestamp: u32,
     ) {
         let ptr = pointer / align;
-        let meta = unsafe { self.meta.get_unchecked_mut(address_space) };
-        meta.set(
-            ptr * size_of::<AccessMetadata>(),
-            &AccessMetadata {
-                timestamp,
-                block_size: block_size as u32,
-            },
-        );
-        for i in 1..(block_size / align) {
-            meta.set(
-                (ptr + i) * size_of::<AccessMetadata>(),
-                &AccessMetadata {
+        // SAFETY:
+        // - alignment is automatic since we multiply by `size_of::<AccessMetadata>()`
+        unsafe {
+            let meta = self.meta.get_unchecked_mut(address_space);
+            meta.write(
+                ptr * size_of::<AccessMetadata>(),
+                AccessMetadata {
                     timestamp,
-                    block_size: AccessMetadata::OCCUPIED,
+                    block_size: block_size as u32,
                 },
             );
+            for i in 1..(block_size / align) {
+                meta.write(
+                    (ptr + i) * size_of::<AccessMetadata>(),
+                    AccessMetadata {
+                        timestamp,
+                        block_size: AccessMetadata::OCCUPIED,
+                    },
+                );
+            }
         }
     }
 
@@ -400,8 +563,13 @@ impl<F: PrimeField32> TracingMemory<F> {
             if cur_ptr >= end {
                 break true;
             }
-            let mut current_metadata = self.meta[address_space]
-                .get::<AccessMetadata>(cur_ptr * size_of::<AccessMetadata>());
+            // SAFETY:
+            // - alignment is automatic since we multiply by `size_of::<AccessMetadata>()`
+            let mut current_metadata = unsafe {
+                self.meta
+                    .get_unchecked(address_space)
+                    .read::<AccessMetadata>(cur_ptr * size_of::<AccessMetadata>())
+            };
             if current_metadata.block_size == BLOCK_SIZE as u32 && cur_ptr + num_segs == end {
                 // We do not have to do anything
                 prev_ts = current_metadata.timestamp;
@@ -434,8 +602,11 @@ impl<F: PrimeField32> TracingMemory<F> {
             prev_ts = prev_ts.max(current_metadata.timestamp);
             while current_metadata.block_size == AccessMetadata::OCCUPIED {
                 cur_ptr -= 1;
-                current_metadata = self.meta[address_space]
-                    .get::<AccessMetadata>(cur_ptr * size_of::<AccessMetadata>());
+                current_metadata = unsafe {
+                    self.meta
+                        .get_unchecked(address_space)
+                        .read::<AccessMetadata>(cur_ptr * size_of::<AccessMetadata>())
+                };
             }
             block_timestamps[cur_ptr.saturating_sub(begin)
                 ..((cur_ptr + (current_metadata.block_size as usize) / align).min(end) - begin)]
@@ -546,7 +717,7 @@ impl<F: PrimeField32> TracingMemory<F> {
         &mut self,
         address_space: u32,
         pointer: u32,
-        values: &[T; BLOCK_SIZE],
+        mut values: [T; BLOCK_SIZE],
     ) -> (u32, [T; BLOCK_SIZE])
     where
         T: Copy + Debug,
@@ -554,7 +725,9 @@ impl<F: PrimeField32> TracingMemory<F> {
         self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
         let t_prev =
             self.prev_access_time::<BLOCK_SIZE>(address_space as usize, pointer as usize, ALIGN);
-        let values_prev = self.data.replace(address_space, pointer, values);
+        self.data.swap(address_space, pointer, &mut values);
+        // values has been swapped so now it has the previous values
+        let values_prev = values;
         let t_curr = self.timestamp;
         self.timestamp += 1;
         self.set_meta_block(
@@ -587,12 +760,23 @@ impl<F: PrimeField32> TracingMemory<F> {
     /// all future accesses are marked as "dirty".
     // block_size is initialized to 0, so nonzero block_size happens to also mark "dirty" cells
     // **Assuming** for now that only the start of a block has nonzero block_size
-    pub fn touched_blocks(&self) -> impl Iterator<Item = (Address, AccessMetadata)> + '_ {
-        zip_eq(&self.meta, &self.min_block_size)
+    pub fn touched_blocks(&self) -> impl ParallelIterator<Item = (Address, AccessMetadata)> + '_ {
+        #[cfg(not(feature = "parallel"))]
+        use itertools::Itertools;
+        self.meta
+            .par_iter()
+            .zip_eq(self.min_block_size.par_iter())
             .enumerate()
-            .flat_map(move |(addr_space, (page, &align))| {
-                page.iter::<AccessMetadata>()
-                    .filter_map(move |(idx, metadata)| {
+            .flat_map(move |(addr_space, (meta, &align))| {
+                let raw = meta.as_slice();
+                // SAFETY:
+                // - by construction, `raw` was created to consist of `AccessMetadata`
+                let (prefix, meta, suffix) = unsafe { raw.align_to::<AccessMetadata>() };
+                debug_assert_eq!(prefix.len(), 0);
+                debug_assert_eq!(suffix.len(), 0);
+                meta.par_iter()
+                    .enumerate()
+                    .filter_map(move |(idx, &metadata)| {
                         (metadata.block_size != 0
                             && metadata.block_size != AccessMetadata::OCCUPIED)
                             .then_some(((addr_space as u32, idx as u32 * align), metadata))

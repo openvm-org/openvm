@@ -27,7 +27,8 @@ jobs:
     runs-on:
       - runs-on=${{ github.run_id }}
       - disk=large
-      - runner=32cpu-linux-arm64
+      - runner=64cpu-linux-arm64
+      - image=ubuntu24-full-arm64
       - extras=s3-cache
 
     steps:
@@ -78,4 +79,4 @@ jobs:
       - name: Run CLI tests
         working-directory: crates/cli
         run: |
-          cargo nextest run --cargo-profile=fast
+          cargo nextest run --cargo-profile=fast --test-threads=1

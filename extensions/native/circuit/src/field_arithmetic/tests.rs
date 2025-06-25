@@ -95,7 +95,7 @@ fn set_and_execute(
 #[test_case(FieldArithmeticOpcode::DIV, 100)]
 fn new_field_arithmetic_air_test(opcode: FieldArithmeticOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default_native();
     let mut chip = create_test_chip(&tester);
 
     for _ in 0..num_ops {
@@ -139,7 +139,7 @@ fn run_negative_field_arithmetic_test(
     error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default_native();
     let mut chip = create_test_chip(&tester);
 
     set_and_execute(&mut tester, &mut chip, &mut rng, opcode, Some(b), Some(c));
@@ -233,7 +233,7 @@ fn field_arithmetic_negative_rand() {
 #[should_panic]
 #[test]
 fn new_field_arithmetic_air_test_panic() {
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default_native();
     let mut chip = create_test_chip(&tester);
     tester.write(4, 0, [BabyBear::ZERO]);
     // should panic

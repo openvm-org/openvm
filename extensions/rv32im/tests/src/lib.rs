@@ -8,8 +8,8 @@ mod tests {
             hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, Streams, VirtualMachine,
             VmExecutor,
         },
-        system::memory::tree::public_values::UserPublicValuesProof,
-        utils::{air_test, air_test_with_min_segments},
+        system::memory::merkle::public_values::UserPublicValuesProof,
+        utils::{air_test, air_test_with_min_segments, test_system_config_with_continuations},
     };
     use openvm_instructions::exe::VmExe;
     use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
@@ -30,9 +30,28 @@ mod tests {
 
     type F = BabyBear;
 
+    #[cfg(test)]
+    fn test_rv32i_config() -> Rv32IConfig {
+        Rv32IConfig {
+            system: test_system_config_with_continuations(),
+            ..Default::default()
+        }
+    }
+
+    #[cfg(test)]
+    fn test_rv32im_config() -> Rv32ImConfig {
+        Rv32ImConfig {
+            rv32i: Rv32IConfig {
+                system: test_system_config_with_continuations(),
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
     #[test_case("fibonacci", 1)]
     fn test_rv32i(example_name: &str, min_segments: usize) -> Result<()> {
-        let config = Rv32IConfig::default();
+        let config = test_rv32i_config();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -47,7 +66,7 @@ mod tests {
 
     #[test_case("collatz", 1)]
     fn test_rv32im(example_name: &str, min_segments: usize) -> Result<()> {
-        let config = Rv32ImConfig::default();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -63,7 +82,7 @@ mod tests {
     #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
     fn test_rv32im_std(example_name: &str, min_segments: usize) -> Result<()> {
-        let config = Rv32ImConfig::default();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             example_name,
@@ -83,7 +102,7 @@ mod tests {
 
     #[test]
     fn test_read_vec() -> Result<()> {
-        let config = Rv32IConfig::default();
+        let config = test_rv32i_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -99,7 +118,7 @@ mod tests {
 
     #[test]
     fn test_hint_load_by_key() -> Result<()> {
-        let config = Rv32IConfig::default();
+        let config = test_rv32i_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint_load_by_key", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -122,7 +141,7 @@ mod tests {
 
     #[test]
     fn test_read() -> Result<()> {
-        let config = Rv32IConfig::default();
+        let config = test_rv32i_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "read", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -153,7 +172,7 @@ mod tests {
 
     #[test]
     fn test_reveal() -> Result<()> {
-        let config = Rv32IConfig::default();
+        let config = test_rv32i_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -206,7 +225,7 @@ mod tests {
 
     #[test]
     fn test_print() -> Result<()> {
-        let config = Rv32IConfig::default();
+        let config = test_rv32i_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "print", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -221,7 +240,7 @@ mod tests {
 
     #[test]
     fn test_heap_overflow() -> Result<()> {
-        let config = Rv32ImConfig::default();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "heap_overflow", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -242,7 +261,7 @@ mod tests {
 
     #[test]
     fn test_hashmap() -> Result<()> {
-        let config = Rv32ImConfig::default();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "hashmap",
@@ -262,7 +281,7 @@ mod tests {
 
     #[test]
     fn test_tiny_mem_test() -> Result<()> {
-        let config = Rv32ImConfig::default();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "tiny-mem-test",
@@ -283,7 +302,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_load_x0() {
-        let config = Rv32ImConfig::default();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "load_x0", &config).unwrap();
         let exe = VmExe::from_elf(
             elf,
@@ -300,7 +319,7 @@ mod tests {
     #[test_case(vec!["getrandom", "getrandom-unsupported"])]
     #[test_case(vec!["getrandom"])]
     fn test_getrandom_unsupported(features: Vec<&str>) {
-        let config = Rv32ImConfig::default();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "getrandom",

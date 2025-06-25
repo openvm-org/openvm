@@ -392,6 +392,7 @@ mod is_equal_tests {
         (chip, bitwise_chip)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn set_and_execute_is_equal<
         const NUM_LANES: usize,
         const LANE_SIZE: usize,

@@ -37,11 +37,9 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
         let mut chip_complex = self.vm_config.create_chip_complex().unwrap();
         // Initialize the memory
         let memory = if self.vm_config.system().continuation_enabled {
-            let mem_config = self.vm_config.system().memory_config;
+            let mem_config = self.vm_config.system().memory_config.clone();
             Some(GuestMemory::new(AddressMap::from_sparse(
-                mem_config.as_offset,
-                1 << mem_config.as_height,
-                1 << mem_config.pointer_max_bits,
+                mem_config.addr_space_sizes.clone(),
                 self.exe.init_memory.clone(),
             )))
         } else {

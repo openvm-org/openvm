@@ -218,6 +218,7 @@ where
 /// in scenarios involving chips that:
 /// - have a single row per record, and
 /// - have trace row = [adapter_row, core_row]
+///
 /// **NOTE**: `M` is the metadata type that implements `AdapterCoreMetadata`
 #[derive(Debug, Clone, Default)]
 pub struct AdapterCoreLayout<M> {
@@ -292,6 +293,7 @@ pub type EmptyAdapterCoreLayout<F, AS> = AdapterCoreLayout<AdapterCoreEmptyMetad
 /// in scenarios involving chips that:
 /// - can have multiple rows per record, and
 /// - have possibly variable length records
+///
 /// **NOTE**: `M` is the metadata type that implements `MultiRowMetadata`
 #[derive(Debug, Clone, Default, derive_new::new)]
 pub struct MultiRowLayout<M> {
@@ -525,7 +527,15 @@ impl DenseRecordArena {
         self.alloc_many::<u8>(count)
     }
 
-    pub fn allocated(&mut self) -> &mut [u8] {
+    pub fn allocated(&self) -> &[u8] {
+        let size = self.records_buffer.position() as usize;
+        let offset = (MAX_ALIGNMENT
+            - (self.records_buffer.get_ref().as_ptr() as usize % MAX_ALIGNMENT))
+            % MAX_ALIGNMENT;
+        &self.records_buffer.get_ref()[offset..size]
+    }
+
+    pub fn allocated_mut(&mut self) -> &mut [u8] {
         let size = self.records_buffer.position() as usize;
         let offset = (MAX_ALIGNMENT
             - (self.records_buffer.get_ref().as_ptr() as usize % MAX_ALIGNMENT))
@@ -541,8 +551,8 @@ impl DenseRecordArena {
     }
 
     // Returns a [RecordSeeker] on the allocated buffer
-    pub fn get_record_seeker<'a, R, L>(&'a mut self) -> RecordSeeker<'a, DenseRecordArena, R, L> {
-        RecordSeeker::new(self.allocated())
+    pub fn get_record_seeker<R, L>(&mut self) -> RecordSeeker<DenseRecordArena, R, L> {
+        RecordSeeker::new(self.allocated_mut())
     }
 }
 
@@ -551,7 +561,7 @@ impl DenseRecordArena {
 impl<'a, A, C, M> RecordArena<'a, AdapterCoreLayout<M>, (A, C)> for DenseRecordArena
 where
     [u8]: CustomBorrow<'a, A, AdapterCoreLayout<M>> + CustomBorrow<'a, C, AdapterCoreLayout<M>>,
-    M: AdapterCoreMetadata + Clone,
+    M: Clone,
     A: SizedRecord<AdapterCoreLayout<M>>,
     C: SizedRecord<AdapterCoreLayout<M>>,
 {
@@ -583,7 +593,6 @@ where
 impl<'a, R, M> RecordArena<'a, MultiRowLayout<M>, R> for DenseRecordArena
 where
     [u8]: CustomBorrow<'a, R, MultiRowLayout<M>>,
-    M: MultiRowMetadata + Clone,
     R: SizedRecord<MultiRowLayout<M>>,
 {
     fn alloc(&'a mut self, layout: MultiRowLayout<M>) -> R {
@@ -591,7 +600,7 @@ where
         let record_alignment = R::alignment(&layout);
         let aligned_record_size = record_size.next_multiple_of(record_alignment);
         let buffer = self.alloc_bytes(aligned_record_size);
-        let record: R = buffer.custom_borrow(layout.clone());
+        let record: R = buffer.custom_borrow(layout);
         record
     }
 }
@@ -690,11 +699,11 @@ where
 {
     // A utility function to get the aligned widths of the adapter and core records
     fn get_aligned_sizes(layout: &AdapterCoreLayout<M>) -> (usize, usize) {
-        let adapter_alignment = A::alignment(&layout);
-        let core_alignment = C::alignment(&layout);
-        let adapter_size = A::size(&layout);
+        let adapter_alignment = A::alignment(layout);
+        let core_alignment = C::alignment(layout);
+        let adapter_size = A::size(layout);
         let aligned_adapter_size = adapter_size.next_multiple_of(core_alignment);
-        let core_size = C::size(&layout);
+        let core_size = C::size(layout);
         let aligned_core_size = (aligned_adapter_size + core_size)
             .next_multiple_of(adapter_alignment)
             - aligned_adapter_size;
@@ -932,7 +941,7 @@ pub trait AdapterTraceStep<F, CTX> {
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        data: &Self::WriteData,
+        data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
     );
 }
@@ -963,7 +972,7 @@ where
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-        data: &Self::WriteData,
+        data: Self::WriteData,
     ) where
         Ctx: E1E2ExecutionCtx;
 }

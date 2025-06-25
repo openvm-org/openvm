@@ -34,7 +34,7 @@ strum = { workspace = true }
 [dev-dependencies]
 p3-symmetric = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
-openvm-native-circuit = { workspace = true }
+openvm-native-circuit = { workspace = true, features = ["test-utils"]}
 openvm-stark-sdk = { workspace = true }
 rand.workspace = true
 

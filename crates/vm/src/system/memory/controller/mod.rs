@@ -23,14 +23,9 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 
 use self::interface::MemoryInterface;
-use super::{
-    online::INITIAL_TIMESTAMP,
-    paged_vec::{AddressMap, PAGE_SIZE},
-    volatile::VolatileBoundaryChip,
-    MemoryAddress,
-};
+use super::{online::INITIAL_TIMESTAMP, volatile::VolatileBoundaryChip, AddressMap, MemoryAddress};
 use crate::{
-    arch::{hasher::HasherChip, MemoryConfig},
+    arch::{hasher::HasherChip, MemoryConfig, ADDR_SPACE_OFFSET},
     system::memory::{
         dimensions::MemoryDimensions,
         merkle::{MemoryMerkleChip, SerialReceiver},
@@ -50,7 +45,7 @@ pub const MERKLE_AIR_OFFSET: usize = 1;
 /// The offset of the boundary AIR in AIRs of MemoryController.
 pub const BOUNDARY_AIR_OFFSET: usize = 0;
 
-pub type MemoryImage = AddressMap<PAGE_SIZE>;
+pub type MemoryImage = AddressMap;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -193,13 +188,17 @@ impl<F: PrimeField32> MemoryController<F> {
     ) -> Self {
         let range_checker_bus = range_checker.bus();
         assert!(mem_config.pointer_max_bits <= F::bits() - 2);
-        assert!(mem_config.as_height < F::bits() - 2);
+        assert!(mem_config
+            .addr_space_sizes
+            .iter()
+            .all(|&x| x <= (1 << mem_config.pointer_max_bits)));
+        assert!(mem_config.addr_space_height < F::bits() - 2);
         let addr_space_max_bits = log2_ceil_usize(
-            (mem_config.as_offset + 2u32.pow(mem_config.as_height as u32)) as usize,
+            (ADDR_SPACE_OFFSET + 2u32.pow(mem_config.addr_space_height as u32)) as usize,
         );
         Self {
             memory_bus,
-            mem_config,
+            mem_config: mem_config.clone(),
             interface_chip: MemoryInterface::Volatile {
                 boundary_chip: VolatileBoundaryChip::new(
                     memory_bus,
@@ -224,11 +223,9 @@ impl<F: PrimeField32> MemoryController<F> {
         merkle_bus: PermutationCheckBus,
         compression_bus: PermutationCheckBus,
     ) -> Self {
-        assert_eq!(mem_config.as_offset, 1);
         let memory_dims = MemoryDimensions {
-            as_height: mem_config.as_height,
+            addr_space_height: mem_config.addr_space_height,
             address_height: mem_config.pointer_max_bits - log2_strict_usize(CHUNK),
-            as_offset: 1,
         };
         let range_checker_bus = range_checker.bus();
         let interface_chip = MemoryInterface::Persistent {
@@ -243,7 +240,7 @@ impl<F: PrimeField32> MemoryController<F> {
         };
         Self {
             memory_bus,
-            mem_config,
+            mem_config: mem_config.clone(),
             interface_chip,
             memory: TracingMemory::new(&mem_config, range_checker.clone(), memory_bus, CHUNK), /* it is expected that the memory will be
                                                                                                 * set later */
@@ -284,17 +281,16 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
+    // TODO[jpw]: change MemoryImage interface here
     pub fn set_initial_memory(&mut self, memory: MemoryImage) {
         if self.timestamp() > INITIAL_TIMESTAMP + 1 {
             panic!("Cannot set initial memory after first timestamp");
         }
-        if memory.is_empty() {
-            return;
-        }
 
         match &mut self.interface_chip {
             MemoryInterface::Volatile { .. } => {
-                panic!("Cannot set initial memory for volatile memory");
+                // Skip initialization for volatile memory
+                return;
             }
             MemoryInterface::Persistent { initial_memory, .. } => {
                 *initial_memory = memory.clone();
@@ -307,7 +303,7 @@ impl<F: PrimeField32> MemoryController<F> {
             self.memory_bus,
             CHUNK,
         )
-        .with_image(memory, self.mem_config.access_capacity);
+        .with_image(memory);
     }
 
     pub fn memory_bridge(&self) -> MemoryBridge {
@@ -489,7 +485,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     /// Returns the final memory state if persistent.
-    #[allow(clippy::assertions_on_constants)]
+    #[tracing::instrument(name = "memory_finalize", skip_all)]
     pub fn finalize<H>(&mut self, hasher: Option<&mut H>)
     where
         H: HasherChip<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
@@ -533,7 +529,7 @@ impl<F: PrimeField32> MemoryController<F> {
                     .map(|(key, value)| (key, value.values))
                     .collect();
                 metrics_span("merkle_finalize_time_ms", || {
-                    merkle_chip.finalize(initial_memory.clone(), &final_memory_values, hasher)
+                    merkle_chip.finalize(initial_memory, &final_memory_values, hasher)
                 });
             }
         }
@@ -762,7 +758,7 @@ mod tests {
 
         let mut memory_controller = MemoryController::<F>::with_volatile_memory(
             memory_bus,
-            memory_config,
+            memory_config.clone(),
             range_checker.clone(),
         );
 
@@ -778,7 +774,7 @@ mod tests {
                 unsafe {
                     memory_controller
                         .memory
-                        .write::<F, 1, 1>(address_space, pointer, &[data]);
+                        .write::<F, 1, 1>(address_space, pointer, [data]);
                 }
             } else {
                 unsafe {

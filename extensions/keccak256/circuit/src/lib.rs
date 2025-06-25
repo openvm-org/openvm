@@ -119,6 +119,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
         let src = read_rv32_register_from_state(state, b.as_canonical_u32());
         let len = read_rv32_register_from_state(state, c.as_canonical_u32());
 
+        // SAFETY: RV32_MEMORY_AS is memory address space of type u8
         let message = unsafe {
             state
                 .memory
@@ -126,8 +127,8 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
                 .get_slice((RV32_MEMORY_AS, src), len as usize)
         };
 
-        let output = keccak256(&message);
-        memory_write(state.memory, RV32_MEMORY_AS, dst, &output);
+        let output = keccak256(message);
+        memory_write(state.memory, RV32_MEMORY_AS, dst, output);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

@@ -6,12 +6,12 @@ use crate::{Native, NativeConfig};
 
 pub(crate) const CASTF_MAX_BITS: usize = 30;
 
-pub fn execute_program(program: Program<BabyBear>, input_stream: impl Into<Streams<BabyBear>>) {
-    let system_config = SystemConfig::default()
-        .with_public_values(4)
-        .with_max_segment_len((1 << 25) - 100);
+pub fn execute_program_with_system_config(
+    program: Program<BabyBear>,
+    input_stream: impl Into<Streams<BabyBear>>,
+    system_config: SystemConfig,
+) {
     let config = NativeConfig::new(system_config, Native);
-
     let input = input_stream.into();
 
     let vm = VirtualMachine::new(default_engine(), config);
@@ -29,6 +29,13 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: impl Into<Strea
     vm.execute(program, input, &segments).unwrap();
 }
 
+pub fn execute_program(program: Program<BabyBear>, input_stream: impl Into<Streams<BabyBear>>) {
+    let system_config = SystemConfig::default()
+        .with_public_values(4)
+        .with_max_segment_len((1 << 25) - 100);
+    execute_program_with_system_config(program, input_stream, system_config);
+}
+
 pub(crate) const fn const_max(a: usize, b: usize) -> usize {
     [a, b][(a < b) as usize]
 }
@@ -38,10 +45,24 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
 pub mod test_utils {
     use std::array;
 
-    use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+    use openvm_circuit::{
+        arch::{
+            testing::{memory::gen_pointer, VmChipTestBuilder},
+            Streams,
+        },
+        utils::test_system_config,
+    };
+    use openvm_instructions::{
+        program::Program,
+        riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    };
     use openvm_native_compiler::conversion::AS;
     use openvm_stark_backend::p3_field::PrimeField32;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{distributions::Standard, prelude::Distribution, rngs::StdRng, Rng};
+
+    use super::execute_program_with_system_config;
+    use crate::extension::NativeConfig;
 
     // If immediate, returns (value, AS::Immediate). Otherwise, writes to native memory and returns
     // (ptr, AS::Native). If is_imm is None, randomizes it.
@@ -75,5 +96,33 @@ pub mod test_utils {
         let ptr = gen_pointer(rng, N);
         tester.write::<N>(AS::Native as usize, ptr, value);
         (value, ptr)
+    }
+
+    pub fn test_execute_program(
+        program: Program<BabyBear>,
+        input_stream: impl Into<Streams<BabyBear>>,
+    ) {
+        let system_config = test_native_config()
+            .system
+            .with_public_values(4)
+            .with_max_segment_len((1 << 25) - 100);
+        execute_program_with_system_config(program, input_stream, system_config);
+    }
+
+    pub fn test_native_config() -> NativeConfig {
+        let mut system = test_system_config();
+        system.memory_config.addr_space_sizes[RV32_REGISTER_AS as usize] = 0;
+        system.memory_config.addr_space_sizes[RV32_MEMORY_AS as usize] = 0;
+        NativeConfig {
+            system,
+            native: Default::default(),
+        }
+    }
+
+    pub fn test_native_continuations_config() -> NativeConfig {
+        NativeConfig {
+            system: test_system_config().with_continuations(),
+            native: Default::default(),
+        }
     }
 }

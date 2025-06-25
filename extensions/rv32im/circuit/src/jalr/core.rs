@@ -265,7 +265,7 @@ where
         );
 
         self.adapter
-            .write(state.memory, instruction, &rd_data, &mut adapter_record);
+            .write(state.memory, instruction, rd_data, &mut adapter_record);
 
         // RISC-V spec explicitly sets the least significant bit of `to_pc` to 0
         *state.pc = to_pc & !1;
@@ -344,7 +344,7 @@ where
         let (to_pc, rd) = run_jalr(*state.pc, rs1, c.as_canonical_u32() as u16, g.is_one());
         let rd = rd.map(|x| x);
 
-        self.adapter.write(state, instruction, &rd);
+        self.adapter.write(state, instruction, rd);
 
         *state.pc = to_pc & !1;
 

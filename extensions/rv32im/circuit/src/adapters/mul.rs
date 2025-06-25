@@ -194,7 +194,7 @@ where
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        data: &Self::WriteData,
+        data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
     ) {
         let &Instruction { a, d, .. } = instruction;
@@ -206,7 +206,7 @@ where
             memory,
             RV32_REGISTER_AS,
             a.as_canonical_u32(),
-            &data[0],
+            data[0],
             &mut record.writes_aux.prev_timestamp,
             &mut record.writes_aux.prev_data,
         )
@@ -285,7 +285,7 @@ where
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-        rd: &Self::WriteData,
+        rd: Self::WriteData,
     ) where
         Ctx: E1E2ExecutionCtx,
     {
@@ -293,6 +293,6 @@ where
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        memory_write_from_state(state, RV32_REGISTER_AS, a.as_canonical_u32(), &rd[0]);
+        memory_write_from_state(state, RV32_REGISTER_AS, a.as_canonical_u32(), rd[0]);
     }
 }

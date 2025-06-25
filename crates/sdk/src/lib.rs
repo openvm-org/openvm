@@ -18,7 +18,7 @@ use openvm_circuit::{
         PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
     },
     system::{
-        memory::{tree::public_values::extract_public_values, CHUNK},
+        memory::{merkle::public_values::extract_public_values, CHUNK},
         program::trace::{compute_exe_commit, VmCommittedExe},
     },
 };
@@ -180,11 +180,8 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
     {
         let vm = VmExecutor::new(vm_config);
         let final_memory = vm.execute_e1(exe, inputs, None)?.memory;
-        let public_values = extract_public_values(
-            &vm.config.system().memory_config.memory_dimensions(),
-            vm.config.system().num_public_values,
-            &final_memory,
-        );
+        let public_values =
+            extract_public_values(vm.config.system().num_public_values, &final_memory);
         Ok(public_values)
     }
 

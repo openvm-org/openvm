@@ -33,7 +33,7 @@ where
 }
 
 #[inline(always)]
-pub fn memory_write_native<F, const N: usize>(memory: &mut GuestMemory, ptr: u32, data: &[F; N])
+pub fn memory_write_native<F, const N: usize>(memory: &mut GuestMemory, ptr: u32, data: [F; N])
 where
     F: PrimeField32,
 {
@@ -80,7 +80,7 @@ where
 pub fn memory_write_native_from_state<Ctx, F, const N: usize>(
     state: &mut VmStateMut<F, GuestMemory, Ctx>,
     ptr: u32,
-    data: &[F; N],
+    data: [F; N],
 ) where
     F: PrimeField32,
     Ctx: E1E2ExecutionCtx,
@@ -110,7 +110,7 @@ where
 pub fn timed_write_native<F, const BLOCK_SIZE: usize>(
     memory: &mut TracingMemory<F>,
     ptr: u32,
-    vals: &[F; BLOCK_SIZE],
+    vals: [F; BLOCK_SIZE],
 ) -> (u32, [F; BLOCK_SIZE])
 where
     F: PrimeField32,
@@ -140,7 +140,7 @@ where
 pub fn tracing_write_native<F, const BLOCK_SIZE: usize>(
     memory: &mut TracingMemory<F>,
     ptr: u32,
-    vals: &[F; BLOCK_SIZE],
+    vals: [F; BLOCK_SIZE],
     prev_timestamp: &mut u32,
     prev_data: &mut [F; BLOCK_SIZE],
 ) where
@@ -156,7 +156,7 @@ pub fn tracing_write_native<F, const BLOCK_SIZE: usize>(
 pub fn tracing_write_native_inplace<F, const BLOCK_SIZE: usize>(
     memory: &mut TracingMemory<F>,
     ptr: u32,
-    vals: &[F; BLOCK_SIZE],
+    vals: [F; BLOCK_SIZE],
     cols: &mut MemoryWriteAuxCols<F, BLOCK_SIZE>,
 ) where
     F: PrimeField32,

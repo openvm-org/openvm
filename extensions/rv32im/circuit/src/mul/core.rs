@@ -215,7 +215,7 @@ where
 
         // TODO(ayush): avoid this conversion
         self.adapter
-            .write(state.memory, instruction, &[a].into(), &mut adapter_record);
+            .write(state.memory, instruction, [a].into(), &mut adapter_record);
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         Ok(())
@@ -282,7 +282,7 @@ where
 
         let (rd, _) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1, &rs2);
 
-        self.adapter.write(state, instruction, &[rd].into());
+        self.adapter.write(state, instruction, [rd].into());
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 

@@ -1,5 +1,5 @@
-use openvm_circuit::arch::{SingleSegmentVmExecutor, SystemConfig, VirtualMachine};
-use openvm_native_circuit::{execute_program, Native, NativeConfig};
+use openvm_circuit::arch::{SingleSegmentVmExecutor, VirtualMachine};
+use openvm_native_circuit::{test_execute_program, test_native_config};
 use openvm_native_compiler::{asm::AsmBuilder, prelude::*};
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
 use openvm_stark_sdk::{config::baby_bear_poseidon2::default_engine, p3_baby_bear::BabyBear};
@@ -28,7 +28,7 @@ fn test_compiler_public_values() {
     }
 
     let program = builder.compile_isa();
-    let config = NativeConfig::new(SystemConfig::default().with_public_values(2), Native);
+    let config = test_native_config();
 
     let vm = VirtualMachine::new(default_engine(), config.clone());
     let vm_pk = vm.keygen();
@@ -78,5 +78,5 @@ fn test_compiler_public_values_no_initial() {
     builder.halt();
 
     let program = builder.compile_isa();
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }

@@ -11,7 +11,7 @@ mod tests {
     use openvm_algebra_transpiler::ModularTranspilerExtension;
     use openvm_circuit::{
         arch::instructions::exe::VmExe,
-        utils::{air_test, air_test_with_min_segments},
+        utils::{air_test, air_test_with_min_segments, test_system_config_with_continuations},
     };
     use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, P256_CONFIG, SECP256K1_CONFIG};
     use openvm_ecc_transpiler::EccTranspilerExtension;
@@ -35,9 +35,16 @@ mod tests {
 
     type F = BabyBear;
 
+    #[cfg(test)]
+    fn test_rv32weierstrass_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
+        let mut config = Rv32WeierstrassConfig::new(curves);
+        config.system = test_system_config_with_continuations();
+        config
+    }
+
     #[test]
     fn test_ec() -> Result<()> {
-        let config = Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone()]);
+        let config = test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone()]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "ec",
@@ -59,7 +66,7 @@ mod tests {
 
     #[test]
     fn test_ec_nonzero_a() -> Result<()> {
-        let config = Rv32WeierstrassConfig::new(vec![P256_CONFIG.clone()]);
+        let config = test_rv32weierstrass_config(vec![P256_CONFIG.clone()]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "ec_nonzero_a",
@@ -82,7 +89,7 @@ mod tests {
     #[test]
     fn test_ec_two_curves() -> Result<()> {
         let config =
-            Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
+            test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "ec_two_curves",
@@ -106,8 +113,7 @@ mod tests {
     fn test_decompress() -> Result<()> {
         use halo2curves_axiom::{group::Curve, secp256k1::Secp256k1Affine};
 
-        let config =
-            Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone(),
+        let config = test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone(),
                 CurveConfig {
                     struct_name: "CurvePoint5mod8".to_string(),
                     modulus: BigUint::from_str("115792089237316195423570985008687907853269984665640564039457584007913129639501")
@@ -260,7 +266,7 @@ mod tests {
         )
         .unwrap();
         let config =
-            Rv32WeierstrassConfig::new(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
+            test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
         air_test(config, openvm_exe);
     }
 }

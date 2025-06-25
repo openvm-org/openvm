@@ -212,7 +212,7 @@ where
             tracing_write_native(
                 state.memory,
                 a.as_canonical_u32(),
-                &[F::from_canonical_u32(
+                [F::from_canonical_u32(
                     state.pc.wrapping_add(DEFAULT_PC_STEP),
                 )],
                 &mut record.write.prev_timestamp,
@@ -228,7 +228,7 @@ where
             tracing_write_native(
                 state.memory,
                 a_ptr,
-                &[a_val],
+                [a_val],
                 &mut record.write.prev_timestamp,
                 &mut record.write.prev_data,
             );
@@ -319,7 +319,7 @@ where
             memory_write_native_from_state(
                 state,
                 a.as_canonical_u32(),
-                &[F::from_canonical_u32(
+                [F::from_canonical_u32(
                     state.pc.wrapping_add(DEFAULT_PC_STEP),
                 )],
             );
@@ -327,7 +327,7 @@ where
         } else if opcode == NativeRangeCheckOpcode::RANGE_CHECK.global_opcode() {
             let [a_val]: [F; 1] = memory_read_native(state.memory, a.as_canonical_u32());
 
-            memory_write_native_from_state(state, a.as_canonical_u32(), &[a_val]);
+            memory_write_native_from_state(state, a.as_canonical_u32(), [a_val]);
 
             #[cfg(debug_assertions)]
             {

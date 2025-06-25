@@ -187,7 +187,7 @@ impl<F: PrimeField32, CTX, const N: usize> AdapterTraceStep<F, CTX>
         &self,
         memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-        data: &Self::WriteData,
+        data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
     ) {
         let &Instruction { a, d, .. } = instruction;
@@ -277,7 +277,7 @@ where
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-        data: &Self::WriteData,
+        data: Self::WriteData,
     ) where
         Ctx: E1E2ExecutionCtx,
     {

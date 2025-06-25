@@ -255,7 +255,7 @@ impl<F: PrimeField32, CTX, const NUM_READS: usize, const READ_SIZE: usize> Adapt
         &self,
         _memory: &mut TracingMemory<F>,
         _instruction: &Instruction<F>,
-        _data: &Self::WriteData,
+        _data: Self::WriteData,
         _record: &mut Self::RecordMut<'_>,
     ) {
         // This adapter doesn't write anything
@@ -359,7 +359,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterExe
         &self,
         _state: &mut VmStateMut<F, GuestMemory, Ctx>,
         _instruction: &Instruction<F>,
-        _data: &Self::WriteData,
+        _data: Self::WriteData,
     ) where
         Ctx: E1E2ExecutionCtx,
     {

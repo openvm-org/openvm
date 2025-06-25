@@ -1,8 +1,11 @@
 use std::{array, borrow::BorrowMut};
 
-use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, VmChipTestBuilder},
-    VmAirWrapper,
+use openvm_circuit::{
+    arch::{
+        testing::{memory::gen_pointer, VmChipTestBuilder},
+        MemoryConfig, VmAirWrapper,
+    },
+    system::memory::merkle::public_values::PUBLIC_VALUES_AS,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
@@ -174,7 +177,11 @@ fn set_and_execute(
 #[test_case(STOREH, 100)]
 fn rand_loadstore_test(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut mem_config = MemoryConfig::default();
+    if [STOREW, STOREB, STOREH].contains(&opcode) {
+        mem_config.addr_space_sizes[PUBLIC_VALUES_AS as usize] = 1 << 29;
+    }
+    let mut tester = VmChipTestBuilder::volatile(mem_config);
     let mut chip = create_test_chip(&mut tester);
 
     for _ in 0..num_ops {
@@ -221,7 +228,11 @@ fn run_negative_loadstore_test(
     interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut mem_config = MemoryConfig::default();
+    if [STOREW, STOREB, STOREH].contains(&opcode) {
+        mem_config.addr_space_sizes[PUBLIC_VALUES_AS as usize] = 1 << 29;
+    }
+    let mut tester = VmChipTestBuilder::volatile(mem_config);
     let mut chip = create_test_chip(&mut tester);
 
     set_and_execute(

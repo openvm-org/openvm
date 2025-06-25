@@ -94,7 +94,7 @@ fn set_and_execute_range_check(
 #[test]
 fn rand_jal_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default_native();
     let mut chip = create_test_chip(&tester);
 
     let num_tests: usize = 100;
@@ -109,7 +109,7 @@ fn rand_jal_test() {
 #[test]
 fn rand_range_check_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default_native();
     let mut chip = create_test_chip(&tester);
 
     let f = |x: u32, y: u32| RangeCheckTestCase {
@@ -144,7 +144,7 @@ fn rand_range_check_test() {
 fn negative_range_check_test() {
     {
         let mut rng = create_seeded_rng();
-        let mut tester = VmChipTestBuilder::default();
+        let mut tester = VmChipTestBuilder::default_native();
         let mut chip = create_test_chip(&tester);
         chip.step.set_debug();
 
@@ -165,7 +165,7 @@ fn negative_range_check_test() {
     }
     {
         let mut rng = create_seeded_rng();
-        let mut tester = VmChipTestBuilder::default();
+        let mut tester = VmChipTestBuilder::default_native();
         let mut chip = create_test_chip(&tester);
         chip.step.set_debug();
 
@@ -189,7 +189,7 @@ fn negative_range_check_test() {
 #[test]
 fn negative_jal_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
+    let mut tester = VmChipTestBuilder::default_native();
     let mut chip = create_test_chip(&tester);
 
     set_and_execute(&mut tester, &mut chip, &mut rng, None, None);

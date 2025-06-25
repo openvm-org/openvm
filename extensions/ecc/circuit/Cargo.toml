@@ -38,3 +38,6 @@ openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 lazy_static = { workspace = true }
+
+[package.metadata.cargo-shear]
+ignored = ["rand"]

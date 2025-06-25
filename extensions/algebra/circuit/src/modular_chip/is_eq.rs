@@ -355,7 +355,7 @@ where
         self.adapter.write(
             state.memory,
             instruction,
-            &write_data.into(),
+            write_data.into(),
             &mut adapter_record,
         );
 
@@ -479,7 +479,7 @@ where
         let mut write_data = [0u8; WRITE_LIMBS];
         write_data[0] = (b == c) as u8;
 
-        self.adapter.write(state, instruction, &write_data.into());
+        self.adapter.write(state, instruction, write_data.into());
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
