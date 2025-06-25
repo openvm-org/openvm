@@ -26,6 +26,7 @@ use openvm_stark_backend::{
     AirRef, Chip, ChipUsageGetter,
 };
 use static_assertions::const_assert;
+use tracing::instrument;
 
 use super::TimestampedEquipartition;
 use crate::system::memory::{
@@ -218,6 +219,7 @@ impl<F: PrimeField32> VolatileBoundaryChip<F> {
     }
     /// Volatile memory requires the starting and final memory to be in equipartition with block
     /// size `1`. When block size is `1`, then the `label` is the same as the address pointer.
+    #[instrument(name = "boundary_finalize", skip_all)]
     pub fn finalize(&mut self, final_memory: TimestampedEquipartition<F, 1>) {
         self.final_memory = Some(final_memory);
     }
