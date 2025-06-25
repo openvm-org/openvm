@@ -595,28 +595,26 @@ impl<F: PrimeField32> TracingMemory<F> {
         let first_meta = unsafe {
             self.meta[address_space].read::<AccessMetadata>(begin * size_of::<AccessMetadata>())
         };
-        let mut need_to_merge = first_meta.block_size != BLOCK_SIZE as u32;
-        let existing_metadatas = (0..num_segs)
-            .flat_map(|i| {
-                let meta = unsafe {
-                    self.meta[address_space]
-                        .read::<AccessMetadata>((begin + i) * size_of::<AccessMetadata>())
-                };
-                if meta != first_meta {
-                    need_to_merge = true;
-                }
-                if meta.block_size > 0 && meta.offset != AccessMetadata::UNSPLITTABLE {
-                    Some(meta)
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
+        let need_to_merge = (first_meta.block_size != BLOCK_SIZE as u32)
+            || (0..num_segs).any(|i| {
+                first_meta
+                    != unsafe {
+                        self.meta[address_space]
+                            .read::<AccessMetadata>((begin + i) * size_of::<AccessMetadata>())
+                    }
+            });
         if need_to_merge {
             // Then we need to split everything we touched there
-            for meta in existing_metadatas {
-                self.access_adapter_inventory
-                    .mark_to_split(meta.block_size as usize, meta.offset as usize);
+            for meta in unsafe {
+                self.meta[address_space].get_aligned_slice::<AccessMetadata>(
+                    begin * size_of::<AccessMetadata>(),
+                    num_segs,
+                )
+            } {
+                if meta.block_size > 0 && meta.offset != AccessMetadata::UNSPLITTABLE {
+                    self.access_adapter_inventory
+                        .mark_to_split(meta.block_size as usize, meta.offset as usize);
+                }
             }
         }
 
