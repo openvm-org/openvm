@@ -31,3 +31,8 @@
 
 - [SDK](./advanced-usage/sdk.md)
 - [Creating a New Extension](./advanced-usage/new-extension.md)
+- [Recursive Verification](./advanced-usage/recursion.md)
+
+# Guest Libraries
+
+- [Verify STARK](./guest-libs/verify-stark.md)
