@@ -527,7 +527,15 @@ impl DenseRecordArena {
         self.alloc_many::<u8>(count)
     }
 
-    pub fn allocated(&mut self) -> &mut [u8] {
+    pub fn allocated(&self) -> &[u8] {
+        let size = self.records_buffer.position() as usize;
+        let offset = (MAX_ALIGNMENT
+            - (self.records_buffer.get_ref().as_ptr() as usize % MAX_ALIGNMENT))
+            % MAX_ALIGNMENT;
+        &self.records_buffer.get_ref()[offset..size]
+    }
+
+    pub fn allocated_mut(&mut self) -> &mut [u8] {
         let size = self.records_buffer.position() as usize;
         let offset = (MAX_ALIGNMENT
             - (self.records_buffer.get_ref().as_ptr() as usize % MAX_ALIGNMENT))
@@ -544,7 +552,7 @@ impl DenseRecordArena {
 
     // Returns a [RecordSeeker] on the allocated buffer
     pub fn get_record_seeker<R, L>(&mut self) -> RecordSeeker<DenseRecordArena, R, L> {
-        RecordSeeker::new(self.allocated())
+        RecordSeeker::new(self.allocated_mut())
     }
 }
 
@@ -553,7 +561,7 @@ impl DenseRecordArena {
 impl<'a, A, C, M> RecordArena<'a, AdapterCoreLayout<M>, (A, C)> for DenseRecordArena
 where
     [u8]: CustomBorrow<'a, A, AdapterCoreLayout<M>> + CustomBorrow<'a, C, AdapterCoreLayout<M>>,
-    M: AdapterCoreMetadata + Clone,
+    M: Clone,
     A: SizedRecord<AdapterCoreLayout<M>>,
     C: SizedRecord<AdapterCoreLayout<M>>,
 {
@@ -585,7 +593,6 @@ where
 impl<'a, R, M> RecordArena<'a, MultiRowLayout<M>, R> for DenseRecordArena
 where
     [u8]: CustomBorrow<'a, R, MultiRowLayout<M>>,
-    M: MultiRowMetadata + Clone,
     R: SizedRecord<MultiRowLayout<M>>,
 {
     fn alloc(&'a mut self, layout: MultiRowLayout<M>) -> R {
@@ -593,7 +600,7 @@ where
         let record_alignment = R::alignment(&layout);
         let aligned_record_size = record_size.next_multiple_of(record_alignment);
         let buffer = self.alloc_bytes(aligned_record_size);
-        let record: R = buffer.custom_borrow(layout.clone());
+        let record: R = buffer.custom_borrow(layout);
         record
     }
 }
