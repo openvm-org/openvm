@@ -28,9 +28,9 @@ use thiserror::Error;
 use tracing::info_span;
 
 use super::{
-    execution_mode::tracegen::TracegenCtx, ExecutionError, InsExecutor, InsExecutorE1,
-    MatrixRecordArena, MemoryConfig, VmChipComplex, VmComplexTraceHeights, VmConfig,
-    VmInventoryError, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
+    execution_mode::e1::E1Ctx, ExecutionError, InsExecutorE1, MemoryConfig, VmChipComplex,
+    VmComplexTraceHeights, VmConfig, VmInventoryError, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
+    PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -38,12 +38,13 @@ use crate::{
     arch::{
         execution_mode::{
             e1::E1ExecutionControl,
-            metered::{ctx::Segment, MeteredCtx, MeteredExecutionControl},
-            tracegen::TracegenExecutionControl,
+            metered::{MeteredCtx, MeteredExecutionControl, Segment},
+            tracegen::{TracegenCtx, TracegenExecutionControl},
         },
         hasher::poseidon2::vm_poseidon2_hasher,
-        VmSegmentExecutor, VmSegmentState,
+        InsExecutor, MatrixRecordArena, VmSegmentExecutor, VmSegmentState,
     },
+    execute_spanned,
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{
@@ -228,22 +229,23 @@ where
             chip_complex,
             self.trace_height_constraints.clone(),
             exe.fn_bounds.clone(),
-            E1ExecutionControl::new(instret_end),
+            E1ExecutionControl,
         );
         #[cfg(feature = "bench-metrics")]
         {
             segment.metrics = state.metrics;
         }
 
+        let ctx = E1Ctx::new(instret_end);
         let mut exec_state = VmSegmentState::new(
             state.instret,
             state.pc,
             Some(GuestMemory::new(state.memory)),
             state.input,
             state.rng,
-            (),
+            ctx,
         );
-        segment.execute_spanned("execute_e1", &mut exec_state)?;
+        execute_spanned!("execute_e1", segment, &mut exec_state)?;
 
         if let Some(exit_code) = exec_state.exit_code {
             check_exit_code(exit_code)?;
@@ -289,20 +291,11 @@ where
         let chip_complex =
             create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
         let air_names = chip_complex.air_names();
-        // TODO(ayush): get rid of segmentation_strategy altogether
-        let ctrl = MeteredExecutionControl::new(&air_names, widths, interactions)
-            .with_max_trace_height(
-                self.config
-                    .system()
-                    .segmentation_strategy
-                    .max_trace_height() as u32,
-            )
-            .with_max_cells(self.config.system().segmentation_strategy.max_cells());
         let mut executor = VmSegmentExecutor::<F, VC, _>::new(
             chip_complex,
             self.trace_height_constraints.clone(),
             exe.fn_bounds.clone(),
-            ctrl,
+            MeteredExecutionControl,
         );
 
         #[cfg(feature = "bench-metrics")]
@@ -314,23 +307,40 @@ where
             .chip_complex
             .memory_controller()
             .continuation_enabled();
+        let as_alignment = executor
+            .chip_complex
+            .memory_controller()
+            .memory
+            .min_block_size
+            .iter()
+            .map(|&x| log2_strict_usize(x as usize) as u8)
+            .collect();
+        let constant_trace_heights = executor
+            .chip_complex
+            .constant_trace_heights()
+            .collect::<Vec<_>>();
+
         let ctx = MeteredCtx::new(
-            widths.len(),
+            constant_trace_heights,
             continuations_enabled,
-            executor
-                .chip_complex
-                .memory_controller()
-                .memory
-                .min_block_size
-                .iter()
-                .map(|&x| log2_strict_usize(x as usize) as u8)
-                .collect(),
+            as_alignment,
             executor
                 .chip_complex
                 .memory_controller()
                 .mem_config()
                 .memory_dimensions(),
-        );
+            air_names,
+            widths.to_vec(),
+            interactions.to_vec(),
+        )
+        // TODO(ayush): get rid of segmentation_strategy altogether
+        .with_max_trace_height(
+            self.config
+                .system()
+                .segmentation_strategy
+                .max_trace_height() as u32,
+        )
+        .with_max_cells(self.config.system().segmentation_strategy.max_cells());
 
         let mut exec_state = VmSegmentState::new(
             state.instret,
@@ -340,11 +350,11 @@ where
             state.rng,
             ctx,
         );
-        executor.execute_spanned("execute_metered", &mut exec_state)?;
+        execute_spanned!("execute_metered", executor, &mut exec_state)?;
 
         check_termination(exec_state.exit_code)?;
 
-        Ok(exec_state.ctx.segments)
+        Ok(exec_state.ctx.into_segments())
     }
 
     pub fn execute_metered(
@@ -401,12 +411,11 @@ where
             )
             .unwrap();
 
-            let ctrl = TracegenExecutionControl::new(Some(state.instret + num_insns));
             let mut segment = VmSegmentExecutor::<_, VC, _>::new(
                 chip_complex,
                 self.trace_height_constraints.clone(),
                 exe.fn_bounds.clone(),
-                ctrl,
+                TracegenExecutionControl,
             );
 
             #[cfg(feature = "bench-metrics")]
@@ -422,9 +431,7 @@ where
             let ctx = TracegenCtx::new_with_capacity(&capacities);
             let mut exec_state =
                 VmSegmentState::new(state.instret, state.pc, None, state.input, state.rng, ctx);
-            segment
-                .execute_spanned("execute_e3", &mut exec_state)
-                .map_err(&map_err)?;
+            execute_spanned!("execute_e3", segment, &mut exec_state).map_err(&map_err)?;
 
             assert_eq!(
                 exec_state.pc,
@@ -691,15 +698,14 @@ where
         let rng = StdRng::seed_from_u64(0);
         let chip_complex =
             create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
-        let ctrl = E1ExecutionControl::default();
         let mut executor = VmSegmentExecutor::<F, VC, _>::new(
             chip_complex,
             self.trace_height_constraints.clone(),
             exe.fn_bounds.clone(),
-            ctrl,
+            E1ExecutionControl,
         );
 
-        let ctx = ();
+        let ctx = E1Ctx::default();
 
         let mut exec_state = VmSegmentState::new(
             0,
@@ -709,7 +715,7 @@ where
             rng,
             ctx,
         );
-        executor.execute_spanned("execute_e1", &mut exec_state)?;
+        execute_spanned!("execute_e1", executor, &mut exec_state)?;
 
         check_termination(exec_state.exit_code)?;
 
@@ -729,37 +735,46 @@ where
         let chip_complex =
             create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
         let air_names = chip_complex.air_names();
-        let ctrl = MeteredExecutionControl::new(&air_names, widths, interactions)
-            .with_max_trace_height(
-                self.config
-                    .system()
-                    .segmentation_strategy
-                    .max_trace_height() as u32,
-            )
-            .with_max_cells(self.config.system().segmentation_strategy.max_cells())
-            // TODO(ayush): this is temporary way to prevent segmentation
-            //              add a metered execution mode with no segmentation
-            .with_segment_check_insns(u64::MAX);
         let mut executor = VmSegmentExecutor::<F, VC, _>::new(
             chip_complex,
             self.trace_height_constraints.clone(),
             exe.fn_bounds.clone(),
-            ctrl,
+            MeteredExecutionControl,
         );
 
+        let continuations_enabled = executor
+            .chip_complex
+            .memory_controller()
+            .continuation_enabled();
+        let as_alignment = executor
+            .chip_complex
+            .memory_controller()
+            .memory
+            .min_block_size
+            .iter()
+            .map(|&x| log2_strict_usize(x as usize) as u8)
+            .collect();
+        let constant_trace_heights = executor
+            .chip_complex
+            .constant_trace_heights()
+            .collect::<Vec<_>>();
+
         let ctx = MeteredCtx::new(
-            widths.len(),
-            self.config.system().continuation_enabled,
-            executor
-                .chip_complex
-                .memory_controller()
-                .memory
-                .min_block_size
-                .iter()
-                .map(|&x| log2_strict_usize(x as usize) as u8)
-                .collect(),
+            constant_trace_heights,
+            continuations_enabled,
+            as_alignment,
             self.config.system().memory_config.memory_dimensions(),
-        );
+            air_names,
+            widths.to_vec(),
+            interactions.to_vec(),
+        )
+        .with_max_trace_height(
+            self.config
+                .system()
+                .segmentation_strategy
+                .max_trace_height() as u32,
+        )
+        .with_max_cells(self.config.system().segmentation_strategy.max_cells());
 
         let mut exec_state = VmSegmentState::new(
             0,
@@ -769,18 +784,19 @@ where
             rng,
             ctx,
         );
-        executor.execute_spanned("execute_metered", &mut exec_state)?;
+        execute_spanned!("execute_metered", executor, &mut exec_state)?;
 
         check_termination(exec_state.exit_code)?;
 
         // Check segment count
+        let segments = exec_state.ctx.into_segments();
         assert_eq!(
-            exec_state.ctx.segments.len(),
+            segments.len(),
             1,
             "Expected exactly 1 segment, but got {}",
-            exec_state.ctx.segments.len()
+            segments.len()
         );
-        let segment = exec_state.ctx.segments.into_iter().next().unwrap();
+        let segment = segments.into_iter().next().unwrap();
         Ok(segment.trace_heights)
     }
 
@@ -801,12 +817,11 @@ where
         let chip_complex =
             create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
 
-        let ctrl = TracegenExecutionControl::default();
         let mut segment = VmSegmentExecutor::new(
             chip_complex,
             self.trace_height_constraints.clone(),
             exe.fn_bounds.clone(),
-            ctrl,
+            TracegenExecutionControl,
         );
 
         if let Some(overridden_heights) = self.overridden_heights.as_ref() {
@@ -820,7 +835,7 @@ where
             .collect::<Vec<_>>();
         let ctx = TracegenCtx::new_with_capacity(&capacities);
         let mut exec_state = VmSegmentState::new(0, exe.pc_start, None, input.into(), rng, ctx);
-        segment.execute_spanned("execute_e3", &mut exec_state)?;
+        execute_spanned!("execute_e3", segment, &mut exec_state)?;
         Ok((segment, exec_state.ctx))
     }
 

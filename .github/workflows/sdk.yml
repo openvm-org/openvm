@@ -98,3 +98,9 @@ jobs:
         run: |
           export RUST_BACKTRACE=1
           cargo nextest run --cargo-profile=fast --features parallel,evm-verify
+
+      - name: Run ignored tests
+        working-directory: crates/sdk
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          cargo nextest run --cargo-profile=fast --features parallel,evm-verify --ignored test_static_verifier_custom_pv_handler

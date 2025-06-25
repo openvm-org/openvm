@@ -13,6 +13,7 @@ use crate::{
 #[derive(Debug)]
 pub struct TracegenCtx<RA> {
     pub arenas: Vec<RA>,
+    pub instret_end: Option<u64>,
 }
 
 impl<RA> TracegenCtx<RA>
@@ -23,7 +24,10 @@ where
         let arenas = (0..count)
             .map(|_| RA::with_capacity(RA::Capacity::default()))
             .collect();
-        Self { arenas }
+        Self {
+            arenas,
+            instret_end: None,
+        }
     }
 
     pub fn new_with_capacity(capacities: &[RA::Capacity]) -> Self {
@@ -32,14 +36,15 @@ where
             .map(|&capacity| RA::with_capacity(capacity))
             .collect();
 
-        Self { arenas }
+        Self {
+            arenas,
+            instret_end: None,
+        }
     }
 }
 
-#[derive(Default, derive_new::new)]
-pub struct TracegenExecutionControl {
-    pub instret_end: Option<u64>,
-}
+#[derive(Default)]
+pub struct TracegenExecutionControl;
 
 impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControl
 where
@@ -51,7 +56,7 @@ where
     type Ctx = TracegenCtx<MatrixRecordArena<F>>;
 
     fn initialize_context(&self) -> Self::Ctx {
-        unimplemented!()
+        TracegenCtx::new(0)
     }
 
     fn should_suspend(
@@ -59,7 +64,9 @@ where
         state: &mut VmSegmentState<F, Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
-        self.instret_end
+        state
+            .ctx
+            .instret_end
             .is_some_and(|instret_end| state.instret >= instret_end)
     }
 

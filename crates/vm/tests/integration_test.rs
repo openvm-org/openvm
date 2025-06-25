@@ -8,7 +8,10 @@ use std::{
 use openvm_circuit::{
     arch::{
         create_and_initialize_chip_complex,
-        execution_mode::{e1::E1ExecutionControl, tracegen::TracegenExecutionControl},
+        execution_mode::{
+            e1::E1ExecutionControl,
+            tracegen::{TracegenCtx, TracegenExecutionControl},
+        },
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         interpreter::InterpretedInstance,
         ChipId, SingleSegmentVmExecutor, SystemTraceHeights, VirtualMachine, VmComplexTraceHeights,
@@ -779,16 +782,16 @@ fn test_hint_load_1() {
     )
     .unwrap();
 
-    let ctrl = TracegenExecutionControl::new(Some(segment.num_insns));
-    let mut segment = VmSegmentExecutor::<F, NativeConfig, _>::new(
+    let mut executor = VmSegmentExecutor::<F, NativeConfig, _>::new(
         chip_complex,
         vec![],
         Default::default(),
-        ctrl,
+        TracegenExecutionControl,
     );
 
-    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), rng, ());
-    segment.execute_from_state(&mut exec_state).unwrap();
+    let ctx = TracegenCtx::new(Some(segment.num_insns));
+    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), rng, ctx);
+    executor.execute_from_state(&mut exec_state).unwrap();
 
     let streams = exec_state.streams;
     assert!(streams.input_stream.is_empty());
@@ -844,19 +847,19 @@ fn test_hint_load_2() {
     )
     .unwrap();
 
-    let ctrl = TracegenExecutionControl::new(Some(segment.num_insns));
-    let mut segment = VmSegmentExecutor::<F, NativeConfig, _>::new(
+    let mut executor = VmSegmentExecutor::<F, NativeConfig, _>::new(
         chip_complex,
         vec![],
         Default::default(),
-        ctrl,
+        TracegenExecutionControl,
     );
 
-    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), rng, ());
-    segment.execute_from_state(&mut exec_state).unwrap();
+    let ctx = TracegenCtx::new(Some(segment.num_insns));
+    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), rng, ctx);
+    executor.execute_from_state(&mut exec_state).unwrap();
 
     let [read] = unsafe {
-        segment
+        executor
             .chip_complex
             .memory_controller()
             .memory
@@ -916,7 +919,7 @@ fn test_vm_pure_execution_non_continuation() {
 
     let executor = InterpretedInstance::<F, _>::new(test_native_config(), program);
     executor
-        .execute(E1ExecutionControl::new(None), vec![])
+        .execute(E1ExecutionControl, vec![])
         .expect("Failed to execute");
 }
 
@@ -943,6 +946,6 @@ fn test_vm_pure_execution_continuation() {
     let program = Program::from_instructions(&instructions);
     let executor = InterpretedInstance::<F, _>::new(test_native_continuations_config(), program);
     executor
-        .execute(E1ExecutionControl::new(None), vec![])
+        .execute(E1ExecutionControl, vec![])
         .expect("Failed to execute");
 }

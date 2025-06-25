@@ -13,8 +13,8 @@ use openvm_circuit::{
             MemoryAuxColsFactory,
         },
         native_adapter::util::{
-            memory_read_native, memory_write_native, tracing_read_native,
-            tracing_write_native_inplace,
+            memory_read_native, memory_read_native_from_state, memory_write_native_from_state,
+            tracing_read_native, tracing_write_native_inplace,
         },
     },
 };
@@ -859,18 +859,18 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_R
             );
             debug_assert_eq!(data_address_space, F::from_canonical_u32(AS::Native as u32));
             let [output_pointer]: [F; 1] =
-                memory_read_native(state.memory, output_register.as_canonical_u32());
+                memory_read_native_from_state(state, output_register.as_canonical_u32());
             let [input_pointer_1]: [F; 1] =
-                memory_read_native(state.memory, input_register_1.as_canonical_u32());
+                memory_read_native_from_state(state, input_register_1.as_canonical_u32());
             let [input_pointer_2] = if instruction.opcode == PERM_POS2.global_opcode() {
                 [input_pointer_1 + F::from_canonical_usize(CHUNK)]
             } else {
-                memory_read_native(state.memory, input_register_2.as_canonical_u32())
+                memory_read_native_from_state(state, input_register_2.as_canonical_u32())
             };
             let data_1: [F; CHUNK] =
-                memory_read_native(state.memory, input_pointer_1.as_canonical_u32());
+                memory_read_native_from_state(state, input_pointer_1.as_canonical_u32());
             let data_2: [F; CHUNK] =
-                memory_read_native(state.memory, input_pointer_2.as_canonical_u32());
+                memory_read_native_from_state(state, input_pointer_2.as_canonical_u32());
 
             let p2_input = std::array::from_fn(|i| {
                 if i < CHUNK {
@@ -881,14 +881,14 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_R
             });
             let output = self.subchip.permute(p2_input);
             let output_pointer_u32 = output_pointer.as_canonical_u32();
-            memory_write_native::<F, CHUNK>(
-                state.memory,
+            memory_write_native_from_state::<_, F, CHUNK>(
+                state,
                 output_pointer_u32,
                 std::array::from_fn(|i| output[i]),
             );
             if instruction.opcode == PERM_POS2.global_opcode() {
-                memory_write_native::<F, CHUNK>(
-                    state.memory,
+                memory_write_native_from_state::<_, F, CHUNK>(
+                    state,
                     output_pointer_u32 + CHUNK as u32,
                     std::array::from_fn(|i| output[i + CHUNK]),
                 );
@@ -915,27 +915,27 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_R
             }
 
             let [proof_id]: [F; 1] =
-                memory_read_native(state.memory, proof_id_ptr.as_canonical_u32());
+                memory_read_native_from_state(state, proof_id_ptr.as_canonical_u32());
             let [dim_base_pointer]: [F; 1] =
-                memory_read_native(state.memory, dim_register.as_canonical_u32());
+                memory_read_native_from_state(state, dim_register.as_canonical_u32());
             let dim_base_pointer_u32 = dim_base_pointer.as_canonical_u32();
             let [opened_base_pointer]: [F; 1] =
-                memory_read_native(state.memory, opened_register.as_canonical_u32());
+                memory_read_native_from_state(state, opened_register.as_canonical_u32());
             let opened_base_pointer_u32 = opened_base_pointer.as_canonical_u32();
             let [opened_length]: [F; 1] =
-                memory_read_native(state.memory, opened_length_register.as_canonical_u32());
+                memory_read_native_from_state(state, opened_length_register.as_canonical_u32());
             let [index_base_pointer]: [F; 1] =
-                memory_read_native(state.memory, index_register.as_canonical_u32());
+                memory_read_native_from_state(state, index_register.as_canonical_u32());
             let index_base_pointer_u32 = index_base_pointer.as_canonical_u32();
             let [commit_pointer]: [F; 1] =
-                memory_read_native(state.memory, commit_register.as_canonical_u32());
+                memory_read_native_from_state(state, commit_register.as_canonical_u32());
             let commit: [F; CHUNK] =
-                memory_read_native(state.memory, commit_pointer.as_canonical_u32());
+                memory_read_native_from_state(state, commit_pointer.as_canonical_u32());
 
             let opened_length = opened_length.as_canonical_u32() as usize;
 
             let initial_log_height = {
-                let [height]: [F; 1] = memory_read_native(state.memory, dim_base_pointer_u32);
+                let [height]: [F; 1] = memory_read_native_from_state(state, dim_base_pointer_u32);
                 height.as_canonical_u32()
             };
 
@@ -954,8 +954,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_R
 
             while log_height >= 0 {
                 if opened_index < opened_length
-                    && memory_read_native::<F, 1>(
-                        state.memory,
+                    && memory_read_native_from_state::<_, F, 1>(
+                        state,
                         dim_base_pointer_u32 + opened_index as u32,
                     )[0] == F::from_canonical_u32(log_height as u32)
                 {
@@ -977,24 +977,25 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_R
                                 } else {
                                     opened_index += 1;
                                     if opened_index == opened_length
-                                        || memory_read_native::<F, 1>(
-                                            state.memory,
+                                        || memory_read_native_from_state::<_, F, 1>(
+                                            state,
                                             dim_base_pointer_u32 + opened_index as u32,
                                         )[0] != F::from_canonical_u32(log_height as u32)
                                     {
                                         break;
                                     }
                                 }
-                                let [new_row_pointer, row_len]: [F; 2] = memory_read_native(
-                                    state.memory,
-                                    opened_base_pointer_u32 + 2 * opened_index as u32,
-                                );
+                                let [new_row_pointer, row_len]: [F; 2] =
+                                    memory_read_native_from_state(
+                                        state,
+                                        opened_base_pointer_u32 + 2 * opened_index as u32,
+                                    );
                                 row_pointer = new_row_pointer.as_canonical_u32() as usize;
                                 row_end = row_pointer
                                     + (opened_element_size * row_len).as_canonical_u32() as usize;
                             }
                             let [value]: [F; 1] =
-                                memory_read_native(state.memory, row_pointer as u32);
+                                memory_read_native_from_state(state, row_pointer as u32);
                             cells_len += 1;
                             *chunk_elem = value;
                             row_pointer += 1;
@@ -1009,13 +1010,13 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_R
                         }
                     }
                     let final_opened_index = opened_index - 1;
-                    let [height_check]: [F; 1] = memory_read_native(
-                        state.memory,
+                    let [height_check]: [F; 1] = memory_read_native_from_state(
+                        state,
                         dim_base_pointer_u32 + initial_opened_index as u32,
                     );
                     assert_eq!(height_check, F::from_canonical_u32(log_height as u32));
-                    let [height_check]: [F; 1] = memory_read_native(
-                        state.memory,
+                    let [height_check]: [F; 1] = memory_read_native_from_state(
+                        state,
                         dim_base_pointer_u32 + final_opened_index as u32,
                     );
                     assert_eq!(height_check, F::from_canonical_u32(log_height as u32));
@@ -1033,8 +1034,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_R
                 }
 
                 if log_height != 0 {
-                    let [sibling_is_on_right]: [F; 1] = memory_read_native(
-                        state.memory,
+                    let [sibling_is_on_right]: [F; 1] = memory_read_native_from_state(
+                        state,
                         index_base_pointer_u32 + sibling_index as u32,
                     );
                     let sibling_is_on_right = sibling_is_on_right == F::ONE;

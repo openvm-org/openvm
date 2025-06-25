@@ -10,6 +10,7 @@ use openvm_stark_backend::{
     prover::types::AirProofInput,
     AirRef, Chip, ChipUsageGetter,
 };
+use tracing::instrument;
 
 use crate::{
     arch::hasher::HasherChip,
@@ -25,6 +26,7 @@ use crate::{
 };
 
 impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
+    #[instrument(name = "merkle_finalize", skip_all)]
     pub fn finalize(
         &mut self,
         initial_memory: &MemoryImage,

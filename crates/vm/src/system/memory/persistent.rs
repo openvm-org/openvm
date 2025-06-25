@@ -18,6 +18,7 @@ use openvm_stark_backend::{
     AirRef, Chip, ChipUsageGetter,
 };
 use rustc_hash::FxHashSet;
+use tracing::instrument;
 
 use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP, TimestampedValues};
 use crate::{
@@ -199,6 +200,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         }
     }
 
+    #[instrument(name = "boundary_finalize", skip_all)]
     pub fn finalize<H>(
         &mut self,
         initial_memory: &MemoryImage,

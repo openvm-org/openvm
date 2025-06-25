@@ -1,5 +1,5 @@
 [workspace.package]
-version = "1.3.0-rc.0"
+version = "1.4.0-rc.0"
 edition = "2021"
 rust-version = "1.82"
 authors = ["OpenVM Authors"]
@@ -110,8 +110,8 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "0879de162658b797b8dd6b6ee4429cbb8dd78ba1", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "0879de162658b797b8dd6b6ee4429cbb8dd78ba1", default-features = false }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "0aa464b8a93c19bb76ae3f46036587735023c2c1", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "0aa464b8a93c19bb76ae3f46036587735023c2c1", default-features = false }
 
 # OpenVM
 openvm-sdk = { path = "crates/sdk", default-features = false }

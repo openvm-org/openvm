@@ -6,17 +6,18 @@ use crate::arch::{
     InsExecutorE1, VmChipComplex, VmConfig, VmSegmentState, VmStateMut,
 };
 
-pub type E1Ctx = ();
+#[derive(Default, derive_new::new)]
+pub struct E1Ctx {
+    pub instret_end: Option<u64>,
+}
 
 impl E1E2ExecutionCtx for E1Ctx {
     fn on_memory_operation(&mut self, _address_space: u32, _ptr: u32, _size: u32) {}
 }
 
 /// Implementation of the ExecutionControl trait using the old segmentation strategy
-#[derive(Default, derive_new::new)]
-pub struct E1ExecutionControl {
-    pub instret_end: Option<u64>,
-}
+#[derive(Default)]
+pub struct E1ExecutionControl;
 
 impl<F, VC> ExecutionControl<F, VC> for E1ExecutionControl
 where
@@ -26,14 +27,18 @@ where
 {
     type Ctx = E1Ctx;
 
-    fn initialize_context(&self) -> Self::Ctx {}
+    fn initialize_context(&self) -> Self::Ctx {
+        E1Ctx { instret_end: None }
+    }
 
     fn should_suspend(
         &self,
         state: &mut VmSegmentState<F, Self::Ctx>,
         _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> bool {
-        self.instret_end
+        state
+            .ctx
+            .instret_end
             .is_some_and(|instret_end| state.instret >= instret_end)
     }
 
