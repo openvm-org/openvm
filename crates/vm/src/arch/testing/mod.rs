@@ -11,6 +11,7 @@ use openvm_stark_backend::{
     interaction::{BusIndex, PermutationCheckBus},
     p3_field::PrimeField32,
     p3_matrix::dense::{DenseMatrix, RowMajorMatrix},
+    p3_util::log2_strict_usize,
     prover::types::AirProofInput,
     verifier::VerificationError,
     AirRef, Chip,
@@ -293,6 +294,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
             RANGE_CHECKER_BUS,
             mem_config.decomp,
         ));
+        let max_access_adapter_n = log2_strict_usize(mem_config.max_access_adapter_n);
         let mut memory_controller = MemoryController::with_persistent_memory(
             MemoryBus::new(MEMORY_BUS),
             mem_config,
@@ -303,7 +305,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         memory_controller
             .memory
             .access_adapter_inventory
-            .set_arenas_from_trace_heights(&[(1 << 16); 5]);
+            .set_arenas_from_trace_heights(&vec![1 << 16; max_access_adapter_n]);
         Self {
             memory: MemoryTester::new(memory_controller),
             streams: Default::default(),
@@ -322,6 +324,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
             RANGE_CHECKER_BUS,
             mem_config.decomp,
         ));
+        let max_access_adapter_n = log2_strict_usize(mem_config.max_access_adapter_n);
         let mut memory_controller = MemoryController::with_volatile_memory(
             MemoryBus::new(MEMORY_BUS),
             mem_config,
@@ -330,7 +333,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         memory_controller
             .memory
             .access_adapter_inventory
-            .set_arenas_from_trace_heights(&[(1 << 16); 5]);
+            .set_arenas_from_trace_heights(&vec![1 << 16; max_access_adapter_n]);
         Self {
             memory: MemoryTester::new(memory_controller),
             streams: Default::default(),
