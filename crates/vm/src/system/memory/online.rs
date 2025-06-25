@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, slice::from_raw_parts};
 
 use getset::Getters;
 use itertools::{izip, zip_eq};
@@ -635,13 +635,15 @@ impl<F: PrimeField32> TracingMemory<F> {
                         let block_start = (begin + i) & !(self.initial_block_size / align - 1);
                         if (address_space as u32) < NATIVE_AS {
                             let initial_values = unsafe {
-                                self.data
-                                    .memory
-                                    .get_slice::<u8>(
-                                        (address_space as u32, (block_start * align) as u32),
-                                        self.initial_block_size,
-                                    )
-                                    .to_vec() // TODO: small vec?
+                                self.data.memory.get_slice::<u8>(
+                                    (address_space as u32, (block_start * align) as u32),
+                                    self.initial_block_size,
+                                )
+                            };
+                            // Safety: the upcoming `record_access` will not have any
+                            // reallocations in the guest memory, so it should be fine
+                            let initial_values = unsafe {
+                                from_raw_parts(initial_values.as_ptr(), self.initial_block_size)
                             };
                             self.record_access::<u8, true>(
                                 self.initial_block_size,
@@ -650,19 +652,22 @@ impl<F: PrimeField32> TracingMemory<F> {
                                 align,
                                 INITIAL_TIMESTAMP,
                                 None,
-                                &initial_values,
-                                &initial_values,
+                                initial_values,
+                                initial_values,
                                 true,
                             );
                         } else {
-                            let initial_values = (0..self.initial_block_size)
-                                .map(|i| {
-                                    self.data.memory.get_f(
-                                        address_space as u32,
-                                        (block_start * align + i) as u32,
-                                    )
-                                })
-                                .collect::<Vec<_>>();
+                            let initial_values = unsafe {
+                                self.data.memory.get_slice::<F>(
+                                    (address_space as u32, (block_start * align) as u32),
+                                    self.initial_block_size,
+                                )
+                            };
+                            // Safety: the upcoming `record_access` will not have any
+                            // reallocations in the guest memory, so it should be fine
+                            let initial_values = unsafe {
+                                from_raw_parts(initial_values.as_ptr(), self.initial_block_size)
+                            };
                             self.record_access::<F, true>(
                                 self.initial_block_size,
                                 address_space,
@@ -670,8 +675,8 @@ impl<F: PrimeField32> TracingMemory<F> {
                                 align,
                                 INITIAL_TIMESTAMP,
                                 None,
-                                &initial_values,
-                                &initial_values,
+                                initial_values,
+                                initial_values,
                                 true,
                             );
                         }
