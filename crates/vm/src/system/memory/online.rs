@@ -553,8 +553,8 @@ impl<F: PrimeField32> TracingMemory<F> {
         address_space: usize,
         pointer: usize,
         align: usize,
-        values: &[T],
-        prev_values: &[T],
+        values: &[T; BLOCK_SIZE],
+        prev_values: &[T; BLOCK_SIZE],
     ) -> u32 {
         /***
          * Each element of meta contains the `block_size` and `timestamp` of the last access
