@@ -391,19 +391,28 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
 
                 // timestamp_and_mask: u32 (4 bytes)
                 let timestamp_and_mask = unsafe { *(bytes.as_ptr().add(ptr) as *const u32) };
-                ptr += 4;
+                ptr += size_of::<u32>();
 
                 // address_space: u32 (4 bytes)
                 let address_space = unsafe { *(bytes.as_ptr().add(ptr) as *const u32) };
-                ptr += 4;
+                ptr += size_of::<u32>();
 
                 // pointer: u32 (4 bytes)
                 let pointer = unsafe { *(bytes.as_ptr().add(ptr) as *const u32) };
-                ptr += 4;
+                ptr += size_of::<u32>();
 
                 // block_size: u32 (4 bytes)
                 let _block_size_field = unsafe { *(bytes.as_ptr().add(ptr) as *const u32) };
-                ptr += 4;
+                ptr += size_of::<u32>();
+
+                // timestamps: [u32] (block_size / cell_size * 4 bytes)
+                let timestamps = unsafe {
+                    std::slice::from_raw_parts(
+                        bytes.as_ptr().add(ptr) as *const u32,
+                        layout.block_size / layout.cell_size,
+                    )
+                };
+                ptr += layout.block_size / layout.cell_size * size_of::<u32>();
 
                 // data: [u8] (block_size * type_size bytes)
                 let data = unsafe {
@@ -419,15 +428,6 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
                     std::slice::from_raw_parts(
                         bytes.as_ptr().add(ptr),
                         layout.block_size * layout.type_size,
-                    )
-                };
-                ptr += layout.block_size * layout.type_size;
-
-                // timestamps: [u32] (block_size / cell_size * 4 bytes)
-                let timestamps = unsafe {
-                    std::slice::from_raw_parts(
-                        bytes.as_ptr().add(ptr) as *const u32,
-                        layout.block_size / layout.cell_size,
                     )
                 };
 

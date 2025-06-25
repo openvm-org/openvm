@@ -12,10 +12,10 @@ pub(crate) struct AccessRecordMut<'a> {
     /// because the record denotes an operation of sort
     /// "split/merge every `block_size` chunk of this data"
     pub block_size: &'a mut u32,
+    // TODO(AG): optimize with some `Option` serialization stuff
+    pub timestamps: &'a mut [u32],
     pub data: &'a mut [u8],
     pub prev_data: &'a mut [u8],
-    pub timestamps: &'a mut [u32],
-    // TODO(AG): optimize with some `Option` serialization stuff
 }
 
 #[derive(Debug, Clone)]
@@ -56,19 +56,28 @@ impl<'a> CustomBorrow<'a, AccessRecordMut<'a>, AccessLayout> for [u8] {
 
         // timestamp_and_mask: u32 (4 bytes)
         let timestamp_and_mask = unsafe { &mut *(self.as_mut_ptr().add(offset) as *mut u32) };
-        offset += 4;
+        offset += size_of::<u32>();
 
         // address_space: u32 (4 bytes)
         let address_space = unsafe { &mut *(self.as_mut_ptr().add(offset) as *mut u32) };
-        offset += 4;
+        offset += size_of::<u32>();
 
         // pointer: u32 (4 bytes)
         let pointer = unsafe { &mut *(self.as_mut_ptr().add(offset) as *mut u32) };
-        offset += 4;
+        offset += size_of::<u32>();
 
         // block_size: u32 (4 bytes)
         let block_size_field = unsafe { &mut *(self.as_mut_ptr().add(offset) as *mut u32) };
-        offset += 4;
+        offset += size_of::<u32>();
+
+        // timestamps: [u32] (block_size / cell_size * 4 bytes)
+        let timestamps = unsafe {
+            std::slice::from_raw_parts_mut(
+                self.as_mut_ptr().add(offset) as *mut u32,
+                layout.block_size / layout.cell_size,
+            )
+        };
+        offset += layout.block_size / layout.cell_size * size_of::<u32>();
 
         // data: [u8] (block_size * type_size bytes)
         let data = unsafe {
@@ -84,15 +93,6 @@ impl<'a> CustomBorrow<'a, AccessRecordMut<'a>, AccessLayout> for [u8] {
             std::slice::from_raw_parts_mut(
                 self.as_mut_ptr().add(offset),
                 layout.block_size * layout.type_size,
-            )
-        };
-        offset += layout.block_size * layout.type_size;
-
-        // timestamps: [u32] (block_size / cell_size * 4 bytes)
-        let timestamps = unsafe {
-            std::slice::from_raw_parts_mut(
-                self.as_mut_ptr().add(offset) as *mut u32,
-                layout.block_size / layout.cell_size,
             )
         };
 
