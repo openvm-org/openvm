@@ -6,7 +6,7 @@ use std::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant,
-    SysPhantom, SystemOpcode, VmOpcode,
+    SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -24,16 +24,20 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-use super::memory::{online::GuestMemory, MemoryController};
+use super::memory::MemoryController;
 use crate::{
     arch::{
-        execution_mode::{e1::E1Ctx, metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{e1::E1Ctx, E1E2ExecutionCtx},
         ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutorE1,
         InstructionExecutor, PcIncOrSet, PhantomSubExecutor, Streams, VmStateMut,
     },
-    system::program::ProgramBus,
+    system::{
+        phantom::execution::{execute_impl, PhantomOperands, PhantomStateMut},
+        program::ProgramBus,
+    },
 };
 
+mod execution;
 #[cfg(test)]
 mod tests;
 
@@ -118,73 +122,6 @@ impl<F> PhantomChip<F> {
     }
 }
 
-impl<F> InsExecutorE1<F> for PhantomChip<F>
-where
-    F: PrimeField32,
-{
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError>
-    where
-        F: PrimeField32,
-        Ctx: E1E2ExecutionCtx,
-    {
-        let &Instruction {
-            opcode, a, b, c, ..
-        } = instruction;
-        assert_eq!(opcode, self.air.phantom_opcode);
-
-        let c_u32 = c.as_canonical_u32();
-        let discriminant = PhantomDiscriminant(c_u32 as u16);
-        // If not a system phantom sub-instruction (which is handled in
-        // ExecutionSegment), look for a phantom sub-executor to handle it.
-        if SysPhantom::from_repr(discriminant.0).is_none() {
-            let sub_executor = self.phantom_executors.get(&discriminant).ok_or_else(|| {
-                ExecutionError::PhantomNotFound {
-                    pc: *state.pc,
-                    discriminant,
-                }
-            })?;
-            // TODO(ayush): implement phantom subexecutor for new traits
-            sub_executor
-                .as_ref()
-                .phantom_execute(
-                    state.memory,
-                    state.streams,
-                    state.rng,
-                    discriminant,
-                    a.as_canonical_u32(),
-                    b.as_canonical_u32(),
-                    (c_u32 >> 16) as u16,
-                )
-                .map_err(|e| ExecutionError::Phantom {
-                    pc: *state.pc,
-                    discriminant,
-                    inner: e,
-                })?;
-        }
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        _chip_index: usize,
-    ) -> Result<(), ExecutionError> {
-        self.execute_e1(state, instruction)?;
-
-        Ok(())
-    }
-
-    fn set_trace_height(&mut self, _height: usize) {}
-}
-
 impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
     fn execute(
         &mut self,
@@ -202,14 +139,26 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
             is_valid: F::ONE,
         });
 
-        let mut state = VmStateMut {
-            pc: &mut pc,
-            memory: &mut memory.memory.data,
-            streams,
-            rng,
-            ctx: &mut E1Ctx::default(),
-        };
-        self.execute_e1(&mut state, instruction)?;
+        let c_u32 = instruction.c.as_canonical_u32();
+        let sub_executor = self
+            .phantom_executors
+            .get(&PhantomDiscriminant(c_u32 as u16))
+            .unwrap();
+        execute_impl(
+            PhantomStateMut {
+                pc: &mut pc,
+                memory: &mut memory.memory.data,
+                streams,
+                rng,
+            },
+            &PhantomOperands {
+                a: instruction.a.as_canonical_u32(),
+                b: instruction.b.as_canonical_u32(),
+                c: instruction.c.as_canonical_u32(),
+            },
+            sub_executor,
+        )?;
+        pc += DEFAULT_PC_STEP;
         memory.increment_timestamp();
 
         Ok(ExecutionState {

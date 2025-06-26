@@ -12,10 +12,7 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{
-    execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-    Streams,
-};
+use super::{execution_mode::E1E2ExecutionCtx, Streams, VmSegmentState};
 use crate::system::{
     memory::{
         online::{GuestMemory, TracingMemory},
@@ -119,25 +116,126 @@ pub trait InstructionExecutor<F> {
     fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
+pub type ExecuteFunc<F, CTX> =
+    unsafe fn(*const PreComputeInstruction<F, CTX>, &mut VmSegmentState<F, CTX>);
+
+// Helper attribute macro for execute functions
+#[macro_export]
+macro_rules! execute_attributes {
+    () => {
+        #[inline(never)]
+        #[cold]
+    };
+}
+#[macro_export]
+macro_rules! next_instruction {
+    ($next_inst: expr, $vm_state: expr) => {
+        ();
+    };
+}
+
+// #[macro_export]
+// macro_rules! next_instruction {
+//     ($next_inst: expr, $vm_state: expr) => {{
+//
+//         {
+//             println!(
+//                 "pc = {}, clk = {}",
+//                 $vm_state.pc,
+//                 $vm_state.instret,
+//             );
+//         }
+//         let handler = (*$next_inst).handler;
+//         #[cfg(target_arch = "aarch64")]
+//         unsafe {
+//             std::arch::asm!(
+//                 // Force compiler to deallocate stack frame
+//                 // "ldr x30, [x29, #8]",
+//                 // ".cfi_restore x30",
+//                 "add sp, x29, #16",
+//                 ".cfi_def_cfa sp, 0",    // Define new CFA relative to SP
+//                 // Tail call
+//                 "br {handler}",
+//                 ".cfi_endproc",
+//                 in("x0") $next_inst,
+//                 in("x1") $vm_state,
+//                 handler = in(reg) handler,
+//                 options(noreturn),
+//                 // clobber_abi("C"),
+//             );
+//         }
+//
+//         #[cfg(target_arch = "x86_64")]
+//         unsafe {
+//             std::arch::asm!(
+//                 // Force stack cleanup by resetting to frame pointer
+//                 "leave",
+//                 // Setup arguments
+//                 "mov rdi, {next_inst}",
+//                 "mov rsi, {vm_state}",
+//                 // Tail call
+//                 "jmp {handler}",
+//                 next_inst = in(reg) $next_inst,
+//                 vm_state = in(reg) $vm_state,
+//                 handler = in(reg) handler,
+//                 options(noreturn)
+//             );
+//         }
+//
+//         #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+//         compile_error!("Unsupported architecture for tail call optimization");
+//     }};
+// }
+
+#[inline]
+pub fn stack_frame_depth() -> usize {
+    let mut depth = 0;
+    backtrace::trace(|_| {
+        depth += 1;
+        true
+    });
+    depth
+}
+// #[macro_export]
+// macro_rules! next_instruction {
+//     ($next_inst: expr, $vm_state: expr) => {{
+//         println!(
+//             "pc = {}, clk = {}, stack_frame: {}",
+//             $vm_state.pc,
+//             $vm_state.instret,
+//             $crate::arch::execution::stack_frame_depth()
+//         );
+//         let handler = (*$next_inst).handler;
+//
+//         std::arch::asm! {
+//             "br {fn_ptr}",
+//             fn_ptr = in(reg) handler,
+//             in("x0") $next_inst,
+//             in("x1") $vm_state,
+//             options(noreturn)
+//         }
+//     }};
+// }
+
+pub struct PreComputeInstruction<'a, F, CTX> {
+    pub handler: ExecuteFunc<F, CTX>,
+    pub pre_compute: &'a [u8],
+}
+
 /// New trait for instruction execution
 pub trait InsExecutorE1<F> {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
     where
         F: PrimeField32,
         Ctx: E1E2ExecutionCtx;
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()>
-    where
-        F: PrimeField32;
+    // fn execute_metered(&self, chip_index: usize) -> ExecuteFunc<F, MeteredCtx>
+    // where
+    //     F: PrimeField32;
+
+    fn pre_compute_size(&self) -> usize;
+
+    fn pre_compute(&self, inst: &Instruction<F>, data: &mut [u8]);
 
     fn set_trace_height(&mut self, height: usize);
 }
@@ -146,31 +244,32 @@ impl<F, C> InsExecutorE1<F> for RefCell<C>
 where
     C: InsExecutorE1<F>,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+    #[inline(always)]
+    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
     where
         F: PrimeField32,
         Ctx: E1E2ExecutionCtx,
     {
-        self.borrow_mut().execute_e1(state, instruction)
+        self.borrow().execute_e1()
     }
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()>
-    where
-        F: PrimeField32,
-    {
-        self.borrow_mut()
-            .execute_metered(state, instruction, chip_index)
-    }
+    // #[inline(always)]
+    // fn execute_metered(&self, chip_index: usize) -> ExecuteFunc<F, MeteredCtx>
+    // where
+    //     F: PrimeField32,
+    // {
+    //     self.execute_metered(chip_index)
+    // }
 
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        self.borrow().pre_compute_size()
+    }
+    #[inline(always)]
+    fn pre_compute(&self, inst: &Instruction<F>, data: &mut [u8]) {
+        self.borrow().pre_compute(inst, data)
+    }
+    #[inline(always)]
     fn set_trace_height(&mut self, height: usize) {
         self.borrow_mut().set_trace_height(height);
     }

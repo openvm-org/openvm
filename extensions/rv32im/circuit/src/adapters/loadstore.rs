@@ -656,23 +656,32 @@ where
             return;
         }
 
-        match local_opcode {
-            STOREW | STOREH | STOREB => {
-                let rs1 = read_rv32_register(state.memory, b.as_canonical_u32());
-                let imm_extended = c.as_canonical_u32() + g.as_canonical_u32() * 0xffff0000;
-                let ptr = rs1.wrapping_add(imm_extended) & !3;
-                if e.as_canonical_u32() == 4 {
-                    memory_write_native_from_state(state, ptr, data.map(F::from_canonical_u32));
-                } else {
-                    memory_write_from_state(state, e.as_canonical_u32(), ptr, data.map(|x| x as u8))
+        if enabled != F::ZERO {
+            match local_opcode {
+                STOREW | STOREH | STOREB => {
+                    let rs1 = read_rv32_register(state.memory, b.as_canonical_u32());
+                    let imm_extended = c.as_canonical_u32() + g.as_canonical_u32() * 0xffff0000;
+                    let ptr = rs1.wrapping_add(imm_extended) & !3;
+                    if e.as_canonical_u32() == 4 {
+                        memory_write_native_from_state(state, ptr, data.map(F::from_canonical_u32));
+                    } else {
+                        memory_write_from_state(
+                            state,
+                            e.as_canonical_u32(),
+                            ptr,
+                            data.map(|x| x as u8),
+                        );
+                    }
+                }
+                LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+                    memory_write_from_state(
+                        state,
+                        RV32_REGISTER_AS,
+                        a.as_canonical_u32(),
+                        data.map(|x| x as u8),
+                    );
                 }
             }
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => memory_write_from_state(
-                state,
-                RV32_REGISTER_AS,
-                a.as_canonical_u32(),
-                data.map(|x| x as u8),
-            ),
         };
     }
 }

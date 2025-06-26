@@ -146,24 +146,34 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                 .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InsExecutorE1<F> });
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<F> for #name #ty_generics #where_clause {
+                    #[inline(always)]
                     fn execute_e1<Ctx>(
                         &self,
-                        state: &mut ::openvm_circuit::arch::VmStateMut<F, ::openvm_circuit::system::memory::online::GuestMemory, Ctx>,
-                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
-                    ) -> ::openvm_circuit::arch::Result<()>
+                    ) -> ::openvm_circuit::arch::execution::ExecuteFunc<F, Ctx>
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::E1E2ExecutionCtx,
                     {
-                        self.0.execute_e1(state, instruction)
+                        self.0.execute_e1()
                     }
 
-                    fn execute_metered(
-                        &self,
-                        state: &mut ::openvm_circuit::arch::VmStateMut<F, ::openvm_circuit::system::memory::online::GuestMemory, ::openvm_circuit::arch::execution_mode::metered::MeteredCtx>,
-                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
-                        chip_index: usize,
-                    ) -> ::openvm_circuit::arch::Result<()> {
-                        self.0.execute_metered(state, instruction, chip_index)
+                    // #[inline(always)]
+                    // fn execute_metered(
+                    //     &self,
+                    //     state: &mut ::openvm_circuit::arch::VmStateMut<F, ::openvm_circuit::system::memory::online::GuestMemory, ::openvm_circuit::arch::execution_mode::metered::MeteredCtx>,
+                    //     pre_compute: &[u8],
+                    //     chip_index: usize,
+                    // ) -> ::openvm_circuit::arch::Result<()>
+                    // where {
+                    //     #inner_ty ::execute_metered(state, pre_compute)
+                    // }
+
+                    #[inline(always)]
+                    fn pre_compute_size(&self) -> usize {
+                        self.0.pre_compute_size()
+                    }
+                    #[inline(always)]
+                    fn pre_compute(&self, inst: &Instruction<F>, data: &mut [u8]) {
+                        self.0.pre_compute_data(inst, data)
                     }
 
                     fn set_trace_height(&mut self, height: usize) {
@@ -197,16 +207,31 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                 .expect("First generic must be type for Field");
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
             // crate. Assume F is already generic of the field.
-            let execute_e1_arms = variants.iter().map(|(variant_name, field)| {
+            let execute_e1_arms = variants
+                .iter()
+                .map(|(variant_name, field)| {
+                    quote! {
+                        #name::#variant_name(x) => x.execute_e1()
+                    }
+                })
+                .collect::<Vec<_>>();
+            // let execute_metered_arms = variants.iter().map(|(variant_name, field)| {
+            //     let field_ty = &field.ty;
+            //     quote! {
+            //         #name::#variant_name(x) => <#field_ty as
+            // ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_metered(x, state,
+            // instruction, chip_index)     }
+            // }).collect::<Vec<_>>();
+            let pre_compute_size_arms = variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_e1(x, state, instruction)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::pre_compute_size(x)
                 }
             }).collect::<Vec<_>>();
-            let execute_metered_arms = variants.iter().map(|(variant_name, field)| {
+            let pre_compute_arms = variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_metered(x, state, instruction, chip_index)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::pre_compute(x, instruction, data)
                 }
             }).collect::<Vec<_>>();
             let set_trace_height_arms = variants.iter().map(|(variant_name, field)| {
@@ -218,11 +243,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
 
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic> for #name #ty_generics {
-                    fn execute_e1<Ctx>(
-                        &self,
-                        state: &mut ::openvm_circuit::arch::VmStateMut<F,::openvm_circuit::system::memory::online::GuestMemory, Ctx>,
-                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
-                    ) -> ::openvm_circuit::arch::Result<()>
+                    fn execute_e1<Ctx>(&self) -> ::openvm_circuit::arch::execution::ExecuteFunc<F, Ctx>
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::E1E2ExecutionCtx,
                     {
@@ -231,14 +252,27 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         }
                     }
 
-                    fn execute_metered(
-                        &self,
-                        state: &mut ::openvm_circuit::arch::VmStateMut<F, ::openvm_circuit::system::memory::online::GuestMemory, ::openvm_circuit::arch::execution_mode::metered::MeteredCtx>,
-                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
-                        chip_index: usize,
-                    ) -> ::openvm_circuit::arch::Result<()> {
+                    // fn execute_metered(
+                    //     &self,
+                    //     state: &mut ::openvm_circuit::arch::VmStateMut<F, ::openvm_circuit::system::memory::online::GuestMemory, ::openvm_circuit::arch::execution_mode::metered::MeteredCtx>,
+                    //     pre_compute: &[u8],
+                    //     chip_index: usize,
+                    // ) -> ::openvm_circuit::arch::Result<()> {
+                    //     match self {
+                    //         #(#execute_metered_arms,)*
+                    //     }
+                    // }
+
+                    #[inline(always)]
+                    fn pre_compute_size(&self) -> usize {
                         match self {
-                            #(#execute_metered_arms,)*
+                            #(#pre_compute_size_arms,)*
+                        }
+                    }
+                    #[inline(always)]
+                    fn pre_compute(&self, instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>, data: &mut [u8]) {
+                        match self {
+                            #(#pre_compute_arms,)*
                         }
                     }
 
