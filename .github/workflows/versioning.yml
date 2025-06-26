@@ -1,11 +1,11 @@
-# Workflow to verify versioning compatibility between main and patch versions
+# Workflow to verify versioning compatibility between base branch and patch versions
 name: Verify Versioning Compatibility
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version tag to compare against main (e.g., v1.2.0)"
+        description: "Version tag to compare (e.g., v1.2.0)"
         required: true
         default: "v1.2.0"
         type: string
@@ -18,13 +18,11 @@ jobs:
       - runner=64cpu-linux-arm64
       - extras=s3-cache
     steps:
+      - name: Checkout base branch
+        uses: actions/checkout@v4
+
       - name: Set version fallback
         run: echo "version=${{ github.event.inputs.version || 'v1.2.0' }}" >> $GITHUB_ENV
-
-      - name: Checkout main
-        uses: actions/checkout@v4
-        with:
-          ref: main
 
       - name: Install solc # svm should support arm64 linux
         run: (hash svm 2>/dev/null || cargo install --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
@@ -37,40 +35,40 @@ jobs:
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
 
-      # Build and test from main
-      - name: Build main CLI
+      # Build and test from base branch
+      - name: Build base branch CLI
         run: cargo install --force --path crates/cli
 
-      - name: Run setup from main and snapshot ~/.openvm
+      - name: Run setup from base branch and snapshot ~/.openvm
         run: |
           cargo openvm setup
-          rm -rf ~/.openvm-main
-          mv ~/.openvm ~/.openvm-main
+          rm -rf ~/.openvm-base
+          mv ~/.openvm ~/.openvm-base
 
-      - name: Build and keygen examples from main
+      - name: Build and keygen examples from base branch
         run: |
-          mkdir -p ./main-outputs/examples
+          mkdir -p ./base-outputs/examples
           for example in examples/*/; do
             if [ -f "$example/Cargo.toml" ]; then
               example_name=$(basename "$example")
               echo "Building and generating keys for example: $example_name"
               cd "$example"
               cargo openvm build --no-transpile
-              cargo openvm keygen --output-dir "../../main-outputs/examples/$example_name"
+              cargo openvm keygen --output-dir "../../base-outputs/examples/$example_name"
               cd ../..
             fi
           done
 
-      - name: Build and keygen benchmarks from main
+      - name: Build and keygen benchmarks from base branch
         run: |
-          mkdir -p ./main-outputs/benchmarks
+          mkdir -p ./base-outputs/benchmarks
           for benchmark in benchmarks/guest/*/; do
             if [ -f "$benchmark/Cargo.toml" ]; then
               benchmark_name=$(basename "$benchmark")
               echo "Building and generating keys for benchmark: $benchmark_name"
               cd "$benchmark"
               cargo openvm build --no-transpile
-              cargo openvm keygen --output-dir "../../../main-outputs/benchmarks/$benchmark_name"
+              cargo openvm keygen --output-dir "../../../base-outputs/benchmarks/$benchmark_name"
               cd ../../..
             fi
           done
@@ -124,8 +122,8 @@ jobs:
       # Compare all outputs
       - name: Compare ~/.openvm contents
         run: |
-          echo "Comparing ~/.openvm between main and ${{ env.version }}..."
-          if diff -r ~/.openvm-main ~/.openvm; then
+          echo "Comparing ~/.openvm between base branch and ${{ env.version }}..."
+          if diff -r ~/.openvm-base ~/.openvm; then
             echo "✅ ~/.openvm outputs are identical"
           else
             echo "❌ ~/.openvm outputs differ"
@@ -134,13 +132,13 @@ jobs:
 
       - name: Compare example verification keys
         run: |
-          echo "Comparing example verification keys between main and ${{ env.version }}..."
+          echo "Comparing example verification keys between base branch and ${{ env.version }}..."
           failed=0
           for example in examples/*/; do
             if [ -f "$example/Cargo.toml" ]; then
               example_name=$(basename "$example")
               echo "Checking example: $example_name"
-              if cmp "./main-outputs/examples/$example_name/app.vk" "./tagged-outputs/examples/$example_name/app.vk"; then
+              if cmp "./base-outputs/examples/$example_name/app.vk" "./tagged-outputs/examples/$example_name/app.vk"; then
                 echo "✅ $example_name verification keys are identical"
               else
                 echo "❌ $example_name verification keys differ"
@@ -157,13 +155,13 @@ jobs:
 
       - name: Compare benchmark verification keys
         run: |
-          echo "Comparing benchmark verification keys between main and ${{ env.version }}..."
+          echo "Comparing benchmark verification keys between base branch and ${{ env.version }}..."
           failed=0
           for benchmark in benchmarks/guest/*/; do
             if [ -f "$benchmark/Cargo.toml" ]; then
               benchmark_name=$(basename "$benchmark")
               echo "Checking benchmark: $benchmark_name"
-              if cmp "./main-outputs/benchmarks/$benchmark_name/app.vk" "./tagged-outputs/benchmarks/$benchmark_name/app.vk"; then
+              if cmp "./base-outputs/benchmarks/$benchmark_name/app.vk" "./tagged-outputs/benchmarks/$benchmark_name/app.vk"; then
                 echo "✅ $benchmark_name verification keys are identical"
               else
                 echo "❌ $benchmark_name verification keys differ"
@@ -181,7 +179,7 @@ jobs:
       - name: Final summary
         run: |
           echo "🎉 Versioning compatibility verification completed successfully!"
-          echo "✅ Setup outputs are identical between main and ${{ env.version }}"
+          echo "✅ Setup outputs are identical between base branch and ${{ env.version }}"
           echo "✅ All example verification keys are identical"
           echo "✅ All benchmark verification keys are identical"
           echo "✅ Versioning policy maintained - patch upgrade is backward compatible"
