@@ -257,7 +257,7 @@ where
         let state = VmState {
             instret: exec_state.instret,
             pc: exec_state.pc,
-            memory: exec_state.memory.unwrap().memory,
+            memory: exec_state.memory.memory,
             input: exec_state.streams,
             rng: exec_state.rng,
             #[cfg(feature = "bench-metrics")]

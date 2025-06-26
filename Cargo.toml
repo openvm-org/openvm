@@ -83,8 +83,9 @@ panic = "unwind"
 codegen-units = 16
 
 [profile.profiling]
-inherits = "release"
+inherits = "maxperf"
 debug = 2
+debug-assertions = false
 strip = false
 
 # Make sure debug symbols are in the bench profile for flamegraphs
@@ -98,7 +99,8 @@ lto = "fat"
 codegen-units = 1
 
 [profile.dev]
-opt-level = 1
+opt-level = 0
+debug = 0
 
 # For O1 optimization but still fast(ish) compile times
 [profile.fast]

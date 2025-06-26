@@ -7,9 +7,11 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, RecordArena, Result, SignedImmInstruction,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc, PreComputeInstruction, RecordArena,
+        Result, SignedImmInstruction, StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface,
+        VmCoreAir, VmSegmentState, VmStateMut,
     },
+    next_instruction,
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
@@ -24,6 +26,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
+    riscv::RV32_REGISTER_AS,
     LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
@@ -319,49 +322,81 @@ where
     }
 }
 
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct JalrPreCompute {
+    imm_extended: u32,
+    a: u8,
+    b: u8,
+    enabled: bool,
+}
+
 impl<F, A> StepExecutorE1<F> for Rv32JalrStep<A>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<
-            F,
-            ReadData = [u8; RV32_REGISTER_NUM_LIMBS],
-            WriteData = [u8; RV32_REGISTER_NUM_LIMBS],
-        >,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+    #[inline(always)]
+    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
     where
         Ctx: E1E2ExecutionCtx,
     {
-        let Instruction { c, g, .. } = instruction;
-
-        let rs1 = u32::from_le_bytes(self.adapter.read(state, instruction));
-
-        let (to_pc, rd) = run_jalr(*state.pc, rs1, c.as_canonical_u32() as u16, g.is_one());
-        let rd = rd.map(|x| x);
-
-        self.adapter.write(state, instruction, rd);
-
-        *state.pc = to_pc & !1;
-
-        Ok(())
+        execute_e1_impl
     }
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
+    // fn execute_metered(
+    //     &self,
+    //     state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+    //     instruction: &Instruction<F>,
+    //     chip_index: usize,
+    // ) -> Result<()> {
+    //     self.execute_e1(state, instruction)?;
+    //     state.ctx.trace_heights[chip_index] += 1;
+    //
+    //     Ok(())
+    // }
 
-        Ok(())
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<JalrPreCompute>()
     }
+    #[inline(always)]
+    fn pre_compute(&self, inst: &Instruction<F>, data: &mut [u8]) {
+        let data: &mut JalrPreCompute = data.borrow_mut();
+        let imm_extended = inst.c.as_canonical_u32() + inst.g.as_canonical_u32() * 0xffff0000;
+        assert_eq!(inst.d.as_canonical_u32(), RV32_REGISTER_AS);
+        *data = JalrPreCompute {
+            imm_extended,
+            a: inst.a.as_canonical_u32() as u8,
+            b: inst.b.as_canonical_u32() as u8,
+            enabled: !inst.f.is_zero(),
+        };
+    }
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+    inst: *const PreComputeInstruction<F, CTX>,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let curr_inst = &*inst;
+    let pre_compute: &JalrPreCompute = curr_inst.pre_compute.borrow();
+    let rs1 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs1 = u32::from_le_bytes(rs1);
+    let to_pc = rs1.wrapping_add(pre_compute.imm_extended);
+    let to_pc = to_pc - (to_pc & 1);
+    assert!(to_pc < (1 << PC_BITS));
+    let rd = (vm_state.pc + DEFAULT_PC_STEP).to_le_bytes();
+
+    if pre_compute.enabled {
+        vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
+    }
+
+    let offset = (to_pc as isize - vm_state.pc as isize) / DEFAULT_PC_STEP as isize;
+
+    let next_inst = inst.offset(offset);
+    vm_state.pc = to_pc;
+    vm_state.instret += 1;
+
+    next_instruction!(next_inst, vm_state)
 }
 
 // returns (to_pc, rd_data)
