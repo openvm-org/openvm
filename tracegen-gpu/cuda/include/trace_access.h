@@ -15,6 +15,10 @@ struct RowSlice {
         return ptr[column_index * stride];
     }
 
+    __device__ static RowSlice null() { return RowSlice(nullptr, 0); }
+
+    __device__ bool is_valid() const { return ptr != nullptr; }
+
     template <typename T>
     __device__ __forceinline__ void write(size_t column_index, T value) const {
         ptr[column_index * stride] = value;
