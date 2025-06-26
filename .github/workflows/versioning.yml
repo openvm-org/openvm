@@ -42,7 +42,7 @@ jobs:
 
       - name: Run setup from base branch and snapshot ~/.openvm
         run: |
-          cargo openvm setup
+          cargo openvm setup --evm
           rm -rf ~/.openvm-base
           mv ~/.openvm ~/.openvm-base
 
@@ -86,6 +86,7 @@ jobs:
 
       - name: Run setup from tagged version
         run: |
+          # TODO: Add --evm after v1.3.0 release
           cargo openvm setup
 
       # - name: Build and keygen examples from tagged version
@@ -119,17 +120,6 @@ jobs:
               cd ../../..
             fi
           done
-
-      # Compare all outputs
-      - name: Compare ~/.openvm contents
-        run: |
-          echo "Comparing ~/.openvm between base branch and ${{ env.version }}..."
-          if diff -r ~/.openvm-base ~/.openvm; then
-            echo "✅ ~/.openvm outputs are identical"
-          else
-            echo "❌ ~/.openvm outputs differ"
-            exit 1
-          fi
 
       # - name: Compare example verification keys
       #   run: |
@@ -175,6 +165,38 @@ jobs:
             exit 1
           else
             echo "✅ All benchmark verification keys are identical"
+          fi
+
+      # Compare all outputs
+      # TODO: After v1.3.0 release, just compare the contents of ~/.openvm-base
+      # and ~/.openvm
+      - name: Compare ~/.openvm contents
+        run: |
+          echo "🔍 Comparing ~/.openvm agg and halo2 outputs between base branch and ${{ env.version }}..."
+
+          failed=0
+
+          # Compare agg.pk with agg_halo2.pk
+          if cmp ~/.openvm-base/agg.pk ~/.openvm/agg_halo2.pk; then
+            echo "✅ agg.pk and agg_halo2.pk are identical"
+          else
+            echo "❌ agg.pk and agg_halo2.pk differ"
+            failed=1
+          fi
+
+          # Compare halo2 directories recursively
+          if diff -r ~/.openvm-base/halo2 ~/.openvm/halo2; then
+            echo "✅ halo2 directories are identical"
+          else
+            echo "❌ halo2 directories differ"
+            failed=1
+          fi
+
+          if [ $failed -eq 1 ]; then
+            echo "❌ ~/.openvm outputs differ"
+            exit 1
+          else
+            echo "✅ All checked ~/.openvm outputs are identical"
           fi
 
       - name: Final summary
