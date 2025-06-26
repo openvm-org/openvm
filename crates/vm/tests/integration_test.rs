@@ -14,8 +14,9 @@ use openvm_circuit::{
         },
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         interpreter::InterpretedInstance,
-        ChipId, SingleSegmentVmExecutor, SystemTraceHeights, VirtualMachine, VmComplexTraceHeights,
-        VmConfig, VmInventoryTraceHeights, VmSegmentExecutor, VmSegmentState,
+        ChipId, DefaultSegmentationStrategy, SingleSegmentVmExecutor, SystemTraceHeights,
+        VirtualMachine, VmComplexTraceHeights, VmConfig, VmInventoryTraceHeights,
+        VmSegmentExecutor, VmSegmentState,
     },
     system::{
         memory::{MemoryTraceHeights, VolatileMemoryTraceHeights, CHUNK},
@@ -948,4 +949,45 @@ fn test_vm_pure_execution_continuation() {
     executor
         .execute(E1ExecutionControl, vec![])
         .expect("Failed to execute");
+}
+
+#[test]
+fn test_single_segment_executor_no_segmentation() {
+    setup_tracing();
+    type F = BabyBear;
+
+    let mut config = test_native_config();
+
+    config.system.set_segmentation_strategy(Arc::new(
+        DefaultSegmentationStrategy::new_with_max_segment_len(1),
+    ));
+
+    let engine =
+        BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
+    let vm = VirtualMachine::new(engine, config.clone());
+    let pk = vm.keygen();
+    let vk = pk.get_vk();
+    let instructions: Vec<_> = (0..1000)
+        .map(|_| Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0))
+        .chain(std::iter::once(Instruction::from_isize(
+            TERMINATE.global_opcode(),
+            0,
+            0,
+            0,
+            0,
+            0,
+        )))
+        .collect();
+
+    let program = Program::from_instructions(&instructions);
+    let single_vm = SingleSegmentVmExecutor::<F, _>::new(config);
+
+    let _ = single_vm
+        .execute_metered(
+            program.clone().into(),
+            vec![],
+            &vk.total_widths(),
+            &vk.num_interactions(),
+        )
+        .unwrap();
 }

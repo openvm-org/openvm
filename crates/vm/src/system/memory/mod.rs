@@ -5,11 +5,11 @@ mod controller;
 pub mod merkle;
 pub mod offline_checker;
 pub mod online;
-mod persistent;
+pub mod persistent;
 // TODO: add back
 // #[cfg(test)]
 // mod tests;
-mod volatile;
+pub mod volatile;
 
 pub use controller::*;
 pub use online::{Address, AddressMap, INITIAL_TIMESTAMP};

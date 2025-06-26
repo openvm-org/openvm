@@ -161,7 +161,13 @@ impl<F: PrimeField32, const CHUNK: usize> TouchedLabels<F, CHUNK> {
         }
     }
 
-    #[allow(clippy::len_without_is_empty)]
+    pub fn is_empty(&self) -> bool {
+        match self {
+            TouchedLabels::Running(touched_labels) => touched_labels.is_empty(),
+            TouchedLabels::Final(touched_labels) => touched_labels.is_empty(),
+        }
+    }
+
     pub fn len(&self) -> usize {
         match self {
             TouchedLabels::Running(touched_labels) => touched_labels.len(),
