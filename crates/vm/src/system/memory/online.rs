@@ -486,8 +486,6 @@ impl<F: PrimeField32> TracingMemory<F> {
             debug_assert_eq!(ts.len(), block_size / lowest_block_size);
         }
 
-        // TODO(AG): handle what if no records need to be created
-
         if block_size > lowest_block_size {
             // only then we need to create a record
             let record_mut = self.access_adapter_inventory.alloc_record(AccessLayout {

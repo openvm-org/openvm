@@ -222,7 +222,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
                             false,
                             MemoryAddress::new(
                                 record.header.address_space,
-                                record.header.pointer + (j * 2 * data_len) as u32,
+                                record.header.pointer + (j << (i + 1)) as u32,
                             ),
                             &record.prev_data[j * 2 * data_len..(j + 1) * 2 * data_len],
                             *record.timestamps[2 * j * ts_len..(2 * j + 1) * ts_len]
@@ -251,7 +251,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
                             true,
                             MemoryAddress::new(
                                 record.header.address_space,
-                                record.header.pointer + (j * 2 * data_len) as u32,
+                                record.header.pointer + (j << (i + 1)) as u32,
                             ),
                             &record.data[j * 2 * data_len..(j + 1) * 2 * data_len],
                             timestamp,
