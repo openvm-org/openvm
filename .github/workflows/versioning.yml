@@ -54,8 +54,10 @@ jobs:
             if [ -f "$example/Cargo.toml" ]; then
               example_name=$(basename "$example")
               echo "Building and generating keys for example: $example_name"
-              cargo openvm build --manifest-path "$example/Cargo.toml"
-              cargo openvm keygen --manifest-path "$example/Cargo.toml" --output-dir "./main-outputs/examples/$example_name"
+              cd "$example"
+              cargo openvm build
+              cargo openvm keygen --output-dir "../../main-outputs/examples/$example_name"
+              cd ../..
             fi
           done
 
@@ -66,8 +68,10 @@ jobs:
             if [ -f "$benchmark/Cargo.toml" ]; then
               benchmark_name=$(basename "$benchmark")
               echo "Building and generating keys for benchmark: $benchmark_name"
-              cargo openvm build --manifest-path "$benchmark/Cargo.toml"
-              cargo openvm keygen --manifest-path "$benchmark/Cargo.toml" --output-dir "./main-outputs/benchmarks/$benchmark_name"
+              cd "$benchmark"
+              cargo openvm build
+              cargo openvm keygen --output-dir "../../../main-outputs/benchmarks/$benchmark_name"
+              cd ../../..
             fi
           done
 
@@ -92,10 +96,12 @@ jobs:
             if [ -f "$example/Cargo.toml" ]; then
               example_name=$(basename "$example")
               echo "Building and generating keys for example: $example_name"
-              cargo openvm build --manifest-path "$example/Cargo.toml"
+              cd "$example"
+              cargo openvm build
               # TODO(yi): Change --vk-output to --output-dir after v1.3.0 release
-              mkdir -p "./tagged-outputs/examples/$example_name"
-              cargo openvm keygen --manifest-path "$example/Cargo.toml" --vk-output "./tagged-outputs/examples/$example_name/app.vk"
+              mkdir -p "../../tagged-outputs/examples/$example_name"
+              cargo openvm keygen --vk-output "../../tagged-outputs/examples/$example_name/app.vk"
+              cd ../..
             fi
           done
 
@@ -106,10 +112,12 @@ jobs:
             if [ -f "$benchmark/Cargo.toml" ]; then
               benchmark_name=$(basename "$benchmark")
               echo "Building and generating keys for benchmark: $benchmark_name"
-              cargo openvm build --manifest-path "$benchmark/Cargo.toml"
+              cd "$benchmark"
+              cargo openvm build
               # TODO(yi): Change --vk-output to --output-dir after v1.3.0 release
-              mkdir -p "./tagged-outputs/benchmarks/$benchmark_name"
-              cargo openvm keygen --manifest-path "$benchmark/Cargo.toml" --vk-output "./tagged-outputs/benchmarks/$benchmark_name/app.vk"
+              mkdir -p "../../../tagged-outputs/benchmarks/$benchmark_name"
+              cargo openvm keygen --vk-output "../../../tagged-outputs/benchmarks/$benchmark_name/app.vk"
+              cd ../../..
             fi
           done
 
