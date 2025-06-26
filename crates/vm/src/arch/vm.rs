@@ -247,7 +247,7 @@ where
         );
         execute_spanned!("execute_e1", segment, &mut exec_state)?;
 
-        if let Some(exit_code) = exec_state.exit_code {
+        if let Some(exit_code) = exec_state.exit_code? {
             check_exit_code(exit_code)?;
         }
         if let Some(instret_end) = instret_end {
@@ -257,7 +257,7 @@ where
         let state = VmState {
             instret: exec_state.instret,
             pc: exec_state.pc,
-            memory: exec_state.memory.unwrap().memory,
+            memory: exec_state.memory.memory,
             input: exec_state.streams,
             rng: exec_state.rng,
             #[cfg(feature = "bench-metrics")]
@@ -655,41 +655,6 @@ where
 
     pub fn set_trace_height_constraints(&mut self, constraints: Vec<LinearConstraint>) {
         self.trace_height_constraints = constraints;
-    }
-
-    pub fn execute_e1(
-        &self,
-        exe: VmExe<F>,
-        input: impl Into<Streams<F>>,
-    ) -> Result<(), ExecutionError> {
-        let memory =
-            create_memory_image(&self.config.system().memory_config, exe.init_memory.clone());
-        let rng = StdRng::seed_from_u64(0);
-        let chip_complex =
-            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
-                .unwrap();
-        let mut executor = VmSegmentExecutor::<F, VC, _>::new(
-            chip_complex,
-            self.trace_height_constraints.clone(),
-            exe.fn_bounds.clone(),
-            E1ExecutionControl,
-        );
-
-        let ctx = E1Ctx::default();
-
-        let mut exec_state = VmSegmentState::new(
-            0,
-            exe.pc_start,
-            Some(GuestMemory::new(memory)),
-            input.into(),
-            rng,
-            ctx,
-        );
-        execute_spanned!("execute_e1", executor, &mut exec_state)?;
-
-        check_termination(exec_state.exit_code)?;
-
-        Ok(())
     }
 
     pub fn execute_metered(
@@ -1341,7 +1306,8 @@ fn check_exit_code(exit_code: u32) -> Result<(), ExecutionError> {
     Ok(())
 }
 
-fn check_termination(exit_code: Option<u32>) -> Result<(), ExecutionError> {
+fn check_termination(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(), ExecutionError> {
+    let exit_code = exit_code?;
     match exit_code {
         Some(code) => check_exit_code(code),
         None => Err(ExecutionError::DidNotTerminate),

@@ -5,18 +5,12 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, RecordArena, Result, StepExecutorE1, TraceFiller,
-        TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterTraceStep, Result,
+        StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
-use openvm_circuit_primitives::AlignedBytesBorrow;
-use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
@@ -46,6 +40,11 @@ enum InstructionOpcode {
     StoreB3,
 }
 
+use openvm_circuit::arch::{
+    get_record_from_slice, AdapterTraceFiller, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError,
+    ExecutionError::InvalidInstruction, RecordArena, TraceFiller, VmSegmentState,
+};
+use openvm_instructions::riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
 use InstructionOpcode::*;
 
 /// LoadStore Core Chip handles byte/halfword into word conversions and unsigned extends
@@ -367,46 +366,244 @@ where
     }
 }
 
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct LoadStorePreCompute {
+    imm_extended: u32,
+    a: u8,
+    b: u8,
+    e: u8,
+}
+
 impl<F, A, const NUM_CELLS: usize> StepExecutorE1<F> for LoadStoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
-    A: 'static
-        + AdapterExecutorE1<
-            F,
-            ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
-            WriteData = [u32; NUM_CELLS],
-        >,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let Instruction { opcode, .. } = instruction;
-
-        let ((prev_data, read_data), shift_amount) = self.adapter.read(state, instruction);
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        let write_data = run_write_data(local_opcode, read_data, prev_data, shift_amount as usize);
-
-        self.adapter.write(state, instruction, write_data);
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<LoadStorePreCompute>()
     }
 
-    fn execute_metered(
+    #[inline(always)]
+    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>> {
+        let pre_compute: &mut LoadStorePreCompute = data.borrow_mut();
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
+            ..
+        } = inst;
+        let enabled = !f.is_zero();
 
-        Ok(())
+        let e_u32 = e.as_canonical_u32();
+        if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 == RV32_IMM_AS {
+            return Err(InvalidInstruction(pc));
+        }
+
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(
+            opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        );
+        match local_opcode {
+            LOADW | LOADBU | LOADHU => {}
+            STOREW | STOREH | STOREB => {
+                assert!(enabled)
+            }
+            _ => unreachable!("LoadStoreStep should not handle LOADB/LOADH opcodes"),
+        }
+
+        let imm = c.as_canonical_u32();
+        let imm_sign = g.as_canonical_u32();
+        let imm_extended = imm + imm_sign * 0xffff0000;
+
+        *pre_compute = LoadStorePreCompute {
+            imm_extended,
+            a: a.as_canonical_u32() as u8,
+            b: b.as_canonical_u32() as u8,
+            e: e_u32 as u8,
+        };
+        let fn_ptr = match (local_opcode, enabled) {
+            (LOADW, true) => execute_e1_impl::<_, _, LoadWOp, true>,
+            (LOADW, false) => execute_e1_impl::<_, _, LoadWOp, false>,
+            (LOADHU, true) => execute_e1_impl::<_, _, LoadHUOp, true>,
+            (LOADHU, false) => execute_e1_impl::<_, _, LoadHUOp, false>,
+            (LOADBU, true) => execute_e1_impl::<_, _, LoadBUOp, true>,
+            (LOADBU, false) => execute_e1_impl::<_, _, LoadBUOp, false>,
+            (STOREW, true) => execute_e1_impl::<_, _, StoreWOp, true>,
+            (STOREW, false) => execute_e1_impl::<_, _, StoreWOp, false>,
+            (STOREH, true) => execute_e1_impl::<_, _, StoreHOp, true>,
+            (STOREH, false) => execute_e1_impl::<_, _, StoreHOp, false>,
+            (STOREB, true) => execute_e1_impl::<_, _, StoreBOp, true>,
+            (STOREB, false) => execute_e1_impl::<_, _, StoreBOp, false>,
+            (_, _) => unreachable!(),
+        };
+        Ok(fn_ptr)
+    }
+}
+
+unsafe fn execute_e1_impl<
+    F: PrimeField32,
+    CTX: E1E2ExecutionCtx,
+    OP: LoadStoreOp,
+    const ENABLED: bool,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &LoadStorePreCompute = pre_compute.borrow();
+
+    let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
+        vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs1_val = u32::from_le_bytes(rs1_bytes);
+    let ptr_val = rs1_val.wrapping_add(pre_compute.imm_extended);
+    // sign_extend([r32{c,g}(b):2]_e)`
+    assert!(ptr_val < (1 << 29));
+    let shift_amount = ptr_val % 4;
+    let ptr_val = ptr_val - shift_amount; // aligned ptr
+
+    let read_data: [u8; RV32_REGISTER_NUM_LIMBS] = if OP::IS_LOAD {
+        vm_state.vm_read(pre_compute.e as u32, ptr_val)
+    } else {
+        vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32)
+    };
+
+    // We need to write 4-byte for STORE.
+    let mut write_data: [u8; RV32_REGISTER_NUM_LIMBS] = if OP::HOST_READ {
+        vm_state.host_read(pre_compute.e as u32, ptr_val)
+    } else {
+        [0; RV32_REGISTER_NUM_LIMBS]
+    };
+
+    if !OP::compute_write_data(&mut write_data, read_data, shift_amount as usize) {
+        vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+        return;
+    }
+
+    if ENABLED {
+        if OP::IS_LOAD {
+            vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &write_data);
+        } else {
+            vm_state.vm_write(pre_compute.e as u32, ptr_val, &write_data);
+        }
+    }
+
+    vm_state.pc += DEFAULT_PC_STEP;
+    vm_state.instret += 1;
+}
+trait LoadStoreOp {
+    const IS_LOAD: bool;
+    const HOST_READ: bool;
+
+    /// Return if the operation is valid.
+    fn compute_write_data(
+        write_data: &mut [u8; RV32_REGISTER_NUM_LIMBS],
+        read_data: [u8; RV32_REGISTER_NUM_LIMBS],
+        shift_amount: usize,
+    ) -> bool;
+}
+struct LoadWOp;
+struct LoadHUOp;
+struct LoadBUOp;
+struct StoreWOp;
+struct StoreHOp;
+struct StoreBOp;
+impl LoadStoreOp for LoadWOp {
+    const IS_LOAD: bool = true;
+    const HOST_READ: bool = false;
+
+    #[inline(always)]
+    fn compute_write_data(
+        write_data: &mut [u8; RV32_REGISTER_NUM_LIMBS],
+        read_data: [u8; RV32_REGISTER_NUM_LIMBS],
+        _shift_amount: usize,
+    ) -> bool {
+        *write_data = read_data;
+        true
+    }
+}
+
+impl LoadStoreOp for LoadHUOp {
+    const IS_LOAD: bool = true;
+    const HOST_READ: bool = false;
+    #[inline(always)]
+    fn compute_write_data(
+        write_data: &mut [u8; RV32_REGISTER_NUM_LIMBS],
+        read_data: [u8; RV32_REGISTER_NUM_LIMBS],
+        shift_amount: usize,
+    ) -> bool {
+        if shift_amount != 0 && shift_amount != 2 {
+            return false;
+        }
+        write_data[0] = read_data[shift_amount];
+        write_data[1] = read_data[shift_amount + 1];
+        true
+    }
+}
+impl LoadStoreOp for LoadBUOp {
+    const IS_LOAD: bool = true;
+    const HOST_READ: bool = false;
+    #[inline(always)]
+    fn compute_write_data(
+        write_data: &mut [u8; RV32_REGISTER_NUM_LIMBS],
+        read_data: [u8; RV32_REGISTER_NUM_LIMBS],
+        shift_amount: usize,
+    ) -> bool {
+        write_data[0] = read_data[shift_amount];
+        true
+    }
+}
+
+impl LoadStoreOp for StoreWOp {
+    const IS_LOAD: bool = false;
+    const HOST_READ: bool = false;
+    #[inline(always)]
+    fn compute_write_data(
+        write_data: &mut [u8; RV32_REGISTER_NUM_LIMBS],
+        read_data: [u8; RV32_REGISTER_NUM_LIMBS],
+        _shift_amount: usize,
+    ) -> bool {
+        *write_data = read_data;
+        true
+    }
+}
+impl LoadStoreOp for StoreHOp {
+    const IS_LOAD: bool = false;
+    const HOST_READ: bool = true;
+
+    #[inline(always)]
+    fn compute_write_data(
+        write_data: &mut [u8; RV32_REGISTER_NUM_LIMBS],
+        read_data: [u8; RV32_REGISTER_NUM_LIMBS],
+        shift_amount: usize,
+    ) -> bool {
+        if shift_amount != 0 && shift_amount != 2 {
+            return false;
+        }
+        write_data[shift_amount] = read_data[0];
+        write_data[shift_amount] = read_data[1];
+        true
+    }
+}
+impl LoadStoreOp for StoreBOp {
+    const IS_LOAD: bool = false;
+    const HOST_READ: bool = true;
+    #[inline(always)]
+    fn compute_write_data(
+        write_data: &mut [u8; RV32_REGISTER_NUM_LIMBS],
+        read_data: [u8; RV32_REGISTER_NUM_LIMBS],
+        shift_amount: usize,
+    ) -> bool {
+        write_data[shift_amount] = read_data[0];
+        true
     }
 }
 

@@ -3,7 +3,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::arch::{
     execution_control::ExecutionControl, execution_mode::E1E2ExecutionCtx, ExecutionError,
-    InsExecutorE1, VmChipComplex, VmConfig, VmSegmentState, VmStateMut,
+    InsExecutorE1, VmChipComplex, VmConfig, VmSegmentState,
 };
 
 #[derive(Default, derive_new::new)]
@@ -13,6 +13,13 @@ pub struct E1Ctx {
 
 impl E1E2ExecutionCtx for E1Ctx {
     fn on_memory_operation(&mut self, _address_space: u32, _ptr: u32, _size: u32) {}
+    fn should_suspend<F>(vm_state: &VmSegmentState<F, Self>) -> bool {
+        if let Some(instret_end) = vm_state.ctx.instret_end {
+            vm_state.pc as u64 >= instret_end
+        } else {
+            false
+        }
+    }
 }
 
 /// Implementation of the ExecutionControl trait using the old segmentation strategy
@@ -60,31 +67,13 @@ where
     /// Execute a single instruction
     fn execute_instruction(
         &self,
-        state: &mut VmSegmentState<F, Self::Ctx>,
-        instruction: &Instruction<F>,
-        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        _state: &mut VmSegmentState<F, Self::Ctx>,
+        _instruction: &Instruction<F>,
+        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
     {
-        let &Instruction { opcode, .. } = instruction;
-
-        if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
-            let mut vm_state = VmStateMut {
-                pc: &mut state.pc,
-                memory: state.memory.as_mut().unwrap(),
-                streams: &mut state.streams,
-                rng: &mut state.rng,
-                ctx: &mut state.ctx,
-            };
-            executor.execute_e1(&mut vm_state, instruction)?;
-        } else {
-            return Err(ExecutionError::DisabledOperation {
-                pc: state.pc,
-                opcode,
-            });
-        };
-
-        Ok(())
+        todo!()
     }
 }

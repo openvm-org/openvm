@@ -264,12 +264,15 @@ impl<M: LinearMemory> AddressMap<M> {
 /// API for guest memory conforming to OpenVM ISA
 // @dev Note we don't make this a trait because phantom executors currently need a concrete type for
 // guest memory
-#[derive(Debug, Clone, derive_new::new)]
+#[derive(Debug, Clone)]
 pub struct GuestMemory {
     pub memory: AddressMap,
 }
 
 impl GuestMemory {
+    pub fn new(addr: AddressMap) -> Self {
+        Self { memory: addr }
+    }
     /// Returns `[pointer:BLOCK_SIZE]_{address_space}`
     ///
     /// # Safety

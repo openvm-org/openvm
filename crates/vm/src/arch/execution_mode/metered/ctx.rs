@@ -6,7 +6,10 @@ use super::{
     memory_ctx::MemoryCtx,
     segment_ctx::{Segment, SegmentationCtx},
 };
-use crate::{arch::execution_mode::E1E2ExecutionCtx, system::memory::dimensions::MemoryDimensions};
+use crate::{
+    arch::{execution_mode::E1E2ExecutionCtx, VmSegmentState},
+    system::memory::dimensions::MemoryDimensions,
+};
 
 #[derive(Debug)]
 pub struct MeteredCtx<const PAGE_BITS: usize = 6> {
@@ -153,5 +156,9 @@ impl<const PAGE_BITS: usize> E1E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
                 size,
             );
         }
+    }
+
+    fn should_suspend<F>(_vm_state: &VmSegmentState<F, Self>) -> bool {
+        todo!()
     }
 }

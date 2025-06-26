@@ -53,7 +53,7 @@ jobs:
 
       - name: Build benchmarks
         working-directory: benchmarks/execute
-        run: cargo codspeed build
+        run: cargo codspeed build --profile maxperf
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v3
         with:
