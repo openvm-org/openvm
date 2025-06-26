@@ -374,8 +374,8 @@ impl<F: PrimeField32> TracingMemory<F> {
         min_block_size[3] = 4;
         let meta = zip_eq(&min_block_size, &num_cells)
             .map(|(min_block_size, num_cells)| {
-                let total_metadata_cells = num_cells.div_ceil(*min_block_size as usize);
-                PagedVec::new(total_metadata_cells, PAGE_SIZE)
+                let total_metadata_len = num_cells.div_ceil(*min_block_size as usize);
+                PagedVec::new(total_metadata_len, PAGE_SIZE)
             })
             .collect();
         Self {
@@ -398,8 +398,8 @@ impl<F: PrimeField32> TracingMemory<F> {
         for (i, (mem, cell_size)) in izip!(image.get_memory(), &image.cell_size).enumerate() {
             let num_cells = mem.size() / cell_size;
 
-            let total_metadata_cells = num_cells.div_ceil(self.min_block_size[i] as usize);
-            self.meta[i] = PagedVec::new(total_metadata_cells, PAGE_SIZE);
+            let total_metadata_len = num_cells.div_ceil(self.min_block_size[i] as usize);
+            self.meta[i] = PagedVec::new(total_metadata_len, PAGE_SIZE);
         }
         self.data = GuestMemory::new(image);
         self
