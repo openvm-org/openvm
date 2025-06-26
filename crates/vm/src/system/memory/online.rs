@@ -479,61 +479,63 @@ impl<F: PrimeField32> TracingMemory<F> {
         prev_values: &[T],
         split_after: bool,
     ) {
-        let offset = if block_size > lowest_block_size {
-            self.access_adapter_inventory.current_size() as u32
-        } else {
-            AccessMetadata::UNSPLITTABLE
-        };
+        let mut offset = self.access_adapter_inventory.current_size() as u32;
+        let align = self.min_block_size[address_space] as usize;
 
         if let Some(ts) = prev_timestamps {
-            assert_eq!(ts.len(), block_size / lowest_block_size);
+            debug_assert_eq!(ts.len(), block_size / lowest_block_size);
         }
 
         // TODO(AG): handle what if no records need to be created
 
-        let record_mut = self.access_adapter_inventory.alloc_record(AccessLayout {
-            block_size,
-            lowest_block_size,
-            type_size: size_of::<T>(),
-        });
-        *record_mut.header = AccessRecordHeader {
-            timestamp_and_mask: timestamp
-                | (if prev_timestamps.is_some() {
-                    MERGE_BEFORE_FLAG
-                } else {
-                    0
-                })
-                | (if split_after { SPLIT_AFTER_FLAG } else { 0 }),
-            address_space: address_space as u32,
-            pointer: pointer as u32,
-            block_size: block_size as u32,
-            lowest_block_size: lowest_block_size as u32,
-            type_size: size_of::<T>() as u32,
-        };
-        let data_slice = unsafe {
-            std::slice::from_raw_parts(values.as_ptr() as *const u8, block_size * size_of::<T>())
-        };
-        record_mut.data.copy_from_slice(data_slice);
-        let prev_data_slice = unsafe {
-            std::slice::from_raw_parts(
-                prev_values.as_ptr() as *const u8,
-                block_size * size_of::<T>(),
-            )
-        };
-        record_mut.prev_data.copy_from_slice(prev_data_slice);
-        if let Some(prev_timestamps) = prev_timestamps {
-            record_mut.timestamps.copy_from_slice(prev_timestamps);
-        } else {
-            record_mut.timestamps.fill(INITIAL_TIMESTAMP);
-        }
+        if block_size > lowest_block_size {
+            // only then we need to create a record
+            let record_mut = self.access_adapter_inventory.alloc_record(AccessLayout {
+                block_size,
+                lowest_block_size,
+                type_size: size_of::<T>(),
+            });
+            *record_mut.header = AccessRecordHeader {
+                timestamp_and_mask: timestamp
+                    | (if prev_timestamps.is_some() {
+                        MERGE_BEFORE_FLAG
+                    } else {
+                        0
+                    })
+                    | (if split_after { SPLIT_AFTER_FLAG } else { 0 }),
+                address_space: address_space as u32,
+                pointer: pointer as u32,
+                block_size: block_size as u32,
+                lowest_block_size: lowest_block_size as u32,
+                type_size: size_of::<T>() as u32,
+            };
+            let data_slice = unsafe {
+                std::slice::from_raw_parts(
+                    values.as_ptr() as *const u8,
+                    block_size * size_of::<T>(),
+                )
+            };
+            record_mut.data.copy_from_slice(data_slice);
+            let prev_data_slice = unsafe {
+                std::slice::from_raw_parts(
+                    prev_values.as_ptr() as *const u8,
+                    block_size * size_of::<T>(),
+                )
+            };
+            record_mut.prev_data.copy_from_slice(prev_data_slice);
+            if let Some(prev_timestamps) = prev_timestamps {
+                record_mut.timestamps.copy_from_slice(prev_timestamps);
+            } // else we don't mind garbage values
 
-        let align = self.min_block_size[address_space] as usize;
-        if align != lowest_block_size {
-            // This must be the volatile 4 <-> 1 type of thing
-            debug_assert!((address_space as u32) < NATIVE_AS);
-            debug_assert_eq!(lowest_block_size, 1);
-            if timestamp == INITIAL_TIMESTAMP {
-                record_mut.header.timestamp_and_mask |= MERGE_BEFORE_FLAG;
+            if align != lowest_block_size {
+                // This must be the volatile 4 <-> 1 type of thing
+                debug_assert!((address_space as u32) < NATIVE_AS);
+                debug_assert_eq!(lowest_block_size, 1);
+                if timestamp == INITIAL_TIMESTAMP {
+                    record_mut.header.timestamp_and_mask |= MERGE_BEFORE_FLAG;
+                    record_mut.timestamps.fill(INITIAL_TIMESTAMP);
+                }
+                offset = AccessMetadata::UNSPLITTABLE;
             }
         }
 
