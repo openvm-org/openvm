@@ -1,12 +1,12 @@
-use openvm_instructions::riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
+use openvm_instructions::riscv::{
+    RV32_IMM_AS, RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
+};
 
 use super::{
     memory_ctx::MemoryCtx,
     segment_ctx::{Segment, SegmentationCtx},
 };
 use crate::{arch::execution_mode::E1E2ExecutionCtx, system::memory::dimensions::MemoryDimensions};
-
-const RV32I_NUM_REGISTERS: usize = 32;
 
 #[derive(Debug)]
 pub struct MeteredCtx<const PAGE_BITS: usize = 6> {
@@ -52,7 +52,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
                 &mut trace_heights,
                 RV32_REGISTER_AS,
                 0,
-                (RV32I_NUM_REGISTERS * RV32_REGISTER_NUM_LIMBS) as u32,
+                (RV32_NUM_REGISTERS * RV32_REGISTER_NUM_LIMBS) as u32,
             );
         }
 
@@ -116,6 +116,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 }
 
 impl<const PAGE_BITS: usize> E1E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
+    #[inline(always)]
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32) {
         debug_assert!(
             address_space != RV32_IMM_AS,
