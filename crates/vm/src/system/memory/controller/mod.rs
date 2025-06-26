@@ -412,7 +412,7 @@ impl<F: PrimeField32> MemoryController<F> {
             {
                 self.memory
                     .access_adapter_inventory
-                    .mark_to_split(block_size as usize, offset as usize);
+                    .mark_to_split(offset as usize);
             }
             if min_block_size > CHUNK {
                 assert_eq!(current_cnt, 0);
@@ -450,7 +450,7 @@ impl<F: PrimeField32> MemoryController<F> {
                             CHUNK,
                             current_address.address_space as usize,
                             current_address.pointer as usize,
-                            min_block_size.min(CHUNK),
+                            min_block_size,
                             *current_timestamps.iter().max().unwrap(),
                             if ptr == current_address.pointer && CHUNK as u32 == block_size {
                                 None

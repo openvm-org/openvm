@@ -915,7 +915,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .memory_controller
             .memory
             .access_adapter_inventory
-            .set_arenas_from_trace_heights(heights);
+            .set_arena_from_trace_heights(heights);
     }
 
     /// Override the trace heights for chips in the inventory. Usually this is for aggregation to

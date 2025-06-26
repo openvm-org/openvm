@@ -305,7 +305,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         memory_controller
             .memory
             .access_adapter_inventory
-            .set_arenas_from_trace_heights(&vec![1 << 16; max_access_adapter_n]);
+            .set_arena_from_trace_heights(&vec![1 << 16; max_access_adapter_n]);
         Self {
             memory: MemoryTester::new(memory_controller),
             streams: Default::default(),
@@ -333,7 +333,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         memory_controller
             .memory
             .access_adapter_inventory
-            .set_arenas_from_trace_heights(&vec![1 << 16; max_access_adapter_n]);
+            .set_arena_from_trace_heights(&vec![1 << 16; max_access_adapter_n]);
         Self {
             memory: MemoryTester::new(memory_controller),
             streams: Default::default(),
