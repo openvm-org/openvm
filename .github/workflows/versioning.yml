@@ -21,8 +21,10 @@ jobs:
       - name: Set version fallback
         run: echo "version=${{ github.event.inputs.version || 'v1.2.0' }}" >> $GITHUB_ENV
 
-      - name: Set up environment
+      - name: Checkout main
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -36,10 +38,11 @@ jobs:
       - name: Build main CLI
         run: cargo install --force --path crates/cli
 
-      - name: Run setup from main
+      - name: Run setup from main and snapshot ~/.openvm
         run: |
-          mkdir -p ./main-outputs
-          cargo openvm setup --output-dir ./main-outputs
+          cargo openvm setup
+          rm -rf ~/.openvm-main
+          mv ~/.openvm ~/.openvm-main
 
       - name: Build and keygen examples from main
         run: |
@@ -77,8 +80,7 @@ jobs:
 
       - name: Run setup from tagged version
         run: |
-          mkdir -p ./tagged-outputs
-          cargo openvm setup --output-dir ./tagged-outputs
+          cargo openvm setup
 
       - name: Build and keygen examples from tagged version
         run: |
@@ -109,13 +111,13 @@ jobs:
           done
 
       # Compare all outputs
-      - name: Compare setup outputs
+      - name: Compare ~/.openvm contents
         run: |
-          echo "Comparing setup outputs between main and ${{ env.version }}..."
-          if diff -r ./main-outputs ./tagged-outputs --exclude=examples --exclude=benchmarks; then
-            echo "✅ Setup outputs are identical"
+          echo "Comparing ~/.openvm between main and ${{ env.version }}..."
+          if diff -r ~/.openvm-main ~/.openvm; then
+            echo "✅ ~/.openvm outputs are identical"
           else
-            echo "❌ Setup outputs differ"
+            echo "❌ ~/.openvm outputs differ"
             exit 1
           fi
 
