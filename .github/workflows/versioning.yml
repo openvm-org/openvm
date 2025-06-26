@@ -9,7 +9,6 @@ on:
         required: true
         default: "v1.2.0"
         type: string
-  push:
 
 jobs:
   verify-versioning:
