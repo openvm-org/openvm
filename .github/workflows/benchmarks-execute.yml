@@ -68,7 +68,7 @@ jobs:
       - runs-on=${{ github.run_id }}
       - runner=8cpu-linux-x64
       - extras=s3-cache
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name != 'pull_request'
 
     env:
       CODSPEED_RUNNER_MODE: instrumentation
