@@ -6,6 +6,7 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 
+use super::cuda::hintstore::tracegen;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_rv32im_circuit::{
     Rv32HintStoreAir, Rv32HintStoreCols, Rv32HintStoreLayout, Rv32HintStoreRecordMut,
@@ -53,7 +54,7 @@ impl ChipUsageGetter for Rv32HintStoreChipGpu {
 // This is the info needed by each row to do parallel tracegen
 #[repr(C)]
 #[derive(new)]
-struct OffsetInfo {
+pub struct OffsetInfo {
     pub record_offset: u32,
     pub local_idx: u32,
 }
@@ -110,48 +111,6 @@ impl DeviceChip<SC, GpuBackend> for Rv32HintStoreChipGpu {
 
         trace
     }
-}
-
-unsafe extern "C" {
-    unsafe fn _hintstore_tracegen(
-        d_trace: *mut std::ffi::c_void,
-        height: usize,
-        width: usize,
-        d_records: *const u8,
-        rows_used: u32,
-        d_record_offsets: *const OffsetInfo,
-        pointer_max_bits: usize,
-        d_range_checker: *const u32,
-        range_checker_num_bits: usize,
-        d_bitwise_lookup: *const u32,
-        bitwise_num_bits: usize,
-    ) -> i32;
-}
-
-unsafe fn tracegen<T>(
-    d_trace: &DeviceBuffer<T>,
-    height: usize,
-    d_records: &DeviceBuffer<u8>,
-    rows_used: u32,
-    d_record_offsets: &DeviceBuffer<OffsetInfo>,
-    pointer_max_bits: usize,
-    d_range_checker: &DeviceBuffer<T>,
-    d_bitwise_lookup: &DeviceBuffer<T>,
-    bitwise_num_bits: usize,
-) -> Result<(), CudaError> {
-    CudaError::from_result(_hintstore_tracegen(
-        d_trace.as_mut_raw_ptr(),
-        height,
-        d_trace.len() / height,
-        d_records.as_ptr(),
-        rows_used,
-        d_record_offsets.as_ptr(),
-        pointer_max_bits,
-        d_range_checker.as_mut_ptr() as *mut u32,
-        d_range_checker.len() / 2,
-        d_bitwise_lookup.as_mut_ptr() as *mut u32,
-        bitwise_num_bits,
-    ))
 }
 
 #[cfg(test)]
