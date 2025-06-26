@@ -261,9 +261,6 @@ where
         self.adapter.write(state, instruction, rd);
 
         *state.pc = to_pc;
-        self.adapter.write(state, instruction, rd);
-
-        *state.pc = to_pc;
 
         Ok(())
     }
