@@ -22,18 +22,24 @@ __device__ __forceinline__ void apply_sbox(Fp &x, RowSlice sbox_regs) {
     } else if constexpr (DEGREE == 5 && SBOX_REGS == 1) {
         Fp x2 = x * x;
         Fp x3 = x2 * x;
-        sbox_regs[0] = x3;
+        if (sbox_regs.is_valid()) {
+            sbox_regs[0] = x3;
+        }
         x = x3 * x2;
     } else if constexpr (DEGREE == 7 && SBOX_REGS == 1) {
         Fp x3 = x * x * x;
-        sbox_regs[0] = x3;
+        if (sbox_regs.is_valid()) {
+            sbox_regs[0] = x3;
+        }
         x = x3 * x3 * x;
     } else if constexpr (DEGREE == 11 && SBOX_REGS == 2) {
         Fp x2 = x * x;
         Fp x3 = x2 * x;
         Fp x9 = x3 * x3 * x3;
-        sbox_regs[0] = x3;
-        sbox_regs[1] = x9;
+        if (sbox_regs.is_valid()) {
+            sbox_regs[0] = x3;
+            sbox_regs[1] = x9;
+        }
         x = x9 * x2;
     } else {
         asm("unexpected (DEGREE, REGISTERS);");
@@ -76,12 +82,14 @@ __device__ __forceinline__ void full_round(
     // external linear layer (full MDS)
     LinearLayers<WIDTH>::external_linear_layer(state);
     // update post-state
+    if (perm.is_valid()) {
 #pragma unroll
-    for (size_t i = 0; i < WIDTH; ++i) {
-        if (is_end) {
-            perm.ending_full_post(round)[i] = state[i];
-        } else {
-            perm.beginning_full_post(round)[i] = state[i];
+        for (size_t i = 0; i < WIDTH; ++i) {
+            if (is_end) {
+                perm.ending_full_post(round)[i] = state[i];
+            } else {
+                perm.beginning_full_post(round)[i] = state[i];
+            }
         }
     }
 }
@@ -103,12 +111,15 @@ __device__ __forceinline__ void partial_round(
     state[0] += INTERNAL_ROUND_CONSTANTS[round];
     apply_sbox<SBOX_DEGREE, SBOX_REGS>(state[0], perm.partial_sbox(round));
     // update post
-    perm.partial_post(round)[0] = state[0];
+    if (perm.is_valid()) {
+        perm.partial_post(round)[0] = state[0];
+    }
     LinearLayers<WIDTH>::internal_linear_layer(state);
 }
 
 //
-// Public API: generate one Poseidon2 trace‐row for a single permutation
+// Public API: generate one Poseidon2 trace‐row for a single permutation. Since we
+// sometimes need to compute Poseidon2 permutation without recording the trace row.
 //
 template <
     size_t WIDTH,
@@ -120,12 +131,14 @@ __device__ __forceinline__ void generate_trace_row_for_perm(
     Poseidon2Row<WIDTH, SBOX_DEGREE, SBOX_REGS, HALF_FULL_ROUNDS, PARTIAL_ROUNDS> perm,
     RowSlice state
 ) {
-    perm.export_col()[0] = Fp::one();
+    if (perm.is_valid()) {
+        perm.export_col()[0] = Fp::one();
 
-    // initial inputs
+        // initial inputs
 #pragma unroll
-    for (size_t i = 0; i < WIDTH; ++i) {
-        perm.inputs()[i] = state[i];
+        for (size_t i = 0; i < WIDTH; ++i) {
+            perm.inputs()[i] = state[i];
+        }
     }
 
     // initial external mix

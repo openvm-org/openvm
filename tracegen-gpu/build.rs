@@ -68,6 +68,7 @@ fn main() {
         .file("cuda/src/dummy/less_than.cu")
         .file("cuda/src/dummy/is_zero.cu")
         .file("cuda/src/dummy/is_equal.cu")
+        .file("cuda/src/dummy/poseidon2.cu")
         .file("cuda/src/dummy/utils.cu")
         .file("cuda/src/system/poseidon2.cu")
         .file("cuda/src/testing/execution.cu")

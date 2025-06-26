@@ -5,6 +5,7 @@ use openvm_circuit_primitives::{
     TraceSubRowGenerator,
 };
 
+use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
 use openvm_stark_sdk::{dummy_airs::fib_air::chip::FibonacciChip, utils::create_seeded_rng};
 use p3_baby_bear::BabyBear;
@@ -21,12 +22,10 @@ use tracegen_gpu::{
         fibair::fibair_tracegen,
         is_equal, is_zero,
         less_than::{assert_less_than_tracegen, less_than_array_tracegen, less_than_tracegen},
+        poseidon2,
     },
     testing::{assert_eq_cpu_and_gpu_matrix, test_chip_whole_trace_output},
 };
-
-use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
-use tracegen_gpu::system::poseidon2;
 
 #[test]
 fn test_fibair_tracegen() {
@@ -456,21 +455,17 @@ fn test_tracegen_gpu_vs_cpu_poseidon2() {
 
     // Generate random states and prepare GPU inputs
     let mut rng = create_seeded_rng();
-    let mut cpu_inputs: Vec<[F; WIDTH]> = Vec::with_capacity(N);
-    for _ in 0..N {
-        let state: [F; WIDTH] =
-            std::array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32)));
-        cpu_inputs.push(state);
-    }
+    let cpu_inputs: Vec<[F; WIDTH]> = (0..N)
+        .map(|_| std::array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32))))
+        .collect();
 
     // Flatten inputs in row-major order for GPU (same layout as cpu_inputs)
-    let mut inputs_rowmaj: Vec<F> = Vec::with_capacity(N * WIDTH);
-    for r in 0..N {
-        for c in 0..WIDTH {
-            inputs_rowmaj.push(cpu_inputs[r][c]);
-        }
-    }
-    let inputs_dev = inputs_rowmaj.to_device().unwrap();
+    let inputs_dev = cpu_inputs
+        .iter()
+        .flat_map(|r| r.iter().copied())
+        .collect::<Vec<_>>()
+        .to_device()
+        .unwrap();
 
     // Launch GPU tracegen
     let num_cols = 1

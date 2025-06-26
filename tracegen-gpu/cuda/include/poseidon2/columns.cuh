@@ -29,6 +29,13 @@ struct Poseidon2Row {
 
     __device__ Poseidon2Row(Fp *input, uint32_t n) : slice(input, n) {}
 
+    __device__ Poseidon2Row(RowSlice slice) : slice(std::move(slice)) {}
+
+    // Null Poseidon2Row definition
+    __device__ static Poseidon2Row null() { return Poseidon2Row(RowSlice::null()); }
+
+    __device__ bool is_valid() const { return slice.is_valid(); }
+
     // Basic accessors
     __device__ RowSlice export_col() const { return slice.slice_from(0); }
 
@@ -36,12 +43,18 @@ struct Poseidon2Row {
 
     // Beginning full rounds accessors
     __device__ RowSlice beginning_full_sbox(size_t round, size_t lane) const {
+        if (!is_valid()) {
+            return RowSlice::null();
+        }
         size_t offset = EXPORT_COL_SIZE + INPUTS_SIZE + (round * (WIDTH * SBOX_REGS + WIDTH)) +
                         (lane * SBOX_REGS);
         return slice.slice_from(offset);
     }
 
     __device__ RowSlice beginning_full_post(size_t round) const {
+        if (!is_valid()) {
+            return RowSlice::null();
+        }
         size_t offset = EXPORT_COL_SIZE + INPUTS_SIZE + (round * (WIDTH * SBOX_REGS + WIDTH)) +
                         (WIDTH * SBOX_REGS);
         return slice.slice_from(offset);
@@ -49,12 +62,18 @@ struct Poseidon2Row {
 
     // Partial rounds accessors
     __device__ RowSlice partial_sbox(size_t round) const {
+        if (!is_valid()) {
+            return RowSlice::null();
+        }
         size_t offset =
             EXPORT_COL_SIZE + INPUTS_SIZE + BEGINNING_FULL_SIZE + (round * (SBOX_REGS + 1));
         return slice.slice_from(offset);
     }
 
     __device__ RowSlice partial_post(size_t round) const {
+        if (!is_valid()) {
+            return RowSlice::null();
+        }
         size_t offset = EXPORT_COL_SIZE + INPUTS_SIZE + BEGINNING_FULL_SIZE +
                         (round * (SBOX_REGS + 1)) + SBOX_REGS;
         return slice.slice_from(offset);
@@ -62,12 +81,18 @@ struct Poseidon2Row {
 
     // Ending full rounds accessors
     __device__ RowSlice ending_full_sbox(size_t round, size_t lane) const {
+        if (!is_valid()) {
+            return RowSlice::null();
+        }
         size_t offset = EXPORT_COL_SIZE + INPUTS_SIZE + BEGINNING_FULL_SIZE + PARTIAL_SIZE +
                         (round * (WIDTH * SBOX_REGS + WIDTH)) + (lane * SBOX_REGS);
         return slice.slice_from(offset);
     }
 
     __device__ RowSlice ending_full_post(size_t round) const {
+        if (!is_valid()) {
+            return RowSlice::null();
+        }
         size_t offset = EXPORT_COL_SIZE + INPUTS_SIZE + BEGINNING_FULL_SIZE + PARTIAL_SIZE +
                         (round * (WIDTH * SBOX_REGS + WIDTH)) + (WIDTH * SBOX_REGS);
         return slice.slice_from(offset);

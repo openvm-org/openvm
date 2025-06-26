@@ -53,7 +53,7 @@ template <size_t WIDTH> __device__ __forceinline__ void mds_light_permutation(Ro
 //-----------------------------------------------------------------------------
 
 // V = [-2, 1, 2, 1/2, 3, 4, -1/2, -3, -4, 1/2^8, 1/4, 1/8, 1/2^27, -1/2^8, -1/16, -1/2^27]
-__constant__ Fp internal_diag16[16] = {
+__constant__ inline Fp internal_diag16[16] = {
     -Fp::one().doubled().doubled(),
     Fp::one(),
     Fp::one().doubled(),
