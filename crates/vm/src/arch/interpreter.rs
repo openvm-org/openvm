@@ -197,9 +197,11 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
         //     let inst = &pre_compute_insts[pc_index];
         //     unsafe { (inst.handler)(inst, &mut vm_state) };
         // }
+        let start = std::time::Instant::now();
         unsafe {
             execute_impl(program, &mut vm_state, &pre_compute_insts);
         }
+        println!("time {}ms", start.elapsed().as_millis());
         // let start_pc_index = get_pc_index(program, self.exe.pc_start)?;
         // let start_inst = &pre_compute_insts[start_pc_index];
         // unsafe { start_e1(start_inst, &mut vm_state) };
