@@ -47,12 +47,14 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         let segmentation_ctx = SegmentationCtx::new(air_names, widths, interactions);
 
         // Add merkle height contributions for all registers
-        memory_ctx.update_boundary_merkle_heights(
-            &mut trace_heights,
-            RV32_REGISTER_AS,
-            0,
-            (RV32I_NUM_REGISTERS * RV32_REGISTER_NUM_LIMBS) as u32,
-        );
+        if continuations_enabled {
+            memory_ctx.update_boundary_merkle_heights(
+                &mut trace_heights,
+                RV32_REGISTER_AS,
+                0,
+                (RV32I_NUM_REGISTERS * RV32_REGISTER_NUM_LIMBS) as u32,
+            );
+        }
 
         Self {
             trace_heights,
