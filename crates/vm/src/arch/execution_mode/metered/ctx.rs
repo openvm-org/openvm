@@ -121,13 +121,15 @@ impl<const PAGE_BITS: usize> E1E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
             .update_adapter_heights(&mut self.trace_heights, address_space, size_bits);
 
         // Handle merkle tree updates
-        // TODO(ayush): use a looser upper bound
-        // see if this can be approximated by total number of reads/writes for AS != register
-        self.memory_ctx.update_boundary_merkle_heights(
-            &mut self.trace_heights,
-            address_space,
-            ptr,
-            size,
-        );
+        // TODO(ayush): add all contributions from address space 1 during initialize
+        //              assuming all registers are read
+        if address_space > 1 {
+            self.memory_ctx.update_boundary_merkle_heights(
+                &mut self.trace_heights,
+                address_space,
+                ptr,
+                size,
+            );
+        }
     }
 }
