@@ -459,7 +459,7 @@ impl<F, const N: usize> ChipUsageGetter for AccessAdapterChip<F, N> {
     }
 
     fn current_trace_height(&self) -> usize {
-        todo!("current trace height")
+        self.overridden_height.unwrap_or(0) // I don't know what to write here
     }
 
     fn trace_width(&self) -> usize {
