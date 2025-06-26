@@ -21,6 +21,9 @@ use crate::{
 mod cuda;
 use cuda::auipc::tracegen;
 
+mod hintstore;
+pub use hintstore::*;
+
 #[cfg(test)]
 mod tests;
 
@@ -54,9 +57,7 @@ impl ChipUsageGetter for Rv32AuipcChipGpu<'_> {
 
     fn current_trace_height(&self) -> usize {
         const RECORD_SIZE: usize = size_of::<(Rv32RdWriteAdapterRecord, Rv32AuipcCoreRecord)>();
-        let records_len = self.arena.as_ref().unwrap().records_buffer.get_ref()
-            [..self.arena.as_ref().unwrap().records_buffer.position() as usize]
-            .len();
+        let records_len = self.arena.unwrap().allocated().len();
         assert_eq!(records_len % RECORD_SIZE, 0);
         records_len / RECORD_SIZE
     }
@@ -72,10 +73,7 @@ impl DeviceChip<SC, GpuBackend> for Rv32AuipcChipGpu<'_> {
     }
 
     fn generate_trace(&self) -> DeviceMatrix<F> {
-        let d_records = self.arena.as_ref().unwrap().records_buffer.get_ref()
-            [..self.arena.as_ref().unwrap().records_buffer.position() as usize]
-            .to_device()
-            .unwrap();
+        let d_records = self.arena.unwrap().allocated().to_device().unwrap();
         let trace_height = next_power_of_two_or_zero(self.current_trace_height());
         let trace = DeviceMatrix::<F>::with_capacity(trace_height, self.trace_width());
         unsafe {

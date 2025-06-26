@@ -9,7 +9,9 @@ path = "src/lib.rs"
 [dependencies]
 rand = { version = "0.8.5", default-features = false }
 tracing = { workspace = true }
+derive-new = { workspace = true }
 
+# stark-backend
 stark-backend-gpu = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
@@ -17,6 +19,7 @@ openvm-stark-sdk = { workspace = true }
 # openvm
 openvm-circuit = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
+openvm-instructions = { workspace = true }
 openvm-rv32im-circuit = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
 openvm-rv32-adapters = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
 openvm-rv32im-transpiler = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }

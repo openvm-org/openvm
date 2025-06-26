@@ -1,7 +1,7 @@
 #pragma once
 
 #include "execution.h"
-#include "system/memory/offline_checker.cuh"
+#include "system/memory/controller.cuh"
 #include "trace_access.h"
 
 using namespace riscv;
