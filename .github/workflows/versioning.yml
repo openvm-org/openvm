@@ -5,10 +5,11 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag to compare against main (e.g., v1.2.0)'
+        description: "Version tag to compare against main (e.g., v1.2.0)"
         required: true
-        default: 'v1.2.0'
+        default: "v1.2.0"
         type: string
+  push:
 
 jobs:
   verify-versioning:
@@ -17,6 +18,9 @@ jobs:
       - runner=64cpu-linux-arm64
       - extras=s3-cache
     steps:
+      - name: Set version fallback
+        run: echo "version=${{ github.event.inputs.version || 'v1.2.0' }}" >> $GITHUB_ENV
+
       - name: Set up environment
         uses: actions/checkout@v4
 
@@ -65,7 +69,7 @@ jobs:
       - name: Checkout tagged version
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.version }}
+          ref: ${{ env.version }}
           clean: false
 
       - name: Build tagged CLI
@@ -107,7 +111,7 @@ jobs:
       # Compare all outputs
       - name: Compare setup outputs
         run: |
-          echo "Comparing setup outputs between main and ${{ github.event.inputs.version }}..."
+          echo "Comparing setup outputs between main and ${{ env.version }}..."
           if diff -r ./main-outputs ./tagged-outputs --exclude=examples --exclude=benchmarks; then
             echo "✅ Setup outputs are identical"
           else
@@ -117,7 +121,7 @@ jobs:
 
       - name: Compare example verification keys
         run: |
-          echo "Comparing example verification keys between main and ${{ github.event.inputs.version }}..."
+          echo "Comparing example verification keys between main and ${{ env.version }}..."
           failed=0
           for example in examples/*/; do
             if [ -f "$example/Cargo.toml" ]; then
@@ -140,7 +144,7 @@ jobs:
 
       - name: Compare benchmark verification keys
         run: |
-          echo "Comparing benchmark verification keys between main and ${{ github.event.inputs.version }}..."
+          echo "Comparing benchmark verification keys between main and ${{ env.version }}..."
           failed=0
           for benchmark in benchmarks/guest/*/; do
             if [ -f "$benchmark/Cargo.toml" ]; then
@@ -164,7 +168,7 @@ jobs:
       - name: Final summary
         run: |
           echo "🎉 Versioning compatibility verification completed successfully!"
-          echo "✅ Setup outputs are identical between main and ${{ github.event.inputs.version }}"
+          echo "✅ Setup outputs are identical between main and ${{ env.version }}"
           echo "✅ All example verification keys are identical"
           echo "✅ All benchmark verification keys are identical"
           echo "✅ Versioning policy maintained - patch upgrade is backward compatible"
