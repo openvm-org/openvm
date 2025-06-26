@@ -537,6 +537,9 @@ impl<F: PrimeField32> TracingMemory<F> {
                 }
                 offset = AccessMetadata::UNSPLITTABLE;
             }
+        } else {
+            debug_assert_eq!(align, lowest_block_size);
+            offset = AccessMetadata::UNSPLITTABLE;
         }
 
         if UPDATE_META {
