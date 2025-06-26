@@ -27,21 +27,3 @@ struct MemoryAuxColsFactory {
         row.fill_zero(0, sizeof(MemoryBaseAuxCols<uint8_t>));
     }
 };
-
-template <size_t NUM_LIMBS> struct MemoryWriteAuxAdapter {
-    MemoryAuxColsFactory mem_helper;
-
-    __device__ MemoryWriteAuxAdapter(VariableRangeChecker range_checker)
-        : mem_helper(range_checker) {}
-
-    __device__ void fill_trace_row(
-        RowSlice row,
-        MemoryWriteAuxRecord<NUM_LIMBS> record,
-        uint32_t timestamp
-    ) {
-        COL_WRITE_ARRAY(row, MemoryWriteAuxCols, prev_data, record.prev_data);
-        mem_helper.fill(
-            row.slice_from(COL_INDEX(MemoryWriteAuxCols, base)), record.prev_timestamp, timestamp
-        );
-    }
-};
