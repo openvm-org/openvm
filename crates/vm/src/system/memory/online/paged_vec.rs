@@ -13,6 +13,7 @@ unsafe impl<T: Sync> Sync for PagedVec<T> {}
 
 impl<T: Copy + Default> PagedVec<T> {
     #[inline]
+    /// `total_size` is the capacity of elements of type `T`.
     pub fn new(total_size: usize, page_size: usize) -> Self {
         let num_pages = total_size.div_ceil(page_size);
         Self {
