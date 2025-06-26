@@ -55,7 +55,7 @@ jobs:
               example_name=$(basename "$example")
               echo "Building and generating keys for example: $example_name"
               cd "$example"
-              cargo openvm build
+              cargo openvm build --no-transpile
               cargo openvm keygen --output-dir "../../main-outputs/examples/$example_name"
               cd ../..
             fi
@@ -69,7 +69,7 @@ jobs:
               benchmark_name=$(basename "$benchmark")
               echo "Building and generating keys for benchmark: $benchmark_name"
               cd "$benchmark"
-              cargo openvm build
+              cargo openvm build --no-transpile
               cargo openvm keygen --output-dir "../../../main-outputs/benchmarks/$benchmark_name"
               cd ../../..
             fi
@@ -97,7 +97,7 @@ jobs:
               example_name=$(basename "$example")
               echo "Building and generating keys for example: $example_name"
               cd "$example"
-              cargo openvm build
+              cargo openvm build --no-transpile
               # TODO(yi): Change --vk-output to --output-dir after v1.3.0 release
               mkdir -p "../../tagged-outputs/examples/$example_name"
               cargo openvm keygen --vk-output "../../tagged-outputs/examples/$example_name/app.vk"
@@ -113,7 +113,7 @@ jobs:
               benchmark_name=$(basename "$benchmark")
               echo "Building and generating keys for benchmark: $benchmark_name"
               cd "$benchmark"
-              cargo openvm build
+              cargo openvm build --no-transpile
               # TODO(yi): Change --vk-output to --output-dir after v1.3.0 release
               mkdir -p "../../../tagged-outputs/benchmarks/$benchmark_name"
               cargo openvm keygen --vk-output "../../../tagged-outputs/benchmarks/$benchmark_name/app.vk"
