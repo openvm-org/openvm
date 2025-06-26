@@ -846,28 +846,6 @@ impl<F: PrimeField32> TracingMemory<F> {
         }
         blocks
     }
-
-    // /// Returns iterator over `((addr_space, ptr), (timestamp, block_size))` of the address, last
-    // /// accessed timestamp, and block size of all memory blocks that have been accessed since
-    // this /// instance of [TracingMemory] was constructed. This is similar to a soft-dirty
-    // mechanism, /// where the memory data is loaded from an initial image and considered
-    // "clean", and then /// all future accesses are marked as "dirty".
-    // // block_size is initialized to 0, so nonzero block_size happens to also mark "dirty" cells
-    // // **Assuming** for now that only the start of a block has nonzero block_size
-    // pub fn touched_blocks(&self) -> impl ParallelIterator<Item = (Address, AccessMetadata)> + '_
-    // {     #[cfg(not(feature = "parallel"))]
-    //     use itertools::Itertools;
-
-    //     self.meta
-    //         .par_iter()
-    //         .zip_eq(self.min_block_size.par_iter())
-    //         .enumerate()
-    //         .flat_map(move |(addr_space, (meta, &align))| {
-    //             meta.par_iter().filter_map(move |(idx, metadata)| {
-    //                 (metadata.block_size != 0 && metadata.block_size != AccessMetadata::OCCUPIED)
-    //                     .then_some(((addr_space as u32, idx as u32 * align), metadata))
-    //             })
-    //         })
 }
 
 // #[cfg(test)]

@@ -71,6 +71,8 @@ pub(super) fn compute_root_proof_heights(
         .collect();
     let mut vm_heights = res.vm_heights;
     vm_heights.round_to_next_power_of_two_or_zero();
+    eprintln!("air_heights: {:?}", air_heights);
+    eprintln!("vm_heights: {:?}", vm_heights);
     (air_heights, vm_heights)
 }
 

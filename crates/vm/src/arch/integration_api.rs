@@ -500,7 +500,11 @@ impl DenseRecordArena {
     pub fn alloc_bytes<'a>(&mut self, count: usize) -> &'a mut [u8] {
         let begin = self.records_buffer.position();
         let width = count;
-        debug_assert!(begin as usize + width <= self.records_buffer.get_ref().len());
+        debug_assert!(
+            begin as usize + width <= self.records_buffer.get_ref().len(),
+            "failed to allocate {width} bytes from {begin} when the capacity is {}",
+            self.records_buffer.get_ref().len()
+        );
         self.records_buffer.set_position(begin + width as u64);
         unsafe {
             std::slice::from_raw_parts_mut(

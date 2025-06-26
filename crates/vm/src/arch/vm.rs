@@ -1292,7 +1292,7 @@ where
         let adapter_offset = if chip_complex.config().continuation_enabled {
             boundary_idx + 2
         } else {
-            boundary_idx
+            boundary_idx + 1
         };
         // Set trace heights for memory adapters
         let num_access_adapters = chip_complex

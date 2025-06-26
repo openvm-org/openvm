@@ -72,6 +72,7 @@ impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
             .iter()
             .map(|&height| height as u32)
             .collect_vec();
+        eprintln!("trace_heights in prove: {:?}", trace_heights);
         let mut proof_input = vm
             .execute_and_generate(
                 self.root_verifier_pk.root_committed_exe.clone(),

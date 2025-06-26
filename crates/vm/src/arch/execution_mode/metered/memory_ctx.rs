@@ -66,7 +66,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         let adapter_offset = if continuations_enabled {
             boundary_idx + 2
         } else {
-            boundary_idx
+            boundary_idx + 1
         };
 
         let chunk = if continuations_enabled {

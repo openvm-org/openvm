@@ -84,6 +84,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
     }
 
     pub fn set_override_trace_heights(&mut self, overridden_heights: Vec<usize>) {
+        eprintln!("overridden_heights: {:?}", overridden_heights);
         self.set_arena_from_trace_heights(
             &overridden_heights
                 .iter()
@@ -108,6 +109,11 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
                 }) * h as usize
             })
             .sum();
+        assert!(self
+            .chips
+            .iter()
+            .all(|chip| chip.overridden_trace_height().is_none()));
+        eprintln!("now allocate {} from {:?}", size_bound, trace_heights);
         self.arena.set_capacity(size_bound);
     }
 
@@ -140,15 +146,20 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
     pub fn air_names(&self) -> Vec<String> {
         self.air_names.clone()
     }
-    pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(mut self) -> Vec<AirProofInput<SC>>
-    where
-        F: PrimeField32,
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
+    pub fn compute_trace_heights(&mut self) {
         let num_adapters = self.chips.len();
-
         let mut heights = vec![0; num_adapters];
+
+        self.compute_heights_from_arena(&mut heights);
+        self.apply_overridden_heights(&mut heights);
+        for (chip, height) in self.chips.iter_mut().zip(heights) {
+            chip.set_computed_trace_height(height);
+        }
+    }
+
+    fn compute_heights_from_arena(&mut self, heights: &mut [usize]) {
         let bytes = self.arena.allocated_mut();
+        eprintln!("computing heights from arena! used {} bytes", bytes.len());
         let mut ptr = 0;
         while ptr < bytes.len() {
             let header: &AccessRecordHeader = bytes[ptr..].borrow();
@@ -176,6 +187,10 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
                 }
             }
         }
+        eprintln!("computed heights: {:?}", heights);
+    }
+
+    fn apply_overridden_heights(&mut self, heights: &mut [usize]) {
         for (i, h) in heights.iter_mut().enumerate() {
             if let Some(oh) = self.chips[i].overridden_trace_height() {
                 assert!(
@@ -187,6 +202,19 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
             }
             *h = next_power_of_two_or_zero(*h);
         }
+    }
+
+    pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(mut self) -> Vec<AirProofInput<SC>>
+    where
+        F: PrimeField32,
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
+        let num_adapters = self.chips.len();
+
+        let mut heights = vec![0; num_adapters];
+        self.compute_heights_from_arena(&mut heights);
+        self.apply_overridden_heights(&mut heights);
+
         let widths = self
             .chips
             .iter()
@@ -200,7 +228,8 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
 
         let mut trace_ptrs = vec![0; num_adapters];
 
-        ptr = 0;
+        let bytes = self.arena.allocated_mut();
+        let mut ptr = 0;
         while ptr < bytes.len() {
             let layout: AccessLayout = unsafe { bytes[ptr..].extract_layout() };
             let record: AccessRecordMut<'_> = bytes[ptr..].custom_borrow(layout.clone());
@@ -325,6 +354,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
 pub(crate) trait GenericAccessAdapterChipTrait<F> {
     fn set_override_trace_height(&mut self, overridden_height: usize);
     fn overridden_trace_height(&self) -> Option<usize>;
+    fn set_computed_trace_height(&mut self, height: usize);
 
     fn fill_trace_row(
         &self,
@@ -373,6 +403,7 @@ pub(crate) struct AccessAdapterChip<F, const N: usize> {
     air: AccessAdapterAir<N>,
     range_checker: SharedVariableRangeCheckerChip,
     overridden_height: Option<usize>,
+    computed_trace_height: Option<usize>,
     _marker: PhantomData<F>,
 }
 
@@ -387,6 +418,7 @@ impl<F: Clone + Send + Sync, const N: usize> AccessAdapterChip<F, N> {
             air: AccessAdapterAir::<N> { memory_bus, lt_air },
             range_checker,
             overridden_height: None,
+            computed_trace_height: None,
             _marker: PhantomData,
         }
     }
@@ -398,6 +430,10 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
 
     fn overridden_trace_height(&self) -> Option<usize> {
         self.overridden_height
+    }
+
+    fn set_computed_trace_height(&mut self, height: usize) {
+        self.computed_trace_height = Some(height);
     }
 
     fn fill_trace_row(
@@ -459,7 +495,7 @@ impl<F, const N: usize> ChipUsageGetter for AccessAdapterChip<F, N> {
     }
 
     fn current_trace_height(&self) -> usize {
-        self.overridden_height.unwrap_or(0) // I don't know what to write here
+        self.computed_trace_height.unwrap_or(0)
     }
 
     fn trace_width(&self) -> usize {

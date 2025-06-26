@@ -488,6 +488,10 @@ impl<F: PrimeField32> MemoryController<F> {
         H: HasherChip<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
         let touched_blocks = self.memory.touched_blocks();
+
+        // Compute trace heights for access adapter chips and update their stored heights
+        self.memory.access_adapter_inventory.compute_trace_heights();
+
         let mut final_memory_volatile = None;
         let mut final_memory_persistent = None;
 
