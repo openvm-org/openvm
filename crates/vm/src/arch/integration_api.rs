@@ -4,6 +4,7 @@ use std::{
     borrow::{Borrow, BorrowMut},
     io::Cursor,
     marker::PhantomData,
+    os::unix::prelude::ExitStatusExt,
     ptr::{copy_nonoverlapping, slice_from_raw_parts_mut},
     sync::Arc,
 };
@@ -25,12 +26,11 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-    ExecutionState, InsExecutorE1, InstructionExecutor, Result, Streams, VmStateMut,
+    execution_mode::E1E2ExecutionCtx, ExecuteFunc, ExecutionState, InsExecutorE1,
+    InstructionExecutor, Result, Streams, VmStateMut,
 };
 use crate::system::memory::{
-    online::{GuestMemory, TracingMemory},
-    MemoryAuxColsFactory, MemoryController, SharedMemoryHelper,
+    online::TracingMemory, MemoryAuxColsFactory, MemoryController, SharedMemoryHelper,
 };
 
 /// The interface between primitive AIR and machine adapter AIR.
@@ -953,46 +953,17 @@ pub trait AdapterTraceFiller<F, CTX>: AdapterTraceStep<F, CTX> {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]);
 }
 
-pub trait AdapterExecutorE1<F>
-where
-    F: PrimeField32,
-{
-    type ReadData;
-    type WriteData;
-
-    fn read<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Self::ReadData
-    where
-        Ctx: E1E2ExecutionCtx;
-
-    fn write<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-    ) where
-        Ctx: E1E2ExecutionCtx;
-}
-
 // TODO: Rename core/step to operator
 pub trait StepExecutorE1<F> {
-    fn execute_e1<Ctx>(
+    fn pre_compute_size(&self) -> usize;
+    fn pre_compute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
     where
         Ctx: E1E2ExecutionCtx;
-
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()>;
 }
 
 impl<F, A, S> InsExecutorE1<F> for NewVmChipWrapper<F, A, S, MatrixRecordArena<F>>
@@ -1001,27 +972,21 @@ where
     S: StepExecutorE1<F>,
     A: BaseAir<F>,
 {
-    fn execute_e1<Ctx>(
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        self.step.pre_compute_size()
+    }
+    #[inline(always)]
+    fn pre_compute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
     where
         Ctx: E1E2ExecutionCtx,
     {
-        self.step.execute_e1(state, instruction)
-    }
-
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()>
-    where
-        F: PrimeField32,
-    {
-        self.step.execute_metered(state, instruction, chip_index)
+        self.step.pre_compute_e1(pc, inst, data)
     }
 
     fn set_trace_height(&mut self, height: usize) {

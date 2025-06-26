@@ -5,15 +5,12 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, ImmInstruction, RecordArena, Result,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc,
+        ExecutionError::InvalidInstruction, ImmInstruction, RecordArena, Result, StepExecutorE1,
+        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
@@ -23,6 +20,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
+    riscv::RV32_REGISTER_AS,
     LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
@@ -290,42 +288,53 @@ where
     }
 }
 
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct AuiPcPreCompute {
+    imm: u32,
+    a: u8,
+}
+
 impl<F, A> StepExecutorE1<F> for Rv32AuipcStep<A>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let Instruction { c: imm, .. } = instruction;
-
-        let rd = run_auipc(*state.pc, imm.as_canonical_u32());
-
-        self.adapter.write(state, instruction, rd);
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<AuiPcPreCompute>()
     }
 
-    fn execute_metered(
+    #[inline(always)]
+    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
-
-        Ok(())
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>> {
+        let Instruction { a, c: imm, d, .. } = inst;
+        if d.as_canonical_u32() != RV32_REGISTER_AS {
+            return Err(InvalidInstruction(pc));
+        }
+        let imm = imm.as_canonical_u32();
+        let data: &mut AuiPcPreCompute = data.borrow_mut();
+        *data = AuiPcPreCompute {
+            imm,
+            a: a.as_canonical_u32() as u8,
+        };
+        Ok(execute_e1_impl)
     }
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &AuiPcPreCompute = pre_compute.borrow();
+    let rd = run_auipc(vm_state.pc, pre_compute.imm);
+    vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
+
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
 }
 
 // returns rd_data

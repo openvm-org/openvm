@@ -9,7 +9,7 @@ use openvm_circuit::{
     arch::{
         create_and_initialize_chip_complex,
         execution_mode::{
-            e1::E1ExecutionControl,
+            e1::{E1Ctx, E1ExecutionControl},
             tracegen::{TracegenCtx, TracegenExecutionControl},
         },
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
@@ -920,7 +920,7 @@ fn test_vm_pure_execution_non_continuation() {
 
     let executor = InterpretedInstance::<F, _>::new(test_native_config(), program);
     executor
-        .execute(E1ExecutionControl, vec![])
+        .execute(E1Ctx { instret_end: None }, vec![])
         .expect("Failed to execute");
 }
 
@@ -947,7 +947,7 @@ fn test_vm_pure_execution_continuation() {
     let program = Program::from_instructions(&instructions);
     let executor = InterpretedInstance::<F, _>::new(test_native_continuations_config(), program);
     executor
-        .execute(E1ExecutionControl, vec![])
+        .execute(E1Ctx { instret_end: None }, vec![])
         .expect("Failed to execute");
 }
 

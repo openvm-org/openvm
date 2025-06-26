@@ -348,17 +348,17 @@ where
         Ok(())
     }
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
-
-        Ok(())
-    }
+    // fn execute_metered(
+    //     &self,
+    //     state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+    //     instruction: &Instruction<F>,
+    //     chip_index: usize,
+    // ) -> Result<()> {
+    //     self.execute_e1(state, instruction)?;
+    //     state.ctx.trace_heights[chip_index] += 1;
+    //
+    //     Ok(())
+    // }
 }
 
 pub type JalRangeCheckChip<F> =

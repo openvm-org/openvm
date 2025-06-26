@@ -5,15 +5,12 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, MinimalInstruction, RecordArena, Result,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc,
+        MinimalInstruction, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
+        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
@@ -21,7 +18,12 @@ use openvm_circuit_primitives::{
     AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_rv32im_transpiler::MulHOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -346,53 +348,92 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
-    for MulHStep<A, NUM_LIMBS, LIMB_BITS>
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct MulHPreCompute {
+    a: u8,
+    b: u8,
+    c: u8,
+}
+
+impl<F, A, const LIMB_BITS: usize> StepExecutorE1<F>
+    for MulHStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<
-            F,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-        >,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let Instruction { opcode, .. } = instruction;
-
-        let mulh_opcode = MulHOpcode::from_usize(opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
-
-        let [rs1, rs2] = self.adapter.read(state, instruction).into();
-        let rs1 = rs1.map(u32::from);
-        let rs2 = rs2.map(u32::from);
-
-        let (rd, _, _, _, _) = run_mulh::<NUM_LIMBS, LIMB_BITS>(mulh_opcode, &rs1, &rs2);
-        let rd = rd.map(|x| x as u8);
-
-        self.adapter.write(state, instruction, [rd].into());
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<MulHPreCompute>()
     }
 
-    fn execute_metered(
+    #[inline(always)]
+    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>> {
+        let pre_compute: &mut MulHPreCompute = data.borrow_mut();
+        *pre_compute = MulHPreCompute {
+            a: inst.a.as_canonical_u32() as u8,
+            b: inst.b.as_canonical_u32() as u8,
+            c: inst.c.as_canonical_u32() as u8,
+        };
+        let fn_ptr =
+            match MulHOpcode::from_usize(inst.opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET)) {
+                MulHOpcode::MULH => execute_e1_impl::<_, _, MulHOp>,
+                MulHOpcode::MULHSU => execute_e1_impl::<_, _, MulHSuOp>,
+                MulHOpcode::MULHU => execute_e1_impl::<_, _, MulHUOp>,
+            };
+        Ok(fn_ptr)
+    }
+}
 
-        Ok(())
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx, OP: MulHOperation>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &MulHPreCompute = pre_compute.borrow();
+
+    let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
+        vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
+        vm_state.vm_read(RV32_REGISTER_AS, pre_compute.c as u32);
+    let rd = <OP as MulHOperation>::compute(rs1, rs2);
+    vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
+
+    vm_state.pc += DEFAULT_PC_STEP;
+    vm_state.instret += 1;
+}
+
+trait MulHOperation {
+    fn compute(rs1: [u8; 4], rs1: [u8; 4]) -> [u8; 4];
+}
+struct MulHOp;
+struct MulHSuOp;
+struct MulHUOp;
+impl MulHOperation for MulHOp {
+    #[inline(always)]
+    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> [u8; 4] {
+        let rs1 = i32::from_le_bytes(rs1) as i64;
+        let rs2 = i32::from_le_bytes(rs2) as i64;
+        ((rs1.wrapping_mul(rs2) >> 32) as u32).to_le_bytes()
+    }
+}
+impl MulHOperation for MulHSuOp {
+    #[inline(always)]
+    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> [u8; 4] {
+        let rs1 = i32::from_le_bytes(rs1) as i64;
+        let rs2 = u32::from_le_bytes(rs2) as i64;
+        ((rs1.wrapping_mul(rs2) >> 32) as u32).to_le_bytes()
+    }
+}
+impl MulHOperation for MulHUOp {
+    #[inline(always)]
+    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> [u8; 4] {
+        let rs1 = u32::from_le_bytes(rs1) as i64;
+        let rs2 = u32::from_le_bytes(rs2) as i64;
+        ((rs1.wrapping_mul(rs2) >> 32) as u32).to_le_bytes()
     }
 }
 
