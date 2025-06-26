@@ -737,13 +737,7 @@ where
             widths.to_vec(),
             interactions.to_vec(),
         )
-        .with_max_trace_height(
-            self.config
-                .system()
-                .segmentation_strategy
-                .max_trace_height() as u32,
-        )
-        .with_max_cells(self.config.system().segmentation_strategy.max_cells());
+        .with_segment_check_insns(u64::MAX);
 
         let mut exec_state = VmSegmentState::new(
             0,

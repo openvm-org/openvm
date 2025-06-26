@@ -34,7 +34,7 @@ impl BitSet {
 }
 
 #[derive(Debug)]
-pub struct MemoryCtx<const PAGE_BITS: usize = 12> {
+pub struct MemoryCtx<const PAGE_BITS: usize> {
     pub page_indices: BitSet,
     memory_dimensions: MemoryDimensions,
     as_byte_alignment_bits: Vec<u8>,

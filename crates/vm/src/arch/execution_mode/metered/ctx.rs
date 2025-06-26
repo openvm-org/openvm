@@ -7,7 +7,7 @@ use super::{
 use crate::{arch::execution_mode::E1E2ExecutionCtx, system::memory::dimensions::MemoryDimensions};
 
 #[derive(Debug)]
-pub struct MeteredCtx<const PAGE_BITS: usize = 12> {
+pub struct MeteredCtx<const PAGE_BITS: usize = 6> {
     pub trace_heights: Vec<u32>,
     pub is_trace_height_constant: Vec<bool>,
 
@@ -121,8 +121,6 @@ impl<const PAGE_BITS: usize> E1E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
             .update_adapter_heights(&mut self.trace_heights, address_space, size_bits);
 
         // Handle merkle tree updates
-        // TODO(ayush): use a looser upper bound
-        // see if this can be approximated by total number of reads/writes for AS != register
         self.memory_ctx.update_boundary_merkle_heights(
             &mut self.trace_heights,
             address_space,
