@@ -276,13 +276,15 @@ mod tests {
         executor.execute(exe, vec![]).unwrap();
     }
 
-    #[test_case(vec!["getrandom", "getrandom-unsupported"])]
-    #[test_case(vec!["getrandom"])]
-    fn test_getrandom_unsupported(features: Vec<&str>) {
+    #[test_case("getrandom", vec!["getrandom", "getrandom-unsupported"])]
+    #[test_case("getrandom", vec!["getrandom"])]
+    #[test_case("getrandom_v02", vec!["getrandom-v02", "getrandom-unsupported"])]
+    #[test_case("getrandom_v02", vec!["getrandom-v02/custom"])]
+    fn test_getrandom_unsupported(program: &str, features: Vec<&str>) {
         let config = Rv32ImConfig::default();
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
-            "getrandom",
+            program,
             &features,
             &config,
         )
