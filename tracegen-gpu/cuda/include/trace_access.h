@@ -33,6 +33,13 @@ struct RowSlice {
         }
     }
 
+    __device__ __forceinline__ void fill_zero(size_t column_index_from, size_t length) const {
+#pragma unroll
+        for (size_t i = 0, c = column_index_from; i < length; i++, c++) {
+            ptr[c * stride] = 0;
+        }
+    }
+
     __device__ __forceinline__ RowSlice slice_from(size_t column_index) const {
         return RowSlice(ptr + column_index * stride, stride);
     }
@@ -52,3 +59,7 @@ struct RowSlice {
 /// Write an array of values into the fixed‐length `FIELD` array of `STRUCT<T>` for one row.
 #define COL_WRITE_ARRAY(ROW, STRUCT, FIELD, VALUES)                                                \
     (ROW).write_array(COL_INDEX(STRUCT, FIELD), COL_ARRAY_LEN(STRUCT, FIELD), VALUES)
+
+/// Fill entire `FIELD` of `STRUCT<T>` with zeros.
+#define COL_FILL_ZERO(ROW, STRUCT, FIELD)                                                          \
+    (ROW).fill_zero(COL_INDEX(STRUCT, FIELD), sizeof(STRUCT<uint8_t>::FIELD))
