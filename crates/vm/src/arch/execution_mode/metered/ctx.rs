@@ -7,7 +7,7 @@ use super::{
 use crate::{arch::execution_mode::E1E2ExecutionCtx, system::memory::dimensions::MemoryDimensions};
 
 #[derive(Debug)]
-pub struct MeteredCtx<const PAGE_BITS: usize = 12> {
+pub struct MeteredCtx<const PAGE_BITS: usize = 6> {
     pub trace_heights: Vec<u32>,
     pub is_trace_height_constant: Vec<bool>,
 
