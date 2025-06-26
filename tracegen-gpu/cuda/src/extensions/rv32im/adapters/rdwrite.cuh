@@ -20,19 +20,20 @@ struct Rv32RdWriteAdapterRecord {
 };
 
 struct Rv32RdWriteAdapter {
-    MemoryWriteAuxAdapter<RV32_REGISTER_NUM_LIMBS> mem_write_aux_adapter;
+    MemoryAuxColsFactory mem_helper;
 
-    __device__ Rv32RdWriteAdapter(VariableRangeChecker range_checker)
-        : mem_write_aux_adapter(range_checker) {}
+    __device__ Rv32RdWriteAdapter(VariableRangeChecker range_checker) : mem_helper(range_checker) {}
 
     __device__ void fill_trace_row(RowSlice row, Rv32RdWriteAdapterRecord record) {
         COL_WRITE_VALUE(row, Rv32RdWriteAdapterCols, from_state.pc, record.from_pc);
         COL_WRITE_VALUE(row, Rv32RdWriteAdapterCols, from_state.timestamp, record.from_timestamp);
         COL_WRITE_VALUE(row, Rv32RdWriteAdapterCols, rd_ptr, record.rd_ptr);
 
-        mem_write_aux_adapter.fill_trace_row(
-            row.slice_from(COL_INDEX(Rv32RdWriteAdapterCols, rd_aux_cols)),
-            record.rd_aux_record,
+        RowSlice aux_row = row.slice_from(COL_INDEX(Rv32RdWriteAdapterCols, rd_aux_cols));
+        COL_WRITE_ARRAY(aux_row, MemoryWriteAuxCols, prev_data, record.rd_aux_record.prev_data);
+        mem_helper.fill(
+            aux_row.slice_from(COL_INDEX(MemoryWriteAuxCols, base)),
+            record.rd_aux_record.prev_timestamp,
             record.from_timestamp
         );
     }

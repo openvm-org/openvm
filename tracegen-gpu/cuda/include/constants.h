@@ -9,4 +9,5 @@ static const size_t RV32_CELL_BITS = 8;
 
 namespace program {
 static const size_t PC_BITS = 30;
+static const size_t DEFAULT_PC_STEP = 4;
 } // namespace program
