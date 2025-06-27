@@ -500,14 +500,11 @@ impl<F: PrimeField32> TracingMemory<F> {
                 type_size: size_of::<T>() as u32,
             };
             let data_slice = unsafe {
-                std::slice::from_raw_parts(
-                    values.as_ptr() as *const u8,
-                    block_size * size_of::<T>(),
-                )
+                from_raw_parts(values.as_ptr() as *const u8, block_size * size_of::<T>())
             };
             record_mut.data.copy_from_slice(data_slice);
             let prev_data_slice = unsafe {
-                std::slice::from_raw_parts(
+                from_raw_parts(
                     prev_values.as_ptr() as *const u8,
                     block_size * size_of::<T>(),
                 )
@@ -689,17 +686,68 @@ impl<F: PrimeField32> TracingMemory<F> {
             })
             .collect::<Vec<_>>(); // TODO(AG): small buffer or small vec or something
 
-        self.record_access::<T, true>(
-            BLOCK_SIZE,
-            address_space,
-            pointer,
-            align,
-            self.timestamp,
-            if need_to_merge { Some(&prev_ts) } else { None },
-            values,
-            prev_values,
-            false,
-        );
+        let need_new_record = need_to_merge || {
+            let old_record_header = self
+                .access_adapter_inventory
+                .get_record_header_at_or_none(first_meta.offset as usize);
+            match old_record_header {
+                Some(old_record_header) => {
+                    old_record_header.timestamp_and_mask & (MERGE_BEFORE_FLAG | SPLIT_AFTER_FLAG)
+                        != 0
+                        || old_record_header.lowest_block_size != align as u32 // should never
+                                                                               // happen tbh
+                }
+                None => true,
+            }
+        };
+        if need_new_record {
+            self.record_access::<T, true>(
+                BLOCK_SIZE,
+                address_space,
+                pointer,
+                align,
+                self.timestamp,
+                if need_to_merge { Some(&prev_ts) } else { None },
+                values,
+                prev_values,
+                false,
+            );
+        } else {
+            // Just overwrite the old record
+            let record_mut = self
+                .access_adapter_inventory
+                .get_record_at_or_none(
+                    first_meta.offset as usize,
+                    AccessLayout {
+                        block_size: BLOCK_SIZE,
+                        lowest_block_size: align,
+                        type_size: size_of::<T>(),
+                    },
+                )
+                .unwrap();
+
+            record_mut.header.timestamp_and_mask = self.timestamp;
+            let data_slice = unsafe {
+                from_raw_parts(values.as_ptr() as *const u8, BLOCK_SIZE * size_of::<T>())
+            };
+            record_mut.data.copy_from_slice(data_slice);
+            let prev_data_slice = unsafe {
+                from_raw_parts(
+                    prev_values.as_ptr() as *const u8,
+                    BLOCK_SIZE * size_of::<T>(),
+                )
+            };
+            record_mut.prev_data.copy_from_slice(prev_data_slice);
+
+            self.set_meta_block(
+                address_space,
+                pointer,
+                align,
+                BLOCK_SIZE,
+                self.timestamp,
+                first_meta.offset,
+            );
+        }
 
         *prev_ts.iter().max().unwrap()
     }

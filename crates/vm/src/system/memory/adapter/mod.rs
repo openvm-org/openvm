@@ -161,6 +161,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         let bytes = self.arena.allocated_mut();
         eprintln!("computing heights from arena! used {} bytes", bytes.len());
         let mut ptr = 0;
+        let mut stats = (0, 0);
         while ptr < bytes.len() {
             let header: &AccessRecordHeader = bytes[ptr..].borrow();
             let layout: AccessLayout = unsafe { bytes[ptr..].extract_layout() };
@@ -185,8 +186,12 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
                 {
                     *h += num_rows << (log_max_block_size - i - 1);
                 }
+            } else {
+                stats.0 += 1;
             }
+            stats.1 += 1;
         }
+        eprintln!("blank records: {} / {}", stats.0, stats.1);
         eprintln!("computed heights: {:?}", heights);
     }
 
@@ -330,6 +335,18 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
     ) -> Option<&mut AccessRecordHeader> {
         if offset < self.arena.records_buffer.position() as usize {
             Some(self.arena.records_buffer.get_mut()[offset..].borrow_mut())
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn get_record_at_or_none(
+        &mut self,
+        offset: usize,
+        layout: AccessLayout,
+    ) -> Option<AccessRecordMut<'_>> {
+        if offset < self.arena.records_buffer.position() as usize {
+            Some(self.arena.records_buffer.get_mut()[offset..].custom_borrow(layout))
         } else {
             None
         }
