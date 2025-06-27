@@ -3,6 +3,8 @@ mod cuda;
 mod hintstore;
 mod jal_lui;
 mod jalr;
+mod load_sign_extend;
+mod loadstore;
 mod mul;
 
 pub use auipc::*;
@@ -10,4 +12,6 @@ pub use cuda::*;
 pub use hintstore::*;
 pub use jal_lui::*;
 pub use jalr::*;
+pub use load_sign_extend::*;
+pub use loadstore::*;
 pub use mul::*;

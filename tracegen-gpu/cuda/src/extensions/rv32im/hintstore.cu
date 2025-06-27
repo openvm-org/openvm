@@ -137,7 +137,7 @@ __global__ void hintstore_tracegen(
     OffsetInfo *record_offsets,
     uint32_t pointer_max_bits,
     uint32_t *range_checker_ptr,
-    uint32_t range_checker_num_bits,
+    uint32_t range_checker_num_bins,
     uint32_t *bitwise_lookup_ptr,
     uint32_t bitwise_num_bits
 ) {
@@ -158,7 +158,7 @@ __global__ void hintstore_tracegen(
         auto step = Rv32HintStore(
             BitwiseOperationLookup(bitwise_lookup_ptr, bitwise_num_bits),
             pointer_max_bits,
-            VariableRangeChecker(range_checker_ptr, range_checker_num_bits)
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins)
         );
         RowSlice row(trace + idx, height);
         step.fill_trace_row(row, record_header, data_write, local_idx);
@@ -178,7 +178,7 @@ extern "C" int _hintstore_tracegen(
     OffsetInfo *d_record_offsets,
     uint32_t pointer_max_bits,
     uint32_t *d_range_checker,
-    uint32_t range_checker_num_bits,
+    uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
     uint32_t bitwise_num_bits
 ) {
@@ -192,7 +192,7 @@ extern "C" int _hintstore_tracegen(
         d_record_offsets,
         pointer_max_bits,
         d_range_checker,
-        range_checker_num_bits,
+        range_checker_num_bins,
         d_bitwise_lookup,
         bitwise_num_bits
     );

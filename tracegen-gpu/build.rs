@@ -60,6 +60,8 @@ fn main() {
         .file("cuda/src/extensions/rv32im/auipc.cu")
         .file("cuda/src/extensions/rv32im/mul.cu")
         .file("cuda/src/extensions/rv32im/hintstore.cu")
+        .file("cuda/src/extensions/rv32im/load_sign_extend.cu")
+        .file("cuda/src/extensions/rv32im/loadstore.cu")
         .file("cuda/src/extensions/rv32im/jalr.cu")
         .file("cuda/src/extensions/rv32im/jal_lui.cu")
         .file("cuda/src/primitives/bitwise_op_lookup.cu")

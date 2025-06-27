@@ -8,11 +8,7 @@ use openvm_rv32im_circuit::{
 use openvm_stark_backend::{rap::get_air_name, AirRef, ChipUsageGetter};
 use p3_air::BaseAir;
 use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer, error::CudaError},
-    prelude::F,
-    prover_backend::GpuBackend,
-    types::SC,
+    base::DeviceMatrix, cuda::copy::MemCopyH2D, prelude::F, prover_backend::GpuBackend, types::SC,
 };
 
 use super::cuda::auipc::tracegen;
