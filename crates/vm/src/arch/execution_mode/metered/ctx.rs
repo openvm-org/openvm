@@ -1,4 +1,6 @@
-use openvm_instructions::riscv::RV32_IMM_AS;
+use openvm_instructions::riscv::{
+    RV32_IMM_AS, RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
+};
 
 use super::{
     memory_ctx::MemoryCtx,
@@ -27,7 +29,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         widths: Vec<usize>,
         interactions: Vec<usize>,
     ) -> Self {
-        let (trace_heights, is_trace_height_constant): (Vec<u32>, Vec<bool>) =
+        let (mut trace_heights, is_trace_height_constant): (Vec<u32>, Vec<bool>) =
             constant_trace_heights
                 .iter()
                 .map(|&constant_height| {
@@ -39,7 +41,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
                 })
                 .unzip();
 
-        let memory_ctx = MemoryCtx::new(
+        let mut memory_ctx = MemoryCtx::new(
             has_public_values_chip,
             continuations_enabled,
             as_byte_alignment_bits,
@@ -54,6 +56,16 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         debug_assert_eq!(&air_names[memory_ctx.adapter_offset], "AccessAdapter<2>");
 
         let segmentation_ctx = SegmentationCtx::new(air_names, widths, interactions);
+
+        // Add merkle height contributions for all registers
+        if continuations_enabled {
+            memory_ctx.update_boundary_merkle_heights(
+                &mut trace_heights,
+                RV32_REGISTER_AS,
+                0,
+                (RV32_NUM_REGISTERS * RV32_REGISTER_NUM_LIMBS) as u32,
+            );
+        }
 
         Self {
             trace_heights,
@@ -115,6 +127,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 }
 
 impl<const PAGE_BITS: usize> E1E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
+    #[inline(always)]
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32) {
         debug_assert!(
             address_space != RV32_IMM_AS,
@@ -132,11 +145,13 @@ impl<const PAGE_BITS: usize> E1E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
             .update_adapter_heights(&mut self.trace_heights, address_space, size_bits);
 
         // Handle merkle tree updates
-        self.memory_ctx.update_boundary_merkle_heights(
-            &mut self.trace_heights,
-            address_space,
-            ptr,
-            size,
-        );
+        if address_space != RV32_REGISTER_AS {
+            self.memory_ctx.update_boundary_merkle_heights(
+                &mut self.trace_heights,
+                address_space,
+                ptr,
+                size,
+            );
+        }
     }
 }
