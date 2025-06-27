@@ -38,23 +38,24 @@ pub struct MemoryCtx<const PAGE_BITS: usize> {
     pub page_indices: BitSet,
     memory_dimensions: MemoryDimensions,
     as_byte_alignment_bits: Vec<u8>,
-    boundary_idx: usize,
-    merkle_tree_index: Option<usize>,
-    adapter_offset: usize,
+    pub boundary_idx: usize,
+    pub merkle_tree_index: Option<usize>,
+    pub adapter_offset: usize,
     chunk: u32,
     chunk_bits: u32,
 }
 
 impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
     pub fn new(
+        has_public_values_chip: bool,
         continuations_enabled: bool,
         as_byte_alignment_bits: Vec<u8>,
         memory_dimensions: MemoryDimensions,
     ) -> Self {
-        let boundary_idx = if continuations_enabled {
-            PUBLIC_VALUES_AIR_ID
-        } else {
+        let boundary_idx = if has_public_values_chip {
             PUBLIC_VALUES_AIR_ID + 1
+        } else {
+            PUBLIC_VALUES_AIR_ID
         };
 
         let merkle_tree_index = if continuations_enabled {
@@ -66,7 +67,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         let adapter_offset = if continuations_enabled {
             boundary_idx + 2
         } else {
-            boundary_idx
+            boundary_idx + 1
         };
 
         let chunk = if continuations_enabled {

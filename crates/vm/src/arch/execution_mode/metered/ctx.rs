@@ -16,8 +16,10 @@ pub struct MeteredCtx<const PAGE_BITS: usize = 6> {
 }
 
 impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         constant_trace_heights: Vec<Option<usize>>,
+        has_public_values_chip: bool,
         continuations_enabled: bool,
         as_byte_alignment_bits: Vec<u8>,
         memory_dimensions: MemoryDimensions,
@@ -38,10 +40,19 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
                 .unzip();
 
         let memory_ctx = MemoryCtx::new(
+            has_public_values_chip,
             continuations_enabled,
             as_byte_alignment_bits,
             memory_dimensions,
         );
+
+        // Assert that the indices are correct
+        debug_assert_eq!(&air_names[memory_ctx.boundary_idx], "Boundary");
+        if let Some(merkle_tree_index) = memory_ctx.merkle_tree_index {
+            debug_assert_eq!(&air_names[merkle_tree_index], "Merkle");
+        }
+        debug_assert_eq!(&air_names[memory_ctx.adapter_offset], "AccessAdapter<2>");
+
         let segmentation_ctx = SegmentationCtx::new(air_names, widths, interactions);
 
         Self {
