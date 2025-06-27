@@ -58,6 +58,9 @@ fn main() {
 
     builder
         .file("cuda/src/extensions/rv32im/auipc.cu")
+        .file("cuda/src/extensions/rv32im/alu.cu")
+        .file("cuda/src/extensions/rv32im/shift.cu")
+        .file("cuda/src/extensions/rv32im/less_than.cu")
         .file("cuda/src/extensions/rv32im/mul.cu")
         .file("cuda/src/extensions/rv32im/hintstore.cu")
         .file("cuda/src/extensions/rv32im/load_sign_extend.cu")

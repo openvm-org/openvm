@@ -1,17 +1,23 @@
+mod alu;
 mod auipc;
 mod cuda;
 mod hintstore;
 mod jal_lui;
 mod jalr;
+mod less_than;
 mod load_sign_extend;
 mod loadstore;
 mod mul;
+mod shift;
 
+pub use alu::*;
 pub use auipc::*;
 pub use cuda::*;
 pub use hintstore::*;
 pub use jal_lui::*;
 pub use jalr::*;
+pub use less_than::*;
 pub use load_sign_extend::*;
 pub use loadstore::*;
 pub use mul::*;
+pub use shift::*;
