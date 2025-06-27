@@ -8,6 +8,7 @@ on:
     paths:
       - "crates/circuits/**"
       - "crates/vm/**"
+      - "crates/toolchain/**"
       - "extensions/**"
       - "guest-libs/**"
       - "Cargo.toml"
@@ -52,6 +53,7 @@ jobs:
           filters: |
             - "crates/circuits/**"
             - "crates/vm/**"
+            - "crates/toolchain/**"
             - "extensions/**"
             - "guest-libs/${{ matrix.crate.path }}/**"
             - ".github/workflows/guest-lib-tests.yml"
