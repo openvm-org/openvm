@@ -308,7 +308,8 @@ impl AggregateMetrics {
             for metric_name in names {
                 let summary = summaries.get(metric_name);
                 if let Some(summary) = summary {
-                    // Special handling for execute_metered metrics (not aggregated across segments in the app proof case)
+                    // Special handling for execute_metered metrics (not aggregated across segments
+                    // in the app proof case)
                     if (metric_name == EXECUTE_METERED_TIME_LABEL
                         && group_name != "leaf"
                         && group_name != "root"
