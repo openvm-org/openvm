@@ -476,3 +476,49 @@ pub mod branch_lt {
         ))
     }
 }
+
+pub mod mulh {
+    use super::*;
+
+    extern "C" {
+        fn _mulh_tracegen(
+            d_trace: *mut std::ffi::c_void,
+            height: usize,
+            width: usize,
+            d_records: *const u8,
+            record_len: usize,
+            d_range_checker: *const u32,
+            range_checker_bins: usize,
+            d_bitwise_lookup: *const u32,
+            bitwise_num_bits: usize,
+            range_tuple_size0: u32,
+            range_tuple_size1: u32,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen<T>(
+        d_trace: &DeviceBuffer<T>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_range_checker: &DeviceBuffer<T>,
+        d_bitwise_lookup: &DeviceBuffer<T>,
+        bitwise_num_bits: usize,
+        range_tuple_size0: u32,
+        range_tuple_size1: u32,
+    ) -> Result<(), CudaError> {
+        assert!(height.is_power_of_two() || height == 0);
+        CudaError::from_result(_mulh_tracegen(
+            d_trace.as_mut_raw_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.as_ptr(),
+            d_records.len(),
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() / 2,
+            d_bitwise_lookup.as_mut_ptr() as *mut u32,
+            bitwise_num_bits,
+            range_tuple_size0,
+            range_tuple_size1,
+        ))
+    }
+}

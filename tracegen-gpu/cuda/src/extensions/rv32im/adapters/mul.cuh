@@ -7,8 +7,7 @@
 
 using namespace riscv;
 
-template <typename T>
-struct Rv32MultAdapterCols {
+template <typename T> struct Rv32MultAdapterCols {
     ExecutionState<T> from_state;
     T rd_ptr;
     T rs1_ptr;
@@ -30,13 +29,12 @@ struct Rv32MultAdapterRecord {
 struct Rv32MultAdapter {
     MemoryAuxColsFactory mem_helper;
 
-    __device__ Rv32MultAdapter(VariableRangeChecker range_checker)
-        : mem_helper(range_checker) {}
+    __device__ Rv32MultAdapter(VariableRangeChecker range_checker) : mem_helper(range_checker) {}
 
     __device__ void fill_trace_row(RowSlice row, Rv32MultAdapterRecord record);
 };
 
-__device__ void Rv32MultAdapter::fill_trace_row(RowSlice row, Rv32MultAdapterRecord record) {
+__device__ inline void Rv32MultAdapter::fill_trace_row(RowSlice row, Rv32MultAdapterRecord record) {
     uint32_t ts = record.from_timestamp;
 
     COL_WRITE_ARRAY(row, Rv32MultAdapterCols, writes_aux.prev_data, record.writes_aux.prev_data);
@@ -47,7 +45,12 @@ __device__ void Rv32MultAdapter::fill_trace_row(RowSlice row, Rv32MultAdapterRec
     );
 
     for (int i = 0; i < 2; i++) {
-        COL_WRITE_VALUE(row, Rv32MultAdapterCols, reads_aux[i].base.prev_timestamp, record.reads_aux[i].prev_timestamp);
+        COL_WRITE_VALUE(
+            row,
+            Rv32MultAdapterCols,
+            reads_aux[i].base.prev_timestamp,
+            record.reads_aux[i].prev_timestamp
+        );
         mem_helper.fill(
             row.slice_from(COL_INDEX(Rv32MultAdapterCols, reads_aux[i])),
             record.reads_aux[i].prev_timestamp,
@@ -60,4 +63,4 @@ __device__ void Rv32MultAdapter::fill_trace_row(RowSlice row, Rv32MultAdapterRec
     COL_WRITE_VALUE(row, Rv32MultAdapterCols, rd_ptr, record.rd_ptr);
     COL_WRITE_VALUE(row, Rv32MultAdapterCols, from_state.pc, record.from_pc);
     COL_WRITE_VALUE(row, Rv32MultAdapterCols, from_state.timestamp, record.from_timestamp);
-} 
+}
