@@ -153,10 +153,10 @@ pub struct FieldExtensionCoreStep<A> {
     adapter: A,
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for FieldExtensionCoreStep<A>
+impl<F, A> TraceStep<F> for FieldExtensionCoreStep<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, CTX, ReadData = [[F; EXT_DEG]; 2], WriteData = [F; EXT_DEG]>,
+    A: 'static + AdapterTraceStep<F, ReadData = [[F; EXT_DEG]; 2], WriteData = [F; EXT_DEG]>,
 {
     type RecordLayout = EmptyAdapterCoreLayout<F, A>;
     type RecordMut<'a> = (A::RecordMut<'a>, &'a mut FieldExtensionRecord<F>);
@@ -170,16 +170,12 @@ where
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let &Instruction { opcode, .. } = instruction;
 
-        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 

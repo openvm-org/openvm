@@ -372,7 +372,7 @@ impl Rv32HintStoreStep {
     }
 }
 
-impl<F, CTX> TraceStep<F, CTX> for Rv32HintStoreStep
+impl<F> TraceStep<F> for Rv32HintStoreStep
 where
     F: PrimeField32,
 {
@@ -391,13 +391,11 @@ where
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
         let &Instruction {
             opcode, a, b, d, e, ..
         } = instruction;
@@ -416,7 +414,7 @@ where
             read_rv32_register(state.memory.data(), a)
         };
 
-        let record = arena.alloc(MultiRowLayout::new(Rv32HintStoreMetadata {
+        let record = state.ctx.alloc(MultiRowLayout::new(Rv32HintStoreMetadata {
             num_words: num_words as usize,
         }));
 
@@ -481,7 +479,7 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep {
+impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreStep {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,

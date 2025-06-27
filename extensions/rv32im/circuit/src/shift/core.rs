@@ -276,14 +276,13 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, 
     }
 }
 
-impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F, CTX>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F>
     for ShiftStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
         + for<'a> AdapterTraceStep<
             F,
-            CTX,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
         >,
@@ -300,9 +299,8 @@ where
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -311,7 +309,7 @@ where
 
         let local_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -338,11 +336,11 @@ where
     }
 }
 
-impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F, CTX>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
     for ShiftStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };

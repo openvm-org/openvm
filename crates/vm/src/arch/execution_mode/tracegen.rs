@@ -1,4 +1,4 @@
-use std::{intrinsics::unreachable, marker::PhantomData};
+use std::marker::PhantomData;
 
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -6,24 +6,24 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use crate::{
     arch::{
         execution_control::ExecutionControl, ExecutionError, ExecutionState, MatrixRecordArena,
-        TraceStep, VmChipComplex, VmConfig, VmSegmentState, VmStateMut,
+        RowMajorMatrixArena, TraceStep, VmChipComplex, VmConfig, VmSegmentState, VmStateMut,
     },
     system::memory::INITIAL_TIMESTAMP,
 };
 
-#[derive(Default, derive_new::new)]
-pub struct TracegenCtx<RA> {
-    pub arenas: Vec<RA>,
+#[derive(Default)]
+pub struct TracegenCtx<F> {
+    pub arenas: Vec<MatrixRecordArena<F>>,
     pub instret_end: Option<u64>,
 }
 
-impl<RA> TracegenCtx<RA>
+impl<F> TracegenCtx<F>
 where
-    RA: BaseRecordArena,
+    F: PrimeField32,
 {
     pub fn new(count: usize) -> Self {
         let arenas = (0..count)
-            .map(|_| RA::with_capacity(RA::Capacity::default()))
+            .map(|_| MatrixRecordArena::with_capacity(0, 0))
             .collect();
         Self {
             arenas,
@@ -31,10 +31,10 @@ where
         }
     }
 
-    pub fn new_with_capacity(capacities: &[RA::Capacity]) -> Self {
+    pub fn new_with_capacity(capacities: &[(usize, usize)]) -> Self {
         let arenas = capacities
             .iter()
-            .map(|&capacity| RA::with_capacity(capacity))
+            .map(|&(height, width)| MatrixRecordArena::with_capacity(height, width))
             .collect();
 
         Self {
@@ -44,11 +44,11 @@ where
     }
 }
 
-pub struct TracegenExecutionControl<RA> {
-    phantom: PhantomData<RA>,
+pub struct TracegenExecutionControl<F> {
+    phantom: PhantomData<F>,
 }
 
-impl<RA> Default for TracegenExecutionControl<RA> {
+impl<F> Default for TracegenExecutionControl<F> {
     fn default() -> Self {
         Self {
             phantom: PhantomData,
@@ -56,12 +56,12 @@ impl<RA> Default for TracegenExecutionControl<RA> {
     }
 }
 
-impl<F, VC, RA> ExecutionControl<F, VC> for TracegenExecutionControl<RA>
+impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControl<F>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
 {
-    type Ctx = TracegenCtx<RA>;
+    type Ctx = TracegenCtx<F>;
 
     fn initialize_context(&self) -> Self::Ctx {
         unreachable!()
@@ -117,16 +117,17 @@ where
         if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
             let memory = &mut chip_complex.base.memory_controller.memory;
             let mut pc = state.pc;
+            let chip_index = executor.chip_index;
+            let arena = &mut state.ctx.arenas[chip_index];
             let state_mut = VmStateMut {
                 pc: &mut pc,
                 memory,
                 streams: &mut state.streams,
                 rng: &mut state.rng,
-                ctx: &mut (),
+                ctx: arena,
             };
-            // TODO: get arena from self.ctx
-            executor.step.execute(state_mut, instruction, &mut arena)?;
-            state.pc = state_mut.pc;
+            executor.step.execute(state_mut, instruction)?;
+            state.pc = pc;
         } else {
             return Err(ExecutionError::DisabledOperation {
                 pc: state.pc,

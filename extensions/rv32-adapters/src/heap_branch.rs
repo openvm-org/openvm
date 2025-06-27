@@ -204,7 +204,7 @@ impl<const NUM_READS: usize, const READ_SIZE: usize>
     }
 }
 
-impl<F: PrimeField32, CTX, const NUM_READS: usize, const READ_SIZE: usize> AdapterTraceStep<F, CTX>
+impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterTraceStep<F>
     for Rv32HeapBranchAdapterStep<NUM_READS, READ_SIZE>
 {
     const WIDTH: usize = Rv32HeapBranchAdapterCols::<F, NUM_READS, READ_SIZE>::width();
@@ -262,8 +262,8 @@ impl<F: PrimeField32, CTX, const NUM_READS: usize, const READ_SIZE: usize> Adapt
     }
 }
 
-impl<F: PrimeField32, CTX, const NUM_READS: usize, const READ_SIZE: usize>
-    AdapterTraceFiller<F, CTX> for Rv32HeapBranchAdapterStep<NUM_READS, READ_SIZE>
+impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize>
+    AdapterTraceFiller<F> for Rv32HeapBranchAdapterStep<NUM_READS, READ_SIZE>
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &Rv32HeapBranchAdapterRecord<NUM_READS> =

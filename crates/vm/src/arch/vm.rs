@@ -421,6 +421,12 @@ where
             }
 
             let instret_end = state.instret + num_insns;
+            let capacities = main_widths
+                .iter()
+                .zip(trace_heights.iter())
+                .map(|(&w, &h)| (w, h as usize))
+                .collect::<Vec<_>>();
+            let ctx = TracegenCtx::new_with_capacity(&capacities);
             let ctx = TracegenCtx::new(Some(instret_end));
             let mut exec_state =
                 VmSegmentState::new(state.instret, state.pc, None, state.input, state.rng, ctx);

@@ -308,13 +308,12 @@ pub struct Rv32VecHeapAdapterStep<
 
 impl<
         F: PrimeField32,
-        CTX,
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
-    > AdapterTraceStep<F, CTX>
+    > AdapterTraceStep<F>
     for Rv32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
 {
     const WIDTH: usize = Rv32VecHeapAdapterCols::<
@@ -430,13 +429,12 @@ impl<
 
 impl<
         F: PrimeField32,
-        CTX,
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
-    > AdapterTraceFiller<F, CTX>
+    > AdapterTraceFiller<F>
     for Rv32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {

@@ -121,7 +121,7 @@ pub struct Rv32BranchAdapterRecord {
 #[derive(derive_new::new)]
 pub struct Rv32BranchAdapterStep;
 
-impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32BranchAdapterStep
+impl<F> AdapterTraceStep<F> for Rv32BranchAdapterStep
 where
     F: PrimeField32,
 {
@@ -177,7 +177,7 @@ where
         // This function is intentionally left empty
     }
 }
-impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32BranchAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32BranchAdapterStep {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &Rv32BranchAdapterRecord =

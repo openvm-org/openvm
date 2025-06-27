@@ -131,11 +131,10 @@ impl<A, const NUM_CELLS: usize> NativeLoadStoreCoreStep<A, NUM_CELLS> {
     }
 }
 
-impl<F, CTX, A, const NUM_CELLS: usize> TraceStep<F, CTX> for NativeLoadStoreCoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> TraceStep<F> for NativeLoadStoreCoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
-    A: 'static
-        + AdapterTraceStep<F, CTX, ReadData = (F, [F; NUM_CELLS]), WriteData = [F; NUM_CELLS]>,
+    A: 'static + AdapterTraceStep<F, ReadData = (F, [F; NUM_CELLS]), WriteData = [F; NUM_CELLS]>,
 {
     type RecordLayout = EmptyAdapterCoreLayout<F, A>;
     type RecordMut<'a> = (
@@ -152,16 +151,12 @@ where
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let &Instruction { opcode, .. } = instruction;
 
-        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 

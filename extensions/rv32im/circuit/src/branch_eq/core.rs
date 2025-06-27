@@ -153,11 +153,10 @@ pub struct BranchEqualStep<A, const NUM_LIMBS: usize> {
     pub pc_step: u32,
 }
 
-impl<F, CTX, A, const NUM_LIMBS: usize> TraceStep<F, CTX> for BranchEqualStep<A, NUM_LIMBS>
+impl<F, A, const NUM_LIMBS: usize> TraceStep<F> for BranchEqualStep<A, NUM_LIMBS>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterTraceStep<F, CTX, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
+    A: 'static + for<'a> AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
 {
     type RecordLayout = EmptyAdapterCoreLayout<F, A>;
     type RecordMut<'a> = (A::RecordMut<'a>, &'a mut BranchEqualCoreRecord<NUM_LIMBS>);
@@ -168,9 +167,8 @@ where
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -179,7 +177,7 @@ where
 
         let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -203,10 +201,10 @@ where
     }
 }
 
-impl<F, CTX, A, const NUM_LIMBS: usize> TraceFiller<F, CTX> for BranchEqualStep<A, NUM_LIMBS>
+impl<F, A, const NUM_LIMBS: usize> TraceFiller<F> for BranchEqualStep<A, NUM_LIMBS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };

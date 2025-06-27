@@ -126,11 +126,10 @@ pub struct CastFCoreStep<A> {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for CastFCoreStep<A>
+impl<F, A> TraceStep<F> for CastFCoreStep<A>
 where
     F: PrimeField32,
-    A: 'static
-        + AdapterTraceStep<F, CTX, ReadData = [F; 1], WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
+    A: 'static + AdapterTraceStep<F, ReadData = [F; 1], WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
 {
     type RecordLayout = EmptyAdapterCoreLayout<F, A>;
     type RecordMut<'a> = (A::RecordMut<'a>, &'a mut CastFCoreRecord);
@@ -141,14 +140,10 @@ where
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
-        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+    ) -> Result<()> {
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 

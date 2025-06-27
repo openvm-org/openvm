@@ -118,15 +118,15 @@ pub trait RecordArena<'a, Layout, RecordMut> {
 /// buffer during both instruction execution and trace generation.
 /// It is expected that no additional memory allocation is necessary and the trace buffer
 /// is sufficient, with possible overwriting.
-pub trait TraceStep<F, CTX> {
+pub trait TraceStep<F> {
     type RecordLayout;
     type RecordMut<'a>;
 
+    /// The context in `state` is expected to be the record arena for this specific step.
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>;
@@ -151,7 +151,7 @@ pub trait RowMajorMatrixArena<F> {
 }
 
 // TODO[jpw]: revisit if this trait makes sense
-pub trait TraceFiller<F, CTX> {
+pub trait TraceFiller<F> {
     /// Populates `trace`. This function will always be called after
     /// [`TraceStep::execute`], so the `trace` should already contain the records necessary to fill
     /// in the rest of it.
@@ -276,7 +276,7 @@ impl<F, AS> Default for AdapterCoreEmptyMetadata<F, AS> {
 
 impl<F, AS> AdapterCoreMetadata for AdapterCoreEmptyMetadata<F, AS>
 where
-    AS: AdapterTraceStep<F, ()>,
+    AS: AdapterTraceStep<F>,
 {
     #[inline(always)]
     fn get_adapter_width() -> usize {
@@ -835,7 +835,7 @@ impl<SC, AIR, STEP, RA> Chip<SC> for NewVmChipWrapper<Val<SC>, AIR, STEP, RA>
 where
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
-    STEP: TraceStep<Val<SC>, ()> + TraceFiller<Val<SC>, ()> + Send + Sync,
+    STEP: TraceStep<Val<SC>> + TraceFiller<Val<SC>> + Send + Sync,
     AIR: Clone + AnyRap<SC> + 'static,
     RA: RowMajorMatrixArena<Val<SC>>,
 {
@@ -880,7 +880,7 @@ where
 /// [TraceStep]. Note that this is only a helper trait when the same interface of state access
 /// is reused or shared by multiple implementations. It is not required to implement this trait if
 /// it is easier to implement the [TraceStep] trait directly without this trait.
-pub trait AdapterTraceStep<F, CTX> {
+pub trait AdapterTraceStep<F> {
     const WIDTH: usize;
     type ReadData;
     type WriteData;
@@ -911,7 +911,7 @@ pub trait AdapterTraceStep<F, CTX> {
 
 // NOTE[jpw]: cannot reuse `TraceSubRowGenerator` trait because we need associated constant
 // `WIDTH`.
-pub trait AdapterTraceFiller<F, CTX>: AdapterTraceStep<F, CTX> {
+pub trait AdapterTraceFiller<F>: AdapterTraceStep<F> {
     /// Post-execution filling of rest of adapter row.
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]);
 }
