@@ -22,17 +22,7 @@ impl<F> TracegenCtx<F>
 where
     F: PrimeField32,
 {
-    pub fn new(count: usize) -> Self {
-        let arenas = (0..count)
-            .map(|_| MatrixRecordArena::with_capacity(0, 0))
-            .collect();
-        Self {
-            arenas,
-            instret_end: None,
-        }
-    }
-
-    pub fn new_with_capacity(capacities: &[(usize, usize)]) -> Self {
+    pub fn new_with_capacity(capacities: &[(usize, usize)], instret_end: Option<u64>) -> Self {
         let arenas = capacities
             .iter()
             .map(|&(height, width)| MatrixRecordArena::with_capacity(height, width))
@@ -40,7 +30,7 @@ where
 
         Self {
             arenas,
-            instret_end: None,
+            instret_end,
         }
     }
 }

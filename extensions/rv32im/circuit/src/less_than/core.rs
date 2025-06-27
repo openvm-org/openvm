@@ -213,6 +213,7 @@ where
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         debug_assert!(LIMB_BITS <= 8);
         let Instruction { opcode, .. } = instruction;
 

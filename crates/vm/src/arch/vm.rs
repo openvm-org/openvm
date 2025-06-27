@@ -5,6 +5,7 @@ use std::{
     sync::Arc,
 };
 
+use itertools::zip_eq;
 use openvm_circuit::system::program::trace::compute_exe_commit;
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
@@ -121,6 +122,8 @@ pub struct VmExecutor<F, VC> {
     pub config: VC,
     pub overridden_heights: Option<VmComplexTraceHeights>,
     pub trace_height_constraints: Vec<LinearConstraint>,
+    // TEMPORARY: only needed for E3 arena allocation
+    pub main_widths: Vec<usize>,
     _marker: PhantomData<F>,
 }
 
@@ -197,6 +200,10 @@ where
         self.overridden_heights = Some(overridden_heights);
     }
 
+    pub fn set_main_widths(&mut self, main_widths: Vec<usize>) {
+        self.main_widths = main_widths;
+    }
+
     pub fn new_with_overridden_trace_heights(
         config: VC,
         overridden_heights: Option<VmComplexTraceHeights>,
@@ -205,6 +212,7 @@ where
             config,
             overridden_heights,
             trace_height_constraints: vec![],
+            main_widths: vec![],
             _marker: Default::default(),
         }
     }
@@ -421,13 +429,10 @@ where
             }
 
             let instret_end = state.instret + num_insns;
-            let capacities = main_widths
-                .iter()
-                .zip(trace_heights.iter())
+            let capacities = zip_eq(&self.main_widths, trace_heights)
                 .map(|(&w, &h)| (w, h as usize))
                 .collect::<Vec<_>>();
-            let ctx = TracegenCtx::new_with_capacity(&capacities);
-            let ctx = TracegenCtx::new(Some(instret_end));
+            let ctx = TracegenCtx::new_with_capacity(&capacities, Some(instret_end));
             let mut exec_state =
                 VmSegmentState::new(state.instret, state.pc, None, state.input, state.rng, ctx);
             execute_spanned!("execute_e3", segment, &mut exec_state).map_err(&map_err)?;
@@ -947,6 +952,10 @@ where
     ) {
         self.executor
             .set_trace_height_constraints(trace_height_constraints);
+    }
+
+    pub fn set_main_widths(&mut self, main_widths: Vec<usize>) {
+        self.executor.set_main_widths(main_widths);
     }
 
     pub fn commit_exe(&self, exe: impl Into<VmExe<F>>) -> Arc<VmCommittedExe<SC>> {

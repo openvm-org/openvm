@@ -194,7 +194,7 @@ pub struct NativeLoadStoreAdapterStep<const NUM_CELLS: usize> {
     offset: usize,
 }
 
-impl<F: PrimeField32, CTX, const NUM_CELLS: usize> AdapterTraceStep<F, CTX>
+impl<F: PrimeField32, const NUM_CELLS: usize> AdapterTraceStep<F>
     for NativeLoadStoreAdapterStep<NUM_CELLS>
 {
     const WIDTH: usize = std::mem::size_of::<NativeLoadStoreAdapterCols<u8, NUM_CELLS>>();
@@ -286,7 +286,7 @@ impl<F: PrimeField32, CTX, const NUM_CELLS: usize> AdapterTraceStep<F, CTX>
     }
 }
 
-impl<F: PrimeField32, CTX, const NUM_CELLS: usize> AdapterTraceFiller<F, CTX>
+impl<F: PrimeField32, const NUM_CELLS: usize> AdapterTraceFiller<F>
     for NativeLoadStoreAdapterStep<NUM_CELLS>
 {
     #[inline(always)]

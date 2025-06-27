@@ -233,6 +233,7 @@ where
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let Instruction { opcode, c, g, .. } = *instruction;
 
         debug_assert_eq!(

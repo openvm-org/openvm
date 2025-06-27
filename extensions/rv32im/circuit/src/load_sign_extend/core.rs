@@ -219,6 +219,7 @@ where
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(

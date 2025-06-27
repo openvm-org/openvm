@@ -211,8 +211,7 @@ impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F>
     for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
+    A: 'static + for<'a> AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
 {
     type RecordLayout = EmptyAdapterCoreLayout<F, A>;
     type RecordMut<'a> = (
@@ -234,6 +233,7 @@ where
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let &Instruction { opcode, c: imm, .. } = instruction;
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());

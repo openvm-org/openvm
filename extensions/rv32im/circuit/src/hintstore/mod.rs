@@ -396,6 +396,7 @@ where
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let &Instruction {
             opcode, a, b, d, e, ..
         } = instruction;

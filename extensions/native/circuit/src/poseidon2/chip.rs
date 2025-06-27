@@ -116,20 +116,20 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> SizedRecord<NativePoseidon2Re
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> TraceStep<F>
     for NativePoseidon2Step<F, SBOX_REGISTERS>
 {
     type RecordLayout = MultiRowLayout<NativePoseidon2Metadata>;
     type RecordMut<'a> = NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS>;
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
     ) -> openvm_circuit::arch::Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
     {
+        let arena = state.ctx;
         let init_timestamp_u32 = state.memory.timestamp;
         if instruction.opcode == PERM_POS2.global_opcode()
             || instruction.opcode == COMP_POS2.global_opcode()
@@ -634,7 +634,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceFiller<F, CTX>
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> TraceFiller<F>
     for NativePoseidon2Step<F, SBOX_REGISTERS>
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {

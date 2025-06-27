@@ -140,7 +140,10 @@ impl<F: PrimeField32> TraceStep<F> for KeccakVmStep {
         &mut self,
         state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let &Instruction {
             opcode,
             a,
@@ -237,7 +240,7 @@ impl<F: PrimeField32> TraceStep<F> for KeccakVmStep {
     }
 }
 
-impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for KeccakVmStep {
+impl<F: PrimeField32> TraceFiller<F> for KeccakVmStep {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,

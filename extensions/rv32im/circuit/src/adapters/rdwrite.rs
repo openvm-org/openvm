@@ -336,7 +336,7 @@ where
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
-        <Rv32RdWriteAdapterStep as AdapterTraceStep<F, CTX>>::read(
+        <Rv32RdWriteAdapterStep as AdapterTraceStep<F>>::read(
             &self.inner,
             memory,
             instruction,
@@ -355,7 +355,7 @@ where
         let Instruction { f: enabled, .. } = instruction;
 
         if enabled.is_one() {
-            <Rv32RdWriteAdapterStep as AdapterTraceStep<F, CTX>>::write(
+            <Rv32RdWriteAdapterStep as AdapterTraceStep<F>>::write(
                 &self.inner,
                 memory,
                 instruction,
@@ -380,7 +380,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32CondRdWriteAdapterStep {
 
         if record.rd_ptr != u32::MAX {
             unsafe {
-                <Rv32RdWriteAdapterStep as AdapterTraceFiller<F, CTX>>::fill_trace_row(
+                <Rv32RdWriteAdapterStep as AdapterTraceFiller<F>>::fill_trace_row(
                     &self.inner,
                     mem_helper,
                     adapter_row

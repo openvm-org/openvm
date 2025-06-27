@@ -183,7 +183,10 @@ where
         &mut self,
         state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let &Instruction {
             opcode, a, b, c, ..
         } = instruction;
@@ -235,7 +238,7 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for JalRangeCheckStep {
+impl<F: PrimeField32> TraceFiller<F> for JalRangeCheckStep {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut row_slice: &mut [F]) {
         let record: &mut JalRangeCheckRecord<F> =
             unsafe { get_record_from_slice(&mut row_slice, ()) };

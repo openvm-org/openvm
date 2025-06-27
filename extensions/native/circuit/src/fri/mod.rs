@@ -710,7 +710,10 @@ where
         &mut self,
         state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let &Instruction {
             a,
             b,
@@ -858,7 +861,7 @@ where
     }
 }
 
-impl<F, CTX> TraceFiller<F, CTX> for FriReducedOpeningStep<F>
+impl<F> TraceFiller<F> for FriReducedOpeningStep<F>
 where
     F: PrimeField32,
 {

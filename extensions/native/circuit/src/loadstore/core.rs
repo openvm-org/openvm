@@ -153,7 +153,10 @@ where
         &mut self,
         state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let &Instruction { opcode, .. } = instruction;
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
@@ -188,11 +191,10 @@ where
     }
 }
 
-impl<F, CTX, A, const NUM_CELLS: usize> TraceFiller<F, CTX>
-    for NativeLoadStoreCoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> TraceFiller<F> for NativeLoadStoreCoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };

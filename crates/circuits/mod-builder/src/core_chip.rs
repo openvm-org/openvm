@@ -206,7 +206,7 @@ impl<F, A> FieldExpressionMetadata<F, A> {
 
 impl<F, A> AdapterCoreMetadata for FieldExpressionMetadata<F, A>
 where
-    A: AdapterTraceStep<F, ()>,
+    A: AdapterTraceStep<F>,
 {
     #[inline(always)]
     fn get_adapter_width() -> usize {
@@ -358,7 +358,10 @@ where
         &mut self,
         state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let (mut adapter_record, mut core_record) = state.ctx.alloc(self.get_record_layout());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
