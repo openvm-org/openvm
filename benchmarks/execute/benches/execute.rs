@@ -35,9 +35,9 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 
 static AVAILABLE_PROGRAMS: &[&str] = &[
-    // "fibonacci_recursive",
-    // "fibonacci_iterative",
-    // "quicksort",
+    "fibonacci_recursive",
+    "fibonacci_iterative",
+    "quicksort",
     "bubblesort",
     // "factorial_iterative_u256",
     // "revm_snailtracer",

@@ -130,7 +130,15 @@ unsafe fn execute_impl<F: PrimeField32, Ctx: E1E2ExecutionCtx>(
             break;
         }
     }
-    println!("execute time: {}ms", start.elapsed().as_millis());
+    let execution_time_s = start.elapsed().as_secs_f64();
+    let clk = vm_state.instret;
+    let frequency_mhz = clk as f64 / execution_time_s / 1_000_000f64;
+    println!(
+        "execute time: {}ms clk: {} frequency: {}Mhz",
+        execution_time_s * 1000.0,
+        clk,
+        frequency_mhz
+    );
 }
 
 fn get_pc_index<F: Field>(program: &Program<F>, pc: u32) -> Result<usize, ExecutionError> {
