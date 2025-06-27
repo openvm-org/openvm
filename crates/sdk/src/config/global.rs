@@ -37,8 +37,8 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
-use openvm_sha256_transpiler::Sha256TranspilerExtension;
+use openvm_sha2_circuit::{Sha2, Sha2Executor, Sha2Periphery};
+use openvm_sha2_transpiler::Sha2TranspilerExtension;
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
@@ -53,7 +53,7 @@ pub struct SdkVmConfig {
     pub rv32i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
-    pub sha256: Option<UnitStruct>,
+    pub sha2: Option<UnitStruct>,
     pub native: Option<UnitStruct>,
     pub castf: Option<UnitStruct>,
 
@@ -76,7 +76,7 @@ pub enum SdkVmConfigExecutor<F: PrimeField32> {
     #[any_enum]
     Keccak(Keccak256Executor<F>),
     #[any_enum]
-    Sha256(Sha256Executor<F>),
+    Sha2(Sha2Executor<F>),
     #[any_enum]
     Native(NativeExecutor<F>),
     #[any_enum]
@@ -106,7 +106,7 @@ pub enum SdkVmConfigPeriphery<F: PrimeField32> {
     #[any_enum]
     Keccak(Keccak256Periphery<F>),
     #[any_enum]
-    Sha256(Sha256Periphery<F>),
+    Sha2(Sha2Periphery<F>),
     #[any_enum]
     Native(NativePeriphery<F>),
     #[any_enum]
@@ -137,8 +137,8 @@ impl SdkVmConfig {
         if self.keccak.is_some() {
             transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
         }
-        if self.sha256.is_some() {
-            transpiler = transpiler.with_extension(Sha256TranspilerExtension);
+        if self.sha2.is_some() {
+            transpiler = transpiler.with_extension(Sha2TranspilerExtension);
         }
         if self.native.is_some() {
             transpiler = transpiler.with_extension(LongFormTranspilerExtension);
@@ -191,8 +191,8 @@ impl<F: PrimeField32> VmConfig<F> for SdkVmConfig {
         if self.keccak.is_some() {
             complex = complex.extend(&Keccak256)?;
         }
-        if self.sha256.is_some() {
-            complex = complex.extend(&Sha256)?;
+        if self.sha2.is_some() {
+            complex = complex.extend(&Sha2)?;
         }
         if self.native.is_some() {
             complex = complex.extend(&Native)?;
@@ -318,8 +318,8 @@ impl From<Keccak256> for UnitStruct {
     }
 }
 
-impl From<Sha256> for UnitStruct {
-    fn from(_: Sha256) -> Self {
+impl From<Sha2> for UnitStruct {
+    fn from(_: Sha2) -> Self {
         UnitStruct {}
     }
 }

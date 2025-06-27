@@ -32,7 +32,7 @@ fn main() -> Result<()> {
         .rv32m(Default::default())
         .io(Default::default())
         .keccak(Default::default())
-        .sha256(Default::default())
+        .sha2(Default::default())
         .bigint(Default::default())
         .modular(ModularExtension::new(vec![
             BigUint::from_str("1000000000000000003").unwrap(),
