@@ -24,7 +24,7 @@ struct Rv32RdWriteAdapter {
 
     __device__ Rv32RdWriteAdapter(VariableRangeChecker range_checker) : mem_helper(range_checker) {}
 
-    __device__ void fill_trace_row(RowSlice row, Rv32RdWriteAdapterRecord record) {
+    __device__ inline void fill_trace_row(RowSlice row, Rv32RdWriteAdapterRecord record) {
         COL_WRITE_VALUE(row, Rv32RdWriteAdapterCols, from_state.pc, record.from_pc);
         COL_WRITE_VALUE(row, Rv32RdWriteAdapterCols, from_state.timestamp, record.from_timestamp);
         COL_WRITE_VALUE(row, Rv32RdWriteAdapterCols, rd_ptr, record.rd_ptr);
@@ -36,5 +36,36 @@ struct Rv32RdWriteAdapter {
             record.rd_aux_record.prev_timestamp,
             record.from_timestamp
         );
+    }
+};
+
+template <typename T> struct Rv32CondRdWriteAdapterCols {
+    Rv32RdWriteAdapterCols<T> inner;
+    T needs_write;
+};
+
+struct Rv32CondRdWriteAdapter {
+    MemoryAuxColsFactory mem_helper;
+
+    __device__ Rv32CondRdWriteAdapter(VariableRangeChecker range_checker)
+        : mem_helper(range_checker) {}
+
+    __device__ inline void fill_trace_row(RowSlice row, Rv32RdWriteAdapterRecord record) {
+        bool do_write = (record.rd_ptr != UINT32_MAX);
+        COL_WRITE_VALUE(row, Rv32CondRdWriteAdapterCols, needs_write, do_write);
+
+        RowSlice inner = row.slice_from(COL_INDEX(Rv32CondRdWriteAdapterCols, inner));
+
+        if (do_write) {
+            Rv32RdWriteAdapter adapter(mem_helper.range_checker);
+            adapter.fill_trace_row(inner, record);
+        } else {
+            COL_WRITE_VALUE(inner, Rv32RdWriteAdapterCols, rd_ptr, 0u);
+            mem_helper.fill_zero(inner.slice_from(COL_INDEX(Rv32RdWriteAdapterCols, rd_aux_cols)));
+            COL_WRITE_VALUE(
+                inner, Rv32RdWriteAdapterCols, from_state.timestamp, record.from_timestamp
+            );
+            COL_WRITE_VALUE(inner, Rv32RdWriteAdapterCols, from_state.pc, record.from_pc);
+        }
     }
 };
