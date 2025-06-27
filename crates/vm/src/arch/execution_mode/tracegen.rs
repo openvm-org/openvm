@@ -5,8 +5,9 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        execution_control::ExecutionControl, ExecutionError, ExecutionState, MatrixRecordArena,
-        RowMajorMatrixArena, TraceStep, VmChipComplex, VmConfig, VmSegmentState, VmStateMut,
+        execution_control::ExecutionControl, ExecutionError, ExecutionState, InstructionExecutor,
+        MatrixRecordArena, RowMajorMatrixArena, TraceStep, VmChipComplex, VmConfig, VmSegmentState,
+        VmStateMut,
     },
     system::memory::INITIAL_TIMESTAMP,
 };
@@ -44,19 +45,15 @@ where
     }
 }
 
-pub struct TracegenExecutionControl<F> {
-    phantom: PhantomData<F>,
-}
+pub struct TracegenExecutionControl;
 
-impl<F> Default for TracegenExecutionControl<F> {
+impl Default for TracegenExecutionControl {
     fn default() -> Self {
-        Self {
-            phantom: PhantomData,
-        }
+        Self {}
     }
 }
 
-impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControl<F>
+impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControl
 where
     F: PrimeField32,
     VC: VmConfig<F>,
@@ -110,24 +107,22 @@ where
     where
         F: PrimeField32,
     {
-        let timestamp = chip_complex.memory_controller().timestamp();
-
         let &Instruction { opcode, .. } = instruction;
 
         if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
-            let memory = &mut chip_complex.base.memory_controller.memory;
-            let mut pc = state.pc;
-            let chip_index = executor.chip_index;
-            let arena = &mut state.ctx.arenas[chip_index];
-            let state_mut = VmStateMut {
-                pc: &mut pc,
-                memory,
-                streams: &mut state.streams,
-                rng: &mut state.rng,
-                ctx: arena,
+            let memory = &mut chip_complex.base.memory_controller;
+            let from_state = ExecutionState {
+                pc: state.pc,
+                timestamp: memory.timestamp(),
             };
-            executor.step.execute(state_mut, instruction)?;
-            state.pc = pc;
+            let to_state = executor.execute(
+                memory,
+                &mut state.streams,
+                &mut state.rng,
+                instruction,
+                from_state,
+            )?;
+            state.pc = to_state.pc;
         } else {
             return Err(ExecutionError::DisabledOperation {
                 pc: state.pc,

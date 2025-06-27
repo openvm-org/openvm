@@ -176,6 +176,24 @@ where
     }
 }
 
+impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
+    fn execute(
+        &mut self,
+        memory: &mut MemoryController<F>,
+        streams: &mut Streams<F>,
+        rng: &mut StdRng,
+        instruction: &Instruction<F>,
+        prev_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
+        self.borrow_mut()
+            .execute(memory, streams, rng, instruction, prev_state)
+    }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        self.borrow().get_opcode_name(opcode)
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Default, AlignedBorrow, Serialize, Deserialize)]
 pub struct ExecutionState<T> {

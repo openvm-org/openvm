@@ -21,15 +21,19 @@ use openvm_stark_backend::{
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     AirRef, Chip, ChipUsageGetter,
 };
+use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 
 use super::{
     execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
     InsExecutorE1, Result, VmStateMut,
 };
-use crate::system::memory::{
-    online::{GuestMemory, TracingMemory},
-    MemoryAuxColsFactory, SharedMemoryHelper,
+use crate::{
+    arch::{ExecutionState, InstructionExecutor, Streams},
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory, MemoryController, SharedMemoryHelper,
+    },
 };
 
 /// The interface between primitive AIR and machine adapter AIR.
@@ -824,6 +828,41 @@ where
     pub fn set_trace_buffer_height(&mut self, height: usize) {
         let width = self.air.width();
         self.arena.set_capacity(height * width * size_of::<F>());
+    }
+}
+
+impl<F, AIR, STEP, RA> InstructionExecutor<F> for NewVmChipWrapper<F, AIR, STEP, RA>
+where
+    F: PrimeField32,
+    STEP: TraceStep<F> + StepExecutorE1<F>,
+    for<'buf> RA: RecordArena<'buf, STEP::RecordLayout, STEP::RecordMut<'buf>>,
+{
+    fn execute(
+        &mut self,
+        memory: &mut MemoryController<F>,
+        streams: &mut Streams<F>,
+        rng: &mut StdRng,
+        instruction: &Instruction<F>,
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>> {
+        let mut pc = from_state.pc;
+        let state = VmStateMut {
+            pc: &mut pc,
+            memory: &mut memory.memory,
+            streams,
+            rng,
+            ctx: &mut self.arena,
+        };
+        self.step.execute(state, instruction)?;
+
+        Ok(ExecutionState {
+            pc,
+            timestamp: memory.memory.timestamp,
+        })
+    }
+
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        self.step.get_opcode_name(opcode)
     }
 }
 
