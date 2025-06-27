@@ -48,7 +48,8 @@ pub fn cols_ref_impl(
             // The ColsRef struct is named by appending `Ref` to the struct name
             let const_cols_ref_name = syn::Ident::new(&format!("{}Ref", ident), ident.span());
 
-            // the args to the `from` method will be different for the ColsRef and ColsRefMut structs
+            // the args to the `from` method will be different for the ColsRef and ColsRefMut
+            // structs
             let from_args = quote! { slice: &'a [#generic_type] };
 
             // Package all the necessary information to generate the ColsRef struct
@@ -78,7 +79,8 @@ pub fn cols_ref_impl(
             // The ColsRefMut struct is named by appending `RefMut` to the struct name
             let mut_cols_ref_name = syn::Ident::new(&format!("{}RefMut", ident), ident.span());
 
-            // the args to the `from` method will be different for the ColsRef and ColsRefMut structs
+            // the args to the `from` method will be different for the ColsRef and ColsRefMut
+            // structs
             let from_args = quote! { slice: &'a mut [#generic_type] };
 
             // Package all the necessary information to generate the ColsRefMut struct
@@ -117,11 +119,12 @@ struct StructInfo {
 }
 
 // Generate the ColsRef and ColsRefMut structs, depending on the value of `struct_info`
-// This function is meant to reduce code duplication between the code needed to generate the two structs
-// Notable differences between the two structs are:
+// This function is meant to reduce code duplication between the code needed to generate the two
+// structs Notable differences between the two structs are:
 //   - the types of the fields
 //   - ColsRef derives Clone, but ColsRefMut cannot (since it stores mutable references)
-//   - the `from` method parameter is a reference to a slice for ColsRef and a mutable reference to a slice for ColsRefMut
+//   - the `from` method parameter is a reference to a slice for ColsRef and a mutable reference to
+//     a slice for ColsRefMut
 fn make_struct(struct_info: StructInfo, config: &proc_macro2::Ident) -> proc_macro2::TokenStream {
     let StructInfo {
         name,
@@ -204,7 +207,8 @@ fn make_from_mut(struct_info: StructInfo, config: &proc_macro2::Ident) -> proc_m
                     other.#ident.view()
                 }
             } else if derives_aligned_borrow {
-                // implicitly converts a mutable reference to an immutable reference, so leave the field value unchanged
+                // implicitly converts a mutable reference to an immutable reference, so leave the
+                // field value unchanged
                 quote! {
                     other.#ident
                 }
@@ -217,7 +221,8 @@ fn make_from_mut(struct_info: StructInfo, config: &proc_macro2::Ident) -> proc_m
                     <#cols_ref_type>::from_mut::<C>(&other.#ident)
                 }
             } else if is_generic_type(&f.ty, &generic_type) {
-                // implicitly converts a mutable reference to an immutable reference, so leave the field value unchanged
+                // implicitly converts a mutable reference to an immutable reference, so leave the
+                // field value unchanged
                 quote! {
                     &other.#ident
                 }
