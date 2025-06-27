@@ -315,7 +315,6 @@ impl AggregateMetrics {
                         && group_name != "halo2_outer"
                         && group_name != "halo2_wrapper"
                         && !group_name.starts_with("internal"))
-                        || metric_name == EXECUTE_METERED_INSN_MI_S_LABEL
                     {
                         writeln!(
                             writer,
@@ -324,6 +323,7 @@ impl AggregateMetrics {
                         )?;
                     } else if metric_name == EXECUTE_E1_INSN_MI_S_LABEL
                         || metric_name == EXECUTE_E3_INSN_MI_S_LABEL
+                        || metric_name == EXECUTE_METERED_INSN_MI_S_LABEL
                     {
                         // skip sum because it is misleading
                         writeln!(
