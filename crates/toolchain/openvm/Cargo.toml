@@ -37,4 +37,4 @@ heap-embedded-alloc = ["openvm-platform/heap-embedded-alloc"]
 std = ["serde/std", "openvm-platform/std"]
 
 [package.metadata.cargo-shear]
-ignored = ["openvm-custom-insn"]
+ignored = ["openvm-custom-insn", "getrandom"]
