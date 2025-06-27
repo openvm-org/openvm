@@ -304,6 +304,7 @@ where
             executor.metrics = state.metrics;
         }
 
+        let has_public_values_chip = executor.chip_complex.config().has_public_values_chip();
         let continuations_enabled = executor
             .chip_complex
             .memory_controller()
@@ -323,6 +324,7 @@ where
 
         let ctx = MeteredCtx::new(
             constant_trace_heights,
+            has_public_values_chip,
             continuations_enabled,
             as_alignment,
             executor
@@ -711,6 +713,7 @@ where
             MeteredExecutionControl,
         );
 
+        let has_public_values_chip = executor.chip_complex.config().has_public_values_chip();
         let continuations_enabled = executor
             .chip_complex
             .memory_controller()
@@ -730,6 +733,7 @@ where
 
         let ctx = MeteredCtx::new(
             constant_trace_heights,
+            has_public_values_chip,
             continuations_enabled,
             as_alignment,
             self.config.system().memory_config.memory_dimensions(),
