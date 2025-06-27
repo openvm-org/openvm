@@ -10,7 +10,7 @@ use getset::Getters;
 use itertools::{zip_eq, Itertools};
 #[cfg(feature = "bench-metrics")]
 use metrics::counter;
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1};
 use openvm_circuit_primitives::{
     utils::next_power_of_two_or_zero,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
@@ -35,8 +35,8 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    vm_poseidon2_config, ExecutionBus, GenerationError, InstructionExecutor, PhantomSubExecutor,
-    SystemConfig, SystemTraceHeights,
+    vm_poseidon2_config, ExecutionBus, GenerationError, PhantomSubExecutor, SystemConfig,
+    SystemTraceHeights,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -531,7 +531,7 @@ impl<F: PrimeField32> SystemBase<F> {
     }
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor, InsExecutorE1)]
+#[derive(ChipUsageGetter, Chip, AnyEnum, From, InsExecutorE1)]
 pub enum SystemExecutor<F: PrimeField32> {
     PublicValues(PublicValuesChip<F>),
     Phantom(RefCell<PhantomChip<F>>),

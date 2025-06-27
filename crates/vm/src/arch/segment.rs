@@ -14,8 +14,6 @@ use openvm_stark_backend::{
 use rand::rngs::StdRng;
 use tracing::instrument;
 
-#[cfg(feature = "bench-metrics")]
-use super::InstructionExecutor;
 use super::{
     execution_control::ExecutionControl, ExecutionError, GenerationError, Streams, SystemConfig,
     VmChipComplex, VmComplexTraceHeights, VmConfig,

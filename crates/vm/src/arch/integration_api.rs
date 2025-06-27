@@ -21,16 +21,15 @@ use openvm_stark_backend::{
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     AirRef, Chip, ChipUsageGetter,
 };
-use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 
 use super::{
     execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-    ExecutionState, InsExecutorE1, InstructionExecutor, Result, Streams, VmStateMut,
+    InsExecutorE1, Result, VmStateMut,
 };
 use crate::system::memory::{
     online::{GuestMemory, TracingMemory},
-    MemoryAuxColsFactory, MemoryController, SharedMemoryHelper,
+    MemoryAuxColsFactory, SharedMemoryHelper,
 };
 
 /// The interface between primitive AIR and machine adapter AIR.
@@ -115,7 +114,7 @@ pub trait RecordArena<'a, Layout, RecordMut> {
     fn alloc(&'a mut self, layout: Layout) -> RecordMut;
 }
 
-/// Interface for trace generation of a single instruction.The trace is provided as a mutable
+/// Interface for trace generation of a single instruction. The trace is provided as a mutable
 /// buffer during both instruction execution and trace generation.
 /// It is expected that no additional memory allocation is necessary and the trace buffer
 /// is sufficient, with possible overwriting.
@@ -825,42 +824,6 @@ where
     pub fn set_trace_buffer_height(&mut self, height: usize) {
         let width = self.air.width();
         self.arena.set_capacity(height * width * size_of::<F>());
-    }
-}
-
-impl<F, AIR, STEP, RA> InstructionExecutor<F> for NewVmChipWrapper<F, AIR, STEP, RA>
-where
-    F: PrimeField32,
-    STEP: TraceStep<F, ()> // TODO: CTX?
-        + StepExecutorE1<F>,
-    for<'buf> RA: RecordArena<'buf, STEP::RecordLayout, STEP::RecordMut<'buf>>,
-{
-    fn execute(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        streams: &mut Streams<F>,
-        rng: &mut StdRng,
-        instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>> {
-        let mut pc = from_state.pc;
-        let state = VmStateMut {
-            pc: &mut pc,
-            memory: &mut memory.memory,
-            streams,
-            rng,
-            ctx: &mut (),
-        };
-        self.step.execute(state, instruction, &mut self.arena)?;
-
-        Ok(ExecutionState {
-            pc,
-            timestamp: memory.memory.timestamp,
-        })
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        self.step.get_opcode_name(opcode)
     }
 }
 

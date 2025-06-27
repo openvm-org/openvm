@@ -1,31 +1,70 @@
+use std::{intrinsics::unreachable, marker::PhantomData};
+
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        execution_control::ExecutionControl, ExecutionError, ExecutionState, InstructionExecutor,
-        VmChipComplex, VmConfig, VmSegmentState,
+        execution_control::ExecutionControl, ExecutionError, ExecutionState, MatrixRecordArena,
+        TraceStep, VmChipComplex, VmConfig, VmSegmentState, VmStateMut,
     },
     system::memory::INITIAL_TIMESTAMP,
 };
 
 #[derive(Default, derive_new::new)]
-pub struct TracegenCtx {
+pub struct TracegenCtx<RA> {
+    pub arenas: Vec<RA>,
     pub instret_end: Option<u64>,
 }
 
-#[derive(Default)]
-pub struct TracegenExecutionControl;
+impl<RA> TracegenCtx<RA>
+where
+    RA: BaseRecordArena,
+{
+    pub fn new(count: usize) -> Self {
+        let arenas = (0..count)
+            .map(|_| RA::with_capacity(RA::Capacity::default()))
+            .collect();
+        Self {
+            arenas,
+            instret_end: None,
+        }
+    }
 
-impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControl
+    pub fn new_with_capacity(capacities: &[RA::Capacity]) -> Self {
+        let arenas = capacities
+            .iter()
+            .map(|&capacity| RA::with_capacity(capacity))
+            .collect();
+
+        Self {
+            arenas,
+            instret_end: None,
+        }
+    }
+}
+
+pub struct TracegenExecutionControl<RA> {
+    phantom: PhantomData<RA>,
+}
+
+impl<RA> Default for TracegenExecutionControl<RA> {
+    fn default() -> Self {
+        Self {
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<F, VC, RA> ExecutionControl<F, VC> for TracegenExecutionControl<RA>
 where
     F: PrimeField32,
     VC: VmConfig<F>,
 {
-    type Ctx = TracegenCtx;
+    type Ctx = TracegenCtx<RA>;
 
     fn initialize_context(&self) -> Self::Ctx {
-        TracegenCtx { instret_end: None }
+        unreachable!()
     }
 
     fn should_suspend(
@@ -76,15 +115,18 @@ where
         let &Instruction { opcode, .. } = instruction;
 
         if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
-            let memory_controller = &mut chip_complex.base.memory_controller;
-            let new_state = executor.execute(
-                memory_controller,
-                &mut state.streams,
-                &mut state.rng,
-                instruction,
-                ExecutionState::new(state.pc, timestamp),
-            )?;
-            state.pc = new_state.pc;
+            let memory = &mut chip_complex.base.memory_controller.memory;
+            let mut pc = state.pc;
+            let state_mut = VmStateMut {
+                pc: &mut pc,
+                memory,
+                streams: &mut state.streams,
+                rng: &mut state.rng,
+                ctx: &mut (),
+            };
+            // TODO: get arena from self.ctx
+            executor.step.execute(state_mut, instruction, &mut arena)?;
+            state.pc = state_mut.pc;
         } else {
             return Err(ExecutionError::DisabledOperation {
                 pc: state.pc,
