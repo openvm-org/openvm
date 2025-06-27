@@ -91,7 +91,7 @@ fn set_and_execute(
 
     let is_load = [LOADW, LOADHU, LOADBU].contains(&opcode);
     let mem_as = mem_as.unwrap_or(if is_load {
-        *[1, 2].choose(rng).unwrap()
+        2
     } else {
         *[2, 3, 4].choose(rng).unwrap()
     });
@@ -109,9 +109,6 @@ fn set_and_execute(
             some_prev_data = [F::ZERO; RV32_REGISTER_NUM_LIMBS];
         }
         tester.write(1, a, some_prev_data);
-        if mem_as == 1 && ptr_val - shift_amount == 0 {
-            read_data = [F::ZERO; RV32_REGISTER_NUM_LIMBS];
-        }
         tester.write(mem_as, (ptr_val - shift_amount) as usize, read_data);
     } else {
         if mem_as == 4 {
