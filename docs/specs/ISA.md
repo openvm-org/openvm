@@ -117,7 +117,7 @@ address spaces and the size of each address space are configurable constants.
 - Valid pointers are field elements that lie in `[0, 2^pointer_max_bits)`, for
   configuration constant `pointer_max_bits`. When accessing an address out of `[0, 2^pointer_max_bits)`, the VM should
   panic.
-- For the register address space (address space `1`), the maximum valid pointer value is `128`, corresponding to 32 registers with 4 byte limbs each.
+- For the register address space (address space `1`), valid pointers lie in `[0, 128)`, corresponding to 32 registers with 4 byte limbs each.
 These configuration constants must satisfy `addr_space_height, pointer_max_bits <= F::bits() - 2`. We use the following notation
 to denote cells in memory:
 
