@@ -98,6 +98,27 @@ impl GpuChipTestBuilder {
         Self::default()
     }
 
+    pub fn volatile(mem_config: MemoryConfig) -> Self {
+        setup_tracing_with_log_level(Level::INFO);
+        let mem_bus = MemoryBus::new(MEMORY_BUS);
+        let range_checker = SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
+            RANGE_CHECKER_BUS,
+            mem_config.decomp,
+        ));
+        let memory_controller =
+            MemoryController::with_volatile_memory(mem_bus, mem_config, range_checker);
+        Self {
+            memory: DeviceMemoryTester::new(memory_controller),
+            execution: DeviceExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
+            program: DeviceProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
+            streams: Default::default(),
+            var_range_checker: None,
+            bitwise_op_lookup: None,
+            range_tuple_checker: None,
+            rng: StdRng::seed_from_u64(0),
+        }
+    }
+
     pub fn with_variable_range_checker(mut self) -> Self {
         let bus = self.memory.controller.range_checker.bus();
         self.var_range_checker = Some(Arc::new(VariableRangeCheckerChipGPU::new(bus)));

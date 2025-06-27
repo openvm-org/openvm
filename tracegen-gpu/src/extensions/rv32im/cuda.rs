@@ -13,7 +13,7 @@ pub mod auipc {
             d_records: *const u8,
             record_len: usize,
             d_range_checker: *const u32,
-            range_checker_max_bits: usize,
+            range_checker_max_bins: usize,
             d_bitwise_lookup: *const u32,
             bitwise_num_bits: usize,
         ) -> i32;
@@ -55,7 +55,7 @@ pub mod hintstore {
             d_record_offsets: *const OffsetInfo,
             pointer_max_bits: usize,
             d_range_checker: *const u32,
-            range_checker_num_bits: usize,
+            range_checker_num_bins: usize,
             d_bitwise_lookup: *const u32,
             bitwise_num_bits: usize,
         ) -> i32;
@@ -99,7 +99,7 @@ pub mod jalr {
             d_records: *const u8,
             record_len: usize,
             d_range_checker: *const u32,
-            range_checker_max_bits: usize,
+            range_checker_max_bins: usize,
             d_bitwise_lookup: *const u32,
             bitwise_num_bits: usize,
         ) -> i32;
@@ -163,6 +163,82 @@ pub mod mul {
     }
 }
 
+pub mod loadstore_cuda {
+    use super::*;
+
+    unsafe extern "C" {
+        unsafe fn _rv32_load_store_tracegen(
+            d_trace: *mut std::ffi::c_void,
+            height: usize,
+            width: usize,
+            d_records: *const u8,
+            rows_used: usize,
+            pointer_max_bits: usize,
+            d_range_checker: *const u32,
+            range_checker_num_bins: u32,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen<T>(
+        d_trace: &DeviceBuffer<T>,
+        height: usize,
+        width: usize,
+        d_records: &DeviceBuffer<u8>,
+        rows_used: usize,
+        pointer_max_bits: usize,
+        d_range_checker: &DeviceBuffer<T>,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rv32_load_store_tracegen(
+            d_trace.as_mut_raw_ptr(),
+            height,
+            width,
+            d_records.as_ptr(),
+            rows_used,
+            pointer_max_bits,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32 / 2,
+        ))
+    }
+}
+
+pub mod load_sign_extend_cuda {
+    use super::*;
+
+    unsafe extern "C" {
+        unsafe fn _rv32_load_sign_extend_tracegen(
+            d_trace: *mut std::ffi::c_void,
+            height: usize,
+            width: usize,
+            d_records: *const u8,
+            rows_used: usize,
+            pointer_max_bits: usize,
+            d_range_checker: *const u32,
+            range_checker_num_bins: u32,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen<T>(
+        d_trace: &DeviceBuffer<T>,
+        height: usize,
+        width: usize,
+        d_records: &DeviceBuffer<u8>,
+        rows_used: usize,
+        pointer_max_bits: usize,
+        d_range_checker: &DeviceBuffer<T>,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rv32_load_sign_extend_tracegen(
+            d_trace.as_mut_raw_ptr(),
+            height,
+            width,
+            d_records.as_ptr(),
+            rows_used,
+            pointer_max_bits,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32 / 2,
+        ))
+    }
+}
+
 pub mod jal_lui {
     use super::*;
 
@@ -174,7 +250,7 @@ pub mod jal_lui {
             d_records: *const u8,
             record_len: usize,
             d_range_checker: *const u32,
-            range_checker_max_bits: usize,
+            range_checker_max_bins: usize,
             d_bitwise_lookup: *const u32,
             bitwise_num_bits: usize,
         ) -> i32;

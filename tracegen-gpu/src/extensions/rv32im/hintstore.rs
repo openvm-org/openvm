@@ -15,7 +15,7 @@ use openvm_stark_backend::{rap::get_air_name, AirRef, ChipUsageGetter};
 use p3_air::BaseAir;
 use stark_backend_gpu::{
     base::DeviceMatrix,
-    cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer, error::CudaError},
+    cuda::copy::MemCopyH2D,
     prover_backend::GpuBackend,
     types::{F, SC},
 };
