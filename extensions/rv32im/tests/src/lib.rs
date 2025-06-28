@@ -183,7 +183,7 @@ mod tests {
         )?;
         let config = Rv32IConfig::default();
 
-        let vm = VirtualMachine::new(default_engine(), config.clone());
+        let mut vm = VirtualMachine::new(default_engine(), config.clone());
         let pk = vm.keygen();
         let vk = pk.get_vk();
         let segments = vm
@@ -196,6 +196,7 @@ mod tests {
             )
             .unwrap();
 
+        vm.set_main_widths(vk.main_widths());
         let final_memory = vm.executor.execute(exe, vec![], &segments)?.unwrap();
         let hasher = vm_poseidon2_hasher::<F>();
         let pv_proof = UserPublicValuesProof::compute(
