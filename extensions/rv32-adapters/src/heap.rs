@@ -120,12 +120,8 @@ impl<const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
     }
 }
 
-impl<
-        F: PrimeField32,
-        const NUM_READS: usize,
-        const READ_SIZE: usize,
-        const WRITE_SIZE: usize,
-    > AdapterTraceStep<F> for Rv32HeapAdapterStep<NUM_READS, READ_SIZE, WRITE_SIZE>
+impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
+    AdapterTraceStep<F> for Rv32HeapAdapterStep<NUM_READS, READ_SIZE, WRITE_SIZE>
 where
     F: PrimeField32,
 {
@@ -161,12 +157,8 @@ where
     }
 }
 
-impl<
-        F: PrimeField32,
-        const NUM_READS: usize,
-        const READ_SIZE: usize,
-        const WRITE_SIZE: usize,
-    > AdapterTraceFiller<F> for Rv32HeapAdapterStep<NUM_READS, READ_SIZE, WRITE_SIZE>
+impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
+    AdapterTraceFiller<F> for Rv32HeapAdapterStep<NUM_READS, READ_SIZE, WRITE_SIZE>
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
         AdapterTraceFiller::<F>::fill_trace_row(&self.0, mem_helper, adapter_row);
