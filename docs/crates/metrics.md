@@ -7,7 +7,7 @@ We describe the metrics that are collected for a single VM circuit proof, which 
 
 To scope metrics from different proofs, we use the [`metrics_tracing_context`](https://docs.rs/metrics-tracing-context/latest/metrics_tracing_context/) crate to provide context-dependent labels. With the exception of the `segment` label, all other labels must be set by the caller.
 
-For a single segment proof, the following metrics are collected:
+For a segment proof, the following metrics are collected:
 
 - `execute_metered_time_ms` (gauge): The metered execution time of the segment in milliseconds. This is timed across **all** segments in the group.
 - `execute_e3_time_ms` (gauge): The preflight execution time of the segment in milliseconds.
@@ -18,7 +18,9 @@ For a single segment proof, the following metrics are collected:
     - `boundary_finalize_time_ms` (gauge): The time in memory finalization spent on boundary finalization.
     - `merkle_finalize_time_ms` (gauge): The time in memory finalization spent on merkle tree finalization.
 - All metrics collected by [`openvm-stark-backend`](https://github.com/openvm-org/stark-backend/blob/main/docs/metrics.md), in particular `stark_prove_excluding_trace_time_ms` (gauge).
-- The `total_proof_time_ms` of the proof is the sum of `execute_e3_time_ms + trace_gen_time_ms + stark_prove_excluding_trace_time_ms`. This **only** includes `execute_metered_time_ms` for non-app proofs; `execute_metered_time_ms` is not recorded separately since it is not a per-segment metric.
+- The `total_proof_time_ms` of the proof is:
+  - The sum `execute_e3_time_ms + trace_gen_time_ms + stark_prove_excluding_trace_time_ms` for app proofs. The `execute_metered_time_ms` is excluded for app proofs because it is not run on a per-segment basis.
+  - The sum `execute_metered_time_ms + execute_e3_time_ms + trace_gen_time_ms + stark_prove_excluding_trace_time_ms` for non-app proofs.
 - `total_cycles` (counter): The total number of cycles in the segment.
 - `main_cells_used` (counter): The total number of main trace cells used by all chips in the segment. This does not include cells needed to pad rows to power-of-two matrix heights. Only main trace cells, not preprocessed or permutation trace cells, are counted.
 
