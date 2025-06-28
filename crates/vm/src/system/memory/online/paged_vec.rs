@@ -95,4 +95,21 @@ impl<T: Copy + Default> PagedVec<T> {
             })
             .flatten()
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = (usize, T)> + '_
+    where
+        T: Send + Sync,
+    {
+        self.pages
+            .iter()
+            .enumerate()
+            .filter_map(move |(page_idx, page)| {
+                page.as_ref().map(move |p| {
+                    p.iter()
+                        .enumerate()
+                        .map(move |(offset, &value)| (page_idx * self.page_size + offset, value))
+                })
+            })
+            .flatten()
+    }
 }

@@ -491,40 +491,29 @@ impl DenseRecordArena {
         self.records_buffer = cursor;
     }
 
-    /// Allocates a single record of the given type and returns a mutable reference to it.
-    pub fn alloc_one<'a, T>(&mut self) -> &'a mut T {
-        let begin = self.records_buffer.position();
-        let width = size_of::<T>();
-        debug_assert!(begin as usize + width <= self.records_buffer.get_ref().len());
-        self.records_buffer.set_position(begin + width as u64);
-        unsafe {
-            &mut *(self
-                .records_buffer
-                .get_mut()
-                .as_mut_ptr()
-                .add(begin as usize) as *mut T)
-        }
+    /// Returns the current size of the allocated buffer so far.
+    pub fn current_size(&self) -> usize {
+        self.records_buffer.position() as usize
     }
 
-    /// Allocates a slice of records of the given type and returns a mutable reference to it.
-    pub fn alloc_many<'a, T>(&mut self, count: usize) -> &'a mut [T] {
+    /// Allocates `count` bytes and returns as a mutable slice.
+    pub fn alloc_bytes<'a>(&mut self, count: usize) -> &'a mut [u8] {
         let begin = self.records_buffer.position();
-        let width = size_of::<T>() * count;
-        debug_assert!(begin as usize + width <= self.records_buffer.get_ref().len());
-        self.records_buffer.set_position(begin + width as u64);
+        debug_assert!(
+            begin as usize + count <= self.records_buffer.get_ref().len(),
+            "failed to allocate {count} bytes from {begin} when the capacity is {}",
+            self.records_buffer.get_ref().len()
+        );
+        self.records_buffer.set_position(begin + count as u64);
         unsafe {
             std::slice::from_raw_parts_mut(
                 self.records_buffer
                     .get_mut()
                     .as_mut_ptr()
-                    .add(begin as usize) as *mut T,
+                    .add(begin as usize),
                 count,
             )
         }
-    }
-
-    pub fn alloc_bytes<'a>(&mut self, count: usize) -> &'a mut [u8] {
-        self.alloc_many::<u8>(count)
     }
 
     pub fn allocated(&self) -> &[u8] {

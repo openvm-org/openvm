@@ -910,6 +910,14 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         )
     }
 
+    pub(crate) fn set_adapter_heights(&mut self, heights: &[u32]) {
+        self.base
+            .memory_controller
+            .memory
+            .access_adapter_inventory
+            .set_arena_from_trace_heights(heights);
+    }
+
     /// Override the trace heights for chips in the inventory. Usually this is for aggregation to
     /// generate a dummy proof and not useful for regular users.
     pub(crate) fn set_override_inventory_trace_heights(
