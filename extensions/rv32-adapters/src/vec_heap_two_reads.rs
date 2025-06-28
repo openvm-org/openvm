@@ -352,13 +352,12 @@ impl<
 
 impl<
         F: PrimeField32,
-        CTX,
         const BLOCKS_PER_READ1: usize,
         const BLOCKS_PER_READ2: usize,
         const BLOCKS_PER_WRITE: usize,
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
-    > AdapterTraceStep<F, CTX>
+    > AdapterTraceStep<F>
     for Rv32VecHeapTwoReadsAdapterStep<
         BLOCKS_PER_READ1,
         BLOCKS_PER_READ2,
@@ -482,13 +481,12 @@ impl<
 
 impl<
         F: PrimeField32,
-        CTX,
         const BLOCKS_PER_READ1: usize,
         const BLOCKS_PER_READ2: usize,
         const BLOCKS_PER_WRITE: usize,
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
-    > AdapterTraceFiller<F, CTX>
+    > AdapterTraceFiller<F>
     for Rv32VecHeapTwoReadsAdapterStep<
         BLOCKS_PER_READ1,
         BLOCKS_PER_READ2,

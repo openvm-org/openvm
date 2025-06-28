@@ -247,24 +247,25 @@ fn dense_record_arena_test() {
     let mut tester = VmChipTestBuilder::default();
     let (mut sparse_chip, bitwise_chip) = create_test_chip(&mut tester);
 
-    {
-        let mut dense_chip = create_test_chip_dense(&mut tester);
+    todo!("get this working again");
+    // {
+    //     let mut dense_chip = create_test_chip_dense(&mut tester);
 
-        let num_ops: usize = 100;
-        for _ in 0..num_ops {
-            set_and_execute(&mut tester, &mut dense_chip, &mut rng, HINT_STOREW);
-        }
+    //     let num_ops: usize = 100;
+    //     for _ in 0..num_ops {
+    //         set_and_execute(&mut tester, &mut dense_chip, &mut rng, HINT_STOREW);
+    //     }
 
-        let mut record_interpreter = dense_chip
-            .arena
-            .get_record_seeker::<_, Rv32HintStoreLayout>();
-        record_interpreter.transfer_to_matrix_arena(&mut sparse_chip.arena);
-    }
+    //     let mut record_interpreter = dense_chip
+    //         .arena
+    //         .get_record_seeker::<_, Rv32HintStoreLayout>();
+    //     record_interpreter.transfer_to_matrix_arena(&mut sparse_chip.arena);
+    // }
 
-    let tester = tester
-        .build()
-        .load(sparse_chip)
-        .load(bitwise_chip)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
+    // let tester = tester
+    //     .build()
+    //     .load(sparse_chip)
+    //     .load(bitwise_chip)
+    //     .finalize();
+    // tester.simple_test().expect("Verification failed");
 }

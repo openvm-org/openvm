@@ -206,7 +206,7 @@ impl<F, A> FieldExpressionMetadata<F, A> {
 
 impl<F, A> AdapterCoreMetadata for FieldExpressionMetadata<F, A>
 where
-    A: AdapterTraceStep<F, ()>,
+    A: AdapterTraceStep<F>,
 {
     #[inline(always)]
     fn get_adapter_width() -> usize {
@@ -346,25 +346,23 @@ impl<A> FieldExpressionStep<A> {
     }
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for FieldExpressionStep<A>
+impl<F, A> TraceStep<F> for FieldExpressionStep<A>
 where
     F: PrimeField32,
-    A: 'static
-        + AdapterTraceStep<F, CTX, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
+    A: 'static + AdapterTraceStep<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
 {
     type RecordLayout = FieldExpressionRecordLayout<F, A>;
     type RecordMut<'a> = (A::RecordMut<'a>, FieldExpressionCoreRecordMut<'a>);
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
     {
-        let (mut adapter_record, mut core_record) = arena.alloc(self.get_record_layout());
+        let (mut adapter_record, mut core_record) = state.ctx.alloc(self.get_record_layout());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -397,10 +395,10 @@ where
     }
 }
 
-impl<F, CTX, A> TraceFiller<F, CTX> for FieldExpressionStep<A>
+impl<F, A> TraceFiller<F> for FieldExpressionStep<A>
 where
     F: PrimeField32 + Send + Sync + Clone,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         // Get the core record from the row slice

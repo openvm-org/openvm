@@ -14,8 +14,6 @@ use openvm_stark_backend::{
 use rand::rngs::StdRng;
 use tracing::instrument;
 
-#[cfg(feature = "bench-metrics")]
-use super::InstructionExecutor;
 use super::{
     execution_control::ExecutionControl, ExecutionError, GenerationError, Streams, SystemConfig,
     VmChipComplex, VmComplexTraceHeights, VmConfig,
@@ -262,6 +260,8 @@ where
         self.metrics.cycle_count += 1;
 
         if self.system_config().profiling {
+            use crate::arch::InstructionExecutor;
+
             let executor = self.chip_complex.inventory.get_executor(opcode).unwrap();
             let opcode_name = executor.get_opcode_name(opcode.as_usize());
             self.metrics.update_trace_cells(

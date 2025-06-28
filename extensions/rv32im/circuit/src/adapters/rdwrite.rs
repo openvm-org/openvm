@@ -203,7 +203,7 @@ pub struct Rv32RdWriteAdapterRecord {
 #[derive(derive_new::new)]
 pub struct Rv32RdWriteAdapterStep;
 
-impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32RdWriteAdapterStep
+impl<F> AdapterTraceStep<F> for Rv32RdWriteAdapterStep
 where
     F: PrimeField32,
 {
@@ -252,7 +252,7 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32RdWriteAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32RdWriteAdapterStep {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &Rv32RdWriteAdapterRecord =
@@ -314,7 +314,7 @@ pub struct Rv32CondRdWriteAdapterStep {
     inner: Rv32RdWriteAdapterStep,
 }
 
-impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32CondRdWriteAdapterStep
+impl<F> AdapterTraceStep<F> for Rv32CondRdWriteAdapterStep
 where
     F: PrimeField32,
 {
@@ -336,7 +336,7 @@ where
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
-        <Rv32RdWriteAdapterStep as AdapterTraceStep<F, CTX>>::read(
+        <Rv32RdWriteAdapterStep as AdapterTraceStep<F>>::read(
             &self.inner,
             memory,
             instruction,
@@ -355,7 +355,7 @@ where
         let Instruction { f: enabled, .. } = instruction;
 
         if enabled.is_one() {
-            <Rv32RdWriteAdapterStep as AdapterTraceStep<F, CTX>>::write(
+            <Rv32RdWriteAdapterStep as AdapterTraceStep<F>>::write(
                 &self.inner,
                 memory,
                 instruction,
@@ -369,7 +369,7 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32CondRdWriteAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32CondRdWriteAdapterStep {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &Rv32RdWriteAdapterRecord =
@@ -380,7 +380,7 @@ impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32CondRdWriteAdapter
 
         if record.rd_ptr != u32::MAX {
             unsafe {
-                <Rv32RdWriteAdapterStep as AdapterTraceFiller<F, CTX>>::fill_trace_row(
+                <Rv32RdWriteAdapterStep as AdapterTraceFiller<F>>::fill_trace_row(
                     &self.inner,
                     mem_helper,
                     adapter_row

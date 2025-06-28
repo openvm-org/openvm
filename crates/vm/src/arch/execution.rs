@@ -16,12 +16,12 @@ use super::{
     execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
     Streams,
 };
-use crate::system::{
-    memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryController,
+use crate::{
+    arch::MatrixRecordArena,
+    system::{
+        memory::online::{GuestMemory, TracingMemory},
+        program::ProgramBus,
     },
-    program::ProgramBus,
 };
 
 pub type Result<T> = std::result::Result<T, ExecutionError>;
@@ -102,21 +102,23 @@ impl<F: PrimeField32, CTX> VmStateMut<'_, F, TracingMemory<F>, CTX> {
 }
 
 // TODO: old
-pub trait InstructionExecutor<F> {
+// TEMPORARY: same as TraceStep but without associated types
+pub trait InstructionExecutor<F, RA = MatrixRecordArena<F>> {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.
     fn execute(
         &mut self,
-        memory: &mut MemoryController<F>,
-        streams: &mut Streams<F>,
-        rng: &mut StdRng,
+        state: VmStateMut<F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>>;
+    ) -> Result<()>;
 
     /// For display purposes. From absolute opcode as `usize`, return the string name of the opcode
     /// if it is a supported opcode by the present executor.
     fn get_opcode_name(&self, opcode: usize) -> String;
+
+    // TEMP patch to keep Chip struct holding matrix but we will first create the chip with no
+    // matrix, keep matrix arena in CTX, then after execution move the matrices into Chip struct
+    fn give_me_my_arena(&mut self, arena: RA);
 }
 
 /// New trait for instruction execution
@@ -138,8 +140,6 @@ pub trait InsExecutorE1<F> {
     ) -> Result<()>
     where
         F: PrimeField32;
-
-    fn set_trace_height(&mut self, height: usize);
 }
 
 impl<F, C> InsExecutorE1<F> for RefCell<C>
@@ -170,27 +170,23 @@ where
         self.borrow_mut()
             .execute_metered(state, instruction, chip_index)
     }
-
-    fn set_trace_height(&mut self, height: usize) {
-        self.borrow_mut().set_trace_height(height);
-    }
 }
 
-impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
+impl<F, C: InstructionExecutor<F, RA>, RA> InstructionExecutor<F, RA> for RefCell<C> {
     fn execute(
         &mut self,
-        memory: &mut MemoryController<F>,
-        streams: &mut Streams<F>,
-        rng: &mut StdRng,
+        state: VmStateMut<F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-        prev_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>> {
-        self.borrow_mut()
-            .execute(memory, streams, rng, instruction, prev_state)
+    ) -> Result<()> {
+        self.borrow_mut().execute(state, instruction)
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
         self.borrow().get_opcode_name(opcode)
+    }
+
+    fn give_me_my_arena(&mut self, arena: RA) {
+        self.borrow_mut().give_me_my_arena(arena)
     }
 }
 

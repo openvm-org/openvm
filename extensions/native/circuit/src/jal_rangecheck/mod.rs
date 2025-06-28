@@ -158,7 +158,7 @@ pub struct JalRangeCheckStep {
     range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F, CTX> TraceStep<F, CTX> for JalRangeCheckStep
+impl<F> TraceStep<F> for JalRangeCheckStep
 where
     F: PrimeField32,
 {
@@ -181,9 +181,8 @@ where
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -197,7 +196,7 @@ where
                 || opcode == NativeRangeCheckOpcode::RANGE_CHECK.global_opcode()
         );
 
-        let record = arena.alloc(EmptyMultiRowLayout::default());
+        let record = state.ctx.alloc(EmptyMultiRowLayout::default());
 
         record.from_pc = *state.pc;
         record.from_timestamp = state.memory.timestamp;
@@ -239,7 +238,7 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for JalRangeCheckStep {
+impl<F: PrimeField32> TraceFiller<F> for JalRangeCheckStep {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut row_slice: &mut [F]) {
         let record: &mut JalRangeCheckRecord<F> =
             unsafe { get_record_from_slice(&mut row_slice, ()) };

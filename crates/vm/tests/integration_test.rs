@@ -5,6 +5,7 @@ use std::{
     sync::Arc,
 };
 
+use itertools::{zip_eq, Itertools};
 use openvm_circuit::{
     arch::{
         create_and_initialize_chip_complex,
@@ -760,7 +761,7 @@ fn test_hint_load_1() {
     let rng = StdRng::seed_from_u64(0);
 
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let vm = VirtualMachine::new(engine, test_native_config());
+    let mut vm = VirtualMachine::new(engine, test_native_config());
     let pk = vm.keygen();
     let vk = pk.get_vk();
     let mut segments = vm
@@ -775,13 +776,8 @@ fn test_hint_load_1() {
     assert_eq!(segments.len(), 1);
     let segment = segments.pop().unwrap();
 
-    let chip_complex = create_and_initialize_chip_complex(
-        &test_native_config(),
-        program,
-        None,
-        Some(&segment.trace_heights),
-    )
-    .unwrap();
+    let chip_complex =
+        create_and_initialize_chip_complex(&test_native_config(), program, None).unwrap();
 
     let mut executor = VmSegmentExecutor::<F, NativeConfig, _>::new(
         chip_complex,
@@ -790,7 +786,10 @@ fn test_hint_load_1() {
         TracegenExecutionControl,
     );
 
-    let ctx = TracegenCtx::new(Some(segment.num_insns));
+    let capacities = zip_eq(vk.main_widths(), segment.trace_heights)
+        .map(|(w, h)| (h as usize, w))
+        .collect_vec();
+    let ctx = TracegenCtx::new_with_capacity(&capacities, Some(segment.num_insns));
     let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), rng, ctx);
     executor.execute_from_state(&mut exec_state).unwrap();
 
@@ -840,13 +839,8 @@ fn test_hint_load_2() {
     assert_eq!(segments.len(), 1);
     let segment = segments.pop().unwrap();
 
-    let chip_complex = create_and_initialize_chip_complex(
-        &test_native_config(),
-        program,
-        None,
-        Some(&segment.trace_heights),
-    )
-    .unwrap();
+    let chip_complex =
+        create_and_initialize_chip_complex(&test_native_config(), program, None).unwrap();
 
     let mut executor = VmSegmentExecutor::<F, NativeConfig, _>::new(
         chip_complex,
@@ -855,7 +849,10 @@ fn test_hint_load_2() {
         TracegenExecutionControl,
     );
 
-    let ctx = TracegenCtx::new(Some(segment.num_insns));
+    let capacities = zip_eq(vk.main_widths(), segment.trace_heights)
+        .map(|(w, h)| (h as usize, w))
+        .collect_vec();
+    let ctx = TracegenCtx::new_with_capacity(&capacities, Some(segment.num_insns));
     let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), rng, ctx);
     executor.execute_from_state(&mut exec_state).unwrap();
 

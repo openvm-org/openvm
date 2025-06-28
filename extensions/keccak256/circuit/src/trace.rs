@@ -128,7 +128,7 @@ impl SizedRecord<KeccakVmRecordLayout> for KeccakVmRecordMut<'_> {
     }
 }
 
-impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
+impl<F: PrimeField32> TraceStep<F> for KeccakVmStep {
     type RecordLayout = KeccakVmRecordLayout;
     type RecordMut<'a> = KeccakVmRecordMut<'a>;
 
@@ -138,9 +138,8 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -163,7 +162,9 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
 
         let num_reads = len.div_ceil(KECCAK_WORD_SIZE);
         let num_blocks = num_keccak_f(len);
-        let record = arena.alloc(KeccakVmRecordLayout::new(KeccakVmMetadata { len }));
+        let record = state
+            .ctx
+            .alloc(KeccakVmRecordLayout::new(KeccakVmMetadata { len }));
 
         record.inner.from_pc = *state.pc;
         record.inner.timestamp = state.memory.timestamp();
@@ -239,7 +240,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
     }
 }
 
-impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for KeccakVmStep {
+impl<F: PrimeField32> TraceFiller<F> for KeccakVmStep {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,

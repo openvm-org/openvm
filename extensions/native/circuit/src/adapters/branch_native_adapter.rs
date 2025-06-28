@@ -138,7 +138,7 @@ pub struct BranchNativeAdapterRecord<F> {
 #[derive(derive_new::new)]
 pub struct BranchNativeAdapterStep;
 
-impl<F, CTX> AdapterTraceStep<F, CTX> for BranchNativeAdapterStep
+impl<F> AdapterTraceStep<F> for BranchNativeAdapterStep
 where
     F: PrimeField32,
 {
@@ -191,7 +191,7 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for BranchNativeAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for BranchNativeAdapterStep {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &BranchNativeAdapterRecord<F> =

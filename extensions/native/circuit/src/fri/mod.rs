@@ -694,7 +694,7 @@ impl<F: PrimeField32> FriReducedOpeningStep<F> {
     }
 }
 
-impl<F, CTX> TraceStep<F, CTX> for FriReducedOpeningStep<F>
+impl<F> TraceStep<F> for FriReducedOpeningStep<F>
 where
     F: PrimeField32,
 {
@@ -708,9 +708,8 @@ where
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -736,7 +735,7 @@ where
         let metadata = FriReducedOpeningMetadata {
             length: length as usize,
         };
-        let record = arena.alloc(MultiRowLayout::new(metadata));
+        let record = state.ctx.alloc(MultiRowLayout::new(metadata));
 
         record.common.from_pc = *state.pc;
         record.common.timestamp = timestamp_start;
@@ -862,7 +861,7 @@ where
     }
 }
 
-impl<F, CTX> TraceFiller<F, CTX> for FriReducedOpeningStep<F>
+impl<F> TraceFiller<F> for FriReducedOpeningStep<F>
 where
     F: PrimeField32,
 {

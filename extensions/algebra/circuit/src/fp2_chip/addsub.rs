@@ -226,7 +226,7 @@ mod tests {
             bitwise_chip.clone(),
             tester.range_checker(),
         );
-        chip.set_trace_height(MAX_INS_CAPACITY);
+        tester.set_arena_capacity(&chip, MAX_INS_CAPACITY);
 
         let num_ops = 10;
         for _ in 0..num_ops {

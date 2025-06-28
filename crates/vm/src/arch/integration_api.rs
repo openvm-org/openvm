@@ -21,16 +21,18 @@ use openvm_stark_backend::{
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     AirRef, Chip, ChipUsageGetter,
 };
-use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 
 use super::{
     execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-    ExecutionState, InsExecutorE1, InstructionExecutor, Result, Streams, VmStateMut,
+    InsExecutorE1, Result, VmStateMut,
 };
-use crate::system::memory::{
-    online::{GuestMemory, TracingMemory},
-    MemoryAuxColsFactory, MemoryController, SharedMemoryHelper,
+use crate::{
+    arch::InstructionExecutor,
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory, SharedMemoryHelper,
+    },
 };
 
 /// The interface between primitive AIR and machine adapter AIR.
@@ -115,19 +117,19 @@ pub trait RecordArena<'a, Layout, RecordMut> {
     fn alloc(&'a mut self, layout: Layout) -> RecordMut;
 }
 
-/// Interface for trace generation of a single instruction.The trace is provided as a mutable
+/// Interface for trace generation of a single instruction. The trace is provided as a mutable
 /// buffer during both instruction execution and trace generation.
 /// It is expected that no additional memory allocation is necessary and the trace buffer
 /// is sufficient, with possible overwriting.
-pub trait TraceStep<F, CTX> {
+pub trait TraceStep<F> {
     type RecordLayout;
     type RecordMut<'a>;
 
+    /// The context in `state` is expected to be the record arena for this specific step.
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>;
@@ -152,7 +154,7 @@ pub trait RowMajorMatrixArena<F> {
 }
 
 // TODO[jpw]: revisit if this trait makes sense
-pub trait TraceFiller<F, CTX> {
+pub trait TraceFiller<F> {
     /// Populates `trace`. This function will always be called after
     /// [`TraceStep::execute`], so the `trace` should already contain the records necessary to fill
     /// in the rest of it.
@@ -277,7 +279,7 @@ impl<F, AS> Default for AdapterCoreEmptyMetadata<F, AS> {
 
 impl<F, AS> AdapterCoreMetadata for AdapterCoreEmptyMetadata<F, AS>
 where
-    AS: AdapterTraceStep<F, ()>,
+    AS: AdapterTraceStep<F>,
 {
     #[inline(always)]
     fn get_adapter_width() -> usize {
@@ -375,9 +377,9 @@ where
 }
 
 // TEMP[jpw]: buffer should be inside CTX
+#[derive(Default)]
 pub struct MatrixRecordArena<F> {
     pub trace_buffer: Vec<F>,
-    // TODO(ayush): width should be a constant?
     pub width: usize,
     pub trace_offset: usize,
 }
@@ -828,39 +830,26 @@ where
     }
 }
 
-impl<F, AIR, STEP, RA> InstructionExecutor<F> for NewVmChipWrapper<F, AIR, STEP, RA>
+impl<F, AIR, STEP, RA> InstructionExecutor<F, RA> for NewVmChipWrapper<F, AIR, STEP, RA>
 where
     F: PrimeField32,
-    STEP: TraceStep<F, ()> // TODO: CTX?
-        + StepExecutorE1<F>,
+    STEP: TraceStep<F> + StepExecutorE1<F>,
     for<'buf> RA: RecordArena<'buf, STEP::RecordLayout, STEP::RecordMut<'buf>>,
 {
     fn execute(
         &mut self,
-        memory: &mut MemoryController<F>,
-        streams: &mut Streams<F>,
-        rng: &mut StdRng,
+        state: VmStateMut<F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>> {
-        let mut pc = from_state.pc;
-        let state = VmStateMut {
-            pc: &mut pc,
-            memory: &mut memory.memory,
-            streams,
-            rng,
-            ctx: &mut (),
-        };
-        self.step.execute(state, instruction, &mut self.arena)?;
-
-        Ok(ExecutionState {
-            pc,
-            timestamp: memory.memory.timestamp,
-        })
+    ) -> Result<()> {
+        self.step.execute(state, instruction)
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
         self.step.get_opcode_name(opcode)
+    }
+
+    fn give_me_my_arena(&mut self, arena: RA) {
+        self.arena = arena;
     }
 }
 
@@ -872,7 +861,7 @@ impl<SC, AIR, STEP, RA> Chip<SC> for NewVmChipWrapper<Val<SC>, AIR, STEP, RA>
 where
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
-    STEP: TraceStep<Val<SC>, ()> + TraceFiller<Val<SC>, ()> + Send + Sync,
+    STEP: TraceStep<Val<SC>> + TraceFiller<Val<SC>> + Send + Sync,
     AIR: Clone + AnyRap<SC> + 'static,
     RA: RowMajorMatrixArena<Val<SC>>,
 {
@@ -917,7 +906,7 @@ where
 /// [TraceStep]. Note that this is only a helper trait when the same interface of state access
 /// is reused or shared by multiple implementations. It is not required to implement this trait if
 /// it is easier to implement the [TraceStep] trait directly without this trait.
-pub trait AdapterTraceStep<F, CTX> {
+pub trait AdapterTraceStep<F> {
     const WIDTH: usize;
     type ReadData;
     type WriteData;
@@ -948,7 +937,7 @@ pub trait AdapterTraceStep<F, CTX> {
 
 // NOTE[jpw]: cannot reuse `TraceSubRowGenerator` trait because we need associated constant
 // `WIDTH`.
-pub trait AdapterTraceFiller<F, CTX>: AdapterTraceStep<F, CTX> {
+pub trait AdapterTraceFiller<F>: AdapterTraceStep<F> {
     /// Post-execution filling of rest of adapter row.
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]);
 }
@@ -1022,10 +1011,6 @@ where
         F: PrimeField32,
     {
         self.step.execute_metered(state, instruction, chip_index)
-    }
-
-    fn set_trace_height(&mut self, height: usize) {
-        self.set_trace_buffer_height(height);
     }
 }
 

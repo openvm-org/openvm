@@ -67,7 +67,7 @@ where
         log_blowup += 1;
     }
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(log_blowup));
-    let vm = VirtualMachine::new(engine, config);
+    let mut vm = VirtualMachine::new(engine, config);
     let pk = vm.keygen();
     let vk = pk.get_vk();
     let exe = exe.into();
@@ -81,6 +81,7 @@ where
             &vk.num_interactions(),
         )
         .unwrap();
+    vm.set_main_widths(vk.main_widths());
     let mut result = vm.execute_and_generate(exe, input, &segments).unwrap();
     let final_memory = Option::take(&mut result.final_memory);
     let global_airs = vm.config().create_chip_complex().unwrap().airs();

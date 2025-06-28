@@ -138,7 +138,7 @@ impl SizedRecord<Sha256VmRecordLayout> for Sha256VmRecordMut<'_> {
     }
 }
 
-impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
+impl<F: PrimeField32> TraceStep<F> for Sha256VmStep {
     type RecordLayout = Sha256VmRecordLayout;
     type RecordMut<'a> = Sha256VmRecordMut<'a>;
 
@@ -148,9 +148,8 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
     ) -> Result<()>
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
@@ -172,7 +171,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
         let len = read_rv32_register(state.memory.data(), c.as_canonical_u32());
 
         let num_blocks = get_sha256_num_blocks(len);
-        let record = arena.alloc(MultiRowLayout {
+        let record = state.ctx.alloc(MultiRowLayout {
             metadata: Sha256VmMetadata { num_blocks },
         });
 
@@ -243,7 +242,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for Sha256VmStep {
     }
 }
 
-impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Sha256VmStep {
+impl<F: PrimeField32> TraceFiller<F> for Sha256VmStep {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
