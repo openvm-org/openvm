@@ -377,6 +377,7 @@ where
 }
 
 // TEMP[jpw]: buffer should be inside CTX
+#[derive(Default)]
 pub struct MatrixRecordArena<F> {
     pub trace_buffer: Vec<F>,
     pub width: usize,
@@ -1010,10 +1011,6 @@ where
         F: PrimeField32,
     {
         self.step.execute_metered(state, instruction, chip_index)
-    }
-
-    fn set_trace_height(&mut self, height: usize) {
-        self.set_trace_buffer_height(height);
     }
 }
 

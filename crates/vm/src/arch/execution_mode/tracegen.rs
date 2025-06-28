@@ -1,5 +1,6 @@
+use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_instructions::instruction::Instruction;
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 
 use crate::{
     arch::{
@@ -20,10 +21,13 @@ impl<F> TracegenCtx<F>
 where
     F: PrimeField32,
 {
+    /// `capacities` is list of `(height, width)` dimensions for each matrix arena.
     pub fn new_with_capacity(capacities: &[(usize, usize)], instret_end: Option<u64>) -> Self {
         let arenas = capacities
             .iter()
-            .map(|&(height, width)| MatrixRecordArena::with_capacity(height, width))
+            .map(|&(height, width)| {
+                MatrixRecordArena::with_capacity(next_power_of_two_or_zero(height), width)
+            })
             .collect();
 
         Self {
@@ -119,6 +123,11 @@ where
         {
             let memory = &mut chip_complex.base.memory_controller.memory;
             let arena = &mut state.ctx.arenas[air_id];
+            println!(
+                "executor: {}, arena size={}",
+                executor.air_name(),
+                arena.trace_buffer.len()
+            );
             let state_mut = VmStateMut {
                 pc: &mut state.pc,
                 memory,

@@ -34,10 +34,11 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InstructionExecutor<F> },
             );
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<F, RA> for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<F> for #name #ty_generics #where_clause {
                     fn execute(
                         &mut self,
-                        state: ::openvm_circuit::arch::execution::VmStateMut<F, ::openvm_circuit::system::memory::online::TracingMemory<F>, RA>,
+                        state: ::openvm_circuit::arch::VmStateMut<F, ::openvm_circuit::system::memory::online::TracingMemory<F>,
+                        ::openvm_circuit::arch::MatrixRecordArena<F>>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                     ) -> ::openvm_circuit::arch::Result<()> {
                         self.0.execute(state, instruction)
@@ -47,7 +48,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                         self.0.get_opcode_name(opcode)
                     }
 
-                    fn give_me_my_arena(&mut self, arena: RA) {
+                    fn give_me_my_arena(&mut self, arena: ::openvm_circuit::arch::MatrixRecordArena<F>) {
                         self.0.give_me_my_arena(arena);
                     }
                 }
@@ -97,7 +98,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic> for #name #ty_generics {
                     fn execute(
                         &mut self,
-                        state: ::openvm_circuit::arch::execution::VmStateMut<#field_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory<#field_ty_generic>, ::openvm_circuit::arch::MatrixRecordArena<#field_ty_generic>>,
+                        state: ::openvm_circuit::arch::VmStateMut<#field_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory<#field_ty_generic>, ::openvm_circuit::arch::MatrixRecordArena<#field_ty_generic>>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#field_ty_generic>,
                     ) -> ::openvm_circuit::arch::Result<()> {
                         match self {
@@ -173,10 +174,6 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     ) -> ::openvm_circuit::arch::Result<()> {
                         self.0.execute_metered(state, instruction, chip_index)
                     }
-
-                    fn set_trace_height(&mut self, height: usize) {
-                        self.0.set_trace_buffer_height(height);
-                    }
                 }
             }
             .into()
@@ -217,12 +214,6 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_metered(x, state, instruction, chip_index)
                 }
             }).collect::<Vec<_>>();
-            let set_trace_height_arms = variants.iter().map(|(variant_name, field)| {
-                let field_ty = &field.ty;
-                quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::set_trace_height(x, height)
-                }
-            }).collect::<Vec<_>>();
 
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic> for #name #ty_generics {
@@ -247,15 +238,6 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     ) -> ::openvm_circuit::arch::Result<()> {
                         match self {
                             #(#execute_metered_arms,)*
-                        }
-                    }
-
-                    fn set_trace_height(
-                        &mut self,
-                        height: usize,
-                    ) {
-                        match self {
-                            #(#set_trace_height_arms,)*
                         }
                     }
                 }

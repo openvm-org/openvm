@@ -265,7 +265,7 @@ mod tests {
             bitwise_chip.clone(),
             tester.range_checker(),
         );
-        chip.set_trace_height(MAX_INS_CAPACITY);
+        tester.set_arena_capacity(&chip, MAX_INS_CAPACITY);
 
         assert_eq!(
             chip.expr().builder.num_variables,

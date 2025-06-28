@@ -52,7 +52,7 @@ fn create_test_chip(
         Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_chip.clone()),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+    tester.set_arena_capacity(&chip, MAX_INS_CAPACITY);
 
     (chip, bitwise_chip)
 }
@@ -95,7 +95,7 @@ fn rand_auipc_test() {
     for _ in 0..num_tests {
         set_and_execute(&mut tester, &mut chip, &mut rng, AUIPC, None, None);
     }
-
+    tester.give_away_arena(&mut chip);
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
     tester.simple_test().expect("Verification failed");
 }
@@ -312,30 +312,31 @@ fn dense_record_arena_test() {
     let mut tester = VmChipTestBuilder::default();
     let (mut sparse_chip, bitwise_chip) = create_test_chip(&tester);
 
-    {
-        let mut dense_chip = create_test_chip_dense(&mut tester);
+    todo!("get dense arena working");
+    // {
+    //     let mut dense_chip = create_test_chip_dense(&mut tester);
 
-        let num_ops: usize = 100;
-        for _ in 0..num_ops {
-            set_and_execute(&mut tester, &mut dense_chip, &mut rng, AUIPC, None, None);
-        }
+    //     let num_ops: usize = 100;
+    //     for _ in 0..num_ops {
+    //         set_and_execute(&mut tester, &mut dense_chip, &mut rng, AUIPC, None, None);
+    //     }
 
-        type Record<'a> = (
-            &'a mut Rv32RdWriteAdapterRecord,
-            &'a mut Rv32AuipcCoreRecord,
-        );
+    //     type Record<'a> = (
+    //         &'a mut Rv32RdWriteAdapterRecord,
+    //         &'a mut Rv32AuipcCoreRecord,
+    //     );
 
-        let mut record_interpreter = dense_chip.arena.get_record_seeker::<Record, _>();
-        record_interpreter.transfer_to_matrix_arena(
-            &mut sparse_chip.arena,
-            EmptyAdapterCoreLayout::<F, Rv32RdWriteAdapterStep>::new(),
-        );
-    }
+    //     let mut record_interpreter = dense_chip.arena.get_record_seeker::<Record, _>();
+    //     record_interpreter.transfer_to_matrix_arena(
+    //         &mut sparse_chip.arena,
+    //         EmptyAdapterCoreLayout::<F, Rv32RdWriteAdapterStep>::new(),
+    //     );
+    // }
 
-    let tester = tester
-        .build()
-        .load(sparse_chip)
-        .load(bitwise_chip)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
+    // let tester = tester
+    //     .build()
+    //     .load(sparse_chip)
+    //     .load(bitwise_chip)
+    //     .finalize();
+    // tester.simple_test().expect("Verification failed");
 }

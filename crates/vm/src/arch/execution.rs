@@ -140,8 +140,6 @@ pub trait InsExecutorE1<F> {
     ) -> Result<()>
     where
         F: PrimeField32;
-
-    fn set_trace_height(&mut self, height: usize);
 }
 
 impl<F, C> InsExecutorE1<F> for RefCell<C>
@@ -171,10 +169,6 @@ where
     {
         self.borrow_mut()
             .execute_metered(state, instruction, chip_index)
-    }
-
-    fn set_trace_height(&mut self, height: usize) {
-        self.borrow_mut().set_trace_height(height);
     }
 }
 

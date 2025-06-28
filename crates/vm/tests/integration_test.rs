@@ -775,13 +775,8 @@ fn test_hint_load_1() {
     assert_eq!(segments.len(), 1);
     let segment = segments.pop().unwrap();
 
-    let chip_complex = create_and_initialize_chip_complex(
-        &test_native_config(),
-        program,
-        None,
-        Some(&segment.trace_heights),
-    )
-    .unwrap();
+    let chip_complex =
+        create_and_initialize_chip_complex(&test_native_config(), program, None).unwrap();
 
     let mut executor = VmSegmentExecutor::<F, NativeConfig, _>::new(
         chip_complex,
@@ -791,7 +786,7 @@ fn test_hint_load_1() {
     );
 
     let capacities = zip_eq(vk.main_widths(), segment.trace_heights)
-        .map(|(w, h)| (w, h as usize))
+        .map(|(w, h)| (h as usize, w))
         .collect_vec();
     let ctx = TracegenCtx::new_with_capacity(&capacities, Some(segment.num_insns));
     let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), rng, ctx);
@@ -843,13 +838,8 @@ fn test_hint_load_2() {
     assert_eq!(segments.len(), 1);
     let segment = segments.pop().unwrap();
 
-    let chip_complex = create_and_initialize_chip_complex(
-        &test_native_config(),
-        program,
-        None,
-        Some(&segment.trace_heights),
-    )
-    .unwrap();
+    let chip_complex =
+        create_and_initialize_chip_complex(&test_native_config(), program, None).unwrap();
 
     let mut executor = VmSegmentExecutor::<F, NativeConfig, _>::new(
         chip_complex,
@@ -859,7 +849,7 @@ fn test_hint_load_2() {
     );
 
     let capacities = zip_eq(vk.main_widths(), segment.trace_heights)
-        .map(|(w, h)| (w, h as usize))
+        .map(|(w, h)| (h as usize, w))
         .collect_vec();
     let ctx = TracegenCtx::new_with_capacity(&capacities, Some(segment.num_insns));
     let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), rng, ctx);

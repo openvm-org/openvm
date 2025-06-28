@@ -1,5 +1,6 @@
 use std::{borrow::Borrow, iter::zip};
 
+use dashmap::DashMap;
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
@@ -13,7 +14,7 @@ use openvm_stark_backend::{
     p3_matrix::dense::{DenseMatrix, RowMajorMatrix},
     prover::types::AirProofInput,
     verifier::VerificationError,
-    AirRef, Chip,
+    AirRef, Chip, ChipUsageGetter,
 };
 use openvm_stark_sdk::{
     config::{
@@ -30,7 +31,9 @@ use tracing::Level;
 
 use super::{ExecutionBridge, ExecutionBus, InstructionExecutor, SystemPort};
 use crate::{
-    arch::{ExecutionState, MemoryConfig, Streams},
+    arch::{
+        ExecutionState, MatrixRecordArena, MemoryConfig, RowMajorMatrixArena, Streams, VmStateMut,
+    },
     system::{
         memory::{
             interface::MemoryInterface,
@@ -69,6 +72,8 @@ pub struct VmChipTestBuilder<F: PrimeField32> {
     internal_rng: StdRng,
     default_register: usize,
     default_pointer: usize,
+
+    arenas: DashMap<String, MatrixRecordArena<F>>,
 }
 
 impl<F: PrimeField32> VmChipTestBuilder<F> {
@@ -90,6 +95,25 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
             internal_rng,
             default_register: 0,
             default_pointer: 0,
+            arenas: DashMap::new(),
+        }
+    }
+
+    pub fn set_arena_capacity<C: ChipUsageGetter>(&self, chip: &C, height: usize) {
+        let type_name = std::any::type_name::<C>();
+        self.arenas
+            .entry(type_name.to_string())
+            .and_modify(|arena| arena.set_capacity(height))
+            .or_insert_with(|| {
+                let width = chip.trace_width();
+                MatrixRecordArena::with_capacity(height, width)
+            });
+    }
+
+    pub fn give_away_arena<E: InstructionExecutor<F>>(&self, executor: &mut E) {
+        let type_name = std::any::type_name::<E>();
+        if let Some((_, arena)) = self.arenas.remove(type_name) {
+            executor.give_me_my_arena(arena);
         }
     }
 
@@ -113,17 +137,28 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
             pc: initial_pc,
             timestamp: self.memory.controller.timestamp(),
         };
-        tracing::debug!(?initial_state.timestamp);
+        tracing::debug!("initial_timestamp={}", self.memory.controller.timestamp());
 
-        let final_state = executor
-            .execute(
-                &mut self.memory.controller,
-                &mut self.streams,
-                &mut self.rng,
-                instruction,
-                initial_state,
-            )
+        let mut pc = initial_pc;
+        let type_name = std::any::type_name::<E>();
+        let mut arena = self
+            .arenas
+            .get_mut(type_name)
+            .unwrap_or_else(|| panic!("Must set capacity of arena for {type_name} first",));
+        let state_mut = VmStateMut {
+            pc: &mut pc,
+            memory: &mut self.memory.controller.memory,
+            streams: &mut self.streams,
+            rng: &mut self.rng,
+            ctx: &mut *arena,
+        };
+        executor
+            .execute(state_mut, instruction)
             .expect("Expected the execution not to fail");
+        let final_state = ExecutionState {
+            pc,
+            timestamp: self.memory.controller.timestamp(),
+        };
 
         self.program.execute(instruction, &initial_state);
         self.execution.execute(initial_state, final_state);
@@ -309,6 +344,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
             internal_rng: StdRng::seed_from_u64(0),
             default_register: 0,
             default_pointer: 0,
+            arenas: Default::default(),
         }
     }
 
@@ -332,6 +368,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
             internal_rng: StdRng::seed_from_u64(0),
             default_register: 0,
             default_pointer: 0,
+            arenas: Default::default(),
         }
     }
 }
@@ -362,7 +399,7 @@ impl<SC: StarkGenericConfig> VmChipTester<SC>
 where
     Val<SC>: PrimeField32,
 {
-    pub fn load<C: Chip<SC>>(mut self, chip: C) -> Self {
+    pub fn load<C: Chip<SC> + 'static>(mut self, chip: C) -> Self {
         if chip.current_trace_height() > 0 {
             let air = chip.air();
             let air_proof_input = chip.generate_air_proof_input();

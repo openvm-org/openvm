@@ -184,14 +184,13 @@ where
         &self,
         state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
-        _chip_index: usize,
+        chip_index: usize,
     ) -> Result<(), ExecutionError> {
         self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += 1;
 
         Ok(())
     }
-
-    fn set_trace_height(&mut self, _height: usize) {}
 }
 
 impl<F, RA> InstructionExecutor<F, RA> for PhantomChip<F, RA>
