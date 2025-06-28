@@ -1,13 +1,11 @@
-use std::marker::PhantomData;
-
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        execution_control::ExecutionControl, ExecutionError, ExecutionState, InstructionExecutor,
-        MatrixRecordArena, RowMajorMatrixArena, TraceStep, VmChipComplex, VmConfig, VmSegmentState,
-        VmStateMut,
+        execution_control::ExecutionControl, ChipId, ExecutionError, ExecutionState,
+        InstructionExecutor, MatrixRecordArena, RowMajorMatrixArena, VmChipComplex, VmConfig,
+        VmSegmentState, VmStateMut, PUBLIC_VALUES_AIR_ID,
     },
     system::memory::INITIAL_TIMESTAMP,
 };
@@ -35,13 +33,8 @@ where
     }
 }
 
+#[derive(Default)]
 pub struct TracegenExecutionControl;
-
-impl Default for TracegenExecutionControl {
-    fn default() -> Self {
-        Self {}
-    }
-}
 
 impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControl
 where
@@ -70,6 +63,28 @@ where
         state: &mut VmSegmentState<F, Self::Ctx>,
         chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
+        let offset = if chip_complex.config().has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
+        } else {
+            PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
+        };
+        let mut executor_id_to_air_id = vec![0; chip_complex.inventory.executors().len()];
+        for (insertion_id, chip_id) in chip_complex
+            .inventory
+            .insertion_order
+            .iter()
+            .rev()
+            .enumerate()
+        {
+            match chip_id {
+                ChipId::Executor(exec_id) => {
+                    executor_id_to_air_id[*exec_id] = insertion_id + offset
+                }
+                _ => {}
+            }
+        }
+        chip_complex.inventory.executor_id_to_air_id = executor_id_to_air_id;
+
         chip_complex
             .connector_chip_mut()
             .begin(ExecutionState::new(state.pc, INITIAL_TIMESTAMP + 1));
@@ -99,20 +114,19 @@ where
     {
         let &Instruction { opcode, .. } = instruction;
 
-        if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
-            let memory = &mut chip_complex.base.memory_controller;
-            let from_state = ExecutionState {
-                pc: state.pc,
-                timestamp: memory.timestamp(),
-            };
-            let to_state = executor.execute(
+        if let Some((executor, air_id)) =
+            chip_complex.inventory.get_mut_executor_with_air_id(&opcode)
+        {
+            let memory = &mut chip_complex.base.memory_controller.memory;
+            let arena = &mut state.ctx.arenas[air_id];
+            let state_mut = VmStateMut {
+                pc: &mut state.pc,
                 memory,
-                &mut state.streams,
-                &mut state.rng,
-                instruction,
-                from_state,
-            )?;
-            state.pc = to_state.pc;
+                streams: &mut state.streams,
+                rng: &mut state.rng,
+                ctx: arena,
+            };
+            executor.execute(state_mut, instruction)?;
         } else {
             return Err(ExecutionError::DisabledOperation {
                 pc: state.pc,

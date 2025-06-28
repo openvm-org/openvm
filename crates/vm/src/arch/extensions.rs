@@ -204,6 +204,8 @@ pub struct VmInventory<E, P> {
     /// Order of insertion. The reverse of this will be the order the chips are destroyed
     /// to generate trace.
     pub insertion_order: Vec<ChipId>,
+    /// TEMP: just shoving this somewhere
+    pub executor_id_to_air_id: Vec<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -248,6 +250,7 @@ impl<E, P> VmInventory<E, P> {
             executors: Vec::new(),
             periphery: Vec::new(),
             insertion_order: Vec::new(),
+            executor_id_to_air_id: Vec::new(),
         }
     }
 
@@ -261,6 +264,7 @@ impl<E, P> VmInventory<E, P> {
             executors: self.executors.into_iter().map(|e| e.into()).collect(),
             periphery: self.periphery.into_iter().map(|p| p.into()).collect(),
             insertion_order: self.insertion_order,
+            executor_id_to_air_id: self.executor_id_to_air_id,
         }
     }
 
@@ -329,22 +333,12 @@ impl<E, P> VmInventory<E, P> {
         self.executors.get_mut(*id)
     }
 
-    pub fn get_mut_executor_with_index(&mut self, opcode: &VmOpcode) -> Option<(&mut E, usize)> {
+    pub fn get_mut_executor_with_air_id(&mut self, opcode: &VmOpcode) -> Option<(&mut E, usize)> {
         let id = *self.instruction_lookup.get(opcode)?;
 
         self.executors.get_mut(id).map(|executor| {
-            // TODO(ayush): cache this somewhere
-            let insertion_id = self
-                .insertion_order
-                .iter()
-                .rev()
-                .position(|chip_id| match chip_id {
-                    ChipId::Executor(exec_id) => *exec_id == id,
-                    _ => false,
-                })
-                .unwrap();
-
-            (executor, insertion_id)
+            let air_id = self.executor_id_to_air_id[id];
+            (executor, air_id)
         })
     }
 

@@ -8,8 +8,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 pub use segment_ctx::Segment;
 
 use crate::arch::{
-    execution_control::ExecutionControl, ExecutionError, InsExecutorE1, VmChipComplex, VmConfig,
-    VmSegmentState, VmStateMut, PUBLIC_VALUES_AIR_ID,
+    execution_control::ExecutionControl, ChipId, ExecutionError, InsExecutorE1, VmChipComplex,
+    VmConfig, VmSegmentState, VmStateMut, PUBLIC_VALUES_AIR_ID,
 };
 
 #[derive(Default)]
@@ -38,8 +38,30 @@ where
     fn on_start(
         &self,
         _state: &mut VmSegmentState<F, Self::Ctx>,
-        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) {
+        // TODO[jpw]: delete it all
+        let offset = if chip_complex.config().has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
+        } else {
+            PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
+        };
+        let mut executor_id_to_air_id = vec![0; chip_complex.inventory.executors().len()];
+        for (insertion_id, chip_id) in chip_complex
+            .inventory
+            .insertion_order
+            .iter()
+            .rev()
+            .enumerate()
+        {
+            match chip_id {
+                ChipId::Executor(exec_id) => {
+                    executor_id_to_air_id[*exec_id] = insertion_id + offset
+                }
+                _ => {}
+            }
+        }
+        chip_complex.inventory.executor_id_to_air_id = executor_id_to_air_id;
     }
 
     fn on_suspend_or_terminate(
@@ -67,13 +89,10 @@ where
         // Check if segmentation needs to happen
         state.ctx.check_and_segment(state.instret);
 
-        let offset = if chip_complex.config().has_public_values_chip() {
-            PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
-        } else {
-            PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
-        };
         let &Instruction { opcode, .. } = instruction;
-        if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode) {
+        if let Some((executor, air_id)) =
+            chip_complex.inventory.get_mut_executor_with_air_id(&opcode)
+        {
             let mut vm_state = VmStateMut {
                 pc: &mut state.pc,
                 memory: state.memory.as_mut().unwrap(),
@@ -81,7 +100,7 @@ where
                 rng: &mut state.rng,
                 ctx: &mut state.ctx,
             };
-            executor.execute_metered(&mut vm_state, instruction, offset + i)?;
+            executor.execute_metered(&mut vm_state, instruction, air_id)?;
         } else {
             return Err(ExecutionError::DisabledOperation {
                 pc: state.pc,

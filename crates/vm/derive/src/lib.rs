@@ -34,20 +34,21 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InstructionExecutor<F> },
             );
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<F> for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<F, RA> for #name #ty_generics #where_clause {
                     fn execute(
                         &mut self,
-                        memory: &mut ::openvm_circuit::system::memory::MemoryController<F>,
-                        streams: &mut ::openvm_circuit::arch::Streams<F>,
-                        rng: &mut ::rand::rngs::StdRng,
+                        state: ::openvm_circuit::arch::execution::VmStateMut<F, ::openvm_circuit::system::memory::online::TracingMemory<F>, RA>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
-                        from_state: ::openvm_circuit::arch::ExecutionState<u32>,
-                    ) -> ::openvm_circuit::arch::Result<::openvm_circuit::arch::ExecutionState<u32>> {
-                        self.0.execute(memory, streams, rng, instruction, from_state)
+                    ) -> ::openvm_circuit::arch::Result<()> {
+                        self.0.execute(state, instruction)
                     }
 
                     fn get_opcode_name(&self, opcode: usize) -> String {
                         self.0.get_opcode_name(opcode)
+                    }
+
+                    fn give_me_my_arena(&mut self, arena: RA) {
+                        self.0.give_me_my_arena(arena);
                     }
                 }
             }
@@ -66,7 +67,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                     (variant_name, field)
                 })
                 .collect::<Vec<_>>();
-            let first_ty_generic = ast
+            let field_ty_generic = ast
                 .generics
                 .params
                 .first()
@@ -77,28 +78,28 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 .expect("First generic must be type for Field");
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
             // crate. Assume F is already generic of the field.
-            let (execute_arms, get_opcode_name_arms): (Vec<_>, Vec<_>) =
+            let (execute_arms, get_opcode_name_arms, give_me_my_arena_arms): (Vec<_>, Vec<_>, Vec<_>) =
                 multiunzip(variants.iter().map(|(variant_name, field)| {
                     let field_ty = &field.ty;
                     let execute_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#first_ty_generic>>::execute(x, memory, streams, rng, instruction, from_state)
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic>>::execute(x, state, instruction)
                     };
                     let get_opcode_name_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#first_ty_generic>>::get_opcode_name(x, opcode)
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic>>::get_opcode_name(x, opcode)
+                    };
+                    let give_me_my_arena_arm = quote! {
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic>>::give_me_my_arena(x, arena)
                     };
 
-                    (execute_arm, get_opcode_name_arm)
+                    (execute_arm, get_opcode_name_arm, give_me_my_arena_arm)
                 }));
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<#first_ty_generic> for #name #ty_generics {
+                impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic> for #name #ty_generics {
                     fn execute(
                         &mut self,
-                        memory: &mut ::openvm_circuit::system::memory::MemoryController<#first_ty_generic>,
-                        streams: &mut ::openvm_circuit::arch::Streams<F>,
-                        rng: &mut ::rand::rngs::StdRng,
-                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
-                        from_state: ::openvm_circuit::arch::ExecutionState<u32>,
-                    ) -> ::openvm_circuit::arch::Result<::openvm_circuit::arch::ExecutionState<u32>> {
+                        state: ::openvm_circuit::arch::execution::VmStateMut<#field_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory<#field_ty_generic>, ::openvm_circuit::arch::MatrixRecordArena<#field_ty_generic>>,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#field_ty_generic>,
+                    ) -> ::openvm_circuit::arch::Result<()> {
                         match self {
                             #(#execute_arms,)*
                         }
@@ -109,6 +110,13 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                             #(#get_opcode_name_arms,)*
                         }
                     }
+
+                    fn give_me_my_arena(&mut self, arena: ::openvm_circuit::arch::MatrixRecordArena<#field_ty_generic>) {
+                        match self {
+                            #(#give_me_my_arena_arms,)*
+                        }
+                    }
+
                 }
             }
             .into()

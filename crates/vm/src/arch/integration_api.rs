@@ -21,7 +21,6 @@ use openvm_stark_backend::{
     rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
     AirRef, Chip, ChipUsageGetter,
 };
-use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -29,10 +28,10 @@ use super::{
     InsExecutorE1, Result, VmStateMut,
 };
 use crate::{
-    arch::{ExecutionState, InstructionExecutor, Streams},
+    arch::InstructionExecutor,
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory, MemoryController, SharedMemoryHelper,
+        MemoryAuxColsFactory, SharedMemoryHelper,
     },
 };
 
@@ -380,7 +379,6 @@ where
 // TEMP[jpw]: buffer should be inside CTX
 pub struct MatrixRecordArena<F> {
     pub trace_buffer: Vec<F>,
-    // TODO(ayush): width should be a constant?
     pub width: usize,
     pub trace_offset: usize,
 }
@@ -831,7 +829,7 @@ where
     }
 }
 
-impl<F, AIR, STEP, RA> InstructionExecutor<F> for NewVmChipWrapper<F, AIR, STEP, RA>
+impl<F, AIR, STEP, RA> InstructionExecutor<F, RA> for NewVmChipWrapper<F, AIR, STEP, RA>
 where
     F: PrimeField32,
     STEP: TraceStep<F> + StepExecutorE1<F>,
@@ -839,30 +837,18 @@ where
 {
     fn execute(
         &mut self,
-        memory: &mut MemoryController<F>,
-        streams: &mut Streams<F>,
-        rng: &mut StdRng,
+        state: VmStateMut<F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>> {
-        let mut pc = from_state.pc;
-        let state = VmStateMut {
-            pc: &mut pc,
-            memory: &mut memory.memory,
-            streams,
-            rng,
-            ctx: &mut self.arena,
-        };
-        self.step.execute(state, instruction)?;
-
-        Ok(ExecutionState {
-            pc,
-            timestamp: memory.memory.timestamp,
-        })
+    ) -> Result<()> {
+        self.step.execute(state, instruction)
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
         self.step.get_opcode_name(opcode)
+    }
+
+    fn give_me_my_arena(&mut self, arena: RA) {
+        self.arena = arena;
     }
 }
 
