@@ -692,10 +692,9 @@ impl<F: PrimeField32> TracingMemory<F> {
                 .get_record_header_at_or_none(first_meta.offset as usize);
             match old_record_header {
                 Some(old_record_header) => {
+                    debug_assert_eq!(old_record_header.lowest_block_size, align as u32);
                     old_record_header.timestamp_and_mask & (MERGE_BEFORE_FLAG | SPLIT_AFTER_FLAG)
                         != 0
-                        || old_record_header.lowest_block_size != align as u32 // should never
-                                                                               // happen tbh
                 }
                 None => true,
             }
@@ -896,26 +895,77 @@ impl<F: PrimeField32> TracingMemory<F> {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::TracingMemory;
-//     use crate::arch::MemoryConfig;
+#[cfg(test)]
+mod tests {
+    use std::array;
 
-//     #[test]
-//     fn test_write_read() {
-//         let mut memory = TracingMemory::new(&MemoryConfig::default());
-//         let address_space = 1;
+    use openvm_stark_backend::p3_field::FieldAlgebra;
+    use openvm_stark_sdk::utils::create_seeded_rng;
+    use p3_baby_bear::BabyBear;
+    use rand::Rng;
 
-//         unsafe {
-//             memory.write(address_space, 0, &[1u8, 2, 3, 4]);
+    use crate::arch::{testing::VmChipTestBuilder, MemoryConfig};
 
-//             let (_, data) = memory.read::<u8, 2>(address_space, 0);
-//             assert_eq!(data, [1u8, 2]);
+    type F = BabyBear;
 
-//             memory.write(address_space, 2, &[100u8]);
+    fn test_memory_write_by_tester(mut tester: VmChipTestBuilder<F>) {
+        let mut rng = create_seeded_rng();
 
-//             let (_, data) = memory.read::<u8, 4>(address_space, 0);
-//             assert_eq!(data, [1u8, 2, 100, 4]);
-//         }
-//     }
-// }
+        // The point here is to have a lot of equal
+        // and intersecting/overlapping blocks,
+        // by limiting the space of valid pointers.
+        let max_ptr = 20;
+        let aligns = [4, 4, 4, 1];
+        let value_bounds = [256, 256, 256, (1 << 30)];
+        let max_log_block_size = 4;
+        let its = 1000;
+        for _ in 0..its {
+            let addr_sp = rng.gen_range(1..=aligns.len());
+            let align: usize = aligns[addr_sp - 1];
+            let value_bound: u32 = value_bounds[addr_sp - 1];
+            let ptr = rng.gen_range(0..max_ptr / align) * align;
+            let log_len = rng.gen_range(align.trailing_zeros()..=max_log_block_size);
+            match log_len {
+                0 => tester.write::<1>(
+                    addr_sp,
+                    ptr,
+                    array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..value_bound))),
+                ),
+                1 => tester.write::<2>(
+                    addr_sp,
+                    ptr,
+                    array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..value_bound))),
+                ),
+                2 => tester.write::<4>(
+                    addr_sp,
+                    ptr,
+                    array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..value_bound))),
+                ),
+                3 => tester.write::<8>(
+                    addr_sp,
+                    ptr,
+                    array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..value_bound))),
+                ),
+                4 => tester.write::<16>(
+                    addr_sp,
+                    ptr,
+                    array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..value_bound))),
+                ),
+                _ => unreachable!(),
+            }
+        }
+
+        let tester = tester.build().finalize();
+        tester.simple_test().expect("Verification failed");
+    }
+
+    #[test]
+    fn test_memory_write_volatile() {
+        test_memory_write_by_tester(VmChipTestBuilder::<F>::volatile(MemoryConfig::default()));
+    }
+
+    #[test]
+    fn test_memory_write_persistent() {
+        test_memory_write_by_tester(VmChipTestBuilder::<F>::persistent(MemoryConfig::default()));
+    }
+}

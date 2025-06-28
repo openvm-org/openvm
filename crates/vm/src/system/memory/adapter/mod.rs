@@ -84,7 +84,6 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
     }
 
     pub fn set_override_trace_heights(&mut self, overridden_heights: Vec<usize>) {
-        eprintln!("overridden_heights: {:?}", overridden_heights);
         self.set_arena_from_trace_heights(
             &overridden_heights
                 .iter()
@@ -98,6 +97,16 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
 
     pub fn set_arena_from_trace_heights(&mut self, trace_heights: &[u32]) {
         assert_eq!(trace_heights.len(), self.chips.len());
+        // At the very worst, each row in `Adapter<N>`
+        // corresponds to a unique record of `block_size` being `2 * N`,
+        // and its `lowest_block_size` is at least 1 and `type_size` is at most 4.
+        // However, there may be "blank" records -- the ones that don't generate any rows.
+        // With the way we create records, this can only happen when we created a record
+        // without knowing we are going to split it, and we never got to.
+        // However, since such a record hasn't been merged from anything either,
+        // and haven't been created on the first touch, there must be a record
+        // that touched an identical block earlier. Therefore we multiply `size_bound`
+        // by 2 in the end just to be safe.
         let size_bound = trace_heights
             .iter()
             .enumerate()
@@ -108,12 +117,17 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
                     type_size: 4,
                 }) * h as usize
             })
-            .sum();
+            .sum::<usize>()
+            * 2;
         assert!(self
             .chips
             .iter()
             .all(|chip| chip.overridden_trace_height().is_none()));
-        eprintln!("now allocate {} from {:?}", size_bound, trace_heights);
+        tracing::debug!(
+            "Allocating {} bytes for memory adapters arena from heights {:?}",
+            size_bound,
+            trace_heights
+        );
         self.arena.set_capacity(size_bound);
     }
 
@@ -159,7 +173,10 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
 
     fn compute_heights_from_arena(&mut self, heights: &mut [usize]) {
         let bytes = self.arena.allocated_mut();
-        eprintln!("computing heights from arena! used {} bytes", bytes.len());
+        tracing::debug!(
+            "Computing heights from memory adapters arena: used {} bytes",
+            bytes.len()
+        );
         let mut ptr = 0;
         let mut stats = (0, 0);
         while ptr < bytes.len() {
@@ -191,8 +208,8 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
             }
             stats.1 += 1;
         }
-        eprintln!("blank records: {} / {}", stats.0, stats.1);
-        eprintln!("computed heights: {:?}", heights);
+        tracing::debug!("Computed heights from memory adapters arena: {:?}", heights);
+        tracing::debug!("Blank records: {} / {}", stats.0, stats.1);
     }
 
     fn apply_overridden_heights(&mut self, heights: &mut [usize]) {
