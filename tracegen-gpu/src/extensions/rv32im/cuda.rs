@@ -1,5 +1,6 @@
 #![allow(clippy::missing_safety_doc)]
 
+use crate::UInt2;
 use stark_backend_gpu::cuda::{d_buffer::DeviceBuffer, error::CudaError};
 
 pub mod auipc {
@@ -53,11 +54,11 @@ pub mod hintstore {
             d_records: *const u8,
             rows_used: u32,
             d_record_offsets: *const OffsetInfo,
-            pointer_max_bits: usize,
+            pointer_max_bins: u32,
             d_range_checker: *const u32,
-            range_checker_num_bins: usize,
+            range_checker_num_bins: u32,
             d_bitwise_lookup: *const u32,
-            bitwise_num_bits: usize,
+            bitwise_num_bits: u32,
         ) -> i32;
     }
 
@@ -67,10 +68,10 @@ pub mod hintstore {
         d_records: &DeviceBuffer<u8>,
         rows_used: u32,
         d_record_offsets: &DeviceBuffer<OffsetInfo>,
-        pointer_max_bits: usize,
+        pointer_max_bins: u32,
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
-        bitwise_num_bits: usize,
+        bitwise_num_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_hintstore_tracegen(
             d_trace.as_mut_raw_ptr(),
@@ -79,9 +80,9 @@ pub mod hintstore {
             d_records.as_ptr(),
             rows_used,
             d_record_offsets.as_ptr(),
-            pointer_max_bits,
+            pointer_max_bins,
             d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() / 2,
+            d_range_checker.len() as u32,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
         ))
@@ -198,6 +199,53 @@ pub mod mul {
             d_records.len(),
             d_range.as_ptr() as *const u32,
             range_bins,
+        ))
+    }
+}
+
+pub mod divrem_cuda {
+    use super::*;
+
+    unsafe extern "C" {
+        unsafe fn _rv32_div_rem_tracegen(
+            d_trace: *mut std::ffi::c_void,
+            height: u32,
+            width: u32,
+            d_records: *const u8,
+            rows_used: u32,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            d_bitwise_lookup: *mut u32,
+            bitwise_num_bits: u32,
+            d_range_tuple_checker: *mut u32,
+            range_tuple_checker_sizes: UInt2,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen<T>(
+        d_trace: &DeviceBuffer<T>,
+        height: u32,
+        width: u32,
+        d_records: &DeviceBuffer<u8>,
+        rows_used: u32,
+        d_range_checker: &DeviceBuffer<T>,
+        d_bitwise_lookup: &DeviceBuffer<T>,
+        bitwise_num_bits: u32,
+        d_range_tuple_checker: &DeviceBuffer<T>,
+        range_tuple_checker_sizes: UInt2,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rv32_div_rem_tracegen(
+            d_trace.as_mut_raw_ptr(),
+            height,
+            width,
+            d_records.as_ptr(),
+            rows_used,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            d_bitwise_lookup.as_mut_ptr() as *mut u32,
+            bitwise_num_bits,
+            d_range_tuple_checker.as_mut_ptr() as *mut u32,
+            range_tuple_checker_sizes,
         ))
     }
 }

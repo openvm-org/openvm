@@ -7,3 +7,9 @@ template <typename T> __global__ void fill_buffer(T *buffer, T value, uint32_t n
         buffer[tid] = value;
     }
 }
+
+// Convert 4 bytes to a u32
+// **SAFETY**: b has to be at least 4 bytes long
+__device__ __forceinline__ uint32_t u32_from_bytes(uint8_t *b) {
+    return (uint32_t)b[0] | ((uint32_t)b[1] << 8) | ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24);
+}

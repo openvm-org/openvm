@@ -74,7 +74,6 @@ __global__ void mul_tracegen(
         Rv32MultiplicationCore core;
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv32MultiplicationCols, core)), rec.core);
     } else {
-#pragma unroll
         row.fill_zero(0, sizeof(Rv32MultiplicationCols<uint8_t>));
     }
 }
