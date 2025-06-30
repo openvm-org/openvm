@@ -98,17 +98,16 @@ pub trait VmCircuitExtension<SC: StarkGenericConfig> {
 /// Extension of VM trace generation.
 /// The returned vector should exactly match the order of AIRs in [`VmCircuitExtension`] for this
 /// extension.
-pub trait VmProverExtension<E, SC, RA, PB>
+pub trait VmProverExtension<SC, RA, PB>
 where
     SC: StarkGenericConfig,
     PB: ProverBackend,
 {
-    fn generate_proving_ctx(
+    fn extend(
         &self,
-        executors: ExecutorInventory<E, PB::Val>,
-        airs: AirInventory<SC>,
+        airs: &AirInventory<SC>,
         chips: &mut ChipInventory,
-    ) -> Result<Vec<AirProvingContext<PB>>, VmInventoryError>;
+    ) -> Result<(), VmInventoryError>;
 }
 
 pub struct ExecutorInventory<E, F> {
@@ -139,10 +138,13 @@ pub struct AirInventory<SC: StarkGenericConfig> {
     bus_idx_mgr: BusIndexManager,
 }
 
-pub struct ChipInventory {
-    chips: Vec<Box<dyn Any>>,
-    /// `ext_start[i]` will have the starting index in `chips` for extension `i`
-    ext_start: Vec<usize>,
+#[derive(Clone, Getters)]
+pub struct ChipInventory<SC: StarkGenericConfig> {
+    /// Read-only view of AIRs, as constructed via the [VmCircuitExtension] trait.
+    #[get = "pub"]
+    airs: AirInventory<SC>,
+    /// Chips that are being built.
+    chips: Vec<Arc<dyn Any>>,
 }
 
 // VmExtension<SC, RA, PB> = VmExecutionExtension + VmCircuitExtension<SC> + VmProverExtension<RA,
@@ -244,11 +246,10 @@ impl<SC: StarkGenericConfig> AirInventory<SC> {
     /// Returns all chips of type `A` in the circuit.
     ///
     /// This should not be used to look for system AIRs.
-    pub fn find_air<A: 'static>(&self) -> Vec<&A> {
+    pub fn find_air<A: 'static>(&self) -> impl Iterator<Item = &'_ A> {
         self.ext_airs
             .iter()
             .filter_map(|air| air.as_any().downcast_ref())
-            .collect()
     }
 
     pub fn add_air<A: AnyRap<SC> + 'static>(&mut self, air: A) {
@@ -261,8 +262,32 @@ impl<SC: StarkGenericConfig> AirInventory<SC> {
 
     pub fn range_checker(&self) -> &VariableRangeCheckerAir {
         self.find_air()
-            .first()
+            .next()
             .expect("system always has range checker AIR")
+    }
+}
+
+impl<SC> ChipInventory<SC>
+where
+    SC: StarkGenericConfig,
+{
+    /// Gets the next AIR from the pre-existing AIR inventory according to the index of the next
+    /// chip to be built.
+    pub fn next_air<A: 'static>(&self) -> Option<&A> {
+        let cur_idx = self.chips.len();
+        self.airs.ext_airs.get(cur_idx)?.as_any().downcast_ref()
+    }
+
+    /// Looks through built chips to see if there exists any of type `C` by downcasting.
+    /// Returns all chips of type `C` in the chipset.
+    ///
+    /// Note: the type `C` will usually be a smart pointer to a chip.
+    pub fn find_chip<C: 'static>(&self) -> impl Iterator<Item = &'_ C> {
+        self.chips.iter().filter_map(|c| c.downcast_ref())
+    }
+
+    pub fn add_chip<C: 'static>(&mut self, chip: C) {
+        self.chips.push(Arc::new(chip));
     }
 }
 
@@ -373,6 +398,13 @@ pub enum AirInventoryError {
     AirNotFound { name: String },
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum ChipInventoryError {
+    #[error("Chip {name} not found")]
+    ChipNotFound { name: String },
+}
+
+// TODO: delete
 #[derive(thiserror::Error, Debug)]
 pub enum VmInventoryError {
     #[error("Chip {name} not found")]
