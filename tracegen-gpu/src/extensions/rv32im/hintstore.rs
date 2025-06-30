@@ -101,10 +101,10 @@ impl DeviceChip<SC, GpuBackend> for Rv32HintStoreChipGpu {
                 &d_records,
                 offsets.len() as u32,
                 &d_record_offsets,
-                self.pointer_max_bits,
+                self.pointer_max_bits as u32,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
-                RV32_CELL_BITS,
+                RV32_CELL_BITS as u32,
             )
             .unwrap();
         }

@@ -11,6 +11,9 @@ pub mod primitives;
 pub mod system;
 #[cfg(any(feature = "test-utils", test))]
 pub mod testing;
+mod utils;
+
+pub use utils::*;
 
 pub trait DeviceChip<SC: StarkGenericConfig, PB: ProverBackend>: ChipUsageGetter {
     fn air(&self) -> AirRef<SC>;

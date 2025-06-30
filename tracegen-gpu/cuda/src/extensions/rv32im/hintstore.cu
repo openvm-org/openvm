@@ -151,8 +151,6 @@ __global__ void hintstore_tracegen(
 
         auto writes_start = records + record_offset + sizeof(Rv32HintStoreRecordHeader);
 
-        // auto writes_var = (uint8_t *)next_multiple_of((size_t)writes_start, alignof(Rv32HintStoreVars));
-
         auto data_write = reinterpret_cast<Rv32HintStoreVars *>(writes_start)[local_idx];
 
         auto step = Rv32HintStore(
