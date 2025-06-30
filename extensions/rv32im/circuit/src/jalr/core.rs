@@ -185,13 +185,18 @@ pub struct Rv32JalrCoreRecord {
     pub imm_sign: bool,
 }
 
+#[derive_new::new]
 pub struct Rv32JalrStep<A> {
+    adapter: A,
+}
+
+pub struct Rv32JalrChip<A> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<A> Rv32JalrStep<A> {
+impl<A> Rv32JalrChip<A> {
     pub fn new(
         adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,

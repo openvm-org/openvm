@@ -1,8 +1,9 @@
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, InitFileGenerator, SystemConfig, SystemPort, VmAirWrapper, VmExtension,
-        VmInventory, VmInventoryBuilder, VmInventoryError,
+        ExecutionBridge, ExecutorInventory, InitFileGenerator, SystemConfig, SystemPort,
+        VmAirWrapper, VmExecutionExtension, VmExtension, VmInventory, VmInventoryBuilder,
+        VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
@@ -24,85 +25,7 @@ use strum::IntoEnumIterator;
 
 use crate::{adapters::*, *};
 
-/// Config for a VM with base extension and IO extension
-#[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
-pub struct Rv32IConfig {
-    #[system]
-    pub system: SystemConfig,
-    #[extension]
-    pub base: Rv32I,
-    #[extension]
-    pub io: Rv32Io,
-}
-
-// Default implementation uses no init file
-impl InitFileGenerator for Rv32IConfig {}
-
-/// Config for a VM with base extension, IO extension, and multiplication extension
-#[derive(Clone, Debug, Default, VmConfig, derive_new::new, Serialize, Deserialize)]
-pub struct Rv32ImConfig {
-    #[config]
-    pub rv32i: Rv32IConfig,
-    #[extension]
-    pub mul: Rv32M,
-}
-
-// Default implementation uses no init file
-impl InitFileGenerator for Rv32ImConfig {}
-
-impl Default for Rv32IConfig {
-    fn default() -> Self {
-        let system = SystemConfig::default().with_continuations();
-        Self {
-            system,
-            base: Default::default(),
-            io: Default::default(),
-        }
-    }
-}
-
-impl Rv32IConfig {
-    pub fn with_public_values(public_values: usize) -> Self {
-        let system = SystemConfig::default()
-            .with_continuations()
-            .with_public_values(public_values);
-        Self {
-            system,
-            base: Default::default(),
-            io: Default::default(),
-        }
-    }
-
-    pub fn with_public_values_and_segment_len(public_values: usize, segment_len: usize) -> Self {
-        let system = SystemConfig::default()
-            .with_continuations()
-            .with_public_values(public_values)
-            .with_max_segment_len(segment_len);
-        Self {
-            system,
-            base: Default::default(),
-            io: Default::default(),
-        }
-    }
-}
-
-impl Rv32ImConfig {
-    pub fn with_public_values(public_values: usize) -> Self {
-        Self {
-            rv32i: Rv32IConfig::with_public_values(public_values),
-            mul: Default::default(),
-        }
-    }
-
-    pub fn with_public_values_and_segment_len(public_values: usize, segment_len: usize) -> Self {
-        Self {
-            rv32i: Rv32IConfig::with_public_values_and_segment_len(public_values, segment_len),
-            mul: Default::default(),
-        }
-    }
-}
-
-// ============ Extension Implementations ============
+// ============ Extension Struct Definitions ============
 
 /// RISC-V 32-bit Base (RV32I) Extension
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
@@ -134,19 +57,19 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 // ============ Executor and Periphery Enums for Extension ============
 
 /// RISC-V 32-bit Base (RV32I) Instruction Executors
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutorE1, From, AnyEnum)]
-pub enum Rv32IExecutor<F: PrimeField32> {
+#[derive(From, AnyEnum)]
+pub enum Rv32IExecutor {
     // Rv32 (for standard 32-bit integers):
-    BaseAlu(Rv32BaseAluChip<F>),
-    LessThan(Rv32LessThanChip<F>),
-    Shift(Rv32ShiftChip<F>),
-    LoadStore(Rv32LoadStoreChip<F>),
-    LoadSignExtend(Rv32LoadSignExtendChip<F>),
-    BranchEqual(Rv32BranchEqualChip<F>),
-    BranchLessThan(Rv32BranchLessThanChip<F>),
-    JalLui(Rv32JalLuiChip<F>),
-    Jalr(Rv32JalrChip<F>),
-    Auipc(Rv32AuipcChip<F>),
+    BaseAlu(Rv32BaseAluStep),
+    LessThan(Rv32LessThanStep),
+    Shift(Rv32ShiftStep),
+    LoadStore(Rv32LoadStoreStep),
+    LoadSignExtend(Rv32LoadSignExtendStep),
+    BranchEqual(Rv32BranchEqualStep),
+    BranchLessThan(Rv32BranchLessThanStep),
+    JalLui(Rv32JalLuiStepWithAdapter),
+    Jalr(Rv32JalrStep),
+    Auipc(Rv32AuipcStep),
 }
 
 /// RISC-V 32-bit Multiplication Extension (RV32M) Instruction Executors
@@ -187,6 +110,80 @@ pub enum Rv32IoPeriphery<F: PrimeField32> {
 }
 
 // ============ VmExtension Implementations ============
+
+impl<F> VmExecutionExtension<F> for Rv32I {
+    type Executor = Rv32IExecutor;
+
+    fn extend_execution(
+        &self,
+        inventory: &mut ExecutorInventory<Rv32IExecutor, F>,
+    ) -> Result<(), VmInventoryError> {
+        let base_alu = Rv32BaseAluStep::new(Rv32BaseAluAdapterStep, BaseAluOpcode::CLASS_OFFSET);
+        inventory.add_executor(base_alu, BaseAluOpcode::iter().map(|x| x.global_opcode()))?;
+
+        let lt = LessThanStep::new(Rv32BaseAluAdapterStep, LessThanOpcode::CLASS_OFFSET);
+        inventory.add_executor(lt, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
+
+        let shift = ShiftStep::new(Rv32BaseAluAdapterStep, ShiftOpcode::CLASS_OFFSET);
+        inventory.add_executor(shift, ShiftOpcode::iter().map(|x| x.global_opcode()))?;
+
+        let load_store = LoadStoreStep::new(
+            Rv32LoadStoreAdapterStep::new(pointer_max_bits),
+            Rv32LoadStoreOpcode::CLASS_OFFSET,
+        );
+        inventory.add_executor(
+            load_store,
+            Rv32LoadStoreOpcode::iter()
+                .take(Rv32LoadStoreOpcode::STOREB as usize + 1)
+                .map(|x| x.global_opcode()),
+        )?;
+
+        let load_sign_extend =
+            LoadSignExtendStep::new(Rv32LoadStoreAdapterStep::new(pointer_max_bits));
+        inventory.add_executor(
+            load_sign_extend,
+            [Rv32LoadStoreOpcode::LOADB, Rv32LoadStoreOpcode::LOADH].map(|x| x.global_opcode()),
+        )?;
+
+        let beq = BranchEqualStep::new(
+            Rv32BranchAdapterStep,
+            BranchEqualOpcode::CLASS_OFFSET,
+            DEFAULT_PC_STEP,
+        );
+        inventory.add_executor(beq, BranchEqualOpcode::iter().map(|x| x.global_opcode()))?;
+
+        let blt =
+            BranchLessThanStep::new(Rv32BranchAdapterStep, BranchLessThanOpcode::CLASS_OFFSET);
+        inventory.add_executor(blt, BranchLessThanOpcode::iter().map(|x| x.global_opcode()))?;
+
+        let jal_lui = Rv32JalLuiStep::new(Rv32CondRdWriteAdapterStep::new(Rv32RdWriteAdapterStep));
+        inventory.add_executor(jal_lui, Rv32JalLuiOpcode::iter().map(|x| x.global_opcode()))?;
+
+        let jalr = Rv32JalrStep::new(Rv32JalrAdapterStep);
+        inventory.add_executor(jalr, Rv32JalrOpcode::iter().map(|x| x.global_opcode()))?;
+
+        let auipc = Rv32AuipcStep::new(Rv32RdWriteAdapterStep);
+        inventory.add_executor(auipc, Rv32AuipcOpcode::iter().map(|x| x.global_opcode()))?;
+
+        // There is no downside to adding phantom sub-executors, so we do it in the base extension.
+        inventory.add_phantom_sub_executor(
+            phantom::Rv32HintInputSubEx,
+            PhantomDiscriminant(Rv32Phantom::HintInput as u16),
+        )?;
+        inventory.add_phantom_sub_executor(
+            phantom::Rv32HintRandomSubEx,
+            PhantomDiscriminant(Rv32Phantom::HintRandom as u16),
+        )?;
+        inventory.add_phantom_sub_executor(
+            phantom::Rv32PrintStrSubEx,
+            PhantomDiscriminant(Rv32Phantom::PrintStr as u16),
+        )?;
+        inventory.add_phantom_sub_executor(
+            phantom::Rv32HintLoadByKeySubEx,
+            PhantomDiscriminant(Rv32Phantom::HintLoadByKey as u16),
+        )?;
+    }
+}
 
 impl<F: PrimeField32> VmExtension<F> for Rv32I {
     type Executor = Rv32IExecutor<F>;

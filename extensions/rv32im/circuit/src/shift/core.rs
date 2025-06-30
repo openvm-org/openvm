@@ -255,11 +255,23 @@ pub struct ShiftCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 pub struct ShiftStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
+}
+
+pub struct ShiftChip<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
+    pub offset: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, LIMB_BITS> {
+    pub fn new(adapter: A, offset: usize) -> Self {
+        assert_eq!(NUM_LIMBS % 2, 0, "Number of limbs must be divisible by 2");
+        Self { adapter, offset }
+    }
+}
+
+impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftChip<A, NUM_LIMBS, LIMB_BITS> {
     pub fn new(
         adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,

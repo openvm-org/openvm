@@ -185,6 +185,11 @@ pub struct LoadSignExtendCoreRecord<const NUM_CELLS: usize> {
 #[derive(derive_new::new)]
 pub struct LoadSignExtendStep<A, const NUM_CELLS: usize, const LIMB_BITS: usize> {
     adapter: A,
+}
+
+#[derive(derive_new::new)]
+pub struct LoadSignExtendChip<A, const NUM_CELLS: usize, const LIMB_BITS: usize> {
+    adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 

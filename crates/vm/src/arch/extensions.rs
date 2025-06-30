@@ -83,53 +83,64 @@ pub trait VmExecutionExtension<F> {
     /// Enum of executor variants
     type Executor: AnyEnum;
 
-    fn build(
+    fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventory<Self::Executor>,
-    ) -> Result<(), VmInventoryError>;
+        inventory: &mut ExecutorInventory<Self::Executor, F>,
+    ) -> Result<(), ExecutorInventoryError>;
 }
 
 /// Extension of the VM circuit. Allows _in-order_ addition of new AIRs with interactions.
 pub trait VmCircuitExtension<SC: StarkGenericConfig> {
-    fn build(&self, inventory: &mut AirInventory<SC>) -> Result<(), VmInventoryError>;
+    fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), VmInventoryError>;
 }
 
 /// Extension of VM trace generation.
 /// The returned vector should exactly match the order of AIRs in [`VmCircuitExtension`] for this
 /// extension.
-pub trait VmProverExtension<E, RA, PB: ProverBackend> {
+pub trait VmProverExtension<E, SC, RA, PB>
+where
+    SC: StarkGenericConfig,
+    PB: ProverBackend,
+{
     fn generate_proving_ctx(
         &self,
-        executors: ExecutorInventory<E>,
+        executors: ExecutorInventory<E, PB::Val>,
         airs: AirInventory<SC>,
         chips: &mut ChipInventory,
     ) -> Result<Vec<AirProvingContext<PB>>, VmInventoryError>;
 }
 
-#[derive(Clone)]
-pub struct ExecutorInventory<E> {
+pub struct ExecutorInventory<E, F> {
     /// Lookup table to executor ID.
     /// This is stored in a hashmap because it is _not_ expected to be used in the hot path.
     /// A direct opcode -> executor mapping should be generated before runtime execution.
     instruction_lookup: FxHashMap<VmOpcode, ExecutorId>,
-    pub executors: Vec<E>,
+    executors: Vec<E>,
+    phantom_executors: FxHashMap<PhantomDiscriminant, Box<dyn PhantomSubExecutor<F>>>,
+    /// `ext_start[i]` will have the starting index in `executors` for extension `i`
+    ext_start: Vec<usize>,
 }
 
 #[derive(Clone)]
 pub struct AirInventory<SC: StarkGenericConfig> {
+    /// The system AIRs required by the circuit architecture.
     pub system: SystemAirs<SC>,
     /// List of all non-system AIRs in the circuit, in insertion order, which is the _reverse_ of
     /// the order they appear in the verifying key.
     ///
     /// Note that the system will ensure that the first AIR in the list is always the
     /// [VariableRangeCheckerAir].
-    pub ext_airs: Vec<AirRef<SC>>,
+    ext_airs: Vec<AirRef<SC>>,
+    /// `ext_start[i]` will have the starting index in `ext_airs` for extension `i`
+    ext_start: Vec<usize>,
 
     bus_idx_mgr: BusIndexManager,
 }
 
 pub struct ChipInventory {
     chips: Vec<Box<dyn Any>>,
+    /// `ext_start[i]` will have the starting index in `chips` for extension `i`
+    ext_start: Vec<usize>,
 }
 
 // VmExtension<SC, RA, PB> = VmExecutionExtension + VmCircuitExtension<SC> + VmProverExtension<RA,
@@ -178,6 +189,48 @@ pub struct SystemPort {
     pub execution_bus: ExecutionBus,
     pub program_bus: ProgramBus,
     pub memory_bridge: MemoryBridge,
+}
+
+impl<E, F> ExecutorInventory<E, F> {
+    /// Inserts an executor with the collection of opcodes that it handles.
+    /// If some executor already owns one of the opcodes, an error is returned with the existing
+    /// executor.
+    pub fn add_executor(
+        &mut self,
+        executor: impl Into<E>,
+        opcodes: impl IntoIterator<Item = VmOpcode>,
+    ) -> Result<(), ExecutorInventoryError> {
+        let opcodes: Vec<_> = opcodes.into_iter().collect();
+        for opcode in &opcodes {
+            if let Some(id) = self.instruction_lookup.get(opcode) {
+                return Err(ExecutorInventoryError::ExecutorExists {
+                    opcode: *opcode,
+                    id: *id,
+                });
+            }
+        }
+        let id = self.executors.len();
+        self.executors.push(executor.into());
+        for opcode in opcodes {
+            self.instruction_lookup.insert(opcode, id);
+        }
+        Ok(())
+    }
+
+    /// The generic `F` must match that of the `PhantomChip<F>`.
+    pub fn add_phantom_sub_executor<PE: PhantomSubExecutor<F> + 'static>(
+        &mut self,
+        phantom_sub: PE,
+        discriminant: PhantomDiscriminant,
+    ) -> Result<(), ExecutorInventoryError> {
+        let existing = self
+            .phantom_executors
+            .insert(discriminant, Box::new(phantom_sub));
+        if existing.is_some() {
+            return Err(ExecutorInventoryError::PhantomSubExecutorExists { discriminant });
+        }
+        Ok(())
+    }
 }
 
 /// Builder for processing unit. Processing units extend an existing system unit.
@@ -236,22 +289,6 @@ impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
             .collect()
     }
 
-    /// The generic `F` must match that of the `PhantomChip<F>`.
-    pub fn add_phantom_sub_executor<PE: PhantomSubExecutor<F> + 'static>(
-        &self,
-        phantom_sub: PE,
-        discriminant: PhantomDiscriminant,
-    ) -> Result<(), VmInventoryError> {
-        let chip_ref: &RefCell<PhantomChip<F>> =
-            self.find_chip().first().expect("PhantomChip always exists");
-        let mut chip = chip_ref.borrow_mut();
-        let existing = chip.add_sub_executor(phantom_sub, discriminant);
-        if existing.is_some() {
-            return Err(VmInventoryError::PhantomSubExecutorExists { discriminant });
-        }
-        Ok(())
-    }
-
     fn add_chip<E: AnyEnum>(&mut self, chip: &'a E) {
         self.chips.push(chip);
     }
@@ -290,11 +327,15 @@ pub enum ChipId {
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum VmInventoryError {
+pub enum ExecutorInventoryError {
     #[error("Opcode {opcode} already owned by executor id {id}")]
     ExecutorExists { opcode: VmOpcode, id: ExecutorId },
     #[error("Phantom discriminant {} already has sub-executor", .discriminant.0)]
     PhantomSubExecutorExists { discriminant: PhantomDiscriminant },
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum VmInventoryError {
     #[error("Chip {name} not found")]
     ChipNotFound { name: String },
 }
@@ -350,32 +391,6 @@ impl<E, P> VmInventory<E, P> {
         self.executors.append(&mut other.executors);
         self.periphery.append(&mut other.periphery);
         self.insertion_order.append(&mut other.insertion_order);
-        Ok(())
-    }
-
-    /// Inserts an executor with the collection of opcodes that it handles.
-    /// If some executor already owns one of the opcodes, it will be replaced and the old
-    /// executor ID is returned.
-    pub fn add_executor(
-        &mut self,
-        executor: impl Into<E>,
-        opcodes: impl IntoIterator<Item = VmOpcode>,
-    ) -> Result<(), VmInventoryError> {
-        let opcodes: Vec<_> = opcodes.into_iter().collect();
-        for opcode in &opcodes {
-            if let Some(id) = self.instruction_lookup.get(opcode) {
-                return Err(VmInventoryError::ExecutorExists {
-                    opcode: *opcode,
-                    id: *id,
-                });
-            }
-        }
-        let id = self.executors.len();
-        self.executors.push(executor.into());
-        self.insertion_order.push(ChipId::Executor(id));
-        for opcode in opcodes {
-            self.instruction_lookup.insert(opcode, id);
-        }
         Ok(())
     }
 

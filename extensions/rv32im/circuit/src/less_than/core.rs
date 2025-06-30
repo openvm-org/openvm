@@ -181,6 +181,12 @@ pub struct LessThanCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 #[derive(derive_new::new)]
 pub struct LessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
+    pub offset: usize,
+}
+
+#[derive(derive_new::new)]
+pub struct LessThanChip<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub offset: usize,
 }
@@ -252,7 +258,7 @@ where
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for LessThanStep<A, NUM_LIMBS, LIMB_BITS>
+    for LessThanChip<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,

@@ -205,6 +205,11 @@ pub struct Rv32AuipcCoreRecord {
 #[derive(derive_new::new)]
 pub struct Rv32AuipcStep<A> {
     adapter: A,
+}
+
+#[derive(derive_new::new)]
+pub struct Rv32AuipcChip<A> {
+    adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 

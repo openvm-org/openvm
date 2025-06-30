@@ -158,6 +158,11 @@ pub struct Rv32JalLuiStepRecord {
 #[derive(derive_new::new)]
 pub struct Rv32JalLuiStep<A> {
     adapter: A,
+}
+
+#[derive(derive_new::new)]
+pub struct Rv32JalLuiChip<A> {
+    adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 

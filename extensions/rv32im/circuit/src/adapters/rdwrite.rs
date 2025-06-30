@@ -200,7 +200,6 @@ pub struct Rv32RdWriteAdapterRecord {
     pub rd_aux_record: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
-#[derive(derive_new::new)]
 pub struct Rv32RdWriteAdapterStep;
 
 impl<F> AdapterTraceStep<F> for Rv32RdWriteAdapterStep

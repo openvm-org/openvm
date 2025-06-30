@@ -203,6 +203,12 @@ pub struct BranchLessThanCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usi
 #[derive(derive_new::new)]
 pub struct BranchLessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
+    pub offset: usize,
+}
+
+#[derive(derive_new::new)]
+pub struct BranchLessChip<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub offset: usize,
 }
