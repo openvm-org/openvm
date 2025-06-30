@@ -31,7 +31,8 @@ use crate::{
     system::{
         memory::{
             adapter::AccessAdapterAir, dimensions::MemoryDimensions, merkle::MemoryMerkleAir,
-            persistent::PersistentBoundaryAir, volatile::VolatileBoundaryAir, CHUNK,
+            offline_checker::MemoryBridge, persistent::PersistentBoundaryAir,
+            volatile::VolatileBoundaryAir, CHUNK,
         },
         native_adapter::NativeAdapterAir,
         public_values::core::PublicValuesCoreAir,
@@ -40,9 +41,14 @@ use crate::{
 
 #[derive(Clone)]
 pub struct SystemAirs<SC: StarkGenericConfig> {
+    pub config: SystemConfig,
     pub program: ProgramAir,
     pub connector: VmConnectorAir,
+    pub memory_bridge: MemoryBridge,
+    /// The order of memory AIRs is boundary, merkle (if exists), access adapters
     pub memory: Vec<AirRef<SC>>,
+    /// Public values AIR exists if and only if continuations is disabled and `num_public_values`
+    /// is greater than 0.
     pub public_values: Option<PublicValuesAir>,
 }
 
@@ -135,10 +141,20 @@ impl<SC: StarkGenericConfig> SystemAirs<SC> {
         };
 
         Self {
+            config,
+            memory_bridge,
             program,
             connector,
             memory,
             public_values,
+        }
+    }
+
+    pub fn port(&self) -> SystemPort {
+        SystemPort {
+            memory_bridge: self.memory_bridge,
+            program_bus: self.program.bus,
+            execution_bus: self.connector.execution_bus,
         }
     }
 }

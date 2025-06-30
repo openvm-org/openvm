@@ -1,15 +1,17 @@
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, ExecutorInventory, InitFileGenerator, SystemConfig, SystemPort,
-        VmAirWrapper, VmExecutionExtension, VmExtension, VmInventory, VmInventoryBuilder,
-        VmInventoryError,
+        AirInventory, ExecutionBridge, ExecutorInventory, InitFileGenerator, SystemConfig,
+        SystemPort, VmAirWrapper, VmCircuitExtension, VmExecutionExtension, VmExtension,
+        VmInventory, VmInventoryBuilder, VmInventoryError,
     },
     system::phantom::PhantomChip,
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
+    },
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
@@ -19,7 +21,7 @@ use openvm_rv32im_transpiler::{
     MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32HintStoreOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode,
     Rv32LoadStoreOpcode, Rv32Phantom, ShiftOpcode,
 };
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{config::StarkGenericConfig, p3_field::PrimeField32};
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
@@ -182,6 +184,100 @@ impl<F> VmExecutionExtension<F> for Rv32I {
             phantom::Rv32HintLoadByKeySubEx,
             PhantomDiscriminant(Rv32Phantom::HintLoadByKey as u16),
         )?;
+    }
+}
+
+impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv32I {
+    fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
+        let SystemPort {
+            execution_bus,
+            program_bus,
+            memory_bridge,
+        } = inventory.system().port();
+
+        let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
+        let range_checker = *inventory.range_checker();
+        let pointer_max_bits = inventory.system().config.memory_config.pointer_max_bits;
+
+        let bitwise_lu =
+            if let Some(&air) = inventory.find_air::<BitwiseOperationLookupAir<8>>().first() {
+                air
+            } else {
+                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
+                let air = BitwiseOperationLookupAir::new(bus);
+                inventory.add_air(air);
+                air
+            };
+
+        let base_alu = VmAirWrapper::new(
+            Rv32BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu.bus),
+            BaseAluCoreAir::new(bitwise_lu.bus, BaseAluOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(base_alu);
+
+        let lt = VmAirWrapper::new(
+            Rv32BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu.bus),
+            LessThanCoreAir::new(bitwise_lu.bus, LessThanOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(lt);
+
+        let shift = VmAirWrapper::new(
+            Rv32BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu.bus),
+            ShiftCoreAir::new(bitwise_lu.bus, range_checker.bus, ShiftOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(shift);
+
+        let load_store = VmAirWrapper::new(
+            Rv32LoadStoreAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker.bus,
+                pointer_max_bits,
+            ),
+            LoadStoreCoreAir::new(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(load_store);
+
+        let load_sign_extend = VmAirWrapper::new(
+            Rv32LoadStoreAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker.bus,
+                pointer_max_bits,
+            ),
+            LoadSignExtendCoreAir::new(range_checker.bus),
+        );
+        inventory.add_air(load_sign_extend);
+
+        let beq = VmAirWrapper::new(
+            Rv32BranchAdapterAir::new(exec_bridge, memory_bridge),
+            BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+        );
+        inventory.add_air(beq);
+
+        let blt = VmAirWrapper::new(
+            Rv32BranchAdapterAir::new(exec_bridge, memory_bridge),
+            BranchLessThanCoreAir::new(bitwise_lu.bus, BranchLessThanOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(blt);
+
+        let jal_lui = VmAirWrapper::new(
+            Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(memory_bridge, exec_bridge)),
+            Rv32JalLuiCoreAir::new(bitwise_lu.bus),
+        );
+        inventory.add_air(jal_lui);
+
+        let jalr = VmAirWrapper::new(
+            Rv32JalrAdapterAir::new(memory_bridge, exec_bridge),
+            Rv32JalrCoreAir::new(bitwise_lu.bus, range_checker.bus),
+        );
+        inventory.add_air(jalr);
+
+        let auipc = VmAirWrapper::new(
+            Rv32RdWriteAdapterAir::new(memory_bridge, exec_bridge),
+            Rv32AuipcCoreAir::new(bitwise_lu.bus),
+        );
+        inventory.add_air(auipc);
     }
 }
 
@@ -414,24 +510,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32I {
         inventory.add_executor(
             auipc_chip,
             Rv32AuipcOpcode::iter().map(|x| x.global_opcode()),
-        )?;
-
-        // There is no downside to adding phantom sub-executors, so we do it in the base extension.
-        builder.add_phantom_sub_executor(
-            phantom::Rv32HintInputSubEx,
-            PhantomDiscriminant(Rv32Phantom::HintInput as u16),
-        )?;
-        builder.add_phantom_sub_executor(
-            phantom::Rv32HintRandomSubEx,
-            PhantomDiscriminant(Rv32Phantom::HintRandom as u16),
-        )?;
-        builder.add_phantom_sub_executor(
-            phantom::Rv32PrintStrSubEx,
-            PhantomDiscriminant(Rv32Phantom::PrintStr as u16),
-        )?;
-        builder.add_phantom_sub_executor(
-            phantom::Rv32HintLoadByKeySubEx,
-            PhantomDiscriminant(Rv32Phantom::HintLoadByKey as u16),
         )?;
 
         Ok(inventory)

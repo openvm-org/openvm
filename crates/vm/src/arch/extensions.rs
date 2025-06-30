@@ -6,14 +6,14 @@ use std::{
 };
 
 use derive_more::derive::From;
-use getset::Getters;
+use getset::{CopyGetters, Getters};
 use itertools::{zip_eq, Itertools};
 #[cfg(feature = "bench-metrics")]
 use metrics::counter;
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
 use openvm_circuit_primitives::{
     utils::next_power_of_two_or_zero,
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus},
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{
@@ -31,6 +31,7 @@ use openvm_stark_backend::{
         hal::ProverBackend,
         types::{AirProofInput, AirProvingContext, CommittedTraceData, ProofInput},
     },
+    rap::AnyRap,
     AirRef, Chip, ChipUsageGetter,
 };
 use p3_baby_bear::BabyBear;
@@ -91,7 +92,7 @@ pub trait VmExecutionExtension<F> {
 
 /// Extension of the VM circuit. Allows _in-order_ addition of new AIRs with interactions.
 pub trait VmCircuitExtension<SC: StarkGenericConfig> {
-    fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), VmInventoryError>;
+    fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError>;
 }
 
 /// Extension of VM trace generation.
@@ -121,10 +122,11 @@ pub struct ExecutorInventory<E, F> {
     ext_start: Vec<usize>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Getters, CopyGetters)]
 pub struct AirInventory<SC: StarkGenericConfig> {
     /// The system AIRs required by the circuit architecture.
-    pub system: SystemAirs<SC>,
+    #[get = "pub"]
+    system: SystemAirs<SC>,
     /// List of all non-system AIRs in the circuit, in insertion order, which is the _reverse_ of
     /// the order they appear in the verifying key.
     ///
@@ -233,6 +235,37 @@ impl<E, F> ExecutorInventory<E, F> {
     }
 }
 
+impl<SC: StarkGenericConfig> AirInventory<SC> {
+    pub fn new_bus_idx(&mut self) -> BusIndex {
+        self.bus_idx_mgr.new_bus_idx()
+    }
+
+    /// Looks through already-defined AIRs to see if there exists any of type `A` by downcasting.
+    /// Returns all chips of type `A` in the circuit.
+    ///
+    /// This should not be used to look for system AIRs.
+    pub fn find_air<A: 'static>(&self) -> Vec<&A> {
+        self.ext_airs
+            .iter()
+            .filter_map(|air| air.as_any().downcast_ref())
+            .collect()
+    }
+
+    pub fn add_air<A: AnyRap<SC> + 'static>(&mut self, air: A) {
+        self.add_air_ref(Arc::new(air));
+    }
+
+    pub fn add_air_ref(&mut self, air: AirRef<SC>) {
+        self.ext_airs.push(air);
+    }
+
+    pub fn range_checker(&self) -> &VariableRangeCheckerAir {
+        self.find_air()
+            .first()
+            .expect("system always has range checker AIR")
+    }
+}
+
 /// Builder for processing unit. Processing units extend an existing system unit.
 pub struct VmInventoryBuilder<'a, F: PrimeField32> {
     system_config: &'a SystemConfig,
@@ -332,6 +365,12 @@ pub enum ExecutorInventoryError {
     ExecutorExists { opcode: VmOpcode, id: ExecutorId },
     #[error("Phantom discriminant {} already has sub-executor", .discriminant.0)]
     PhantomSubExecutorExists { discriminant: PhantomDiscriminant },
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum AirInventoryError {
+    #[error("AIR {name} not found")]
+    AirNotFound { name: String },
 }
 
 #[derive(thiserror::Error, Debug)]
