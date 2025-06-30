@@ -88,6 +88,26 @@ impl<F: Field> BaseAir<F> for VmConnectorAir {
 }
 
 impl VmConnectorAir {
+    pub fn new(
+        execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
+        range_bus: VariableRangeCheckerBus,
+        timestamp_max_bits: usize,
+    ) -> Self {
+        assert!(
+            range_bus.range_max_bits * 2 >= timestamp_max_bits,
+            "Range checker not large enough: range_max_bits={}, timestamp_max_bits={}",
+            range_bus.range_max_bits,
+            timestamp_max_bits
+        );
+        Self {
+            execution_bus,
+            program_bus,
+            range_bus,
+            timestamp_max_bits,
+        }
+    }
+
     /// Returns (low_bits, high_bits) to range check.
     fn timestamp_limb_bits(&self) -> (usize, usize) {
         let range_max_bits = self.range_bus.range_max_bits;

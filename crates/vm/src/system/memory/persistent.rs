@@ -52,7 +52,7 @@ pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
 /// - if `expand_direction` is 1, sends `[0, 0, address_space_label, leaf_label]` to `merkle_bus`.
 /// - if `expand_direction` is -1, receives `[1, 0, address_space_label, leaf_label]` from
 ///   `merkle_bus`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, derive_new::new)]
 pub struct PersistentBoundaryAir<const CHUNK: usize> {
     pub memory_dims: MemoryDimensions,
     pub memory_bus: MemoryBus,

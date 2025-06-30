@@ -27,7 +27,10 @@ use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32, TwoAdicField},
     p3_matrix::Matrix,
     p3_util::log2_ceil_usize,
-    prover::types::{AirProofInput, CommittedTraceData, ProofInput},
+    prover::{
+        hal::ProverBackend,
+        types::{AirProofInput, AirProvingContext, CommittedTraceData, ProofInput},
+    },
     AirRef, Chip, ChipUsageGetter,
 };
 use p3_baby_bear::BabyBear;
@@ -43,7 +46,7 @@ use crate::metrics::VmMetrics;
 use crate::{
     arch::{ExecutionBridge, InstructionExecutor, VmAirWrapper},
     system::{
-        connector::VmConnectorChip,
+        connector::{VmConnectorAir, VmConnectorChip},
         memory::{
             offline_checker::{MemoryBridge, MemoryBus},
             MemoryController, MemoryImage, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
@@ -51,11 +54,12 @@ use crate::{
         native_adapter::{NativeAdapterAir, NativeAdapterStep},
         phantom::PhantomChip,
         poseidon2::Poseidon2PeripheryChip,
-        program::{ProgramBus, ProgramChip},
+        program::{ProgramAir, ProgramBus, ProgramChip},
         public_values::{
             core::{PublicValuesCoreAir, PublicValuesCoreStep},
-            PublicValuesChip,
+            PublicValuesAir, PublicValuesChip,
         },
+        SystemAirs,
     },
 };
 
@@ -75,21 +79,61 @@ pub const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
 
 /// Extension of VM execution. Allows registration of custom execution of new instructions by
 /// opcode.
-pub trait VmExecutionExtension {
-    fn build(&self, inventory: &mut ExecutorInventory) -> Result<(), VmInventoryError>;
+pub trait VmExecutionExtension<F> {
+    /// Enum of executor variants
+    type Executor: AnyEnum;
+
+    fn build(
+        &self,
+        inventory: &mut ExecutorInventory<Self::Executor>,
+    ) -> Result<(), VmInventoryError>;
 }
 
 /// Extension of the VM circuit. Allows _in-order_ addition of new AIRs with interactions.
-pub trait VmCircuitExtension<SC> {
-    fn build(&self, inventory: &mut AirInventory) -> Result<(), VmInventoryError>;
+pub trait VmCircuitExtension<SC: StarkGenericConfig> {
+    fn build(&self, inventory: &mut AirInventory<SC>) -> Result<(), VmInventoryError>;
 }
 
 /// Extension of VM trace generation.
-/// The implementation **must** add chips in the same order and number matching the AIRs in
-/// [`VmCircuitExtension`].
-pub trait VmProverExtension<RA, PB> {
-    fn build(&self, inventory: &mut ChipInventory) -> Result<(), VmInventoryError>;
+/// The returned vector should exactly match the order of AIRs in [`VmCircuitExtension`] for this
+/// extension.
+pub trait VmProverExtension<E, RA, PB: ProverBackend> {
+    fn generate_proving_ctx(
+        &self,
+        executors: ExecutorInventory<E>,
+        airs: AirInventory<SC>,
+        chips: &mut ChipInventory,
+    ) -> Result<Vec<AirProvingContext<PB>>, VmInventoryError>;
 }
+
+#[derive(Clone)]
+pub struct ExecutorInventory<E> {
+    /// Lookup table to executor ID.
+    /// This is stored in a hashmap because it is _not_ expected to be used in the hot path.
+    /// A direct opcode -> executor mapping should be generated before runtime execution.
+    instruction_lookup: FxHashMap<VmOpcode, ExecutorId>,
+    pub executors: Vec<E>,
+}
+
+#[derive(Clone)]
+pub struct AirInventory<SC: StarkGenericConfig> {
+    pub system: SystemAirs<SC>,
+    /// List of all non-system AIRs in the circuit, in insertion order, which is the _reverse_ of
+    /// the order they appear in the verifying key.
+    ///
+    /// Note that the system will ensure that the first AIR in the list is always the
+    /// [VariableRangeCheckerAir].
+    pub ext_airs: Vec<AirRef<SC>>,
+
+    bus_idx_mgr: BusIndexManager,
+}
+
+pub struct ChipInventory {
+    chips: Vec<Box<dyn Any>>,
+}
+
+// VmExtension<SC, RA, PB> = VmExecutionExtension + VmCircuitExtension<SC> + VmProverExtension<RA,
+// PB>
 
 /// Configuration for a processor extension.
 ///
