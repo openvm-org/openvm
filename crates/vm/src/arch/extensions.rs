@@ -73,6 +73,24 @@ pub const BOUNDARY_AIR_ID: usize = PUBLIC_VALUES_AIR_ID + 1 + BOUNDARY_AIR_OFFSE
 /// Merkle AIR commits start/final memory states.
 pub const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
 
+/// Extension of VM execution. Allows registration of custom execution of new instructions by
+/// opcode.
+pub trait VmExecutionExtension {
+    fn build(&self, inventory: &mut ExecutorInventory) -> Result<(), VmInventoryError>;
+}
+
+/// Extension of the VM circuit. Allows _in-order_ addition of new AIRs with interactions.
+pub trait VmCircuitExtension<SC> {
+    fn build(&self, inventory: &mut AirInventory) -> Result<(), VmInventoryError>;
+}
+
+/// Extension of VM trace generation.
+/// The implementation **must** add chips in the same order and number matching the AIRs in
+/// [`VmCircuitExtension`].
+pub trait VmProverExtension<RA, PB> {
+    fn build(&self, inventory: &mut ChipInventory) -> Result<(), VmInventoryError>;
+}
+
 /// Configuration for a processor extension.
 ///
 /// There are two associated types:
