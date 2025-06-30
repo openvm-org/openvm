@@ -516,7 +516,7 @@ impl<F: PrimeField32> TracingMemory<F> {
 
             if align != lowest_block_size {
                 // This must be the volatile 4 <-> 1 type of thing
-                debug_assert!((address_space as u32) < NATIVE_AS);
+                debug_assert!((address_space as u32) < NATIVE_AS); // TODO: normal way
                 debug_assert_eq!(lowest_block_size, 1);
                 if timestamp == INITIAL_TIMESTAMP {
                     record_mut.header.timestamp_and_mask |= MERGE_BEFORE_FLAG;
@@ -619,6 +619,7 @@ impl<F: PrimeField32> TracingMemory<F> {
                     if self.initial_block_size >= align {
                         // We need to split the initial block into chunks
                         let block_start = (begin + i) & !(self.initial_block_size / align - 1);
+                        // TODO: normal way
                         if (address_space as u32) < NATIVE_AS {
                             let initial_values = unsafe {
                                 self.data.memory.get_slice::<u8>(
@@ -668,7 +669,7 @@ impl<F: PrimeField32> TracingMemory<F> {
                         }
                     } else {
                         debug_assert_eq!(self.initial_block_size, 1);
-                        debug_assert!((address_space as u32) < NATIVE_AS);
+                        debug_assert!((address_space as u32) < NATIVE_AS); // TODO: normal way
                         self.record_access::<u8, true>(
                             align,
                             address_space,

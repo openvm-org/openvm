@@ -55,14 +55,11 @@ pub struct TimestampedValues<T, const N: usize> {
     pub values: [T; N],
 }
 
-/// An equipartition of memory, with timestamps and values.
+/// A sorted equipartition of memory, with timestamps and values.
 ///
-/// The key is a pair `(address_space, label)`, where `label` is the index of the block in the
+/// The "key" is a pair `(address_space, label)`, where `label` is the index of the block in the
 /// partition. I.e., the starting address of the block is `(address_space, label * N)`.
-///
-/// If a key is not present in the map, then the block is uninitialized (and therefore zero).
-pub type TimestampedEquipartition<F, const N: usize> =
-    BTreeMap<(u32, u32), TimestampedValues<F, N>>;
+pub type TimestampedEquipartition<F, const N: usize> = Vec<((u32, u32), TimestampedValues<F, N>)>;
 
 /// An equipartition of memory values.
 ///
@@ -356,14 +353,15 @@ impl<F: PrimeField32> MemoryController<F> {
         debug_assert!(touched_blocks.is_sorted_by_key(|(addr, _)| addr));
         let (bytes, fs): (Vec<_>, Vec<_>) = touched_blocks
             .into_iter()
-            .partition(|((addr_sp, _), _)| *addr_sp < NATIVE_AS);
+            .partition(|((addr_sp, _), _)| *addr_sp < NATIVE_AS); // TODO: normal way
 
         self.handle_touched_blocks::<u8, CHUNK>(&mut final_memory, bytes, 4, |x| {
             F::from_canonical_u8(x)
         });
         self.handle_touched_blocks::<F, CHUNK>(&mut final_memory, fs, 1, |x| x);
 
-        final_memory.into_iter().collect()
+        debug_assert!(final_memory.is_sorted_by_key(|(key, _)| *key));
+        final_memory
     }
 
     fn handle_touched_blocks<T: Copy + Debug + Default, const CHUNK: usize>(

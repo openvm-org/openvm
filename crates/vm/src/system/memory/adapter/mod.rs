@@ -488,6 +488,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
             F::from_canonical_u32(address.address_space),
             F::from_canonical_u32(address.pointer),
         );
+        // TODO: normal way
         if address.address_space < NATIVE_AS {
             for (dst, src) in row.values.iter_mut().zip(values.iter()) {
                 *dst = F::from_canonical_u8(*src);
