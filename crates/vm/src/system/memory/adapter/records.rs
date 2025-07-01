@@ -10,8 +10,7 @@ use crate::arch::{CustomBorrow, DenseRecordArena, RecordArena, SizedRecord};
 #[repr(C)]
 #[derive(Debug, Clone, Copy, AlignedBytesBorrow, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct AccessRecordHeader {
-    /// If we need to merge before, this has the 31st bit set.
-    /// If we need to split after, this has the 30th bit set.
+    /// Iff we need to merge before, this has the `MERGE_AND_NOT_SPLIT_FLAG` bit set
     pub timestamp_and_mask: u32,
     pub address_space: u32,
     pub pointer: u32,
@@ -28,7 +27,6 @@ pub(crate) struct AccessRecordMut<'a> {
     // TODO(AG): optimize with some `Option` serialization stuff
     pub timestamps: &'a mut [u32], // len is block_size / lowest_block_size
     pub data: &'a mut [u8],        // len is block_size * type_size
-    pub prev_data: &'a mut [u8],   // len is block_size * type_size
 }
 
 #[derive(Debug, Clone)]
@@ -41,13 +39,22 @@ pub(crate) struct AccessLayout {
     pub type_size: usize,
 }
 
-pub(crate) const MERGE_BEFORE_FLAG: u32 = 1 << 30;
-pub(crate) const SPLIT_AFTER_FLAG: u32 = 1 << 31;
+impl AccessLayout {
+    pub(crate) fn from_record_header(header: &AccessRecordHeader) -> Self {
+        Self {
+            block_size: header.block_size as usize,
+            lowest_block_size: header.lowest_block_size as usize,
+            type_size: header.type_size as usize,
+        }
+    }
+}
+
+pub(crate) const MERGE_AND_NOT_SPLIT_FLAG: u32 = 1 << 31;
 
 pub(crate) fn size_by_layout(layout: &AccessLayout) -> usize {
     size_of::<AccessRecordHeader>() // header struct
     + (layout.block_size / layout.lowest_block_size) * size_of::<u32>() // timestamps
-    + (layout.block_size * layout.type_size).next_multiple_of(4) * 2 // data and prev_data
+    + (layout.block_size * layout.type_size).next_multiple_of(4) // data
 }
 
 impl SizedRecord<AccessLayout> for AccessRecordMut<'_> {
@@ -85,20 +92,10 @@ impl<'a> CustomBorrow<'a, AccessRecordMut<'a>, AccessLayout> for [u8] {
                 layout.block_size * layout.type_size,
             )
         };
-        offset += (layout.block_size * layout.type_size).next_multiple_of(4);
-
-        // prev_data: [u8] (block_size * type_size bytes)
-        let prev_data = unsafe {
-            std::slice::from_raw_parts_mut(
-                rest.as_mut_ptr().add(offset),
-                layout.block_size * layout.type_size,
-            )
-        };
 
         AccessRecordMut {
             header,
             data,
-            prev_data,
             timestamps,
         }
     }

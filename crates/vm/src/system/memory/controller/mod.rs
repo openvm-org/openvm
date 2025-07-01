@@ -28,6 +28,7 @@ use super::{online::INITIAL_TIMESTAMP, volatile::VolatileBoundaryChip, AddressMa
 use crate::{
     arch::{hasher::HasherChip, MemoryConfig, ADDR_SPACE_OFFSET},
     system::memory::{
+        adapter::records::AccessRecordHeader,
         dimensions::MemoryDimensions,
         merkle::{MemoryMerkleChip, SerialReceiver},
         offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
@@ -348,6 +349,7 @@ impl<F: PrimeField32> MemoryController<F> {
         &mut self,
         touched_blocks: Vec<((u32, u32), AccessMetadata)>,
     ) -> TimestampedEquipartition<F, CHUNK> {
+        eprintln!("touched blocks: {:?}", touched_blocks);
         let mut final_memory = Vec::new();
 
         debug_assert!(touched_blocks.is_sorted_by_key(|(addr, _)| addr));
@@ -377,9 +379,9 @@ impl<F: PrimeField32> MemoryController<F> {
         let mut current_timestamps = vec![0; CHUNK];
         for ((addr_space, ptr), metadata) in touched_blocks {
             let AccessMetadata {
+                start_ptr,
                 timestamp,
                 block_size,
-                offset,
             } = metadata;
             assert!(
                 current_cnt == 0
@@ -398,6 +400,18 @@ impl<F: PrimeField32> MemoryController<F> {
             debug_assert!(block_size >= min_block_size as u32);
             debug_assert!(ptr % min_block_size as u32 == 0);
 
+            if (ptr != current_address.pointer || CHUNK as u32 != block_size)
+                && block_size > min_block_size as u32
+            {
+                self.memory.add_split_record(AccessRecordHeader {
+                    timestamp_and_mask: timestamp,
+                    address_space: addr_space,
+                    pointer: start_ptr,
+                    block_size,
+                    lowest_block_size: min_block_size as u32,
+                    type_size: size_of::<T>() as u32,
+                });
+            }
             let values = unsafe {
                 self.memory
                     .data
@@ -405,13 +419,6 @@ impl<F: PrimeField32> MemoryController<F> {
                     .get_slice::<T>((addr_space, ptr), block_size as usize)
                     .to_vec()
             };
-            if (ptr != current_address.pointer || CHUNK as u32 != block_size)
-                && block_size > min_block_size as u32
-            {
-                self.memory
-                    .access_adapter_inventory
-                    .mark_to_split(offset as usize);
-            }
             if min_block_size > CHUNK {
                 assert_eq!(current_cnt, 0);
                 for i in (0..block_size).step_by(min_block_size) {

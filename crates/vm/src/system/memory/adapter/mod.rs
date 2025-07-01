@@ -29,8 +29,8 @@ use crate::{
     arch::{CustomBorrow, DenseRecordArena, RecordArena, SizedRecord},
     system::memory::{
         adapter::records::{
-            size_by_layout, AccessLayout, AccessRecordHeader, AccessRecordMut, MERGE_BEFORE_FLAG,
-            SPLIT_AFTER_FLAG,
+            size_by_layout, AccessLayout, AccessRecordHeader, AccessRecordMut,
+            MERGE_AND_NOT_SPLIT_FLAG,
         },
         offline_checker::MemoryBus,
         MemoryAddress,
@@ -178,38 +178,22 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
             bytes.len()
         );
         let mut ptr = 0;
-        let mut stats = (0, 0);
         while ptr < bytes.len() {
             let header: &AccessRecordHeader = bytes[ptr..].borrow();
             let layout: AccessLayout = unsafe { bytes[ptr..].extract_layout() };
             ptr += <AccessRecordMut<'_> as SizedRecord<AccessLayout>>::size(&layout);
 
-            let num_rows = if header.timestamp_and_mask & SPLIT_AFTER_FLAG != 0 {
-                1
-            } else {
-                0
-            } + if header.timestamp_and_mask & MERGE_BEFORE_FLAG != 0 {
-                1
-            } else {
-                0
-            };
-            if num_rows > 0 {
-                let log_max_block_size = log2_strict_usize(header.block_size as usize);
-                for (i, h) in heights
-                    .iter_mut()
-                    .enumerate()
-                    .take(log_max_block_size)
-                    .skip(log2_strict_usize(header.lowest_block_size as usize))
-                {
-                    *h += num_rows << (log_max_block_size - i - 1);
-                }
-            } else {
-                stats.0 += 1;
+            let log_max_block_size = log2_strict_usize(header.block_size as usize);
+            for (i, h) in heights
+                .iter_mut()
+                .enumerate()
+                .take(log_max_block_size)
+                .skip(log2_strict_usize(header.lowest_block_size as usize))
+            {
+                *h += 1 << (log_max_block_size - i - 1);
             }
-            stats.1 += 1;
         }
         tracing::debug!("Computed heights from memory adapters arena: {:?}", heights);
-        tracing::debug!("Blank records: {} / {}", stats.0, stats.1);
     }
 
     fn apply_overridden_heights(&mut self, heights: &mut [usize]) {
@@ -260,7 +244,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
             let log_min_block_size = log2_strict_usize(record.header.lowest_block_size as usize);
             let log_max_block_size = log2_strict_usize(record.header.block_size as usize);
 
-            if record.header.timestamp_and_mask & MERGE_BEFORE_FLAG != 0 {
+            if record.header.timestamp_and_mask & MERGE_AND_NOT_SPLIT_FLAG != 0 {
                 for i in log_min_block_size..log_max_block_size {
                     let data_len = layout.type_size << i;
                     let ts_len = 1 << (i - log_min_block_size);
@@ -275,7 +259,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
                                 record.header.address_space,
                                 record.header.pointer + (j << (i + 1)) as u32,
                             ),
-                            &record.prev_data[j * 2 * data_len..(j + 1) * 2 * data_len],
+                            &record.data[j * 2 * data_len..(j + 1) * 2 * data_len],
                             *record.timestamps[2 * j * ts_len..(2 * j + 1) * ts_len]
                                 .iter()
                                 .max()
@@ -287,10 +271,8 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
                         );
                     }
                 }
-            }
-            if record.header.timestamp_and_mask & SPLIT_AFTER_FLAG != 0 {
-                let timestamp =
-                    record.header.timestamp_and_mask & !SPLIT_AFTER_FLAG & !MERGE_BEFORE_FLAG;
+            } else {
+                let timestamp = record.header.timestamp_and_mask;
                 for i in log_min_block_size..log_max_block_size {
                     let data_len = layout.type_size << i;
                     for j in 0..record.data.len() / (2 * data_len) {
@@ -367,20 +349,6 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         } else {
             None
         }
-    }
-
-    pub(crate) fn mark_to_split(&mut self, offset: usize) {
-        self.get_record_header_at_or_none(offset)
-            .unwrap()
-            .timestamp_and_mask |= SPLIT_AFTER_FLAG;
-    }
-
-    pub(crate) fn is_marked_to_split(&mut self, offset: usize) -> bool {
-        self.get_record_header_at_or_none(offset)
-            .unwrap()
-            .timestamp_and_mask
-            & SPLIT_AFTER_FLAG
-            != 0
     }
 }
 

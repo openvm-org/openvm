@@ -10,7 +10,7 @@ use super::{adapter::AccessAdapterInventory, offline_checker::MemoryBus};
 use crate::{
     arch::MemoryConfig,
     system::memory::{
-        adapter::records::{AccessLayout, AccessRecordHeader, MERGE_BEFORE_FLAG, SPLIT_AFTER_FLAG},
+        adapter::records::{AccessLayout, AccessRecordHeader, MERGE_AND_NOT_SPLIT_FLAG},
         MemoryImage,
     },
 };
@@ -208,6 +208,15 @@ impl<M: LinearMemory> AddressMap<M> {
         mem.get_aligned_slice(start, len)
     }
 
+    /// Panics or segfaults if `ptr..ptr + len` is out of bounds
+    ///
+    /// # Safety
+    /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    pub unsafe fn get_u8_slice(&self, addr_space: usize, start: usize, len: usize) -> &[u8] {
+        let mem = self.mem.get_unchecked(addr_space);
+        mem.get_aligned_slice(start, len)
+    }
+
     /// Copies `data` into the memory at `(addr_space, ptr)`.
     ///
     /// Panics or segfaults if `ptr + size_of_val(data)` is out of bounds.
@@ -333,8 +342,8 @@ impl GuestMemory {
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, derive_new::new)]
 pub struct AccessMetadata {
-    /// The offset of the record in the corresponding adapter's arena
-    pub offset: u32,
+    /// The starting pointer of the access
+    pub start_ptr: u32,
     /// The block size of the memory access
     pub block_size: u32,
     /// The timestamp of the last access.
@@ -438,7 +447,6 @@ impl<F: PrimeField32> TracingMemory<F> {
         align: usize,
         block_size: usize,
         timestamp: u32,
-        offset: u32,
     ) {
         let ptr = pointer / align;
         // SAFETY: address_space is assumed to be valid and within bounds
@@ -447,12 +455,84 @@ impl<F: PrimeField32> TracingMemory<F> {
             meta.set(
                 ptr + i,
                 AccessMetadata {
-                    offset,
+                    start_ptr: pointer as u32,
                     block_size: block_size as u32,
                     timestamp,
                 },
             );
         }
+    }
+
+    pub(crate) fn add_split_record(&mut self, header: AccessRecordHeader) {
+        if header.block_size == header.lowest_block_size {
+            return;
+        }
+        let data_slice = unsafe {
+            self.data.memory.get_u8_slice(
+                header.address_space as usize,
+                (header.pointer * header.type_size) as usize,
+                (header.block_size * header.type_size) as usize,
+            )
+        };
+
+        let record_mut = self
+            .access_adapter_inventory
+            .alloc_record(AccessLayout::from_record_header(&header));
+        *record_mut.header = header;
+        record_mut.data.copy_from_slice(data_slice);
+        // we don't mind garbage values in prev_*
+    }
+
+    pub(crate) fn add_merge_record<T>(
+        &mut self,
+        header: AccessRecordHeader,
+        data: &[T],
+        prev_ts: &[u32],
+    ) {
+        if header.block_size == header.lowest_block_size {
+            return;
+        }
+
+        let data_slice =
+            unsafe { from_raw_parts(data.as_ptr() as *const u8, std::mem::size_of_val(data)) };
+
+        let record_mut = self
+            .access_adapter_inventory
+            .alloc_record(AccessLayout::from_record_header(&header));
+        *record_mut.header = header;
+        record_mut.header.timestamp_and_mask |= MERGE_AND_NOT_SPLIT_FLAG;
+        record_mut.data.copy_from_slice(data_slice);
+        record_mut.timestamps.copy_from_slice(prev_ts);
+    }
+
+    fn split_by_meta<T: Copy>(
+        &mut self,
+        meta: &AccessMetadata,
+        address_space: usize,
+        lowest_block_size: usize,
+    ) {
+        if meta.block_size == lowest_block_size as u32 {
+            return;
+        }
+        let begin = meta.start_ptr as usize / lowest_block_size;
+        for i in 0..(meta.block_size as usize / lowest_block_size) {
+            self.meta[address_space].set(
+                begin + i,
+                AccessMetadata {
+                    start_ptr: (meta.start_ptr + (i * lowest_block_size) as u32),
+                    block_size: lowest_block_size as u32,
+                    timestamp: meta.timestamp,
+                },
+            );
+        }
+        self.add_split_record(AccessRecordHeader {
+            timestamp_and_mask: meta.timestamp,
+            address_space: address_space as u32,
+            pointer: meta.start_ptr,
+            block_size: meta.block_size,
+            lowest_block_size: lowest_block_size as u32,
+            type_size: size_of::<T>() as u32,
+        });
     }
 
     /// Given all the necessary information about an access,
@@ -479,50 +559,42 @@ impl<F: PrimeField32> TracingMemory<F> {
         }
 
         if block_size > lowest_block_size {
-            // only then we need to create a record
-            let record_mut = self.access_adapter_inventory.alloc_record(AccessLayout {
-                block_size,
-                lowest_block_size,
-                type_size: size_of::<T>(),
-            });
-            *record_mut.header = AccessRecordHeader {
-                timestamp_and_mask: timestamp
-                    | (if prev_timestamps.is_some() {
-                        MERGE_BEFORE_FLAG
-                    } else {
-                        0
-                    })
-                    | (if split_after { SPLIT_AFTER_FLAG } else { 0 }),
-                address_space: address_space as u32,
-                pointer: pointer as u32,
-                block_size: block_size as u32,
-                lowest_block_size: lowest_block_size as u32,
-                type_size: size_of::<T>() as u32,
-            };
-            let data_slice = unsafe {
-                from_raw_parts(values.as_ptr() as *const u8, block_size * size_of::<T>())
-            };
-            record_mut.data.copy_from_slice(data_slice);
-            let prev_data_slice = unsafe {
-                from_raw_parts(
-                    prev_values.as_ptr() as *const u8,
-                    block_size * size_of::<T>(),
-                )
-            };
-            record_mut.prev_data.copy_from_slice(prev_data_slice);
+            // only then we maybe need to create a record
             if let Some(prev_timestamps) = prev_timestamps {
-                record_mut.timestamps.copy_from_slice(prev_timestamps);
-            } // else we don't mind garbage values
+                self.add_merge_record(
+                    AccessRecordHeader {
+                        timestamp_and_mask: timestamp,
+                        address_space: address_space as u32,
+                        pointer: pointer as u32,
+                        block_size: block_size as u32,
+                        lowest_block_size: lowest_block_size as u32,
+                        type_size: size_of::<T>() as u32,
+                    },
+                    prev_values,
+                    prev_timestamps,
+                );
 
-            if align != lowest_block_size {
-                // This must be the volatile 4 <-> 1 type of thing
-                debug_assert!((address_space as u32) < NATIVE_AS); // TODO: normal way
-                debug_assert_eq!(lowest_block_size, 1);
-                if timestamp == INITIAL_TIMESTAMP {
-                    record_mut.header.timestamp_and_mask |= MERGE_BEFORE_FLAG;
-                    record_mut.timestamps.fill(INITIAL_TIMESTAMP);
+                if align != lowest_block_size {
+                    // This must be the volatile 4 <-> 1 type of thing
+                    todo!()
+                    // debug_assert!((address_space as u32) < NATIVE_AS); // TODO: normal way
+                    // debug_assert_eq!(lowest_block_size, 1);
+                    // if timestamp == INITIAL_TIMESTAMP {
+                    //     record_mut.header.timestamp_and_mask |= MERGE_BEFORE_FLAG;
+                    //     record_mut.timestamps.fill(INITIAL_TIMESTAMP);
+                    // }
+                    // offset = AccessMetadata::UNSPLITTABLE;
                 }
-                offset = AccessMetadata::UNSPLITTABLE;
+            }
+            if split_after {
+                self.add_split_record(AccessRecordHeader {
+                    timestamp_and_mask: timestamp,
+                    address_space: address_space as u32,
+                    pointer: pointer as u32,
+                    block_size: block_size as u32,
+                    lowest_block_size: lowest_block_size as u32,
+                    type_size: size_of::<T>() as u32,
+                });
             }
         } else {
             debug_assert_eq!(align, lowest_block_size);
@@ -538,11 +610,10 @@ impl<F: PrimeField32> TracingMemory<F> {
                         align,
                         lowest_block_size,
                         timestamp,
-                        AccessMetadata::UNSPLITTABLE,
                     );
                 }
             } else {
-                self.set_meta_block(address_space, pointer, align, block_size, timestamp, offset);
+                self.set_meta_block(address_space, pointer, align, block_size, timestamp);
             }
         }
     }
@@ -551,7 +622,7 @@ impl<F: PrimeField32> TracingMemory<F> {
     /// and the offset of the record in bytes.
     ///
     /// Caller must ensure alignment (e.g. via `assert_alignment`) prior to calling this function.
-    fn prev_access_time<T, const BLOCK_SIZE: usize>(
+    fn prev_access_time<T: Copy, const BLOCK_SIZE: usize>(
         &mut self,
         address_space: usize,
         pointer: usize,
@@ -559,197 +630,87 @@ impl<F: PrimeField32> TracingMemory<F> {
         values: &[T; BLOCK_SIZE],
         prev_values: &[T; BLOCK_SIZE],
     ) -> u32 {
-        /***
-         * Each element of meta contains the `block_size` and `timestamp` of the last access
-         * to the corresponding `[align]` block, as well as the offset of the corresponding
-         * record in the corresponding record arena. It also records the memory access it
-         * is called for, as well as all the required accesses corresponding to initializing
-         * new blocks.
-         * If any of the previous memory accesses turn out in need to be split,
-         * this function sets their corresponding flags.
-         *
-         * The way metadata works is:
-         * - When we touch a block, it must be decomposable into aligned subsegments of length
-         *   `align`. We set the metadata for each of these subsegments, completely overwriting
-         *   the previous metadata.
-         * - If we overwrite a piece of metadata that belonged to another access, we **do not
-         *   care** about other pieces of the same access subsegment.
-         * - Whatever we overwrite, we mark the corresponding access to be split later.
-         *
-         * The way adapter records work is:
-         * - Every time we have an access, it has two values:
-         *   - The size of the access,
-         *   - The size of the subsegments we may want to split it into. At the time of the
-         *     access, we don't know yet if we want to split it afterwards. This small size is
-         *     usually equal to the `align` for this address space, but it can differ, e.g. if
-         *     we want to split `align=4` into final segments, which have size `1` in the
-         *     volatile memory interface.
-         * - We add one record to all the adapters with sizes from `(lowest_size, block_size]`.
-         * - When we want to mark an access to be split, we only modify the highest record (the
-         *   one with the largest size), which is considered the "master" record. The
-         *   corresponding metadatas will have the offset of this record in its arena.
-         * - Before finalization, we call `prepare_to_finalize` function that propagates the
-         *   split flag to all the smaller records for this access.
-         */
         let num_segs = BLOCK_SIZE / align;
 
         let begin = pointer / align;
 
-        let first_meta = *self.meta[address_space].get(begin);
-        let need_to_merge = (first_meta.block_size != BLOCK_SIZE as u32)
-            || (0..num_segs).any(|i| first_meta != *self.meta[address_space].get(begin + i));
-        if need_to_merge {
+        let first_meta = self.meta[address_space].get(begin);
+        let need_to_merge =
+            first_meta.block_size != BLOCK_SIZE as u32 || first_meta.start_ptr != pointer as u32;
+        let result = if need_to_merge {
             // Then we need to split everything we touched there
-            for i in 0..num_segs {
+            // And add a merge record in the end
+            let mut i = 0;
+            while i < num_segs {
                 let meta = self.meta[address_space].get(begin + i);
-                if meta.block_size > 0 && meta.offset != AccessMetadata::UNSPLITTABLE {
-                    self.access_adapter_inventory
-                        .mark_to_split(meta.offset as usize);
+                if meta.block_size == 0 {
+                    i += 1;
+                    continue;
                 }
+                let meta = *meta;
+                self.split_by_meta::<T>(&meta, address_space, align);
+                i = (meta.start_ptr + meta.block_size) as usize / align - begin;
             }
-        }
 
-        let prev_ts = (0..num_segs)
-            .map(|i| {
-                let meta = self.meta[address_space].get(begin + i);
-                if meta.block_size > 0 {
-                    meta.timestamp
-                } else {
-                    // Initialize
-                    if self.initial_block_size >= align {
-                        // We need to split the initial block into chunks
-                        let block_start = (begin + i) & !(self.initial_block_size / align - 1);
-                        // TODO: normal way
-                        if (address_space as u32) < NATIVE_AS {
-                            let initial_values = unsafe {
-                                self.data.memory.get_slice::<u8>(
-                                    (address_space as u32, (block_start * align) as u32),
-                                    self.initial_block_size,
-                                )
-                            };
-                            // Safety: the upcoming `record_access` will not have any
-                            // reallocations in the guest memory, so it should be fine
-                            let initial_values = unsafe {
-                                from_raw_parts(initial_values.as_ptr(), self.initial_block_size)
-                            };
-                            self.record_access::<u8, true>(
-                                self.initial_block_size,
+            let prev_ts = (0..num_segs)
+                .map(|i| {
+                    let meta = self.meta[address_space].get(begin + i);
+                    if meta.block_size > 0 {
+                        meta.timestamp
+                    } else {
+                        // Initialize
+                        if self.initial_block_size >= align {
+                            // We need to split the initial block into chunks
+                            let block_start = (begin + i) & !(self.initial_block_size / align - 1);
+                            self.split_by_meta::<T>(
+                                &AccessMetadata {
+                                    start_ptr: (block_start * align) as u32,
+                                    block_size: self.initial_block_size as u32,
+                                    timestamp: INITIAL_TIMESTAMP,
+                                },
                                 address_space,
-                                block_start * align,
                                 align,
-                                INITIAL_TIMESTAMP,
-                                None,
-                                initial_values,
-                                initial_values,
-                                true,
                             );
                         } else {
-                            let initial_values = unsafe {
-                                self.data.memory.get_slice::<F>(
-                                    (address_space as u32, (block_start * align) as u32),
-                                    self.initial_block_size,
-                                )
-                            };
-                            // Safety: the upcoming `record_access` will not have any
-                            // reallocations in the guest memory, so it should be fine
-                            let initial_values = unsafe {
-                                from_raw_parts(initial_values.as_ptr(), self.initial_block_size)
-                            };
-                            self.record_access::<F, true>(
-                                self.initial_block_size,
-                                address_space,
-                                block_start * align,
-                                align,
-                                INITIAL_TIMESTAMP,
-                                None,
-                                initial_values,
-                                initial_values,
-                                true,
+                            debug_assert_eq!(self.initial_block_size, 1);
+                            debug_assert!((address_space as u32) < NATIVE_AS); // TODO: normal way
+                            self.add_merge_record::<u8>(
+                                AccessRecordHeader {
+                                    timestamp_and_mask: INITIAL_TIMESTAMP,
+                                    address_space: address_space as u32,
+                                    pointer: (pointer + i * align) as u32,
+                                    block_size: align as u32,
+                                    lowest_block_size: self.initial_block_size as u32,
+                                    type_size: 1,
+                                },
+                                &vec![0; align], // TODO: not vec maybe
+                                &vec![INITIAL_TIMESTAMP; align], // TODO: not vec maybe
                             );
                         }
-                    } else {
-                        debug_assert_eq!(self.initial_block_size, 1);
-                        debug_assert!((address_space as u32) < NATIVE_AS); // TODO: normal way
-                        self.record_access::<u8, true>(
-                            align,
-                            address_space,
-                            pointer + i * align,
-                            1,
-                            INITIAL_TIMESTAMP,
-                            None,
-                            &vec![0; align],
-                            &vec![0; align],
-                            false,
-                        );
+                        INITIAL_TIMESTAMP
                     }
-                    INITIAL_TIMESTAMP
-                }
-            })
-            .collect::<Vec<_>>(); // TODO(AG): small buffer or small vec or something
+                })
+                .collect::<Vec<_>>(); // TODO(AG): small buffer or small vec or something
 
-        let need_new_record = need_to_merge || {
-            let old_record_header = self
-                .access_adapter_inventory
-                .get_record_header_at_or_none(first_meta.offset as usize);
-            match old_record_header {
-                Some(old_record_header) => {
-                    debug_assert_eq!(old_record_header.lowest_block_size, align as u32);
-                    old_record_header.timestamp_and_mask & (MERGE_BEFORE_FLAG | SPLIT_AFTER_FLAG)
-                        != 0
-                }
-                None => true,
-            }
-        };
-        if need_new_record {
-            self.record_access::<T, true>(
-                BLOCK_SIZE,
-                address_space,
-                pointer,
-                align,
-                self.timestamp,
-                if need_to_merge { Some(&prev_ts) } else { None },
-                values,
+            let timestamp = *prev_ts.iter().max().unwrap();
+            self.add_merge_record(
+                AccessRecordHeader {
+                    timestamp_and_mask: timestamp,
+                    address_space: address_space as u32,
+                    pointer: pointer as u32,
+                    block_size: BLOCK_SIZE as u32,
+                    lowest_block_size: align as u32,
+                    type_size: size_of::<T>() as u32,
+                },
                 prev_values,
-                false,
+                &prev_ts,
             );
+            timestamp
         } else {
-            // Just overwrite the old record
-            let record_mut = self
-                .access_adapter_inventory
-                .get_record_at_or_none(
-                    first_meta.offset as usize,
-                    AccessLayout {
-                        block_size: BLOCK_SIZE,
-                        lowest_block_size: align,
-                        type_size: size_of::<T>(),
-                    },
-                )
-                .unwrap();
-
-            record_mut.header.timestamp_and_mask = self.timestamp;
-            let data_slice = unsafe {
-                from_raw_parts(values.as_ptr() as *const u8, BLOCK_SIZE * size_of::<T>())
-            };
-            record_mut.data.copy_from_slice(data_slice);
-            let prev_data_slice = unsafe {
-                from_raw_parts(
-                    prev_values.as_ptr() as *const u8,
-                    BLOCK_SIZE * size_of::<T>(),
-                )
-            };
-            record_mut.prev_data.copy_from_slice(prev_data_slice);
-
-            self.set_meta_block(
-                address_space,
-                pointer,
-                align,
-                BLOCK_SIZE,
-                self.timestamp,
-                first_meta.offset,
-            );
-        }
-
-        *prev_ts.iter().max().unwrap()
+            first_meta.timestamp
+        };
+        self.set_meta_block(address_space, pointer, align, BLOCK_SIZE, self.timestamp);
+        result
     }
 
     /// Atomic read operation which increments the timestamp by 1.
@@ -857,42 +818,20 @@ impl<F: PrimeField32> TracingMemory<F> {
     /// Returns the list of all touched blocks. The list is sorted by address.
     /// If a block hasn't been explicitly accessed and is created by a split,
     /// the corresponding metadata has `offset` set to `AccessMetadata::UNSPLITTABLE`.
-    pub fn touched_blocks(&mut self) -> Vec<(Address, AccessMetadata)> {
-        let mut blocks = Vec::new();
-        for (addr_space, (page, &align)) in zip_eq(&self.meta, &self.min_block_size).enumerate() {
-            let mut next_idx = 0;
-            for (idx, metadata) in page.iter() {
-                if idx < next_idx {
-                    continue;
-                }
-                if metadata.block_size != 0 {
-                    if idx >= next_idx
-                        && metadata.block_size > align
-                        && metadata.offset != AccessMetadata::UNSPLITTABLE
-                        && !self
-                            .access_adapter_inventory
-                            .is_marked_to_split(metadata.offset as usize)
-                    {
-                        // This block is only intact if it's not split after
-                        blocks.push(((addr_space as u32, idx as u32 * align), metadata));
-                        next_idx = idx + (metadata.block_size / align) as usize;
+    pub fn touched_blocks(&self) -> Vec<(Address, AccessMetadata)> {
+        zip_eq(&self.meta, &self.min_block_size)
+            .enumerate()
+            .flat_map(|(addr_space, (page, &align))| {
+                page.iter().filter_map(move |(idx, metadata)| {
+                    let ptr = idx as u32 * align;
+                    if ptr == metadata.start_ptr && metadata.block_size != 0 {
+                        Some(((addr_space as u32, ptr), metadata))
                     } else {
-                        // The next block is created by a split
-                        // and does not exist in form of a record
-                        blocks.push((
-                            (addr_space as u32, idx as u32 * align),
-                            AccessMetadata {
-                                offset: AccessMetadata::UNSPLITTABLE,
-                                block_size: align,
-                                timestamp: metadata.timestamp,
-                            },
-                        ));
-                        next_idx += 1;
+                        None
                     }
-                }
-            }
-        }
-        blocks
+                })
+            })
+            .collect()
     }
 }
 
