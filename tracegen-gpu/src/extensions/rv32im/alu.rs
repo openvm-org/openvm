@@ -1,19 +1,22 @@
 use std::{mem::size_of, sync::Arc};
 
-use super::cuda::alu::tracegen as rv32_alu_tracegen;
-use crate::{
-    primitives::bitwise_op_lookup::BitwiseOperationLookupChipGPU,
-    primitives::var_range::VariableRangeCheckerChipGPU, DeviceChip,
-};
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
-use openvm_rv32im_circuit::adapters::{
-    Rv32BaseAluAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+use openvm_rv32im_circuit::{
+    adapters::{Rv32BaseAluAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+    BaseAluCoreRecord, Rv32BaseAluAir,
 };
-use openvm_rv32im_circuit::{BaseAluCoreAir, BaseAluCoreRecord, Rv32BaseAluAir};
-use openvm_stark_backend::{p3_field::FieldAlgebra, rap::get_air_name, AirRef, ChipUsageGetter};
+use openvm_stark_backend::{rap::get_air_name, AirRef, ChipUsageGetter};
 use p3_air::BaseAir;
 use stark_backend_gpu::{
     base::DeviceMatrix, cuda::copy::MemCopyH2D, prelude::F, prover_backend::GpuBackend, types::SC,
+};
+
+use super::cuda::alu::tracegen as rv32_alu_tracegen;
+use crate::{
+    primitives::{
+        bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
+    },
+    DeviceChip,
 };
 
 pub struct Rv32AluChipGpu<'a> {
@@ -88,8 +91,6 @@ impl DeviceChip<SC, GpuBackend> for Rv32AluChipGpu<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::testing::GpuChipTestBuilder;
     use openvm_circuit::arch::{
         testing::{memory::gen_pointer, BITWISE_OP_LOOKUP_BUS},
         DenseRecordArena, EmptyAdapterCoreLayout, MatrixRecordArena, NewVmChipWrapper,
@@ -99,16 +100,18 @@ mod tests {
         BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
     };
     use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode};
-    use openvm_rv32im_circuit::adapters::{Rv32BaseAluAdapterAir, Rv32BaseAluAdapterStep};
     use openvm_rv32im_circuit::{
+        adapters::{Rv32BaseAluAdapterAir, Rv32BaseAluAdapterStep},
         BaseAluCoreAir, BaseAluCoreRecord, Rv32BaseAluAir, Rv32BaseAluStep,
     };
     use openvm_rv32im_transpiler::BaseAluOpcode;
-    use openvm_stark_backend::p3_field::FieldAlgebra;
-    use openvm_stark_backend::verifier::VerificationError;
+    use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::Rng;
     use stark_backend_gpu::prelude::F;
+
+    use super::*;
+    use crate::testing::GpuChipTestBuilder;
 
     const MAX_INS_CAPACITY: usize = 512;
 
@@ -125,9 +128,9 @@ mod tests {
                 Rv32BaseAluAdapterAir::new(
                     tester.execution_bridge(),
                     tester.memory_bridge(),
-                    bitwise_chip.bus().clone(),
+                    bitwise_chip.bus(),
                 ),
-                BaseAluCoreAir::new(bitwise_chip.bus().clone(), BaseAluOpcode::CLASS_OFFSET),
+                BaseAluCoreAir::new(bitwise_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
             ),
             Rv32BaseAluStep::new(
                 Rv32BaseAluAdapterStep::new(bitwise_chip.clone()),
@@ -149,9 +152,9 @@ mod tests {
                 Rv32BaseAluAdapterAir::new(
                     tester.execution_bridge(),
                     tester.memory_bridge(),
-                    bitwise_chip.bus().clone(),
+                    bitwise_chip.bus(),
                 ),
-                BaseAluCoreAir::new(bitwise_chip.bus().clone(), BaseAluOpcode::CLASS_OFFSET),
+                BaseAluCoreAir::new(bitwise_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
             ),
             Rv32BaseAluStep::new(
                 Rv32BaseAluAdapterStep::new(bitwise_chip.clone()),
@@ -171,7 +174,7 @@ mod tests {
             .with_variable_range_checker()
             .with_bitwise_op_lookup(BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS));
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let shared_bitwise = SharedBitwiseOperationLookupChip::new(bitwise_bus.clone());
+        let shared_bitwise = SharedBitwiseOperationLookupChip::new(bitwise_bus);
 
         let mut dense_chip = create_dense_alu_chip(&tester, shared_bitwise.clone());
         let mut gpu_chip = Rv32AluChipGpu::new(

@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
-
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use openvm_rv32im_circuit::{
     adapters::Rv32LoadStoreAdapterRecord, LoadStoreCoreRecord, Rv32LoadStoreAir,
@@ -16,7 +15,7 @@ use stark_backend_gpu::{
     types::{F, SC},
 };
 
-use super::loadstore_cuda;
+use super::cuda::loadstore_cuda;
 use crate::{primitives::var_range::VariableRangeCheckerChipGPU, DeviceChip};
 
 #[derive(new)]
@@ -77,9 +76,6 @@ impl DeviceChip<SC, GpuBackend> for Rv32LoadStoreChipGpu {
 mod test {
     use std::array;
 
-    use crate::testing::GpuChipTestBuilder;
-
-    use super::*;
     use openvm_circuit::{
         arch::{
             testing::{memory::gen_pointer, BITWISE_OP_LOOKUP_BUS},
@@ -90,13 +86,15 @@ mod test {
     use openvm_circuit_primitives::{
         bitwise_op_lookup::BitwiseOperationLookupBus, var_range::VariableRangeCheckerBus,
     };
-    use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS};
-    use openvm_instructions::{riscv::RV32_CELL_BITS, LocalOpcode};
+    use openvm_instructions::{
+        instruction::Instruction,
+        riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+        LocalOpcode,
+    };
     use openvm_rv32im_circuit::{
         adapters::{Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterStep},
         LoadStoreCoreAir, LoadStoreStep, Rv32LoadStoreChip, Rv32LoadStoreStep,
     };
-
     use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
     use openvm_stark_backend::{
         p3_field::{FieldAlgebra, PrimeField32},
@@ -105,6 +103,9 @@ mod test {
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::{rngs::StdRng, Rng};
     use test_case::test_case;
+
+    use super::*;
+    use crate::testing::GpuChipTestBuilder;
 
     const IMM_BITS: usize = 16;
     const MAX_INS_CAPACITY: usize = 128;

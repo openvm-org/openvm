@@ -4,7 +4,6 @@ use openvm_circuit_primitives::{
     encoder::Encoder, is_equal::IsEqSubAir, is_equal_array::IsEqArraySubAir, is_zero::IsZeroSubAir,
     TraceSubRowGenerator,
 };
-
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
 use openvm_stark_sdk::{dummy_airs::fib_air::chip::FibonacciChip, utils::create_seeded_rng};

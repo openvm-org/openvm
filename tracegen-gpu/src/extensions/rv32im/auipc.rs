@@ -12,7 +12,6 @@ use stark_backend_gpu::{
 };
 
 use super::cuda::auipc::tracegen;
-
 use crate::{
     primitives::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
@@ -86,7 +85,6 @@ impl DeviceChip<SC, GpuBackend> for Rv32AuipcChipGpu<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use openvm_circuit::arch::{
         testing::BITWISE_OP_LOOKUP_BUS, DenseRecordArena, EmptyAdapterCoreLayout,
         MatrixRecordArena, NewVmChipWrapper, VmAirWrapper,
@@ -108,6 +106,7 @@ mod tests {
     use rand::Rng;
     use stark_backend_gpu::prelude::F;
 
+    use super::*;
     use crate::testing::GpuChipTestBuilder;
 
     const IMM_BITS: usize = 24;

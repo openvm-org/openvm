@@ -4,6 +4,7 @@
 #include "launcher.cuh"
 #include "trace_access.h"
 #include "utils.cuh"
+
 using namespace riscv;
 
 template <typename T, size_t NUM_LIMBS> struct DivRemCoreCols {

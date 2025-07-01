@@ -5,8 +5,6 @@ use openvm_circuit::{
     arch::{DenseRecordArena, RecordSeeker},
     utils::next_power_of_two_or_zero,
 };
-
-use super::cuda::hintstore::tracegen;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_rv32im_circuit::{
     Rv32HintStoreAir, Rv32HintStoreCols, Rv32HintStoreLayout, Rv32HintStoreRecordMut,
@@ -20,6 +18,7 @@ use stark_backend_gpu::{
     types::{F, SC},
 };
 
+use super::cuda::hintstore::tracegen;
 use crate::{
     primitives::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
@@ -115,9 +114,6 @@ impl DeviceChip<SC, GpuBackend> for Rv32HintStoreChipGpu {
 
 #[cfg(test)]
 mod test {
-    use crate::testing::GpuChipTestBuilder;
-
-    use super::*;
     use openvm_circuit::arch::{
         testing::{memory::gen_pointer, BITWISE_OP_LOOKUP_BUS, RANGE_CHECKER_BUS},
         ExecutionBridge, InstructionExecutor, MemoryConfig, NewVmChipWrapper,
@@ -137,6 +133,9 @@ mod test {
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::{rngs::StdRng, Rng, RngCore};
     use Rv32HintStoreOpcode::*;
+
+    use super::*;
+    use crate::testing::GpuChipTestBuilder;
 
     const MAX_INS_CAPACITY: usize = 1024;
     type Rv32HintStoreDenseChip<F> =

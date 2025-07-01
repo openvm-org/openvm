@@ -1,11 +1,5 @@
 use std::{mem::size_of, sync::Arc};
 
-use crate::{
-    primitives::{
-        bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
-    },
-    DeviceChip,
-};
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_rv32im_circuit::{
     adapters::{Rv32BaseAluAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
@@ -18,6 +12,12 @@ use stark_backend_gpu::{
 };
 
 use super::cuda::shift::tracegen as rv32_shift_tracegen;
+use crate::{
+    primitives::{
+        bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
+    },
+    DeviceChip,
+};
 
 pub struct Rv32ShiftChipGpu<'a> {
     pub air: Rv32ShiftAir,
@@ -26,7 +26,7 @@ pub struct Rv32ShiftChipGpu<'a> {
     pub arena: Option<&'a DenseRecordArena>,
 }
 
-impl<'a> Rv32ShiftChipGpu<'a> {
+impl Rv32ShiftChipGpu<'_> {
     pub fn new(
         air: Rv32ShiftAir,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
@@ -92,8 +92,6 @@ impl DeviceChip<SC, GpuBackend> for Rv32ShiftChipGpu<'_> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::testing::GpuChipTestBuilder;
     use openvm_circuit::arch::{
         testing::BITWISE_OP_LOOKUP_BUS, EmptyAdapterCoreLayout, MatrixRecordArena,
         NewVmChipWrapper, VmAirWrapper,
@@ -114,6 +112,9 @@ mod test {
     use rand::Rng;
     use stark_backend_gpu::prelude::F;
 
+    use super::*;
+    use crate::testing::GpuChipTestBuilder;
+
     type DenseChip<F> = NewVmChipWrapper<F, Rv32ShiftAir, Rv32ShiftStep, DenseRecordArena>;
     const MAX_INS_CAPACITY: usize = 128;
 
@@ -123,20 +124,19 @@ mod test {
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
         let mut tester = GpuChipTestBuilder::default()
             .with_variable_range_checker()
-            .with_bitwise_op_lookup(bitwise_bus.clone());
+            .with_bitwise_op_lookup(bitwise_bus);
 
-        let shared_bitwise =
-            SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus.clone());
+        let shared_bitwise = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
         let mut dense_chip = DenseChip::<F>::new(
             VmAirWrapper::new(
                 Rv32BaseAluAdapterAir::new(
                     tester.execution_bridge(),
                     tester.memory_bridge(),
-                    bitwise_bus.clone(),
+                    bitwise_bus,
                 ),
                 ShiftCoreAir::new(
-                    bitwise_bus.clone(),
+                    bitwise_bus,
                     tester.cpu_range_checker().bus(),
                     ShiftOpcode::CLASS_OFFSET,
                 ),
@@ -158,10 +158,10 @@ mod test {
                 Rv32BaseAluAdapterAir::new(
                     tester.execution_bridge(),
                     tester.memory_bridge(),
-                    bitwise_bus.clone(),
+                    bitwise_bus,
                 ),
                 ShiftCoreAir::new(
-                    bitwise_bus.clone(),
+                    bitwise_bus,
                     tester.cpu_range_checker().bus(),
                     ShiftOpcode::CLASS_OFFSET,
                 ),
@@ -227,7 +227,7 @@ mod test {
             );
 
         let mut gpu_chip = Rv32ShiftChipGpu::new(
-            cpu_chip.air.clone(),
+            cpu_chip.air,
             tester.range_checker(),
             tester.bitwise_op_lookup(),
         );

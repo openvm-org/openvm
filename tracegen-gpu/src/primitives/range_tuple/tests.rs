@@ -1,8 +1,8 @@
 use core::array::from_fn;
-use rand::Rng;
 use std::sync::Arc;
 
 use openvm_circuit_primitives::range_tuple::RangeTupleCheckerBus;
+use rand::Rng;
 
 use crate::{
     dummy::range_tuple::DummyInteractionChipGPU, primitives::range_tuple::RangeTupleCheckerChipGPU,

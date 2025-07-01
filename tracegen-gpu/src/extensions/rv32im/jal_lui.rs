@@ -8,11 +8,7 @@ use openvm_rv32im_circuit::{
 use openvm_stark_backend::{rap::get_air_name, AirRef, ChipUsageGetter};
 use p3_air::BaseAir;
 use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer, error::CudaError},
-    prelude::F,
-    prover_backend::GpuBackend,
-    types::SC,
+    base::DeviceMatrix, cuda::copy::MemCopyH2D, prelude::F, prover_backend::GpuBackend, types::SC,
 };
 
 use super::cuda::jal_lui::tracegen;
@@ -67,7 +63,7 @@ impl ChipUsageGetter for Rv32JalLuiChipGpu<'_> {
 
 impl DeviceChip<SC, GpuBackend> for Rv32JalLuiChipGpu<'_> {
     fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
+        Arc::new(self.air)
     }
 
     fn generate_trace(&self) -> DeviceMatrix<F> {
@@ -94,7 +90,6 @@ impl DeviceChip<SC, GpuBackend> for Rv32JalLuiChipGpu<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use openvm_circuit::arch::{
         testing::BITWISE_OP_LOOKUP_BUS, DenseRecordArena, EmptyAdapterCoreLayout,
         MatrixRecordArena, NewVmChipWrapper, VmAirWrapper,
@@ -118,6 +113,7 @@ mod tests {
     use stark_backend_gpu::prelude::F;
     use test_case::test_case;
 
+    use super::*;
     use crate::testing::GpuChipTestBuilder;
 
     const IMM_BITS: usize = 12;
@@ -141,7 +137,7 @@ mod tests {
         let mut dense_chip = create_dense_chip(&tester, cpu_bitwise_chip.clone());
 
         let mut gpu_chip = Rv32JalLuiChipGpu::new(
-            dense_chip.air.clone(),
+            dense_chip.air,
             tester.range_checker(),
             tester.bitwise_op_lookup(),
             None,

@@ -12,7 +12,6 @@ use stark_backend_gpu::{
 };
 
 use super::cuda::jalr::tracegen;
-
 use crate::{
     primitives::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
@@ -91,7 +90,6 @@ impl DeviceChip<SC, GpuBackend> for Rv32JalrChipGpu<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use openvm_circuit::arch::{
         testing::BITWISE_OP_LOOKUP_BUS, DenseRecordArena, EmptyAdapterCoreLayout,
         MatrixRecordArena, NewVmChipWrapper, VmAirWrapper,
@@ -107,12 +105,12 @@ mod tests {
         Rv32JalrAir, Rv32JalrCoreAir, Rv32JalrCoreRecord, Rv32JalrStep, Rv32JalrStepWithAdapter,
     };
     use openvm_rv32im_transpiler::Rv32JalrOpcode::*;
-    use openvm_stark_backend::p3_field::FieldAlgebra;
-    use openvm_stark_backend::verifier::VerificationError;
+    use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::Rng;
     use stark_backend_gpu::prelude::F;
 
+    use super::*;
     use crate::testing::GpuChipTestBuilder;
 
     const IMM_BITS: usize = 12;

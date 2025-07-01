@@ -1,17 +1,14 @@
 
 #include "adapters/branch.cuh" // Rv32BranchAdapterCols, Rv32BranchAdapterRecord, Rv32BranchAdapter
 #include "constants.h"         // RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS
-#include "execution.h"
 #include "histogram.cuh"
 #include "launcher.cuh"
-#include "system/memory/controller.cuh"
-#include "system/memory/offline_checker.cuh"
 #include "trace_access.h"
 
 using namespace riscv;
 
 static constexpr uint8_t BEQ = 0;
-static constexpr uint8_t BNE = 1;
+// static constexpr uint8_t BNE = 1;
 
 template <typename T> struct BranchEqualCoreCols {
     T a[RV32_REGISTER_NUM_LIMBS];

@@ -1,7 +1,7 @@
-use rand::Rng;
 use std::sync::Arc;
 
 use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use rand::Rng;
 
 use crate::{
     dummy::var_range::DummyInteractionChipGPU, primitives::var_range::VariableRangeCheckerChipGPU,
