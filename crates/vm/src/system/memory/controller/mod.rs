@@ -666,22 +666,20 @@ impl<F: PrimeField32> MemoryController<F> {
 }
 
 /// Owned version of [MemoryAuxColsFactory].
-pub struct SharedMemoryHelper<T> {
+pub struct SharedMemoryHelper<F> {
     pub(crate) range_checker: SharedVariableRangeCheckerChip,
     pub(crate) timestamp_lt_air: AssertLtSubAir,
-    pub(crate) _marker: PhantomData<T>,
+    pub(crate) _marker: PhantomData<F>,
 }
 
 /// A helper for generating trace values in auxiliary memory columns related to the offline memory
 /// argument.
-pub struct MemoryAuxColsFactory<'a, T> {
+pub struct MemoryAuxColsFactory<'a, F> {
     pub(crate) range_checker: &'a VariableRangeCheckerChip,
     pub(crate) timestamp_lt_air: AssertLtSubAir,
-    pub(crate) _marker: PhantomData<T>,
+    pub(crate) _marker: PhantomData<F>,
 }
 
-// NOTE[jpw]: The `make_*_aux_cols` functions should be thread-safe so they can be used in
-// parallelized trace generation.
 impl<F: PrimeField32> MemoryAuxColsFactory<'_, F> {
     /// Fill the trace assuming `prev_timestamp` is already provided in `buffer`.
     pub fn fill(&self, prev_timestamp: u32, timestamp: u32, buffer: &mut MemoryBaseAuxCols<F>) {
@@ -714,8 +712,8 @@ impl<F: PrimeField32> MemoryAuxColsFactory<'_, F> {
     }
 }
 
-impl<T> SharedMemoryHelper<T> {
-    pub fn as_borrowed(&self) -> MemoryAuxColsFactory<'_, T> {
+impl<F> SharedMemoryHelper<F> {
+    pub fn as_borrowed(&self) -> MemoryAuxColsFactory<'_, F> {
         MemoryAuxColsFactory {
             range_checker: self.range_checker.as_ref(),
             timestamp_lt_air: self.timestamp_lt_air,

@@ -169,8 +169,7 @@ pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize>;
 
 #[derive(derive_new::new)]
 pub struct Rv32BaseAluAdapterChip<const LIMB_BITS: usize> {
-    // TODO(arayi): use reference to bitwise lookup chip with lifetimes instead
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 
 // Intermediate type that should not be copied or cloned and should be directly written to

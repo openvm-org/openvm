@@ -27,7 +27,7 @@ use program::ProgramAir;
 use public_values::PublicValuesAir;
 
 use crate::{
-    arch::{ExecutionBridge, SystemConfig, SystemPort, VmAirWrapper, ADDR_SPACE_OFFSET},
+    arch::{ExecutionBridge, ExecutionBus, SystemConfig, VmAirWrapper, ADDR_SPACE_OFFSET},
     system::{
         memory::{
             adapter::AccessAdapterAir, dimensions::MemoryDimensions, merkle::MemoryMerkleAir,
@@ -35,9 +35,18 @@ use crate::{
             volatile::VolatileBoundaryAir, CHUNK,
         },
         native_adapter::NativeAdapterAir,
+        program::ProgramBus,
         public_values::core::PublicValuesCoreAir,
     },
 };
+
+/// SystemPort combines system resources needed by most extensions
+#[derive(Clone, Copy)]
+pub struct SystemPort {
+    pub execution_bus: ExecutionBus,
+    pub program_bus: ProgramBus,
+    pub memory_bridge: MemoryBridge,
+}
 
 #[derive(Clone)]
 pub struct SystemAirs<SC: StarkGenericConfig> {

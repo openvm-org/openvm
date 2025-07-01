@@ -1,5 +1,5 @@
 use std::{
-    any::{Any, TypeId},
+    any::{type_name, Any, TypeId},
     cell::RefCell,
     iter::once,
     sync::Arc,
@@ -20,17 +20,14 @@ use openvm_instructions::{
     program::Program, LocalOpcode, PhantomDiscriminant, PublishOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::{
-    config::{Domain, StarkGenericConfig},
+    config::{Domain, StarkGenericConfig, Val},
     interaction::{BusIndex, PermutationCheckBus},
     keygen::types::LinearConstraint,
     p3_commit::PolynomialSpace,
     p3_field::{FieldAlgebra, PrimeField32, TwoAdicField},
     p3_matrix::Matrix,
     p3_util::log2_ceil_usize,
-    prover::{
-        hal::ProverBackend,
-        types::{AirProofInput, AirProvingContext, CommittedTraceData, ProofInput},
-    },
+    prover::{cpu::CpuBackend, hal::ProverBackend, types::AirProvingContext},
     rap::AnyRap,
     AirRef, AnyChip, Chip, ChipUsageGetter,
 };
@@ -45,7 +42,7 @@ use super::{
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{ExecutionBridge, InstructionExecutor, VmAirWrapper},
+    arch::{ExecutionBridge, InstructionExecutor, MatrixRecordArena, VmAirWrapper},
     system::{
         connector::{VmConnectorAir, VmConnectorChip},
         memory::{
@@ -78,6 +75,30 @@ pub const BOUNDARY_AIR_ID: usize = PUBLIC_VALUES_AIR_ID + 1 + BOUNDARY_AIR_OFFSE
 /// Merkle AIR commits start/final memory states.
 pub const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
 
+type ExecutorId = u32;
+
+// ======================= VM Extension Traits =============================
+
+/// A full VM extension consists of three components, represented by sub-traits:
+/// - [VmExecutionExtension]
+/// - [VmCircuitExtension]
+/// - [VmProverExtension]
+pub trait VmExtension<SC, RA = MatrixRecordArena<Val<SC>>, PB = CpuBackend<SC>>:
+    VmExecutionExtension<Val<SC>> + VmCircuitExtension<SC> + VmProverExtension<SC, RA, PB>
+where
+    SC: StarkGenericConfig,
+    PB: ProverBackend,
+{
+}
+
+impl<SC, RA, PB, EXT> VmExtension<SC, RA, PB> for EXT
+where
+    SC: StarkGenericConfig,
+    PB: ProverBackend,
+    EXT: VmExecutionExtension<Val<SC>> + VmCircuitExtension<SC> + VmProverExtension<SC, RA, PB>,
+{
+}
+
 /// Extension of VM execution. Allows registration of custom execution of new instructions by
 /// opcode.
 pub trait VmExecutionExtension<F> {
@@ -103,8 +124,16 @@ where
     SC: StarkGenericConfig,
     PB: ProverBackend,
 {
-    fn extend(&self, chips: &mut ChipInventory<SC, RA, PB>) -> Result<(), ChipInventoryError>;
+    /// We do not provide access to the [ExecutorInventory] because the process to find an executor
+    /// from the inventory seems more cumbersome than to simply re-construct any necessary executors
+    /// directly within this function implementation.
+    fn extend_prover(
+        &self,
+        inventory: &mut ChipInventory<SC, RA, PB>,
+    ) -> Result<(), ChipInventoryError>;
 }
+
+// ======================= Different Inventory Struct Definitions =============================
 
 pub struct ExecutorInventory<E, F> {
     /// Lookup table to executor ID.
@@ -145,36 +174,31 @@ where
     airs: AirInventory<SC>,
     /// Chips that are being built.
     chips: Vec<Box<dyn AnyChip<RA, PB>>>,
+
+    /// This should be provided from [ExecutorInventory] and is used for sanity checking.
+    exec_ext_start: Vec<usize>,
+    /// Number of extensions that have chips added, including the current one that is still being
+    /// built.
+    cur_num_exts: usize,
+    /// Mapping from executor index to AIR index. Chips must be added in order so the chip index
+    /// matches the AIR index.
+    executor_idx_to_air_idx: Vec<usize>,
 }
 
-// VmExtension<SC, RA, PB> = VmExecutionExtension + VmCircuitExtension<SC> + VmProverExtension<RA,
-// PB>
-
-impl<F: PrimeField32, E: VmExtension<F>> VmExtension<F> for Option<E> {
-    type Executor = E::Executor;
-    type Periphery = E::Periphery;
-
-    fn build(
-        &self,
-        builder: &mut VmInventoryBuilder<F>,
-    ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
-        if let Some(extension) = self {
-            extension.build(builder)
-        } else {
-            Ok(VmInventory::new())
-        }
-    }
+#[derive(Clone, Copy, Debug, Default)]
+pub struct BusIndexManager {
+    /// All existing buses use indices in [0, bus_idx_max)
+    bus_idx_max: BusIndex,
 }
 
-/// SystemPort combines system resources needed by most extensions
-#[derive(Clone, Copy)]
-pub struct SystemPort {
-    pub execution_bus: ExecutionBus,
-    pub program_bus: ProgramBus,
-    pub memory_bridge: MemoryBridge,
-}
+// ======================= Inventory Function Definitions =============================
 
 impl<E, F> ExecutorInventory<E, F> {
+    /// This should be called **exactly once** at the start of the declaration of a new extension.
+    pub fn start_new_extension(&mut self) {
+        self.ext_start.push(self.executors.len());
+    }
+
     /// Inserts an executor with the collection of opcodes that it handles.
     /// If some executor already owns one of the opcodes, an error is returned with the existing
     /// executor.
@@ -195,7 +219,8 @@ impl<E, F> ExecutorInventory<E, F> {
         let id = self.executors.len();
         self.executors.push(executor.into());
         for opcode in opcodes {
-            self.instruction_lookup.insert(opcode, id);
+            self.instruction_lookup
+                .insert(opcode, id.try_into().unwrap());
         }
         Ok(())
     }
@@ -214,9 +239,61 @@ impl<E, F> ExecutorInventory<E, F> {
         }
         Ok(())
     }
+
+    pub fn transmute<E2>(self) -> ExecutorInventory<E2, F>
+    where
+        E: Into<E2>,
+    {
+        ExecutorInventory {
+            instruction_lookup: self.instruction_lookup,
+            executors: self.executors.into_iter().map(|e| e.into()).collect(),
+            phantom_executors: self.phantom_executors,
+            ext_start: self.ext_start,
+        }
+    }
+
+    /// Append `other` to current inventory. This means `self` comes earlier in the dependency
+    /// chain.
+    pub fn append(
+        &mut self,
+        mut other: ExecutorInventory<E, F>,
+    ) -> Result<(), ExecutorInventoryError> {
+        let num_executors = self.executors.len();
+        for (opcode, mut id) in other.instruction_lookup.into_iter() {
+            id = id.checked_add(num_executors.try_into().unwrap()).unwrap();
+            if let Some(old_id) = self.instruction_lookup.insert(opcode, id) {
+                return Err(ExecutorInventoryError::ExecutorExists { opcode, id: old_id });
+            }
+        }
+        for id in &mut other.ext_start {
+            *id = id.checked_add(num_executors).unwrap();
+        }
+        self.executors.append(&mut other.executors);
+        self.ext_start.append(&mut other.ext_start);
+        Ok(())
+    }
+
+    pub fn get_executor(&self, opcode: VmOpcode) -> Option<&E> {
+        let id = self.instruction_lookup.get(&opcode)?;
+        self.executors.get(*id as usize)
+    }
+
+    pub fn get_mut_executor(&mut self, opcode: &VmOpcode) -> Option<&mut E> {
+        let id = self.instruction_lookup.get(opcode)?;
+        self.executors.get_mut(*id as usize)
+    }
+
+    pub fn executors(&self) -> &[E] {
+        &self.executors
+    }
 }
 
 impl<SC: StarkGenericConfig> AirInventory<SC> {
+    /// This should be called **exactly once** at the start of the declaration of a new extension.
+    pub fn start_new_extension(&mut self) {
+        self.ext_start.push(self.ext_airs.len());
+    }
+
     pub fn new_bus_idx(&mut self) -> BusIndex {
         self.bus_idx_mgr.new_bus_idx()
     }
@@ -246,16 +323,62 @@ impl<SC: StarkGenericConfig> AirInventory<SC> {
     }
 }
 
+impl BusIndexManager {
+    pub fn new() -> Self {
+        Self { bus_idx_max: 0 }
+    }
+
+    pub fn new_bus_idx(&mut self) -> BusIndex {
+        let idx = self.bus_idx_max;
+        self.bus_idx_max = self.bus_idx_max.checked_add(1).unwrap();
+        idx
+    }
+}
+
 impl<SC, RA, PB> ChipInventory<SC, RA, PB>
 where
     SC: StarkGenericConfig,
     PB: ProverBackend,
 {
+    pub fn start_new_extension(&mut self) -> Result<(), ChipInventoryError> {
+        if self.cur_num_exts >= self.exec_ext_start.len() {
+            return Err(ChipInventoryError::MissingExecutionExtension(
+                self.exec_ext_start.len(),
+            ));
+        }
+        if self.cur_num_exts >= self.airs.ext_start.len() {
+            return Err(ChipInventoryError::MissingCircuitExtension(
+                self.airs.ext_start.len(),
+            ));
+        }
+        if self.chips.len() != self.airs.ext_start[self.cur_num_exts] {
+            return Err(ChipInventoryError::MissingChip {
+                actual: self.chips.len(),
+                expected: self.airs.ext_start[self.cur_num_exts],
+            });
+        }
+        if self.executor_idx_to_air_idx.len() != self.exec_ext_start[self.cur_num_exts] {
+            return Err(ChipInventoryError::MissingExecutor {
+                actual: self.executor_idx_to_air_idx.len(),
+                expected: self.exec_ext_start[self.cur_num_exts],
+            });
+        }
+
+        self.cur_num_exts += 1;
+        Ok(())
+    }
+
     /// Gets the next AIR from the pre-existing AIR inventory according to the index of the next
     /// chip to be built.
-    pub fn next_air<A: 'static>(&self) -> Option<&A> {
+    pub fn next_air<A: 'static>(&self) -> Result<&A, ChipInventoryError> {
         let cur_idx = self.chips.len();
-        self.airs.ext_airs.get(cur_idx)?.as_any().downcast_ref()
+        self.airs
+            .ext_airs
+            .get(cur_idx)
+            .and_then(|air| air.as_any().downcast_ref())
+            .ok_or_else(|| ChipInventoryError::AirNotFound {
+                name: type_name::<A>().to_string(),
+            })
     }
 
     /// Looks through built chips to see if there exists any of type `C` by downcasting.
@@ -266,52 +389,16 @@ where
         self.chips.iter().filter_map(|c| c.as_any().downcast_ref())
     }
 
-    pub fn add_chip<C: Chip<RA, PB> + 'static>(&mut self, chip: C) {
+    /// Adds a chip that is not associated with any executor, as defined by the
+    /// [VmExecutionExtension] trait.
+    pub fn add_periphery_chip<C: Chip<RA, PB> + 'static>(&mut self, chip: C) {
         self.chips.push(Box::new(chip));
     }
-}
 
-/// Builder for processing unit. Processing units extend an existing system unit.
-pub struct VmInventoryBuilder<'a, F: PrimeField32> {
-    system_config: &'a SystemConfig,
-    system: &'a SystemBase<F>,
-    bus_idx_mgr: BusIndexManager,
-    /// Chips that are already included in the chipset and may be used
-    /// as dependencies. The order should be that depended-on chips are ordered
-    /// **before** their dependents.
-    chips: Vec<&'a dyn AnyEnum>,
-}
-
-#[derive(Clone, Debug)]
-pub struct VmInventory<E, P> {
-    /// Lookup table to executor ID. We store executors separately due to mutable borrow issues.
-    instruction_lookup: FxHashMap<VmOpcode, ExecutorId>,
-    pub executors: Vec<E>,
-    pub periphery: Vec<P>,
-    /// Order of insertion. The reverse of this will be the order the chips are destroyed
-    /// to generate trace.
-    pub insertion_order: Vec<ChipId>,
-    /// TEMP: just shoving this somewhere
-    pub executor_id_to_air_id: Vec<usize>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct VmInventoryTraceHeights {
-    pub chips: FxHashMap<ChipId, usize>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, derive_new::new)]
-pub struct VmComplexTraceHeights {
-    pub system: SystemTraceHeights,
-    pub inventory: VmInventoryTraceHeights,
-}
-
-type ExecutorId = usize;
-
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ChipId {
-    Executor(usize),
-    Periphery(usize),
+    pub fn add_executor_chip<C: Chip<RA, PB> + 'static>(&mut self, chip: C) {
+        self.executor_idx_to_air_idx.push(self.chips.len());
+        self.chips.push(Box::new(chip));
+    }
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -330,148 +417,31 @@ pub enum AirInventoryError {
 
 #[derive(thiserror::Error, Debug)]
 pub enum ChipInventoryError {
+    #[error("Air {name} not found")]
+    AirNotFound { name: String },
     #[error("Chip {name} not found")]
     ChipNotFound { name: String },
+    #[error("Adding prover extension without execution extension. Number of execution extensions is {0}")]
+    MissingExecutionExtension(usize),
+    #[error(
+        "Adding prover extension without circuit extension. Number of circuit extensions is {0}"
+    )]
+    MissingCircuitExtension(usize),
+    #[error("Missing chip. Number of chips is {actual}, expected number is {expected}")]
+    MissingChip { actual: usize, expected: usize },
+    #[error("Missing executor chip. Number of executors with associated chips is {actual}, expected number is {expected}")]
+    MissingExecutor { actual: usize, expected: usize },
 }
 
-impl<E, P> Default for VmInventory<E, P> {
-    fn default() -> Self {
-        Self::new()
-    }
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct VmInventoryTraceHeights {
+    pub chips: FxHashMap<ChipId, usize>,
 }
 
-impl<E, P> VmInventory<E, P> {
-    pub fn new() -> Self {
-        Self {
-            instruction_lookup: FxHashMap::default(),
-            executors: Vec::new(),
-            periphery: Vec::new(),
-            insertion_order: Vec::new(),
-            executor_id_to_air_id: Vec::new(),
-        }
-    }
-
-    pub fn transmute<E2, P2>(self) -> VmInventory<E2, P2>
-    where
-        E: Into<E2>,
-        P: Into<P2>,
-    {
-        VmInventory {
-            instruction_lookup: self.instruction_lookup,
-            executors: self.executors.into_iter().map(|e| e.into()).collect(),
-            periphery: self.periphery.into_iter().map(|p| p.into()).collect(),
-            insertion_order: self.insertion_order,
-            executor_id_to_air_id: self.executor_id_to_air_id,
-        }
-    }
-
-    /// Append `other` to current inventory. This means `self` comes earlier in the dependency
-    /// chain.
-    pub fn append(&mut self, mut other: VmInventory<E, P>) -> Result<(), VmInventoryError> {
-        let num_executors = self.executors.len();
-        let num_periphery = self.periphery.len();
-        for (opcode, mut id) in other.instruction_lookup.into_iter() {
-            id += num_executors;
-            if let Some(old_id) = self.instruction_lookup.insert(opcode, id) {
-                return Err(VmInventoryError::ExecutorExists { opcode, id: old_id });
-            }
-        }
-        for chip_id in other.insertion_order.iter_mut() {
-            match chip_id {
-                ChipId::Executor(id) => *id += num_executors,
-                ChipId::Periphery(id) => *id += num_periphery,
-            }
-        }
-        self.executors.append(&mut other.executors);
-        self.periphery.append(&mut other.periphery);
-        self.insertion_order.append(&mut other.insertion_order);
-        Ok(())
-    }
-
-    pub fn add_periphery_chip(&mut self, periphery_chip: impl Into<P>) {
-        let id = self.periphery.len();
-        self.periphery.push(periphery_chip.into());
-        self.insertion_order.push(ChipId::Periphery(id));
-    }
-
-    pub fn get_executor(&self, opcode: VmOpcode) -> Option<&E> {
-        let id = self.instruction_lookup.get(&opcode)?;
-        self.executors.get(*id)
-    }
-
-    pub fn get_mut_executor(&mut self, opcode: &VmOpcode) -> Option<&mut E> {
-        let id = self.instruction_lookup.get(opcode)?;
-        self.executors.get_mut(*id)
-    }
-
-    pub fn get_mut_executor_with_air_id(&mut self, opcode: &VmOpcode) -> Option<(&mut E, usize)> {
-        let id = *self.instruction_lookup.get(opcode)?;
-
-        self.executors.get_mut(id).map(|executor| {
-            let air_id = self.executor_id_to_air_id[id];
-            (executor, air_id)
-        })
-    }
-
-    pub fn executors(&self) -> &[E] {
-        &self.executors
-    }
-
-    pub fn periphery(&self) -> &[P] {
-        &self.periphery
-    }
-
-    pub fn num_airs(&self) -> usize {
-        self.executors.len() + self.periphery.len()
-    }
-
-    /// Return trace heights of all chips in the inventory.
-    /// The order is deterministic:
-    /// - All executors come first, in the order they were added.
-    /// - All periphery chips come after, in the order they were added.
-    pub fn get_trace_heights(&self) -> VmInventoryTraceHeights
-    where
-        E: ChipUsageGetter,
-        P: ChipUsageGetter,
-    {
-        VmInventoryTraceHeights {
-            chips: self
-                .executors
-                .iter()
-                .enumerate()
-                .map(|(i, chip)| (ChipId::Executor(i), chip.current_trace_height()))
-                .chain(
-                    self.periphery
-                        .iter()
-                        .enumerate()
-                        .map(|(i, chip)| (ChipId::Periphery(i), chip.current_trace_height())),
-                )
-                .collect(),
-        }
-    }
-
-    /// Return the dummy trace heights of the inventory. This is used for generating a dummy proof.
-    /// Regular users should not need this.
-    pub fn get_dummy_trace_heights(&self) -> VmInventoryTraceHeights
-    where
-        E: ChipUsageGetter,
-        P: ChipUsageGetter,
-    {
-        VmInventoryTraceHeights {
-            chips: self
-                .executors
-                .iter()
-                .enumerate()
-                .map(|(i, _)| (ChipId::Executor(i), 1))
-                .chain(self.periphery.iter().enumerate().map(|(i, chip)| {
-                    (
-                        ChipId::Periphery(i),
-                        chip.constant_trace_height().unwrap_or(1),
-                    )
-                }))
-                .collect(),
-        }
-    }
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, derive_new::new)]
+pub struct VmComplexTraceHeights {
+    pub system: SystemTraceHeights,
+    pub inventory: VmInventoryTraceHeights,
 }
 
 impl VmInventoryTraceHeights {
@@ -524,24 +494,6 @@ pub struct VmChipComplex<F: PrimeField32, E, P> {
     max_trace_height: usize,
 
     bus_idx_mgr: BusIndexManager,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub struct BusIndexManager {
-    /// All existing buses use indices in [0, bus_idx_max)
-    bus_idx_max: BusIndex,
-}
-
-impl BusIndexManager {
-    pub fn new() -> Self {
-        Self { bus_idx_max: 0 }
-    }
-
-    pub fn new_bus_idx(&mut self) -> BusIndex {
-        let idx = self.bus_idx_max;
-        self.bus_idx_max = self.bus_idx_max.checked_add(1).unwrap();
-        idx
-    }
 }
 
 /// The base [VmChipComplex] with only system chips.
@@ -755,7 +707,7 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         config: &Ext,
     ) -> Result<VmChipComplex<F, E3, P3>, VmInventoryError>
     where
-        Ext: VmExtension<F>,
+        // Ext: VmExtension<F>,
         E: Into<E3> + AnyEnum,
         P: Into<P3> + AnyEnum,
         Ext::Executor: Into<E3>,
@@ -1270,6 +1222,49 @@ pub fn generate_air_proof_input<SC: StarkGenericConfig, C: Chip<SC>>(
     proof_input
 }
 
+impl<F, E: VmExecutionExtension<F>> VmExecutionExtension<F> for Option<E> {
+    type Executor = E::Executor;
+
+    fn extend_execution(
+        &self,
+        inventory: &mut ExecutorInventory<E::Executor, F>,
+    ) -> Result<(), ExecutorInventoryError> {
+        if let Some(extension) = self {
+            extension.extend_execution(inventory)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl<SC: StarkGenericConfig, E: VmCircuitExtension<SC>> VmCircuitExtension<SC> for Option<E> {
+    fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
+        if let Some(extension) = self {
+            extension.extend_circuit(inventory)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl<SC, RA, PB, E> VmProverExtension<SC, RA, PB> for Option<E>
+where
+    SC: StarkGenericConfig,
+    PB: ProverBackend,
+    E: VmProverExtension<SC, RA, PB>,
+{
+    fn extend_prover(
+        &self,
+        inventory: &mut ChipInventory<SC, RA, PB>,
+    ) -> Result<(), ChipInventoryError> {
+        if let Some(extension) = self {
+            extension.extend_prover(inventory)
+        } else {
+            Ok(())
+        }
+    }
+}
+
 /// A helper trait for downcasting types that may be enums.
 pub trait AnyEnum {
     /// Recursively "unwraps" enum and casts to `Any` for downcasting.
@@ -1285,51 +1280,6 @@ impl AnyEnum for () {
     }
     fn as_any_kind_mut(&mut self) -> &mut dyn Any {
         self
-    }
-}
-
-impl AnyEnum for SharedVariableRangeCheckerChip {
-    fn as_any_kind(&self) -> &dyn Any {
-        self
-    }
-    fn as_any_kind_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-}
-
-pub(crate) enum Either<E, P> {
-    Executor(E),
-    Periphery(P),
-}
-
-impl<'a, E, P> ChipUsageGetter for Either<&'a E, &'a P>
-where
-    E: ChipUsageGetter,
-    P: ChipUsageGetter,
-{
-    fn air_name(&self) -> String {
-        match self {
-            Either::Executor(chip) => chip.air_name(),
-            Either::Periphery(chip) => chip.air_name(),
-        }
-    }
-    fn current_trace_height(&self) -> usize {
-        match self {
-            Either::Executor(chip) => chip.current_trace_height(),
-            Either::Periphery(chip) => chip.current_trace_height(),
-        }
-    }
-    fn trace_width(&self) -> usize {
-        match self {
-            Either::Executor(chip) => chip.trace_width(),
-            Either::Periphery(chip) => chip.trace_width(),
-        }
-    }
-    fn current_trace_cells(&self) -> usize {
-        match self {
-            Either::Executor(chip) => chip.current_trace_cells(),
-            Either::Periphery(chip) => chip.current_trace_cells(),
-        }
     }
 }
 
