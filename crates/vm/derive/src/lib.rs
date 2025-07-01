@@ -11,8 +11,23 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
 
     let name = &ast.ident;
-    let generics = &ast.generics;
-    let (impl_generics, ty_generics, _) = generics.split_for_impl();
+    let (_, ty_generics, _) = ast.generics.split_for_impl();
+    let mut generics = ast.generics.clone();
+
+    // Check if first generic is 'F'
+    let needs_f = match generics.params.first() {
+        Some(GenericParam::Type(type_param)) => type_param.ident != "F",
+        Some(_) => true, // First param is lifetime or const, so we need F
+        None => true,    // No generics at all, so we need F
+    };
+    if needs_f {
+        // Create new F generic parameter
+        let f_param: GenericParam = syn::parse_quote!(F);
+
+        // Insert at the beginning
+        generics.params.insert(0, f_param);
+    }
+    let (impl_generics, _, _) = generics.split_for_impl();
 
     match &ast.data {
         Data::Struct(inner) => {
@@ -114,6 +129,149 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
             .into()
         }
         Data::Union(_) => unimplemented!("Unions are not supported"),
+    }
+}
+
+#[proc_macro_derive(TraceStep)]
+pub fn trace_step_derive(input: TokenStream) -> TokenStream {
+    let ast: syn::DeriveInput = syn::parse(input).unwrap();
+
+    let name = &ast.ident;
+    let (_, ty_generics, _) = ast.generics.split_for_impl();
+    let mut generics = ast.generics.clone();
+
+    // Check if first generic is 'F'
+    let needs_f = match generics.params.first() {
+        Some(GenericParam::Type(type_param)) => type_param.ident != "F",
+        Some(_) => true, // First param is lifetime or const, so we need F
+        None => true,    // No generics at all, so we need F
+    };
+    if needs_f {
+        // Create new F generic parameter
+        let f_param: GenericParam =
+            syn::parse_quote!(F: ::openvm_stark_backend::p3_field::PrimeField32);
+
+        // Insert at the beginning
+        generics.params.insert(0, f_param);
+    }
+    let need_ctx = if generics.params.len() >= 2 {
+        match &generics.params[2] {
+            GenericParam::Type(type_param) => type_param.ident != "CTX",
+            _ => true,
+        }
+    } else {
+        true
+    };
+    if need_ctx {
+        // Create new F generic parameter
+        let ctx_param: GenericParam = syn::parse_quote!(CTX);
+
+        // Insert at the beginning
+        generics.params.insert(0, ctx_param);
+    }
+    let (impl_generics, _, _) = generics.split_for_impl();
+
+    match &ast.data {
+        Data::Struct(inner) => {
+            // Check if the struct has only one unnamed field
+            let inner_ty = match &inner.fields {
+                Fields::Unnamed(fields) => {
+                    if fields.unnamed.len() != 1 {
+                        panic!("Only one unnamed field is supported");
+                    }
+                    fields.unnamed.first().unwrap().ty.clone()
+                }
+                _ => panic!("Only unnamed fields are supported"),
+            };
+            quote! {
+                impl #impl_generics ::openvm_circuit::arch::TraceStep<F, CTX> for #name #ty_generics {
+                    type RecordLayout = <#inner_ty as ::openvm_circuit::arch::TraceStep<F, CTX>>::RecordLayout;
+                    type RecordMut<'a> = <#inner_ty as ::openvm_circuit::arch::TraceStep<F, CTX>>::RecordMut<'a>;
+
+                    fn execute<'buf, RA>(
+                        &mut self,
+                        state: ::openvm_circuit::arch::execution::VmStateMut<F, ::openvm_circuit::system::memory::online::TracingMemory<F>, CTX>,
+                        instruction: &::openvm_instructions::instruction::Instruction<F>,
+                        arena: &'buf mut RA,
+                    ) -> ::openvm_circuit::arch::Result<()>
+                    where
+                        RA: ::openvm_circuit::arch::RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+                    {
+                        self.0.execute(state, instruction, arena)
+                    }
+
+                    fn get_opcode_name(&self, opcode: usize) -> String {
+                        ::openvm_circuit::arch::TraceStep::<F, CTX>::get_opcode_name(&self.0, opcode)
+                    }
+                }
+            }
+                .into()
+        }
+        _ => unimplemented!(),
+    }
+}
+
+#[proc_macro_derive(TraceFiller)]
+pub fn trace_filler_derive(input: TokenStream) -> TokenStream {
+    let ast: syn::DeriveInput = syn::parse(input).unwrap();
+
+    let name = &ast.ident;
+    let (_, ty_generics, _) = ast.generics.split_for_impl();
+    let mut generics = ast.generics.clone();
+
+    // Check if first generic is 'F'
+    let needs_f = match generics.params.first() {
+        Some(GenericParam::Type(type_param)) => type_param.ident != "F",
+        Some(_) => true, // First param is lifetime or const, so we need F
+        None => true,    // No generics at all, so we need F
+    };
+    if needs_f {
+        // Create new F generic parameter
+        let f_param: GenericParam =
+            syn::parse_quote!(F: ::openvm_stark_backend::p3_field::PrimeField32);
+
+        // Insert at the beginning
+        generics.params.insert(0, f_param);
+    }
+    let need_ctx = if generics.params.len() >= 2 {
+        match &generics.params[2] {
+            GenericParam::Type(type_param) => type_param.ident != "CTX",
+            _ => true,
+        }
+    } else {
+        true
+    };
+    if need_ctx {
+        // Create new F generic parameter
+        let ctx_param: GenericParam = syn::parse_quote!(CTX);
+
+        // Insert at the beginning
+        generics.params.insert(0, ctx_param);
+    }
+    let (impl_generics, _, _) = generics.split_for_impl();
+
+    match &ast.data {
+        Data::Struct(inner) => {
+            // Check if the struct has only one unnamed field
+            let inner_ty = match &inner.fields {
+                Fields::Unnamed(fields) => {
+                    if fields.unnamed.len() != 1 {
+                        panic!("Only one unnamed field is supported");
+                    }
+                    fields.unnamed.first().unwrap().ty.clone()
+                }
+                _ => panic!("Only unnamed fields are supported"),
+            };
+            quote! {
+                impl #impl_generics ::openvm_circuit::arch::TraceFiller<F, CTX> for #name #ty_generics {
+                    fn fill_trace_row(&self, mem_helper: &::openvm_circuit::system::memory::MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+                        ::openvm_circuit::arch::TraceFiller::<F, CTX>::fill_trace_row(&self.0, mem_helper, row_slice);
+                    }
+                }
+            }
+                .into()
+        }
+        _ => unimplemented!(),
     }
 }
 

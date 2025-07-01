@@ -22,7 +22,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::RV32_REGISTER_AS,
     LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
