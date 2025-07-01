@@ -22,6 +22,12 @@ template <typename T, size_t NUM_LIMBS = RV32_REGISTER_NUM_LIMBS> struct MemoryW
     T prev_data[NUM_LIMBS];
 };
 
+template <typename T> struct MemoryReadOrImmediateAuxCols {
+    MemoryBaseAuxCols<T> base;
+    T is_immediate;
+    T is_zero_aux;
+};
+
 struct MemoryReadAuxRecord {
     uint32_t prev_timestamp;
 };

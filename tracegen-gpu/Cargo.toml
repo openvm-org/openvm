@@ -21,6 +21,8 @@ openvm-circuit = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-rv32im-circuit = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
+openvm-native-circuit = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
+openvm-native-compiler = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
 openvm-rv32-adapters = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
 openvm-rv32im-transpiler = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
 openvm-rv32im-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
