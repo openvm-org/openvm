@@ -320,35 +320,8 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         }
     }
 
-    pub(crate) fn current_size(&self) -> usize {
-        self.arena.current_size()
-    }
-
     pub(crate) fn alloc_record(&mut self, layout: AccessLayout) -> AccessRecordMut {
         self.arena.alloc(layout)
-    }
-
-    pub(crate) fn get_record_header_at_or_none(
-        &mut self,
-        offset: usize,
-    ) -> Option<&mut AccessRecordHeader> {
-        if offset < self.arena.records_buffer.position() as usize {
-            Some(self.arena.records_buffer.get_mut()[offset..].borrow_mut())
-        } else {
-            None
-        }
-    }
-
-    pub(crate) fn get_record_at_or_none(
-        &mut self,
-        offset: usize,
-        layout: AccessLayout,
-    ) -> Option<AccessRecordMut<'_>> {
-        if offset < self.arena.records_buffer.position() as usize {
-            Some(self.arena.records_buffer.get_mut()[offset..].custom_borrow(layout))
-        } else {
-            None
-        }
     }
 }
 

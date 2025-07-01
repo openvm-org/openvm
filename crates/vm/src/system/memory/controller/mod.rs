@@ -349,7 +349,6 @@ impl<F: PrimeField32> MemoryController<F> {
         &mut self,
         touched_blocks: Vec<((u32, u32), AccessMetadata)>,
     ) -> TimestampedEquipartition<F, CHUNK> {
-        eprintln!("touched blocks: {:?}", touched_blocks);
         let mut final_memory = Vec::new();
 
         debug_assert!(touched_blocks.is_sorted_by_key(|(addr, _)| addr));
@@ -389,6 +388,9 @@ impl<F: PrimeField32> MemoryController<F> {
                         && current_address.pointer + current_cnt as u32 == ptr),
                 "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`"
             );
+            debug_assert!(block_size >= min_block_size as u32);
+            debug_assert!(ptr % min_block_size as u32 == 0);
+
             if current_cnt == 0 {
                 assert_eq!(
                     ptr & (CHUNK as u32 - 1),
@@ -397,12 +399,8 @@ impl<F: PrimeField32> MemoryController<F> {
                 );
                 current_address = MemoryAddress::new(addr_space, ptr);
             }
-            debug_assert!(block_size >= min_block_size as u32);
-            debug_assert!(ptr % min_block_size as u32 == 0);
 
-            if (ptr != current_address.pointer || CHUNK as u32 != block_size)
-                && block_size > min_block_size as u32
-            {
+            if block_size > min_block_size as u32 {
                 self.memory.add_split_record(AccessRecordHeader {
                     timestamp_and_mask: timestamp,
                     address_space: addr_space,
@@ -412,28 +410,24 @@ impl<F: PrimeField32> MemoryController<F> {
                     type_size: size_of::<T>() as u32,
                 });
             }
-            let values = unsafe {
-                self.memory
-                    .data
-                    .memory
-                    .get_slice::<T>((addr_space, ptr), block_size as usize)
-                    .to_vec()
-            };
             if min_block_size > CHUNK {
                 assert_eq!(current_cnt, 0);
                 for i in (0..block_size).step_by(min_block_size) {
-                    self.memory.record_access::<T, false>(
-                        min_block_size,
-                        current_address.address_space as usize,
-                        (current_address.pointer + i) as usize,
-                        CHUNK,
-                        metadata.timestamp,
-                        None,
-                        &values[i as usize..i as usize + min_block_size],
-                        &values[i as usize..i as usize + min_block_size],
-                        true,
-                    );
+                    self.memory.add_split_record(AccessRecordHeader {
+                        timestamp_and_mask: timestamp,
+                        address_space: addr_space,
+                        pointer: start_ptr + i,
+                        block_size: min_block_size as u32,
+                        lowest_block_size: CHUNK as u32,
+                        type_size: size_of::<T>() as u32,
+                    });
                 }
+                let values = unsafe {
+                    self.memory
+                        .data
+                        .memory
+                        .get_slice::<T>((addr_space, ptr), block_size as usize)
+                };
                 for i in (0..block_size).step_by(CHUNK) {
                     final_memory.push((
                         (addr_space, ptr + i),
@@ -445,35 +439,33 @@ impl<F: PrimeField32> MemoryController<F> {
                 }
             } else {
                 for i in 0..block_size {
-                    current_values[current_cnt] = values[i as usize];
+                    current_values[current_cnt] =
+                        unsafe { self.memory.data.memory.get((addr_space, ptr + i)) };
                     if current_cnt & (min_block_size - 1) == 0 {
                         current_timestamps[current_cnt / min_block_size] = timestamp;
                     }
                     current_cnt += 1;
                     if current_cnt == CHUNK {
-                        self.memory.record_access::<T, false>(
-                            CHUNK,
-                            current_address.address_space as usize,
-                            current_address.pointer as usize,
-                            min_block_size,
-                            *current_timestamps.iter().max().unwrap(),
-                            if ptr == current_address.pointer && CHUNK as u32 == block_size {
-                                None
-                            } else {
-                                Some(&current_timestamps[..CHUNK / min_block_size])
+                        let timestamp = *current_timestamps[..CHUNK / min_block_size]
+                            .iter()
+                            .max()
+                            .unwrap();
+                        self.memory.add_merge_record(
+                            AccessRecordHeader {
+                                timestamp_and_mask: timestamp,
+                                address_space: addr_space,
+                                pointer: current_address.pointer,
+                                block_size: CHUNK as u32,
+                                lowest_block_size: min_block_size as u32,
+                                type_size: size_of::<T>() as u32,
                             },
                             &current_values,
-                            &current_values,
-                            min_block_size > CHUNK,
+                            &current_timestamps[..CHUNK / min_block_size],
                         );
                         final_memory.push((
                             (current_address.address_space, current_address.pointer),
                             TimestampedValues {
-                                timestamp: *current_timestamps
-                                    .iter()
-                                    .take(current_cnt.div_ceil(min_block_size))
-                                    .max()
-                                    .unwrap(),
+                                timestamp,
                                 values: from_fn(|i| convert(current_values[i])),
                             },
                         ));

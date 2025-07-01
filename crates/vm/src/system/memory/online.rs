@@ -352,10 +352,6 @@ pub struct AccessMetadata {
     pub timestamp: u32,
 }
 
-impl AccessMetadata {
-    pub(crate) const UNSPLITTABLE: u32 = u32::MAX;
-}
-
 /// Online memory that stores additional information for trace generation purposes.
 /// In particular, keeps track of timestamp.
 #[derive(Getters)]
@@ -535,89 +531,6 @@ impl<F: PrimeField32> TracingMemory<F> {
         });
     }
 
-    /// Given all the necessary information about an access,
-    /// adds a record about the access.
-    /// Updates the metadata if `UPDATE_META` is true.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn record_access<T, const UPDATE_META: bool>(
-        &mut self,
-        block_size: usize,
-        address_space: usize,
-        pointer: usize,
-        lowest_block_size: usize,
-        timestamp: u32,
-        prev_timestamps: Option<&[u32]>,
-        values: &[T],
-        prev_values: &[T],
-        split_after: bool,
-    ) {
-        let mut offset = self.access_adapter_inventory.current_size() as u32;
-        let align = self.min_block_size[address_space] as usize;
-
-        if let Some(ts) = prev_timestamps {
-            debug_assert_eq!(ts.len(), block_size / lowest_block_size);
-        }
-
-        if block_size > lowest_block_size {
-            // only then we maybe need to create a record
-            if let Some(prev_timestamps) = prev_timestamps {
-                self.add_merge_record(
-                    AccessRecordHeader {
-                        timestamp_and_mask: timestamp,
-                        address_space: address_space as u32,
-                        pointer: pointer as u32,
-                        block_size: block_size as u32,
-                        lowest_block_size: lowest_block_size as u32,
-                        type_size: size_of::<T>() as u32,
-                    },
-                    prev_values,
-                    prev_timestamps,
-                );
-
-                if align != lowest_block_size {
-                    // This must be the volatile 4 <-> 1 type of thing
-                    todo!()
-                    // debug_assert!((address_space as u32) < NATIVE_AS); // TODO: normal way
-                    // debug_assert_eq!(lowest_block_size, 1);
-                    // if timestamp == INITIAL_TIMESTAMP {
-                    //     record_mut.header.timestamp_and_mask |= MERGE_BEFORE_FLAG;
-                    //     record_mut.timestamps.fill(INITIAL_TIMESTAMP);
-                    // }
-                    // offset = AccessMetadata::UNSPLITTABLE;
-                }
-            }
-            if split_after {
-                self.add_split_record(AccessRecordHeader {
-                    timestamp_and_mask: timestamp,
-                    address_space: address_space as u32,
-                    pointer: pointer as u32,
-                    block_size: block_size as u32,
-                    lowest_block_size: lowest_block_size as u32,
-                    type_size: size_of::<T>() as u32,
-                });
-            }
-        } else {
-            debug_assert_eq!(align, lowest_block_size);
-            offset = AccessMetadata::UNSPLITTABLE;
-        }
-
-        if UPDATE_META {
-            if split_after {
-                for i in (0..block_size).step_by(align) {
-                    self.set_meta_block(
-                        address_space,
-                        pointer + i,
-                        align,
-                        lowest_block_size,
-                        timestamp,
-                    );
-                }
-            } else {
-                self.set_meta_block(address_space, pointer, align, block_size, timestamp);
-            }
-        }
-    }
-
     /// Returns the timestamp of the previous access to `[pointer:BLOCK_SIZE]_{address_space}`
     /// and the offset of the record in bytes.
     ///
@@ -627,7 +540,6 @@ impl<F: PrimeField32> TracingMemory<F> {
         address_space: usize,
         pointer: usize,
         align: usize,
-        values: &[T; BLOCK_SIZE],
         prev_values: &[T; BLOCK_SIZE],
     ) -> u32 {
         let num_segs = BLOCK_SIZE / align;
@@ -750,7 +662,6 @@ impl<F: PrimeField32> TracingMemory<F> {
             pointer as usize,
             ALIGN,
             &values,
-            &values,
         );
         self.timestamp += 1;
 
@@ -794,7 +705,6 @@ impl<F: PrimeField32> TracingMemory<F> {
             address_space as usize,
             pointer as usize,
             ALIGN,
-            &values,
             &values_prev,
         );
         self.data.write(address_space, pointer, values);
