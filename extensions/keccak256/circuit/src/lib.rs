@@ -3,7 +3,6 @@
 
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
 use openvm_stark_backend::p3_field::PrimeField32;
-use p3_keccak_air::NUM_ROUNDS;
 
 pub mod air;
 pub mod columns;
@@ -16,14 +15,15 @@ pub use extension::*;
 #[cfg(test)]
 mod tests;
 
+use std::borrow::{Borrow, BorrowMut};
+
 pub use air::KeccakVmAir;
-use openvm_circuit::{
-    arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        ExecutionBridge, MatrixRecordArena, NewVmChipWrapper, Result, StepExecutorE1, VmStateMut,
-    },
-    system::memory::online::GuestMemory,
+use openvm_circuit::arch::{
+    execution_mode::E1E2ExecutionCtx, ExecuteFunc, ExecutionBridge,
+    ExecutionError::InvalidInstruction, MatrixRecordArena, NewVmChipWrapper, Result,
+    StepExecutorE1, VmSegmentState,
 };
+use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -31,10 +31,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_keccak256_transpiler::Rv32KeccakOpcode;
-use openvm_rv32im_circuit::adapters::{
-    memory_read_from_state, memory_write, memory_write_from_state, read_rv32_register_from_state,
-};
-use utils::num_keccak_f;
+use openvm_rv32im_circuit::adapters::INT256_NUM_LIMBS;
 
 use crate::utils::keccak256;
 
@@ -92,55 +89,29 @@ impl KeccakVmStep {
     }
 }
 
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct KeccakPreCompute {
+    a: u8,
+    b: u8,
+    c: u8,
+}
+
 impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
-    fn execute_e1<Ctx>(
+    fn pre_compute_size(&self) -> usize {
+        size_of::<KeccakPreCompute>()
+    }
+
+    fn pre_compute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
     where
         Ctx: E1E2ExecutionCtx,
     {
-        let &Instruction {
-            opcode,
-            a,
-            b,
-            c,
-            d,
-            e,
-            ..
-        } = instruction;
-
-        debug_assert_eq!(opcode, Rv32KeccakOpcode::KECCAK256.global_opcode());
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
-
-        let dst = read_rv32_register_from_state(state, a.as_canonical_u32());
-        let src = read_rv32_register_from_state(state, b.as_canonical_u32());
-        let len = read_rv32_register_from_state(state, c.as_canonical_u32());
-
-        // SAFETY: RV32_MEMORY_AS is memory address space of type u8
-        let message = unsafe {
-            state
-                .memory
-                .memory
-                .get_slice((RV32_MEMORY_AS, src), len as usize)
-        };
-
-        let output = keccak256(message);
-        memory_write(state.memory, RV32_MEMORY_AS, dst, output);
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
+        let data: &mut KeccakPreCompute = data.borrow_mut();
         let Instruction {
             opcode,
             a,
@@ -149,51 +120,42 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
             d,
             e,
             ..
-        } = instruction;
-        debug_assert_eq!(*opcode, Rv32KeccakOpcode::KECCAK256.global_opcode());
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
-
-        let dst = read_rv32_register_from_state(state, a.as_canonical_u32());
-        let src = read_rv32_register_from_state(state, b.as_canonical_u32());
-        let len = read_rv32_register_from_state(state, c.as_canonical_u32()) as usize;
-
-        let num_blocks = num_keccak_f(len);
-
-        debug_assert!(src as usize + len <= (1 << self.pointer_max_bits));
-        debug_assert!(dst as usize + KECCAK_DIGEST_BYTES <= (1 << self.pointer_max_bits));
-        // We don't support messages longer than 2^[pointer_max_bits] bytes
-        debug_assert!(len < (1 << self.pointer_max_bits));
-
-        let mut input = Vec::with_capacity(len);
-        let num_reads = len.div_ceil(KECCAK_WORD_SIZE);
-        for idx in 0..num_reads {
-            let read: [u8; KECCAK_WORD_SIZE] = memory_read_from_state(
-                state,
-                RV32_MEMORY_AS,
-                src + (idx * KECCAK_WORD_SIZE) as u32,
-            );
-            if idx < num_reads - 1 {
-                input.extend_from_slice(&read);
-            } else {
-                let remaining_bytes = len - idx * KECCAK_WORD_SIZE;
-                input.extend_from_slice(&read[..remaining_bytes]);
-            }
+        } = inst;
+        let e_u32 = e.as_canonical_u32();
+        if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
+            return Err(InvalidInstruction(pc));
         }
-
-        let output = keccak256(&input);
-        for (i, word) in output.chunks_exact(KECCAK_WORD_SIZE).enumerate() {
-            memory_write_from_state::<F, _, KECCAK_WORD_SIZE>(
-                state,
-                RV32_MEMORY_AS,
-                dst + (i * KECCAK_WORD_SIZE) as u32,
-                word.try_into().unwrap(),
-            );
-        }
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        state.ctx.trace_heights[chip_index] += (num_blocks * NUM_ROUNDS) as u32;
-
-        Ok(())
+        *data = KeccakPreCompute {
+            a: a.as_canonical_u32() as u8,
+            b: b.as_canonical_u32() as u8,
+            c: c.as_canonical_u32() as u8,
+        };
+        assert_eq!(&Rv32KeccakOpcode::KECCAK256.global_opcode(), opcode);
+        Ok(execute_impl::<_, _, true>)
     }
+}
+
+unsafe fn execute_impl<F: PrimeField32, CTX: E1E2ExecutionCtx, const IS_E1: bool>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &KeccakPreCompute = pre_compute.borrow();
+    let dst = vm_state.host_read(RV32_REGISTER_AS, pre_compute.a as u32);
+    let src = vm_state.host_read(RV32_REGISTER_AS, pre_compute.b as u32);
+    let len = vm_state.host_read(RV32_REGISTER_AS, pre_compute.c as u32);
+    let dst_u32 = u32::from_le_bytes(dst);
+    let src_u32 = u32::from_le_bytes(src);
+    let len_u32 = u32::from_le_bytes(len);
+
+    let output = if IS_E1 {
+        // SAFETY: RV32_MEMORY_AS is memory address space of type u8
+        let message = vm_state.vm_read_slice(RV32_MEMORY_AS, src_u32, len_u32 as usize);
+        keccak256(message)
+    } else {
+        unimplemented!()
+    };
+    vm_state.host_write(RV32_MEMORY_AS, dst_u32, &output);
+
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
 }

@@ -253,7 +253,7 @@ pub fn trace_filler_derive(input: TokenStream) -> TokenStream {
     match &ast.data {
         Data::Struct(inner) => {
             // Check if the struct has only one unnamed field
-            let inner_ty = match &inner.fields {
+            match &inner.fields {
                 Fields::Unnamed(fields) => {
                     if fields.unnamed.len() != 1 {
                         panic!("Only one unnamed field is supported");
