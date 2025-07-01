@@ -179,8 +179,10 @@ pub mod mul {
             width: usize,
             d_records: *const u8,
             record_len: usize,
-            d_range_checker: *const u32,
-            range_checker_bins: usize,
+            d_range: *const u32,
+            range_bins: usize,
+            d_range_tuple: *mut u32,
+            range_tuple_sizes: UInt2,
         ) -> i32;
     }
 
@@ -190,6 +192,8 @@ pub mod mul {
         d_records: &DeviceBuffer<u8>,
         d_range: &DeviceBuffer<T>,
         range_bins: usize,
+        d_range_tuple: &DeviceBuffer<T>,
+        range_tuple_sizes: UInt2,
     ) -> Result<(), CudaError> {
         let width = d_trace.len() / height;
         CudaError::from_result(_mul_tracegen(
@@ -200,6 +204,8 @@ pub mod mul {
             d_records.len(),
             d_range.as_ptr() as *const u32,
             range_bins,
+            d_range_tuple.as_ptr() as *mut u32,
+            range_tuple_sizes,
         ))
     }
 }

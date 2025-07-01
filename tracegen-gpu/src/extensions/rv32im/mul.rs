@@ -12,11 +12,15 @@ use stark_backend_gpu::{
 };
 
 use super::cuda::mul::tracegen as mul_tracegen;
-use crate::{primitives::var_range::VariableRangeCheckerChipGPU, DeviceChip};
+use crate::{
+    primitives::{range_tuple::RangeTupleCheckerChipGPU, var_range::VariableRangeCheckerChipGPU},
+    DeviceChip, UInt2,
+};
 
 pub struct Rv32MultiplicationChipGpu<'a> {
     pub air: Rv32MultiplicationAir,
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
+    pub range_tuple_checker: Arc<RangeTupleCheckerChipGPU<2>>,
     pub arena: Option<&'a DenseRecordArena>,
 }
 
@@ -24,11 +28,13 @@ impl<'a> Rv32MultiplicationChipGpu<'a> {
     pub fn new(
         air: Rv32MultiplicationAir,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
+        range_tuple_checker: Arc<RangeTupleCheckerChipGPU<2>>,
         arena: Option<&'a DenseRecordArena>,
     ) -> Self {
         Self {
             air,
             range_checker,
+            range_tuple_checker,
             arena,
         }
     }
@@ -65,13 +71,20 @@ impl DeviceChip<SC, GpuBackend> for Rv32MultiplicationChipGpu<'_> {
         let d_records = buf.to_device().unwrap();
         let height = next_power_of_two_or_zero(self.current_trace_height());
         let trace = DeviceMatrix::<F>::with_capacity(height, self.trace_width());
+        let sizes = self.range_tuple_checker.air.bus.sizes;
+        let d_sizes = UInt2 {
+            x: sizes[0],
+            y: sizes[1],
+        };
         unsafe {
             mul_tracegen(
                 trace.buffer(),
                 height,
                 &d_records,
                 &self.range_checker.count,
-                self.range_checker.count.len(),
+                self.range_checker.count.len() / 2,
+                &self.range_tuple_checker.count,
+                d_sizes,
             )
             .unwrap();
         }
@@ -95,8 +108,9 @@ mod tests {
         Rv32MultiplicationStep,
     };
     use openvm_rv32im_transpiler::MulOpcode;
-    use openvm_stark_backend::verifier::VerificationError;
+    use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
     use openvm_stark_sdk::utils::create_seeded_rng;
+    use rand::Rng;
 
     use super::*;
     use crate::testing::GpuChipTestBuilder;
@@ -150,7 +164,6 @@ mod tests {
 
     #[test]
     fn rand_mul_tracegen_test() {
-        let mut tester = GpuChipTestBuilder::default().with_variable_range_checker();
         let mut rng = create_seeded_rng();
 
         // Default range tuple sizes for MUL (8-bit limbs)
@@ -158,22 +171,46 @@ mod tests {
         let range_tuple_bus = RangeTupleCheckerBus::new(0, sizes);
         let cpu_range_tuple_chip = SharedRangeTupleCheckerChip::new(range_tuple_bus);
 
+        let mut tester = GpuChipTestBuilder::default()
+            .with_variable_range_checker()
+            .with_range_tuple_checker(range_tuple_bus);
+
         let mut dense_chip = create_dense_mul_chip(&tester, cpu_range_tuple_chip.clone());
-        let mut gpu_chip =
-            Rv32MultiplicationChipGpu::new(dense_chip.air, tester.range_checker(), None);
+        let mut gpu_chip = Rv32MultiplicationChipGpu::new(
+            dense_chip.air,
+            tester.range_checker(),
+            tester.range_tuple_checker(),
+            None,
+        );
         let mut cpu_chip = create_sparse_mul_chip(&tester, cpu_range_tuple_chip);
 
         for _ in 0..100 {
+            let rd = gen_pointer(&mut rng, 4);
             let ptr1 = gen_pointer(&mut rng, 4);
             let ptr2 = gen_pointer(&mut rng, 4);
+
+            let val1 = rng.gen::<u32>();
+            let val2 = rng.gen::<u32>();
+
+            tester.write(
+                RV32_REGISTER_AS as usize,
+                ptr1,
+                val1.to_le_bytes().map(F::from_canonical_u8),
+            );
+            tester.write(
+                RV32_REGISTER_AS as usize,
+                ptr2,
+                val2.to_le_bytes().map(F::from_canonical_u8),
+            );
+
             tester.execute(
                 &mut dense_chip,
                 &Instruction::from_usize(
                     MulOpcode::MUL.global_opcode(),
                     [
+                        rd as usize,
                         ptr1 as usize,
                         ptr2 as usize,
-                        0,
                         RV32_REGISTER_AS as usize,
                         0,
                     ],
@@ -193,6 +230,8 @@ mod tests {
                 EmptyAdapterCoreLayout::<F, Rv32MultAdapterStep>::new(),
             );
         gpu_chip.arena = Some(&dense_chip.arena);
+
+        tester.range_tuple_checker().count.fill_zero().unwrap();
 
         tester
             .build()
