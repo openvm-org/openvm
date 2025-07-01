@@ -19,9 +19,9 @@ use openvm_stark_backend::{
     p3_air::{Air, BaseAir, PairBuilder},
     p3_field::Field,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProofInput,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter,
+    Chip, ChipUsageGetter,
 };
 
 use super::bus::XorBus;
@@ -170,14 +170,10 @@ impl<const M: usize> XorLookupChip<M> {
     }
 }
 
-impl<SC: StarkGenericConfig, const M: usize> Chip<SC> for XorLookupChip<M> {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air)
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+impl<R, SC: StarkGenericConfig, const M: usize> Chip<R, CpuBackend<SC>> for XorLookupChip<M> {
+    fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
         let trace = self.generate_trace::<Val<SC>>();
-        AirProofInput::simple_no_pis(trace)
+        AirProvingContext::simple_no_pis(Arc::new(trace))
     }
 }
 
