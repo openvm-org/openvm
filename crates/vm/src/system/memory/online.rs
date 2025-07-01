@@ -322,6 +322,11 @@ impl GuestMemory {
             .get_unchecked_mut(addr_space as usize)
             .swap((ptr as usize) * size_of::<T>(), values);
     }
+
+    #[inline(always)]
+    pub unsafe fn get_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
+        self.memory.get_slice((addr_space, ptr), len)
+    }
 }
 
 // perf[jpw]: since we restrict `timestamp < 2^29`, we could pack `timestamp, log2(block_size)`

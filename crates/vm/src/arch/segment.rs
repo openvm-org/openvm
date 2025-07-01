@@ -93,6 +93,15 @@ impl<F, Ctx> VmSegmentState<F, Ctx> {
     }
 
     #[inline(always)]
+    pub fn vm_read_slice<T: Copy + Debug>(&mut self, addr_space: u32, ptr: u32, len: usize) -> &[T]
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+        self.ctx.on_memory_operation(addr_space, ptr, len as u32);
+        self.host_read_slice(addr_space, ptr, len)
+    }
+
+    #[inline(always)]
     pub fn host_read<T: Copy + Debug, const BLOCK_SIZE: usize>(
         &self,
         addr_space: u32,
@@ -113,6 +122,13 @@ impl<F, Ctx> VmSegmentState<F, Ctx> {
         Ctx: E1E2ExecutionCtx,
     {
         unsafe { self.memory.write(addr_space, ptr, *data) }
+    }
+    #[inline(always)]
+    pub fn host_read_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T]
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+        unsafe { self.memory.get_slice(addr_space, ptr, len) }
     }
 }
 
