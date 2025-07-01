@@ -47,7 +47,7 @@ struct Rv32HintStoreRecordHeader {
 
 // This is the part of the record that we keep `num_words` times per instruction
 struct Rv32HintStoreVars {
-    MemoryWriteAuxRecord<RV32_REGISTER_NUM_LIMBS> write_aux;
+    MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS> write_aux;
     uint8_t data[RV32_REGISTER_NUM_LIMBS];
 };
 

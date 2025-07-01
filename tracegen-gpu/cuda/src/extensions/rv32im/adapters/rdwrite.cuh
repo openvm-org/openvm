@@ -16,7 +16,7 @@ struct Rv32RdWriteAdapterRecord {
     uint32_t from_pc;
     uint32_t from_timestamp;
     uint32_t rd_ptr;
-    MemoryWriteAuxRecord<RV32_REGISTER_NUM_LIMBS> rd_aux_record;
+    MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS> rd_aux_record;
 };
 
 struct Rv32RdWriteAdapter {

@@ -23,7 +23,7 @@ struct Rv32MultAdapterRecord {
     uint32_t rs1_ptr;
     uint32_t rs2_ptr;
     MemoryReadAuxRecord reads_aux[2];
-    MemoryWriteAuxRecord<RV32_REGISTER_NUM_LIMBS> writes_aux;
+    MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS> writes_aux;
 };
 
 struct Rv32MultAdapter {

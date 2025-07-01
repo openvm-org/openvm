@@ -23,7 +23,7 @@ template <typename F, size_t WRITE_SIZE> struct ConvertAdapterRecord {
     F b_ptr;
 
     MemoryReadAuxRecord read_aux;
-    MemoryWriteAuxRecord<WRITE_SIZE> write_aux;
+    MemoryWriteBytesAuxRecord<WRITE_SIZE> write_aux;
 };
 
 template <typename F, size_t WRITE_SIZE> struct ConvertAdapter {
