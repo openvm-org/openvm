@@ -12,7 +12,7 @@ use openvm_circuit::{
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
+        MemoryAuxColsFactory, SharedMemoryHelper,
     },
 };
 use openvm_circuit_primitives::{
@@ -185,7 +185,7 @@ pub struct LessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(derive_new::new)]
-pub struct LessThanChip<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct LessThanChip<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub offset: usize,
@@ -259,14 +259,14 @@ where
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for LessThanChip<A, NUM_LIMBS, LIMB_BITS>
+    for LessThanChip<F, A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(self.mem_helper, adapter_row);
+        self.adapter.fill_trace_row(&self.mem_helper, adapter_row);
         let record: &LessThanCoreRecord<NUM_LIMBS, LIMB_BITS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
 

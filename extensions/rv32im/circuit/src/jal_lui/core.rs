@@ -9,7 +9,7 @@ use openvm_circuit::{
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
+        MemoryAuxColsFactory, SharedMemoryHelper,
     },
 };
 use openvm_circuit_primitives::{
@@ -30,7 +30,10 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 
-use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_J_TYPE_IMM_BITS};
+use crate::adapters::{
+    Rv32CondRdWriteAdapterChip, Rv32CondRdWriteAdapterStep, RV32_CELL_BITS,
+    RV32_REGISTER_NUM_LIMBS, RV_J_TYPE_IMM_BITS,
+};
 
 pub(super) const ADDITIONAL_BITS: u32 = 0b11000000;
 
@@ -156,14 +159,15 @@ pub struct Rv32JalLuiStepRecord {
 }
 
 #[derive(derive_new::new)]
-pub struct Rv32JalLuiStep<A> {
+pub struct Rv32JalLuiStep<A = Rv32CondRdWriteAdapterStep> {
     adapter: A,
 }
 
 #[derive(derive_new::new)]
-pub struct Rv32JalLuiChip<A> {
+pub struct Rv32JalLuiChip<F, A = Rv32CondRdWriteAdapterChip> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    pub mem_helper: SharedMemoryHelper<F>,
 }
 
 impl<F, A> TraceStep<F> for Rv32JalLuiStep<A>
@@ -214,14 +218,14 @@ where
     }
 }
 
-impl<F, A> TraceFiller<F> for Rv32JalLuiStep<A>
+impl<F, A> TraceFiller<F> for Rv32JalLuiChip<A>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    fn fill_trace_row(&self, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        self.adapter.fill_trace_row(&self.mem_helper, adapter_row);
         let record: &Rv32JalLuiStepRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let core_row: &mut Rv32JalLuiCoreCols<F> = core_row.borrow_mut();
 

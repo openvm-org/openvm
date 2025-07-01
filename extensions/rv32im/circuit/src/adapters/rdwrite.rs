@@ -201,6 +201,7 @@ pub struct Rv32RdWriteAdapterRecord {
 }
 
 pub struct Rv32RdWriteAdapterStep;
+pub type Rv32RdWriteAdapterChip = Rv32RdWriteAdapterStep;
 
 impl<F> AdapterTraceStep<F> for Rv32RdWriteAdapterStep
 where
@@ -312,6 +313,7 @@ where
 pub struct Rv32CondRdWriteAdapterStep {
     inner: Rv32RdWriteAdapterStep,
 }
+pub type Rv32CondRdWriteAdapterChip = Rv32CondRdWriteAdapterStep;
 
 impl<F> AdapterTraceStep<F> for Rv32CondRdWriteAdapterStep
 where
@@ -368,7 +370,7 @@ where
     }
 }
 
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32CondRdWriteAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32CondRdWriteAdapterChip {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &Rv32RdWriteAdapterRecord =

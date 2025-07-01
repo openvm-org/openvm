@@ -12,7 +12,7 @@ use openvm_circuit::{
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
+        MemoryAuxColsFactory, SharedMemoryHelper,
     },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -259,6 +259,13 @@ pub struct LoadStoreStep<A, const NUM_CELLS: usize> {
     pub offset: usize,
 }
 
+#[derive(derive_new::new)]
+pub struct LoadStoreChip<F, A, const NUM_CELLS: usize> {
+    adapter: A,
+    pub offset: usize,
+    pub mem_helper: SharedMemoryHelper<F>,
+}
+
 impl<F, A, const NUM_CELLS: usize> TraceStep<F> for LoadStoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
@@ -318,14 +325,14 @@ where
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> TraceFiller<F> for LoadStoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> TraceFiller<F> for LoadStoreChip<F, A, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    fn fill_trace_row(&self, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        self.adapter.fill_trace_row(&self.mem_helper, adapter_row);
 
         let record: &LoadStoreCoreRecord<NUM_CELLS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
