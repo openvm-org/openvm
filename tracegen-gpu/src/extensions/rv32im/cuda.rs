@@ -36,7 +36,7 @@ pub mod auipc {
             d_records.as_ptr(),
             d_records.len(),
             d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() / 2,
+            d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
         ))
@@ -123,7 +123,7 @@ pub mod jalr {
             d_records.as_ptr(),
             d_records.len(),
             d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() / 2,
+            d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
         ))
@@ -364,7 +364,7 @@ pub mod loadstore_cuda {
             rows_used,
             pointer_max_bits,
             d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32 / 2,
+            d_range_checker.len() as u32,
         ))
     }
 }
@@ -402,7 +402,7 @@ pub mod load_sign_extend_cuda {
             rows_used,
             pointer_max_bits,
             d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32 / 2,
+            d_range_checker.len() as u32,
         ))
     }
 }
@@ -440,7 +440,7 @@ pub mod jal_lui {
             d_records.as_ptr(),
             d_records.len(),
             d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() / 2,
+            d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
         ))
@@ -480,7 +480,7 @@ pub mod beq {
             d_records.as_ptr(),
             d_records.len(),
             d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() / 2,
+            d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
         ))
@@ -520,7 +520,7 @@ pub mod branch_lt {
             d_records.as_ptr(),
             d_records.len(),
             d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() / 2,
+            d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
         ))
@@ -565,7 +565,7 @@ pub mod mulh {
             d_records.as_ptr(),
             d_records.len(),
             d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() / 2,
+            d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
             range_tuple_size0,
