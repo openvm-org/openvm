@@ -395,9 +395,26 @@ where
         self.chips.push(Box::new(chip));
     }
 
+    /// Adds a chip and associates it to the next executor.
+    /// **Caution:** you must add chips in the order matching the order that executors were added in
+    /// the [VmExecutionExtension] implementation.
     pub fn add_executor_chip<C: Chip<RA, PB> + 'static>(&mut self, chip: C) {
         self.executor_idx_to_air_idx.push(self.chips.len());
         self.chips.push(Box::new(chip));
+    }
+}
+
+// SharedVariableRangeCheckerChip is only used by the CPU backend.
+impl<SC, RA> ChipInventory<SC, RA, CpuBackend<SC>>
+where
+    SC: StarkGenericConfig,
+{
+    pub fn range_checker(&self) -> Result<&SharedVariableRangeCheckerChip, ChipInventoryError> {
+        self.find_chip::<SharedVariableRangeCheckerChip>()
+            .next()
+            .ok_or_else(|| ChipInventoryError::ChipNotFound {
+                name: "VariableRangeCheckerChip".to_string(),
+            })
     }
 }
 

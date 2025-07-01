@@ -275,15 +275,7 @@ where
         &self,
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
-        let range_checker = inventory
-            .find_chip::<SharedVariableRangeCheckerChip>()
-            .next()
-            .ok_or_else(|_| {
-                Err(ChipInventoryError::ChipNotFound {
-                    name: "VariableRangeCheckerChip".to_string(),
-                })
-            })?
-            .clone();
+        let range_checker = inventory.range_checker()?.clone();
         let mem_helper = todo!();
 
         let bitwise_lu = if let Some(&chip) = inventory
