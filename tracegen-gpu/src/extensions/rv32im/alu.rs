@@ -79,7 +79,7 @@ impl DeviceChip<SC, GpuBackend> for Rv32AluChipGpu<'_> {
                 height,
                 &d_records,
                 &self.range_checker.count,
-                self.range_checker.count.len() / 2,
+                self.range_checker.count.len(),
                 &self.bitwise_lookup.count,
                 RV32_CELL_BITS,
             )
