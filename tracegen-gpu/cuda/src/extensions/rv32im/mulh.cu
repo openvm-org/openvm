@@ -181,7 +181,6 @@ __global__ void mulh_tracegen(
         );
         core.fill_trace_row(row.slice_from(COL_INDEX(MulHCols, core)), rec.core);
     } else {
-#pragma unroll
         row.fill_zero(0, sizeof(MulHCols<uint8_t>));
     }
 }

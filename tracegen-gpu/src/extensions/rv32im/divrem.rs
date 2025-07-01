@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
-
 use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use openvm_rv32im_circuit::{adapters::Rv32MultAdapterRecord, DivRemCoreRecords, Rv32DivRemAir};
 use openvm_stark_backend::{rap::get_air_name, AirRef, ChipUsageGetter};
@@ -55,7 +54,7 @@ impl ChipUsageGetter for Rv32DivRemChipGpu {
 
 impl DeviceChip<SC, GpuBackend> for Rv32DivRemChipGpu {
     fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
+        Arc::new(self.air)
     }
 
     fn generate_trace(&self) -> DeviceMatrix<F> {
@@ -88,9 +87,6 @@ impl DeviceChip<SC, GpuBackend> for Rv32DivRemChipGpu {
 
 #[cfg(test)]
 mod test {
-    use crate::testing::GpuChipTestBuilder;
-
-    use super::*;
     use openvm_circuit::arch::{
         testing::{memory::gen_pointer, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS},
         EmptyAdapterCoreLayout, NewVmChipWrapper,
@@ -99,18 +95,21 @@ mod test {
         bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
         range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
     };
-    use openvm_instructions::LocalOpcode;
-    use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS};
+    use openvm_instructions::{
+        instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode,
+    };
     use openvm_rv32im_circuit::{
         adapters::{Rv32MultAdapterAir, Rv32MultAdapterStep},
         DivRemCoreAir, DivRemStep, Rv32DivRemChip, Rv32DivRemStep,
     };
-
     use openvm_rv32im_transpiler::DivRemOpcode::{self, *};
     use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::{rngs::StdRng, Rng};
     use test_case::test_case;
+
+    use super::*;
+    use crate::testing::GpuChipTestBuilder;
 
     const TUPLE_CHECKER_SIZES: [u32; 2] = [
         (1 << RV32_CELL_BITS) as u32,
@@ -150,7 +149,7 @@ mod test {
         dense_chip: &Rv32DivRemDenseChip<F>,
     ) -> Rv32DivRemChip<F> {
         let mut chip = Rv32DivRemChip::<F>::new(
-            dense_chip.air.clone(),
+            dense_chip.air,
             DivRemStep::new(
                 Rv32MultAdapterStep::new(),
                 dense_chip.step.bitwise_lookup_chip.clone(),

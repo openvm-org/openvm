@@ -1,6 +1,5 @@
 use std::{mem::size_of, sync::Arc};
 
-use crate::{primitives::var_range::VariableRangeCheckerChipGPU, DeviceChip};
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_rv32im_circuit::{
     adapters::{Rv32MultAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
@@ -13,6 +12,7 @@ use stark_backend_gpu::{
 };
 
 use super::cuda::mul::tracegen as mul_tracegen;
+use crate::{primitives::var_range::VariableRangeCheckerChipGPU, DeviceChip};
 
 pub struct Rv32MultiplicationChipGpu<'a> {
     pub air: Rv32MultiplicationAir,
@@ -64,7 +64,7 @@ impl DeviceChip<SC, GpuBackend> for Rv32MultiplicationChipGpu<'_> {
         let buf = &self.arena.unwrap().allocated();
         let d_records = buf.to_device().unwrap();
         let height = next_power_of_two_or_zero(self.current_trace_height());
-        let mut trace = DeviceMatrix::<F>::with_capacity(height, self.trace_width());
+        let trace = DeviceMatrix::<F>::with_capacity(height, self.trace_width());
         unsafe {
             mul_tracegen(
                 trace.buffer(),
@@ -81,19 +81,14 @@ impl DeviceChip<SC, GpuBackend> for Rv32MultiplicationChipGpu<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::testing::GpuChipTestBuilder;
     use openvm_circuit::arch::{
-        testing::{memory::gen_pointer, BITWISE_OP_LOOKUP_BUS},
-        DenseRecordArena, EmptyAdapterCoreLayout, MatrixRecordArena, NewVmChipWrapper,
-        VmAirWrapper,
+        testing::memory::gen_pointer, DenseRecordArena, EmptyAdapterCoreLayout, MatrixRecordArena,
+        NewVmChipWrapper, VmAirWrapper,
     };
-    use openvm_circuit_primitives::{
-        bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-        range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
+    use openvm_circuit_primitives::range_tuple::{
+        RangeTupleCheckerBus, SharedRangeTupleCheckerChip,
     };
-    use openvm_instructions::riscv::RV32_REGISTER_AS;
-    use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
+    use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode};
     use openvm_rv32im_circuit::{
         adapters::{Rv32MultAdapterAir, Rv32MultAdapterStep},
         MultiplicationCoreAir, MultiplicationCoreRecord, Rv32MultiplicationAir,
@@ -102,7 +97,9 @@ mod tests {
     use openvm_rv32im_transpiler::MulOpcode;
     use openvm_stark_backend::verifier::VerificationError;
     use openvm_stark_sdk::utils::create_seeded_rng;
-    use rand::Rng;
+
+    use super::*;
+    use crate::testing::GpuChipTestBuilder;
 
     const MAX_INS_CAPACITY: usize = 128;
 

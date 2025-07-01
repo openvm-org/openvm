@@ -1,11 +1,5 @@
 use std::{mem::size_of, sync::Arc};
 
-use crate::{
-    primitives::{
-        bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
-    },
-    DeviceChip,
-};
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_rv32im_circuit::{
     adapters::{Rv32BaseAluAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
@@ -18,6 +12,12 @@ use stark_backend_gpu::{
 };
 
 use super::cuda::less_than::tracegen as rv32_less_than_tracegen;
+use crate::{
+    primitives::{
+        bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
+    },
+    DeviceChip,
+};
 
 pub struct Rv32LessThanChipGpu<'a> {
     pub air: Rv32LessThanAir,
@@ -26,7 +26,7 @@ pub struct Rv32LessThanChipGpu<'a> {
     pub arena: Option<&'a DenseRecordArena>,
 }
 
-impl<'a> Rv32LessThanChipGpu<'a> {
+impl Rv32LessThanChipGpu<'_> {
     pub fn new(
         air: Rv32LessThanAir,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
@@ -41,7 +41,7 @@ impl<'a> Rv32LessThanChipGpu<'a> {
     }
 }
 
-impl<'a> ChipUsageGetter for Rv32LessThanChipGpu<'a> {
+impl ChipUsageGetter for Rv32LessThanChipGpu<'_> {
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
@@ -63,7 +63,7 @@ impl<'a> ChipUsageGetter for Rv32LessThanChipGpu<'a> {
     }
 }
 
-impl<'a> DeviceChip<SC, GpuBackend> for Rv32LessThanChipGpu<'a> {
+impl DeviceChip<SC, GpuBackend> for Rv32LessThanChipGpu<'_> {
     fn air(&self) -> AirRef<SC> {
         Arc::new(self.air)
     }
@@ -92,8 +92,6 @@ impl<'a> DeviceChip<SC, GpuBackend> for Rv32LessThanChipGpu<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::testing::GpuChipTestBuilder;
     use openvm_circuit::arch::{
         testing::BITWISE_OP_LOOKUP_BUS, EmptyAdapterCoreLayout, MatrixRecordArena,
         NewVmChipWrapper, VmAirWrapper,
@@ -104,12 +102,17 @@ mod test {
     use openvm_instructions::{
         instruction::Instruction, program::PC_BITS, riscv::RV32_REGISTER_AS, LocalOpcode,
     };
-    use openvm_rv32im_circuit::adapters::{Rv32BaseAluAdapterAir, Rv32BaseAluAdapterStep};
-    use openvm_rv32im_circuit::{LessThanCoreAir, LessThanStep};
+    use openvm_rv32im_circuit::{
+        adapters::{Rv32BaseAluAdapterAir, Rv32BaseAluAdapterStep},
+        LessThanCoreAir, LessThanStep,
+    };
     use openvm_rv32im_transpiler::LessThanOpcode;
     use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::Rng;
+
+    use super::*;
+    use crate::testing::GpuChipTestBuilder;
 
     type DenseChip<F> = NewVmChipWrapper<
         F,
@@ -132,16 +135,15 @@ mod test {
         let mut rng = create_seeded_rng();
 
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let shared_bitwise =
-            SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus.clone());
+        let shared_bitwise = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
         let mut dense_chip = DenseChip::<F>::new(
             VmAirWrapper::new(
                 Rv32BaseAluAdapterAir::new(
                     tester.execution_bridge(),
                     tester.memory_bridge(),
-                    bitwise_bus.clone(),
+                    bitwise_bus,
                 ),
-                LessThanCoreAir::new(bitwise_bus.clone(), LessThanOpcode::CLASS_OFFSET),
+                LessThanCoreAir::new(bitwise_bus, LessThanOpcode::CLASS_OFFSET),
             ),
             LessThanStep::new(
                 Rv32BaseAluAdapterStep::new(shared_bitwise.clone()),
@@ -167,9 +169,9 @@ mod test {
                 Rv32BaseAluAdapterAir::new(
                     tester.execution_bridge(),
                     tester.memory_bridge(),
-                    bitwise_bus.clone(),
+                    bitwise_bus,
                 ),
-                LessThanCoreAir::new(bitwise_bus.clone(), LessThanOpcode::CLASS_OFFSET),
+                LessThanCoreAir::new(bitwise_bus, LessThanOpcode::CLASS_OFFSET),
             ),
             LessThanStep::new(
                 Rv32BaseAluAdapterStep::new(shared_bitwise.clone()),
@@ -217,7 +219,7 @@ mod test {
             );
 
         let mut gpu_chip = Rv32LessThanChipGpu::new(
-            cpu_chip.air.clone(),
+            cpu_chip.air,
             tester.range_checker(),
             tester.bitwise_op_lookup(),
         );

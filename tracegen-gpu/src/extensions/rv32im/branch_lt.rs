@@ -1,12 +1,5 @@
 use std::{mem::size_of, sync::Arc};
 
-use super::cuda::branch_lt::tracegen;
-use crate::{
-    primitives::{
-        bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
-    },
-    DeviceChip,
-};
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_rv32im_circuit::{
     adapters::{Rv32BranchAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
@@ -15,11 +8,15 @@ use openvm_rv32im_circuit::{
 use openvm_stark_backend::{rap::get_air_name, AirRef, ChipUsageGetter};
 use p3_air::BaseAir;
 use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer, error::CudaError},
-    prelude::F,
-    prover_backend::GpuBackend,
-    types::SC,
+    base::DeviceMatrix, cuda::copy::MemCopyH2D, prelude::F, prover_backend::GpuBackend, types::SC,
+};
+
+use super::cuda::branch_lt::tracegen;
+use crate::{
+    primitives::{
+        bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
+    },
+    DeviceChip,
 };
 pub struct Rv32BranchLessThanChipGpu<'a> {
     pub air: Rv32BranchLessThanAir,
@@ -68,7 +65,7 @@ impl ChipUsageGetter for Rv32BranchLessThanChipGpu<'_> {
 
 impl DeviceChip<SC, GpuBackend> for Rv32BranchLessThanChipGpu<'_> {
     fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
+        Arc::new(self.air)
     }
 
     fn generate_trace(&self) -> DeviceMatrix<F> {
@@ -95,7 +92,8 @@ impl DeviceChip<SC, GpuBackend> for Rv32BranchLessThanChipGpu<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::array;
+
     use openvm_circuit::arch::{
         testing::{memory::gen_pointer, BITWISE_OP_LOOKUP_BUS},
         DenseRecordArena, EmptyAdapterCoreLayout, MatrixRecordArena, NewVmChipWrapper,
@@ -105,11 +103,6 @@ mod tests {
         BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
     };
     use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
-    use openvm_rv32im_transpiler::BranchLessThanOpcode;
-    use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
-    use std::array;
-    use test_case::test_case;
-
     use openvm_rv32im_circuit::{
         adapters::{
             Rv32BranchAdapterAir, Rv32BranchAdapterRecord, Rv32BranchAdapterStep, RV32_CELL_BITS,
@@ -118,11 +111,14 @@ mod tests {
         BranchLessThanCoreAir, BranchLessThanCoreRecord, BranchLessThanStep, Rv32BranchLessThanAir,
         Rv32BranchLessThanStep,
     };
-
+    use openvm_rv32im_transpiler::BranchLessThanOpcode;
+    use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::Rng;
     use stark_backend_gpu::prelude::F;
+    use test_case::test_case;
 
+    use super::*;
     use crate::testing::GpuChipTestBuilder;
 
     const IMM_BITS: usize = 12;
@@ -148,7 +144,7 @@ mod tests {
         let mut dense_chip = create_dense_chip(&tester, cpu_bitwise_chip.clone());
 
         let mut gpu_chip = Rv32BranchLessThanChipGpu::new(
-            dense_chip.air.clone(),
+            dense_chip.air,
             tester.range_checker(),
             tester.bitwise_op_lookup(),
             None,

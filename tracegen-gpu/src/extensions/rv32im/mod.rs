@@ -18,7 +18,6 @@ pub use alu::*;
 pub use auipc::*;
 pub use beq::*;
 pub use branch_lt::*;
-pub use cuda::*;
 pub use divrem::*;
 pub use hintstore::*;
 pub use jal_lui::*;

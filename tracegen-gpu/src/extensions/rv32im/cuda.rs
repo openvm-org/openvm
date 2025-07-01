@@ -1,7 +1,8 @@
 #![allow(clippy::missing_safety_doc)]
 
-use crate::UInt2;
 use stark_backend_gpu::cuda::{d_buffer::DeviceBuffer, error::CudaError};
+
+use crate::UInt2;
 
 pub mod auipc {
     use super::*;
@@ -43,8 +44,7 @@ pub mod auipc {
 }
 
 pub mod hintstore {
-    use super::super::hintstore::OffsetInfo;
-    use super::*;
+    use super::{super::hintstore::OffsetInfo, *};
 
     unsafe extern "C" {
         unsafe fn _hintstore_tracegen(
@@ -62,6 +62,7 @@ pub mod hintstore {
         ) -> i32;
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn tracegen<T>(
         d_trace: &DeviceBuffer<T>,
         height: usize,
@@ -222,6 +223,7 @@ pub mod divrem_cuda {
         ) -> i32;
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn tracegen<T>(
         d_trace: &DeviceBuffer<T>,
         height: u32,
@@ -544,6 +546,7 @@ pub mod mulh {
         ) -> i32;
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn tracegen<T>(
         d_trace: &DeviceBuffer<T>,
         height: usize,

@@ -74,7 +74,7 @@ impl ChipUsageGetter for Rv32MulHChipGpu<'_> {
 
 impl DeviceChip<SC, GpuBackend> for Rv32MulHChipGpu<'_> {
     fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
+        Arc::new(self.air)
     }
 
     fn generate_trace(&self) -> DeviceMatrix<F> {
@@ -108,12 +108,13 @@ impl DeviceChip<SC, GpuBackend> for Rv32MulHChipGpu<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use openvm_circuit::arch::{
-        testing::{memory::gen_pointer, BITWISE_OP_LOOKUP_BUS},
-        EmptyAdapterCoreLayout, MatrixRecordArena, NewVmChipWrapper, VmAirWrapper,
+    use openvm_circuit::{
+        arch::{
+            testing::{memory::gen_pointer, BITWISE_OP_LOOKUP_BUS},
+            EmptyAdapterCoreLayout, MatrixRecordArena, NewVmChipWrapper, VmAirWrapper,
+        },
+        utils::generate_long_number,
     };
-    use openvm_circuit::utils::generate_long_number;
     use openvm_circuit_primitives::{
         bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
         range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
@@ -125,6 +126,7 @@ mod tests {
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::Rng;
 
+    use super::*;
     use crate::testing::GpuChipTestBuilder;
 
     const MAX_INS_CAPACITY: usize = 128;
@@ -158,7 +160,7 @@ mod tests {
             .with_bitwise_op_lookup(bitwise_bus)
             .with_range_tuple_checker(range_tuple_bus);
         let mut rng = create_seeded_rng();
-        let cpu_range_tuple_chip = SharedRangeTupleCheckerChip::new(range_tuple_bus.clone());
+        let cpu_range_tuple_chip = SharedRangeTupleCheckerChip::new(range_tuple_bus);
         let cpu_bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
         let mut dense_chip = {
@@ -201,7 +203,7 @@ mod tests {
             chip
         };
         let mut gpu_chip = Rv32MulHChipGpu::new(
-            dense_chip.air.clone(),
+            dense_chip.air,
             tester.range_checker(),
             tester.bitwise_op_lookup(),
             tester.range_tuple_checker(),
