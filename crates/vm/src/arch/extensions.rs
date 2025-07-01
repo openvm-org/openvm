@@ -32,7 +32,7 @@ use openvm_stark_backend::{
         types::{AirProofInput, AirProvingContext, CommittedTraceData, ProofInput},
     },
     rap::AnyRap,
-    AirRef, Chip, ChipUsageGetter,
+    AirRef, AnyChip, Chip, ChipUsageGetter,
 };
 use p3_baby_bear::BabyBear;
 use rustc_hash::FxHashMap;
@@ -103,11 +103,7 @@ where
     SC: StarkGenericConfig,
     PB: ProverBackend,
 {
-    fn extend(
-        &self,
-        airs: &AirInventory<SC>,
-        chips: &mut ChipInventory,
-    ) -> Result<(), VmInventoryError>;
+    fn extend(&self, chips: &mut ChipInventory<SC, RA, PB>) -> Result<(), ChipInventoryError>;
 }
 
 pub struct ExecutorInventory<E, F> {
@@ -138,38 +134,21 @@ pub struct AirInventory<SC: StarkGenericConfig> {
     bus_idx_mgr: BusIndexManager,
 }
 
-#[derive(Clone, Getters)]
-pub struct ChipInventory<SC: StarkGenericConfig> {
+#[derive(Getters)]
+pub struct ChipInventory<SC, RA, PB>
+where
+    SC: StarkGenericConfig,
+    PB: ProverBackend,
+{
     /// Read-only view of AIRs, as constructed via the [VmCircuitExtension] trait.
     #[get = "pub"]
     airs: AirInventory<SC>,
     /// Chips that are being built.
-    chips: Vec<Arc<dyn Any>>,
+    chips: Vec<Box<dyn AnyChip<RA, PB>>>,
 }
 
 // VmExtension<SC, RA, PB> = VmExecutionExtension + VmCircuitExtension<SC> + VmProverExtension<RA,
 // PB>
-
-/// Configuration for a processor extension.
-///
-/// There are two associated types:
-/// - `Executor`: enum for chips that are [`InstructionExecutor`]s.
-/// -
-pub trait VmExtension<F: PrimeField32> {
-    /// Enum of chips that implement [`InstructionExecutor`] for instruction execution.
-    /// `Executor` **must** implement `Chip<SC>` but the trait bound is omitted to omit the
-    /// `StarkGenericConfig` generic parameter.
-    type Executor: InstructionExecutor<F> + AnyEnum;
-    /// Enum of periphery chips that do not implement [`InstructionExecutor`].
-    /// `Periphery` **must** implement `Chip<SC>` but the trait bound is omitted to omit the
-    /// `StarkGenericConfig` generic parameter.
-    type Periphery: AnyEnum;
-
-    fn build(
-        &self,
-        builder: &mut VmInventoryBuilder<F>,
-    ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError>;
-}
 
 impl<F: PrimeField32, E: VmExtension<F>> VmExtension<F> for Option<E> {
     type Executor = E::Executor;
@@ -267,9 +246,10 @@ impl<SC: StarkGenericConfig> AirInventory<SC> {
     }
 }
 
-impl<SC> ChipInventory<SC>
+impl<SC, RA, PB> ChipInventory<SC, RA, PB>
 where
     SC: StarkGenericConfig,
+    PB: ProverBackend,
 {
     /// Gets the next AIR from the pre-existing AIR inventory according to the index of the next
     /// chip to be built.
@@ -283,11 +263,11 @@ where
     ///
     /// Note: the type `C` will usually be a smart pointer to a chip.
     pub fn find_chip<C: 'static>(&self) -> impl Iterator<Item = &'_ C> {
-        self.chips.iter().filter_map(|c| c.downcast_ref())
+        self.chips.iter().filter_map(|c| c.as_any().downcast_ref())
     }
 
-    pub fn add_chip<C: 'static>(&mut self, chip: C) {
-        self.chips.push(Arc::new(chip));
+    pub fn add_chip<C: Chip<RA, PB> + 'static>(&mut self, chip: C) {
+        self.chips.push(Box::new(chip));
     }
 }
 
@@ -300,56 +280,6 @@ pub struct VmInventoryBuilder<'a, F: PrimeField32> {
     /// as dependencies. The order should be that depended-on chips are ordered
     /// **before** their dependents.
     chips: Vec<&'a dyn AnyEnum>,
-}
-
-impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
-    pub fn new(
-        system_config: &'a SystemConfig,
-        system: &'a SystemBase<F>,
-        bus_idx_mgr: BusIndexManager,
-    ) -> Self {
-        Self {
-            system_config,
-            system,
-            bus_idx_mgr,
-            chips: Vec::new(),
-        }
-    }
-
-    pub fn system_config(&self) -> &SystemConfig {
-        self.system_config
-    }
-
-    pub fn system_base(&self) -> &SystemBase<F> {
-        self.system
-    }
-
-    pub fn system_port(&self) -> SystemPort {
-        SystemPort {
-            execution_bus: self.system_base().execution_bus(),
-            program_bus: self.system_base().program_bus(),
-            memory_bridge: self.system_base().memory_bridge(),
-        }
-    }
-
-    pub fn new_bus_idx(&mut self) -> BusIndex {
-        self.bus_idx_mgr.new_bus_idx()
-    }
-
-    /// Looks through built chips to see if there exists any of type `C` by downcasting.
-    /// Returns all chips of type `C` in the chipset.
-    ///
-    /// Note: the type `C` will usually be a smart pointer to a chip.
-    pub fn find_chip<C: 'static>(&self) -> Vec<&C> {
-        self.chips
-            .iter()
-            .filter_map(|c| c.as_any_kind().downcast_ref())
-            .collect()
-    }
-
-    fn add_chip<E: AnyEnum>(&mut self, chip: &'a E) {
-        self.chips.push(chip);
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -400,13 +330,6 @@ pub enum AirInventoryError {
 
 #[derive(thiserror::Error, Debug)]
 pub enum ChipInventoryError {
-    #[error("Chip {name} not found")]
-    ChipNotFound { name: String },
-}
-
-// TODO: delete
-#[derive(thiserror::Error, Debug)]
-pub enum VmInventoryError {
     #[error("Chip {name} not found")]
     ChipNotFound { name: String },
 }
