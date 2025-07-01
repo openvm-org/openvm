@@ -5,22 +5,18 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice,
-        instructions::LocalOpcode,
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep,
-        EmptyAdapterCoreLayout, ExecutionError, RecordArena, Result, StepExecutorE1, TraceFiller,
-        TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, instructions::LocalOpcode,
+        AdapterAirContext, AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout,
+        ExecuteFunc, ExecutionError, ExecutionError::InvalidInstruction, RecordArena, Result,
+        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmSegmentState,
+        VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
-use openvm_native_compiler::NativeLoadStoreOpcode;
+use openvm_native_compiler::{conversion::AS, NativeLoadStoreOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -218,52 +214,118 @@ where
     }
 }
 
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct NativeLoadStorePreCompute<F> {
+    a: u32,
+    b: F,
+    c: u32,
+}
+
 impl<F, A, const NUM_CELLS: usize> StepExecutorE1<F> for NativeLoadStoreCoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<F, ReadData = (F, [F; NUM_CELLS]), WriteData = [F; NUM_CELLS]>,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let Instruction { opcode, .. } = instruction;
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<NativeLoadStorePreCompute<F>>()
+    }
 
-        // Get the local opcode for this instruction
+    #[inline(always)]
+    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>> {
+        let data: &mut NativeLoadStorePreCompute<F> = data.borrow_mut();
+
+        let &Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
+        } = inst;
+
         let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let (_, data_read) = self.adapter.read(state, instruction);
+        let a = a.as_canonical_u32();
+        let c = c.as_canonical_u32();
+        let d = d.as_canonical_u32();
+        let e = e.as_canonical_u32();
 
-        let data = if local_opcode == NativeLoadStoreOpcode::HINT_STOREW {
-            if state.streams.hint_stream.len() < NUM_CELLS {
-                return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
-            }
-            array::from_fn(|_| state.streams.hint_stream.pop_front().unwrap())
-        } else {
-            data_read
+        if d != AS::Native as u32 {
+            return Err(InvalidInstruction(pc));
+        }
+        if e != AS::Native as u32 {
+            return Err(InvalidInstruction(pc));
+        }
+
+        *data = NativeLoadStorePreCompute { a, b, c };
+
+        let fn_ptr = match local_opcode {
+            NativeLoadStoreOpcode::LOADW => execute_loadw::<F, Ctx, NUM_CELLS>,
+            NativeLoadStoreOpcode::STOREW => execute_storew::<F, Ctx, NUM_CELLS>,
+            NativeLoadStoreOpcode::HINT_STOREW => execute_hint_storew::<F, Ctx, NUM_CELLS>,
         };
 
-        self.adapter.write(state, instruction, data);
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
+        Ok(fn_ptr)
     }
+}
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
+unsafe fn execute_loadw<F: PrimeField32, CTX: E1E2ExecutionCtx, const NUM_CELLS: usize>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &NativeLoadStorePreCompute<F> = pre_compute.borrow();
 
-        Ok(())
+    let [read_cell]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.c);
+
+    let data_read_ptr = (read_cell + pre_compute.b).as_canonical_u32();
+    let data_read: [F; NUM_CELLS] = vm_state.vm_read(AS::Native as u32, data_read_ptr);
+
+    vm_state.vm_write(AS::Native as u32, pre_compute.a, &data_read);
+
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
+}
+
+unsafe fn execute_storew<F: PrimeField32, CTX: E1E2ExecutionCtx, const NUM_CELLS: usize>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &NativeLoadStorePreCompute<F> = pre_compute.borrow();
+
+    let [read_cell]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.c);
+    let data_read: [F; NUM_CELLS] = vm_state.vm_read(AS::Native as u32, pre_compute.a);
+
+    let data_write_ptr = (read_cell + pre_compute.b).as_canonical_u32();
+    vm_state.vm_write(AS::Native as u32, data_write_ptr, &data_read);
+
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
+}
+
+unsafe fn execute_hint_storew<F: PrimeField32, CTX: E1E2ExecutionCtx, const NUM_CELLS: usize>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &NativeLoadStorePreCompute<F> = pre_compute.borrow();
+
+    let [read_cell]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.c);
+
+    if vm_state.streams.hint_stream.len() < NUM_CELLS {
+        panic!("Hint stream out of bounds at pc: {}", vm_state.pc);
     }
+    let data: [F; NUM_CELLS] =
+        array::from_fn(|_| vm_state.streams.hint_stream.pop_front().unwrap());
+
+    let data_write_ptr = (read_cell + pre_compute.b).as_canonical_u32();
+    vm_state.vm_write(AS::Native as u32, data_write_ptr, &data);
+
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
 }
