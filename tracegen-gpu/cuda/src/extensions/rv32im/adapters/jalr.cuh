@@ -25,7 +25,7 @@ struct Rv32JalrAdapterRecord {
     uint32_t rd_ptr;
 
     MemoryReadAuxRecord reads_aux;
-    MemoryWriteAuxRecord<RV32_REGISTER_NUM_LIMBS> writes_aux;
+    MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS> writes_aux;
 };
 
 struct Rv32JalrAdapter {

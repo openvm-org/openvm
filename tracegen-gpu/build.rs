@@ -71,6 +71,7 @@ fn main() {
         .file("cuda/src/extensions/rv32im/beq.cu")
         .file("cuda/src/extensions/rv32im/jal_lui.cu")
         .file("cuda/src/extensions/rv32im/mulh.cu")
+        .file("cuda/src/extensions/native/field_arithmetic.cu")
         .file("cuda/src/extensions/native/branch_eq.cu")
         .file("cuda/src/extensions/native/castf.cu")
         .file("cuda/src/primitives/bitwise_op_lookup.cu")

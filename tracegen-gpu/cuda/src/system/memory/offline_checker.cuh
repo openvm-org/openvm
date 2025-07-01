@@ -32,7 +32,10 @@ struct MemoryReadAuxRecord {
     uint32_t prev_timestamp;
 };
 
-template <size_t NUM_LIMBS> struct MemoryWriteAuxRecord {
+template <typename T, size_t NUM_LIMBS> struct MemoryWriteAuxRecord {
     uint32_t prev_timestamp;
-    uint8_t prev_data[NUM_LIMBS];
+    T prev_data[NUM_LIMBS];
 };
+
+template <size_t NUM_LIMBS>
+using MemoryWriteBytesAuxRecord = MemoryWriteAuxRecord<uint8_t, NUM_LIMBS>;

@@ -25,7 +25,7 @@ struct Rv32BaseAluAdapterRecord {
     uint32_t rs2; // Pointer if rs2 was a read, immediate value otherwise
     uint8_t rs2_as; // 1 if rs2 was a read, 0 if an immediate
     MemoryReadAuxRecord reads_aux[2];
-    MemoryWriteAuxRecord<RV32_REGISTER_NUM_LIMBS> writes_aux;
+    MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS> writes_aux;
 };
 
 struct Rv32BaseAluAdapter {

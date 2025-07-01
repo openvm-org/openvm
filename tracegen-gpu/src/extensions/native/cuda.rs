@@ -71,3 +71,41 @@ pub mod native_branch_eq_cuda {
         ))
     }
 }
+
+pub mod field_arithmetic_cuda {
+    use std::ffi::c_void;
+
+    use super::*;
+
+    extern "C" {
+        fn _field_arithmetic_tracegen(
+            d_trace: *mut c_void,
+            height: usize,
+            width: usize,
+            d_records: *const u8,
+            record_len: usize,
+            d_range_checker: *const u32,
+            range_checker_bins: usize,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen<T>(
+        d_trace: &DeviceBuffer<T>,
+        height: usize,
+        width: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_range_checker: *const u32,
+        range_bins: usize,
+    ) -> Result<(), CudaError> {
+        let result = _field_arithmetic_tracegen(
+            d_trace.as_mut_raw_ptr(),
+            height,
+            width,
+            d_records.as_ptr(),
+            d_records.len(),
+            d_range_checker,
+            range_bins,
+        );
+        CudaError::from_result(result)
+    }
+}
