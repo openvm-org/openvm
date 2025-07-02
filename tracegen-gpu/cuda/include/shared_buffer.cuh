@@ -8,13 +8,11 @@
 
 template <typename T> struct SharedBuffer {
     T *data;
-    uint32_t capacity;
     uint32_t *idx;
+    size_t capacity;
 
-    __device__ SharedBuffer(T *data, uint32_t capacity) : data(data), capacity(capacity) {}
-
-    __device__ SharedBuffer(T *data, uint32_t capacity, uint32_t *idx)
-        : data(data), capacity(capacity), idx(idx) {}
+    __device__ SharedBuffer(T *data, uint32_t *idx, size_t capacity)
+        : data(data), idx(idx), capacity(capacity) {}
 
     __device__ void push(T value) {
         uint32_t idx = atomicAdd(this->idx, 1);
@@ -26,10 +24,8 @@ template <typename T> struct SharedBuffer {
 struct Poseidon2Buffer {
     SharedBuffer<FpArray<16>> state;
 
-    __device__ Poseidon2Buffer(FpArray<16> *data, uint32_t capacity) : state(data, capacity) {}
-
-    __device__ Poseidon2Buffer(FpArray<16> *data, uint32_t capacity, uint32_t *idx)
-        : state(data, capacity, idx) {}
+    __device__ Poseidon2Buffer(FpArray<16> *data, uint32_t *idx, size_t capacity)
+        : state(data, idx, capacity) {}
 
     __device__ bool nonempty() const { return *state.idx > 0; }
 
@@ -49,11 +45,10 @@ struct Poseidon2Buffer {
         }
         state.push(value);
 
-        RowSlice slice = RowSlice((Fp *)&value.v[0], 1);
         poseidon2::generate_trace_row_for_perm(
-            poseidon2::Poseidon2Row<8, SBOX_DEGREE, SBOX_REGS, HALF_FULL_ROUNDS, PARTIAL_ROUNDS>::
+            poseidon2::Poseidon2Row<16, SBOX_DEGREE, SBOX_REGS, HALF_FULL_ROUNDS, PARTIAL_ROUNDS>::
                 null(),
-            slice
+            value.as_row()
         );
 
         FpArray<8> result;
@@ -70,5 +65,25 @@ struct Poseidon2Buffer {
         return compress_and_record<SBOX_DEGREE, SBOX_REGS, HALF_FULL_ROUNDS, PARTIAL_ROUNDS>(
             left_array, right_array
         );
+    }
+
+    template <size_t SBOX_DEGREE, size_t SBOX_REGS, size_t HALF_FULL_ROUNDS, size_t PARTIAL_ROUNDS>
+    __device__ FpArray<8> hash_and_record(FpArray<8> &left) {
+        FpArray<8> zeros = FpArray<8>({0, 0, 0, 0, 0, 0, 0, 0});
+        FpArray<8> result =
+            compress_and_record<SBOX_DEGREE, SBOX_REGS, HALF_FULL_ROUNDS, PARTIAL_ROUNDS>(
+                left, zeros
+            );
+        return result;
+    }
+
+    template <size_t SBOX_DEGREE, size_t SBOX_REGS, size_t HALF_FULL_ROUNDS, size_t PARTIAL_ROUNDS>
+    __device__ FpArray<8> hash_and_record(RowSlice left) {
+        FpArray<8> zeros = FpArray<8>({0, 0, 0, 0, 0, 0, 0, 0});
+        FpArray<8> result =
+            compress_and_record<SBOX_DEGREE, SBOX_REGS, HALF_FULL_ROUNDS, PARTIAL_ROUNDS>(
+                left, zeros.as_row()
+            );
+        return result;
     }
 };

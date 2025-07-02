@@ -1,10 +1,11 @@
 #pragma once
 
 #include "trace_access.h"
-#include <cuda/std/tuple>
 
 template <size_t N> struct FpArray {
     uint32_t v[N];
+
+    __device__ RowSlice as_row() { return RowSlice((Fp *)&v[0], 1); }
 
     __device__ static FpArray from_row(RowSlice slice, size_t length = N) {
         FpArray result;
@@ -13,6 +14,22 @@ template <size_t N> struct FpArray {
         }
         for (int i = length; i < N; i++) {
             result.v[i] = 0;
+        }
+        return result;
+    }
+
+    __device__ static FpArray from_raw_array(uint32_t raw[N]) {
+        FpArray result;
+        for (int i = 0; i < N; i++) {
+            result.v[i] = raw[i];
+        }
+        return result;
+    }
+
+    __device__ static FpArray from_u32_array(uint32_t arr[N]) {
+        FpArray result;
+        for (int i = 0; i < N; i++) {
+            result.v[i] = Fp(arr[i]).asRaw();
         }
         return result;
     }

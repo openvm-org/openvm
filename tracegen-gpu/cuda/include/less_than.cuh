@@ -1,7 +1,19 @@
 #pragma once
 
-#include "fp.h"
 #include "histogram.cuh"
+#include "poseidon2/fp_array.cuh"
+
+static const size_t AUX_LEN = 2;
+
+template <typename T, size_t AUX_LEN = AUX_LEN> struct LessThanAuxCols {
+    T lower_decomp[AUX_LEN];
+};
+
+template <typename T, size_t NUM, size_t AUX_LEN = AUX_LEN> struct LessThanArrayAuxCols {
+    T diff_marker[NUM];
+    T diff_inv;
+    LessThanAuxCols<T, AUX_LEN> lt_decomp;
+};
 
 /// Generators aka subairs
 namespace AssertLessThan {
@@ -110,15 +122,26 @@ __device__ __forceinline__ void generate_subrow(
     Fp shifted_diff_fp = (diff_val + Fp((1 << max_bits) - 1));
     uint32_t shifted_diff = shifted_diff_fp.asUInt32();
     uint32_t lower = shifted_diff & ((1 << max_bits) - 1);
-    *out_flag = Fp(shifted_diff != lower);
+    if (out_flag) {
+        *out_flag = Fp(shifted_diff != lower);
+    }
     rc.decompose(lower, max_bits, lt_decomp, aux_len);
 }
+
+template <size_t N>
+__device__ __forceinline__ void generate_subrow(
+    VariableRangeChecker &rc,
+    const uint32_t max_bits,
+    FpArray<N> x,
+    FpArray<N> y,
+    const size_t aux_len,
+    RowSlice diff_marker,
+    Fp *diff_inv,
+    RowSlice lt_decomp,
+    Fp *out_flag
+) {
+    generate_subrow(
+        rc, max_bits, x.as_row(), y.as_row(), N, aux_len, diff_marker, diff_inv, lt_decomp, out_flag
+    );
+}
 } // namespace IsLessThanArray
-
-/// Column structs
-
-static const size_t AUX_LEN = 2;
-
-template <typename T, size_t N = AUX_LEN> struct LessThanAuxCols {
-    T lower_decomp[N];
-};
