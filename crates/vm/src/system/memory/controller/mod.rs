@@ -349,12 +349,8 @@ impl<F: PrimeField32> MemoryController<F> {
         &mut self,
         touched_blocks: Vec<((u32, u32), AccessMetadata)>,
     ) -> TimestampedEquipartition<F, CHUNK> {
-        let mut final_memory = Vec::with_capacity(
-            touched_blocks
-                .par_iter()
-                .map(|&(_, meta)| meta.block_size as usize)
-                .sum::<usize>(),
-        );
+        // [perf] We can `.with_capacity()` if we keep track of the number of segments we initialize
+        let mut final_memory = Vec::new();
 
         debug_assert!(touched_blocks.is_sorted_by_key(|(addr, _)| addr));
         let (bytes, fs): (Vec<_>, Vec<_>) = touched_blocks
