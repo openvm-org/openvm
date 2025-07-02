@@ -10,7 +10,7 @@ use openvm_stark_backend::{
 
 use crate::system::memory::merkle::{MemoryDimensions, MemoryMerkleCols, MemoryMerklePvs};
 
-#[derive(Clone, Debug, derive_new::new)]
+#[derive(Clone, Debug)]
 pub struct MemoryMerkleAir<const CHUNK: usize> {
     pub memory_dimensions: MemoryDimensions,
     pub merkle_bus: PermutationCheckBus,

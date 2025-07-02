@@ -7,7 +7,10 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
-    prover::types::AirProofInput,
+    prover::{
+        cpu::CpuBackend,
+        types::{AirProofInput, AirProvingContext},
+    },
     AirRef, Chip, ChipUsageGetter,
 };
 use tracing::instrument;
@@ -40,19 +43,18 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     }
 }
 
-impl<const CHUNK: usize, SC: StarkGenericConfig> Chip<SC> for MemoryMerkleChip<CHUNK, Val<SC>>
+impl<const CHUNK: usize, RA, SC> Chip<RA, CpuBackend<SC>> for MemoryMerkleChip<CHUNK, Val<SC>>
 where
+    SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+    // TODO: switch to using records
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         assert!(
             self.final_state.is_some(),
             "Merkle chip must finalize before trace generation"
         );
+        // TODO[jpw]: figure this out later, probably memory just shouldn't use Chip trait
         let FinalState {
             mut rows,
             init_root,
@@ -79,9 +81,9 @@ where
             *trace_row.borrow_mut() = row;
         }
 
-        let trace = RowMajorMatrix::new(trace, width);
+        let trace = Arc::new(RowMajorMatrix::new(trace, width));
         let pvs = init_root.into_iter().chain(final_root).collect();
-        AirProofInput::simple(trace, pvs)
+        AirProvingContext::simple(trace, pvs)
     }
 }
 impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<CHUNK, F> {
