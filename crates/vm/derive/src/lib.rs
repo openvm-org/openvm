@@ -264,8 +264,24 @@ pub fn trace_filler_derive(input: TokenStream) -> TokenStream {
             };
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::TraceFiller<F, CTX> for #name #ty_generics {
+                    fn fill_trace(
+                        &self,
+                        mem_helper: &::openvm_circuit::system::memory::MemoryAuxColsFactory<F>,
+                        trace: &mut ::openvm_stark_backend::p3_matrix::dense::RowMajorMatrix<F>,
+                        rows_used: usize,
+                    ) where
+                        Self: Send + Sync,
+                        F: Send + Sync + Clone,
+                    {
+                        ::openvm_circuit::arch::TraceFiller::<F, CTX>::fill_trace(&self.0, mem_helper, trace, rows_used);
+                    }
+
                     fn fill_trace_row(&self, mem_helper: &::openvm_circuit::system::memory::MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
                         ::openvm_circuit::arch::TraceFiller::<F, CTX>::fill_trace_row(&self.0, mem_helper, row_slice);
+                    }
+
+                    fn fill_dummy_trace_row(&self, mem_helper: &::openvm_circuit::system::memory::MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+                        ::openvm_circuit::arch::TraceFiller::<F, CTX>::fill_dummy_trace_row(&self.0, mem_helper, row_slice);
                     }
                 }
             }

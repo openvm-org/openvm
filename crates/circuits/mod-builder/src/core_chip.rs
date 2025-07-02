@@ -1,20 +1,20 @@
-use std::marker::PhantomData;
+use std::{
+    marker::PhantomData,
+    mem::{align_of, size_of},
+};
 
 use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterCoreMetadata,
-        AdapterTraceFiller, AdapterTraceStep, CustomBorrow, DynAdapterInterface, DynArray,
-        ExecuteFunc, MinimalInstruction, RecordArena, Result, SizedRecord, StepExecutorE1,
-        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        execution_mode::E1ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        AdapterCoreLayout, AdapterCoreMetadata, AdapterTraceFiller, AdapterTraceStep, CustomBorrow,
+        DynAdapterInterface, DynArray, ExecuteFunc, MinimalInstruction, RecordArena, Result,
+        SizedRecord, StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
     var_range::SharedVariableRangeCheckerChip, SubAir, TraceSubRowGenerator,
@@ -32,6 +32,7 @@ use crate::{
     builder::{FieldExpr, FieldExprCols},
     utils::biguint_to_limbs_vec,
 };
+
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {
     pub expr: FieldExpr,
@@ -440,43 +441,18 @@ impl<F, A> StepExecutorE1<F> for FieldExpressionStep<A>
 where
     F: PrimeField32,
 {
-    // fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
-    // where
-    //     Ctx: E1E2ExecutionCtx,
-    // {
-    //     let data: &[u8] = &self.adapter.read(state, instruction).into().0;
-    //     let (writes, _, _) =
-    //         run_field_expression(self, data, instruction.opcode.local_opcode_idx(self.offset));
-    //
-    //     self.adapter.write(state, instruction, writes.into());
-    //     *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-    //     Ok(())
-    // }
-
     fn pre_compute_size(&self) -> usize {
-        todo!()
+        unreachable!()
     }
 
     fn pre_compute_e1<Ctx: E1ExecutionCtx>(
         &self,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
+        _pc: u32,
+        _inst: &Instruction<F>,
+        _data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>> {
-        todo!()
+        unreachable!()
     }
-
-    // fn execute_metered(
-    //     &self,
-    //     state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-    //     instruction: &Instruction<F>,
-    //     chip_index: usize,
-    // ) -> Result<()> {
-    //     self.execute_e1(state, instruction)?;
-    //     state.ctx.trace_heights[chip_index] += 1;
-    //
-    //     Ok(())
-    // }
 }
 
 fn run_field_expression<A>(
@@ -501,6 +477,7 @@ fn run_field_expression<A>(
         flags = vec![false; step.num_flags()];
 
         // Find which opcode this is in our local_opcode_idx list
+
         if let Some(opcode_position) = step
             .local_opcode_idx
             .iter()
@@ -533,4 +510,50 @@ fn run_field_expression<A>(
         .into();
 
     (writes, inputs, flags)
+}
+
+#[inline(always)]
+pub fn run_field_expression_precomputed<const NEEDS_SETUP: bool>(
+    expr: &FieldExpr,
+    flag_idx: usize,
+    data: &[u8],
+) -> DynArray<u8> {
+    let field_element_limbs = expr.canonical_num_limbs();
+    assert_eq!(data.len(), expr.num_inputs() * field_element_limbs);
+
+    let mut inputs = Vec::with_capacity(expr.num_inputs());
+    for i in 0..expr.num_inputs() {
+        let start = i * expr.canonical_num_limbs();
+        let end = start + expr.canonical_num_limbs();
+        let limb_slice = &data[start..end];
+        let input = BigUint::from_bytes_le(limb_slice);
+        inputs.push(input);
+    }
+
+    let flags = if NEEDS_SETUP {
+        let mut flags = vec![false; expr.num_flags()];
+        if flag_idx < expr.num_flags() {
+            flags[flag_idx] = true;
+        }
+        flags
+    } else {
+        vec![]
+    };
+
+    let vars = expr.execute(inputs, flags);
+    assert_eq!(vars.len(), expr.num_vars());
+
+    let outputs: Vec<BigUint> = expr
+        .output_indices()
+        .iter()
+        .map(|&i| vars[i].clone())
+        .collect();
+
+    outputs
+        .iter()
+        .map(|x| biguint_to_limbs_vec(x, field_element_limbs))
+        .concat()
+        .into_iter()
+        .collect::<Vec<_>>()
+        .into()
 }

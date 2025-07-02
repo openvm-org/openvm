@@ -5,7 +5,10 @@ use openvm_rv32im_circuit::*;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 
-use super::*;
+use crate::{
+    Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
+    ModularExtensionExecutor, ModularExtensionPeriphery,
+};
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32ModularConfig {
