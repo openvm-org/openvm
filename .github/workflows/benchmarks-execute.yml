@@ -31,7 +31,8 @@ jobs:
     name: Run codspeed walltime benchmarks
     runs-on:
       - runs-on=${{ github.run_id }}
-      - runner=8cpu-linux-x64
+      - family=m5a.xlarge # 2.5Ghz clock speed
+      - image=ubuntu24-full-x64
       - extras=s3-cache
 
     env:
@@ -66,7 +67,8 @@ jobs:
     name: Run codspeed instrumentation benchmarks
     runs-on:
       - runs-on=${{ github.run_id }}
-      - runner=8cpu-linux-x64
+      - family=m5a.xlarge
+      - image=ubuntu24-full-x64
       - extras=s3-cache
     if: github.event_name != 'pull_request'
 
