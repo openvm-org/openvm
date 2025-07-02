@@ -48,7 +48,7 @@ pub fn addsub_expr(
 
 #[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1)]
 pub struct ModularAddSubChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    pub ModularChip<F, BLOCKS, BLOCK_SIZE>,
+    pub(crate) ModularChip<F, BLOCKS, BLOCK_SIZE>,
 );
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>

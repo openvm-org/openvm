@@ -51,7 +51,7 @@ pub fn ec_add_ne_expr(
 
 #[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1)]
 pub struct EcAddNeChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    pub WeierstrassChip<F, 2, BLOCKS, BLOCK_SIZE>,
+    pub(crate) WeierstrassChip<F, 2, BLOCKS, BLOCK_SIZE>,
 );
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
