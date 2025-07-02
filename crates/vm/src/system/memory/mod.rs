@@ -147,3 +147,10 @@ impl<SC: StarkGenericConfig> MemoryAirInventory<SC> {
         airs
     }
 }
+
+/// This is O(1) and returns the length of
+/// [`MemoryAirInventory::into_airs`].
+pub fn num_memory_airs(is_persistent: bool, max_access_adapter_n: usize) -> usize {
+    // boundary + { merkle if is_persistent } + access_adapters
+    1 + usize::from(is_persistent) + log2_strict_usize(max_access_adapter_n)
+}

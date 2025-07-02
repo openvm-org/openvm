@@ -19,9 +19,11 @@ use super::{
 use crate::{
     arch::{
         AirInventory, AirInventoryError, ChipInventoryError, ExecutorInventory,
-        ExecutorInventoryError,
+        ExecutorInventoryError, SystemChipComplex,
     },
-    system::memory::{merkle::public_values::PUBLIC_VALUES_AS, BOUNDARY_AIR_OFFSET},
+    system::memory::{
+        merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, BOUNDARY_AIR_OFFSET,
+    },
 };
 
 // sbox is decomposed to have this max degree for Poseidon2. We set to 3 so quotient_degree = 2
@@ -77,7 +79,11 @@ where
     SC: StarkGenericConfig,
     PB: ProverBackend,
 {
-    fn create_chip_complex(&self) -> Result<VmChipComplex<SC, RA, PB>, ChipInventoryError>;
+    type SystemChipComplex: SystemChipComplex<PB>;
+
+    fn create_chip_complex(
+        &self,
+    ) -> Result<VmChipComplex<RA, PB, Self::SystemChipComplex>, ChipInventoryError>;
 }
 
 pub const OPENVM_DEFAULT_INIT_FILE_BASENAME: &str = "openvm_init";
@@ -271,6 +277,16 @@ impl SystemConfig {
         }
         ret += BOUNDARY_AIR_OFFSET;
         ret
+    }
+
+    /// This is O(1) and returns the length of
+    /// [`SystemAirInventory::into_airs`](crate::system::SystemAirInventory::into_airs).
+    pub fn num_airs(&self) -> usize {
+        2 + usize::from(self.has_public_values_chip())
+            + num_memory_airs(
+                self.continuation_enabled,
+                self.memory_config.max_access_adapter_n,
+            )
     }
 }
 

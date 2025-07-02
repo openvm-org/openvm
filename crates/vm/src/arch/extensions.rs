@@ -1,63 +1,37 @@
 use std::{
-    any::{type_name, Any, TypeId},
-    cell::RefCell,
-    iter::once,
+    any::{type_name, Any},
+    iter::{self, zip},
     sync::Arc,
 };
 
-use derive_more::derive::From;
 use getset::{CopyGetters, Getters};
-use itertools::{zip_eq, Itertools};
-#[cfg(feature = "bench-metrics")]
-use metrics::counter;
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
-use openvm_circuit_primitives::{
-    utils::next_power_of_two_or_zero,
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus},
+use itertools::Itertools;
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerAir,
 };
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
-use openvm_instructions::{
-    program::Program, LocalOpcode, PhantomDiscriminant, PublishOpcode, SystemOpcode, VmOpcode,
-};
+use openvm_instructions::{PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
-    config::{Domain, StarkGenericConfig, Val},
-    interaction::{BusIndex, PermutationCheckBus},
+    config::{StarkGenericConfig, Val},
+    interaction::BusIndex,
     keygen::types::LinearConstraint,
-    p3_commit::PolynomialSpace,
-    p3_field::{FieldAlgebra, PrimeField32, TwoAdicField},
-    p3_matrix::Matrix,
-    p3_util::log2_ceil_usize,
-    prover::{cpu::CpuBackend, hal::ProverBackend, types::AirProvingContext},
+    prover::{
+        cpu::CpuBackend,
+        hal::ProverBackend,
+        types::{AirProvingContext, ProvingContext},
+    },
     rap::AnyRap,
-    AirRef, AnyChip, Chip, ChipUsageGetter,
+    AirRef, AnyChip, Chip,
 };
-use p3_baby_bear::BabyBear;
-use rand::distributions::Slice;
 use rustc_hash::FxHashMap;
-use serde::{Deserialize, Serialize};
 
-use super::{
-    vm_poseidon2_config, ExecutionBus, GenerationError, PhantomSubExecutor, SystemConfig,
-    SystemTraceHeights,
-};
+use super::{GenerationError, PhantomSubExecutor, SystemConfig};
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{ExecutionBridge, InstructionExecutor, MatrixRecordArena, VmAirWrapper},
+    arch::MatrixRecordArena,
     system::{
-        connector::{VmConnectorAir, VmConnectorChip},
-        memory::{
-            offline_checker::{MemoryBridge, MemoryBus},
-            MemoryController, MemoryImage, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
-        },
-        native_adapter::{NativeAdapterAir, NativeAdapterStep},
+        memory::{BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET},
         phantom::PhantomChip,
-        poseidon2::Poseidon2PeripheryChip,
-        program::{ProgramAir, ProgramBus, ProgramChip},
-        public_values::{
-            core::{PublicValuesCoreAir, PublicValuesCoreStep},
-            PublicValuesAir, PublicValuesChip,
-        },
         SystemAirInventory,
     },
 };
@@ -77,7 +51,6 @@ pub const BOUNDARY_AIR_ID: usize = PUBLIC_VALUES_AIR_ID + 1 + BOUNDARY_AIR_OFFSE
 pub const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
 
 type ExecutorId = u32;
-type ChipId = u32;
 
 // ======================= VM Extension Traits =============================
 
@@ -149,6 +122,8 @@ pub struct ExecutorInventory<E> {
 
 #[derive(Clone, Getters, CopyGetters)]
 pub struct AirInventory<SC: StarkGenericConfig> {
+    #[get = "pub"]
+    config: SystemConfig,
     /// The system AIRs required by the circuit architecture.
     #[get = "pub"]
     system: SystemAirInventory<SC>,
@@ -337,8 +312,14 @@ impl<E> ExecutorInventory<E> {
 }
 
 impl<SC: StarkGenericConfig> AirInventory<SC> {
-    pub(crate) fn new(system: SystemAirInventory<SC>, bus_idx_mgr: BusIndexManager) -> Self {
+    /// Outside of this crate, [AirInventory] must be constructed via [SystemConfig].
+    pub(crate) fn new(
+        config: SystemConfig,
+        system: SystemAirInventory<SC>,
+        bus_idx_mgr: BusIndexManager,
+    ) -> Self {
         Self {
+            config,
             system,
             ext_start: Vec::new(),
             ext_airs: Vec::new(),
@@ -535,15 +516,13 @@ pub struct VmChipComplex<RA, PB, SCC>
 where
     PB: ProverBackend,
 {
-    pub config: SystemConfig,
+    pub system_config: SystemConfig,
     /// System chip complex responsible for trace generation of [SystemAirInventory]
     pub system: SCC,
-    /// The chips defined from a collection of [VmProverExtension] implementations.
+    /// The chips defined from a collection of [VmProverExtension] implementations. These are in
+    /// the insertion order, so chips that depend on other chips come **later** in the list.
     pub chips: Vec<Box<dyn AnyChip<RA, PB>>>,
 
-    /// Set override trace heights to force the proof to use trace matrices with fixed dimensions.
-    overridden_inventory_heights: Option<VmInventoryTraceHeights>,
-    /// Absolute maximum value a trace height can be and still be provable.
     max_trace_height: usize,
 }
 
@@ -623,138 +602,97 @@ where
     //     )
     // }
 
-    /// Override the trace heights for chips in the inventory. Usually this is for aggregation to
-    /// generate a dummy proof and not useful for regular users.
-    // pub(crate) fn set_override_inventory_trace_heights(
-    //     &mut self,
-    //     overridden_inventory_heights: VmInventoryTraceHeights,
-    // ) {
-    //     self.overridden_inventory_heights = Some(overridden_inventory_heights);
-    // }
+    pub fn num_airs(&self) -> usize {
+        self.system_config.num_airs() + self.chips.len()
+    }
 
-    pub(crate) fn generate_proof_input<SC: StarkGenericConfig>(
+    /// `record_arenas` is expected to have length equal to the number of AIRs in the verifying key
+    /// and in the same order as the AIRs appearing in the verifying key, even though some chips may
+    /// not require a record arena.
+    pub(crate) fn generate_proving_ctx(
         mut self,
-        cached_program: Option<CommittedTraceData<SC>>,
+        record_arenas: Vec<RA>,
         trace_height_constraints: &[LinearConstraint],
         #[cfg(feature = "bench-metrics")] metrics: &mut VmMetrics,
-    ) -> Result<ProofInput<SC>, GenerationError>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-        E: Chip<SC>,
-        P: AnyEnum + Chip<SC>,
-    {
-        // System: Finalize memory.
-        self.finalize_memory();
-
-        let trace_heights = self
-            .current_trace_heights()
-            .iter()
-            .map(|h| next_power_of_two_or_zero(*h))
-            .collect_vec();
-        if let Some(index) = trace_heights
-            .iter()
-            .position(|h| *h > self.max_trace_height)
-        {
-            tracing::info!(
-                "trace height of air {index} has height {} greater than maximum {}",
-                trace_heights[index],
-                self.max_trace_height
-            );
-            return Err(GenerationError::TraceHeightsLimitExceeded);
-        }
+    ) -> Result<ProvingContext<PB>, GenerationError> {
         if trace_height_constraints.is_empty() {
             tracing::warn!("generating proof input without trace height constraints");
         }
+        // ATTENTION: The order of AIR proving context generation MUST be consistent with
+        // `AirInventory::into_airs`.
+
+        // Execution has finished at this point.
+        // ASSUMPTION WHICH MUST HOLD: non-system chips do not have a dependency on the system chips
+        // during trace generation. Given this assumption, we can generate trace on the system chips
+        // first.
+        let num_sys_airs = self.system_config.num_airs();
+        let num_airs = num_sys_airs + self.chips.len();
+        if num_airs != record_arenas.len() {
+            return Err(GenerationError::UnexpectedNumArenas {
+                actual: record_arenas.len(),
+                expected: num_airs,
+            });
+        }
+
+        // First go through all system chips
+        // Then go through all other chips in inventory in **reverse** order they were added (to
+        // resolve dependencies)
+        //
+        // Perf[jpw]: currently we call tracegen on each chip **serially** (although tracegen per
+        // chip is parallelized). We could introduce more parallelism, while potentially increasing
+        // the peak memory usage, by keeping a dependency tree and generating traces at the same
+        // layer of the tree in parallel.
+        let ctx_without_empties: Vec<(usize, AirProvingContext<_>)> = iter::empty()
+            .chain(self.system.generate_proving_ctx())
+            .chain(
+                zip(self.chips, record_arenas.into_iter().skip(num_sys_airs))
+                    .map(|(chip, records)| chip.generate_proving_ctx(records))
+                    .rev(),
+            )
+            .enumerate()
+            .filter(|(_air_id, ctx)| ctx.main_trace_height() > 0)
+            .collect();
+
+        // Defensive checks that the trace heights satisfy the linear constraints:
+        let idx_trace_heights = ctx_without_empties
+            .iter()
+            .map(|(air_idx, ctx)| (*air_idx, ctx.main_trace_height()))
+            .collect_vec();
+        if let Some(&(air_idx, height)) = idx_trace_heights
+            .iter()
+            .find(|(_, height)| *height > self.max_trace_height)
+        {
+            return Err(GenerationError::TraceHeightsLimitExceeded {
+                air_idx,
+                height,
+                max_height: self.max_trace_height,
+            });
+        }
         for (i, constraint) in trace_height_constraints.iter().enumerate() {
-            let value = zip_eq(&constraint.coefficients, &trace_heights)
-                .map(|(&c, &h)| c as u64 * h as u64)
+            let value = idx_trace_heights
+                .iter()
+                .map(|&(air_idx, h)| constraint.coefficients[air_idx] as u64 * h as u64)
                 .sum::<u64>();
 
             if value >= constraint.threshold as u64 {
                 tracing::info!(
                     "trace heights {:?} violate linear constraint {} ({} >= {})",
-                    trace_heights,
+                    idx_trace_heights,
                     i,
                     value,
                     constraint.threshold
                 );
-                return Err(GenerationError::TraceHeightsLimitExceeded);
+                return Err(GenerationError::LinearTraceHeightConstraintExceeded {
+                    constraint_idx: i,
+                    value,
+                    threshold: constraint.threshold,
+                });
             }
         }
 
-        // #[cfg(feature = "bench-metrics")]
-        // self.finalize_metrics(metrics);
-
-        let has_pv_chip = self.public_values_chip_idx().is_some();
-        // ATTENTION: The order of AIR proof input generation MUST be consistent with `airs`.
-        let mut builder = VmProofInputBuilder::new();
-        let SystemBase {
-            range_checker_chip,
-            memory_controller,
-            connector_chip,
-            program_chip,
-            ..
-        } = self.base;
-
-        // System: Program Chip
-        debug_assert_eq!(builder.curr_air_id, PROGRAM_AIR_ID);
-        builder.add_air_proof_input(program_chip.generate_air_proof_input(cached_program));
-        // System: Connector Chip
-        debug_assert_eq!(builder.curr_air_id, CONNECTOR_AIR_ID);
-        builder.add_air_proof_input(connector_chip.generate_air_proof_input());
-
-        // Go through all chips in inventory in reverse order they were added (to resolve
-        // dependencies) Important Note: for air_id ordering reasons, we want to
-        // generate_air_proof_input for public values and memory chips **last** but include
-        // them into the `builder` **first**.
-        let mut public_values_input = None;
-        let mut insertion_order = self.inventory.insertion_order;
-        insertion_order.reverse();
-        let mut non_sys_inputs = Vec::with_capacity(insertion_order.len());
-        for chip_id in insertion_order {
-            let mut height = None;
-            if let Some(overridden_heights) = self.overridden_inventory_heights.as_ref() {
-                height = overridden_heights.chips.get(&chip_id).copied();
-            }
-            let air_proof_input = match chip_id {
-                ChipId::Executor(id) => {
-                    let chip = self.inventory.executors.pop().unwrap();
-                    assert_eq!(id, self.inventory.executors.len());
-                    generate_air_proof_input(chip, height)
-                }
-                ChipId::Periphery(id) => {
-                    let chip = self.inventory.periphery.pop().unwrap();
-                    assert_eq!(id, self.inventory.periphery.len());
-                    generate_air_proof_input(chip, height)
-                }
-            };
-            if has_pv_chip && chip_id == ChipId::Executor(Self::PV_EXECUTOR_IDX) {
-                public_values_input = Some(air_proof_input);
-            } else {
-                non_sys_inputs.push(air_proof_input);
-            }
-        }
-
-        if let Some(input) = public_values_input {
-            debug_assert_eq!(builder.curr_air_id, PUBLIC_VALUES_AIR_ID);
-            builder.add_air_proof_input(input);
-        }
-        // System: Memory Controller
-        {
-            // memory
-            let air_proof_inputs = memory_controller.generate_air_proof_inputs();
-            for air_proof_input in air_proof_inputs {
-                builder.add_air_proof_input(air_proof_input);
-            }
-        }
-        // Non-system chips
-        non_sys_inputs
-            .into_iter()
-            .for_each(|input| builder.add_air_proof_input(input));
-        // System: Range Checker Chip
-        builder.add_air_proof_input(range_checker_chip.generate_air_proof_input());
-
-        Ok(builder.build())
+        Ok(ProvingContext {
+            per_air: ctx_without_empties,
+        })
     }
 
     // #[cfg(feature = "bench-metrics")]
@@ -776,102 +714,6 @@ where
     // }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct VmInventoryTraceHeights {
-    pub chips: FxHashMap<ChipId, usize>,
-}
-
-// #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, derive_new::new)]
-// pub struct VmComplexTraceHeights {
-//     pub system: SystemTraceHeights,
-//     pub inventory: VmInventoryTraceHeights,
-// }
-
-// impl VmInventoryTraceHeights {
-//     /// Round all trace heights to the next power of two. This will round trace heights of 0 to
-// 1. pub fn round_to_next_power_of_two(&mut self) { self.chips .values_mut() .for_each(|v| *v =
-//    v.next_power_of_two()); }
-
-//     /// Round all trace heights to the next power of two, except 0 stays 0.
-//     pub fn round_to_next_power_of_two_or_zero(&mut self) {
-//         self.chips
-//             .values_mut()
-//             .for_each(|v| *v = next_power_of_two_or_zero(*v));
-//     }
-// }
-
-// impl VmComplexTraceHeights {
-//     /// Round all trace heights to the next power of two. This will round trace heights of 0 to
-// 1. pub fn round_to_next_power_of_two(&mut self) { self.system.round_to_next_power_of_two();
-//    self.inventory.round_to_next_power_of_two(); }
-
-//     /// Round all trace heights to the next power of two, except 0 stays 0.
-//     pub fn round_to_next_power_of_two_or_zero(&mut self) {
-//         self.system.round_to_next_power_of_two_or_zero();
-//         self.inventory.round_to_next_power_of_two_or_zero();
-//     }
-// }
-
-struct VmProofInputBuilder<SC: StarkGenericConfig> {
-    curr_air_id: usize,
-    proof_input_per_air: Vec<(usize, AirProofInput<SC>)>,
-}
-
-impl<SC: StarkGenericConfig> VmProofInputBuilder<SC> {
-    fn new() -> Self {
-        Self {
-            curr_air_id: 0,
-            proof_input_per_air: vec![],
-        }
-    }
-    /// Adds air proof input if one of the main trace matrices is non-empty.
-    /// Always increments the internal `curr_air_id` regardless of whether a new air proof input was
-    /// added or not.
-    fn add_air_proof_input(&mut self, air_proof_input: AirProofInput<SC>) {
-        let h = if !air_proof_input.raw.cached_mains.is_empty() {
-            air_proof_input.raw.cached_mains[0].height()
-        } else {
-            air_proof_input
-                .raw
-                .common_main
-                .as_ref()
-                .map(|trace| trace.height())
-                .unwrap()
-        };
-        if h > 0 {
-            self.proof_input_per_air
-                .push((self.curr_air_id, air_proof_input));
-        }
-        self.curr_air_id += 1;
-    }
-
-    fn build(self) -> ProofInput<SC> {
-        ProofInput {
-            per_air: self.proof_input_per_air,
-        }
-    }
-}
-
-/// Generates an AIR proof input of the chip with the given height, if any.
-///
-/// Assumption: an all-0 row is a valid dummy row for `chip`.
-pub fn generate_air_proof_input<SC: StarkGenericConfig, C: Chip<SC>>(
-    chip: C,
-    height: Option<usize>,
-) -> AirProofInput<SC> {
-    let mut proof_input = chip.generate_air_proof_input();
-    if let Some(height) = height {
-        let height = next_power_of_two_or_zero(height);
-        let main = proof_input.raw.common_main.as_mut().unwrap();
-        assert!(
-            height >= main.height(),
-            "Overridden height must be greater than or equal to the used height"
-        );
-        main.pad_to_height(height, FieldAlgebra::ZERO);
-    }
-    proof_input
-}
-
 // ============ Blanket implementation of VM extension traits for Option<E> ===========
 
 impl<F, EXT: VmExecutionExtension<F>> VmExecutionExtension<F> for Option<EXT> {
@@ -879,7 +721,7 @@ impl<F, EXT: VmExecutionExtension<F>> VmExecutionExtension<F> for Option<EXT> {
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventory<Self::Executor, F>,
+        inventory: &mut ExecutorInventory<Self::Executor>,
     ) -> Result<(), ExecutorInventoryError> {
         if let Some(extension) = self {
             extension.extend_execution(inventory)

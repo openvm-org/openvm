@@ -276,7 +276,8 @@ where
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
-        let mem_helper = todo!();
+        let timestamp_max_bits = inventory.airs().config().memory_config.clk_max_bits;
+        let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
 
         let bitwise_lu = if let Some(&chip) = inventory
             .find_chip::<SharedBitwiseOperationLookupChip<8>>()

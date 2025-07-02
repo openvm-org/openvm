@@ -4,7 +4,6 @@ use derive_more::derive::From;
 use openvm_circuit_derive::AnyEnum;
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerAir, VariableRangeCheckerBus};
 use openvm_instructions::{LocalOpcode, PublishOpcode, SystemOpcode};
-use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
     config::StarkGenericConfig,
     interaction::{LookupBus, PermutationCheckBus},
@@ -43,7 +42,7 @@ use crate::{
         },
         native_adapter::{NativeAdapterAir, NativeAdapterStep},
         phantom::{PhantomAir, PhantomChip},
-        poseidon2::{air::Poseidon2PeripheryAir, new_poseidon2_periphery_air},
+        poseidon2::new_poseidon2_periphery_air,
         program::{ProgramBus, ProgramChip},
         public_values::{PublicValuesChip, PublicValuesCoreAir, PublicValuesStep},
     },
@@ -70,7 +69,6 @@ pub struct SystemPort {
 
 #[derive(Clone)]
 pub struct SystemAirInventory<SC: StarkGenericConfig> {
-    pub config: SystemConfig,
     pub program: ProgramAir,
     pub connector: VmConnectorAir,
     pub memory: MemoryAirInventory<SC>,
@@ -81,7 +79,7 @@ pub struct SystemAirInventory<SC: StarkGenericConfig> {
 
 impl<SC: StarkGenericConfig> SystemAirInventory<SC> {
     pub fn new(
-        config: SystemConfig,
+        config: &SystemConfig,
         port: SystemPort,
         merkle_compression_buses: Option<(PermutationCheckBus, PermutationCheckBus)>,
     ) -> Self {
@@ -127,7 +125,6 @@ impl<SC: StarkGenericConfig> SystemAirInventory<SC> {
         };
 
         Self {
-            config,
             program,
             connector,
             memory,
@@ -209,9 +206,9 @@ impl<SC: StarkGenericConfig> VmCircuitConfig<SC> for SystemConfig {
             program_bus,
             memory_bridge,
         };
-        let system = SystemAirInventory::new(self.clone(), system_port, merkle_compression_buses);
+        let system = SystemAirInventory::new(self, system_port, merkle_compression_buses);
 
-        let mut inventory = AirInventory::new(system, bus_idx_mgr);
+        let mut inventory = AirInventory::new(self.clone(), system, bus_idx_mgr);
 
         let range_checker = VariableRangeCheckerAir::new(range_bus);
         // Range checker is always the first AIR in the inventory

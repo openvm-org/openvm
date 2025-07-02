@@ -62,10 +62,22 @@ use crate::{
 
 #[derive(Error, Debug)]
 pub enum GenerationError {
-    #[error("generated trace heights violate constraints")]
-    TraceHeightsLimitExceeded,
-    #[error(transparent)]
-    Execution(#[from] ExecutionError),
+    #[error("unexpected number of arenas: {actual} (expected num_airs={expected})")]
+    UnexpectedNumArenas { actual: usize, expected: usize },
+    #[error("force_trace_heights len incorrect: {actual} (expected num_airs={expected})")]
+    UnexpectedForceTraceHeightsLen { actual: usize, expected: usize },
+    #[error("trace height of air {air_idx} has height {height} greater than maximum {max_height}")]
+    TraceHeightsLimitExceeded {
+        air_idx: usize,
+        height: usize,
+        max_height: usize,
+    },
+    #[error("trace heights violate linear constraint {constraint_idx} ({value} >= {threshold})")]
+    LinearTraceHeightConstraintExceeded {
+        constraint_idx: usize,
+        value: u64,
+        threshold: u32,
+    },
 }
 
 /// A trait for key-value store for `Streams`.

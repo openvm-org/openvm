@@ -671,6 +671,17 @@ pub struct SharedMemoryHelper<F> {
     pub(crate) _marker: PhantomData<F>,
 }
 
+impl<F> SharedMemoryHelper<F> {
+    pub fn new(range_checker: SharedVariableRangeCheckerChip, timestamp_max_bits: usize) -> Self {
+        let timestamp_lt_air = AssertLtSubAir::new(range_checker.bus(), timestamp_max_bits);
+        Self {
+            range_checker,
+            timestamp_lt_air,
+            _marker: PhantomData,
+        }
+    }
+}
+
 /// A helper for generating trace values in auxiliary memory columns related to the offline memory
 /// argument.
 pub struct MemoryAuxColsFactory<'a, F> {
