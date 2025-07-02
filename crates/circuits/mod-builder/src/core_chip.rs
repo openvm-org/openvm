@@ -1,20 +1,20 @@
-use std::marker::PhantomData;
+use std::{
+    marker::PhantomData,
+    mem::{align_of, size_of},
+};
 
 use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterCoreMetadata,
-        AdapterTraceFiller, AdapterTraceStep, CustomBorrow, DynAdapterInterface, DynArray,
-        ExecuteFunc, MinimalInstruction, RecordArena, Result, SizedRecord, StepExecutorE1,
-        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        AdapterCoreLayout, AdapterCoreMetadata, AdapterTraceFiller, AdapterTraceStep, CustomBorrow,
+        DynAdapterInterface, DynArray, ExecuteFunc, MinimalInstruction, RecordArena, Result,
+        SizedRecord, StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
     var_range::SharedVariableRangeCheckerChip, SubAir, TraceSubRowGenerator,
@@ -32,6 +32,7 @@ use crate::{
     builder::{FieldExpr, FieldExprCols},
     utils::biguint_to_limbs_vec,
 };
+
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {
     pub expr: FieldExpr,
@@ -378,8 +379,13 @@ where
             &data.0,
         );
 
-        let (writes, _, _) =
-            run_field_expression(self, core_record.input_limbs, *core_record.opcode as usize);
+        let (writes, _, _) = run_field_expression(
+            &self.expr,
+            core_record.input_limbs,
+            *core_record.opcode as usize,
+            &self.local_opcode_idx,
+            &self.opcode_flag_idx,
+        );
 
         self.adapter.write(
             state.memory,
@@ -411,8 +417,13 @@ where
         let record: FieldExpressionCoreRecordMut =
             unsafe { get_record_from_slice(&mut core_row, self.get_record_layout::<F>()) };
 
-        let (_, inputs, flags) =
-            run_field_expression(self, record.input_limbs, *record.opcode as usize);
+        let (_, inputs, flags) = run_field_expression(
+            &self.expr,
+            record.input_limbs,
+            *record.opcode as usize,
+            &self.local_opcode_idx,
+            &self.opcode_flag_idx,
+        );
 
         let range_checker = self.range_checker.as_ref();
         self.expr
@@ -440,55 +451,35 @@ impl<F, A> StepExecutorE1<F> for FieldExpressionStep<A>
 where
     F: PrimeField32,
 {
-    // fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
-    // where
-    //     Ctx: E1E2ExecutionCtx,
-    // {
-    //     let data: &[u8] = &self.adapter.read(state, instruction).into().0;
-    //     let (writes, _, _) =
-    //         run_field_expression(self, data, instruction.opcode.local_opcode_idx(self.offset));
-    //
-    //     self.adapter.write(state, instruction, writes.into());
-    //     *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-    //     Ok(())
-    // }
-
     fn pre_compute_size(&self) -> usize {
-        todo!()
+        unreachable!()
     }
 
-    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
+    fn pre_compute_e1<Ctx>(
         &self,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
-        todo!()
+        _pc: u32,
+        _inst: &Instruction<F>,
+        _data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+        unreachable!()
     }
-
-    // fn execute_metered(
-    //     &self,
-    //     state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-    //     instruction: &Instruction<F>,
-    //     chip_index: usize,
-    // ) -> Result<()> {
-    //     self.execute_e1(state, instruction)?;
-    //     state.ctx.trace_heights[chip_index] += 1;
-    //
-    //     Ok(())
-    // }
 }
 
-fn run_field_expression<A>(
-    step: &FieldExpressionStep<A>,
+pub fn run_field_expression(
+    expr: &FieldExpr,
     data: &[u8],
-    local_opcode_idx: usize,
+    opcode: usize,
+    local_opcode_idx: &[usize],
+    opcode_flag_idx: &[usize],
 ) -> (DynArray<u8>, Vec<BigUint>, Vec<bool>) {
-    let field_element_limbs = step.expr.canonical_num_limbs();
-    assert_eq!(data.len(), step.num_inputs() * field_element_limbs);
+    let field_element_limbs = expr.canonical_num_limbs();
+    assert_eq!(data.len(), expr.num_inputs() * field_element_limbs);
 
-    let mut inputs = Vec::with_capacity(step.num_inputs());
-    for i in 0..step.num_inputs() {
+    let mut inputs = Vec::with_capacity(expr.num_inputs());
+    for i in 0..expr.num_inputs() {
         let start = i * field_element_limbs;
         let end = start + field_element_limbs;
         let limb_slice = &data[start..end];
@@ -497,29 +488,25 @@ fn run_field_expression<A>(
     }
 
     let mut flags = vec![];
-    if step.expr.needs_setup() {
-        flags = vec![false; step.num_flags()];
+    if expr.needs_setup() {
+        flags = vec![false; expr.num_flags()];
 
         // Find which opcode this is in our local_opcode_idx list
-        if let Some(opcode_position) = step
-            .local_opcode_idx
-            .iter()
-            .position(|&idx| idx == local_opcode_idx)
-        {
+        if let Some(opcode_position) = local_opcode_idx.iter().position(|&idx| idx == opcode) {
             // If this is NOT the last opcode (setup), set the corresponding flag
-            if opcode_position < step.opcode_flag_idx.len() {
-                let flag_idx = step.opcode_flag_idx[opcode_position];
+            if opcode_position < opcode_flag_idx.len() {
+                let flag_idx = opcode_flag_idx[opcode_position];
                 flags[flag_idx] = true;
             }
-            // If opcode_position == step.opcode_flag_idx.len(), it's the setup operation
+            // If opcode_position == opcode_flag_idx.len(), it's the setup operation
             // and all flags should remain false (which they already are)
         }
     }
 
-    let vars = step.expr.execute(inputs.clone(), flags.clone());
-    assert_eq!(vars.len(), step.num_vars());
+    let vars = expr.execute(inputs.clone(), flags.clone());
+    assert_eq!(vars.len(), expr.num_vars());
 
-    let outputs: Vec<BigUint> = step
+    let outputs: Vec<BigUint> = expr
         .output_indices()
         .iter()
         .map(|&i| vars[i].clone())
@@ -533,4 +520,48 @@ fn run_field_expression<A>(
         .into();
 
     (writes, inputs, flags)
+}
+
+#[inline(always)]
+pub fn run_field_expression_precomputed<const NEEDS_SETUP: bool>(
+    expr: &FieldExpr,
+    flag_idx: usize,
+    data: &[u8],
+) -> DynArray<u8> {
+    assert_eq!(data.len(), expr.num_inputs() * expr.canonical_num_limbs());
+
+    let mut inputs = Vec::with_capacity(expr.num_inputs());
+    for i in 0..expr.num_inputs() {
+        let start = i * expr.canonical_num_limbs();
+        let end = start + expr.canonical_num_limbs();
+        let limb_slice = &data[start..end];
+        let input = BigUint::from_bytes_le(limb_slice);
+        inputs.push(input);
+    }
+
+    let flags = if NEEDS_SETUP {
+        let mut flags = vec![false; expr.num_flags()];
+        if flag_idx < expr.num_flags() {
+            flags[flag_idx] = true;
+        }
+        flags
+    } else {
+        vec![]
+    };
+
+    let vars = expr.execute(inputs, flags);
+
+    let outputs: Vec<BigUint> = expr
+        .output_indices()
+        .iter()
+        .map(|&i| vars[i].clone())
+        .collect();
+
+    outputs
+        .iter()
+        .map(|x| biguint_to_limbs_vec(x, expr.canonical_num_limbs()))
+        .concat()
+        .into_iter()
+        .collect::<Vec<_>>()
+        .into()
 }
