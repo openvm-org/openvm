@@ -1288,16 +1288,19 @@ where
         };
 
         // Calculate adapter offset the same way as in MeteredCtx
-        let boundary_idx = if chip_complex.config().continuation_enabled {
-            PUBLIC_VALUES_AIR_ID
-        } else {
+        // TODO: extract + reuse this logic instead of maintaining this copy-paste
+        let boundary_idx = if chip_complex.config().has_public_values_chip() {
             PUBLIC_VALUES_AIR_ID + 1
+        } else {
+            PUBLIC_VALUES_AIR_ID
         };
+
         let adapter_offset = if chip_complex.config().continuation_enabled {
             boundary_idx + 2
         } else {
             boundary_idx + 1
         };
+
         // Set trace heights for memory adapters
         let num_access_adapters = chip_complex
             .memory_controller()

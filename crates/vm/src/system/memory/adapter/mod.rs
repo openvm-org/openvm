@@ -100,13 +100,6 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         // At the very worst, each row in `Adapter<N>`
         // corresponds to a unique record of `block_size` being `2 * N`,
         // and its `lowest_block_size` is at least 1 and `type_size` is at most 4.
-        // However, there may be "blank" records -- the ones that don't generate any rows.
-        // With the way we create records, this can only happen when we created a record
-        // without knowing we are going to split it, and we never got to.
-        // However, since such a record hasn't been merged from anything either,
-        // and haven't been created on the first touch, there must be a record
-        // that touched an identical block earlier. Therefore we multiply `size_bound`
-        // by 2 in the end just to be safe.
         let size_bound = trace_heights
             .iter()
             .enumerate()
@@ -117,8 +110,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
                     type_size: 4,
                 }) * h as usize
             })
-            .sum::<usize>()
-            * 2;
+            .sum::<usize>();
         assert!(self
             .chips
             .iter()

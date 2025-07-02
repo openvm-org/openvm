@@ -4,7 +4,10 @@ use getset::Getters;
 use itertools::{izip, zip_eq};
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_instructions::{exe::SparseMemoryImage, NATIVE_AS};
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{
+    p3_field::PrimeField32,
+    p3_maybe_rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
+};
 
 use super::{adapter::AccessAdapterInventory, offline_checker::MemoryBus};
 use crate::{
@@ -726,20 +729,23 @@ impl<F: PrimeField32> TracingMemory<F> {
     }
 
     /// Returns the list of all touched blocks. The list is sorted by address.
-    /// If a block hasn't been explicitly accessed and is created by a split,
-    /// the corresponding metadata has `offset` set to `AccessMetadata::UNSPLITTABLE`.
     pub fn touched_blocks(&self) -> Vec<(Address, AccessMetadata)> {
-        zip_eq(&self.meta, &self.min_block_size)
+        assert_eq!(self.meta.len(), self.min_block_size.len());
+        self.meta
+            .par_iter()
+            .zip(self.min_block_size.par_iter())
             .enumerate()
             .flat_map(|(addr_space, (page, &align))| {
-                page.iter().filter_map(move |(idx, metadata)| {
-                    let ptr = idx as u32 * align;
-                    if ptr == metadata.start_ptr && metadata.block_size != 0 {
-                        Some(((addr_space as u32, ptr), metadata))
-                    } else {
-                        None
-                    }
-                })
+                page.par_iter()
+                    .filter_map(move |(idx, metadata)| {
+                        let ptr = idx as u32 * align;
+                        if ptr == metadata.start_ptr && metadata.block_size != 0 {
+                            Some(((addr_space as u32, ptr), metadata))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
             })
             .collect()
     }

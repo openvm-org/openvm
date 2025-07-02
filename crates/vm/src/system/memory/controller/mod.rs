@@ -15,7 +15,7 @@ use openvm_stark_backend::{
     interaction::PermutationCheckBus,
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
-    p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
+    p3_maybe_rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator},
     p3_util::{log2_ceil_usize, log2_strict_usize},
     prover::types::AirProofInput,
     AirRef, Chip, ChipUsageGetter,
@@ -345,11 +345,16 @@ impl<F: PrimeField32> MemoryController<F> {
 
     /// Returns the equipartition of the touched blocks.
     /// Modifies records and adds new to account for the initial/final segments.
-    fn touched_blocks_to_equipartition<const CHUNK: usize, const INITIAL_MERGES: bool>(
+    fn touched_blocks_to_equipartition<const CHUNK: usize>(
         &mut self,
         touched_blocks: Vec<((u32, u32), AccessMetadata)>,
     ) -> TimestampedEquipartition<F, CHUNK> {
-        let mut final_memory = Vec::new();
+        let mut final_memory = Vec::with_capacity(
+            touched_blocks
+                .par_iter()
+                .map(|&(_, meta)| meta.block_size as usize)
+                .sum::<usize>(),
+        );
 
         debug_assert!(touched_blocks.is_sorted_by_key(|(addr, _)| addr));
         let (bytes, fs): (Vec<_>, Vec<_>) = touched_blocks
@@ -495,11 +500,11 @@ impl<F: PrimeField32> MemoryController<F> {
         match &self.interface_chip {
             MemoryInterface::Volatile { .. } => {
                 final_memory_volatile =
-                    Some(self.touched_blocks_to_equipartition::<1, true>(touched_blocks));
+                    Some(self.touched_blocks_to_equipartition::<1>(touched_blocks));
             }
             MemoryInterface::Persistent { .. } => {
                 final_memory_persistent =
-                    Some(self.touched_blocks_to_equipartition::<CHUNK, false>(touched_blocks));
+                    Some(self.touched_blocks_to_equipartition::<CHUNK>(touched_blocks));
             }
         }
 
