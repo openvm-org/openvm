@@ -179,10 +179,19 @@ pub struct NativeAdapterRecord<F, const R: usize, const W: usize> {
 /// R reads(R<=2), W writes(W<=1).
 /// Operands: b for the first read, c for the second read, a for the first write.
 /// If an operand is not used, its address space and pointer should be all 0.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct NativeAdapterStep<F, const R: usize, const W: usize> {
     _phantom: PhantomData<F>,
 }
+
+impl<F, const R: usize, const W: usize> Default for NativeAdapterStep<F, R, W> {
+    fn default() -> Self {
+        Self {
+            _phantom: PhantomData,
+        }
+    }
+}
+
 pub type NativeAdapterChip<F, const R: usize, const W: usize> = NativeAdapterStep<F, R, W>;
 
 impl<F, const R: usize, const W: usize> AdapterTraceStep<F> for NativeAdapterStep<F, R, W>

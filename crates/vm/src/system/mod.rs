@@ -3,11 +3,12 @@ use std::sync::Arc;
 use derive_more::derive::From;
 use openvm_circuit_derive::AnyEnum;
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerAir, VariableRangeCheckerBus};
-use openvm_instructions::{PublishOpcode, SystemOpcode};
+use openvm_instructions::{LocalOpcode, PublishOpcode, SystemOpcode};
 use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
     config::StarkGenericConfig,
     interaction::{LookupBus, PermutationCheckBus},
+    prover::cpu::CpuBackend,
     AirRef,
 };
 
@@ -30,9 +31,9 @@ use public_values::PublicValuesAir;
 
 use crate::{
     arch::{
-        vm_poseidon2_config, AirInventory, AirInventoryError, BusIndexManager, ExecutionBridge,
-        ExecutionBus, ExecutorInventory, ExecutorInventoryError, SystemConfig, VmAirWrapper,
-        VmCircuitConfig, VmExecutionConfig,
+        vm_poseidon2_config, AirInventory, AirInventoryError, BusIndexManager, ChipInventoryError,
+        ExecutionBridge, ExecutionBus, ExecutorInventory, ExecutorInventoryError, SystemConfig,
+        VmAirWrapper, VmChipComplex, VmCircuitConfig, VmExecutionConfig, VmProverConfig,
     },
     system::{
         connector::VmConnectorChip,
@@ -42,7 +43,7 @@ use crate::{
         },
         native_adapter::{NativeAdapterAir, NativeAdapterStep},
         phantom::{PhantomAir, PhantomChip},
-        poseidon2::air::Poseidon2PeripheryAir,
+        poseidon2::{air::Poseidon2PeripheryAir, new_poseidon2_periphery_air},
         program::{ProgramBus, ProgramChip},
         public_values::{PublicValuesChip, PublicValuesCoreAir, PublicValuesStep},
     },
@@ -54,9 +55,9 @@ const POSEIDON2_EXT_AIR_IDX: usize = 1;
 const PV_EXECUTOR_IDX: usize = 0;
 
 #[derive(AnyEnum, From)]
-pub enum SystemExecutor<F> {
+pub enum SystemExecutor<F: 'static> {
     PublicValues(PublicValuesStep<F>),
-    // Phantom(PhantomChip<F>),
+    Phantom(PhantomChip<F>),
 }
 
 /// SystemPort combines system resources needed by most extensions
@@ -154,7 +155,7 @@ impl<SC: StarkGenericConfig> SystemAirInventory<SC> {
     }
 }
 
-impl<F> VmExecutionConfig<F> for SystemConfig {
+impl<F: 'static> VmExecutionConfig<F> for SystemConfig {
     type Executor = SystemExecutor<F>;
 
     /// The only way to create an [ExecutorInventory] is from a [SystemConfig]. This will add an
@@ -162,11 +163,11 @@ impl<F> VmExecutionConfig<F> for SystemConfig {
     /// for [PhantomChip], which handles all phantom sub-executors.
     fn create_executors(
         &self,
-    ) -> Result<ExecutorInventory<Self::Executor, F>, ExecutorInventoryError> {
+    ) -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError> {
         let mut inventory = ExecutorInventory::new();
         // PublicValuesChip is required when num_public_values > 0 in single segment mode.
         if self.has_public_values_chip() {
-            assert_eq!(inventory.executors().len(), Self::PV_EXECUTOR_IDX);
+            assert_eq!(inventory.executors().len(), PV_EXECUTOR_IDX);
 
             let public_values = PublicValuesStep::new(
                 NativeAdapterStep::default(),
@@ -223,11 +224,12 @@ impl<SC: StarkGenericConfig> VmCircuitConfig<SC> for SystemConfig {
             // special handling when that happens
             let (_, compression_bus) = merkle_compression_buses.unwrap();
             let direct_bus_idx = compression_bus.index;
-            let air = Poseidon2PeripheryAir::new(
-                Arc::new(Poseidon2SubAir::new(vm_poseidon2_config().constants.into())),
+            let air = new_poseidon2_periphery_air(
+                vm_poseidon2_config(),
                 LookupBus::new(direct_bus_idx),
+                self.max_constraint_degree,
             );
-            inventory.add_air(air);
+            inventory.add_air_ref(air);
         }
         let execution_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let phantom = PhantomAir {
@@ -253,8 +255,10 @@ pub struct SystemBase<F> {
     pub public_values: Option<PublicValuesChip<F>>,
 }
 
-impl<F: PrimeField32> SystemComplex<F> {
-    pub fn new(config: SystemConfig) -> Self {
+impl<SC, RA> VmProverConfig<SC, RA, CpuBackend<SC>> for SystemConfig {
+    fn create_chip_complex(
+        &self,
+    ) -> Result<VmChipComplex<SC, RA, CpuBackend<SC>>, ChipInventoryError> {
         let mut bus_idx_mgr = BusIndexManager::new();
         let execution_bus = ExecutionBus::new(bus_idx_mgr.new_bus_idx());
         let memory_bus = MemoryBus::new(bus_idx_mgr.new_bus_idx());

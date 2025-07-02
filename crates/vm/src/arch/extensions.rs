@@ -109,7 +109,7 @@ pub trait VmExecutionExtension<F> {
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventory<Self::Executor, F>,
+        inventory: &mut ExecutorInventory<Self::Executor>,
     ) -> Result<(), ExecutorInventoryError>;
 }
 
@@ -137,13 +137,12 @@ where
 
 // ======================= Different Inventory Struct Definitions =============================
 
-pub struct ExecutorInventory<E, F> {
+pub struct ExecutorInventory<E> {
     /// Lookup table to executor ID.
     /// This is stored in a hashmap because it is _not_ expected to be used in the hot path.
     /// A direct opcode -> executor mapping should be generated before runtime execution.
     instruction_lookup: FxHashMap<VmOpcode, ExecutorId>,
     executors: Vec<E>,
-    phantom_executors: FxHashMap<PhantomDiscriminant, Box<dyn PhantomSubExecutor<F>>>,
     /// `ext_start[i]` will have the starting index in `executors` for extension `i`
     ext_start: Vec<usize>,
 }
@@ -196,19 +195,14 @@ pub struct BusIndexManager {
 
 // ======================= Inventory Function Definitions =============================
 
-impl<E, F> ExecutorInventory<E, F> {
-    pub(crate) fn new() -> Self {
+impl<E> ExecutorInventory<E> {
+    /// Empty inventory should be created at the start of the declaration of a new extension.
+    pub fn new() -> Self {
         Self {
             instruction_lookup: Default::default(),
             executors: Default::default(),
-            phantom_executors: Default::default(),
-            ext_start: Default::default(),
+            ext_start: vec![0],
         }
-    }
-
-    /// This should be called **exactly once** at the start of the declaration of a new extension.
-    pub fn start_new_extension(&mut self) {
-        self.ext_start.push(self.executors.len());
     }
 
     /// Inserts an executor with the collection of opcodes that it handles.
@@ -238,11 +232,16 @@ impl<E, F> ExecutorInventory<E, F> {
     }
 
     /// The generic `F` must match that of the `PhantomChip<F>`.
-    pub fn add_phantom_sub_executor<PE: PhantomSubExecutor<F> + 'static>(
+    pub fn add_phantom_sub_executor<F, PE>(
         &mut self,
         phantom_sub: PE,
         discriminant: PhantomDiscriminant,
-    ) -> Result<(), ExecutorInventoryError> {
+    ) -> Result<(), ExecutorInventoryError>
+    where
+        E: AnyEnum,
+        F: 'static,
+        PE: PhantomSubExecutor<F> + 'static,
+    {
         let phantom_chip: &mut PhantomChip<F> = self
             .find_executor_mut()
             .next()
@@ -254,14 +253,31 @@ impl<E, F> ExecutorInventory<E, F> {
         Ok(())
     }
 
-    pub fn transmute<E2>(self) -> ExecutorInventory<E2, F>
+    /// Extend the inventory with a new extension.
+    /// A new inventory with different type generics is returned with the combined inventory.
+    pub fn extend<F, E3, EXT>(
+        self,
+        other: &EXT,
+    ) -> Result<ExecutorInventory<E3>, ExecutorInventoryError>
+    where
+        EXT: VmExecutionExtension<F>,
+        E: Into<E3> + AnyEnum,
+        EXT::Executor: Into<E3>,
+    {
+        let mut other_inventory = ExecutorInventory::new();
+        other.extend_execution(&mut other_inventory)?;
+        let mut inventory_ext = self.transmute();
+        inventory_ext.append(other_inventory.transmute())?;
+        Ok(inventory_ext)
+    }
+
+    pub fn transmute<E2>(self) -> ExecutorInventory<E2>
     where
         E: Into<E2>,
     {
         ExecutorInventory {
             instruction_lookup: self.instruction_lookup,
             executors: self.executors.into_iter().map(|e| e.into()).collect(),
-            phantom_executors: self.phantom_executors,
             ext_start: self.ext_start,
         }
     }
@@ -270,7 +286,7 @@ impl<E, F> ExecutorInventory<E, F> {
     /// chain.
     pub fn append(
         &mut self,
-        mut other: ExecutorInventory<E, F>,
+        mut other: ExecutorInventory<E>,
     ) -> Result<(), ExecutorInventoryError> {
         let num_executors = self.executors.len();
         for (opcode, mut id) in other.instruction_lookup.into_iter() {
@@ -361,6 +377,17 @@ impl<SC: StarkGenericConfig> AirInventory<SC> {
         self.find_air()
             .next()
             .expect("system always has range checker AIR")
+    }
+
+    /// The AIRs in the order they appear in the verifying key.
+    /// This is the system AIRs, followed by the other AIRs in the **reverse** of the order they
+    /// were added in the VM extension definitions. In particular, the AIRs that have dependencies
+    /// appear later. The system guarantees that the last AIR is the [VariableRangeCheckerAir].
+    pub fn into_airs(self) -> impl Iterator<Item = AirRef<SC>> {
+        self.system
+            .into_airs()
+            .into_iter()
+            .chain(self.ext_airs.into_iter().rev())
     }
 }
 
@@ -491,55 +518,26 @@ pub enum ChipInventoryError {
     MissingExecutor { actual: usize, expected: usize },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct VmInventoryTraceHeights {
-    pub chips: FxHashMap<ChipId, usize>,
+// ======================= VM Chip Complex Implementation =============================
+
+/// Trait for trace generation of all system AIRs. The system chip complex is special because we may
+/// not exactly following the exact matching between `Air` and `Chip`. Moreover we may require more
+/// flexibility than what is provided through the trait object [`AnyChip`].
+pub trait SystemChipComplex<PB: ProverBackend> {
+    fn generate_proving_ctx(self) -> Vec<AirProvingContext<PB>>;
 }
 
-// #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, derive_new::new)]
-// pub struct VmComplexTraceHeights {
-//     pub system: SystemTraceHeights,
-//     pub inventory: VmInventoryTraceHeights,
-// }
-
-// impl VmInventoryTraceHeights {
-//     /// Round all trace heights to the next power of two. This will round trace heights of 0 to
-// 1. pub fn round_to_next_power_of_two(&mut self) { self.chips .values_mut() .for_each(|v| *v =
-//    v.next_power_of_two()); }
-
-//     /// Round all trace heights to the next power of two, except 0 stays 0.
-//     pub fn round_to_next_power_of_two_or_zero(&mut self) {
-//         self.chips
-//             .values_mut()
-//             .for_each(|v| *v = next_power_of_two_or_zero(*v));
-//     }
-// }
-
-// impl VmComplexTraceHeights {
-//     /// Round all trace heights to the next power of two. This will round trace heights of 0 to
-// 1. pub fn round_to_next_power_of_two(&mut self) { self.system.round_to_next_power_of_two();
-//    self.inventory.round_to_next_power_of_two(); }
-
-//     /// Round all trace heights to the next power of two, except 0 stays 0.
-//     pub fn round_to_next_power_of_two_or_zero(&mut self) {
-//         self.system.round_to_next_power_of_two_or_zero();
-//         self.inventory.round_to_next_power_of_two_or_zero();
-//     }
-// }
-
-// ======================= VM Chip Complex Implementation =============================
-// The VM Chip Complex contains the methods to coordinate trace generation for all chips in the VM
-// after construction.
-
-// PublicValuesChip needs F: PrimeField32 due to Adapter
-/// The minimum collection of chips that any VM must have.
+/// The collection of all chips in the VM. The chips should correspond 1-to-1 with the associated
+/// [AirInventory]. The [VmChipComplex] coordinates the trace generation for all chips in the VM
+/// after construction.
 #[derive(Getters)]
-pub struct VmChipComplex<SC, RA, PB>
+pub struct VmChipComplex<RA, PB, SCC>
 where
-    SC: StarkGenericConfig,
     PB: ProverBackend,
 {
-    pub system: SystemChipComplex,
+    pub config: SystemConfig,
+    /// System chip complex responsible for trace generation of [SystemAirInventory]
+    pub system: SCC,
     /// The chips defined from a collection of [VmProverExtension] implementations.
     pub chips: Vec<Box<dyn AnyChip<RA, PB>>>,
 
@@ -549,347 +547,90 @@ where
     max_trace_height: usize,
 }
 
-impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
-    /// **If** public values chip exists, then its executor index is 0.
-    pub(super) const PV_EXECUTOR_IDX: ExecutorId = 0;
+impl<RA, PB, SCC> VmChipComplex<RA, PB, SCC>
+where
+    PB: ProverBackend,
+    SCC: SystemChipComplex<PB>,
+{
+    // pub fn finalize_memory(&mut self)
+    // where
+    //     P: AnyEnum,
+    // {
+    //     if self.config.continuation_enabled {
+    //         let chip = self
+    //             .inventory
+    //             .periphery
+    //             .get_mut(Self::POSEIDON2_PERIPHERY_IDX)
+    //             .expect("Poseidon2 chip required for persistent memory");
+    //         let hasher: &mut Poseidon2PeripheryChip<F> = chip
+    //             .as_any_kind_mut()
+    //             .downcast_mut()
+    //             .expect("Poseidon2 chip required for persistent memory");
+    //         self.base.memory_controller.finalize(Some(hasher));
+    //     } else {
+    //         self.base
+    //             .memory_controller
+    //             .finalize(None::<&mut Poseidon2PeripheryChip<F>>);
+    //     };
+    // }
 
-    // @dev: Remember to update self.bus_idx_mgr after dropping this!
-    pub fn inventory_builder(&self) -> VmInventoryBuilder<F>
-    where
-        E: AnyEnum,
-        P: AnyEnum,
-    {
-        let mut builder = VmInventoryBuilder::new(&self.config, &self.base, self.bus_idx_mgr);
-        // Add range checker for convenience, the other system base chips aren't included - they can
-        // be accessed directly from builder
-        builder.add_chip(&self.base.range_checker_chip);
-        for chip in self.inventory.executors() {
-            builder.add_chip(chip);
-        }
-        for chip in self.inventory.periphery() {
-            builder.add_chip(chip);
-        }
+    // TODO: move these two into SystemChipComplex trait
+    // pub(crate) fn set_program(&mut self, program: Program<F>) {
+    //     self.base.program_chip.set_program(program);
+    // }
 
-        builder
-    }
+    // pub(crate) fn set_initial_memory(&mut self, memory: MemoryImage) {
+    //     self.base.memory_controller.set_initial_memory(memory);
+    // }
 
-    /// Extend the chip complex with a new extension.
-    /// A new chip complex with different type generics is returned with the combined inventory.
-    pub fn extend<E3, P3, Ext>(
-        mut self,
-        config: &Ext,
-    ) -> Result<VmChipComplex<F, E3, P3>, VmInventoryError>
-    where
-        // Ext: VmExtension<F>,
-        E: Into<E3> + AnyEnum,
-        P: Into<P3> + AnyEnum,
-        Ext::Executor: Into<E3>,
-        Ext::Periphery: Into<P3>,
-    {
-        let mut builder = self.inventory_builder();
-        let inventory_ext = config.build(&mut builder)?;
-        self.bus_idx_mgr = builder.bus_idx_mgr;
-        let mut ext_complex = self.transmute();
-        ext_complex.append(inventory_ext.transmute())?;
-        Ok(ext_complex)
-    }
+    // // This is O(1).
+    // pub fn num_airs(&self) -> usize {
+    //     3 + self.memory_controller().num_airs() + self.inventory.num_airs()
+    // }
 
-    pub fn transmute<E2, P2>(self) -> VmChipComplex<F, E2, P2>
-    where
-        E: Into<E2>,
-        P: Into<P2>,
-    {
-        VmChipComplex {
-            config: self.config,
-            base: self.base,
-            inventory: self.inventory.transmute(),
-            bus_idx_mgr: self.bus_idx_mgr,
-            overridden_inventory_heights: self.overridden_inventory_heights,
-            max_trace_height: self.max_trace_height,
-        }
-    }
-
-    /// Appends `other` to the current inventory.
-    /// This means `self` comes earlier in the dependency chain.
-    pub fn append(&mut self, other: VmInventory<E, P>) -> Result<(), VmInventoryError> {
-        self.inventory.append(other)
-    }
-
-    pub fn program_chip(&self) -> &ProgramChip<F> {
-        &self.base.program_chip
-    }
-
-    pub fn program_chip_mut(&mut self) -> &mut ProgramChip<F> {
-        &mut self.base.program_chip
-    }
-
-    pub fn connector_chip(&self) -> &VmConnectorChip<F> {
-        &self.base.connector_chip
-    }
-
-    pub fn connector_chip_mut(&mut self) -> &mut VmConnectorChip<F> {
-        &mut self.base.connector_chip
-    }
-
-    pub fn memory_controller(&self) -> &MemoryController<F> {
-        &self.base.memory_controller
-    }
-
-    pub fn range_checker_chip(&self) -> &SharedVariableRangeCheckerChip {
-        &self.base.range_checker_chip
-    }
-
-    pub fn public_values_chip(&self) -> Option<&PublicValuesChip<F>>
-    where
-        E: AnyEnum,
-    {
-        let chip = self.inventory.executors().get(Self::PV_EXECUTOR_IDX)?;
-        chip.as_any_kind().downcast_ref()
-    }
-
-    pub fn poseidon2_chip(&self) -> Option<&Poseidon2PeripheryChip<F>>
-    where
-        P: AnyEnum,
-    {
-        let chip = self
-            .inventory
-            .periphery
-            .get(Self::POSEIDON2_PERIPHERY_IDX)?;
-        chip.as_any_kind().downcast_ref()
-    }
-
-    pub fn poseidon2_chip_mut(&mut self) -> Option<&mut Poseidon2PeripheryChip<F>>
-    where
-        P: AnyEnum,
-    {
-        let chip = self
-            .inventory
-            .periphery
-            .get_mut(Self::POSEIDON2_PERIPHERY_IDX)?;
-        chip.as_any_kind_mut().downcast_mut()
-    }
-
-    pub fn finalize_memory(&mut self)
-    where
-        P: AnyEnum,
-    {
-        if self.config.continuation_enabled {
-            let chip = self
-                .inventory
-                .periphery
-                .get_mut(Self::POSEIDON2_PERIPHERY_IDX)
-                .expect("Poseidon2 chip required for persistent memory");
-            let hasher: &mut Poseidon2PeripheryChip<F> = chip
-                .as_any_kind_mut()
-                .downcast_mut()
-                .expect("Poseidon2 chip required for persistent memory");
-            self.base.memory_controller.finalize(Some(hasher));
-        } else {
-            self.base
-                .memory_controller
-                .finalize(None::<&mut Poseidon2PeripheryChip<F>>);
-        };
-    }
-
-    pub(crate) fn set_program(&mut self, program: Program<F>) {
-        self.base.program_chip.set_program(program);
-    }
-
-    pub(crate) fn set_initial_memory(&mut self, memory: MemoryImage) {
-        self.base.memory_controller.set_initial_memory(memory);
-    }
-
-    // This is O(1).
-    pub fn num_airs(&self) -> usize {
-        3 + self.memory_controller().num_airs() + self.inventory.num_airs()
-    }
-
-    // we always need to special case it because we need to fix the air id.
-    pub(crate) fn public_values_chip_idx(&self) -> Option<ExecutorId> {
-        self.config
-            .has_public_values_chip()
-            .then_some(Self::PV_EXECUTOR_IDX)
-    }
-
-    // Avoids a downcast when you don't need the concrete type.
-    fn _public_values_chip(&self) -> Option<&E> {
-        self.config
-            .has_public_values_chip()
-            .then(|| &self.inventory.executors[Self::PV_EXECUTOR_IDX])
-    }
-
-    // All inventory chips except public values chip, in reverse order they were added.
-    pub(crate) fn chips_excluding_pv_chip(&self) -> impl Iterator<Item = Either<&'_ E, &'_ P>> {
-        let public_values_chip_idx = self.public_values_chip_idx();
-        self.inventory
-            .insertion_order
-            .iter()
-            .rev()
-            .flat_map(move |chip_idx| match *chip_idx {
-                // Skip public values chip if it exists.
-                ChipId::Executor(id) => (Some(id) != public_values_chip_idx)
-                    .then(|| Either::Executor(&self.inventory.executors[id])),
-                ChipId::Periphery(id) => Some(Either::Periphery(&self.inventory.periphery[id])),
-            })
-    }
-
-    /// Return air names of all chips in order.
-    pub fn air_names(&self) -> Vec<String>
-    where
-        E: ChipUsageGetter,
-        P: ChipUsageGetter,
-    {
-        once(self.program_chip().air_name())
-            .chain([self.connector_chip().air_name()])
-            .chain(self._public_values_chip().map(|c| c.air_name()))
-            .chain(self.memory_controller().air_names())
-            .chain(self.chips_excluding_pv_chip().map(|c| c.air_name()))
-            .chain([self.range_checker_chip().air_name()])
-            .collect()
-    }
-
-    /// Return trace heights of all chips in order corresponding to `air_names`.
-    pub(crate) fn current_trace_heights(&self) -> Vec<usize>
-    where
-        E: ChipUsageGetter,
-        P: ChipUsageGetter,
-    {
-        once(self.program_chip().current_trace_height())
-            .chain([self.connector_chip().current_trace_height()])
-            .chain(self._public_values_chip().map(|c| c.current_trace_height()))
-            .chain(self.memory_controller().current_trace_heights())
-            .chain(
-                self.chips_excluding_pv_chip()
-                    .map(|c| c.current_trace_height()),
-            )
-            .chain([self.range_checker_chip().current_trace_height()])
-            .collect()
-    }
-
+    // Note[jpw]: do we still need this?
     /// Return trace heights of (SystemBase, Inventory). Usually this is for aggregation and not
     /// useful for regular users.
     ///
     /// **Warning**: the order of `get_trace_heights` is deterministic, but it is not the same as
     /// the order of `air_names`. In other words, the order here does not match the order of AIR
     /// IDs.
-    pub fn get_internal_trace_heights(&self) -> VmComplexTraceHeights
-    where
-        E: ChipUsageGetter,
-        P: ChipUsageGetter,
-    {
-        VmComplexTraceHeights::new(
-            self.base.get_system_trace_heights(),
-            self.inventory.get_trace_heights(),
-        )
-    }
+    // pub fn get_internal_trace_heights(&self) -> VmComplexTraceHeights
+    // where
+    //     E: ChipUsageGetter,
+    //     P: ChipUsageGetter,
+    // {
+    //     VmComplexTraceHeights::new(
+    //         self.base.get_system_trace_heights(),
+    //         self.inventory.get_trace_heights(),
+    //     )
+    // }
 
-    /// Return dummy trace heights of (SystemBase, Inventory). Usually this is for aggregation to
-    /// generate a dummy proof and not useful for regular users.
-    ///
-    /// **Warning**: the order of `get_dummy_trace_heights` is deterministic, but it is not the same
-    /// as the order of `air_names`. In other words, the order here does not match the order of
-    /// AIR IDs.
-    pub fn get_dummy_internal_trace_heights(&self) -> VmComplexTraceHeights
-    where
-        E: ChipUsageGetter,
-        P: ChipUsageGetter,
-    {
-        VmComplexTraceHeights::new(
-            self.base.get_dummy_system_trace_heights(),
-            self.inventory.get_dummy_trace_heights(),
-        )
-    }
+    // /// Return dummy trace heights of (SystemBase, Inventory). Usually this is for aggregation to
+    // /// generate a dummy proof and not useful for regular users.
+    // ///
+    // /// **Warning**: the order of `get_dummy_trace_heights` is deterministic, but it is not the
+    // same /// as the order of `air_names`. In other words, the order here does not match the
+    // order of /// AIR IDs.
+    // pub fn get_dummy_internal_trace_heights(&self) -> VmComplexTraceHeights
+    // where
+    //     E: ChipUsageGetter,
+    //     P: ChipUsageGetter,
+    // {
+    //     VmComplexTraceHeights::new(
+    //         self.base.get_dummy_system_trace_heights(),
+    //         self.inventory.get_dummy_trace_heights(),
+    //     )
+    // }
 
     /// Override the trace heights for chips in the inventory. Usually this is for aggregation to
     /// generate a dummy proof and not useful for regular users.
-    pub(crate) fn set_override_inventory_trace_heights(
-        &mut self,
-        overridden_inventory_heights: VmInventoryTraceHeights,
-    ) {
-        self.overridden_inventory_heights = Some(overridden_inventory_heights);
-    }
-
-    pub(crate) fn set_override_system_trace_heights(
-        &mut self,
-        overridden_system_heights: SystemTraceHeights,
-    ) {
-        let memory_controller = &mut self.base.memory_controller;
-        memory_controller.set_override_trace_heights(overridden_system_heights.memory);
-    }
-
-    /// Return constant trace heights of all chips in order, or None if
-    /// chip has dynamic height.
-    pub(crate) fn constant_trace_heights(&self) -> impl Iterator<Item = Option<usize>> + '_
-    where
-        E: ChipUsageGetter,
-        P: ChipUsageGetter,
-    {
-        [
-            self.program_chip().constant_trace_height(),
-            self.connector_chip().constant_trace_height(),
-        ]
-        .into_iter()
-        .chain(
-            self._public_values_chip()
-                .map(|c| c.constant_trace_height()),
-        )
-        .chain(std::iter::repeat(None).take(self.memory_controller().num_airs()))
-        .chain(self.chips_excluding_pv_chip().map(|c| match c {
-            Either::Periphery(c) => c.constant_trace_height(),
-            Either::Executor(c) => c.constant_trace_height(),
-        }))
-        .chain([self.range_checker_chip().constant_trace_height()])
-    }
-
-    /// Return trace cells of all chips in order.
-    /// This returns 0 cells for chips with preprocessed trace because the number of trace cells is
-    /// constant in those cases. This function is used to sample periodically and provided to
-    /// the segmentation strategy to decide whether to segment during execution.
-    #[cfg(feature = "bench-metrics")]
-    pub(crate) fn current_trace_cells(&self) -> Vec<usize>
-    where
-        E: ChipUsageGetter,
-        P: ChipUsageGetter,
-    {
-        // program_chip, connector_chip
-        [0, 0]
-            .into_iter()
-            .chain(self._public_values_chip().map(|c| c.current_trace_cells()))
-            .chain(self.memory_controller().current_trace_cells())
-            .chain(self.chips_excluding_pv_chip().map(|c| match c {
-                Either::Executor(c) => c.current_trace_cells(),
-                Either::Periphery(c) => {
-                    if c.constant_trace_height().is_some() {
-                        0
-                    } else {
-                        c.current_trace_cells()
-                    }
-                }
-            }))
-            .chain([0]) // range_checker_chip
-            .collect()
-    }
-
-    pub fn airs<SC: StarkGenericConfig>(&self) -> Vec<AirRef<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-        E: Chip<SC>,
-        P: Chip<SC>,
-    {
-        // ATTENTION: The order of AIR MUST be consistent with `generate_proof_input`.
-        let program_rap = Arc::new(self.program_chip().air) as AirRef<SC>;
-        let connector_rap = Arc::new(self.connector_chip().air) as AirRef<SC>;
-        [program_rap, connector_rap]
-            .into_iter()
-            .chain(self._public_values_chip().map(|chip| chip.air()))
-            .chain(self.memory_controller().airs())
-            .chain(self.chips_excluding_pv_chip().map(|chip| match chip {
-                Either::Executor(chip) => chip.air(),
-                Either::Periphery(chip) => chip.air(),
-            }))
-            .chain(once(self.range_checker_chip().air()))
-            .collect()
-    }
+    // pub(crate) fn set_override_inventory_trace_heights(
+    //     &mut self,
+    //     overridden_inventory_heights: VmInventoryTraceHeights,
+    // ) {
+    //     self.overridden_inventory_heights = Some(overridden_inventory_heights);
+    // }
 
     pub(crate) fn generate_proof_input<SC: StarkGenericConfig>(
         mut self,
@@ -941,8 +682,8 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             }
         }
 
-        #[cfg(feature = "bench-metrics")]
-        self.finalize_metrics(metrics);
+        // #[cfg(feature = "bench-metrics")]
+        // self.finalize_metrics(metrics);
 
         let has_pv_chip = self.public_values_chip_idx().is_some();
         // ATTENTION: The order of AIR proof input generation MUST be consistent with `airs`.
@@ -1016,24 +757,60 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         Ok(builder.build())
     }
 
-    #[cfg(feature = "bench-metrics")]
-    fn finalize_metrics(&self, metrics: &mut VmMetrics)
-    where
-        E: ChipUsageGetter,
-        P: ChipUsageGetter,
-    {
-        tracing::info!(metrics.cycle_count);
-        counter!("total_cycles").absolute(metrics.cycle_count as u64);
-        counter!("main_cells_used")
-            .absolute(self.current_trace_cells().into_iter().sum::<usize>() as u64);
+    // #[cfg(feature = "bench-metrics")]
+    // fn finalize_metrics(&self, metrics: &mut VmMetrics)
+    // where
+    //     E: ChipUsageGetter,
+    //     P: ChipUsageGetter,
+    // {
+    //     tracing::info!(metrics.cycle_count);
+    //     counter!("total_cycles").absolute(metrics.cycle_count as u64);
+    //     counter!("main_cells_used")
+    //         .absolute(self.current_trace_cells().into_iter().sum::<usize>() as u64);
 
-        if self.config.profiling {
-            metrics.chip_heights =
-                itertools::izip!(self.air_names(), self.current_trace_heights()).collect();
-            metrics.emit();
-        }
-    }
+    //     if self.config.profiling {
+    //         metrics.chip_heights =
+    //             itertools::izip!(self.air_names(), self.current_trace_heights()).collect();
+    //         metrics.emit();
+    //     }
+    // }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct VmInventoryTraceHeights {
+    pub chips: FxHashMap<ChipId, usize>,
+}
+
+// #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, derive_new::new)]
+// pub struct VmComplexTraceHeights {
+//     pub system: SystemTraceHeights,
+//     pub inventory: VmInventoryTraceHeights,
+// }
+
+// impl VmInventoryTraceHeights {
+//     /// Round all trace heights to the next power of two. This will round trace heights of 0 to
+// 1. pub fn round_to_next_power_of_two(&mut self) { self.chips .values_mut() .for_each(|v| *v =
+//    v.next_power_of_two()); }
+
+//     /// Round all trace heights to the next power of two, except 0 stays 0.
+//     pub fn round_to_next_power_of_two_or_zero(&mut self) {
+//         self.chips
+//             .values_mut()
+//             .for_each(|v| *v = next_power_of_two_or_zero(*v));
+//     }
+// }
+
+// impl VmComplexTraceHeights {
+//     /// Round all trace heights to the next power of two. This will round trace heights of 0 to
+// 1. pub fn round_to_next_power_of_two(&mut self) { self.system.round_to_next_power_of_two();
+//    self.inventory.round_to_next_power_of_two(); }
+
+//     /// Round all trace heights to the next power of two, except 0 stays 0.
+//     pub fn round_to_next_power_of_two_or_zero(&mut self) {
+//         self.system.round_to_next_power_of_two_or_zero();
+//         self.inventory.round_to_next_power_of_two_or_zero();
+//     }
+// }
 
 struct VmProofInputBuilder<SC: StarkGenericConfig> {
     curr_air_id: usize,

@@ -8,12 +8,14 @@
 //! internal leaves of a Merkle tree but **not** as the leaf hash because `compress` does not
 //! add any padding.
 
-use openvm_poseidon2_air::Poseidon2Config;
+use std::sync::Arc;
+
+use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    interaction::BusIndex,
+    interaction::{BusIndex, LookupBus},
     p3_field::PrimeField32,
-    prover::types::AirProofInput,
+    prover::cpu::CpuBackend,
     AirRef, Chip, ChipUsageGetter,
 };
 
@@ -24,7 +26,10 @@ pub mod air;
 mod chip;
 pub use chip::*;
 
-use crate::arch::hasher::{Hasher, HasherChip};
+use crate::{
+    arch::hasher::{Hasher, HasherChip},
+    system::poseidon2::air::Poseidon2PeripheryAir,
+};
 pub mod columns;
 pub mod trace;
 
@@ -49,17 +54,28 @@ impl<F: PrimeField32> Poseidon2PeripheryChip<F> {
     }
 }
 
-impl<SC: StarkGenericConfig> Chip<SC> for Poseidon2PeripheryChip<Val<SC>>
+pub fn new_poseidon2_periphery_air<SC: StarkGenericConfig>(
+    poseidon2_config: Poseidon2Config<Val<SC>>,
+    direct_bus: LookupBus,
+    max_constraint_degree: usize,
+) -> AirRef<SC> {
+    if max_constraint_degree >= 7 {
+        Arc::new(Poseidon2PeripheryAir::<Val<SC>, 0>::new(
+            Arc::new(Poseidon2SubAir::new(poseidon2_config.constants.into())),
+            direct_bus,
+        ))
+    } else {
+        Arc::new(Poseidon2PeripheryAir::<Val<SC>, 1>::new(
+            Arc::new(Poseidon2SubAir::new(poseidon2_config.constants.into())),
+            direct_bus,
+        ))
+    }
+}
+
+impl<RA, SC: StarkGenericConfig> Chip<RA, CpuBackend<SC>> for Poseidon2PeripheryChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> AirRef<SC> {
-        match self {
-            Poseidon2PeripheryChip::Register0(chip) => chip.air(),
-            Poseidon2PeripheryChip::Register1(chip) => chip.air(),
-        }
-    }
-
     fn generate_air_proof_input(self) -> AirProofInput<SC> {
         match self {
             Poseidon2PeripheryChip::Register0(chip) => chip.generate_air_proof_input(),

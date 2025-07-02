@@ -7,7 +7,7 @@ use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
-    p3_field::PrimeField32,
+    p3_field::Field,
     prover::hal::ProverBackend,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -33,7 +33,7 @@ pub const POSEIDON2_WIDTH: usize = 16;
 /// Offset for address space indices. This is used to distinguish between different memory spaces.
 pub const ADDR_SPACE_OFFSET: u32 = 1;
 /// Returns a Poseidon2 config for the VM.
-pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<F> {
+pub fn vm_poseidon2_config<F: Field>() -> Poseidon2Config<F> {
     Poseidon2Config::default()
 }
 
@@ -64,9 +64,8 @@ where
 pub trait VmExecutionConfig<F> {
     type Executor: AnyEnum;
 
-    fn create_executors(
-        &self,
-    ) -> Result<ExecutorInventory<Self::Executor, F>, ExecutorInventoryError>;
+    fn create_executors(&self)
+        -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
 }
 
 pub trait VmCircuitConfig<SC: StarkGenericConfig> {

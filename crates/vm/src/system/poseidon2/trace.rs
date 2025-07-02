@@ -7,7 +7,6 @@ use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
-    prover::types::AirProofInput,
     AirRef, Chip, ChipUsageGetter,
 };
 

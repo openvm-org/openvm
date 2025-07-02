@@ -11,9 +11,7 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::Matrix,
-    p3_maybe_rayon::prelude::*,
-    rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
@@ -23,8 +21,7 @@ use super::memory::online::{GuestMemory, TracingMemory};
 use crate::arch::{
     execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
     get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionError, ExecutionState,
-    InsExecutorE1, PcIncOrSet, PhantomSubExecutor, RecordArena, RowMajorMatrixArena, TraceFiller,
-    TraceStep, VmStateMut,
+    InsExecutorE1, PcIncOrSet, PhantomSubExecutor, RecordArena, TraceFiller, TraceStep, VmStateMut,
 };
 
 #[cfg(test)]
@@ -198,7 +195,7 @@ where
         record.operands = [a, b, c];
 
         let opcode = instruction.opcode;
-        assert_eq!(opcode, self.air.phantom_opcode);
+        assert_eq!(opcode, self.phantom_opcode);
 
         let discriminant = PhantomDiscriminant(c as u16);
         // If not a system phantom sub-instruction (which is handled in
@@ -241,28 +238,13 @@ where
     }
 }
 
-impl<F: PrimeField32> ChipUsageGetter for PhantomChip<F> {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-    fn current_trace_height(&self) -> usize {
-        self.arena.trace_offset() / self.arena.width()
-    }
-    fn trace_width(&self) -> usize {
-        PhantomCols::<F>::width()
-    }
-    fn current_trace_cells(&self) -> usize {
-        self.trace_width() * self.current_trace_height()
-    }
-}
-
 impl<F> TraceFiller<F> for PhantomChip<F>
 where
     F: PrimeField32,
 {
-    fn fill_trace_row(&self, row_slice: &mut [F]) {
+    fn fill_trace_row(&self, mut row_slice: &mut [F]) {
         // SAFETY: assume that row has size PhantomCols::<F>::width()
-        let record: &PhantomRecord = unsafe { get_record_from_slice(row_slice, ()) };
+        let record: &PhantomRecord = unsafe { get_record_from_slice(&mut row_slice, ()) };
         let row: &mut PhantomCols<F> = row_slice.borrow_mut();
         // SAFETY: must assign in reverse order of column struct to prevent overwriting
         // borrowed data
