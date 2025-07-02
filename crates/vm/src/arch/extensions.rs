@@ -197,6 +197,15 @@ pub struct BusIndexManager {
 // ======================= Inventory Function Definitions =============================
 
 impl<E, F> ExecutorInventory<E, F> {
+    pub(crate) fn new() -> Self {
+        Self {
+            instruction_lookup: Default::default(),
+            executors: Default::default(),
+            phantom_executors: Default::default(),
+            ext_start: Default::default(),
+        }
+    }
+
     /// This should be called **exactly once** at the start of the declaration of a new extension.
     pub fn start_new_extension(&mut self) {
         self.ext_start.push(self.executors.len());
@@ -234,9 +243,11 @@ impl<E, F> ExecutorInventory<E, F> {
         phantom_sub: PE,
         discriminant: PhantomDiscriminant,
     ) -> Result<(), ExecutorInventoryError> {
-        let existing = self
-            .phantom_executors
-            .insert(discriminant, Box::new(phantom_sub));
+        let phantom_chip: &mut PhantomChip<F> = self
+            .find_executor_mut()
+            .next()
+            .expect("system always has phantom chip");
+        let existing = phantom_chip.add_sub_executor(phantom_sub, discriminant);
         if existing.is_some() {
             return Err(ExecutorInventoryError::PhantomSubExecutorExists { discriminant });
         }
@@ -289,13 +300,28 @@ impl<E, F> ExecutorInventory<E, F> {
     pub fn executors(&self) -> &[E] {
         &self.executors
     }
+
+    pub fn find_executor<EX: 'static>(&self) -> impl Iterator<Item = &'_ EX>
+    where
+        E: AnyEnum,
+    {
+        self.executors
+            .iter()
+            .filter_map(|e| e.as_any_kind().downcast_ref())
+    }
+
+    pub fn find_executor_mut<EX: 'static>(&mut self) -> impl Iterator<Item = &'_ mut EX>
+    where
+        E: AnyEnum,
+    {
+        self.executors
+            .iter_mut()
+            .filter_map(|e| e.as_any_kind_mut().downcast_mut())
+    }
 }
 
 impl<SC: StarkGenericConfig> AirInventory<SC> {
-    pub(in crate::system) fn new(
-        system: SystemAirInventory<SC>,
-        bus_idx_mgr: BusIndexManager,
-    ) -> Self {
+    pub(crate) fn new(system: SystemAirInventory<SC>, bus_idx_mgr: BusIndexManager) -> Self {
         Self {
             system,
             ext_start: Vec::new(),
@@ -1058,7 +1084,7 @@ pub fn generate_air_proof_input<SC: StarkGenericConfig, C: Chip<SC>>(
 ) -> AirProofInput<SC> {
     let mut proof_input = chip.generate_air_proof_input();
     if let Some(height) = height {
-        let height = height.next_power_of_two();
+        let height = next_power_of_two_or_zero(height);
         let main = proof_input.raw.common_main.as_mut().unwrap();
         assert!(
             height >= main.height(),

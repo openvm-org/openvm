@@ -3,7 +3,7 @@ use std::sync::Arc;
 use derive_more::derive::From;
 use openvm_circuit_derive::AnyEnum;
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerAir, VariableRangeCheckerBus};
-use openvm_instructions::SystemOpcode;
+use openvm_instructions::{PublishOpcode, SystemOpcode};
 use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
     config::StarkGenericConfig,
@@ -40,20 +40,22 @@ use crate::{
             offline_checker::{MemoryBridge, MemoryBus},
             MemoryAirInventory, MemoryController,
         },
-        native_adapter::NativeAdapterAir,
-        phantom::PhantomAir,
+        native_adapter::{NativeAdapterAir, NativeAdapterStep},
+        phantom::{PhantomAir, PhantomChip},
         poseidon2::air::Poseidon2PeripheryAir,
         program::{ProgramBus, ProgramChip},
-        public_values::{core::PublicValuesCoreAir, PublicValuesChip},
+        public_values::{PublicValuesChip, PublicValuesCoreAir, PublicValuesStep},
     },
 };
 
 /// **If** internal poseidon2 chip exists, then its periphery index is 0.
 const POSEIDON2_EXT_AIR_IDX: usize = 1;
+/// **If** public values chip exists, then its executor index is 0.
+const PV_EXECUTOR_IDX: usize = 0;
 
 #[derive(AnyEnum, From)]
 pub enum SystemExecutor<F> {
-    PublicValues(PublicValuesChip<F>),
+    PublicValues(PublicValuesStep<F>),
     // Phantom(PhantomChip<F>),
 }
 
@@ -155,9 +157,29 @@ impl<SC: StarkGenericConfig> SystemAirInventory<SC> {
 impl<F> VmExecutionConfig<F> for SystemConfig {
     type Executor = SystemExecutor<F>;
 
+    /// The only way to create an [ExecutorInventory] is from a [SystemConfig]. This will add an
+    /// executor for [PublicValuesStep] if continuations is disabled. It will always add an executor
+    /// for [PhantomChip], which handles all phantom sub-executors.
     fn create_executors(
         &self,
     ) -> Result<ExecutorInventory<Self::Executor, F>, ExecutorInventoryError> {
+        let mut inventory = ExecutorInventory::new();
+        // PublicValuesChip is required when num_public_values > 0 in single segment mode.
+        if self.has_public_values_chip() {
+            assert_eq!(inventory.executors().len(), Self::PV_EXECUTOR_IDX);
+
+            let public_values = PublicValuesStep::new(
+                NativeAdapterStep::default(),
+                self.num_public_values,
+                (self.max_constraint_degree as u32).checked_sub(1).unwrap(),
+            );
+            inventory.add_executor(public_values, [PublishOpcode::PUBLISH.global_opcode()])?;
+        }
+        let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
+        let phantom_chip = PhantomChip::new(Default::default(), phantom_opcode);
+        inventory.add_executor(phantom_chip, [phantom_opcode])?;
+
+        Ok(inventory)
     }
 }
 

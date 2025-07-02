@@ -1,38 +1,30 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    sync::Arc,
-};
+use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit_primitives::{utils::next_power_of_two_or_zero, AlignedBytesBorrow};
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant,
-    SysPhantom, SystemOpcode, VmOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
+    SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::Matrix,
     p3_maybe_rayon::prelude::*,
-    prover::types::AirProofInput,
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter,
+    Chip, ChipUsageGetter,
 };
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
 use super::memory::online::{GuestMemory, TracingMemory};
-use crate::{
-    arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionBus, ExecutionError,
-        ExecutionState, InsExecutorE1, InstructionExecutor, MatrixRecordArena, PcIncOrSet,
-        PhantomSubExecutor, RecordArena, RowMajorMatrixArena, VmStateMut,
-    },
-    system::program::ProgramBus,
+use crate::arch::{
+    execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+    get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionError, ExecutionState,
+    InsExecutorE1, PcIncOrSet, PhantomSubExecutor, RecordArena, RowMajorMatrixArena, TraceFiller,
+    TraceStep, VmStateMut,
 };
 
 #[cfg(test)]
@@ -99,24 +91,15 @@ pub struct PhantomRecord {
     pub timestamp: u32,
 }
 
-pub struct PhantomChip<F, RA = MatrixRecordArena<F>> {
-    pub air: PhantomAir,
-    pub arena: RA,
+/// `PhantomChip` is a special executor because it is stateful and stores all the phantom
+/// sub-executors.
+#[derive(derive_new::new)]
+pub struct PhantomChip<F> {
     phantom_executors: FxHashMap<PhantomDiscriminant, Box<dyn PhantomSubExecutor<F>>>,
+    phantom_opcode: VmOpcode,
 }
 
-impl<F: Field> PhantomChip<F, MatrixRecordArena<F>> {
-    pub fn new(execution_bus: ExecutionBus, program_bus: ProgramBus, offset: usize) -> Self {
-        Self {
-            air: PhantomAir {
-                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                phantom_opcode: VmOpcode::from_usize(offset + SystemOpcode::PHANTOM.local_usize()),
-            },
-            arena: MatrixRecordArena::with_capacity(0, size_of::<PhantomCols<u8>>()),
-            phantom_executors: FxHashMap::default(),
-        }
-    }
-
+impl<F> PhantomChip<F> {
     pub(crate) fn add_sub_executor<P: PhantomSubExecutor<F> + 'static>(
         &mut self,
         sub_executor: P,
@@ -127,7 +110,7 @@ impl<F: Field> PhantomChip<F, MatrixRecordArena<F>> {
     }
 }
 
-impl<F, RA> InsExecutorE1<F> for PhantomChip<F, RA>
+impl<F> InsExecutorE1<F> for PhantomChip<F>
 where
     F: PrimeField32,
 {
@@ -143,7 +126,7 @@ where
         let &Instruction {
             opcode, a, b, c, ..
         } = instruction;
-        assert_eq!(opcode, self.air.phantom_opcode);
+        assert_eq!(opcode, self.phantom_opcode);
 
         let c_u32 = c.as_canonical_u32();
         let discriminant = PhantomDiscriminant(c_u32 as u16);
@@ -193,16 +176,21 @@ where
     }
 }
 
-impl<F, RA> InstructionExecutor<F, RA> for PhantomChip<F, RA>
+impl<F> TraceStep<F> for PhantomChip<F>
 where
     F: PrimeField32,
-    for<'a> RA: RecordArena<'a, EmptyMultiRowLayout, &'a mut PhantomRecord>,
 {
-    fn execute(
+    type RecordLayout = EmptyMultiRowLayout;
+    type RecordMut<'a> = &'a mut PhantomRecord;
+
+    fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, RA>,
+        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError> {
+    ) -> Result<(), ExecutionError>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
         let record: &mut PhantomRecord = state.ctx.alloc(EmptyMultiRowLayout::default());
         record.pc = *state.pc;
         record.timestamp = state.memory.timestamp;
@@ -251,10 +239,6 @@ where
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{:?}", SystemOpcode::PHANTOM)
     }
-
-    fn give_me_my_arena(&mut self, arena: RA) {
-        self.arena = arena;
-    }
 }
 
 impl<F: PrimeField32> ChipUsageGetter for PhantomChip<F> {
@@ -272,39 +256,21 @@ impl<F: PrimeField32> ChipUsageGetter for PhantomChip<F> {
     }
 }
 
-impl<SC: StarkGenericConfig> Chip<SC> for PhantomChip<Val<SC>>
+impl<F> TraceFiller<F> for PhantomChip<F>
 where
-    Val<SC>: PrimeField32,
+    F: PrimeField32,
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let width = self.arena.width();
-        assert_eq!(self.arena.trace_offset() % width, 0);
-        let rows_used = self.arena.trace_offset() / width;
-        let height = next_power_of_two_or_zero(rows_used);
-        let mut trace = self.arena.into_matrix();
-        trace.values.resize(height * width, Val::<SC>::ZERO);
-
-        // fill trace
-        trace.values[..rows_used * width]
-            .par_chunks_mut(width)
-            .for_each(|mut row| {
-                // SAFETY: assume that row has size PhantomCols::<F>::width()
-                let record: &PhantomRecord = unsafe { get_record_from_slice(&mut row, ()) };
-                let row: &mut PhantomCols<Val<SC>> = row.borrow_mut();
-                // SAFETY: must assign in reverse order of column struct to prevent overwriting
-                // borrowed data
-                row.is_valid = Val::<SC>::ONE;
-                row.timestamp = Val::<SC>::from_canonical_u32(record.timestamp);
-                row.operands[2] = Val::<SC>::from_canonical_u32(record.operands[2]);
-                row.operands[1] = Val::<SC>::from_canonical_u32(record.operands[1]);
-                row.operands[0] = Val::<SC>::from_canonical_u32(record.operands[0]);
-                row.pc = Val::<SC>::from_canonical_u32(record.pc)
-            });
-
-        AirProofInput::simple(trace, vec![])
+    fn fill_trace_row(&self, row_slice: &mut [F]) {
+        // SAFETY: assume that row has size PhantomCols::<F>::width()
+        let record: &PhantomRecord = unsafe { get_record_from_slice(row_slice, ()) };
+        let row: &mut PhantomCols<F> = row_slice.borrow_mut();
+        // SAFETY: must assign in reverse order of column struct to prevent overwriting
+        // borrowed data
+        row.is_valid = F::ONE;
+        row.timestamp = F::from_canonical_u32(record.timestamp);
+        row.operands[2] = F::from_canonical_u32(record.operands[2]);
+        row.operands[1] = F::from_canonical_u32(record.operands[1]);
+        row.operands[0] = F::from_canonical_u32(record.operands[0]);
+        row.pc = F::from_canonical_u32(record.pc)
     }
 }
