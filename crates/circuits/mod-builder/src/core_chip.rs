@@ -5,7 +5,7 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, E1ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterCoreMetadata,
         AdapterTraceFiller, AdapterTraceStep, CustomBorrow, DynAdapterInterface, DynArray,
         ExecuteFunc, MinimalInstruction, RecordArena, Result, SizedRecord, StepExecutorE1,
@@ -457,7 +457,7 @@ where
         todo!()
     }
 
-    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
+    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,

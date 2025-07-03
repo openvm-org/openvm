@@ -2,7 +2,7 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterTraceFiller,
+        execution_mode::E1ExecutionCtx, get_record_from_slice, AdapterTraceFiller,
         AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc, RecordArena, Result, StepExecutorE1,
         TraceFiller, TraceStep, VmSegmentState, VmStateMut,
     },
@@ -133,7 +133,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
+    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
         &self,
         _pc: u32,
         inst: &Instruction<F>,
@@ -199,7 +199,7 @@ where
 
 unsafe fn execute_e1_impl<
     F: PrimeField32,
-    CTX: E1E2ExecutionCtx,
+    CTX: E1ExecutionCtx,
     const A_IS_IMM: bool,
     const B_IS_IMM: bool,
     const IS_NE: bool,

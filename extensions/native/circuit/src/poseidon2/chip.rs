@@ -2,7 +2,7 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, CustomBorrow, ExecuteFunc,
+        execution_mode::E1ExecutionCtx, CustomBorrow, ExecuteFunc,
         ExecutionError::InvalidInstruction, MultiRowLayout, MultiRowMetadata, RecordArena, Result,
         SizedRecord, StepExecutorE1, TraceFiller, TraceStep, VmSegmentState, VmStateMut,
     },
@@ -842,7 +842,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE1<F>
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
+    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -915,7 +915,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE1<F>
 
 unsafe fn execute_pos2_e1_impl<
     F: PrimeField32,
-    CTX: E1E2ExecutionCtx,
+    CTX: E1ExecutionCtx,
     const SBOX_REGISTERS: usize,
     const IS_PERM: bool,
 >(
@@ -968,7 +968,7 @@ unsafe fn execute_pos2_e1_impl<
 
 unsafe fn execute_verify_batch_e1_impl<
     F: PrimeField32,
-    CTX: E1E2ExecutionCtx,
+    CTX: E1ExecutionCtx,
     const SBOX_REGISTERS: usize,
 >(
     pre_compute: &[u8],

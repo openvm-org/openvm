@@ -4,7 +4,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::arch::{
-    execution_mode::E1E2ExecutionCtx, MatrixRecordArena, NewVmChipWrapper, Result, StepExecutorE1,
+    execution_mode::E1ExecutionCtx, MatrixRecordArena, NewVmChipWrapper, Result, StepExecutorE1,
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::SharedBitwiseOperationLookupChip, encoder::Encoder,
@@ -92,7 +92,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>>
     where
-        Ctx: E1E2ExecutionCtx,
+        Ctx: E1ExecutionCtx,
     {
         let data: &mut ShaPreCompute = data.borrow_mut();
         let Instruction {
@@ -118,7 +118,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
     }
 }
 
-unsafe fn execute_impl<F: PrimeField32, CTX: E1E2ExecutionCtx, const IS_E1: bool>(
+unsafe fn execute_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_E1: bool>(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {

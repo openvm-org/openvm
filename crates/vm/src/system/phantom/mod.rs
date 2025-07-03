@@ -27,7 +27,7 @@ use serde_big_array::BigArray;
 use super::memory::MemoryController;
 use crate::{
     arch::{
-        execution_mode::{e1::E1Ctx, E1E2ExecutionCtx},
+        execution_mode::{e1::E1Ctx, E1ExecutionCtx},
         ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutorE1,
         InstructionExecutor, PcIncOrSet, PhantomSubExecutor, Streams, VmStateMut,
     },

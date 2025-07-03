@@ -19,7 +19,7 @@ use openvm_stark_backend::{
 
 use crate::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        execution_mode::E1ExecutionCtx, get_record_from_slice, AdapterAirContext,
         AdapterTraceFiller, AdapterTraceStep, BasicAdapterInterface, EmptyAdapterCoreLayout,
         ExecuteFunc, MinimalInstruction, RecordArena, Result, StepExecutorE1, TraceFiller,
         TraceStep, VmCoreAir, VmSegmentState, VmStateMut,
@@ -256,7 +256,7 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>>
     where
-        Ctx: E1E2ExecutionCtx,
+        Ctx: E1ExecutionCtx,
     {
         let data: &mut PublicValuesPreCompute<F> = data.borrow_mut();
         *data = PublicValuesPreCompute {
@@ -276,7 +276,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX>(
     pre_compute: &[u8],
     state: &mut VmSegmentState<F, CTX>,
 ) where
-    CTX: E1E2ExecutionCtx,
+    CTX: E1ExecutionCtx,
 {
     let pre_compute: &PublicValuesPreCompute<F> = pre_compute.borrow();
     let [value] = state.vm_read::<F, 1>(pre_compute.e, pre_compute.b);

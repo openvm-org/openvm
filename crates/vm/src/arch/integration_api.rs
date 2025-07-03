@@ -26,7 +26,7 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    execution_mode::E1E2ExecutionCtx, ExecuteFunc, ExecutionState, InsExecutorE1,
+    execution_mode::E1ExecutionCtx, ExecuteFunc, ExecutionState, InsExecutorE1,
     InstructionExecutor, Result, Streams, VmStateMut,
 };
 use crate::system::memory::{
@@ -952,7 +952,7 @@ pub trait StepExecutorE1<F> {
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>>
     where
-        Ctx: E1E2ExecutionCtx;
+        Ctx: E1ExecutionCtx;
 }
 
 impl<F, A, S> InsExecutorE1<F> for NewVmChipWrapper<F, A, S, MatrixRecordArena<F>>
@@ -973,7 +973,7 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>>
     where
-        Ctx: E1E2ExecutionCtx,
+        Ctx: E1ExecutionCtx,
     {
         self.step.pre_compute_e1(pc, inst, data)
     }

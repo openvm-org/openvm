@@ -25,7 +25,7 @@ use super::{
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{execution_mode::E1E2ExecutionCtx, instructions::*},
+    arch::{execution_mode::E1ExecutionCtx, instructions::*},
     system::memory::online::GuestMemory,
 };
 
@@ -70,7 +70,7 @@ impl<F, Ctx> VmSegmentState<F, Ctx> {
         ptr: u32,
     ) -> [T; BLOCK_SIZE]
     where
-        Ctx: E1E2ExecutionCtx,
+        Ctx: E1ExecutionCtx,
     {
         self.ctx
             .on_memory_operation(addr_space, ptr, BLOCK_SIZE as u32);
@@ -85,7 +85,7 @@ impl<F, Ctx> VmSegmentState<F, Ctx> {
         ptr: u32,
         data: &[T; BLOCK_SIZE],
     ) where
-        Ctx: E1E2ExecutionCtx,
+        Ctx: E1ExecutionCtx,
     {
         self.ctx
             .on_memory_operation(addr_space, ptr, BLOCK_SIZE as u32);
@@ -95,7 +95,7 @@ impl<F, Ctx> VmSegmentState<F, Ctx> {
     #[inline(always)]
     pub fn vm_read_slice<T: Copy + Debug>(&mut self, addr_space: u32, ptr: u32, len: usize) -> &[T]
     where
-        Ctx: E1E2ExecutionCtx,
+        Ctx: E1ExecutionCtx,
     {
         self.ctx.on_memory_operation(addr_space, ptr, len as u32);
         self.host_read_slice(addr_space, ptr, len)
@@ -108,7 +108,7 @@ impl<F, Ctx> VmSegmentState<F, Ctx> {
         ptr: u32,
     ) -> [T; BLOCK_SIZE]
     where
-        Ctx: E1E2ExecutionCtx,
+        Ctx: E1ExecutionCtx,
     {
         unsafe { self.memory.read(addr_space, ptr) }
     }
@@ -119,14 +119,14 @@ impl<F, Ctx> VmSegmentState<F, Ctx> {
         ptr: u32,
         data: &[T; BLOCK_SIZE],
     ) where
-        Ctx: E1E2ExecutionCtx,
+        Ctx: E1ExecutionCtx,
     {
         unsafe { self.memory.write(addr_space, ptr, *data) }
     }
     #[inline(always)]
     pub fn host_read_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T]
     where
-        Ctx: E1E2ExecutionCtx,
+        Ctx: E1ExecutionCtx,
     {
         unsafe { self.memory.get_slice(addr_space, ptr, len) }
     }

@@ -12,13 +12,16 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{execution_mode::E1E2ExecutionCtx, Streams, VmSegmentState};
-use crate::system::{
-    memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryController,
+use super::{execution_mode::E1ExecutionCtx, Streams, VmSegmentState};
+use crate::{
+    arch::execution_mode::E2ExecutionCtx,
+    system::{
+        memory::{
+            online::{GuestMemory, TracingMemory},
+            MemoryController,
+        },
+        program::ProgramBus,
     },
-    program::ProgramBus,
 };
 
 pub type Result<T> = std::result::Result<T, ExecutionError>;
@@ -125,7 +128,12 @@ pub struct PreComputeInstruction<'a, F, CTX> {
     pub pre_compute: &'a [u8],
 }
 
-/// New trait for instruction execution
+pub struct E2PreCompute<DATA> {
+    pub chip_idx: u32,
+    pub data: DATA,
+}
+
+/// Trait for E1 execution
 pub trait InsExecutorE1<F> {
     fn pre_compute_size(&self) -> usize;
 
@@ -136,9 +144,23 @@ pub trait InsExecutorE1<F> {
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>>
     where
-        Ctx: E1E2ExecutionCtx;
+        Ctx: E1ExecutionCtx;
 
     fn set_trace_height(&mut self, height: usize);
+}
+
+pub trait InsExecutorE2<F> {
+    fn e2_pre_compute_size(&self) -> usize;
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx;
 }
 
 impl<F, C> InsExecutorE1<F> for RefCell<C>
@@ -157,7 +179,7 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>>
     where
-        Ctx: E1E2ExecutionCtx,
+        Ctx: E1ExecutionCtx,
     {
         self.borrow().pre_compute_e1(pc, inst, data)
     }

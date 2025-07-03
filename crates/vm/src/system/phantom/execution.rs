@@ -9,7 +9,7 @@ use rand::rngs::StdRng;
 
 use crate::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, ExecuteFunc, ExecutionError, InsExecutorE1,
+        execution_mode::E1ExecutionCtx, ExecuteFunc, ExecutionError, InsExecutorE1,
         PhantomSubExecutor, Streams, VmSegmentState,
     },
     system::{memory::online::GuestMemory, phantom::PhantomChip},
@@ -46,7 +46,7 @@ where
         data: &mut [u8],
     ) -> crate::arch::Result<ExecuteFunc<F, Ctx>>
     where
-        Ctx: E1E2ExecutionCtx,
+        Ctx: E1ExecutionCtx,
     {
         let data: &mut PhantomPreCompute<F> = data.borrow_mut();
         let c = inst.c.as_canonical_u32();
@@ -74,7 +74,7 @@ pub(super) struct PhantomStateMut<'a, F> {
     pub(super) rng: &'a mut StdRng,
 }
 
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {

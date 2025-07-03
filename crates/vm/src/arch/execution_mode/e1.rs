@@ -2,7 +2,7 @@ use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::arch::{
-    execution_control::ExecutionControl, execution_mode::E1E2ExecutionCtx, ExecutionError,
+    execution_control::ExecutionControl, execution_mode::E1ExecutionCtx, ExecutionError,
     InsExecutorE1, VmChipComplex, VmConfig, VmSegmentState,
 };
 
@@ -11,7 +11,7 @@ pub struct E1Ctx {
     pub instret_end: Option<u64>,
 }
 
-impl E1E2ExecutionCtx for E1Ctx {
+impl E1ExecutionCtx for E1Ctx {
     fn on_memory_operation(&mut self, _address_space: u32, _ptr: u32, _size: u32) {}
     fn should_suspend<F>(vm_state: &VmSegmentState<F, Self>) -> bool {
         if let Some(instret_end) = vm_state.ctx.instret_end {

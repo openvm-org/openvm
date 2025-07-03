@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, get_record_from_slice, EmptyMultiRowLayout, ExecuteFunc,
+        execution_mode::E1ExecutionCtx, get_record_from_slice, EmptyMultiRowLayout, ExecuteFunc,
         ExecutionBridge, ExecutionError, ExecutionError::InvalidInstruction, ExecutionState,
         MatrixRecordArena, NewVmChipWrapper, PcIncOrSet, RecordArena, Result, StepExecutorE1,
         TraceFiller, TraceStep, VmSegmentState, VmStateMut,
@@ -323,7 +323,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
+    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -367,7 +367,7 @@ where
     }
 }
 
-unsafe fn execute_jal_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+unsafe fn execute_jal_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
@@ -378,7 +378,7 @@ unsafe fn execute_jal_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     vm_state.pc = (F::from_canonical_u32(vm_state.pc) + pre_compute.b).as_canonical_u32();
 }
 
-unsafe fn execute_range_check_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+unsafe fn execute_range_check_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
