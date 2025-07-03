@@ -1018,7 +1018,12 @@ where
                 ins1_chunk[INS_1_WIDTH..OVERALL_WIDTH].fill(F::ZERO);
             }
 
-            // Copy of `a_write_prev_data` to avoid overwriting
+            // To fill the WorkloadRows we do 2 passes:
+            // - First, a serial pass to fill some of the records into the trace
+            // - Then, a parallel pass to fill the rest of the records into the trace
+            // Note, the first pass is done to avoid overwriting the records
+
+            // Copy of `a_write_prev_data` to avoid overwriting it and to use it in the parallel pass
             let a_prev_data = if !is_init {
                 let mut tmp = Vec::with_capacity(length);
                 tmp.extend_from_slice(record.a_write_prev_data);
@@ -1045,6 +1050,8 @@ where
                     cols.b_aux.as_mut(),
                 );
 
+                // We temporarily store the result here
+                // the correct value of b is computed during the serial pass below
                 cols.b = record.workload[i].result;
 
                 mem_helper.fill(
