@@ -10,13 +10,13 @@
 
 use std::sync::Arc;
 
+use openvm_circuit_primitives::Chip;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::{BusIndex, LookupBus},
     p3_field::PrimeField32,
-    prover::cpu::CpuBackend,
-    AirRef, Chip, ChipUsageGetter,
+    AirRef, ChipUsageGetter,
 };
 
 #[cfg(test)]
@@ -36,6 +36,8 @@ pub mod trace;
 pub const PERIPHERY_POSEIDON2_WIDTH: usize = 16;
 pub const PERIPHERY_POSEIDON2_CHUNK_SIZE: usize = 8;
 
+#[derive(Chip)]
+#[chip(where = "F: PrimeField32")]
 pub enum Poseidon2PeripheryChip<F: PrimeField32> {
     Register0(Poseidon2PeripheryBaseChip<F, 0>),
     Register1(Poseidon2PeripheryBaseChip<F, 1>),
@@ -69,18 +71,6 @@ pub fn new_poseidon2_periphery_air<SC: StarkGenericConfig>(
             Arc::new(Poseidon2SubAir::new(poseidon2_config.constants.into())),
             direct_bus,
         ))
-    }
-}
-
-impl<RA, SC: StarkGenericConfig> Chip<RA, CpuBackend<SC>> for Poseidon2PeripheryChip<Val<SC>>
-where
-    Val<SC>: PrimeField32,
-{
-    fn generate_air_proof_input(self) -> AirProvingContext<SC> {
-        match self {
-            Poseidon2PeripheryChip::Register0(chip) => chip.generate_air_proof_input(),
-            Poseidon2PeripheryChip::Register1(chip) => chip.generate_air_proof_input(),
-        }
     }
 }
 

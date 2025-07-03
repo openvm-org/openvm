@@ -268,7 +268,7 @@ where
         let connector_ctx = self.connector_chip.generate_proving_ctx(());
 
         let pv_ctx = self.public_values_chip.map(|chip| {
-            let mut arena = record_arenas.remove(PUBLIC_VALUES_AIR_ID);
+            let arena = record_arenas.remove(PUBLIC_VALUES_AIR_ID);
             chip.generate_proving_ctx(arena)
         });
         let memory_ctxs = self.memory_controller.generate_proving_ctx();
