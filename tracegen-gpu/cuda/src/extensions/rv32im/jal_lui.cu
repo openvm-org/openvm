@@ -1,4 +1,3 @@
-
 #include "adapters/rdwrite.cuh"
 #include "histogram.cuh"
 #include "trace_access.h"
@@ -71,12 +70,8 @@ __global__ void jal_lui_tracegen(
         adapter.fill_trace_row(row, full.adapter);
         Rv32JalLuiCore core(bw_ptr, bw_bits);
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv32JalLuiCols, core)), full.core);
-
     } else {
-#pragma unroll
-        for (size_t c = 0; c < sizeof(Rv32JalLuiCols<uint8_t>); ++c) {
-            row.write(c, 0);
-        }
+        row.fill_zero(0, sizeof(Rv32JalLuiCols<uint8_t>));
     }
 }
 
