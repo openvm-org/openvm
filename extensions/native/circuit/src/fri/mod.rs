@@ -619,8 +619,9 @@ pub struct FriReducedOpeningWorkloadRowRecord<F> {
     pub a: F,
     pub a_aux: MemoryReadAuxRecord,
     // The result of this workload row
+    // b can be computed from a, alpha, result, and previous result:
+    // b = result + a - prev_result * alpha
     pub result: [F; EXT_DEG],
-
     pub b_aux: MemoryReadAuxRecord,
 }
 
