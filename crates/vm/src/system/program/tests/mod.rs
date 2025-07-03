@@ -12,7 +12,7 @@ use openvm_rv32im_transpiler::BranchEqualOpcode::*;
 use openvm_stark_backend::{
     p3_field::FieldAlgebra,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProofInput,
+    prover::types::AirProvingContext,
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec,
@@ -81,7 +81,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
         any_rap_arc_vec!(program_air, counter_air),
         vec![
             program_proof_input,
-            AirProofInput::simple_no_pis(counter_trace),
+            AirProvingContext::simple_no_pis(counter_trace),
         ],
     )
     .expect("Verification failed");
@@ -209,7 +209,7 @@ fn test_program_negative() {
         any_rap_arc_vec!(program_air, counter_air),
         vec![
             program_proof_input,
-            AirProofInput::simple_no_pis(counter_trace),
+            AirProvingContext::simple_no_pis(counter_trace),
         ],
     )
     .expect("Verification failed");

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{iter, sync::Arc};
 
 use derive_more::derive::From;
 use openvm_circuit_derive::AnyEnum;
@@ -262,24 +262,22 @@ where
 {
     fn generate_proving_ctx(
         self,
-        record_arenas: Vec<RA>,
+        mut record_arenas: Vec<RA>,
     ) -> Vec<AirProvingContext<CpuBackend<SC>>> {
         let program_ctx = self.program_chip.generate_proving_ctx();
         let connector_ctx = self.connector_chip.generate_proving_ctx(());
 
         let pv_ctx = self.public_values_chip.map(|chip| {
             let mut arena = record_arenas.remove(PUBLIC_VALUES_AIR_ID);
-            chip.generate_proving_ctx(arena);
+            chip.generate_proving_ctx(arena)
         });
-        // System: Memory Controller
-        {
-            // memory
-            let air_proof_inputs = memory_controller.generate_air_proof_inputs();
-            for air_proof_input in air_proof_inputs {
-                builder.add_air_proof_input(air_proof_input);
-            }
-        }
-        todo!()
+        let memory_ctxs = self.memory_controller.generate_proving_ctx();
+
+        [program_ctx, connector_ctx]
+            .into_iter()
+            .chain(pv_ctx)
+            .chain(memory_ctxs)
+            .collect()
     }
 }
 

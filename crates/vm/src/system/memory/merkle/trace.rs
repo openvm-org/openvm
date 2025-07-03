@@ -4,14 +4,12 @@ use std::{
 };
 
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    p3_field::{FieldAlgebra, PrimeField32},
+    config::{Domain, StarkGenericConfig, Val},
+    p3_commit::PolynomialSpace,
+    p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
-    prover::{
-        cpu::CpuBackend,
-        types::{AirProofInput, AirProvingContext},
-    },
-    AirRef, Chip, ChipUsageGetter,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
+    ChipUsageGetter,
 };
 use tracing::instrument;
 
@@ -43,13 +41,16 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     }
 }
 
-impl<const CHUNK: usize, RA, SC> Chip<RA, CpuBackend<SC>> for MemoryMerkleChip<CHUNK, Val<SC>>
+impl<const CHUNK: usize, F> MemoryMerkleChip<CHUNK, F>
 where
-    SC: StarkGenericConfig,
-    Val<SC>: PrimeField32,
+    F: PrimeField32,
 {
     // TODO: switch to using records
-    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
+    pub fn generate_proving_ctx<SC>(self) -> AirProvingContext<CpuBackend<SC>>
+    where
+        SC: StarkGenericConfig,
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
         assert!(
             self.final_state.is_some(),
             "Merkle chip must finalize before trace generation"

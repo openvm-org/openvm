@@ -76,7 +76,7 @@ impl<RA, SC: StarkGenericConfig> Chip<RA, CpuBackend<SC>> for Poseidon2Periphery
 where
     Val<SC>: PrimeField32,
 {
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+    fn generate_air_proof_input(self) -> AirProvingContext<SC> {
         match self {
             Poseidon2PeripheryChip::Register0(chip) => chip.generate_air_proof_input(),
             Poseidon2PeripheryChip::Register1(chip) => chip.generate_air_proof_input(),

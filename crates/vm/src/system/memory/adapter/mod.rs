@@ -14,8 +14,8 @@ use openvm_stark_backend::{
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProofInput,
-    AirRef, Chip, ChipUsageGetter,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
+    Chip, ChipUsageGetter,
 };
 
 use crate::system::memory::{offline_checker::MemoryBus, MemoryAddress};
@@ -81,24 +81,19 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
             .map(|chip| chip.current_trace_cells())
             .collect()
     }
-    pub fn airs<SC: StarkGenericConfig>(&self) -> Vec<AirRef<SC>>
-    where
-        F: PrimeField32,
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        self.chips.iter().map(|chip| chip.air()).collect()
-    }
     pub fn air_names(&self) -> Vec<String> {
         self.air_names.clone()
     }
-    pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>
+    pub fn generate_proving_ctx<SC: StarkGenericConfig>(
+        self,
+    ) -> Vec<AirProvingContext<CpuBackend<SC>>>
     where
         F: PrimeField32,
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         self.chips
             .into_iter()
-            .map(|chip| chip.generate_air_proof_input())
+            .map(|chip| chip.generate_proving_ctx(()))
             .collect()
     }
 
@@ -170,7 +165,7 @@ pub struct AccessAdapterRecord<T> {
 pub trait GenericAccessAdapterChipTrait<F> {
     fn set_override_trace_heights(&mut self, overridden_height: usize);
     fn n(&self) -> usize;
-    fn generate_trace(self) -> RowMajorMatrix<F>
+    fn generate_trace(&self) -> RowMajorMatrix<F>
     where
         F: PrimeField32;
 
@@ -190,7 +185,6 @@ pub trait GenericAccessAdapterChipTrait<F> {
 
 #[derive(Chip, ChipUsageGetter)]
 #[enum_dispatch(GenericAccessAdapterChipTrait<F>)]
-#[chip(where = "F: PrimeField32")]
 enum GenericAccessAdapterChip<F> {
     N2(AccessAdapterChip<F, 2>),
     N4(AccessAdapterChip<F, 4>),
@@ -248,12 +242,12 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
     fn n(&self) -> usize {
         N
     }
-    fn generate_trace(self) -> RowMajorMatrix<F>
+    fn generate_trace(&self) -> RowMajorMatrix<F>
     where
         F: PrimeField32,
     {
         let width = self.trace_width();
-        let mut trace = RowMajorMatrix::new(self.trace_cursor.into_inner(), width);
+        let mut trace = RowMajorMatrix::new(self.trace_cursor.clone().into_inner(), width);
         let height = trace.height();
         let padded_height = if let Some(oh) = self.overridden_height {
             assert!(
@@ -356,17 +350,14 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
     }
 }
 
-impl<SC: StarkGenericConfig, const N: usize> Chip<SC> for AccessAdapterChip<Val<SC>, N>
+impl<RA, SC: StarkGenericConfig, const N: usize> Chip<RA, CpuBackend<SC>>
+    for AccessAdapterChip<Val<SC>, N>
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         let trace = self.generate_trace();
-        AirProofInput::simple_no_pis(trace)
+        AirProvingContext::simple_no_pis(Arc::new(trace))
     }
 }
 

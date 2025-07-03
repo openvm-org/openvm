@@ -5,7 +5,7 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
-    prover::types::AirProofInput,
+    prover::types::AirProvingContext,
     AirRef, Chip, ChipUsageGetter,
 };
 
@@ -56,7 +56,7 @@ where
         Arc::new(ExecutionDummyAir::new(self.bus))
     }
 
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+    fn generate_air_proof_input(self) -> AirProvingContext<SC> {
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
         let mut values = Val::<SC>::zero_vec(height * width);
@@ -65,7 +65,7 @@ where
         for (row, record) in values.chunks_mut(width).zip(self.records) {
             *row.borrow_mut() = record;
         }
-        AirProofInput::simple_no_pis(RowMajorMatrix::new(values, width))
+        AirProvingContext::simple_no_pis(RowMajorMatrix::new(values, width))
     }
 }
 impl<F: Field> ChipUsageGetter for ExecutionTester<F> {

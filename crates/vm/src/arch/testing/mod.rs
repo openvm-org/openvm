@@ -12,7 +12,7 @@ use openvm_stark_backend::{
     interaction::{BusIndex, PermutationCheckBus},
     p3_field::PrimeField32,
     p3_matrix::dense::{DenseMatrix, RowMajorMatrix},
-    prover::types::AirProofInput,
+    prover::types::AirProvingContext,
     verifier::VerificationError,
     AirRef, Chip, ChipUsageGetter,
 };
@@ -383,7 +383,7 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
 
 pub struct VmChipTester<SC: StarkGenericConfig> {
     pub memory: Option<MemoryTester<Val<SC>>>,
-    pub air_proof_inputs: Vec<(AirRef<SC>, AirProofInput<SC>)>,
+    pub air_proof_inputs: Vec<(AirRef<SC>, AirProvingContext<SC>)>,
 }
 
 impl<SC: StarkGenericConfig> Default for VmChipTester<SC> {
@@ -461,7 +461,7 @@ where
 
     pub fn load_air_proof_input(
         mut self,
-        air_proof_input: (AirRef<SC>, AirProofInput<SC>),
+        air_proof_input: (AirRef<SC>, AirProvingContext<SC>),
     ) -> Self {
         self.air_proof_inputs.push(air_proof_input);
         self

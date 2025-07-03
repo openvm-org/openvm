@@ -5,7 +5,7 @@ use openvm_circuit_primitives::var_range::{
 };
 use openvm_stark_backend::{
     interaction::BusIndex, p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix,
-    prover::types::AirProofInput, Chip,
+    prover::types::AirProvingContext, Chip,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -107,7 +107,7 @@ fn boundary_air_test() {
 
     boundary_chip.finalize(final_memory.clone());
     let boundary_air = boundary_chip.air();
-    let boundary_api: AirProofInput<BabyBearPoseidon2Config> =
+    let boundary_api: AirProvingContext<BabyBearPoseidon2Config> =
         boundary_chip.generate_air_proof_input();
     // test trace height override
     {
@@ -117,7 +117,7 @@ fn boundary_air_test() {
             VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker.clone());
         boundary_chip.set_overridden_height(overridden_height);
         boundary_chip.finalize(final_memory.clone());
-        let boundary_api: AirProofInput<BabyBearPoseidon2Config> =
+        let boundary_api: AirProvingContext<BabyBearPoseidon2Config> =
             boundary_chip.generate_air_proof_input();
         assert_eq!(
             boundary_api.main_trace_height(),
@@ -135,8 +135,8 @@ fn boundary_air_test() {
         vec![
             boundary_api,
             range_checker.generate_air_proof_input(),
-            AirProofInput::simple_no_pis(init_memory_trace),
-            AirProofInput::simple_no_pis(final_memory_trace),
+            AirProvingContext::simple_no_pis(init_memory_trace),
+            AirProvingContext::simple_no_pis(final_memory_trace),
         ],
     )
     .expect("Verification failed");

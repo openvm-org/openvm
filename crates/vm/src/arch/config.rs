@@ -79,7 +79,7 @@ where
     SC: StarkGenericConfig,
     PB: ProverBackend,
 {
-    type SystemChipComplex: SystemChipComplex<PB>;
+    type SystemChipComplex: SystemChipComplex<RA, PB>;
 
     fn create_chip_complex(
         &self,

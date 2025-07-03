@@ -8,7 +8,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::{
     config::StarkGenericConfig, engine::StarkEngine, p3_field::FieldAlgebra,
-    prover::types::AirProofInput, utils::disable_debug_builder,
+    prover::types::AirProvingContext, utils::disable_debug_builder,
 };
 use openvm_stark_sdk::{
     config::{
@@ -65,7 +65,7 @@ fn test_vm_connector_wrong_is_terminate() {
 fn test_impl(
     should_pass: bool,
     exit_code: u32,
-    f: impl FnOnce(&mut AirProofInput<BabyBearPoseidon2Config>),
+    f: impl FnOnce(&mut AirProvingContext<BabyBearPoseidon2Config>),
 ) {
     let vm_config = SystemConfig::default();
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));

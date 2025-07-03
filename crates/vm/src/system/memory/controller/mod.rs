@@ -530,6 +530,10 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
+    // @dev: Memory is complicated and allowed to break all the rules (e.g., 1 arena per chip) and
+    // there's no need for any memory chip to implement the Chip trait. We do it when convenient,
+    // but all that matters is that you can tracegen all the trace matrices for the memory AIRs
+    // _somehow_.
     pub fn generate_proving_ctx<SC: StarkGenericConfig>(
         self,
     ) -> Vec<AirProvingContext<CpuBackend<SC>>>
@@ -541,7 +545,7 @@ impl<F: PrimeField32> MemoryController<F> {
         let access_adapters = self.memory.access_adapter_inventory;
         match self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
-                ret.push(boundary_chip.generate_proving_ctx());
+                ret.push(boundary_chip.generate_proving_ctx(()));
             }
             MemoryInterface::Persistent {
                 merkle_chip,
@@ -549,12 +553,12 @@ impl<F: PrimeField32> MemoryController<F> {
                 ..
             } => {
                 debug_assert_eq!(ret.len(), BOUNDARY_AIR_OFFSET);
-                ret.push(boundary_chip.generate_proving_ctx());
+                ret.push(boundary_chip.generate_proving_ctx(()));
                 debug_assert_eq!(ret.len(), MERKLE_AIR_OFFSET);
                 ret.push(merkle_chip.generate_proving_ctx());
             }
         }
-        ret.extend(access_adapters.generate_proving_ctxs());
+        ret.extend(access_adapters.generate_proving_ctx());
         ret
     }
 
