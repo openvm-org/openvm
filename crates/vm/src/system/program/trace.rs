@@ -83,7 +83,7 @@ where
     {
         let hasher = vm_poseidon2_hasher();
         let memory_dimensions = memory_config.memory_dimensions();
-        let app_program_commit: &[Val<SC>; CHUNK] = self.committed_program.commitment.as_ref();
+        let app_program_commit: &[Val<SC>; CHUNK] = self.commitment.as_ref();
         let mem_config = memory_config;
         let memory_image = AddressMap::from_sparse(
             mem_config.addr_space_sizes.clone(),

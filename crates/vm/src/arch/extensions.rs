@@ -29,7 +29,7 @@ use crate::{
     arch::MatrixRecordArena,
     system::{
         memory::{BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET},
-        phantom::PhantomChip,
+        phantom::PhantomExecutor,
         SystemAirInventory,
     },
 };
@@ -215,7 +215,7 @@ impl<E> ExecutorInventory<E> {
         F: 'static,
         PE: PhantomSubExecutor<F> + 'static,
     {
-        let phantom_chip: &mut PhantomChip<F> = self
+        let phantom_chip: &mut PhantomExecutor<F> = self
             .find_executor_mut()
             .next()
             .expect("system always has phantom chip");
@@ -502,8 +502,10 @@ pub enum ChipInventoryError {
 /// Trait for trace generation of all system AIRs. The system chip complex is special because we may
 /// not exactly following the exact matching between `Air` and `Chip`. Moreover we may require more
 /// flexibility than what is provided through the trait object [`AnyChip`].
-pub trait SystemChipComplex<PB: ProverBackend> {
-    fn generate_proving_ctx(self) -> Vec<AirProvingContext<PB>>;
+pub trait SystemChipComplex<RA, PB: ProverBackend> {
+    /// The caller must guarantee that `record_arenas` has length equal to the number of system
+    /// AIRs, although some arenas may be empty if they are unused.
+    fn generate_proving_ctx(self, record_arenas: Vec<RA>) -> Vec<AirProvingContext<PB>>;
 }
 
 /// The collection of all chips in the VM. The chips should correspond 1-to-1 with the associated
@@ -527,7 +529,7 @@ where
 impl<RA, PB, SCC> VmChipComplex<RA, PB, SCC>
 where
     PB: ProverBackend,
-    SCC: SystemChipComplex<PB>,
+    SCC: SystemChipComplex<RA, PB>,
 {
     // pub fn finalize_memory(&mut self)
     // where
@@ -630,6 +632,9 @@ where
                 expected: num_airs,
             });
         }
+        let mut _record_arenas = record_arenas;
+        let record_arenas = _record_arenas.split_off(num_sys_airs);
+        let sys_record_arenas = _record_arenas;
 
         // First go through all system chips
         // Then go through all other chips in inventory in **reverse** order they were added (to
@@ -640,9 +645,9 @@ where
         // the peak memory usage, by keeping a dependency tree and generating traces at the same
         // layer of the tree in parallel.
         let ctx_without_empties: Vec<(usize, AirProvingContext<_>)> = iter::empty()
-            .chain(self.system.generate_proving_ctx())
+            .chain(self.system.generate_proving_ctx(sys_record_arenas))
             .chain(
-                zip(self.chips, record_arenas.into_iter().skip(num_sys_airs))
+                zip(self.chips, record_arenas)
                     .map(|(chip, records)| chip.generate_proving_ctx(records))
                     .rev(),
             )

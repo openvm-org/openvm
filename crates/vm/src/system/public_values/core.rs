@@ -24,9 +24,9 @@ use crate::{
     system::{
         memory::{
             online::{GuestMemory, TracingMemory},
-            SharedMemoryHelper,
+            MemoryAuxColsFactory,
         },
-        native_adapter::{NativeAdapterChip, NativeAdapterStep},
+        native_adapter::NativeAdapterStep,
         public_values::columns::PublicValuesCoreColsView,
     },
 };
@@ -124,13 +124,7 @@ pub struct PublicValuesStep<F, A = NativeAdapterStep<F, 2, 0>> {
     pub(crate) custom_pvs: Mutex<Vec<Option<F>>>,
 }
 
-pub struct PublicValuesChip<F, A = NativeAdapterChip<F, 2, 0>> {
-    adapter: A,
-    encoder: Encoder,
-    mem_helper: SharedMemoryHelper<F>,
-}
-
-impl<F, A> PublicValuesStep<F, A> {
+impl<F: Clone, A> PublicValuesStep<F, A> {
     /// **Note:** `max_degree` is the maximum degree of the constraint polynomials to represent the
     /// flags. If you want the overall AIR's constraint degree to be `<= max_constraint_degree`,
     /// then typically you should set `max_degree` to `max_constraint_degree - 1`.
@@ -141,23 +135,12 @@ impl<F, A> PublicValuesStep<F, A> {
             custom_pvs: Mutex::new(vec![None; num_custom_pvs]),
         }
     }
-    pub fn get_custom_public_values(&self) -> Vec<Option<F>> {
-        self.custom_pvs.lock().unwrap().clone()
-    }
-}
 
-impl<F, A> PublicValuesChip<F, A> {
-    /// See [`PublicValuesChip::new`].
-    pub fn new(
-        adapter: A,
-        num_custom_pvs: usize,
-        max_degree: u32,
-        mem_helper: SharedMemoryHelper<F>,
-    ) -> Self {
-        Self {
-            adapter,
-            encoder: Encoder::new(num_custom_pvs, max_degree, true),
-            mem_helper,
+    pub fn set_public_values(&mut self, public_values: &[F]) {
+        let mut custom_pvs = self.custom_pvs.lock().unwrap();
+        assert_eq!(public_values.len(), custom_pvs.len());
+        for (pv_mut, value) in custom_pvs.iter_mut().zip(public_values) {
+            *pv_mut = Some(value.clone());
         }
     }
 }
@@ -209,23 +192,16 @@ where
 
         Ok(())
     }
-
-    fn generate_public_values(&self) -> Vec<F> {
-        self.get_custom_public_values()
-            .into_iter()
-            .map(|x| x.unwrap_or(F::ZERO))
-            .collect()
-    }
 }
 
-impl<F, A> TraceFiller<F> for PublicValuesChip<F, A>
+impl<F, A> TraceFiller<F> for PublicValuesStep<F, A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
+    A: 'static + AdapterTraceFiller<F> + Send + Sync,
 {
-    fn fill_trace_row(&self, row_slice: &mut [F]) {
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(&self.mem_helper, adapter_row);
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
         let record: &PublicValuesRecord<F> = unsafe { get_record_from_slice(&mut core_row, ()) };
         let cols = PublicValuesCoreColsView::<_, &mut F>::borrow_mut(core_row);
 
@@ -242,6 +218,15 @@ where
         *cols.index = record.index;
         *cols.value = record.value;
         *cols.is_valid = F::ONE;
+    }
+
+    fn generate_public_values(&self) -> Vec<F> {
+        self.custom_pvs
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|&x| x.unwrap_or(F::ZERO))
+            .collect()
     }
 }
 

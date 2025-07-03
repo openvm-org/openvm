@@ -15,8 +15,9 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
+    prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter,
+    Chip, ChipUsageGetter,
 };
 use serde::{Deserialize, Serialize};
 
@@ -267,16 +268,12 @@ impl<F: PrimeField32> VmConnectorChip<F> {
     }
 }
 
-impl<SC> Chip<SC> for VmConnectorChip<Val<SC>>
+impl<RA, SC> Chip<RA, CpuBackend<SC>> for VmConnectorChip<Val<SC>>
 where
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air)
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         let [initial_state, final_state] = self.boundary_states.map(|state| {
             let mut state = state.unwrap();
             // Decompose and range check timestamp
@@ -291,10 +288,10 @@ where
             state.map(Val::<SC>::from_canonical_u32)
         });
 
-        let trace = RowMajorMatrix::new(
+        let trace = Arc::new(RowMajorMatrix::new(
             [initial_state.flatten(), final_state.flatten()].concat(),
             self.trace_width(),
-        );
+        ));
 
         let mut public_values = Val::<SC>::zero_vec(VmConnectorPvs::<Val<SC>>::width());
         *public_values.as_mut_slice().borrow_mut() = VmConnectorPvs {
@@ -303,7 +300,7 @@ where
             exit_code: final_state.exit_code,
             is_terminate: final_state.is_terminate,
         };
-        AirProofInput::simple(trace, public_values)
+        AirProvingContext::simple(trace, public_values)
     }
 }
 

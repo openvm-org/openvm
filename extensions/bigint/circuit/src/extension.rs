@@ -8,7 +8,7 @@ use openvm_circuit::{
         ExecutionBridge, InitFileGenerator, SystemConfig, SystemPort, VmExtension, VmInventory,
         VmInventoryBuilder, VmInventoryError,
     },
-    system::phantom::PhantomChip,
+    system::phantom::PhantomExecutor,
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::{
@@ -90,7 +90,7 @@ pub enum Int256Periphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
     /// Only needed for multiplication extension
     RangeTupleChecker(SharedRangeTupleCheckerChip<2>),
-    Phantom(PhantomChip<F>),
+    Phantom(PhantomExecutor<F>),
 }
 
 impl<F: PrimeField32> VmExtension<F> for Int256 {

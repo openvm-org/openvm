@@ -192,8 +192,6 @@ impl<F, const R: usize, const W: usize> Default for NativeAdapterStep<F, R, W> {
     }
 }
 
-pub type NativeAdapterChip<F, const R: usize, const W: usize> = NativeAdapterStep<F, R, W>;
-
 impl<F, const R: usize, const W: usize> AdapterTraceStep<F> for NativeAdapterStep<F, R, W>
 where
     F: PrimeField32,
@@ -264,7 +262,7 @@ where
 }
 
 impl<F: PrimeField32, const R: usize, const W: usize> AdapterTraceFiller<F>
-    for NativeAdapterChip<F, R, W>
+    for NativeAdapterStep<F, R, W>
 {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {

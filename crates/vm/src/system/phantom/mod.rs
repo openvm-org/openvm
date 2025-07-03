@@ -18,10 +18,14 @@ use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
 use super::memory::online::{GuestMemory, TracingMemory};
-use crate::arch::{
-    execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-    get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionError, ExecutionState,
-    InsExecutorE1, PcIncOrSet, PhantomSubExecutor, RecordArena, TraceFiller, TraceStep, VmStateMut,
+use crate::{
+    arch::{
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionError,
+        ExecutionState, InsExecutorE1, PcIncOrSet, PhantomSubExecutor, RecordArena, TraceFiller,
+        TraceStep, VmChipWrapper, VmStateMut,
+    },
+    system::memory::MemoryAuxColsFactory,
 };
 
 #[cfg(test)]
@@ -91,12 +95,15 @@ pub struct PhantomRecord {
 /// `PhantomChip` is a special executor because it is stateful and stores all the phantom
 /// sub-executors.
 #[derive(derive_new::new)]
-pub struct PhantomChip<F> {
+pub struct PhantomExecutor<F> {
     phantom_executors: FxHashMap<PhantomDiscriminant, Box<dyn PhantomSubExecutor<F>>>,
     phantom_opcode: VmOpcode,
 }
 
-impl<F> PhantomChip<F> {
+pub struct PhantomFiller;
+pub type PhantomChip<F> = VmChipWrapper<F, PhantomFiller>;
+
+impl<F> PhantomExecutor<F> {
     pub(crate) fn add_sub_executor<P: PhantomSubExecutor<F> + 'static>(
         &mut self,
         sub_executor: P,
@@ -107,7 +114,7 @@ impl<F> PhantomChip<F> {
     }
 }
 
-impl<F> InsExecutorE1<F> for PhantomChip<F>
+impl<F> InsExecutorE1<F> for PhantomExecutor<F>
 where
     F: PrimeField32,
 {
@@ -173,7 +180,7 @@ where
     }
 }
 
-impl<F> TraceStep<F> for PhantomChip<F>
+impl<F> TraceStep<F> for PhantomExecutor<F>
 where
     F: PrimeField32,
 {
@@ -238,11 +245,8 @@ where
     }
 }
 
-impl<F> TraceFiller<F> for PhantomChip<F>
-where
-    F: PrimeField32,
-{
-    fn fill_trace_row(&self, mut row_slice: &mut [F]) {
+impl<F: Field> TraceFiller<F> for PhantomFiller {
+    fn fill_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, mut row_slice: &mut [F]) {
         // SAFETY: assume that row has size PhantomCols::<F>::width()
         let record: &PhantomRecord = unsafe { get_record_from_slice(&mut row_slice, ()) };
         let row: &mut PhantomCols<F> = row_slice.borrow_mut();

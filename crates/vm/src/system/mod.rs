@@ -7,8 +7,9 @@ use openvm_instructions::{LocalOpcode, PublishOpcode, SystemOpcode};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::{LookupBus, PermutationCheckBus},
+    p3_field::{Field, PrimeField32},
     prover::{cpu::CpuBackend, types::AirProvingContext},
-    AirRef,
+    AirRef, Chip,
 };
 
 pub mod connector;
@@ -32,8 +33,8 @@ use crate::{
     arch::{
         vm_poseidon2_config, AirInventory, AirInventoryError, BusIndexManager, ChipInventoryError,
         ExecutionBridge, ExecutionBus, ExecutorInventory, ExecutorInventoryError,
-        SystemChipComplex, SystemConfig, VmAirWrapper, VmChipComplex, VmCircuitConfig,
-        VmExecutionConfig, VmProverConfig,
+        RowMajorMatrixArena, SystemChipComplex, SystemConfig, VmAirWrapper, VmChipComplex,
+        VmCircuitConfig, VmExecutionConfig, VmProverConfig, PUBLIC_VALUES_AIR_ID,
     },
     system::{
         connector::VmConnectorChip,
@@ -42,7 +43,7 @@ use crate::{
             MemoryAirInventory, MemoryController,
         },
         native_adapter::{NativeAdapterAir, NativeAdapterStep},
-        phantom::{PhantomAir, PhantomChip},
+        phantom::{PhantomAir, PhantomChip, PhantomExecutor, PhantomFiller},
         poseidon2::new_poseidon2_periphery_air,
         program::{ProgramBus, ProgramChip, ProgramHandler},
         public_values::{PublicValuesChip, PublicValuesCoreAir, PublicValuesStep},
@@ -57,7 +58,7 @@ const PV_EXECUTOR_IDX: usize = 0;
 #[derive(AnyEnum, From)]
 pub enum SystemExecutor<F: 'static> {
     PublicValues(PublicValuesStep<F>),
-    Phantom(PhantomChip<F>),
+    Phantom(PhantomExecutor<F>),
 }
 
 /// SystemPort combines system resources needed by most extensions
@@ -153,7 +154,7 @@ impl<SC: StarkGenericConfig> SystemAirInventory<SC> {
     }
 }
 
-impl<F: 'static> VmExecutionConfig<F> for SystemConfig {
+impl<F: Field> VmExecutionConfig<F> for SystemConfig {
     type Executor = SystemExecutor<F>;
 
     /// The only way to create an [ExecutorInventory] is from a [SystemConfig]. This will add an
@@ -175,7 +176,7 @@ impl<F: 'static> VmExecutionConfig<F> for SystemConfig {
             inventory.add_executor(public_values, [PublishOpcode::PUBLISH.global_opcode()])?;
         }
         let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
-        let phantom_chip = PhantomChip::new(Default::default(), phantom_opcode);
+        let phantom_chip = PhantomExecutor::new(Default::default(), phantom_opcode);
         inventory.add_executor(phantom_chip, [phantom_opcode])?;
 
         Ok(inventory)
@@ -250,53 +251,26 @@ pub struct CpuSystemChipComplex<SC: StarkGenericConfig> {
     pub connector_chip: VmConnectorChip<Val<SC>>,
     /// Contains all memory chips
     pub memory_controller: MemoryController<Val<SC>>,
-    pub public_values: Option<PublicValuesChip<Val<SC>>>,
+    pub public_values_chip: Option<PublicValuesChip<Val<SC>>>,
 }
 
-impl<SC> SystemChipComplex<CpuBackend<SC>> for CpuSystemChipComplex<SC>
+impl<RA, SC> SystemChipComplex<RA, CpuBackend<SC>> for CpuSystemChipComplex<SC>
 where
+    RA: RowMajorMatrixArena<Val<SC>>,
     SC: StarkGenericConfig,
+    Val<SC>: PrimeField32,
 {
-    fn generate_proving_ctx(self) -> Vec<AirProvingContext<CpuBackend<SC>>> {
+    fn generate_proving_ctx(
+        self,
+        record_arenas: Vec<RA>,
+    ) -> Vec<AirProvingContext<CpuBackend<SC>>> {
         let program_ctx = self.program_chip.generate_proving_ctx();
-        self.connector_chip.generate_air_proof_input();
+        let connector_ctx = self.connector_chip.generate_proving_ctx(());
 
-        // Go through all chips in inventory in reverse order they were added (to resolve
-        // dependencies) Important Note: for air_id ordering reasons, we want to
-        // generate_air_proof_input for public values and memory chips **last** but include
-        // them into the `builder` **first**.
-        let mut public_values_input = None;
-        let mut insertion_order = self.inventory.insertion_order;
-        insertion_order.reverse();
-        let mut non_sys_inputs = Vec::with_capacity(insertion_order.len());
-        for chip_id in insertion_order {
-            let mut height = None;
-            if let Some(overridden_heights) = self.overridden_inventory_heights.as_ref() {
-                height = overridden_heights.chips.get(&chip_id).copied();
-            }
-            let air_proof_input = match chip_id {
-                ChipId::Executor(id) => {
-                    let chip = self.inventory.executors.pop().unwrap();
-                    assert_eq!(id, self.inventory.executors.len());
-                    generate_air_proof_input(chip, height)
-                }
-                ChipId::Periphery(id) => {
-                    let chip = self.inventory.periphery.pop().unwrap();
-                    assert_eq!(id, self.inventory.periphery.len());
-                    generate_air_proof_input(chip, height)
-                }
-            };
-            if has_pv_chip && chip_id == ChipId::Executor(Self::PV_EXECUTOR_IDX) {
-                public_values_input = Some(air_proof_input);
-            } else {
-                non_sys_inputs.push(air_proof_input);
-            }
-        }
-
-        if let Some(input) = public_values_input {
-            debug_assert_eq!(builder.curr_air_id, PUBLIC_VALUES_AIR_ID);
-            builder.add_air_proof_input(input);
-        }
+        let pv_ctx = self.public_values_chip.map(|chip| {
+            let mut arena = record_arenas.remove(PUBLIC_VALUES_AIR_ID);
+            chip.generate_proving_ctx(arena);
+        });
         // System: Memory Controller
         {
             // memory
@@ -309,15 +283,18 @@ where
     }
 }
 
-impl<SC, RA> VmProverConfig<SC, RA, CpuBackend<SC>> for SystemConfig
+impl<RA, SC> VmProverConfig<SC, RA, CpuBackend<SC>> for SystemConfig
 where
+    RA: RowMajorMatrixArena<Val<SC>>,
     SC: StarkGenericConfig,
+    Val<SC>: PrimeField32,
 {
-    type SystemChipComplex = SystemBase<Val<SC>>;
+    type SystemChipComplex = CpuSystemChipComplex<SC>;
 
     fn create_chip_complex(
         &self,
-    ) -> Result<VmChipComplex<RA, CpuBackend<SC>, SystemBase<Val<SC>>>, ChipInventoryError> {
+    ) -> Result<VmChipComplex<RA, CpuBackend<SC>, CpuSystemChipComplex<SC>>, ChipInventoryError>
+    {
         let mut bus_idx_mgr = BusIndexManager::new();
         let execution_bus = ExecutionBus::new(bus_idx_mgr.new_bus_idx());
         let memory_bus = MemoryBus::new(bus_idx_mgr.new_bus_idx());
@@ -397,10 +374,8 @@ where
             inventory.add_periphery_chip(chip);
         }
         let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
-        let phantom_chip = PhantomChip::new(execution_bus, program_bus, SystemOpcode::CLASS_OFFSET);
-        inventory
-            .add_executor(RefCell::new(phantom_chip), [phantom_opcode])
-            .unwrap();
+        let phantom_chip = PhantomChip::new(PhantomFiller, mem_helper.clone());
+        inventory.add_executor_chip(phantom_chip)?;
 
         let base = SystemBase {
             program_chip,

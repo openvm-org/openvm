@@ -1,4 +1,7 @@
-use crate::{arch::VmAirWrapper, system::native_adapter::NativeAdapterAir};
+use crate::{
+    arch::{VmAirWrapper, VmChipWrapper},
+    system::native_adapter::NativeAdapterAir,
+};
 
 mod columns;
 /// Chip to publish custom public values from VM programs.
@@ -9,3 +12,4 @@ pub use core::*;
 mod tests;
 
 pub type PublicValuesAir = VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir>;
+pub type PublicValuesChip<F> = VmChipWrapper<F, PublicValuesStep<F>>;

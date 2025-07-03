@@ -8,7 +8,7 @@ use openvm_circuit::{
         VmExecutionExtension, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
         VmProverExtension,
     },
-    system::phantom::PhantomChip,
+    system::phantom::PhantomExecutor,
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::{
