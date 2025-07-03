@@ -25,8 +25,6 @@ use openvm_stark_backend::{
 use rustc_hash::FxHashMap;
 
 use super::{GenerationError, PhantomSubExecutor, SystemConfig};
-#[cfg(feature = "bench-metrics")]
-use crate::metrics::VmMetrics;
 use crate::{
     arch::MatrixRecordArena,
     system::{
@@ -613,7 +611,6 @@ where
         mut self,
         record_arenas: Vec<RA>,
         trace_height_constraints: &[LinearConstraint],
-        #[cfg(feature = "bench-metrics")] metrics: &mut VmMetrics,
     ) -> Result<ProvingContext<PB>, GenerationError> {
         if trace_height_constraints.is_empty() {
             tracing::warn!("generating proof input without trace height constraints");
@@ -695,6 +692,7 @@ where
         })
     }
 
+    // TODO[jpw]: This doesn't belong here!
     // #[cfg(feature = "bench-metrics")]
     // fn finalize_metrics(&self, metrics: &mut VmMetrics)
     // where

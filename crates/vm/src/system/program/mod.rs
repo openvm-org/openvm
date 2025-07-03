@@ -2,7 +2,13 @@ use openvm_instructions::{
     instruction::{DebugInfo, Instruction},
     program::Program,
 };
-use openvm_stark_backend::{p3_field::PrimeField64, ChipUsageGetter};
+use openvm_stark_backend::{
+    config::StarkGenericConfig,
+    p3_field::PrimeField64,
+    p3_maybe_rayon::prelude::*,
+    prover::{cpu::CpuBackend, types::CommittedTraceData},
+    ChipUsageGetter,
+};
 
 use crate::{arch::ExecutionError, system::program::trace::padding_instruction};
 
@@ -18,15 +24,16 @@ pub use bus::*;
 
 const EXIT_CODE_FAIL: usize = 1;
 
+// TODO[jpw]: will this still be needed with rewriting of ins lookups?
 #[derive(Debug)]
-pub struct ProgramChip<F> {
+pub struct ProgramHandler<F> {
     pub air: ProgramAir,
     pub program: Program<F>,
     pub true_program_length: usize,
-    pub execution_frequencies: Vec<usize>,
+    pub execution_frequencies: Vec<u32>,
 }
 
-impl<F: PrimeField64> ProgramChip<F> {
+impl<F: PrimeField64> ProgramHandler<F> {
     pub fn new(bus: ProgramBus) -> Self {
         Self {
             execution_frequencies: vec![],
@@ -84,9 +91,18 @@ impl<F: PrimeField64> ProgramChip<F> {
                 program_len: self.program.len(),
             })
     }
+
+    pub fn filtered_execution_frequencies(&self) -> Vec<u32> {
+        self.program
+            .instructions_and_debug_infos
+            .par_iter()
+            .enumerate()
+            .filter_map(|(i, opt)| opt.is_some().then(|| self.execution_frequencies[i]))
+            .collect()
+    }
 }
 
-impl<F: PrimeField64> ChipUsageGetter for ProgramChip<F> {
+impl<F: PrimeField64> ChipUsageGetter for ProgramHandler<F> {
     fn air_name(&self) -> String {
         "ProgramChip".to_string()
     }
@@ -102,4 +118,12 @@ impl<F: PrimeField64> ChipUsageGetter for ProgramChip<F> {
     fn trace_width(&self) -> usize {
         1
     }
+}
+
+// For CPU backend only
+pub struct ProgramChip<SC: StarkGenericConfig> {
+    /// `i` -> frequency of instruction in `i`th row of trace matrix. This requires filtering
+    /// `program.instructions_and_debug_infos` to remove gaps.
+    pub filtered_exec_frequencies: Vec<u32>,
+    pub cached: CommittedTraceData<CpuBackend<SC>>,
 }

@@ -29,7 +29,7 @@ use static_assertions::assert_impl_all;
 
 use crate::{
     arch::{instructions::SystemOpcode::*, testing::READ_INSTRUCTION_BUS},
-    system::program::{trace::VmCommittedExe, ProgramBus, ProgramChip},
+    system::program::{trace::VmCommittedExe, ProgramBus, ProgramHandler},
 };
 
 assert_impl_all!(VmCommittedExe<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
@@ -37,7 +37,7 @@ assert_impl_all!(VmCommittedExe<BabyBearPoseidon2RootConfig>: Serialize, Deseria
 
 fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let bus = ProgramBus::new(READ_INSTRUCTION_BUS);
-    let mut chip = ProgramChip::new_with_program(program.clone(), bus);
+    let mut chip = ProgramHandler::new_with_program(program.clone(), bus);
     let mut execution_frequencies = vec![0; program.len()];
     for pc_idx in execution {
         execution_frequencies[pc_idx as usize] += 1;
@@ -179,7 +179,7 @@ fn test_program_negative() {
     let bus = ProgramBus::new(READ_INSTRUCTION_BUS);
     let program = Program::from_instructions(&instructions);
 
-    let mut chip = ProgramChip::new_with_program(program, bus);
+    let mut chip = ProgramHandler::new_with_program(program, bus);
     let execution_frequencies = vec![1; instructions.len()];
     for pc_idx in 0..instructions.len() {
         chip.get_instruction(pc_idx as u32 * DEFAULT_PC_STEP)

@@ -5,9 +5,9 @@ use openvm_circuit_derive::AnyEnum;
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerAir, VariableRangeCheckerBus};
 use openvm_instructions::{LocalOpcode, PublishOpcode, SystemOpcode};
 use openvm_stark_backend::{
-    config::StarkGenericConfig,
+    config::{StarkGenericConfig, Val},
     interaction::{LookupBus, PermutationCheckBus},
-    prover::cpu::CpuBackend,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
     AirRef,
 };
 
@@ -31,8 +31,9 @@ use public_values::PublicValuesAir;
 use crate::{
     arch::{
         vm_poseidon2_config, AirInventory, AirInventoryError, BusIndexManager, ChipInventoryError,
-        ExecutionBridge, ExecutionBus, ExecutorInventory, ExecutorInventoryError, SystemConfig,
-        VmAirWrapper, VmChipComplex, VmCircuitConfig, VmExecutionConfig, VmProverConfig,
+        ExecutionBridge, ExecutionBus, ExecutorInventory, ExecutorInventoryError,
+        SystemChipComplex, SystemConfig, VmAirWrapper, VmChipComplex, VmCircuitConfig,
+        VmExecutionConfig, VmProverConfig,
     },
     system::{
         connector::VmConnectorChip,
@@ -43,7 +44,7 @@ use crate::{
         native_adapter::{NativeAdapterAir, NativeAdapterStep},
         phantom::{PhantomAir, PhantomChip},
         poseidon2::new_poseidon2_periphery_air,
-        program::{ProgramBus, ProgramChip},
+        program::{ProgramBus, ProgramChip, ProgramHandler},
         public_values::{PublicValuesChip, PublicValuesCoreAir, PublicValuesStep},
     },
 };
@@ -244,18 +245,79 @@ impl<SC: StarkGenericConfig> VmCircuitConfig<SC> for SystemConfig {
 /// Base system chips for CPU backend. These chips must exactly correspond to the AIRs in
 /// [SystemAirInventory]. The following don't execute instructions, but are essential
 /// for the VM architecture.
-pub struct SystemBase<F> {
-    pub program_chip: ProgramChip<F>,
-    pub connector_chip: VmConnectorChip<F>,
+pub struct CpuSystemChipComplex<SC: StarkGenericConfig> {
+    pub program_chip: ProgramChip<SC>,
+    pub connector_chip: VmConnectorChip<Val<SC>>,
     /// Contains all memory chips
-    pub memory_controller: MemoryController<F>,
-    pub public_values: Option<PublicValuesChip<F>>,
+    pub memory_controller: MemoryController<Val<SC>>,
+    pub public_values: Option<PublicValuesChip<Val<SC>>>,
 }
 
-impl<SC, RA> VmProverConfig<SC, RA, CpuBackend<SC>> for SystemConfig {
+impl<SC> SystemChipComplex<CpuBackend<SC>> for CpuSystemChipComplex<SC>
+where
+    SC: StarkGenericConfig,
+{
+    fn generate_proving_ctx(self) -> Vec<AirProvingContext<CpuBackend<SC>>> {
+        let program_ctx = self.program_chip.generate_proving_ctx();
+        self.connector_chip.generate_air_proof_input();
+
+        // Go through all chips in inventory in reverse order they were added (to resolve
+        // dependencies) Important Note: for air_id ordering reasons, we want to
+        // generate_air_proof_input for public values and memory chips **last** but include
+        // them into the `builder` **first**.
+        let mut public_values_input = None;
+        let mut insertion_order = self.inventory.insertion_order;
+        insertion_order.reverse();
+        let mut non_sys_inputs = Vec::with_capacity(insertion_order.len());
+        for chip_id in insertion_order {
+            let mut height = None;
+            if let Some(overridden_heights) = self.overridden_inventory_heights.as_ref() {
+                height = overridden_heights.chips.get(&chip_id).copied();
+            }
+            let air_proof_input = match chip_id {
+                ChipId::Executor(id) => {
+                    let chip = self.inventory.executors.pop().unwrap();
+                    assert_eq!(id, self.inventory.executors.len());
+                    generate_air_proof_input(chip, height)
+                }
+                ChipId::Periphery(id) => {
+                    let chip = self.inventory.periphery.pop().unwrap();
+                    assert_eq!(id, self.inventory.periphery.len());
+                    generate_air_proof_input(chip, height)
+                }
+            };
+            if has_pv_chip && chip_id == ChipId::Executor(Self::PV_EXECUTOR_IDX) {
+                public_values_input = Some(air_proof_input);
+            } else {
+                non_sys_inputs.push(air_proof_input);
+            }
+        }
+
+        if let Some(input) = public_values_input {
+            debug_assert_eq!(builder.curr_air_id, PUBLIC_VALUES_AIR_ID);
+            builder.add_air_proof_input(input);
+        }
+        // System: Memory Controller
+        {
+            // memory
+            let air_proof_inputs = memory_controller.generate_air_proof_inputs();
+            for air_proof_input in air_proof_inputs {
+                builder.add_air_proof_input(air_proof_input);
+            }
+        }
+        todo!()
+    }
+}
+
+impl<SC, RA> VmProverConfig<SC, RA, CpuBackend<SC>> for SystemConfig
+where
+    SC: StarkGenericConfig,
+{
+    type SystemChipComplex = SystemBase<Val<SC>>;
+
     fn create_chip_complex(
         &self,
-    ) -> Result<VmChipComplex<SC, RA, CpuBackend<SC>>, ChipInventoryError> {
+    ) -> Result<VmChipComplex<RA, CpuBackend<SC>, SystemBase<Val<SC>>>, ChipInventoryError> {
         let mut bus_idx_mgr = BusIndexManager::new();
         let execution_bus = ExecutionBus::new(bus_idx_mgr.new_bus_idx());
         let memory_bus = MemoryBus::new(bus_idx_mgr.new_bus_idx());
@@ -280,7 +342,7 @@ impl<SC, RA> VmProverConfig<SC, RA, CpuBackend<SC>> for SystemConfig {
             )
         };
         let memory_bridge = memory_controller.memory_bridge();
-        let program_chip = ProgramChip::new(program_bus);
+        let program_chip = ProgramHandler::new(program_bus);
         let connector_chip = VmConnectorChip::new(
             execution_bus,
             program_bus,
