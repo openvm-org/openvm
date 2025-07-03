@@ -4,7 +4,7 @@ use itertools::izip;
 use openvm_circuit::{
     arch::{
         execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
-        AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc,
+        AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError,
         MinimalInstruction, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
         VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
@@ -362,7 +362,10 @@ unsafe fn execute_e1_impl<
         2 => b_val * c_val, // MUL
         3 => {
             // DIV
-            assert!(!c_val.is_zero(), "Division by zero");
+            if c_val.is_zero() {
+                vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+                return;
+            }
             b_val * c_val.inverse()
         }
         _ => panic!("Invalid field arithmetic opcode: {OPCODE}"),

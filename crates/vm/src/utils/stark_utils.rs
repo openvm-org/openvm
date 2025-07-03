@@ -264,23 +264,23 @@ where
 
 type ExecuteAndProveResult<SC> = Result<VerificationDataWithFriParams<SC>, VerificationError>;
 
-// /// Executes program and runs simple STARK prover test (keygen, prove, verify).
-// pub fn execute_and_prove_program<SC: StarkGenericConfig, E: StarkFriEngine<SC>, VC>(
-//     program: Program<Val<SC>>,
-//     input_stream: impl Into<Streams<Val<SC>>> + Clone,
-//     config: VC,
-//     engine: &E,
-// ) -> ExecuteAndProveResult<SC>
-// where
-//     Val<SC>: PrimeField32,
-//     VC: VmConfig<Val<SC>> + Clone,
-//     VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
-//     VC::Periphery: Chip<SC>,
-// {
-//     let span = tracing::info_span!("execute_and_prove_program").entered();
-//     let test_proof_input =
-//         gen_vm_program_test_proof_input::<_, _, E>(program, input_stream, config);
-//     let vparams = test_proof_input.run_test(engine)?;
-//     span.exit();
-//     Ok(vparams)
-// }
+/// Executes program and runs simple STARK prover test (keygen, prove, verify).
+pub fn execute_and_prove_program<SC: StarkGenericConfig, E: StarkFriEngine<SC>, VC>(
+    program: Program<Val<SC>>,
+    input_stream: impl Into<Streams<Val<SC>>> + Clone,
+    config: VC,
+    engine: &E,
+) -> ExecuteAndProveResult<SC>
+where
+    Val<SC>: PrimeField32,
+    VC: VmConfig<Val<SC>> + Clone,
+    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
+    VC::Periphery: Chip<SC>,
+{
+    let span = tracing::info_span!("execute_and_prove_program").entered();
+    let test_proof_input =
+        gen_vm_program_test_proof_input::<_, _, E>(program, input_stream, config);
+    let vparams = test_proof_input.run_test(engine)?;
+    span.exit();
+    Ok(vparams)
+}

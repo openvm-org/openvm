@@ -27,7 +27,6 @@ mod tests {
         let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
         pkg_dir.pop();
         pkg_dir.pop();
-        pkg_dir.pop();
         pkg_dir.push("crates/sdk/guest/fib");
 
         let vm_config = SdkVmConfig::builder()

@@ -804,23 +804,23 @@ fn mem_fill_helper<F: PrimeField32>(
 #[derive(AlignedBytesBorrow)]
 #[repr(C)]
 struct Pos2PreCompute<'a, F: Field, const SBOX_REGISTERS: usize> {
+    subchip: &'a Poseidon2SubChip<F, SBOX_REGISTERS>,
     output_register: u32,
     input_register_1: u32,
     input_register_2: u32,
-    subchip: &'a Poseidon2SubChip<F, SBOX_REGISTERS>,
 }
 
 #[derive(AlignedBytesBorrow)]
 #[repr(C)]
 struct VerifyBatchPreCompute<'a, F: Field, const SBOX_REGISTERS: usize> {
+    subchip: &'a Poseidon2SubChip<F, SBOX_REGISTERS>,
     dim_register: u32,
     opened_register: u32,
     opened_length_register: u32,
     proof_id_ptr: u32,
     index_register: u32,
     commit_register: u32,
-    opened_element_size_inv: F,
-    subchip: &'a Poseidon2SubChip<F, SBOX_REGISTERS>,
+    opened_element_size: F,
 }
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE1<F>
@@ -871,10 +871,10 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE1<F>
             }
 
             *data = Pos2PreCompute {
+                subchip: &self.subchip,
                 output_register: a,
                 input_register_1: b,
                 input_register_2: c,
-                subchip: &self.subchip,
             };
             if opcode == PERM_POS2.global_opcode() {
                 Ok(execute_pos2_e1_impl::<_, _, SBOX_REGISTERS, true>)
@@ -883,15 +883,21 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE1<F>
             }
         } else if opcode == VERIFY_BATCH.global_opcode() {
             let data: &mut VerifyBatchPreCompute<F, SBOX_REGISTERS> = data.borrow_mut();
+            let opened_element_size_inv = g;
+            // calc inverse fast assuming opened_element_size in {1, 4}
+            let mut opened_element_size = F::ONE;
+            while opened_element_size * opened_element_size_inv != F::ONE {
+                opened_element_size += F::ONE;
+            }
             *data = VerifyBatchPreCompute {
+                subchip: &self.subchip,
                 dim_register: a,
                 opened_register: b,
                 opened_length_register: c,
                 proof_id_ptr: d,
                 index_register: e,
                 commit_register: f,
-                opened_element_size_inv: g,
-                subchip: &self.subchip,
+                opened_element_size,
             };
             Ok(execute_verify_batch_e1_impl::<_, _, SBOX_REGISTERS>)
         } else {
@@ -966,13 +972,7 @@ unsafe fn execute_verify_batch_e1_impl<
 
     let pre_compute: &VerifyBatchPreCompute<F, SBOX_REGISTERS> = pre_compute.borrow();
     let subchip = pre_compute.subchip;
-    let opened_element_size_inv = pre_compute.opened_element_size_inv;
-
-    // calc inverse fast assuming opened_element_size in {1, 4}
-    let mut opened_element_size = F::ONE;
-    while opened_element_size * opened_element_size_inv != F::ONE {
-        opened_element_size += F::ONE;
-    }
+    let opened_element_size = pre_compute.opened_element_size;
 
     let [proof_id]: [F; 1] = vm_state.host_read(AS::Native as u32, pre_compute.proof_id_ptr);
     let [dim_base_pointer]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.dim_register);

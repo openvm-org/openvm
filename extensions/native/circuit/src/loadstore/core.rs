@@ -257,10 +257,7 @@ where
         let d = d.as_canonical_u32();
         let e = e.as_canonical_u32();
 
-        if d != AS::Native as u32 {
-            return Err(InvalidInstruction(pc));
-        }
-        if e != AS::Native as u32 {
+        if d != AS::Native as u32 || e != AS::Native as u32 {
             return Err(InvalidInstruction(pc));
         }
 
@@ -318,7 +315,8 @@ unsafe fn execute_hint_storew<F: PrimeField32, CTX: E1E2ExecutionCtx, const NUM_
     let [read_cell]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.c);
 
     if vm_state.streams.hint_stream.len() < NUM_CELLS {
-        panic!("Hint stream out of bounds at pc: {}", vm_state.pc);
+        vm_state.exit_code = Err(ExecutionError::HintOutOfBounds { pc: vm_state.pc });
+        return;
     }
     let data: [F; NUM_CELLS] =
         array::from_fn(|_| vm_state.streams.hint_stream.pop_front().unwrap());

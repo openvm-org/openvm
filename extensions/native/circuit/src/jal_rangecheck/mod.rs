@@ -6,9 +6,9 @@ use std::{
 use openvm_circuit::{
     arch::{
         execution_mode::E1E2ExecutionCtx, get_record_from_slice, EmptyMultiRowLayout, ExecuteFunc,
-        ExecutionBridge, ExecutionError::InvalidInstruction, ExecutionState, MatrixRecordArena,
-        NewVmChipWrapper, PcIncOrSet, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
-        VmSegmentState, VmStateMut,
+        ExecutionBridge, ExecutionError, ExecutionError::InvalidInstruction, ExecutionState,
+        MatrixRecordArena, NewVmChipWrapper, PcIncOrSet, RecordArena, Result, StepExecutorE1,
+        TraceFiller, TraceStep, VmSegmentState, VmStateMut,
     },
     system::{
         memory::{
@@ -306,8 +306,8 @@ struct JalPreCompute<F> {
 #[repr(C)]
 struct RangeCheckPreCompute {
     a: u32,
-    b: u32,
-    c: u32,
+    b: u8,
+    c: u8,
 }
 
 impl<F> StepExecutorE1<F> for JalRangeCheckStep
@@ -353,8 +353,15 @@ where
             let a = a.as_canonical_u32();
             let b = b.as_canonical_u32();
             let c = c.as_canonical_u32();
+            if b > 16 || c > 14 {
+                return Err(InvalidInstruction(pc));
+            }
 
-            *data = RangeCheckPreCompute { a, b, c };
+            *data = RangeCheckPreCompute {
+                a,
+                b: b as u8,
+                c: c as u8,
+            };
             Ok(execute_range_check_e1_impl)
         }
     }
@@ -380,7 +387,6 @@ unsafe fn execute_range_check_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     let [a_val]: [F; 1] = vm_state.host_read(AS::Native as u32, pre_compute.a);
 
     vm_state.vm_write(AS::Native as u32, pre_compute.a, &[a_val]);
-    #[cfg(debug_assertions)]
     {
         let a_val = a_val.as_canonical_u32();
         let b = pre_compute.b;
@@ -388,10 +394,11 @@ unsafe fn execute_range_check_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
         let x = a_val & 0xffff;
         let y = a_val >> 16;
 
-        assert!(b <= 16);
-        assert!(c <= 14);
-        assert!(x < (1 << b));
-        assert!(y < (1 << c));
+        // The range of `b`,`c` had already been checked in `pre_compute_e1`.
+        if !(x < (1 << b) && y < (1 << c)) {
+            vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+            return;
+        }
     }
     vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
     vm_state.instret += 1;
