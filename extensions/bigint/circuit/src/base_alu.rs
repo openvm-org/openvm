@@ -5,7 +5,7 @@ use std::{
 
 use openvm_bigint_transpiler::Rv32BaseAlu256Opcode;
 use openvm_circuit::arch::{
-    execution_mode::E1E2ExecutionCtx, ExecuteFunc, ExecutionError::InvalidInstruction,
+    execution_mode::E1ExecutionCtx, ExecuteFunc, ExecutionError::InvalidInstruction,
     MatrixRecordArena, NewVmChipWrapper, StepExecutorE1, VmAirWrapper, VmSegmentState,
 };
 use openvm_circuit_derive::{TraceFiller, TraceStep};
@@ -66,7 +66,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Rv32BaseAlu256Step {
         data: &mut [u8],
     ) -> openvm_circuit::arch::Result<ExecuteFunc<F, Ctx>>
     where
-        Ctx: E1E2ExecutionCtx,
+        Ctx: E1ExecutionCtx,
     {
         let data: &mut BaseAluPreCompute = data.borrow_mut();
         let Instruction {
@@ -100,7 +100,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Rv32BaseAlu256Step {
     }
 }
 
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx, OP: AluOp>(
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: AluOp>(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {

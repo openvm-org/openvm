@@ -316,7 +316,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         data: &mut [u8],
                     ) -> ::openvm_circuit::arch::execution::Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>>
                     where
-                        Ctx: ::openvm_circuit::arch::execution_mode::E1E2ExecutionCtx, {
+                        Ctx: ::openvm_circuit::arch::execution_mode::E1ExecutionCtx, {
                         self.0.pre_compute_e1(pc, inst, data)
                     }
 
@@ -387,7 +387,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         data: &mut [u8],
                     ) -> ::openvm_circuit::arch::execution::Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>>
                     where
-                        Ctx: ::openvm_circuit::arch::execution_mode::E1E2ExecutionCtx, {
+                        Ctx: ::openvm_circuit::arch::execution_mode::E1ExecutionCtx, {
                         match self {
                             #(#pre_compute_e1_arms,)*
                         }
@@ -404,6 +404,140 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                 }
             }
             .into()
+        }
+        Data::Union(_) => unimplemented!("Unions are not supported"),
+    }
+}
+
+#[proc_macro_derive(InsExecutorE2)]
+pub fn ins_executor_e2_executor_derive(input: TokenStream) -> TokenStream {
+    let ast: syn::DeriveInput = syn::parse(input).unwrap();
+
+    let name = &ast.ident;
+    let generics = &ast.generics;
+    let (impl_generics, ty_generics, _) = generics.split_for_impl();
+
+    match &ast.data {
+        Data::Struct(inner) => {
+            // Check if the struct has only one unnamed field
+            let inner_ty = match &inner.fields {
+                Fields::Unnamed(fields) => {
+                    if fields.unnamed.len() != 1 {
+                        panic!("Only one unnamed field is supported");
+                    }
+                    fields.unnamed.first().unwrap().ty.clone()
+                }
+                _ => panic!("Only unnamed fields are supported"),
+            };
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+            // crate. Assume F is already generic of the field.
+            let mut new_generics = generics.clone();
+            let where_clause = new_generics.make_where_clause();
+            where_clause
+                .predicates
+                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InsExecutorE1<F> });
+            quote! {
+                impl #impl_generics ::openvm_circuit::arch::InsExecutorE2<F> for #name #ty_generics #where_clause {
+                    #[inline(always)]
+                    fn e2_pre_compute_size(&self) -> usize {
+                        self.0.pre_compute_size()
+                    }
+                    #[inline(always)]
+                    fn pre_compute_e2<Ctx>(
+                        &self,
+                        pc: u32,
+                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        data: &mut [u8],
+                    ) -> ::openvm_circuit::arch::execution::Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>>
+                    where
+                        Ctx: ::openvm_circuit::arch::execution_mode::E2ExecutionCtx, {
+                        self.0.pre_compute_e2(pc, inst, data)
+                    }
+
+                    fn set_trace_height(&mut self, height: usize) {
+                        self.0.set_trace_buffer_height(height);
+                    }
+                }
+            }
+                .into()
+        }
+        Data::Enum(e) => {
+            let variants = e
+                .variants
+                .iter()
+                .map(|variant| {
+                    let variant_name = &variant.ident;
+
+                    let mut fields = variant.fields.iter();
+                    let field = fields.next().unwrap();
+                    assert!(fields.next().is_none(), "Only one field is supported");
+                    (variant_name, field)
+                })
+                .collect::<Vec<_>>();
+            let first_ty_generic = ast
+                .generics
+                .params
+                .first()
+                .and_then(|param| match param {
+                    GenericParam::Type(type_param) => Some(&type_param.ident),
+                    _ => None,
+                })
+                .expect("First generic must be type for Field");
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+            // crate. Assume F is already generic of the field.
+            let pre_compute_size_arms = variants.iter().map(|(variant_name, field)| {
+                let field_ty = &field.ty;
+                quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>>::pre_compute_size(x)
+                }
+            }).collect::<Vec<_>>();
+            let pre_compute_e2_arms = variants.iter().map(|(variant_name, field)| {
+                let field_ty = &field.ty;
+                quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>>::pre_compute_e2(x, chip_idx, pc, instruction, data)
+                }
+            }).collect::<Vec<_>>();
+            let set_trace_height_arms = variants.iter().map(|(variant_name, field)| {
+                let field_ty = &field.ty;
+                quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>>::set_trace_height(x, height)
+                }
+            }).collect::<Vec<_>>();
+
+            quote! {
+                impl #impl_generics ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic> for #name #ty_generics {
+                    #[inline(always)]
+                    fn pre_compute_size(&self) -> usize {
+                        match self {
+                            #(#pre_compute_size_arms,)*
+                        }
+                    }
+
+                    #[inline(always)]
+                    fn pre_compute_e2<Ctx>(
+                        &self,
+                        pc: u32,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        data: &mut [u8],
+                    ) -> ::openvm_circuit::arch::execution::Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>>
+                    where
+                        Ctx: ::openvm_circuit::arch::execution_mode::E2ExecutionCtx, {
+                        match self {
+                            #(#pre_compute_e2_arms,)*
+                        }
+                    }
+
+                    fn set_trace_height(
+                        &mut self,
+                        height: usize,
+                    ) {
+                        match self {
+                            #(#set_trace_height_arms,)*
+                        }
+                    }
+                }
+            }
+                .into()
         }
         Data::Union(_) => unimplemented!("Unions are not supported"),
     }

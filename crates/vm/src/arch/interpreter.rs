@@ -20,7 +20,7 @@ use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{
     arch::{
-        execution_control::ExecutionControl, execution_mode::E1E2ExecutionCtx, ExecutionError,
+        execution_control::ExecutionControl, execution_mode::E1ExecutionCtx, ExecutionError,
         ExecutionError::InvalidInstruction, InsExecutorE1, PreComputeInstruction, Streams,
         VmChipComplex, VmConfig, VmSegmentState,
     },
@@ -53,7 +53,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
 
     /// Execute the VM program with the given execution control and inputs. Returns the final VM
     /// state with the `ExecutionControl` context.
-    pub fn execute<Ctx: E1E2ExecutionCtx>(
+    pub fn execute<Ctx: E1ExecutionCtx>(
         &self,
         ctx: Ctx,
         inputs: impl Into<Streams<F>>,
@@ -112,7 +112,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
 }
 
 #[inline(never)]
-unsafe fn execute_impl<F: PrimeField32, Ctx: E1E2ExecutionCtx>(
+unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
     program: &Program<F>,
     vm_state: &mut VmSegmentState<F, Ctx>,
     fn_ptrs: &[PreComputeInstruction<F, Ctx>],
@@ -184,7 +184,7 @@ impl Drop for AlignedBuf {
     }
 }
 
-unsafe fn terminate_execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+unsafe fn terminate_execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
@@ -192,7 +192,7 @@ unsafe fn terminate_execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     vm_state.exit_code = Ok(Some(pre_compute.exit_code));
 }
 
-unsafe fn debug_panic_execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+unsafe fn debug_panic_execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
@@ -200,7 +200,7 @@ unsafe fn debug_panic_execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
     vm_state.exit_code = Err(ExecutionError::Fail { pc: pre_compute.pc });
 }
 
-unsafe fn nop_execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+unsafe fn nop_execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     _pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
@@ -249,7 +249,7 @@ fn get_pre_compute_instructions<
     F: PrimeField32,
     E: InsExecutorE1<F>,
     P,
-    Ctx: E1E2ExecutionCtx,
+    Ctx: E1ExecutionCtx,
 >(
     program: &'a Program<F>,
     chip_complex: &'a VmChipComplex<F, E, P>,

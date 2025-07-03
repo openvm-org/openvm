@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        execution_mode::E1ExecutionCtx, get_record_from_slice, AdapterAirContext,
         AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc,
         ExecutionError::InvalidInstruction, MinimalInstruction, RecordArena, Result,
         StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmSegmentState,
@@ -438,7 +438,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
+    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -479,12 +479,7 @@ where
     }
 }
 
-unsafe fn execute_e1_impl<
-    F: PrimeField32,
-    CTX: E1E2ExecutionCtx,
-    const IS_IMM: bool,
-    OP: ShiftOp,
->(
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_IMM: bool, OP: ShiftOp>(
     pre_compute: &[u8],
     state: &mut VmSegmentState<F, CTX>,
 ) {

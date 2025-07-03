@@ -7,7 +7,7 @@ use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, E1ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
         EmptyAdapterCoreLayout, ExecuteFunc, MinimalInstruction, RecordArena, Result,
         StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
@@ -477,7 +477,7 @@ where
         todo!()
     }
 
-    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
+    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,

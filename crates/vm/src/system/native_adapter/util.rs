@@ -3,7 +3,7 @@ use openvm_instructions::{riscv::RV32_IMM_AS, NATIVE_AS};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
-    arch::{execution_mode::E1E2ExecutionCtx, VmStateMut},
+    arch::{execution_mode::E1ExecutionCtx, VmStateMut},
     system::memory::{offline_checker::MemoryWriteAuxCols, online::GuestMemory},
 };
 
@@ -49,7 +49,7 @@ pub fn memory_read_native_from_state<Ctx, F, const N: usize>(
 ) -> [F; N]
 where
     F: PrimeField32,
-    Ctx: E1E2ExecutionCtx,
+    Ctx: E1ExecutionCtx,
 {
     state.ctx.on_memory_operation(NATIVE_AS, ptr, N as u32);
 
@@ -64,7 +64,7 @@ pub fn memory_read_or_imm_native_from_state<Ctx, F>(
 ) -> F
 where
     F: PrimeField32,
-    Ctx: E1E2ExecutionCtx,
+    Ctx: E1ExecutionCtx,
 {
     debug_assert!(addr_space == RV32_IMM_AS || addr_space == NATIVE_AS);
 
@@ -83,7 +83,7 @@ pub fn memory_write_native_from_state<Ctx, F, const N: usize>(
     data: [F; N],
 ) where
     F: PrimeField32,
-    Ctx: E1E2ExecutionCtx,
+    Ctx: E1ExecutionCtx,
 {
     state.ctx.on_memory_operation(NATIVE_AS, ptr, N as u32);
 

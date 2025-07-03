@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, get_record_from_slice, instructions::LocalOpcode,
+        execution_mode::E1ExecutionCtx, get_record_from_slice, instructions::LocalOpcode,
         AdapterAirContext, AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout,
         ExecuteFunc, ExecutionError, ExecutionError::InvalidInstruction, RecordArena, Result,
         StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmSegmentState,
@@ -232,7 +232,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
+    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -273,7 +273,7 @@ where
     }
 }
 
-unsafe fn execute_loadw<F: PrimeField32, CTX: E1E2ExecutionCtx, const NUM_CELLS: usize>(
+unsafe fn execute_loadw<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELLS: usize>(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
@@ -290,7 +290,7 @@ unsafe fn execute_loadw<F: PrimeField32, CTX: E1E2ExecutionCtx, const NUM_CELLS:
     vm_state.instret += 1;
 }
 
-unsafe fn execute_storew<F: PrimeField32, CTX: E1E2ExecutionCtx, const NUM_CELLS: usize>(
+unsafe fn execute_storew<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELLS: usize>(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
@@ -306,7 +306,7 @@ unsafe fn execute_storew<F: PrimeField32, CTX: E1E2ExecutionCtx, const NUM_CELLS
     vm_state.instret += 1;
 }
 
-unsafe fn execute_hint_storew<F: PrimeField32, CTX: E1E2ExecutionCtx, const NUM_CELLS: usize>(
+unsafe fn execute_hint_storew<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELLS: usize>(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {

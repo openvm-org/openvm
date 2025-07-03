@@ -2,7 +2,7 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, get_record_from_slice, CustomBorrow, ExecuteFunc,
+        execution_mode::E1ExecutionCtx, get_record_from_slice, CustomBorrow, ExecuteFunc,
         ExecutionBridge, ExecutionError, ExecutionError::InvalidInstruction, ExecutionState,
         MatrixRecordArena, MultiRowLayout, MultiRowMetadata, NewVmChipWrapper, RecordArena, Result,
         SizedRecord, StepExecutorE1, TraceFiller, TraceStep, VmSegmentState, VmStateMut,
@@ -614,7 +614,7 @@ where
         size_of::<HintStorePreCompute>()
     }
 
-    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
+    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -648,7 +648,7 @@ where
     }
 }
 
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx, const IS_HINT_STOREW: bool>(
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_HINT_STOREW: bool>(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {

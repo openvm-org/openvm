@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterTraceStep, Result,
+        execution_mode::E1ExecutionCtx, AdapterAirContext, AdapterTraceStep, Result,
         StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
@@ -385,7 +385,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
+    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -452,7 +452,7 @@ where
 
 unsafe fn execute_e1_impl<
     F: PrimeField32,
-    CTX: E1E2ExecutionCtx,
+    CTX: E1ExecutionCtx,
     OP: LoadStoreOp,
     const ENABLED: bool,
 >(

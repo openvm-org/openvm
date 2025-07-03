@@ -5,7 +5,7 @@ use super::{
     segment_ctx::{Segment, SegmentationCtx},
 };
 use crate::{
-    arch::{execution_mode::E1E2ExecutionCtx, VmSegmentState},
+    arch::{execution_mode::E1ExecutionCtx, VmSegmentState},
     system::memory::dimensions::MemoryDimensions,
 };
 
@@ -106,7 +106,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     }
 }
 
-impl<const PAGE_BITS: usize> E1E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
+impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32) {
         debug_assert!(
             address_space != RV32_IMM_AS,

@@ -19,7 +19,7 @@ use std::borrow::{Borrow, BorrowMut};
 
 pub use air::KeccakVmAir;
 use openvm_circuit::arch::{
-    execution_mode::E1E2ExecutionCtx, ExecuteFunc, ExecutionBridge,
+    execution_mode::E1ExecutionCtx, ExecuteFunc, ExecutionBridge,
     ExecutionError::InvalidInstruction, MatrixRecordArena, NewVmChipWrapper, Result,
     StepExecutorE1, VmSegmentState,
 };
@@ -109,7 +109,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>>
     where
-        Ctx: E1E2ExecutionCtx,
+        Ctx: E1ExecutionCtx,
     {
         let data: &mut KeccakPreCompute = data.borrow_mut();
         let Instruction {
@@ -135,7 +135,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
     }
 }
 
-unsafe fn execute_impl<F: PrimeField32, CTX: E1E2ExecutionCtx, const IS_E1: bool>(
+unsafe fn execute_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_E1: bool>(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {

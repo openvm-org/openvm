@@ -2,7 +2,7 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        execution_mode::E1ExecutionCtx, get_record_from_slice, AdapterAirContext,
         AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc, ImmInstruction,
         RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir,
         VmSegmentState, VmStateMut,
@@ -252,7 +252,7 @@ where
         size_of::<JalLuiPreCompute>()
     }
 
-    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
+    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
         &self,
         _pc: u32,
         inst: &Instruction<F>,
@@ -293,7 +293,7 @@ where
 
 unsafe fn execute_e1_impl<
     F: PrimeField32,
-    CTX: E1E2ExecutionCtx,
+    CTX: E1ExecutionCtx,
     const IS_JAL: bool,
     const ENABLED: bool,
 >(

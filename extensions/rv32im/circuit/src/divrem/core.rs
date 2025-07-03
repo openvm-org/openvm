@@ -7,7 +7,7 @@ use num_bigint::BigUint;
 use num_integer::Integer;
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        execution_mode::E1ExecutionCtx, get_record_from_slice, AdapterAirContext,
         AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc,
         ExecutionError::InvalidInstruction, MinimalInstruction, RecordArena, Result,
         StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmSegmentState,
@@ -588,7 +588,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
+    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -617,7 +617,7 @@ where
     }
 }
 
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx, OP: DivRemOp>(
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: DivRemOp>(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
