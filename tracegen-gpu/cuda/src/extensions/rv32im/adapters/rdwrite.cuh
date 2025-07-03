@@ -60,8 +60,7 @@ struct Rv32CondRdWriteAdapter {
             Rv32RdWriteAdapter adapter(mem_helper.range_checker);
             adapter.fill_trace_row(inner, record);
         } else {
-            COL_WRITE_VALUE(inner, Rv32RdWriteAdapterCols, rd_ptr, 0u);
-            mem_helper.fill_zero(inner.slice_from(COL_INDEX(Rv32RdWriteAdapterCols, rd_aux_cols)));
+            inner.fill_zero(0, sizeof(Rv32RdWriteAdapterCols<uint8_t>));
             COL_WRITE_VALUE(
                 inner, Rv32RdWriteAdapterCols, from_state.timestamp, record.from_timestamp
             );
