@@ -289,6 +289,22 @@ impl FieldExpr {
         ret.setup_values = setup_values;
         ret
     }
+
+    pub fn num_inputs(&self) -> usize {
+        self.builder.num_input
+    }
+
+    pub fn num_vars(&self) -> usize {
+        self.builder.num_variables
+    }
+
+    pub fn num_flags(&self) -> usize {
+        self.builder.num_flags
+    }
+
+    pub fn output_indices(&self) -> &[usize] {
+        &self.builder.output_indices
+    }
 }
 
 impl Deref for FieldExpr {

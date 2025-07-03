@@ -91,7 +91,7 @@ pub fn fp2_muldiv_expr(
 // Output: Fp2
 #[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1)]
 pub struct Fp2MulDivChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    pub Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
+    pub(crate) Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
 );
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
@@ -145,7 +145,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
     }
 
     pub fn expr(&self) -> &FieldExpr {
-        &self.0.step.expr
+        &self.0.step.0.expr
     }
 }
 

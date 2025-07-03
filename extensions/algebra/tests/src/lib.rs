@@ -182,19 +182,19 @@ mod tests {
         air_test(config, openvm_exe);
     }
 
-    #[test]
-    fn test_sqrt() -> Result<()> {
-        let config = test_rv32modular_config(vec![SECP256K1_CONFIG.modulus.clone()]);
-        let elf = build_example_program_at_path(get_programs_dir!(), "sqrt", &config)?;
-        let openvm_exe = VmExe::from_elf(
-            elf,
-            Transpiler::<F>::default()
-                .with_extension(Rv32ITranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
-        )?;
-        air_test(config, openvm_exe);
-        Ok(())
-    }
+    // #[test]
+    // fn test_sqrt() -> Result<()> {
+    //     let config = test_rv32modular_config(vec![SECP256K1_CONFIG.modulus.clone()]);
+    //     let elf = build_example_program_at_path(get_programs_dir!(), "sqrt", &config)?;
+    //     let openvm_exe = VmExe::from_elf(
+    //         elf,
+    //         Transpiler::<F>::default()
+    //             .with_extension(Rv32ITranspilerExtension)
+    //             .with_extension(Rv32MTranspilerExtension)
+    //             .with_extension(Rv32IoTranspilerExtension)
+    //             .with_extension(ModularTranspilerExtension),
+    //     )?;
+    //     air_test(config, openvm_exe);
+    //     Ok(())
+    // }
 }

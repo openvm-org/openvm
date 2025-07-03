@@ -28,7 +28,7 @@ use strum::EnumCount;
 
 use crate::modular_chip::{
     ModularAddSubChip, ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir,
-    ModularIsEqualStep, ModularMulDivChip,
+    ModularMulDivChip, VmModularIsEqualStep,
 };
 
 // TODO: this should be decided after e2 execution
@@ -185,7 +185,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                             start_offset,
                         ),
                     ),
-                    ModularIsEqualStep::new(
+                    VmModularIsEqualStep::new(
                         Rv32IsEqualModeAdapterStep::new(pointer_max_bits, bitwise_lu_chip.clone()),
                         modulus_limbs,
                         start_offset,
@@ -253,7 +253,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                             start_offset,
                         ),
                     ),
-                    ModularIsEqualStep::new(
+                    VmModularIsEqualStep::new(
                         Rv32IsEqualModeAdapterStep::new(pointer_max_bits, bitwise_lu_chip.clone()),
                         modulus_limbs,
                         start_offset,
