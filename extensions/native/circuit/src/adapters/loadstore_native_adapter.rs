@@ -5,9 +5,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
-        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, ExecutionBridge, ExecutionState,
-        VmAdapterAir, VmAdapterInterface, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface,
     },
     system::{
         memory::{
@@ -15,13 +14,10 @@ use openvm_circuit::{
                 MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
                 MemoryWriteAuxRecord,
             },
-            online::{GuestMemory, TracingMemory},
+            online::TracingMemory,
             MemoryAddress, MemoryAuxColsFactory,
         },
-        native_adapter::util::{
-            memory_read_native, memory_read_native_from_state, memory_write_native_from_state,
-            tracing_read_native, tracing_write_native,
-        },
+        native_adapter::util::{tracing_read_native, tracing_write_native},
     },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -332,96 +328,5 @@ impl<F: PrimeField32, CTX, const NUM_CELLS: usize> AdapterTraceFiller<F, CTX>
 
         adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
         adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-    }
-}
-
-impl<F, const NUM_CELLS: usize> AdapterExecutorE1<F> for NativeLoadStoreAdapterStep<NUM_CELLS>
-where
-    F: PrimeField32,
-{
-    type ReadData = (F, [F; NUM_CELLS]);
-    type WriteData = [F; NUM_CELLS];
-
-    fn read<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Self::ReadData
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let &Instruction {
-            opcode,
-            a,
-            b,
-            c,
-            d,
-            e,
-            ..
-        } = instruction;
-
-        debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
-
-        let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-
-        let [read_cell]: [F; 1] = memory_read_native_from_state(state, c.as_canonical_u32());
-
-        let data_read_as = match local_opcode {
-            LOADW => e.as_canonical_u32(),
-            STOREW | HINT_STOREW => d.as_canonical_u32(),
-        };
-
-        debug_assert_eq!(data_read_as, AS::Native as u32);
-
-        let data_read_ptr = match local_opcode {
-            LOADW => (read_cell + b).as_canonical_u32(),
-            STOREW | HINT_STOREW => a.as_canonical_u32(),
-        };
-
-        let data_read: [F; NUM_CELLS] = match local_opcode {
-            HINT_STOREW => [F::ZERO; NUM_CELLS],
-            LOADW | STOREW => memory_read_native_from_state(state, data_read_ptr),
-        };
-
-        (read_cell, data_read)
-    }
-
-    fn write<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-    ) where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let &Instruction {
-            opcode,
-            a,
-            b,
-            c,
-            d,
-            e,
-            ..
-        } = instruction;
-
-        debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
-
-        let local_opcode = NativeLoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-
-        let [read_cell]: [F; 1] = memory_read_native(state.memory, c.as_canonical_u32());
-
-        let data_write_as = match local_opcode {
-            LOADW => d.as_canonical_u32(),
-            STOREW | HINT_STOREW => e.as_canonical_u32(),
-        };
-
-        debug_assert_eq!(data_write_as, AS::Native as u32);
-
-        let data_write_ptr = match local_opcode {
-            LOADW => a.as_canonical_u32(),
-            STOREW | HINT_STOREW => (read_cell + b).as_canonical_u32(),
-        };
-
-        memory_write_native_from_state(state, data_write_ptr, data);
     }
 }

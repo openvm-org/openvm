@@ -8,9 +8,9 @@ use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc, MinimalInstruction, RecordArena,
-        Result, StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        EmptyAdapterCoreLayout, ExecuteFunc, MinimalInstruction, RecordArena, Result,
+        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -440,51 +440,44 @@ impl<F, A, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: u
     StepExecutorE1<F> for ModularIsEqualStep<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<
-            F,
-            ReadData: Into<[[u8; READ_LIMBS]; 2]>,
-            WriteData: From<[u8; WRITE_LIMBS]>,
-        >,
 {
-    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        todo!()
-        // let Instruction { opcode, .. } = instruction;
-        //
-        // let local_opcode =
-        //     Rv32ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        // matches!(
-        //     local_opcode,
-        //     Rv32ModularArithmeticOpcode::IS_EQ | Rv32ModularArithmeticOpcode::SETUP_ISEQ
-        // );
-        //
-        // let [b, c] = self.adapter.read(state, instruction).into();
-        // let (b_cmp, _) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.modulus_limbs);
-        // let (c_cmp, _) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.modulus_limbs);
-        // let is_setup = instruction.opcode.local_opcode_idx(self.offset)
-        //     == Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize;
-        //
-        // if !is_setup {
-        //     assert!(b_cmp, "{:?} >= {:?}", b, self.modulus_limbs);
-        // }
-        // assert!(c_cmp, "{:?} >= {:?}", c, self.modulus_limbs);
-        //
-        // let mut write_data = [0u8; WRITE_LIMBS];
-        // write_data[0] = (b == c) as u8;
-        //
-        // self.adapter.write(state, instruction, write_data.into());
-        //
-        // *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-    }
+    // fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
+    // where
+    //     Ctx: E1E2ExecutionCtx,
+    // {
+    //     let Instruction { opcode, .. } = instruction;
+    //
+    //     let local_opcode =
+    //         Rv32ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+    //     matches!(
+    //         local_opcode,
+    //         Rv32ModularArithmeticOpcode::IS_EQ | Rv32ModularArithmeticOpcode::SETUP_ISEQ
+    //     );
+    //
+    //     let [b, c] = self.adapter.read(state, instruction).into();
+    //     let (b_cmp, _) = run_unsigned_less_than::<READ_LIMBS>(&b, &self.modulus_limbs);
+    //     let (c_cmp, _) = run_unsigned_less_than::<READ_LIMBS>(&c, &self.modulus_limbs);
+    //     let is_setup = instruction.opcode.local_opcode_idx(self.offset)
+    //         == Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize;
+    //
+    //     if !is_setup {
+    //         assert!(b_cmp, "{:?} >= {:?}", b, self.modulus_limbs);
+    //     }
+    //     assert!(c_cmp, "{:?} >= {:?}", c, self.modulus_limbs);
+    //
+    //     let mut write_data = [0u8; WRITE_LIMBS];
+    //     write_data[0] = (b == c) as u8;
+    //
+    //     self.adapter.write(state, instruction, write_data.into());
+    //
+    //     *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+    // }
 
     fn pre_compute_size(&self) -> usize {
         todo!()
     }
 
-    fn pre_compute_e1(
+    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,

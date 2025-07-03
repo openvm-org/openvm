@@ -7,9 +7,9 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterCoreMetadata,
-        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, CustomBorrow, DynAdapterInterface,
-        DynArray, ExecuteFunc, MinimalInstruction, RecordArena, Result, SizedRecord,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterTraceFiller, AdapterTraceStep, CustomBorrow, DynAdapterInterface, DynArray,
+        ExecuteFunc, MinimalInstruction, RecordArena, Result, SizedRecord, StepExecutorE1,
+        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -439,28 +439,25 @@ where
 impl<F, A> StepExecutorE1<F> for FieldExpressionStep<A>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
 {
-    fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        todo!()
-        // let data: &[u8] = &self.adapter.read(state, instruction).into().0;
-        // let (writes, _, _) =
-        //     run_field_expression(self, data, instruction.opcode.local_opcode_idx(self.offset));
-        //
-        // self.adapter.write(state, instruction, writes.into());
-        // *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        // Ok(())
-    }
+    // fn execute_e1<Ctx>(&self) -> ExecuteFunc<F, Ctx>
+    // where
+    //     Ctx: E1E2ExecutionCtx,
+    // {
+    //     let data: &[u8] = &self.adapter.read(state, instruction).into().0;
+    //     let (writes, _, _) =
+    //         run_field_expression(self, data, instruction.opcode.local_opcode_idx(self.offset));
+    //
+    //     self.adapter.write(state, instruction, writes.into());
+    //     *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+    //     Ok(())
+    // }
 
     fn pre_compute_size(&self) -> usize {
         todo!()
     }
 
-    fn pre_compute_e1(
+    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
