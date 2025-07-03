@@ -1,23 +1,23 @@
-use std::borrow::BorrowMut;
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep,
-        EmptyAdapterCoreLayout, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
-        VmStateMut,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterTraceFiller,
+        AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc, RecordArena, Result, StepExecutorE1,
+        TraceFiller, TraceStep, VmSegmentState, VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_IMM_AS, LocalOpcode,
+};
 use openvm_native_compiler::NativeBranchEqualOpcode;
 use openvm_rv32im_circuit::BranchEqualCoreCols;
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
+
+use crate::{transmute_field_to_u32, transmute_u32_to_field};
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
@@ -113,48 +113,117 @@ where
     }
 }
 
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct NativeBranchEqualPreCompute {
+    imm: isize,
+    a_or_imm: u32,
+    b_or_imm: u32,
+    d: u32,
+    e: u32,
+}
+
 impl<F, A> StepExecutorE1<F> for NativeBranchEqualStep<A>
 where
     F: PrimeField32,
-    A: 'static + for<'a> AdapterExecutorE1<F, ReadData: Into<[F; 2]>, WriteData = ()>,
 {
-    fn execute_e1<Ctx>(
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<NativeBranchEqualPreCompute>()
+    }
+
+    #[inline(always)]
+    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let &Instruction { opcode, c: imm, .. } = instruction;
-
-        let [rs1, rs2] = self.adapter.read(state, instruction).into();
-
-        let is_beq = opcode.local_opcode_idx(self.offset) == BranchEqualOpcode::BEQ as usize;
-        let cmp_result = (rs1 == rs2) ^ !is_beq;
-
-        if cmp_result {
-            // TODO(ayush): verify this is fine
-            // state.pc = state.pc.wrapping_add(imm.as_canonical_u32());
-            *state.pc = (F::from_canonical_u32(*state.pc) + imm).as_canonical_u32();
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>> {
+        let data: &mut NativeBranchEqualPreCompute = data.borrow_mut();
+        let &Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
+        } = inst;
+        let local_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let c = c.as_canonical_u32();
+        let imm = if F::ORDER_U32 - c < c {
+            -((F::ORDER_U32 - c) as isize)
         } else {
-            *state.pc = state.pc.wrapping_add(self.pc_step);
-        }
+            c as isize
+        };
+        let d = d.as_canonical_u32();
+        let e = e.as_canonical_u32();
 
-        Ok(())
+        let a_is_imm = d == RV32_IMM_AS;
+        let b_is_imm = e == RV32_IMM_AS;
+
+        let a_or_imm = if a_is_imm {
+            transmute_field_to_u32(&a)
+        } else {
+            a.as_canonical_u32()
+        };
+        let b_or_imm = if b_is_imm {
+            transmute_field_to_u32(&b)
+        } else {
+            b.as_canonical_u32()
+        };
+
+        *data = NativeBranchEqualPreCompute {
+            imm,
+            a_or_imm,
+            b_or_imm,
+            d,
+            e,
+        };
+
+        let is_bne = local_opcode == BranchEqualOpcode::BNE;
+        let fn_ptr = match (a_is_imm, b_is_imm, is_bne) {
+            (true, true, true) => execute_e1_impl::<_, _, true, true, true>,
+            (true, true, false) => execute_e1_impl::<_, _, true, true, false>,
+            (true, false, true) => execute_e1_impl::<_, _, true, false, true>,
+            (true, false, false) => execute_e1_impl::<_, _, true, false, false>,
+            (false, true, true) => execute_e1_impl::<_, _, false, true, true>,
+            (false, true, false) => execute_e1_impl::<_, _, false, true, false>,
+            (false, false, true) => execute_e1_impl::<_, _, false, false, true>,
+            (false, false, false) => execute_e1_impl::<_, _, false, false, false>,
+        };
+
+        Ok(fn_ptr)
     }
+}
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
-
-        Ok(())
+unsafe fn execute_e1_impl<
+    F: PrimeField32,
+    CTX: E1E2ExecutionCtx,
+    const A_IS_IMM: bool,
+    const B_IS_IMM: bool,
+    const IS_NE: bool,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &NativeBranchEqualPreCompute = pre_compute.borrow();
+    let rs1 = if A_IS_IMM {
+        transmute_u32_to_field(&pre_compute.a_or_imm)
+    } else {
+        vm_state.vm_read::<F, 1>(pre_compute.d, pre_compute.a_or_imm)[0]
+    };
+    let rs2 = if B_IS_IMM {
+        transmute_u32_to_field(&pre_compute.b_or_imm)
+    } else {
+        vm_state.vm_read::<F, 1>(pre_compute.e, pre_compute.b_or_imm)[0]
+    };
+    if (rs1 == rs2) ^ IS_NE {
+        vm_state.pc = (vm_state.pc as isize + pre_compute.imm) as u32;
+    } else {
+        vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
     }
+    vm_state.instret += 1;
 }
 
 // Returns (cmp_result, diff_idx, x[diff_idx] - y[diff_idx])

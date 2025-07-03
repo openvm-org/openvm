@@ -2,23 +2,23 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, MinimalInstruction, RecordArena, Result,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc,
+        ExecutionError::InvalidInstruction, MinimalInstruction, RecordArena, Result,
+        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmSegmentState,
+        VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_native_compiler::CastfOpcode;
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_MEMORY_AS, LocalOpcode,
+};
+use openvm_native_compiler::{conversion::AS, CastfOpcode};
 use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -196,49 +196,67 @@ where
     }
 }
 
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct CastFPreCompute {
+    a: u32,
+    b: u32,
+}
+
 impl<F, A> StepExecutorE1<F> for CastFCoreStep<A>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<F, ReadData = [F; 1], WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let Instruction { opcode, .. } = instruction;
-
-        assert_eq!(
-            opcode.local_opcode_idx(CastfOpcode::CLASS_OFFSET),
-            CastfOpcode::CASTF as usize
-        );
-
-        let [y] = self.adapter.read(state, instruction);
-
-        let x = run_castf(y.as_canonical_u32());
-
-        self.adapter.write(state, instruction, x);
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<CastFPreCompute>()
     }
 
-    fn execute_metered(
+    #[inline(always)]
+    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>> {
+        let data: &mut CastFPreCompute = data.borrow_mut();
+        let Instruction {
+            a, b, d, e, opcode, ..
+        } = inst;
 
-        Ok(())
+        if opcode.local_opcode_idx(CastfOpcode::CLASS_OFFSET) != CastfOpcode::CASTF as usize {
+            return Err(InvalidInstruction(pc));
+        }
+        if d.as_canonical_u32() != RV32_MEMORY_AS {
+            return Err(InvalidInstruction(pc));
+        }
+        if e.as_canonical_u32() != AS::Native as u32 {
+            return Err(InvalidInstruction(pc));
+        }
+
+        let a = a.as_canonical_u32();
+        let b = b.as_canonical_u32();
+        *data = CastFPreCompute { a, b };
+
+        let fn_ptr = execute_e1_impl::<_, _>;
+
+        Ok(fn_ptr)
     }
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &CastFPreCompute = pre_compute.borrow();
+
+    let y = vm_state.vm_read::<F, 1>(AS::Native as u32, pre_compute.b)[0];
+    let x = run_castf(y.as_canonical_u32());
+
+    vm_state.vm_write::<u8, RV32_REGISTER_NUM_LIMBS>(RV32_MEMORY_AS, pre_compute.a, &x);
+
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
 }
 
 #[inline(always)]

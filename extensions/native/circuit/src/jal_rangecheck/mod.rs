@@ -5,20 +5,18 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionState,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, EmptyMultiRowLayout, ExecuteFunc,
+        ExecutionBridge, ExecutionError, ExecutionError::InvalidInstruction, ExecutionState,
         MatrixRecordArena, NewVmChipWrapper, PcIncOrSet, RecordArena, Result, StepExecutorE1,
-        TraceFiller, TraceStep, VmStateMut,
+        TraceFiller, TraceStep, VmSegmentState, VmStateMut,
     },
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryWriteAuxCols, MemoryWriteAuxRecord},
-            online::{GuestMemory, TracingMemory},
+            online::TracingMemory,
             MemoryAddress, MemoryAuxColsFactory,
         },
-        native_adapter::util::{
-            memory_read_native, memory_write_native_from_state, tracing_write_native,
-        },
+        native_adapter::util::{memory_read_native, tracing_write_native},
     },
 };
 use openvm_circuit_primitives::{
@@ -176,7 +174,7 @@ where
         if opcode == range_check_opcode {
             return String::from("RANGE_CHECK");
         }
-        panic!("Unknown opcode {}", opcode);
+        panic!("Unknown opcode {opcode}");
     }
 
     fn execute<'buf, RA>(
@@ -296,69 +294,114 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for JalRangeCheckStep {
     }
 }
 
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct JalPreCompute<F> {
+    a: u32,
+    b: F,
+    return_pc: F,
+}
+
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct RangeCheckPreCompute {
+    a: u32,
+    b: u8,
+    c: u8,
+}
+
 impl<F> StepExecutorE1<F> for JalRangeCheckStep
 where
     F: PrimeField32,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let &Instruction { opcode, a, b, .. } = instruction;
-
-        debug_assert!(
-            opcode == NativeJalOpcode::JAL.global_opcode()
-                || opcode == NativeRangeCheckOpcode::RANGE_CHECK.global_opcode()
-        );
-
-        if opcode == NativeJalOpcode::JAL.global_opcode() {
-            memory_write_native_from_state(
-                state,
-                a.as_canonical_u32(),
-                [F::from_canonical_u32(
-                    state.pc.wrapping_add(DEFAULT_PC_STEP),
-                )],
-            );
-            *state.pc = (F::from_canonical_u32(*state.pc) + b).as_canonical_u32();
-        } else if opcode == NativeRangeCheckOpcode::RANGE_CHECK.global_opcode() {
-            let [a_val]: [F; 1] = memory_read_native(state.memory, a.as_canonical_u32());
-
-            memory_write_native_from_state(state, a.as_canonical_u32(), [a_val]);
-
-            #[cfg(debug_assertions)]
-            {
-                let a_val = a_val.as_canonical_u32();
-                let b = instruction.b.as_canonical_u32();
-                let c = instruction.c.as_canonical_u32();
-                let x = a_val & 0xffff;
-                let y = a_val >> 16;
-
-                assert!(b <= 16);
-                assert!(c <= 14);
-                assert!(x < (1 << b));
-                assert!(y < (1 << c));
-            }
-            *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        }
-
-        Ok(())
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        std::cmp::max(
+            size_of::<JalPreCompute<F>>(),
+            size_of::<RangeCheckPreCompute>(),
+        )
     }
 
-    // fn execute_metered(
-    //     &self,
-    //     state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-    //     instruction: &Instruction<F>,
-    //     chip_index: usize,
-    // ) -> Result<()> {
-    //     self.execute_e1(state, instruction)?;
-    //     state.ctx.trace_heights[chip_index] += 1;
-    //
-    //     Ok(())
-    // }
+    #[inline(always)]
+    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>> {
+        let &Instruction {
+            opcode, a, b, c, ..
+        } = inst;
+
+        if opcode != NativeJalOpcode::JAL.global_opcode()
+            && opcode != NativeRangeCheckOpcode::RANGE_CHECK.global_opcode()
+        {
+            return Err(InvalidInstruction(pc));
+        }
+
+        let is_jal = opcode == NativeJalOpcode::JAL.global_opcode();
+
+        if is_jal {
+            let data: &mut JalPreCompute<F> = data.borrow_mut();
+            let a = a.as_canonical_u32();
+            let return_pc = F::from_canonical_u32(pc.wrapping_add(DEFAULT_PC_STEP));
+
+            *data = JalPreCompute { a, b, return_pc };
+            Ok(execute_jal_e1_impl)
+        } else {
+            let data: &mut RangeCheckPreCompute = data.borrow_mut();
+            let a = a.as_canonical_u32();
+            let b = b.as_canonical_u32();
+            let c = c.as_canonical_u32();
+            if b > 16 || c > 14 {
+                return Err(InvalidInstruction(pc));
+            }
+
+            *data = RangeCheckPreCompute {
+                a,
+                b: b as u8,
+                c: c as u8,
+            };
+            Ok(execute_range_check_e1_impl)
+        }
+    }
+}
+
+unsafe fn execute_jal_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &JalPreCompute<F> = pre_compute.borrow();
+
+    vm_state.vm_write(AS::Native as u32, pre_compute.a, &[pre_compute.return_pc]);
+    // TODO(ayush): better way to do this
+    vm_state.pc = (F::from_canonical_u32(vm_state.pc) + pre_compute.b).as_canonical_u32();
+}
+
+unsafe fn execute_range_check_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &RangeCheckPreCompute = pre_compute.borrow();
+
+    let [a_val]: [F; 1] = vm_state.host_read(AS::Native as u32, pre_compute.a);
+
+    vm_state.vm_write(AS::Native as u32, pre_compute.a, &[a_val]);
+    {
+        let a_val = a_val.as_canonical_u32();
+        let b = pre_compute.b;
+        let c = pre_compute.c;
+        let x = a_val & 0xffff;
+        let y = a_val >> 16;
+
+        // The range of `b`,`c` had already been checked in `pre_compute_e1`.
+        if !(x < (1 << b) && y < (1 << c)) {
+            vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+            return;
+        }
+    }
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
 }
 
 pub type JalRangeCheckChip<F> =

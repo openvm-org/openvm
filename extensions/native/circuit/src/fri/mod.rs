@@ -7,10 +7,10 @@ use std::{
 use itertools::zip_eq;
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionState, MatrixRecordArena,
-        MultiRowLayout, MultiRowMetadata, NewVmChipWrapper, RecordArena, Result, SizedRecord,
-        StepExecutorE1, TraceFiller, TraceStep, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, CustomBorrow, ExecuteFunc,
+        ExecutionBridge, ExecutionState, MatrixRecordArena, MultiRowLayout, MultiRowMetadata,
+        NewVmChipWrapper, RecordArena, Result, SizedRecord, StepExecutorE1, TraceFiller, TraceStep,
+        VmSegmentState, VmStateMut,
     },
     system::{
         memory::{
@@ -18,13 +18,10 @@ use openvm_circuit::{
                 MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
                 MemoryWriteAuxRecord,
             },
-            online::{GuestMemory, TracingMemory},
+            online::TracingMemory,
             MemoryAddress, MemoryAuxColsFactory,
         },
-        native_adapter::util::{
-            memory_read_native, memory_read_native_from_state, memory_write_native_from_state,
-            tracing_read_native, tracing_write_native,
-        },
+        native_adapter::util::{memory_read_native, tracing_read_native, tracing_write_native},
     },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -1062,18 +1059,36 @@ where
     }
 }
 
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct FriReducedOpeningPreCompute {
+    a_ptr_ptr: u32,
+    b_ptr_ptr: u32,
+    length_ptr: u32,
+    alpha_ptr: u32,
+    result_ptr: u32,
+    hint_id_ptr: u32,
+    is_init_ptr: u32,
+}
+
 impl<F> StepExecutorE1<F> for FriReducedOpeningStep<F>
 where
     F: PrimeField32,
 {
-    fn execute_e1<Ctx>(
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<FriReducedOpeningPreCompute>()
+    }
+
+    #[inline(always)]
+    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>> {
+        let data: &mut FriReducedOpeningPreCompute = data.borrow_mut();
+
         let &Instruction {
             a,
             b,
@@ -1083,7 +1098,7 @@ where
             f,
             g,
             ..
-        } = instruction;
+        } = inst;
 
         let a_ptr_ptr = a.as_canonical_u32();
         let b_ptr_ptr = b.as_canonical_u32();
@@ -1093,73 +1108,77 @@ where
         let hint_id_ptr = f.as_canonical_u32();
         let is_init_ptr = g.as_canonical_u32();
 
-        let alpha = memory_read_native_from_state(state, alpha_ptr);
-        let [length]: [F; 1] = memory_read_native_from_state(state, length_ptr);
-        let [a_ptr]: [F; 1] = memory_read_native_from_state(state, a_ptr_ptr);
-        let [b_ptr]: [F; 1] = memory_read_native_from_state(state, b_ptr_ptr);
-        let [is_init_read]: [F; 1] = memory_read_native_from_state(state, is_init_ptr);
-        let is_init = is_init_read.as_canonical_u32();
-
-        let [hint_id_f]: [F; 1] = memory_read_native(state.memory, hint_id_ptr);
-        let hint_id = hint_id_f.as_canonical_u32() as usize;
-
-        let length = length.as_canonical_u32() as usize;
-
-        let data = if is_init == 0 {
-            let hint_steam = &mut state.streams.hint_space[hint_id];
-            hint_steam.drain(0..length).collect()
-        } else {
-            vec![]
+        *data = FriReducedOpeningPreCompute {
+            a_ptr_ptr,
+            b_ptr_ptr,
+            length_ptr,
+            alpha_ptr,
+            result_ptr,
+            hint_id_ptr,
+            is_init_ptr,
         };
 
-        let mut as_and_bs = Vec::with_capacity(length);
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..length {
-            let a_ptr_i = (a_ptr + F::from_canonical_usize(i)).as_canonical_u32();
-            let [a]: [F; 1] = if is_init == 0 {
-                memory_write_native_from_state(state, a_ptr_i, [data[i]]);
-                [data[i]]
-            } else {
-                memory_read_native_from_state(state, a_ptr_i)
-            };
-            let b_ptr_i = (b_ptr + F::from_canonical_usize(EXT_DEG * i)).as_canonical_u32();
-            let b = memory_read_native_from_state(state, b_ptr_i);
+        let fn_ptr = execute_e1_impl;
+        Ok(fn_ptr)
+    }
+}
 
-            as_and_bs.push((a, b));
-        }
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &FriReducedOpeningPreCompute = pre_compute.borrow();
 
-        let mut result = [F::ZERO; EXT_DEG];
-        for (a, b) in as_and_bs.into_iter().rev() {
-            // result = result * alpha + (b - a)
-            result = FieldExtension::add(
-                FieldExtension::multiply(result, alpha),
-                FieldExtension::subtract(b, elem_to_ext(a)),
-            );
-        }
+    let alpha = vm_state.vm_read(AS::Native as u32, pre_compute.alpha_ptr);
 
-        memory_write_native_from_state(state, result_ptr, result);
+    let [length]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.length_ptr);
+    let length = length.as_canonical_u32() as usize;
 
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+    let [a_ptr]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.a_ptr_ptr);
+    let [b_ptr]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.b_ptr_ptr);
 
-        Ok(())
+    let [is_init_read]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.is_init_ptr);
+    let is_init = is_init_read.as_canonical_u32();
+
+    let [hint_id_f]: [F; 1] = vm_state.host_read(AS::Native as u32, pre_compute.hint_id_ptr);
+    let hint_id = hint_id_f.as_canonical_u32() as usize;
+
+    let data = if is_init == 0 {
+        let hint_steam = &mut vm_state.streams.hint_space[hint_id];
+        hint_steam.drain(0..length).collect()
+    } else {
+        vec![]
+    };
+
+    let mut as_and_bs = Vec::with_capacity(length);
+    #[allow(clippy::needless_range_loop)]
+    for i in 0..length {
+        let a_ptr_i = (a_ptr + F::from_canonical_usize(i)).as_canonical_u32();
+        let [a]: [F; 1] = if is_init == 0 {
+            vm_state.vm_write(AS::Native as u32, a_ptr_i, &[data[i]]);
+            [data[i]]
+        } else {
+            vm_state.vm_read(AS::Native as u32, a_ptr_i)
+        };
+        let b_ptr_i = (b_ptr + F::from_canonical_usize(EXT_DEG * i)).as_canonical_u32();
+        let b = vm_state.vm_read(AS::Native as u32, b_ptr_i);
+
+        as_and_bs.push((a, b));
     }
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        let &Instruction { c, .. } = instruction;
-
-        let length_ptr = c.as_canonical_u32();
-        let [length]: [F; 1] = memory_read_native(state.memory, length_ptr);
-
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += length.as_canonical_u32() + 2;
-
-        Ok(())
+    let mut result = [F::ZERO; EXT_DEG];
+    for (a, b) in as_and_bs.into_iter().rev() {
+        // result = result * alpha + (b - a)
+        result = FieldExtension::add(
+            FieldExtension::multiply(result, alpha),
+            FieldExtension::subtract(b, elem_to_ext(a)),
+        );
     }
+
+    vm_state.vm_write(AS::Native as u32, pre_compute.result_ptr, &result);
+
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
 }
 
 pub type FriReducedOpeningChip<F> =

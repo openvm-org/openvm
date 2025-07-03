@@ -1,5 +1,6 @@
 use openvm_circuit::arch::{Streams, SystemConfig, VirtualMachine};
 use openvm_instructions::program::Program;
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_sdk::{config::baby_bear_poseidon2::default_engine, p3_baby_bear::BabyBear};
 
 use crate::{Native, NativeConfig};
@@ -40,6 +41,42 @@ pub(crate) const fn const_max(a: usize, b: usize) -> usize {
     [a, b][(a < b) as usize]
 }
 
+#[inline(always)]
+pub fn transmute_field_to_u32<F: PrimeField32>(field: &F) -> u32 {
+    debug_assert_eq!(
+        std::mem::size_of::<F>(),
+        std::mem::size_of::<u32>(),
+        "Field type F must have the same size as u32"
+    );
+    debug_assert_eq!(
+        std::mem::align_of::<F>(),
+        std::mem::align_of::<u32>(),
+        "Field type F must have the same alignment as u32"
+    );
+    // SAFETY: This assumes that F has the same memory layout as u32.
+    // This is only safe for field types that are guaranteed to be represented
+    // as a single u32 internally
+    unsafe { *(field as *const F as *const u32) }
+}
+
+#[inline(always)]
+pub fn transmute_u32_to_field<F: PrimeField32>(value: &u32) -> F {
+    debug_assert_eq!(
+        std::mem::size_of::<F>(),
+        std::mem::size_of::<u32>(),
+        "Field type F must have the same size as u32"
+    );
+    debug_assert_eq!(
+        std::mem::align_of::<F>(),
+        std::mem::align_of::<u32>(),
+        "Field type F must have the same alignment as u32"
+    );
+    // SAFETY: This assumes that F has the same memory layout as u32.
+    // This is only safe for field types that are guaranteed to be represented
+    // as a single u32 internally
+    unsafe { *(value as *const u32 as *const F) }
+}
+
 /// Testing framework
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils {
@@ -62,7 +99,7 @@ pub mod test_utils {
     use rand::{distributions::Standard, prelude::Distribution, rngs::StdRng, Rng};
 
     use super::execute_program_with_system_config;
-    use crate::extension::NativeConfig;
+    use crate::{extension::NativeConfig, Rv32WithKernelsConfig};
 
     // If immediate, returns (value, AS::Immediate). Otherwise, writes to native memory and returns
     // (ptr, AS::Native). If is_imm is None, randomizes it.
@@ -123,6 +160,13 @@ pub mod test_utils {
         NativeConfig {
             system: test_system_config().with_continuations(),
             native: Default::default(),
+        }
+    }
+
+    pub fn test_rv32_with_kernels_config() -> Rv32WithKernelsConfig {
+        Rv32WithKernelsConfig {
+            system: test_system_config().with_continuations(),
+            ..Default::default()
         }
     }
 }

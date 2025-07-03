@@ -7,20 +7,21 @@ use std::{
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, MinimalInstruction, RecordArena, Result,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc,
+        ExecutionError::InvalidInstruction, MinimalInstruction, RecordArena, Result,
+        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmSegmentState,
+        VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_native_compiler::FieldExtensionOpcode::{self, *};
+use openvm_native_compiler::{
+    conversion::AS,
+    FieldExtensionOpcode::{self, *},
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -236,49 +237,100 @@ where
     }
 }
 
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct FieldExtensionPreCompute {
+    a: u32,
+    b: u32,
+    c: u32,
+}
+
 impl<F, A> StepExecutorE1<F> for FieldExtensionCoreStep<A>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<F, ReadData = [[F; EXT_DEG]; 2], WriteData = [F; EXT_DEG]>,
 {
-    fn execute_e1<Ctx>(
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<FieldExtensionPreCompute>()
+    }
+
+    #[inline(always)]
+    fn pre_compute_e1<Ctx: E1E2ExecutionCtx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let Instruction { opcode, .. } = instruction;
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>> {
+        let data: &mut FieldExtensionPreCompute = data.borrow_mut();
+        let &Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
+        } = inst;
 
-        let local_opcode_idx = opcode.local_opcode_idx(FieldExtensionOpcode::CLASS_OFFSET);
-
-        let [y_val, z_val] = self.adapter.read(state, instruction);
-        let x_val = run_field_extension(
-            FieldExtensionOpcode::from_usize(local_opcode_idx),
-            y_val,
-            z_val,
+        let local_opcode = FieldExtensionOpcode::from_usize(
+            opcode.local_opcode_idx(FieldExtensionOpcode::CLASS_OFFSET),
         );
 
-        self.adapter.write(state, instruction, x_val);
+        let a = a.as_canonical_u32();
+        let b = b.as_canonical_u32();
+        let c = c.as_canonical_u32();
+        let d = d.as_canonical_u32();
+        let e = e.as_canonical_u32();
 
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        if d != AS::Native as u32 {
+            return Err(InvalidInstruction(_pc));
+        }
+        if e != AS::Native as u32 {
+            return Err(InvalidInstruction(_pc));
+        }
 
-        Ok(())
+        *data = FieldExtensionPreCompute { a, b, c };
+
+        let fn_ptr = match local_opcode {
+            FieldExtensionOpcode::FE4ADD => {
+                execute_e1_impl::<_, _, { FieldExtensionOpcode::FE4ADD as u8 }>
+            }
+            FieldExtensionOpcode::FE4SUB => {
+                execute_e1_impl::<_, _, { FieldExtensionOpcode::FE4SUB as u8 }>
+            }
+            FieldExtensionOpcode::BBE4MUL => {
+                execute_e1_impl::<_, _, { FieldExtensionOpcode::BBE4MUL as u8 }>
+            }
+            FieldExtensionOpcode::BBE4DIV => {
+                execute_e1_impl::<_, _, { FieldExtensionOpcode::BBE4DIV as u8 }>
+            }
+        };
+
+        Ok(fn_ptr)
     }
+}
 
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1E2ExecutionCtx, const OPCODE: u8>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &FieldExtensionPreCompute = pre_compute.borrow();
 
-        Ok(())
-    }
+    let y: [F; EXT_DEG] = vm_state.vm_read::<F, EXT_DEG>(AS::Native as u32, pre_compute.b);
+    let z: [F; EXT_DEG] = vm_state.vm_read::<F, EXT_DEG>(AS::Native as u32, pre_compute.c);
+
+    let x = match OPCODE {
+        0 => FieldExtension::add(y, z),      // FE4ADD
+        1 => FieldExtension::subtract(y, z), // FE4SUB
+        2 => FieldExtension::multiply(y, z), // BBE4MUL
+        3 => FieldExtension::divide(y, z),   // BBE4DIV
+        _ => panic!("Invalid field extension opcode: {OPCODE}"),
+    };
+
+    vm_state.vm_write(AS::Native as u32, pre_compute.a, &x);
+
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
 }
 
 // Returns the result of the field extension operation.

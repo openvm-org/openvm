@@ -5,9 +5,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
-        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, BasicAdapterInterface,
-        ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
     },
     system::{
         memory::{
@@ -15,13 +14,10 @@ use openvm_circuit::{
                 MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
                 MemoryWriteAuxRecord,
             },
-            online::{GuestMemory, TracingMemory},
+            online::TracingMemory,
             MemoryAddress, MemoryAuxColsFactory,
         },
-        native_adapter::util::{
-            memory_read_native_from_state, memory_write_native_from_state, tracing_read_native,
-            tracing_write_native,
-        },
+        native_adapter::util::{tracing_read_native, tracing_write_native},
     },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -242,49 +238,5 @@ impl<F: PrimeField32, CTX, const N: usize> AdapterTraceFiller<F, CTX>
 
         adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
         adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
-    }
-}
-
-impl<F, const N: usize> AdapterExecutorE1<F> for NativeVectorizedAdapterStep<N>
-where
-    F: PrimeField32,
-{
-    type ReadData = [[F; N]; 2];
-    type WriteData = [F; N];
-
-    #[inline(always)]
-    fn read<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Self::ReadData
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let Instruction { b, c, d, e, .. } = instruction;
-
-        debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
-        debug_assert_eq!(e.as_canonical_u32(), AS::Native as u32);
-
-        let y_val: [F; N] = memory_read_native_from_state(state, b.as_canonical_u32());
-        let z_val: [F; N] = memory_read_native_from_state(state, c.as_canonical_u32());
-
-        [y_val, z_val]
-    }
-
-    #[inline(always)]
-    fn write<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-    ) where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let Instruction { a, d, .. } = instruction;
-
-        debug_assert_eq!(d.as_canonical_u32(), AS::Native as u32);
-
-        memory_write_native_from_state(state, a.as_canonical_u32(), data);
     }
 }
