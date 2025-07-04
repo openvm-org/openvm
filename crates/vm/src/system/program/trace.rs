@@ -11,6 +11,7 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::{cpu::CpuBackend, types::AirProvingContext},
+    Chip,
 };
 use serde::{Deserialize, Serialize};
 
@@ -100,20 +101,24 @@ where
     }
 }
 
-impl<SC: StarkGenericConfig> ProgramChip<SC> {
-    pub fn generate_proving_ctx(self) -> AirProvingContext<CpuBackend<SC>> {
-        assert_eq!(
-            self.filtered_exec_frequencies.len(),
-            self.cached.trace.height()
-        );
+impl<RA, SC: StarkGenericConfig> Chip<RA, CpuBackend<SC>> for ProgramChip<SC> {
+    /// The cached program trace is cloned and left for future use. The clone is cheap because the
+    /// cached trace is behind smart pointers. The execution frequencies are left unchanged.
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
+        let cached = self
+            .cached
+            .clone()
+            .expect("cached program trace must be loaded");
+        assert_eq!(self.filtered_exec_frequencies.len(), cached.trace.height());
         let common_trace = RowMajorMatrix::new_col(
             self.filtered_exec_frequencies
-                .into_par_iter()
+                .par_iter()
+                .copied()
                 .map(Val::<SC>::from_canonical_u32)
                 .collect::<Vec<_>>(),
         );
         AirProvingContext {
-            cached_mains: vec![self.cached],
+            cached_mains: vec![cached],
             common_main: Some(Arc::new(common_trace)),
             public_values: vec![],
         }

@@ -535,15 +535,15 @@ impl<F: PrimeField32> MemoryController<F> {
     // but all that matters is that you can tracegen all the trace matrices for the memory AIRs
     // _somehow_.
     pub fn generate_proving_ctx<SC: StarkGenericConfig>(
-        self,
+        &mut self,
     ) -> Vec<AirProvingContext<CpuBackend<SC>>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         let mut ret = Vec::new();
 
-        let access_adapters = self.memory.access_adapter_inventory;
-        match self.interface_chip {
+        let access_adapters = &self.memory.access_adapter_inventory;
+        match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 ret.push(boundary_chip.generate_proving_ctx(()));
             }

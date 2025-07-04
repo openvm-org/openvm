@@ -46,7 +46,7 @@ where
     F: PrimeField32,
 {
     // TODO: switch to using records
-    pub fn generate_proving_ctx<SC>(self) -> AirProvingContext<CpuBackend<SC>>
+    pub fn generate_proving_ctx<SC>(&mut self) -> AirProvingContext<CpuBackend<SC>>
     where
         SC: StarkGenericConfig,
         Domain<SC>: PolynomialSpace<Val = F>,
@@ -60,7 +60,7 @@ where
             mut rows,
             init_root,
             final_root,
-        } = self.final_state.unwrap();
+        } = self.final_state.take().unwrap();
         // important that this sort be stable,
         // because we need the initial root to be first and the final root to be second
         rows.reverse();

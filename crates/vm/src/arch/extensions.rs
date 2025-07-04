@@ -30,7 +30,7 @@ use crate::{
     system::{
         memory::{BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET},
         phantom::PhantomExecutor,
-        SystemAirInventory,
+        SystemAirInventory, SystemChipComplex, SystemRecords,
     },
 };
 
@@ -125,7 +125,7 @@ pub struct AirInventory<SC: StarkGenericConfig> {
     /// The system AIRs required by the circuit architecture.
     #[get = "pub"]
     system: SystemAirInventory<SC>,
-    /// List of all non-system AIRs in the circuit, in insertion order, which is the _reverse_ of
+    /// List of all non-system AIRs in the circuit, in insertion order, which is the **reverse** of
     /// the order they appear in the verifying key.
     ///
     /// Note that the system will ensure that the first AIR in the list is always the
@@ -138,6 +138,14 @@ pub struct AirInventory<SC: StarkGenericConfig> {
     bus_idx_mgr: BusIndexManager,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct BusIndexManager {
+    /// All existing buses use indices in [0, bus_idx_max)
+    bus_idx_max: BusIndex,
+}
+
+// @dev: ChipInventory does not have the SystemChipComplex because that is custom depending on `PB`.
+// The full struct with SystemChipComplex is VmChipComplex
 #[derive(Getters)]
 pub struct ChipInventory<SC, RA, PB>
 where
@@ -148,22 +156,33 @@ where
     #[get = "pub"]
     airs: AirInventory<SC>,
     /// Chips that are being built.
+    #[get = "pub"]
     chips: Vec<Box<dyn AnyChip<RA, PB>>>,
 
-    /// This should be provided from [ExecutorInventory] and is used for sanity checking.
-    exec_ext_start: Vec<usize>,
     /// Number of extensions that have chips added, including the current one that is still being
     /// built.
     cur_num_exts: usize,
-    /// Mapping from executor index to AIR index. Chips must be added in order so the chip index
-    /// matches the AIR index.
-    executor_idx_to_air_idx: Vec<usize>,
+    /// Mapping from executor index to chip insertion index. Chips must be added in order so the
+    /// chip insertion index matches the AIR insertion index. Reminder: this is in **reverse**
+    /// order of the verifying key AIR ordering.
+    ///
+    /// Note: if public values chip exists, then it will be the first entry and point to
+    /// `usize::MAX`. This entry should never be used.
+    pub(crate) executor_idx_to_insertion_idx: Vec<usize>,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct BusIndexManager {
-    /// All existing buses use indices in [0, bus_idx_max)
-    bus_idx_max: BusIndex,
+/// The collection of all chips in the VM. The chips should correspond 1-to-1 with the associated
+/// [AirInventory]. The [VmChipComplex] coordinates the trace generation for all chips in the VM
+/// after construction.
+#[derive(Getters)]
+pub struct VmChipComplex<SC, RA, PB, SCC>
+where
+    SC: StarkGenericConfig,
+    PB: ProverBackend,
+{
+    /// System chip complex responsible for trace generation of [SystemAirInventory]
+    pub system: SCC,
+    pub inventory: ChipInventory<SC, RA, PB>,
 }
 
 // ======================= Inventory Function Definitions =============================
@@ -387,12 +406,16 @@ where
     SC: StarkGenericConfig,
     PB: ProverBackend,
 {
-    pub fn start_new_extension(&mut self) -> Result<(), ChipInventoryError> {
-        if self.cur_num_exts >= self.exec_ext_start.len() {
-            return Err(ChipInventoryError::MissingExecutionExtension(
-                self.exec_ext_start.len(),
-            ));
+    pub(crate) fn new(airs: AirInventory<SC>) -> Self {
+        Self {
+            airs,
+            chips: Vec::new(),
+            cur_num_exts: 0,
+            executor_idx_to_insertion_idx: Vec::new(),
         }
+    }
+
+    pub fn start_new_extension(&mut self) -> Result<(), ChipInventoryError> {
         if self.cur_num_exts >= self.airs.ext_start.len() {
             return Err(ChipInventoryError::MissingCircuitExtension(
                 self.airs.ext_start.len(),
@@ -402,12 +425,6 @@ where
             return Err(ChipInventoryError::MissingChip {
                 actual: self.chips.len(),
                 expected: self.airs.ext_start[self.cur_num_exts],
-            });
-        }
-        if self.executor_idx_to_air_idx.len() != self.exec_ext_start[self.cur_num_exts] {
-            return Err(ChipInventoryError::MissingExecutor {
-                actual: self.executor_idx_to_air_idx.len(),
-                expected: self.exec_ext_start[self.cur_num_exts],
             });
         }
 
@@ -499,35 +516,9 @@ pub enum ChipInventoryError {
 
 // ======================= VM Chip Complex Implementation =============================
 
-/// Trait for trace generation of all system AIRs. The system chip complex is special because we may
-/// not exactly following the exact matching between `Air` and `Chip`. Moreover we may require more
-/// flexibility than what is provided through the trait object [`AnyChip`].
-pub trait SystemChipComplex<RA, PB: ProverBackend> {
-    /// The caller must guarantee that `record_arenas` has length equal to the number of system
-    /// AIRs, although some arenas may be empty if they are unused.
-    fn generate_proving_ctx(self, record_arenas: Vec<RA>) -> Vec<AirProvingContext<PB>>;
-}
-
-/// The collection of all chips in the VM. The chips should correspond 1-to-1 with the associated
-/// [AirInventory]. The [VmChipComplex] coordinates the trace generation for all chips in the VM
-/// after construction.
-#[derive(Getters)]
-pub struct VmChipComplex<RA, PB, SCC>
+impl<SC, RA, PB, SCC> VmChipComplex<SC, RA, PB, SCC>
 where
-    PB: ProverBackend,
-{
-    pub system_config: SystemConfig,
-    /// System chip complex responsible for trace generation of [SystemAirInventory]
-    pub system: SCC,
-    /// The chips defined from a collection of [VmProverExtension] implementations. These are in
-    /// the insertion order, so chips that depend on other chips come **later** in the list.
-    pub chips: Vec<Box<dyn AnyChip<RA, PB>>>,
-
-    max_trace_height: usize,
-}
-
-impl<RA, PB, SCC> VmChipComplex<RA, PB, SCC>
-where
+    SC: StarkGenericConfig,
     PB: ProverBackend,
     SCC: SystemChipComplex<RA, PB>,
 {
@@ -610,13 +601,11 @@ where
     /// and in the same order as the AIRs appearing in the verifying key, even though some chips may
     /// not require a record arena.
     pub(crate) fn generate_proving_ctx(
-        mut self,
+        &mut self,
+        system_records: SystemRecords,
         record_arenas: Vec<RA>,
-        trace_height_constraints: &[LinearConstraint],
+        // trace_height_constraints: &[LinearConstraint],
     ) -> Result<ProvingContext<PB>, GenerationError> {
-        if trace_height_constraints.is_empty() {
-            tracing::warn!("generating proof input without trace height constraints");
-        }
         // ATTENTION: The order of AIR proving context generation MUST be consistent with
         // `AirInventory::into_airs`.
 
@@ -645,9 +634,12 @@ where
         // the peak memory usage, by keeping a dependency tree and generating traces at the same
         // layer of the tree in parallel.
         let ctx_without_empties: Vec<(usize, AirProvingContext<_>)> = iter::empty()
-            .chain(self.system.generate_proving_ctx(sys_record_arenas))
             .chain(
-                zip(self.chips, record_arenas)
+                self.system
+                    .generate_proving_ctx(system_records, sys_record_arenas),
+            )
+            .chain(
+                zip(self.inventory.chips, record_arenas)
                     .map(|(chip, records)| chip.generate_proving_ctx(records))
                     .rev(),
             )
@@ -655,42 +647,46 @@ where
             .filter(|(_air_id, ctx)| ctx.main_trace_height() > 0)
             .collect();
 
-        // Defensive checks that the trace heights satisfy the linear constraints:
-        let idx_trace_heights = ctx_without_empties
-            .iter()
-            .map(|(air_idx, ctx)| (*air_idx, ctx.main_trace_height()))
-            .collect_vec();
-        if let Some(&(air_idx, height)) = idx_trace_heights
-            .iter()
-            .find(|(_, height)| *height > self.max_trace_height)
-        {
-            return Err(GenerationError::TraceHeightsLimitExceeded {
-                air_idx,
-                height,
-                max_height: self.max_trace_height,
-            });
-        }
-        for (i, constraint) in trace_height_constraints.iter().enumerate() {
-            let value = idx_trace_heights
-                .iter()
-                .map(|&(air_idx, h)| constraint.coefficients[air_idx] as u64 * h as u64)
-                .sum::<u64>();
+        // TODO: move out to VirtualMachine
+        // // Defensive checks that the trace heights satisfy the linear constraints:
+        // let idx_trace_heights = ctx_without_empties
+        //     .iter()
+        //     .map(|(air_idx, ctx)| (*air_idx, ctx.main_trace_height()))
+        //     .collect_vec();
+        // if let Some(&(air_idx, height)) = idx_trace_heights
+        //     .iter()
+        //     .find(|(_, height)| *height > self.max_trace_height)
+        // {
+        //     return Err(GenerationError::TraceHeightsLimitExceeded {
+        //         air_idx,
+        //         height,
+        //         max_height: self.max_trace_height,
+        //     });
+        // }
+        // if trace_height_constraints.is_empty() {
+        //     tracing::warn!("generating proof input without trace height constraints");
+        // }
+        // for (i, constraint) in trace_height_constraints.iter().enumerate() {
+        //     let value = idx_trace_heights
+        //         .iter()
+        //         .map(|&(air_idx, h)| constraint.coefficients[air_idx] as u64 * h as u64)
+        //         .sum::<u64>();
 
-            if value >= constraint.threshold as u64 {
-                tracing::info!(
-                    "trace heights {:?} violate linear constraint {} ({} >= {})",
-                    idx_trace_heights,
-                    i,
-                    value,
-                    constraint.threshold
-                );
-                return Err(GenerationError::LinearTraceHeightConstraintExceeded {
-                    constraint_idx: i,
-                    value,
-                    threshold: constraint.threshold,
-                });
-            }
-        }
+        //     if value >= constraint.threshold as u64 {
+        //         tracing::info!(
+        //             "trace heights {:?} violate linear constraint {} ({} >= {})",
+        //             idx_trace_heights,
+        //             i,
+        //             value,
+        //             constraint.threshold
+        //         );
+        //         return Err(GenerationError::LinearTraceHeightConstraintExceeded {
+        //             constraint_idx: i,
+        //             value,
+        //             threshold: constraint.threshold,
+        //         });
+        //     }
+        // }
 
         Ok(ProvingContext {
             per_air: ctx_without_empties,

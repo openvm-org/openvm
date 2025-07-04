@@ -7,7 +7,6 @@ use openvm_stark_backend::{
     p3_field::PrimeField64,
     p3_maybe_rayon::prelude::*,
     prover::{cpu::CpuBackend, types::CommittedTraceData},
-    ChipUsageGetter,
 };
 
 use crate::{arch::ExecutionError, system::program::trace::padding_instruction};
@@ -102,28 +101,19 @@ impl<F: PrimeField64> ProgramHandler<F> {
     }
 }
 
-impl<F: PrimeField64> ChipUsageGetter for ProgramHandler<F> {
-    fn air_name(&self) -> String {
-        "ProgramChip".to_string()
-    }
-
-    fn constant_trace_height(&self) -> Option<usize> {
-        Some(self.true_program_length.next_power_of_two())
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.true_program_length
-    }
-
-    fn trace_width(&self) -> usize {
-        1
-    }
-}
-
 // For CPU backend only
 pub struct ProgramChip<SC: StarkGenericConfig> {
     /// `i` -> frequency of instruction in `i`th row of trace matrix. This requires filtering
     /// `program.instructions_and_debug_infos` to remove gaps.
-    pub filtered_exec_frequencies: Vec<u32>,
-    pub cached: CommittedTraceData<CpuBackend<SC>>,
+    filtered_exec_frequencies: Vec<u32>,
+    pub(super) cached: Option<CommittedTraceData<CpuBackend<SC>>>,
+}
+
+impl<SC: StarkGenericConfig> ProgramChip<SC> {
+    pub(super) fn unloaded() -> Self {
+        Self {
+            filtered_exec_frequencies: Vec::new(),
+            cached: None,
+        }
+    }
 }

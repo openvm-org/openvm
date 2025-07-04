@@ -85,14 +85,14 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         self.air_names.clone()
     }
     pub fn generate_proving_ctx<SC: StarkGenericConfig>(
-        self,
+        &self,
     ) -> Vec<AirProvingContext<CpuBackend<SC>>>
     where
         F: PrimeField32,
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         self.chips
-            .into_iter()
+            .iter()
             .map(|chip| chip.generate_proving_ctx(()))
             .collect()
     }

@@ -1,14 +1,21 @@
-use std::{iter, sync::Arc};
+use std::sync::Arc;
 
 use derive_more::derive::From;
 use openvm_circuit_derive::AnyEnum;
-use openvm_circuit_primitives::var_range::{VariableRangeCheckerAir, VariableRangeCheckerBus};
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
+    VariableRangeCheckerChip,
+};
 use openvm_instructions::{LocalOpcode, PublishOpcode, SystemOpcode};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::{LookupBus, PermutationCheckBus},
     p3_field::{Field, PrimeField32},
-    prover::{cpu::CpuBackend, types::AirProvingContext},
+    prover::{
+        cpu::CpuBackend,
+        hal::ProverBackend,
+        types::{AirProvingContext, CommittedTraceData},
+    },
     AirRef, Chip,
 };
 
@@ -16,10 +23,6 @@ pub mod connector;
 pub mod memory;
 // Necessary for the PublicValuesChip
 pub mod native_adapter;
-/// Chip to handle phantom instructions.
-/// The Air will always constrain a NOP which advances pc by DEFAULT_PC_STEP.
-/// The runtime executor will execute different phantom instructions that may
-/// affect trace generation based on the operand.
 pub mod phantom;
 pub mod poseidon2;
 pub mod program;
@@ -31,29 +34,57 @@ use public_values::PublicValuesAir;
 
 use crate::{
     arch::{
-        vm_poseidon2_config, AirInventory, AirInventoryError, BusIndexManager, ChipInventoryError,
-        ExecutionBridge, ExecutionBus, ExecutorInventory, ExecutorInventoryError,
-        RowMajorMatrixArena, SystemChipComplex, SystemConfig, VmAirWrapper, VmChipComplex,
-        VmCircuitConfig, VmExecutionConfig, VmProverConfig, PUBLIC_VALUES_AIR_ID,
+        vm_poseidon2_config, AirInventory, AirInventoryError, BusIndexManager, ChipInventory,
+        ChipInventoryError, ExecutionBridge, ExecutionBus, ExecutionState, ExecutorInventory,
+        ExecutorInventoryError, RowMajorMatrixArena, SystemConfig, VmAirWrapper, VmChipComplex,
+        VmChipWrapper, VmCircuitConfig, VmExecutionConfig, VmProverConfig, PUBLIC_VALUES_AIR_ID,
     },
     system::{
         connector::VmConnectorChip,
         memory::{
+            interface::MemoryInterfaceAirs,
             offline_checker::{MemoryBridge, MemoryBus},
             MemoryAirInventory, MemoryController,
         },
         native_adapter::{NativeAdapterAir, NativeAdapterStep},
         phantom::{PhantomAir, PhantomChip, PhantomExecutor, PhantomFiller},
-        poseidon2::new_poseidon2_periphery_air,
-        program::{ProgramBus, ProgramChip, ProgramHandler},
+        poseidon2::{
+            air::Poseidon2PeripheryAir, new_poseidon2_periphery_air, Poseidon2PeripheryChip,
+        },
+        program::{ProgramBus, ProgramChip},
         public_values::{PublicValuesChip, PublicValuesCoreAir, PublicValuesStep},
     },
 };
 
-/// **If** internal poseidon2 chip exists, then its periphery index is 0.
-const POSEIDON2_EXT_AIR_IDX: usize = 1;
+/// **If** internal poseidon2 chip exists, then its insertion index is 1.
+const POSEIDON2_INSERTION_IDX: usize = 1;
 /// **If** public values chip exists, then its executor index is 0.
 const PV_EXECUTOR_IDX: usize = 0;
+
+/// Trait for trace generation of all system AIRs. The system chip complex is special because we may
+/// not exactly following the exact matching between `Air` and `Chip`. Moreover we may require more
+/// flexibility than what is provided through the trait object [`AnyChip`].
+///
+/// The [SystemChipComplex] is meant to be constructible once the VM configuration is known, and it
+/// can be loaded with arbitrary programs supported by the instruction set available to its
+/// configuration. The [SystemChipComplex] is meant to persistent between instances of proof
+/// generation.
+pub trait SystemChipComplex<RA, PB: ProverBackend> {
+    fn load_program(&mut self, cached_program_trace: CommittedTraceData<PB>);
+    /// The caller must guarantee that `record_arenas` has length equal to the number of system
+    /// AIRs, although some arenas may be empty if they are unused.
+    fn generate_proving_ctx(
+        &mut self,
+        system_records: SystemRecords,
+        record_arenas: Vec<RA>,
+    ) -> Vec<AirProvingContext<PB>>;
+}
+
+pub struct SystemRecords {
+    pub from_state: ExecutionState<u32>,
+    pub to_state: ExecutionState<u32>,
+    pub exit_code: Option<u32>,
+}
 
 #[derive(AnyEnum, From)]
 pub enum SystemExecutor<F: 'static> {
@@ -217,7 +248,7 @@ impl<SC: StarkGenericConfig> VmCircuitConfig<SC> for SystemConfig {
         inventory.add_air(range_checker);
 
         if self.continuation_enabled {
-            assert_eq!(inventory.ext_airs().len(), POSEIDON2_EXT_AIR_IDX);
+            assert_eq!(inventory.ext_airs().len(), POSEIDON2_INSERTION_IDX);
             // Add direct poseidon2 AIR for persistent memory.
             // Currently we never use poseidon2 opcodes when continuations is enabled: we will need
             // special handling when that happens
@@ -244,9 +275,8 @@ impl<SC: StarkGenericConfig> VmCircuitConfig<SC> for SystemConfig {
 // =================== CPU Backend Specific System Chip Complex Constructor ==================
 
 /// Base system chips for CPU backend. These chips must exactly correspond to the AIRs in
-/// [SystemAirInventory]. The following don't execute instructions, but are essential
-/// for the VM architecture.
-pub struct CpuSystemChipComplex<SC: StarkGenericConfig> {
+/// [SystemAirInventory].
+pub struct SystemChipInventory<SC: StarkGenericConfig> {
     pub program_chip: ProgramChip<SC>,
     pub connector_chip: VmConnectorChip<Val<SC>>,
     /// Contains all memory chips
@@ -254,20 +284,96 @@ pub struct CpuSystemChipComplex<SC: StarkGenericConfig> {
     pub public_values_chip: Option<PublicValuesChip<Val<SC>>>,
 }
 
-impl<RA, SC> SystemChipComplex<RA, CpuBackend<SC>> for CpuSystemChipComplex<SC>
+// Note[jpw]: We could get rid of the `mem_inventory` input because `MemoryController` doesn't need
+// the buses for tracegen. We leave it to use old interfaces.
+impl<SC: StarkGenericConfig> SystemChipInventory<SC>
+where
+    Val<SC>: PrimeField32,
+{
+    pub fn new(
+        config: &SystemConfig,
+        mem_inventory: &MemoryAirInventory<SC>,
+        range_checker: SharedVariableRangeCheckerChip,
+    ) -> Self {
+        // We create an empty program chip: the program should be loaded later (and can be swapped
+        // out). The execution frequencies are supplied only after execution.
+        let program_chip = ProgramChip::unloaded();
+        let connector_chip = VmConnectorChip::<Val<SC>>::new(
+            range_checker.clone(),
+            config.memory_config.clk_max_bits,
+        );
+        let memory_bus = mem_inventory.bridge.memory_bus();
+        let memory_controller = match &mem_inventory.interface {
+            MemoryInterfaceAirs::Persistent {
+                boundary: _,
+                merkle,
+            } => {
+                assert!(config.continuation_enabled);
+                MemoryController::<Val<SC>>::with_persistent_memory(
+                    memory_bus,
+                    config.memory_config.clone(),
+                    range_checker.clone(),
+                    merkle.merkle_bus,
+                    merkle.compression_bus,
+                )
+            }
+            MemoryInterfaceAirs::Volatile { boundary: _ } => {
+                assert!(!config.continuation_enabled);
+                MemoryController::with_volatile_memory(
+                    memory_bus,
+                    config.memory_config.clone(),
+                    range_checker.clone(),
+                )
+            }
+        };
+
+        let public_values_chip = config.has_public_values_chip().then(|| {
+            VmChipWrapper::new(
+                PublicValuesStep::new(
+                    NativeAdapterStep::default(),
+                    config.num_public_values,
+                    config.max_constraint_degree as u32 - 1,
+                ),
+                memory_controller.helper(),
+            )
+        });
+
+        Self {
+            program_chip,
+            connector_chip,
+            memory_controller,
+            public_values_chip,
+        }
+    }
+}
+
+impl<RA, SC> SystemChipComplex<RA, CpuBackend<SC>> for SystemChipInventory<SC>
 where
     RA: RowMajorMatrixArena<Val<SC>>,
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
 {
+    fn load_program(&mut self, cached_program_trace: CommittedTraceData<CpuBackend<SC>>) {
+        let _ = self.program_chip.cached.replace(cached_program_trace);
+    }
+
     fn generate_proving_ctx(
-        self,
+        &mut self,
+        system_records: SystemRecords,
         mut record_arenas: Vec<RA>,
     ) -> Vec<AirProvingContext<CpuBackend<SC>>> {
-        let program_ctx = self.program_chip.generate_proving_ctx();
+        let SystemRecords {
+            from_state,
+            to_state,
+            exit_code,
+        } = system_records;
+
+        let program_ctx = self.program_chip.generate_proving_ctx(());
+        self.connector_chip.begin(from_state);
+        self.connector_chip.end(to_state, exit_code);
         let connector_ctx = self.connector_chip.generate_proving_ctx(());
 
-        let pv_ctx = self.public_values_chip.map(|chip| {
+        let pv_ctx = self.public_values_chip.as_ref().map(|chip| {
             let arena = record_arenas.remove(PUBLIC_VALUES_AIR_ID);
             chip.generate_proving_ctx(arena)
         });
@@ -287,118 +393,64 @@ where
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
 {
-    type SystemChipComplex = CpuSystemChipComplex<SC>;
+    type SystemChipInventory = SystemChipInventory<SC>;
 
     fn create_chip_complex(
         &self,
-    ) -> Result<VmChipComplex<RA, CpuBackend<SC>, CpuSystemChipComplex<SC>>, ChipInventoryError>
+        airs: AirInventory<SC>,
+    ) -> Result<VmChipComplex<SC, RA, CpuBackend<SC>, SystemChipInventory<SC>>, ChipInventoryError>
     {
-        let mut bus_idx_mgr = BusIndexManager::new();
-        let execution_bus = ExecutionBus::new(bus_idx_mgr.new_bus_idx());
-        let memory_bus = MemoryBus::new(bus_idx_mgr.new_bus_idx());
-        let program_bus = ProgramBus::new(bus_idx_mgr.new_bus_idx());
-        let range_bus =
-            VariableRangeCheckerBus::new(bus_idx_mgr.new_bus_idx(), config.memory_config.decomp);
+        let range_bus = airs.range_checker().bus;
+        let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
+        let system = SystemChipInventory::new(self, &airs.system().memory, range_checker.clone());
 
-        let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
-        let memory_controller = if config.continuation_enabled {
-            MemoryController::with_persistent_memory(
-                memory_bus,
-                config.memory_config.clone(),
-                range_checker.clone(),
-                PermutationCheckBus::new(bus_idx_mgr.new_bus_idx()),
-                PermutationCheckBus::new(bus_idx_mgr.new_bus_idx()),
-            )
-        } else {
-            MemoryController::with_volatile_memory(
-                memory_bus,
-                config.memory_config.clone(),
-                range_checker.clone(),
-            )
-        };
-        let memory_bridge = memory_controller.memory_bridge();
-        let program_chip = ProgramHandler::new(program_bus);
-        let connector_chip = VmConnectorChip::new(
-            execution_bus,
-            program_bus,
-            range_checker.clone(),
-            config.memory_config.clk_max_bits,
-        );
-
-        let mut inventory = VmInventory::new();
+        let mut inventory = ChipInventory::new(airs);
         // PublicValuesChip is required when num_public_values > 0 in single segment mode.
-        if config.has_public_values_chip() {
-            assert_eq!(inventory.executors().len(), Self::PV_EXECUTOR_IDX);
-
-            let chip = PublicValuesChip::new(
-                VmAirWrapper::new(
-                    NativeAdapterAir::new(
-                        ExecutionBridge::new(execution_bus, program_bus),
-                        memory_bridge,
-                    ),
-                    PublicValuesCoreAir::new(
-                        config.num_public_values,
-                        config.max_constraint_degree as u32 - 1,
-                    ),
-                ),
-                PublicValuesCoreStep::new(
-                    NativeAdapterStep::new(),
-                    config.num_public_values,
-                    config.max_constraint_degree as u32 - 1,
-                ),
-                memory_controller.helper(),
+        if self.has_public_values_chip() {
+            assert_eq!(
+                inventory.executor_idx_to_insertion_idx.len(),
+                PV_EXECUTOR_IDX
             );
-
-            inventory
-                .add_executor(chip, [PublishOpcode::PUBLISH.global_opcode()])
-                .unwrap();
+            // This value should **NOT** be used, it is just so the vector has the correct length.
+            inventory.executor_idx_to_insertion_idx.push(usize::MAX);
         }
-        if config.continuation_enabled {
-            assert_eq!(inventory.periphery().len(), Self::POSEIDON2_PERIPHERY_IDX);
-            // Add direct poseidon2 chip for persistent memory.
-            // This is **not** an instruction executor.
-            // Currently we never use poseidon2 opcodes when continuations is enabled: we will need
-            // special handling when that happens
-            let direct_bus_idx = memory_controller
-                .interface_chip
-                .compression_bus()
-                .unwrap()
-                .index;
+        inventory.next_air::<VariableRangeCheckerAir>()?;
+        inventory.add_periphery_chip(range_checker);
+
+        if self.continuation_enabled {
+            assert_eq!(inventory.chips().len(), POSEIDON2_INSERTION_IDX);
+            // ATTENTION: The threshold 7 here must match the one in `new_poseidon2_periphery_air`
+            let direct_bus = if self.max_constraint_degree >= 7 {
+                inventory
+                    .next_air::<Poseidon2PeripheryAir<Val<SC>, 0>>()?
+                    .bus
+            } else {
+                inventory
+                    .next_air::<Poseidon2PeripheryAir<Val<SC>, 1>>()?
+                    .bus
+            };
             let chip = Poseidon2PeripheryChip::new(
                 vm_poseidon2_config(),
-                direct_bus_idx,
-                config.max_constraint_degree,
+                direct_bus.index,
+                self.max_constraint_degree,
             );
             inventory.add_periphery_chip(chip);
         }
-        let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
-        let phantom_chip = PhantomChip::new(PhantomFiller, mem_helper.clone());
-        inventory.add_executor_chip(phantom_chip)?;
 
-        let base = SystemBase {
-            program_chip,
-            connector_chip,
-            memory_controller,
-            range_checker_chip: range_checker,
-        };
+        let phantom_chip = PhantomChip::new(PhantomFiller, system.memory_controller.helper());
+        inventory.add_executor_chip(phantom_chip);
 
-        let max_trace_height = if TypeId::of::<F>() == TypeId::of::<BabyBear>() {
-            let min_log_blowup = log2_ceil_usize(config.max_constraint_degree - 1);
-            1 << (BabyBear::TWO_ADICITY - min_log_blowup)
-        } else {
-            tracing::warn!(
-                "constructing SystemComplex for unrecognized field; using max_trace_height = 2^30"
-            );
-            1 << 30
-        };
+        // TODO: move this elsewhere
+        // let max_trace_height = if TypeId::of::<F>() == TypeId::of::<BabyBear>() {
+        //     let min_log_blowup = log2_ceil_usize(config.max_constraint_degree - 1);
+        //     1 << (BabyBear::TWO_ADICITY - min_log_blowup)
+        // } else {
+        //     tracing::warn!(
+        //         "constructing SystemComplex for unrecognized field; using max_trace_height =
+        // 2^30"     );
+        //     1 << 30
+        // };
 
-        Self {
-            config,
-            base,
-            inventory,
-            bus_idx_mgr,
-            overridden_inventory_heights: None,
-            max_trace_height,
-        }
+        Ok(VmChipComplex { system, inventory })
     }
 }

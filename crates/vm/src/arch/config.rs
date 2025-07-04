@@ -5,11 +5,12 @@ use openvm_circuit::system::memory::MemoryTraceHeights;
 use openvm_instructions::NATIVE_AS;
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
-    config::{Domain, StarkGenericConfig},
+    config::{StarkGenericConfig, Val},
     p3_commit::PolynomialSpace,
     p3_field::Field,
     prover::hal::ProverBackend,
 };
+use openvm_stark_sdk::engine::StarkEngine;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{
@@ -19,10 +20,11 @@ use super::{
 use crate::{
     arch::{
         AirInventory, AirInventoryError, ChipInventoryError, ExecutorInventory,
-        ExecutorInventoryError, SystemChipComplex,
+        ExecutorInventoryError,
     },
-    system::memory::{
-        merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, BOUNDARY_AIR_OFFSET,
+    system::{
+        memory::{merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, BOUNDARY_AIR_OFFSET},
+        SystemChipComplex,
     },
 };
 
@@ -47,16 +49,15 @@ pub fn vm_poseidon2_config<F: Field>() -> Poseidon2Config<F> {
 ///
 /// This trait does not contain the [VmProverConfig] trait, because a single VM configuration may
 /// implement multiple [VmProverConfig]s for different prover backends.
-pub trait VmConfig<F, SC>:
+pub trait VmConfig<SC>:
     Clone
     + Serialize
     + DeserializeOwned
     + InitFileGenerator
-    + VmExecutionConfig<F>
+    + VmExecutionConfig<Val<SC>>
     + VmCircuitConfig<SC>
 where
     SC: StarkGenericConfig,
-    Domain<SC>: PolynomialSpace<Val = F>,
 {
     /// Must contain system config
     fn system(&self) -> &SystemConfig;
@@ -74,16 +75,19 @@ pub trait VmCircuitConfig<SC: StarkGenericConfig> {
     fn create_circuit(&self) -> Result<AirInventory<SC>, AirInventoryError>;
 }
 
-pub trait VmProverConfig<SC, RA, PB>
+pub trait VmProverConfig<SC, RA, PB>: VmCircuitConfig<SC>
 where
     SC: StarkGenericConfig,
     PB: ProverBackend,
 {
-    type SystemChipComplex: SystemChipComplex<RA, PB>;
+    type SystemChipInventory: SystemChipComplex<RA, PB>;
 
+    /// Create a [VmChipComplex] from the full [AirInventory], which should be the output of
+    /// [VmCircuitConfig::create_circuit].
     fn create_chip_complex(
         &self,
-    ) -> Result<VmChipComplex<RA, PB, Self::SystemChipComplex>, ChipInventoryError>;
+        circuit: AirInventory<SC>,
+    ) -> Result<VmChipComplex<SC, RA, PB, Self::SystemChipInventory>, ChipInventoryError>;
 }
 
 pub const OPENVM_DEFAULT_INIT_FILE_BASENAME: &str = "openvm_init";

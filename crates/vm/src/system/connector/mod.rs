@@ -214,39 +214,30 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
 }
 
 pub struct VmConnectorChip<F> {
-    pub air: VmConnectorAir,
     pub range_checker: SharedVariableRangeCheckerChip,
     pub boundary_states: [Option<ConnectorCols<u32>>; 2],
+    timestamp_max_bits: usize,
     _marker: PhantomData<F>,
 }
 
-impl<F: PrimeField32> VmConnectorChip<F> {
-    pub fn new(
-        execution_bus: ExecutionBus,
-        program_bus: ProgramBus,
-        range_checker: SharedVariableRangeCheckerChip,
-        timestamp_max_bits: usize,
-    ) -> Self {
+impl<F> VmConnectorChip<F> {
+    pub fn new(range_checker: SharedVariableRangeCheckerChip, timestamp_max_bits: usize) -> Self {
+        let range_bus = range_checker.bus();
         assert!(
-            range_checker.bus().range_max_bits * 2 >= timestamp_max_bits,
+            range_bus.range_max_bits * 2 >= timestamp_max_bits,
             "Range checker not large enough: range_max_bits={}, timestamp_max_bits={}",
-            range_checker.bus().range_max_bits,
+            range_bus.range_max_bits,
             timestamp_max_bits
         );
         Self {
-            air: VmConnectorAir {
-                execution_bus,
-                program_bus,
-                range_bus: range_checker.bus(),
-                timestamp_max_bits,
-            },
             range_checker,
             boundary_states: [None, None],
+            timestamp_max_bits,
             _marker: PhantomData,
         }
     }
 
-    pub fn begin(&mut self, state: ExecutionState<u32>) {
+    pub(crate) fn begin(&mut self, state: ExecutionState<u32>) {
         self.boundary_states[0] = Some(ConnectorCols {
             pc: state.pc,
             // TODO(ayush): should this be hardcoded to INITIAL_TIMESTAMP?
@@ -257,7 +248,7 @@ impl<F: PrimeField32> VmConnectorChip<F> {
         });
     }
 
-    pub fn end(&mut self, state: ExecutionState<u32>, exit_code: Option<u32>) {
+    pub(crate) fn end(&mut self, state: ExecutionState<u32>, exit_code: Option<u32>) {
         self.boundary_states[1] = Some(ConnectorCols {
             pc: state.pc,
             timestamp: state.timestamp,
@@ -265,6 +256,15 @@ impl<F: PrimeField32> VmConnectorChip<F> {
             exit_code: exit_code.unwrap_or(DEFAULT_SUSPEND_EXIT_CODE),
             timestamp_low_limb: 0, // will be computed during tracegen
         });
+    }
+
+    fn timestamp_limb_bits(&self) -> (usize, usize) {
+        let range_max_bits = self.range_checker.bus().range_max_bits;
+        if self.timestamp_max_bits <= range_max_bits {
+            (self.timestamp_max_bits, 0)
+        } else {
+            (range_max_bits, self.timestamp_max_bits - range_max_bits)
+        }
     }
 }
 
@@ -280,7 +280,7 @@ where
             let range_max_bits = self.range_checker.range_max_bits();
             let timestamp_low_limb = state.timestamp & ((1u32 << range_max_bits) - 1);
             state.timestamp_low_limb = timestamp_low_limb;
-            let (low_bits, high_bits) = self.air.timestamp_limb_bits();
+            let (low_bits, high_bits) = self.timestamp_limb_bits();
             self.range_checker.add_count(timestamp_low_limb, low_bits);
             self.range_checker
                 .add_count(state.timestamp >> range_max_bits, high_bits);
