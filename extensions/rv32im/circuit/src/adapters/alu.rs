@@ -165,10 +165,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
     }
 }
 
+pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize>;
+
 #[derive(derive_new::new)]
-pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize> {
-    // TODO(arayi): use reference to bitwise lookup chip with lifetimes instead
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+pub struct Rv32BaseAluAdapterChip<const LIMB_BITS: usize> {
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 
 // Intermediate type that should not be copied or cloned and should be directly written to
@@ -270,7 +271,7 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceStep<F>
 }
 
 impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
-    for Rv32BaseAluAdapterStep<LIMB_BITS>
+    for Rv32BaseAluAdapterChip<LIMB_BITS>
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY: the following is highly unsafe. We are going to cast `adapter_row` to a record

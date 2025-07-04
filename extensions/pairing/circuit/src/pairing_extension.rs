@@ -3,7 +3,7 @@ use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use openvm_circuit::{
     arch::{VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
-    system::phantom::PhantomChip,
+    system::phantom::PhantomExecutor,
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
@@ -64,13 +64,13 @@ pub struct PairingExtension {
 
 #[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, InsExecutorE1)]
 pub enum PairingExtensionExecutor<F: PrimeField32> {
-    Phantom(PhantomChip<F>),
+    Phantom(PhantomExecutor<F>),
 }
 
 #[derive(ChipUsageGetter, Chip, AnyEnum, From)]
 pub enum PairingExtensionPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
-    Phantom(PhantomChip<F>),
+    Phantom(PhantomExecutor<F>),
 }
 
 impl<F: PrimeField32> VmExtension<F> for PairingExtension {

@@ -8,7 +8,7 @@ use openvm_circuit::{
     arch::{
         ExecutionBridge, SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
-    system::phantom::PhantomChip,
+    system::phantom::PhantomExecutor,
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
 use openvm_circuit_primitives::bitwise_op_lookup::{
@@ -93,7 +93,7 @@ pub enum WeierstrassExtensionExecutor<F: PrimeField32> {
 #[derive(ChipUsageGetter, Chip, AnyEnum, From)]
 pub enum WeierstrassExtensionPeriphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
-    Phantom(PhantomChip<F>),
+    Phantom(PhantomExecutor<F>),
 }
 
 impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {

@@ -1,3 +1,4 @@
+//! [MemoryController] can be considered as the Memory Chip Complex for the CPU Backend.
 use std::{collections::BTreeMap, iter, marker::PhantomData};
 
 use getset::{Getters, MutGetters};
@@ -16,8 +17,8 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
     p3_util::{log2_ceil_usize, log2_strict_usize},
-    prover::types::AirProofInput,
-    AirRef, Chip, ChipUsageGetter,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
+    Chip, ChipUsageGetter,
 };
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
@@ -529,16 +530,22 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
-    pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(self) -> Vec<AirProofInput<SC>>
+    // @dev: Memory is complicated and allowed to break all the rules (e.g., 1 arena per chip) and
+    // there's no need for any memory chip to implement the Chip trait. We do it when convenient,
+    // but all that matters is that you can tracegen all the trace matrices for the memory AIRs
+    // _somehow_.
+    pub fn generate_proving_ctx<SC: StarkGenericConfig>(
+        &mut self,
+    ) -> Vec<AirProvingContext<CpuBackend<SC>>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         let mut ret = Vec::new();
 
-        let access_adapters = self.memory.access_adapter_inventory;
-        match self.interface_chip {
+        let access_adapters = &self.memory.access_adapter_inventory;
+        match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
-                ret.push(boundary_chip.generate_air_proof_input());
+                ret.push(boundary_chip.generate_proving_ctx(()));
             }
             MemoryInterface::Persistent {
                 merkle_chip,
@@ -546,40 +553,13 @@ impl<F: PrimeField32> MemoryController<F> {
                 ..
             } => {
                 debug_assert_eq!(ret.len(), BOUNDARY_AIR_OFFSET);
-                ret.push(boundary_chip.generate_air_proof_input());
+                ret.push(boundary_chip.generate_proving_ctx(()));
                 debug_assert_eq!(ret.len(), MERKLE_AIR_OFFSET);
-                ret.push(merkle_chip.generate_air_proof_input());
+                ret.push(merkle_chip.generate_proving_ctx());
             }
         }
-        ret.extend(access_adapters.generate_air_proof_inputs());
+        ret.extend(access_adapters.generate_proving_ctx());
         ret
-    }
-
-    pub fn airs<SC: StarkGenericConfig>(&self) -> Vec<AirRef<SC>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        let mut airs = Vec::<AirRef<SC>>::new();
-
-        match &self.interface_chip {
-            MemoryInterface::Volatile { boundary_chip } => {
-                debug_assert_eq!(airs.len(), BOUNDARY_AIR_OFFSET);
-                airs.push(boundary_chip.air())
-            }
-            MemoryInterface::Persistent {
-                boundary_chip,
-                merkle_chip,
-                ..
-            } => {
-                debug_assert_eq!(airs.len(), BOUNDARY_AIR_OFFSET);
-                airs.push(boundary_chip.air());
-                debug_assert_eq!(airs.len(), MERKLE_AIR_OFFSET);
-                airs.push(merkle_chip.air());
-            }
-        }
-        airs.extend(self.memory.access_adapter_inventory.airs());
-
-        airs
     }
 
     /// Return the number of AIRs in the memory controller.
@@ -592,14 +572,8 @@ impl<F: PrimeField32> MemoryController<F> {
         num_airs
     }
 
-    pub fn air_names(&self) -> Vec<String> {
-        let mut air_names = vec!["Boundary".to_string()];
-        if self.continuation_enabled() {
-            air_names.push("Merkle".to_string());
-        }
-        air_names.extend(self.memory.access_adapter_inventory.air_names());
-        air_names
-    }
+    // The following functions are for instrumentation but not necessarily required by any traits.
+    // They may be deleted in the future.
 
     pub fn current_trace_heights(&self) -> Vec<usize> {
         self.get_memory_trace_heights().flatten()
@@ -666,22 +640,31 @@ impl<F: PrimeField32> MemoryController<F> {
 }
 
 /// Owned version of [MemoryAuxColsFactory].
-pub struct SharedMemoryHelper<T> {
+pub struct SharedMemoryHelper<F> {
     pub(crate) range_checker: SharedVariableRangeCheckerChip,
     pub(crate) timestamp_lt_air: AssertLtSubAir,
-    pub(crate) _marker: PhantomData<T>,
+    pub(crate) _marker: PhantomData<F>,
+}
+
+impl<F> SharedMemoryHelper<F> {
+    pub fn new(range_checker: SharedVariableRangeCheckerChip, timestamp_max_bits: usize) -> Self {
+        let timestamp_lt_air = AssertLtSubAir::new(range_checker.bus(), timestamp_max_bits);
+        Self {
+            range_checker,
+            timestamp_lt_air,
+            _marker: PhantomData,
+        }
+    }
 }
 
 /// A helper for generating trace values in auxiliary memory columns related to the offline memory
 /// argument.
-pub struct MemoryAuxColsFactory<'a, T> {
+pub struct MemoryAuxColsFactory<'a, F> {
     pub(crate) range_checker: &'a VariableRangeCheckerChip,
     pub(crate) timestamp_lt_air: AssertLtSubAir,
-    pub(crate) _marker: PhantomData<T>,
+    pub(crate) _marker: PhantomData<F>,
 }
 
-// NOTE[jpw]: The `make_*_aux_cols` functions should be thread-safe so they can be used in
-// parallelized trace generation.
 impl<F: PrimeField32> MemoryAuxColsFactory<'_, F> {
     /// Fill the trace assuming `prev_timestamp` is already provided in `buffer`.
     pub fn fill(&self, prev_timestamp: u32, timestamp: u32, buffer: &mut MemoryBaseAuxCols<F>) {
@@ -714,8 +697,8 @@ impl<F: PrimeField32> MemoryAuxColsFactory<'_, F> {
     }
 }
 
-impl<T> SharedMemoryHelper<T> {
-    pub fn as_borrowed(&self) -> MemoryAuxColsFactory<'_, T> {
+impl<F> SharedMemoryHelper<F> {
+    pub fn as_borrowed(&self) -> MemoryAuxColsFactory<'_, F> {
         MemoryAuxColsFactory {
             range_checker: self.range_checker.as_ref(),
             timestamp_lt_air: self.timestamp_lt_air,

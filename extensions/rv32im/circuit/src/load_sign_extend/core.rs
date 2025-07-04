@@ -12,7 +12,7 @@ use openvm_circuit::{
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
+        MemoryAuxColsFactory, SharedMemoryHelper,
     },
 };
 use openvm_circuit_primitives::{
@@ -185,7 +185,13 @@ pub struct LoadSignExtendCoreRecord<const NUM_CELLS: usize> {
 #[derive(derive_new::new)]
 pub struct LoadSignExtendStep<A, const NUM_CELLS: usize, const LIMB_BITS: usize> {
     adapter: A,
+}
+
+#[derive(derive_new::new)]
+pub struct LoadSignExtendChip<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> {
+    adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
+    pub mem_helper: SharedMemoryHelper<F>,
 }
 
 impl<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceStep<F>
@@ -259,14 +265,14 @@ where
 }
 
 impl<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for LoadSignExtendStep<A, NUM_CELLS, LIMB_BITS>
+    for LoadSignExtendChip<F, A, NUM_CELLS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    fn fill_trace_row(&self, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        self.adapter.fill_trace_row(&self.mem_helper, adapter_row);
         let record: &LoadSignExtendCoreRecord<NUM_CELLS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
 

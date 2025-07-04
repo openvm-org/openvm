@@ -26,6 +26,7 @@ use crate::{
             online::{GuestMemory, TracingMemory},
             MemoryAuxColsFactory,
         },
+        native_adapter::NativeAdapterStep,
         public_values::columns::PublicValuesCoreColsView,
     },
 };
@@ -116,18 +117,14 @@ pub struct PublicValuesRecord<F> {
 
 /// ATTENTION: If a specific public value is not provided, a default 0 will be used when generating
 /// the proof but in the perspective of constraints, it could be any value.
-pub struct PublicValuesCoreStep<A, F> {
+pub struct PublicValuesStep<F, A = NativeAdapterStep<F, 2, 0>> {
     adapter: A,
-    // TODO(ayush): put air here and take from air
     encoder: Encoder,
     // Mutex is to make the struct Sync. But it actually won't be accessed by multiple threads.
     pub(crate) custom_pvs: Mutex<Vec<Option<F>>>,
 }
 
-impl<A, F> PublicValuesCoreStep<A, F>
-where
-    F: PrimeField32,
-{
+impl<F: Clone, A> PublicValuesStep<F, A> {
     /// **Note:** `max_degree` is the maximum degree of the constraint polynomials to represent the
     /// flags. If you want the overall AIR's constraint degree to be `<= max_constraint_degree`,
     /// then typically you should set `max_degree` to `max_constraint_degree - 1`.
@@ -138,12 +135,17 @@ where
             custom_pvs: Mutex::new(vec![None; num_custom_pvs]),
         }
     }
-    pub fn get_custom_public_values(&self) -> Vec<Option<F>> {
-        self.custom_pvs.lock().unwrap().clone()
+
+    pub fn set_public_values(&mut self, public_values: &[F]) {
+        let mut custom_pvs = self.custom_pvs.lock().unwrap();
+        assert_eq!(public_values.len(), custom_pvs.len());
+        for (pv_mut, value) in custom_pvs.iter_mut().zip(public_values) {
+            *pv_mut = Some(value.clone());
+        }
     }
 }
 
-impl<F, A> TraceStep<F> for PublicValuesCoreStep<A, F>
+impl<F, A> TraceStep<F> for PublicValuesStep<F, A>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceStep<F, ReadData = [[F; 1]; 2], WriteData = [[F; 1]; 0]>,
@@ -190,19 +192,12 @@ where
 
         Ok(())
     }
-
-    fn generate_public_values(&self) -> Vec<F> {
-        self.get_custom_public_values()
-            .into_iter()
-            .map(|x| x.unwrap_or(F::ZERO))
-            .collect()
-    }
 }
 
-impl<F, A> TraceFiller<F> for PublicValuesCoreStep<A, F>
+impl<F, A> TraceFiller<F> for PublicValuesStep<F, A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
+    A: 'static + AdapterTraceFiller<F> + Send + Sync,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
@@ -224,9 +219,18 @@ where
         *cols.value = record.value;
         *cols.is_valid = F::ONE;
     }
+
+    fn generate_public_values(&self) -> Vec<F> {
+        self.custom_pvs
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|&x| x.unwrap_or(F::ZERO))
+            .collect()
+    }
 }
 
-impl<F, A> StepExecutorE1<F> for PublicValuesCoreStep<A, F>
+impl<F, A> StepExecutorE1<F> for PublicValuesStep<F, A>
 where
     F: PrimeField32,
     A: 'static + for<'a> AdapterExecutorE1<F, ReadData = [F; 2], WriteData = [F; 0]>,

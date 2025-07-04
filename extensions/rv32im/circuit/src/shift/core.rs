@@ -12,7 +12,7 @@ use openvm_circuit::{
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
+        MemoryAuxColsFactory, SharedMemoryHelper,
     },
 };
 use openvm_circuit_primitives::{
@@ -255,16 +255,30 @@ pub struct ShiftCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 pub struct ShiftStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
+}
+
+pub struct ShiftChip<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
+    pub offset: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
+    pub mem_helper: SharedMemoryHelper<F>,
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, LIMB_BITS> {
+    pub fn new(adapter: A, offset: usize) -> Self {
+        assert_eq!(NUM_LIMBS % 2, 0, "Number of limbs must be divisible by 2");
+        Self { adapter, offset }
+    }
+}
+
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftChip<F, A, NUM_LIMBS, LIMB_BITS> {
     pub fn new(
         adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
         range_checker_chip: SharedVariableRangeCheckerChip,
         offset: usize,
+        mem_helper: SharedMemoryHelper<F>,
     ) -> Self {
         assert_eq!(NUM_LIMBS % 2, 0, "Number of limbs must be divisible by 2");
         Self {
@@ -272,6 +286,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, 
             offset,
             bitwise_lookup_chip,
             range_checker_chip,
+            mem_helper,
         }
     }
 }
@@ -337,14 +352,14 @@ where
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for ShiftStep<A, NUM_LIMBS, LIMB_BITS>
+    for ShiftChip<F, A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    fn fill_trace_row(&self, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        self.adapter.fill_trace_row(&self.mem_helper, adapter_row);
 
         let record: &ShiftCoreRecord<NUM_LIMBS, LIMB_BITS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };

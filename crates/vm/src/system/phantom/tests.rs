@@ -2,14 +2,14 @@ use openvm_instructions::{instruction::Instruction, SystemOpcode};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use super::PhantomChip;
+use super::PhantomExecutor;
 use crate::arch::{instructions::LocalOpcode, testing::VmChipTestBuilder, ExecutionState};
 type F = BabyBear;
 
 #[test]
 fn test_nops_and_terminate() {
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = PhantomChip::<F>::new(
+    let mut chip = PhantomExecutor::<F>::new(
         tester.execution_bus(),
         tester.program_bus(),
         SystemOpcode::CLASS_OFFSET,

@@ -6,7 +6,7 @@ use openvm_circuit::{
         InitFileGenerator, SystemConfig, SystemPort, VmExtension, VmInventory, VmInventoryBuilder,
         VmInventoryError,
     },
-    system::phantom::PhantomChip,
+    system::phantom::PhantomExecutor,
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
@@ -64,7 +64,7 @@ pub enum Keccak256Executor<F: PrimeField32> {
 #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
 pub enum Keccak256Periphery<F: PrimeField32> {
     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
-    Phantom(PhantomChip<F>),
+    Phantom(PhantomExecutor<F>),
 }
 
 impl<F: PrimeField32> VmExtension<F> for Keccak256 {

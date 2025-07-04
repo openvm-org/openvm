@@ -12,7 +12,7 @@ use openvm_circuit::{
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
+        MemoryAuxColsFactory, SharedMemoryHelper,
     },
 };
 use openvm_circuit_primitives::{
@@ -34,7 +34,9 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 
-use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use crate::adapters::{
+    Rv32JalrAdapterChip, Rv32JalrAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
@@ -185,23 +187,31 @@ pub struct Rv32JalrCoreRecord {
     pub imm_sign: bool,
 }
 
-pub struct Rv32JalrStep<A> {
+#[derive_new::new]
+pub struct Rv32JalrStep<A = Rv32JalrAdapterStep> {
+    adapter: A,
+}
+
+pub struct Rv32JalrChip<F, A = Rv32JalrAdapterChip> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
+    pub mem_helper: SharedMemoryHelper<F>,
 }
 
-impl<A> Rv32JalrStep<A> {
+impl<A> Rv32JalrChip<A> {
     pub fn new(
         adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         range_checker_chip: SharedVariableRangeCheckerChip,
+        mem_helper: SharedMemoryHelper<F>,
     ) -> Self {
         assert!(range_checker_chip.range_max_bits() >= 16);
         Self {
             adapter,
             bitwise_lookup_chip,
             range_checker_chip,
+            mem_helper,
         }
     }
 }
@@ -271,15 +281,15 @@ where
         Ok(())
     }
 }
-impl<F, A> TraceFiller<F> for Rv32JalrStep<A>
+impl<F, A> TraceFiller<F> for Rv32JalrChip<A>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    fn fill_trace_row(&self, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        self.adapter.fill_trace_row(&self.mem_helper, adapter_row);
         let record: &Rv32JalrCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
 
         let core_row: &mut Rv32JalrCoreCols<F> = core_row.borrow_mut();

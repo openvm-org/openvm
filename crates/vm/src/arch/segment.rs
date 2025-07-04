@@ -16,7 +16,7 @@ use tracing::instrument;
 
 use super::{
     execution_control::ExecutionControl, ExecutionError, GenerationError, Streams, SystemConfig,
-    VmChipComplex, VmComplexTraceHeights, VmConfig,
+    VmChipComplex, VmConfig,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;

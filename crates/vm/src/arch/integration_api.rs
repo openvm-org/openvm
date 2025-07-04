@@ -1,5 +1,4 @@
 use std::{
-    any::type_name,
     array::from_fn,
     borrow::{Borrow, BorrowMut},
     io::Cursor,
@@ -17,22 +16,19 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::types::AirProofInput,
-    rap::{get_air_name, AnyRap, BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    Chip,
 };
 use serde::{Deserialize, Serialize};
 
 use super::{
     execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-    InsExecutorE1, Result, VmStateMut,
+    Result, VmStateMut,
 };
-use crate::{
-    arch::InstructionExecutor,
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory, SharedMemoryHelper,
-    },
+use crate::system::memory::{
+    online::{GuestMemory, TracingMemory},
+    MemoryAuxColsFactory, SharedMemoryHelper,
 };
 
 /// The interface between primitive AIR and machine adapter AIR.
@@ -134,11 +130,6 @@ pub trait TraceStep<F> {
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>;
 
-    /// Returns a list of public values to publish.
-    fn generate_public_values(&self) -> Vec<F> {
-        vec![]
-    }
-
     /// Displayable opcode name for logging and debugging purposes.
     fn get_opcode_name(&self, opcode: usize) -> String;
 }
@@ -154,7 +145,8 @@ pub trait RowMajorMatrixArena<F> {
 }
 
 // TODO[jpw]: revisit if this trait makes sense
-pub trait TraceFiller<F> {
+/// Helper trait for CPU tracegen.
+pub trait TraceFiller<F>: Send + Sync {
     /// Populates `trace`. This function will always be called after
     /// [`TraceStep::execute`], so the `trace` should already contain the records necessary to fill
     /// in the rest of it.
@@ -165,7 +157,6 @@ pub trait TraceFiller<F> {
         trace: &mut RowMajorMatrix<F>,
         rows_used: usize,
     ) where
-        Self: Send + Sync,
         F: Send + Sync + Clone,
     {
         let width = trace.width();
@@ -177,7 +168,7 @@ pub trait TraceFiller<F> {
         trace.values[rows_used * width..]
             .par_chunks_exact_mut(width)
             .for_each(|row_slice| {
-                self.fill_dummy_trace_row(mem_helper, row_slice);
+                self.fill_dummy_trace_row(row_slice);
             });
     }
 
@@ -195,8 +186,13 @@ pub trait TraceFiller<F> {
     /// By default the trace is padded with empty (all 0) rows to make the height a power of 2.
     ///
     /// The provided `row_slice` will have length equal to the width of the AIR.
-    fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, _row_slice: &mut [F]) {
+    fn fill_dummy_trace_row(&self, _row_slice: &mut [F]) {
         // By default, the row is filled with zeroes
+    }
+
+    /// Returns a list of public values to publish.
+    fn generate_public_values(&self) -> Vec<F> {
+        vec![]
     }
 }
 
@@ -376,7 +372,6 @@ where
     }
 }
 
-// TEMP[jpw]: buffer should be inside CTX
 #[derive(Default)]
 pub struct MatrixRecordArena<F> {
     pub trace_buffer: Vec<F>,
@@ -768,137 +763,34 @@ where
     }
 }
 
-// TODO(ayush): rename to ChipWithExecutionContext or something
-pub struct NewVmChipWrapper<F, AIR, STEP, RA> {
-    pub air: AIR,
-    pub step: STEP,
-    pub arena: RA,
-    mem_helper: SharedMemoryHelper<F>,
+/// We want a blanket implementation of `Chip<MatrixRecordArena, CpuBackend>` on any struct that
+/// implements [TraceFiller] but due to Rust orphan rules, we need a wrapper struct.
+// @dev: You could make a macro, but it's hard to handle generics in the struct definition.
+#[derive(derive_new::new)]
+pub struct VmChipWrapper<F, FILLER> {
+    pub inner: FILLER,
+    pub mem_helper: SharedMemoryHelper<F>,
 }
 
-// TODO(AG): more general RA
-impl<F, AIR, STEP> NewVmChipWrapper<F, AIR, STEP, MatrixRecordArena<F>>
-where
-    F: Field,
-    AIR: BaseAir<F>,
-{
-    pub fn new(air: AIR, step: STEP, mem_helper: SharedMemoryHelper<F>) -> Self {
-        let width = air.width();
-        assert!(
-            align_of::<F>() >= align_of::<u32>(),
-            "type {} should have at least alignment of u32",
-            type_name::<F>()
-        );
-        let arena = MatrixRecordArena::with_capacity(0, width);
-        Self {
-            air,
-            step,
-            arena,
-            mem_helper,
-        }
-    }
-
-    pub fn set_trace_buffer_height(&mut self, height: usize) {
-        self.arena.set_capacity(height);
-    }
-}
-
-// TODO(AG): more general RA
-impl<F, AIR, STEP> NewVmChipWrapper<F, AIR, STEP, DenseRecordArena>
-where
-    F: Field,
-    AIR: BaseAir<F>,
-{
-    pub fn new(air: AIR, step: STEP, mem_helper: SharedMemoryHelper<F>) -> Self {
-        assert!(
-            align_of::<F>() >= align_of::<u32>(),
-            "type {} should have at least alignment of u32",
-            type_name::<F>()
-        );
-        let arena = DenseRecordArena::with_capacity(0);
-        Self {
-            air,
-            step,
-            arena,
-            mem_helper,
-        }
-    }
-
-    pub fn set_trace_buffer_height(&mut self, height: usize) {
-        let width = self.air.width();
-        self.arena.set_capacity(height * width * size_of::<F>());
-    }
-}
-
-impl<F, AIR, STEP, RA> InstructionExecutor<F, RA> for NewVmChipWrapper<F, AIR, STEP, RA>
-where
-    F: PrimeField32,
-    STEP: TraceStep<F> + StepExecutorE1<F>,
-    for<'buf> RA: RecordArena<'buf, STEP::RecordLayout, STEP::RecordMut<'buf>>,
-{
-    fn execute(
-        &mut self,
-        state: VmStateMut<F, TracingMemory<F>, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<()> {
-        self.step.execute(state, instruction)
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        self.step.get_opcode_name(opcode)
-    }
-
-    fn give_me_my_arena(&mut self, arena: RA) {
-        self.arena = arena;
-    }
-}
-
-// Note[jpw]: the statement we want is:
-// - `Air` is an `Air<AB>` for all `AB: AirBuilder`s needed by stark-backend
-// which is equivalent to saying it implements AirRef<SC>
-// The where clauses to achieve this statement is unfortunately really verbose.
-impl<SC, AIR, STEP, RA> Chip<SC> for NewVmChipWrapper<Val<SC>, AIR, STEP, RA>
+impl<SC, FILLER, RA> Chip<RA, CpuBackend<SC>> for VmChipWrapper<Val<SC>, FILLER>
 where
     SC: StarkGenericConfig,
-    Val<SC>: PrimeField32,
-    STEP: TraceStep<Val<SC>> + TraceFiller<Val<SC>> + Send + Sync,
-    AIR: Clone + AnyRap<SC> + 'static,
+    FILLER: TraceFiller<Val<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let width = self.arena.width();
-        assert_eq!(self.arena.trace_offset() % width, 0);
-        let rows_used = self.arena.trace_offset() / width;
+    fn generate_proving_ctx(&self, arena: RA) -> AirProvingContext<CpuBackend<SC>> {
+        let width = arena.width();
+        assert_eq!(arena.trace_offset() % width, 0);
+        let rows_used = arena.trace_offset() / width;
         let height = next_power_of_two_or_zero(rows_used);
-        let mut trace = self.arena.into_matrix();
+        let mut trace = arena.into_matrix();
         // This should be automatic since trace_buffer's height is a power of two:
         assert!(height.checked_mul(width).unwrap() <= trace.values.len());
         trace.values.truncate(height * width);
         let mem_helper = self.mem_helper.as_borrowed();
-        self.step.fill_trace(&mem_helper, &mut trace, rows_used);
-        drop(self.mem_helper);
+        self.inner.fill_trace(&mem_helper, &mut trace, rows_used);
 
-        AirProofInput::simple(trace, self.step.generate_public_values())
-    }
-}
-
-impl<F, AIR, C, RA> ChipUsageGetter for NewVmChipWrapper<F, AIR, C, RA>
-where
-    C: Sync,
-    RA: RowMajorMatrixArena<F>,
-{
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-    fn current_trace_height(&self) -> usize {
-        self.arena.trace_offset() / self.arena.width()
-    }
-    fn trace_width(&self) -> usize {
-        self.arena.width()
+        AirProvingContext::simple(Arc::new(trace), self.inner.generate_public_values())
     }
 }
 
@@ -982,36 +874,6 @@ pub trait StepExecutorE1<F> {
         instruction: &Instruction<F>,
         chip_index: usize,
     ) -> Result<()>;
-}
-
-impl<F, A, S> InsExecutorE1<F> for NewVmChipWrapper<F, A, S, MatrixRecordArena<F>>
-where
-    F: PrimeField32,
-    S: StepExecutorE1<F>,
-    A: BaseAir<F>,
-{
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        self.step.execute_e1(state, instruction)
-    }
-
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()>
-    where
-        F: PrimeField32,
-    {
-        self.step.execute_metered(state, instruction, chip_index)
-    }
 }
 
 #[derive(Clone, Copy, derive_new::new)]

@@ -9,7 +9,7 @@ use openvm_circuit::{
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
+        MemoryAuxColsFactory, SharedMemoryHelper,
     },
 };
 use openvm_circuit_primitives::{
@@ -203,8 +203,15 @@ pub struct BranchLessThanCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usi
 #[derive(derive_new::new)]
 pub struct BranchLessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
+    pub offset: usize,
+}
+
+#[derive(derive_new::new)]
+pub struct BranchLessThanChip<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub offset: usize,
+    pub mem_helper: SharedMemoryHelper<F>,
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F>
@@ -261,18 +268,18 @@ where
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
+    for BranchLessThanChip<F, A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    fn fill_trace_row(&self, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         let record: &BranchLessThanCoreRecord<NUM_LIMBS, LIMB_BITS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
 
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        self.adapter.fill_trace_row(&self.mem_helper, adapter_row);
         let core_row: &mut BranchLessThanCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 
         let signed = record.local_opcode == BranchLessThanOpcode::BLT as u8

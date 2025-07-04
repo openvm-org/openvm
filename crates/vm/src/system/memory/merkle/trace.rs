@@ -4,11 +4,12 @@ use std::{
 };
 
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    p3_field::{FieldAlgebra, PrimeField32},
+    config::{Domain, StarkGenericConfig, Val},
+    p3_commit::PolynomialSpace,
+    p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
-    prover::types::AirProofInput,
-    AirRef, Chip, ChipUsageGetter,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
+    ChipUsageGetter,
 };
 use tracing::instrument;
 
@@ -40,24 +41,26 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     }
 }
 
-impl<const CHUNK: usize, SC: StarkGenericConfig> Chip<SC> for MemoryMerkleChip<CHUNK, Val<SC>>
+impl<const CHUNK: usize, F> MemoryMerkleChip<CHUNK, F>
 where
-    Val<SC>: PrimeField32,
+    F: PrimeField32,
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+    // TODO: switch to using records
+    pub fn generate_proving_ctx<SC>(&mut self) -> AirProvingContext<CpuBackend<SC>>
+    where
+        SC: StarkGenericConfig,
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
         assert!(
             self.final_state.is_some(),
             "Merkle chip must finalize before trace generation"
         );
+        // TODO[jpw]: figure this out later, probably memory just shouldn't use Chip trait
         let FinalState {
             mut rows,
             init_root,
             final_root,
-        } = self.final_state.unwrap();
+        } = self.final_state.take().unwrap();
         // important that this sort be stable,
         // because we need the initial root to be first and the final root to be second
         rows.reverse();
@@ -79,9 +82,9 @@ where
             *trace_row.borrow_mut() = row;
         }
 
-        let trace = RowMajorMatrix::new(trace, width);
+        let trace = Arc::new(RowMajorMatrix::new(trace, width));
         let pvs = init_root.into_iter().chain(final_root).collect();
-        AirProofInput::simple(trace, pvs)
+        AirProvingContext::simple(trace, pvs)
     }
 }
 impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<CHUNK, F> {

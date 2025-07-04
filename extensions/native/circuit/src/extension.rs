@@ -11,7 +11,7 @@ use openvm_circuit::{
         ExecutionBridge, InitFileGenerator, MemoryConfig, SystemConfig, SystemPort, VmAirWrapper,
         VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
     },
-    system::phantom::PhantomChip,
+    system::phantom::PhantomExecutor,
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
@@ -74,7 +74,7 @@ pub enum NativeExecutor<F: PrimeField32> {
 
 #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
 pub enum NativePeriphery<F: PrimeField32> {
-    Phantom(PhantomChip<F>),
+    Phantom(PhantomExecutor<F>),
 }
 
 impl<F: PrimeField32> VmExtension<F> for Native {

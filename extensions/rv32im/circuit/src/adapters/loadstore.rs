@@ -324,6 +324,11 @@ pub struct Rv32LoadStoreAdapterRecord {
 #[derive(derive_new::new)]
 pub struct Rv32LoadStoreAdapterStep {
     pointer_max_bits: usize,
+}
+
+#[derive(derive_new::new)]
+pub struct Rv32LoadStoreAdapterChip {
+    pointer_max_bits: usize,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
