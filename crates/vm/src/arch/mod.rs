@@ -10,6 +10,7 @@ mod extensions;
 /// Traits and wrappers to facilitate VM chip integration
 mod integration_api;
 /// Runtime execution and segmentation
+// TODO: rename this module
 pub mod segment;
 /// Strategy for determining when to segment VM execution
 pub mod segmentation_strategy;

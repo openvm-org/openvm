@@ -43,7 +43,7 @@ use crate::{
             tracegen::{TracegenCtx, TracegenExecutionControl},
         },
         hasher::poseidon2::vm_poseidon2_hasher,
-        InstructionExecutor, VmSegmentExecutor, VmSegmentState,
+        InstructionExecutor, VmExecutionConfig, VmSegmentExecutor, VmSegmentState,
     },
     execute_spanned,
     system::{
@@ -656,7 +656,7 @@ pub struct SingleSegmentVmExecutionResult<F> {
 impl<F, VC> SingleSegmentVmExecutor<F, VC>
 where
     F: PrimeField32,
-    VC: VmConfig<F>,
+    VC: VmExecutionConfig<F>,
     VC::Executor: InsExecutorE1<F>,
 {
     pub fn new(config: VC) -> Self {

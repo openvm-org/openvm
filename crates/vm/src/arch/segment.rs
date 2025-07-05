@@ -20,7 +20,10 @@ use super::{
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
-use crate::{arch::instructions::*, system::memory::online::GuestMemory};
+use crate::{
+    arch::{instructions::*, VmExecutionConfig},
+    system::memory::online::GuestMemory,
+};
 
 pub struct VmSegmentState<F, Ctx> {
     pub instret: u64,
@@ -56,10 +59,9 @@ impl<F, Ctx> VmSegmentState<F, Ctx> {
 pub struct VmSegmentExecutor<F, VC, Ctrl>
 where
     F: PrimeField32,
-    VC: VmConfig<F>,
+    VC: VmExecutionConfig<F>,
     Ctrl: ExecutionControl<F, VC>,
 {
-    pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
     /// Execution control for determining segmentation and stopping conditions
     pub ctrl: Ctrl,
 
@@ -76,7 +78,7 @@ where
 impl<F, VC, Ctrl> VmSegmentExecutor<F, VC, Ctrl>
 where
     F: PrimeField32,
-    VC: VmConfig<F>,
+    VC: VmExecutionConfig<F>,
     Ctrl: ExecutionControl<F, VC>,
 {
     /// Creates a new execution segment from a program and initial state, using parent VM config

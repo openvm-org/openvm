@@ -5,7 +5,6 @@ use std::{
 };
 
 use getset::{CopyGetters, Getters};
-use itertools::Itertools;
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerAir,
 };
@@ -13,7 +12,6 @@ use openvm_instructions::{PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::BusIndex,
-    keygen::types::LinearConstraint,
     prover::{
         cpu::CpuBackend,
         hal::ProverBackend,
@@ -48,7 +46,7 @@ pub const BOUNDARY_AIR_ID: usize = PUBLIC_VALUES_AIR_ID + 1 + BOUNDARY_AIR_OFFSE
 /// Merkle AIR commits start/final memory states.
 pub const MERKLE_AIR_ID: usize = CONNECTOR_AIR_ID + 1 + MERKLE_AIR_OFFSET;
 
-type ExecutorId = u32;
+pub type ExecutorId = u32;
 
 // ======================= VM Extension Traits =============================
 
@@ -112,8 +110,8 @@ pub struct ExecutorInventory<E> {
     /// Lookup table to executor ID.
     /// This is stored in a hashmap because it is _not_ expected to be used in the hot path.
     /// A direct opcode -> executor mapping should be generated before runtime execution.
-    instruction_lookup: FxHashMap<VmOpcode, ExecutorId>,
-    executors: Vec<E>,
+    pub instruction_lookup: FxHashMap<VmOpcode, ExecutorId>,
+    pub executors: Vec<E>,
     /// `ext_start[i]` will have the starting index in `executors` for extension `i`
     ext_start: Vec<usize>,
 }
@@ -415,6 +413,10 @@ where
         }
     }
 
+    pub fn config(&self) -> &SystemConfig {
+        &self.airs.config
+    }
+
     pub fn start_new_extension(&mut self) -> Result<(), ChipInventoryError> {
         if self.cur_num_exts >= self.airs.ext_start.len() {
             return Err(ChipInventoryError::MissingCircuitExtension(
@@ -463,8 +465,12 @@ where
     /// **Caution:** you must add chips in the order matching the order that executors were added in
     /// the [VmExecutionExtension] implementation.
     pub fn add_executor_chip<C: Chip<RA, PB> + 'static>(&mut self, chip: C) {
-        self.executor_idx_to_air_idx.push(self.chips.len());
+        self.executor_idx_to_insertion_idx.push(self.chips.len());
         self.chips.push(Box::new(chip));
+    }
+
+    pub fn num_airs(&self) -> usize {
+        self.config().num_airs() + self.chips.len()
     }
 }
 
@@ -481,6 +487,8 @@ where
             })
     }
 }
+
+// ================================== Error Types =====================================
 
 #[derive(thiserror::Error, Debug)]
 pub enum ExecutorInventoryError {
@@ -522,6 +530,9 @@ where
     PB: ProverBackend,
     SCC: SystemChipComplex<RA, PB>,
 {
+    pub fn system_config(&self) -> &SystemConfig {
+        self.inventory.config()
+    }
     // pub fn finalize_memory(&mut self)
     // where
     //     P: AnyEnum,
@@ -593,10 +604,6 @@ where
     //     )
     // }
 
-    pub fn num_airs(&self) -> usize {
-        self.system_config.num_airs() + self.chips.len()
-    }
-
     /// `record_arenas` is expected to have length equal to the number of AIRs in the verifying key
     /// and in the same order as the AIRs appearing in the verifying key, even though some chips may
     /// not require a record arena.
@@ -613,8 +620,8 @@ where
         // ASSUMPTION WHICH MUST HOLD: non-system chips do not have a dependency on the system chips
         // during trace generation. Given this assumption, we can generate trace on the system chips
         // first.
-        let num_sys_airs = self.system_config.num_airs();
-        let num_airs = num_sys_airs + self.chips.len();
+        let num_sys_airs = self.system_config().num_airs();
+        let num_airs = num_sys_airs + self.inventory.chips.len();
         if num_airs != record_arenas.len() {
             return Err(GenerationError::UnexpectedNumArenas {
                 actual: record_arenas.len(),
@@ -639,7 +646,7 @@ where
                     .generate_proving_ctx(system_records, sys_record_arenas),
             )
             .chain(
-                zip(self.inventory.chips, record_arenas)
+                zip(&mut self.inventory.chips, record_arenas)
                     .map(|(chip, records)| chip.generate_proving_ctx(records))
                     .rev(),
             )

@@ -30,13 +30,6 @@ pub type Result<T> = std::result::Result<T, ExecutionError>;
 pub enum ExecutionError {
     #[error("execution failed at pc {pc}")]
     Fail { pc: u32 },
-    #[error("pc {pc} not found for program of length {program_len}, with pc_base {pc_base} and step = {step}")]
-    PcNotFound {
-        pc: u32,
-        step: u32,
-        pc_base: u32,
-        program_len: usize,
-    },
     #[error("pc {pc} out of bounds for program of length {program_len}, with pc_base {pc_base} and step = {step}")]
     PcOutOfBounds {
         pc: u32,
@@ -92,15 +85,6 @@ pub struct VmStateMut<'a, F, MEM, CTX> {
     pub ctx: &'a mut CTX,
 }
 
-impl<F: PrimeField32, CTX> VmStateMut<'_, F, TracingMemory<F>, CTX> {
-    // TODO: store as u32 directly
-    #[inline(always)]
-    pub fn ins_start(&self, from_state: &mut ExecutionState<F>) {
-        from_state.pc = F::from_canonical_u32(*self.pc);
-        from_state.timestamp = F::from_canonical_u32(self.memory.timestamp);
-    }
-}
-
 // TODO: old
 // TEMPORARY: same as TraceStep but without associated types
 pub trait InstructionExecutor<F, RA = MatrixRecordArena<F>> {
@@ -115,10 +99,6 @@ pub trait InstructionExecutor<F, RA = MatrixRecordArena<F>> {
     /// For display purposes. From absolute opcode as `usize`, return the string name of the opcode
     /// if it is a supported opcode by the present executor.
     fn get_opcode_name(&self, opcode: usize) -> String;
-
-    // TEMP patch to keep Chip struct holding matrix but we will first create the chip with no
-    // matrix, keep matrix arena in CTX, then after execution move the matrices into Chip struct
-    fn give_me_my_arena(&mut self, arena: RA);
 }
 
 /// New trait for instruction execution
@@ -183,10 +163,6 @@ impl<F, C: InstructionExecutor<F, RA>, RA> InstructionExecutor<F, RA> for RefCel
 
     fn get_opcode_name(&self, opcode: usize) -> String {
         self.borrow().get_opcode_name(opcode)
-    }
-
-    fn give_me_my_arena(&mut self, arena: RA) {
-        self.borrow_mut().give_me_my_arena(arena)
     }
 }
 
