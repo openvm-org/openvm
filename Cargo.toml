@@ -68,7 +68,7 @@ members = [
     "guest-libs/pairing/",
     "guest-libs/ruint/",
     "guest-libs/sha2/",
-    "guest-libs/verify_stark/", "test-init-output",
+    "guest-libs/verify_stark/",
 ]
 exclude = ["crates/sdk/example"]
 resolver = "2"
