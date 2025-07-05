@@ -328,13 +328,18 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
             RANGE_CHECKER_BUS,
             mem_config.decomp,
         ));
-        let memory_controller = MemoryController::with_persistent_memory(
+        let max_access_adapter_n = log2_strict_usize(mem_config.max_access_adapter_n);
+        let mut memory_controller = MemoryController::with_persistent_memory(
             MemoryBus::new(MEMORY_BUS),
             mem_config,
             range_checker,
             PermutationCheckBus::new(MEMORY_MERKLE_BUS),
             PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
         );
+        memory_controller
+            .memory
+            .access_adapter_inventory
+            .set_arena_from_trace_heights(&vec![1 << 16; max_access_adapter_n]);
         Self {
             memory: MemoryTester::new(memory_controller),
             streams: Default::default(),
@@ -354,11 +359,16 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
             RANGE_CHECKER_BUS,
             mem_config.decomp,
         ));
-        let memory_controller = MemoryController::with_volatile_memory(
+        let max_access_adapter_n = log2_strict_usize(mem_config.max_access_adapter_n);
+        let mut memory_controller = MemoryController::with_volatile_memory(
             MemoryBus::new(MEMORY_BUS),
             mem_config,
             range_checker,
         );
+        memory_controller
+            .memory
+            .access_adapter_inventory
+            .set_arena_from_trace_heights(&vec![1 << 16; max_access_adapter_n]);
         Self {
             memory: MemoryTester::new(memory_controller),
             streams: Default::default(),

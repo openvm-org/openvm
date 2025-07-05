@@ -100,7 +100,14 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize>
     }
 
     unsafe fn extract_layout(&self) -> NativePoseidon2RecordLayout {
-        todo!()
+        // Each instruction record consists solely of some number of contiguously
+        // stored NativePoseidon2Cols<...> structs, each of which corresponds to a
+        // single trace row. Trace fillers don't actually need to know how many rows
+        // each instruction uses, and can thus treat each NativePoseidon2Cols<...>
+        // as a single record.
+        NativePoseidon2RecordLayout {
+            metadata: NativePoseidon2Metadata { num_rows: 1 },
+        }
     }
 }
 

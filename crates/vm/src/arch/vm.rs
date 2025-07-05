@@ -1306,6 +1306,57 @@ where
         chip_complex.set_initial_memory(initial_memory);
     }
 
+    if let Some(max_trace_heights) = max_trace_heights {
+        let executor_chip_offset = if chip_complex.config().has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
+        } else {
+            PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
+        };
+
+        // Calculate adapter offset the same way as in MeteredCtx
+        // TODO: extract + reuse this logic instead of maintaining this copy-paste
+        let boundary_idx = if chip_complex.config().has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1
+        } else {
+            PUBLIC_VALUES_AIR_ID
+        };
+
+        let adapter_offset = if chip_complex.config().continuation_enabled {
+            boundary_idx + 2
+        } else {
+            boundary_idx + 1
+        };
+
+        // Set trace heights for memory adapters
+        let num_access_adapters = chip_complex
+            .memory_controller()
+            .memory
+            .access_adapter_inventory
+            .num_access_adapters();
+        chip_complex.set_adapter_heights(
+            &max_trace_heights[adapter_offset..adapter_offset + num_access_adapters],
+        );
+
+        for (i, chip_id) in chip_complex
+            .inventory
+            .insertion_order
+            .iter()
+            .rev()
+            .enumerate()
+        {
+            if let ChipId::Executor(exec_id) = chip_id {
+                if let Some(height_index) = executor_chip_offset.checked_add(i) {
+                    if let Some(&height) = max_trace_heights.get(height_index) {
+                        if let Some(executor) = chip_complex.inventory.executors.get_mut(*exec_id) {
+                            // TODO(ayush): remove conversion
+                            executor.set_trace_height(height.next_power_of_two() as usize);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Ok(chip_complex)
 }
 
