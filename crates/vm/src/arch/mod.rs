@@ -19,7 +19,7 @@ pub mod vm;
 pub use openvm_instructions as instructions;
 
 pub mod hasher;
-pub mod interpreter;
+// pub mod interpreter;
 /// Testing framework
 // #[cfg(any(test, feature = "test-utils"))]
 // pub mod testing;

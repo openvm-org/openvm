@@ -14,7 +14,6 @@ use openvm_circuit::{
             tracegen::{TracegenCtx, TracegenExecutionControl},
         },
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-        interpreter::InterpretedInstance,
         ChipId, DefaultSegmentationStrategy, SingleSegmentVmExecutor, SystemTraceHeights,
         VirtualMachine, VmComplexTraceHeights, VmConfig, VmInventoryTraceHeights,
         VmSegmentExecutor, VmSegmentState,
@@ -874,79 +873,80 @@ fn test_hint_load_2() {
     );
 }
 
-#[test]
-fn test_vm_pure_execution_non_continuation() {
-    type F = BabyBear;
-    let n = 6;
-    /*
-    Instruction 0 assigns word[0]_4 to n.
-    Instruction 4 terminates
-    The remainder is a loop that decrements word[0]_4 until it reaches 0, then terminates.
-    Instruction 1 checks if word[0]_4 is 0 yet, and if so sets pc to 5 in order to terminate
-    Instruction 2 decrements word[0]_4 (using word[1]_4)
-    Instruction 3 uses JAL as a simple jump to go back to instruction 1 (repeating the loop).
-     */
-    let instructions = vec![
-        // word[0]_4 <- word[n]_0
-        Instruction::large_from_isize(ADD.global_opcode(), 0, n, 0, 4, 0, 0, 0),
-        // if word[0]_4 == 0 then pc += 3 * DEFAULT_PC_STEP
-        Instruction::from_isize(
-            NativeBranchEqualOpcode(BEQ).global_opcode(),
-            0,
-            0,
-            3 * DEFAULT_PC_STEP as isize,
-            4,
-            0,
-        ),
-        // word[0]_4 <- word[0]_4 - word[1]_4
-        Instruction::large_from_isize(SUB.global_opcode(), 0, 0, 1, 4, 4, 0, 0),
-        // word[2]_4 <- pc + DEFAULT_PC_STEP, pc -= 2 * DEFAULT_PC_STEP
-        Instruction::from_isize(
-            JAL.global_opcode(),
-            2,
-            -2 * DEFAULT_PC_STEP as isize,
-            0,
-            4,
-            0,
-        ),
-        // terminate
-        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
-    ];
+// TODO: re-enable with new interpreter
+// #[test]
+// fn test_vm_pure_execution_non_continuation() {
+//     type F = BabyBear;
+//     let n = 6;
+//     /*
+//     Instruction 0 assigns word[0]_4 to n.
+//     Instruction 4 terminates
+//     The remainder is a loop that decrements word[0]_4 until it reaches 0, then terminates.
+//     Instruction 1 checks if word[0]_4 is 0 yet, and if so sets pc to 5 in order to terminate
+//     Instruction 2 decrements word[0]_4 (using word[1]_4)
+//     Instruction 3 uses JAL as a simple jump to go back to instruction 1 (repeating the loop).
+//      */
+//     let instructions = vec![
+//         // word[0]_4 <- word[n]_0
+//         Instruction::large_from_isize(ADD.global_opcode(), 0, n, 0, 4, 0, 0, 0),
+//         // if word[0]_4 == 0 then pc += 3 * DEFAULT_PC_STEP
+//         Instruction::from_isize(
+//             NativeBranchEqualOpcode(BEQ).global_opcode(),
+//             0,
+//             0,
+//             3 * DEFAULT_PC_STEP as isize,
+//             4,
+//             0,
+//         ),
+//         // word[0]_4 <- word[0]_4 - word[1]_4
+//         Instruction::large_from_isize(SUB.global_opcode(), 0, 0, 1, 4, 4, 0, 0),
+//         // word[2]_4 <- pc + DEFAULT_PC_STEP, pc -= 2 * DEFAULT_PC_STEP
+//         Instruction::from_isize(
+//             JAL.global_opcode(),
+//             2,
+//             -2 * DEFAULT_PC_STEP as isize,
+//             0,
+//             4,
+//             0,
+//         ),
+//         // terminate
+//         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+//     ];
 
-    let program = Program::from_instructions(&instructions);
+//     let program = Program::from_instructions(&instructions);
 
-    let executor = InterpretedInstance::<F, _>::new(test_native_config(), program);
-    executor
-        .execute(E1ExecutionControl, vec![])
-        .expect("Failed to execute");
-}
+//     let executor = InterpretedInstance::<F, _>::new(test_native_config(), program);
+//     executor
+//         .execute(E1ExecutionControl, vec![])
+//         .expect("Failed to execute");
+// }
 
-#[test]
-fn test_vm_pure_execution_continuation() {
-    type F = BabyBear;
-    let instructions = vec![
-        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 1, 0, 2, 4, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 2, 0, 1, 4, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 3, 0, 2, 4, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 4, 0, 2, 4, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 5, 0, 1, 4, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 6, 0, 1, 4, 0, 0, 0),
-        Instruction::large_from_isize(ADD.global_opcode(), 7, 0, 2, 4, 0, 0, 0),
-        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 4, 4),
-        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 4, 4),
-        Instruction::from_isize(FE4SUB.global_opcode(), 12, 0, 4, 4, 4),
-        Instruction::from_isize(BBE4MUL.global_opcode(), 12, 0, 4, 4, 4),
-        Instruction::from_isize(BBE4DIV.global_opcode(), 12, 0, 4, 4, 4),
-        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
-    ];
+// #[test]
+// fn test_vm_pure_execution_continuation() {
+//     type F = BabyBear;
+//     let instructions = vec![
+//         Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0),
+//         Instruction::large_from_isize(ADD.global_opcode(), 1, 0, 2, 4, 0, 0, 0),
+//         Instruction::large_from_isize(ADD.global_opcode(), 2, 0, 1, 4, 0, 0, 0),
+//         Instruction::large_from_isize(ADD.global_opcode(), 3, 0, 2, 4, 0, 0, 0),
+//         Instruction::large_from_isize(ADD.global_opcode(), 4, 0, 2, 4, 0, 0, 0),
+//         Instruction::large_from_isize(ADD.global_opcode(), 5, 0, 1, 4, 0, 0, 0),
+//         Instruction::large_from_isize(ADD.global_opcode(), 6, 0, 1, 4, 0, 0, 0),
+//         Instruction::large_from_isize(ADD.global_opcode(), 7, 0, 2, 4, 0, 0, 0),
+//         Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 4, 4),
+//         Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 4, 4),
+//         Instruction::from_isize(FE4SUB.global_opcode(), 12, 0, 4, 4, 4),
+//         Instruction::from_isize(BBE4MUL.global_opcode(), 12, 0, 4, 4, 4),
+//         Instruction::from_isize(BBE4DIV.global_opcode(), 12, 0, 4, 4, 4),
+//         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+//     ];
 
-    let program = Program::from_instructions(&instructions);
-    let executor = InterpretedInstance::<F, _>::new(test_native_continuations_config(), program);
-    executor
-        .execute(E1ExecutionControl, vec![])
-        .expect("Failed to execute");
-}
+//     let program = Program::from_instructions(&instructions);
+//     let executor = InterpretedInstance::<F, _>::new(test_native_continuations_config(), program);
+//     executor
+//         .execute(E1ExecutionControl, vec![])
+//         .expect("Failed to execute");
+// }
 
 #[test]
 fn test_single_segment_executor_no_segmentation() {

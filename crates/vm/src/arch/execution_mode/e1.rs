@@ -3,7 +3,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::arch::{
     execution_control::ExecutionControl, execution_mode::E1E2ExecutionCtx, ExecutionError,
-    InsExecutorE1, VmChipComplex, VmConfig, VmSegmentState, VmStateMut,
+    InsExecutorE1, VmChipComplex, VmExecutionConfig, VmSegmentState, VmStateMut,
 };
 
 #[derive(Default, derive_new::new)]
@@ -22,7 +22,7 @@ pub struct E1ExecutionControl;
 impl<F, VC> ExecutionControl<F, VC> for E1ExecutionControl
 where
     F: PrimeField32,
-    VC: VmConfig<F>,
+    VC: VmExecutionConfig<F>,
     VC::Executor: InsExecutorE1<F>,
 {
     type Ctx = E1Ctx;

@@ -6,7 +6,7 @@ use crate::{
     arch::{
         execution_control::ExecutionControl, ChipId, ExecutionError, ExecutionState,
         InstructionExecutor, MatrixRecordArena, RowMajorMatrixArena, VmChipComplex, VmConfig,
-        VmSegmentState, VmStateMut, PUBLIC_VALUES_AIR_ID,
+        VmExecutionConfig, VmSegmentState, VmStateMut, PUBLIC_VALUES_AIR_ID,
     },
     system::memory::INITIAL_TIMESTAMP,
 };
@@ -43,7 +43,7 @@ pub struct TracegenExecutionControl;
 impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControl
 where
     F: PrimeField32,
-    VC: VmConfig<F>,
+    VC: VmExecutionConfig<F>,
 {
     type Ctx = TracegenCtx<F>;
 

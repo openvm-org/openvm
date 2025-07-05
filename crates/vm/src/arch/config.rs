@@ -6,11 +6,9 @@ use openvm_instructions::NATIVE_AS;
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_commit::PolynomialSpace,
     p3_field::Field,
     prover::hal::ProverBackend,
 };
-use openvm_stark_sdk::engine::StarkEngine;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{
