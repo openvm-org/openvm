@@ -14,7 +14,7 @@ This will generate an OpenVM-specific starter package. Notice `Cargo.toml` has t
 
 ```toml
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git", features = ["std"] }
+openvm = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.2.0", features = ["std"] }
 ```
 
 Note that `std` is not enabled by default, so explicitly enabling it is required.
