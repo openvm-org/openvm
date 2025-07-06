@@ -30,8 +30,8 @@ pub struct PcEntry<F> {
     // TODO[jpw]: revisit storing only smaller `precompute` for better cache locality. Currently
     // VmOpcode is usize so align=8 and there are 7 u32 operands so we store ExecutorId(u32) after
     // to avoid padding. This means PcEntry has align=8 and size=40 bytes, which is too big
-    insn: Instruction<F>,
-    executor_idx: ExecutorId,
+    pub insn: Instruction<F>,
+    pub executor_idx: ExecutorId,
 }
 
 impl<F> PcEntry<F> {
@@ -116,10 +116,7 @@ impl<F: Field, E> ProgramHandler<F, E> {
 
     /// Returns `(executor, pc_entry, pc_idx)`.
     #[inline(always)]
-    pub fn get_executor(
-        &mut self,
-        pc: u32,
-    ) -> Result<(&mut E, &PcEntry<F>, usize), ExecutionError> {
+    pub fn get_executor(&mut self, pc: u32) -> Result<(&mut E, &PcEntry<F>), ExecutionError> {
         let pc_idx = self.get_pc_index(pc);
         let entry = self
             .pc_handler
@@ -142,10 +139,11 @@ impl<F: Field, E> ProgramHandler<F, E> {
                 .get_unchecked_mut(entry.executor_idx as usize)
         };
 
-        Ok((executor, entry, pc_idx))
+        Ok((executor, entry))
     }
 
-    pub fn get_debug_info(&self, pc_idx: usize) -> Result<&Option<DebugInfo>, ExecutionError> {
+    pub fn get_debug_info(&self, pc: u32) -> Result<&Option<DebugInfo>, ExecutionError> {
+        let pc_idx = self.get_pc_index(pc);
         self.debug_infos
             .get(pc_idx)
             .ok_or_else(|| ExecutionError::PcOutOfBounds {

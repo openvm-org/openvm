@@ -385,6 +385,11 @@ impl<SC: StarkGenericConfig> AirInventory<SC> {
             .into_iter()
             .chain(self.ext_airs.into_iter().rev())
     }
+
+    /// This is O(1). Returns the total number of AIRs and equals the length of [`Self::into_airs`].
+    pub fn num_airs(&self) -> usize {
+        self.config.num_airs() + self.ext_airs.len()
+    }
 }
 
 impl BusIndexManager {
@@ -469,8 +474,27 @@ where
         self.chips.push(Box::new(chip));
     }
 
-    pub fn num_airs(&self) -> usize {
-        self.config().num_airs() + self.chips.len()
+    /// Returns the mapping from executor index to the AIR index, where AIR index is the index of
+    /// the AIR within the verifying key.
+    ///
+    /// This should only be called after the `ChipInventory` is fully built.
+    pub fn executor_idx_to_air_idx(&self) -> Vec<usize> {
+        let num_airs = self.airs.num_airs();
+        assert_eq!(
+            num_airs,
+            self.config().num_airs() + self.chips.len(),
+            "Number of chips does not match number of AIRs"
+        );
+        // system AIRs are at the front of vkey, and then insertion index is the reverse ordering of
+        // AIR index
+        self.executor_idx_to_insertion_idx
+            .iter()
+            .map(|insertion_idx| {
+                num_airs
+                    .checked_sub(insertion_idx.checked_add(1).unwrap())
+                    .unwrap()
+            })
+            .collect()
     }
 }
 

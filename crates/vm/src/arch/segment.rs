@@ -16,42 +16,31 @@ use tracing::instrument;
 
 use super::{
     execution_control::ExecutionControl, ExecutionError, GenerationError, Streams, SystemConfig,
-    VmChipComplex, VmConfig,
+    VmChipComplex,
 };
+use crate::arch::{instructions::*, VmExecutionConfig, VmStateMut};
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
-use crate::{
-    arch::{instructions::*, VmExecutionConfig},
-    system::memory::online::GuestMemory,
-};
 
-pub struct VmSegmentState<F, Ctx> {
+#[derive(derive_new::new)]
+pub struct VmSegmentState<F, MEM, CTX> {
     pub instret: u64,
     pub pc: u32,
-    pub memory: Option<GuestMemory>,
+    pub memory: MEM,
     pub streams: Streams<F>,
     pub rng: StdRng,
     pub exit_code: Option<u32>,
-    pub ctx: Ctx,
+    pub ctx: CTX,
 }
 
-impl<F, Ctx> VmSegmentState<F, Ctx> {
-    pub fn new(
-        instret: u64,
-        pc: u32,
-        memory: Option<GuestMemory>,
-        streams: Streams<F>,
-        rng: StdRng,
-        ctx: Ctx,
-    ) -> Self {
-        Self {
-            instret,
-            pc,
-            memory,
-            streams,
-            rng,
-            ctx,
-            exit_code: None,
+impl<F, MEM, CTX> VmSegmentState<F, MEM, CTX> {
+    pub fn state_mut(&mut self) -> VmStateMut<F, MEM, CTX> {
+        VmStateMut {
+            pc: &mut self.pc,
+            memory: &mut self.memory,
+            streams: &mut self.streams,
+            rng: &mut self.rng,
+            ctx: &mut self.ctx,
         }
     }
 }

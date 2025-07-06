@@ -1,9 +1,11 @@
-use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::arch::{
-    execution_control::ExecutionControl, execution_mode::E1E2ExecutionCtx, ExecutionError,
-    InsExecutorE1, VmChipComplex, VmExecutionConfig, VmSegmentState, VmStateMut,
+use crate::{
+    arch::{
+        execution_control::ExecutionControl, execution_mode::E1E2ExecutionCtx, ExecutionError,
+        InsExecutorE1, VmSegmentState,
+    },
+    system::{memory::online::GuestMemory, program::ProgramHandler},
 };
 
 #[derive(Default, derive_new::new)]
@@ -19,71 +21,37 @@ impl E1E2ExecutionCtx for E1Ctx {
 #[derive(Default)]
 pub struct E1ExecutionControl;
 
-impl<F, VC> ExecutionControl<F, VC> for E1ExecutionControl
+impl<F, Executor> ExecutionControl<F, Executor> for E1ExecutionControl
 where
     F: PrimeField32,
-    VC: VmExecutionConfig<F>,
-    VC::Executor: InsExecutorE1<F>,
+    Executor: InsExecutorE1<F>,
 {
+    type Memory = GuestMemory;
     type Ctx = E1Ctx;
 
-    fn initialize_context(&self) -> Self::Ctx {
-        E1Ctx { instret_end: None }
-    }
-
-    fn should_suspend(
-        &self,
-        state: &mut VmSegmentState<F, Self::Ctx>,
-        _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
-    ) -> bool {
+    fn should_suspend(&self, state: &mut VmSegmentState<F, GuestMemory, Self::Ctx>) -> bool {
         state
             .ctx
             .instret_end
             .is_some_and(|instret_end| state.instret >= instret_end)
     }
 
-    fn on_start(
-        &self,
-        _state: &mut VmSegmentState<F, Self::Ctx>,
-        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
-    ) {
-    }
-
     fn on_suspend_or_terminate(
         &self,
-        _state: &mut VmSegmentState<F, Self::Ctx>,
-        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        _state: &mut VmSegmentState<F, GuestMemory, Self::Ctx>,
         _exit_code: Option<u32>,
     ) {
     }
 
     /// Execute a single instruction
+    #[inline(always)]
     fn execute_instruction(
         &self,
-        state: &mut VmSegmentState<F, Self::Ctx>,
-        instruction: &Instruction<F>,
-        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
-    ) -> Result<(), ExecutionError>
-    where
-        F: PrimeField32,
-    {
-        let &Instruction { opcode, .. } = instruction;
-
-        if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
-            let mut vm_state = VmStateMut {
-                pc: &mut state.pc,
-                memory: state.memory.as_mut().unwrap(),
-                streams: &mut state.streams,
-                rng: &mut state.rng,
-                ctx: &mut state.ctx,
-            };
-            executor.execute_e1(&mut vm_state, instruction)?;
-        } else {
-            return Err(ExecutionError::DisabledOperation {
-                pc: state.pc,
-                opcode,
-            });
-        };
+        state: &mut VmSegmentState<F, GuestMemory, Self::Ctx>,
+        handler: &mut ProgramHandler<F, Executor>,
+    ) -> Result<(), ExecutionError> {
+        let (executor, pc_entry) = handler.get_executor(state.pc)?;
+        executor.execute_e1(&mut state.state_mut(), &pc_entry.insn)?;
 
         Ok(())
     }
