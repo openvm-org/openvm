@@ -66,10 +66,14 @@ pub struct ProgramHandler<F, E> {
 
 impl<F: Field, E> ProgramHandler<F, E> {
     /// Rewrite the program into compiled handlers.
+    // @dev: We need to clone the executors because they are not completely stateless
     pub fn new(
         program: Program<F>,
-        inventory: ExecutorInventory<E>,
-    ) -> Result<Self, StaticProgramError> {
+        inventory: &ExecutorInventory<E>,
+    ) -> Result<Self, StaticProgramError>
+    where
+        E: Clone,
+    {
         if inventory.executors().len() > u32::MAX as usize {
             // This would mean we cannot use u32::MAX as an "undefined" executor index
             return Err(StaticProgramError::TooManyExecutors);
@@ -99,7 +103,7 @@ impl<F: Field, E> ProgramHandler<F, E> {
 
         Ok(Self {
             execution_frequencies: vec![0u32; len],
-            executors: inventory.executors,
+            executors: inventory.executors.clone(),
             pc_handler,
             debug_infos,
             pc_base: program.pc_base,

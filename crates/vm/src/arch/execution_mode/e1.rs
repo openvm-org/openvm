@@ -5,7 +5,7 @@ use crate::{
         execution_control::ExecutionControl, execution_mode::E1E2ExecutionCtx, ExecutionError,
         InsExecutorE1, VmSegmentState,
     },
-    system::{memory::online::GuestMemory, program::ProgramHandler},
+    system::{memory::online::GuestMemory, program::PcEntry},
 };
 
 #[derive(Default, derive_new::new)]
@@ -48,9 +48,9 @@ where
     fn execute_instruction(
         &self,
         state: &mut VmSegmentState<F, GuestMemory, Self::Ctx>,
-        handler: &mut ProgramHandler<F, Executor>,
+        executor: &mut Executor,
+        pc_entry: &PcEntry<F>,
     ) -> Result<(), ExecutionError> {
-        let (executor, pc_entry) = handler.get_executor(state.pc)?;
         executor.execute_e1(&mut state.state_mut(), &pc_entry.insn)?;
 
         Ok(())

@@ -14,7 +14,7 @@ mod integration_api;
 pub mod segment;
 /// Strategy for determining when to segment VM execution
 pub mod segmentation_strategy;
-/// Top level [VirtualMachine] constructor and API.
+/// Top level [VmExecutor] and [VirtualMachine] constructor and API.
 pub mod vm;
 
 pub use openvm_instructions as instructions;

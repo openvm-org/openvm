@@ -1,5 +1,5 @@
 use super::{ExecutionError, VmSegmentState};
-use crate::system::program::ProgramHandler;
+use crate::system::program::PcEntry;
 
 /// Trait for execution control, determining segmentation and stopping conditions
 /// Invariants:
@@ -36,6 +36,7 @@ pub trait ExecutionControl<F, Executor> {
     fn execute_instruction(
         &self,
         state: &mut VmSegmentState<F, Self::Memory, Self::Ctx>,
-        handler: &mut ProgramHandler<F, Executor>,
+        executor: &mut Executor,
+        pc_entry: &PcEntry<F>,
     ) -> Result<(), ExecutionError>;
 }

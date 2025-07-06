@@ -8,7 +8,7 @@ pub use segment_ctx::Segment;
 
 use crate::{
     arch::{execution_control::ExecutionControl, ExecutionError, InsExecutorE1, VmSegmentState},
-    system::{memory::online::GuestMemory, program::ProgramHandler},
+    system::{memory::online::GuestMemory, program::PcEntry},
 };
 
 #[derive(Debug, derive_new::new)]
@@ -46,12 +46,12 @@ where
     fn execute_instruction(
         &self,
         state: &mut VmSegmentState<F, GuestMemory, Self::Ctx>,
-        handler: &mut ProgramHandler<F, Executor>,
+        executor: &mut Executor,
+        pc_entry: &PcEntry<F>,
     ) -> Result<(), ExecutionError> {
         // Check if segmentation needs to happen
         state.ctx.check_and_segment(state.instret);
 
-        let (executor, pc_entry) = handler.get_executor(state.pc)?;
         // SAFETY: executor idx is guaranteed to be within bounds in construction of ProgramHandler
         let air_id = unsafe {
             *self

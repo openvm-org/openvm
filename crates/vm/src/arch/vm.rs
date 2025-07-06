@@ -1,3 +1,11 @@
+//! [VmExecutor] is the struct that can execute an _arbitrary_ program, provided in the form of a
+//! [VmExe], for a fixed set of OpenVM instructions corresponding to a [VmExecutionConfig].
+//! Internally once it is given a program, it will preprocess the program to rewrite it into a more
+//! optimized format for runtime execution. This **instance** of the executor will be a separate
+//! struct specialized to running a _fixed_ program on different program inputs.
+//!
+//! [VirtualMachine] will similarly be the struct that has done all the setup so it can
+//! execute+prove an arbitrary program for a fixed config - it will internally still hold VmExecutor
 use std::{
     borrow::Borrow,
     collections::{HashMap, VecDeque},
@@ -19,7 +27,6 @@ use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     p3_util::log2_strict_usize,
     proof::Proof,
-    prover::types::ProofInput,
     verifier::VerificationError,
     Chip,
 };
@@ -29,9 +36,9 @@ use thiserror::Error;
 use tracing::info_span;
 
 use super::{
-    execution_mode::e1::E1Ctx, ChipId, ExecutionError, InsExecutorE1, MemoryConfig, VmChipComplex,
-    VmComplexTraceHeights, VmConfig, VmInventoryError, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
-    PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
+    execution_mode::e1::E1Ctx, ExecutionError, InsExecutorE1, MemoryConfig, VmChipComplex,
+    VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
+    PUBLIC_VALUES_AIR_ID,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -43,7 +50,8 @@ use crate::{
             tracegen::{TracegenCtx, TracegenExecutionControl},
         },
         hasher::poseidon2::vm_poseidon2_hasher,
-        InstructionExecutor, VmExecutionConfig, VmSegmentExecutor, VmSegmentState,
+        ExecutorInventory, ExecutorInventoryError, InstructionExecutor, VmExecutionConfig,
+        VmSegmentExecutor, VmSegmentState,
     },
     execute_spanned,
     system::{
@@ -56,7 +64,7 @@ use crate::{
             online::GuestMemory,
             AddressMap, MemoryImage, CHUNK,
         },
-        program::trace::VmCommittedExe,
+        program::{trace::VmCommittedExe, ProgramHandler},
     },
 };
 
@@ -130,13 +138,16 @@ impl<F> From<Vec<Vec<F>>> for Streams<F> {
     }
 }
 
-pub struct VmExecutor<F, VC> {
-    pub config: VC,
-    pub overridden_heights: Option<VmComplexTraceHeights>,
-    pub trace_height_constraints: Vec<LinearConstraint>,
+pub struct VmExecutor<F, E> {
+    /// If any executors are stateful (i.e., they mutate during execution), then the `inventory`
+    /// must store the executors in their initialized state. Internally, the executors are cloned
+    /// into a separate instance before running a program.
+    inventory: ExecutorInventory<E>,
+    // pub overridden_heights: Option<VmComplexTraceHeights>,
+    // pub trace_height_constraints: Vec<LinearConstraint>,
     // TEMPORARY: only needed for E3 arena allocation
-    pub main_widths: Vec<usize>,
-    _marker: PhantomData<F>,
+    // pub main_widths: Vec<usize>,
+    phantom: PhantomData<F>,
 }
 
 #[repr(i32)]
@@ -146,11 +157,12 @@ pub enum ExitCode {
     Suspended = -1, // Continuations
 }
 
-pub struct VmExecutorResult<SC: StarkGenericConfig> {
-    pub per_segment: Vec<ProofInput<SC>>,
-    /// When VM is running on persistent mode, public values are stored in a special memory space.
-    pub final_memory: Option<MemoryImage>,
-}
+// TODO[jpw]: questionable struct
+// pub struct VmExecutorResult<SC: StarkGenericConfig> {
+//     pub per_segment: Vec<ProofInput<SC>>,
+//     /// When VM is running on persistent mode, public values are stored in a special memory
+// space.     pub final_memory: Option<MemoryImage>,
+// }
 
 pub struct VmState<F>
 where
@@ -186,53 +198,36 @@ impl<F: PrimeField32> VmState<F> {
     }
 }
 
-pub struct VmExecutorOneSegmentResult<F, VC>
+pub struct VmExecutorOneSegmentResult<F, VC, RA>
 where
     F: PrimeField32,
-    VC: VmConfig<F>,
+    VC: VmExecutionConfig<F>,
 {
-    pub segment: VmSegmentExecutor<F, VC, TracegenExecutionControl>,
+    pub segment: VmSegmentExecutor<F, VC, TracegenExecutionControl<RA>>,
     pub next_state: Option<VmState<F>>,
 }
 
-impl<F, VC> VmExecutor<F, VC>
-where
-    F: PrimeField32,
-    VC: VmConfig<F>,
-    VC::Executor: InsExecutorE1<F>,
-{
+impl<F, E> VmExecutor<F, E> {
     /// Create a new VM executor with a given config.
     ///
     /// The VM will start with a single segment, which is created from the initial state.
-    pub fn new(config: VC) -> Self {
-        Self::new_with_overridden_trace_heights(config, None)
+    pub fn new<VC>(config: &VC) -> Result<Self, ExecutorInventoryError>
+    where
+        VC: VmExecutionConfig<F, Executor = E>,
+    {
+        let inventory = config.create_executors()?;
+        Ok(Self {
+            inventory,
+            phantom: PhantomData,
+        })
     }
+}
 
-    pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
-        self.overridden_heights = Some(overridden_heights);
-    }
-
-    pub fn set_main_widths(&mut self, main_widths: Vec<usize>) {
-        self.main_widths = main_widths;
-    }
-
-    pub fn new_with_overridden_trace_heights(
-        config: VC,
-        overridden_heights: Option<VmComplexTraceHeights>,
-    ) -> Self {
-        Self {
-            config,
-            overridden_heights,
-            trace_height_constraints: vec![],
-            main_widths: vec![],
-            _marker: Default::default(),
-        }
-    }
-
-    pub fn continuation_enabled(&self) -> bool {
-        self.config.system().continuation_enabled
-    }
-
+impl<F, E> VmExecutor<F, E>
+where
+    F: PrimeField32,
+    E: InsExecutorE1<F>,
+{
     /// Base E1 execution function that operates from a given state
     pub fn execute_e1_from_state(
         &self,
@@ -242,24 +237,19 @@ where
     ) -> Result<VmState<F>, ExecutionError> {
         let instret_end = num_insns.map(|n| state.instret + n);
 
-        let chip_complex =
-            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None).unwrap();
-        let mut segment = VmSegmentExecutor::<F, VC, _>::new(
-            chip_complex,
-            self.trace_height_constraints.clone(),
-            exe.fn_bounds.clone(),
-            E1ExecutionControl,
-        );
+        let handler = ProgramHandler::new(exe.program, &self.inventory)?;
+        let mut segment = VmSegmentExecutor::<F, E, _>::new(handler, E1ExecutionControl);
         #[cfg(feature = "bench-metrics")]
         {
             segment.metrics = state.metrics;
+            segment.set_fn_bounds(exe.fn_bounds.clone());
         }
 
         let ctx = E1Ctx::new(instret_end);
         let mut exec_state = VmSegmentState::new(
             state.instret,
             state.pc,
-            Some(GuestMemory::new(state.memory)),
+            GuestMemory::new(state.memory),
             state.input,
             state.rng,
             ctx,
@@ -276,7 +266,7 @@ where
         let state = VmState {
             instret: exec_state.instret,
             pc: exec_state.pc,
-            memory: exec_state.memory.unwrap().memory,
+            memory: exec_state.memory.memory,
             input: exec_state.streams,
             rng: exec_state.rng,
             #[cfg(feature = "bench-metrics")]

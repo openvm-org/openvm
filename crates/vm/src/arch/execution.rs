@@ -102,7 +102,7 @@ pub trait InstructionExecutor<F, RA = MatrixRecordArena<F>> {
 }
 
 /// New trait for instruction execution
-pub trait InsExecutorE1<F> {
+pub trait InsExecutorE1<F>: Clone {
     fn execute_e1<Ctx>(
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,

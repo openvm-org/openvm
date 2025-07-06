@@ -131,6 +131,7 @@ where
         F: PrimeField32,
         Ctx: E1E2ExecutionCtx,
     {
+        let pc = *state.pc;
         let &Instruction {
             opcode, a, b, c, ..
         } = instruction;
@@ -140,13 +141,15 @@ where
         let discriminant = PhantomDiscriminant(c_u32 as u16);
         // If not a system phantom sub-instruction (which is handled in
         // ExecutionSegment), look for a phantom sub-executor to handle it.
-        if SysPhantom::from_repr(discriminant.0).is_none() {
-            let sub_executor = self.phantom_executors.get(&discriminant).ok_or_else(|| {
-                ExecutionError::PhantomNotFound {
-                    pc: *state.pc,
-                    discriminant,
-                }
-            })?;
+        if let Some(sys_phantom) = SysPhantom::from_repr(discriminant.0) {
+            if sys_phantom == SysPhantom::DebugPanic {
+                return Err(ExecutionError::Fail { pc });
+            }
+        } else {
+            let sub_executor = self
+                .phantom_executors
+                .get(&discriminant)
+                .ok_or_else(|| ExecutionError::PhantomNotFound { pc, discriminant })?;
             // TODO(ayush): implement phantom subexecutor for new traits
             sub_executor
                 .as_ref()
@@ -160,13 +163,13 @@ where
                     (c_u32 >> 16) as u16,
                 )
                 .map_err(|e| ExecutionError::Phantom {
-                    pc: *state.pc,
+                    pc,
                     discriminant,
                     inner: e,
                 })?;
         }
 
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        *state.pc = pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }
@@ -199,8 +202,9 @@ where
     where
         RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
     {
+        let pc = *state.pc;
         let record: &mut PhantomRecord = state.ctx.alloc(EmptyMultiRowLayout::default());
-        record.pc = *state.pc;
+        record.pc = pc;
         record.timestamp = state.memory.timestamp;
         let [a, b, c] = [instruction.a, instruction.b, instruction.c].map(|x| x.as_canonical_u32());
         record.operands = [a, b, c];
@@ -211,13 +215,15 @@ where
         let discriminant = PhantomDiscriminant(c as u16);
         // If not a system phantom sub-instruction (which is handled in
         // ExecutionSegment), look for a phantom sub-executor to handle it.
-        if SysPhantom::from_repr(discriminant.0).is_none() {
-            let sub_executor = self.phantom_executors.get(&discriminant).ok_or_else(|| {
-                ExecutionError::PhantomNotFound {
-                    pc: *state.pc,
-                    discriminant,
-                }
-            })?;
+        if let Some(sys_phantom) = SysPhantom::from_repr(discriminant.0) {
+            if sys_phantom == SysPhantom::DebugPanic {
+                return Err(ExecutionError::Fail { pc });
+            }
+        } else {
+            let sub_executor = self
+                .phantom_executors
+                .get(&discriminant)
+                .ok_or_else(|| ExecutionError::PhantomNotFound { pc, discriminant })?;
             // TODO(ayush): implement phantom subexecutor for new traits
             sub_executor
                 .as_ref()
@@ -231,14 +237,13 @@ where
                     (c >> 16) as u16,
                 )
                 .map_err(|e| ExecutionError::Phantom {
-                    pc: *state.pc,
+                    pc,
                     discriminant,
                     inner: e,
                 })?;
         }
 
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
+        *state.pc = pc.wrapping_add(DEFAULT_PC_STEP);
         state.memory.increment_timestamp();
 
         Ok(())

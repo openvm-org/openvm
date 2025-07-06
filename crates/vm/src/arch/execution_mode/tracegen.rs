@@ -7,7 +7,7 @@ use crate::{
         execution_control::ExecutionControl, ExecutionError, InstructionExecutor, VmSegmentState,
         VmStateMut,
     },
-    system::{memory::online::TracingMemory, program::ProgramHandler},
+    system::{memory::online::TracingMemory, program::PcEntry},
 };
 
 pub struct TracegenCtx<RA> {
@@ -66,6 +66,7 @@ where
         _state: &mut VmSegmentState<F, Self::Memory, Self::Ctx>,
         _exit_code: Option<u32>,
     ) {
+        // This should be handled in VmSegmentExecutor
         // let timestamp = state.memory.timestamp();
         // chip_complex
         //     .connector_chip_mut()
@@ -77,9 +78,10 @@ where
     fn execute_instruction(
         &self,
         state: &mut VmSegmentState<F, Self::Memory, Self::Ctx>,
-        handler: &mut ProgramHandler<F, Executor>,
+        executor: &mut Executor,
+        pc_entry: &PcEntry<F>,
     ) -> Result<(), ExecutionError> {
-        let (executor, pc_entry) = handler.get_executor(state.pc)?;
+        tracing::trace!("timestamp: {}", state.memory.timestamp());
         let arena = unsafe {
             // SAFETY: executor_idx is guarantee to be within bounds by ProgramHandler constructor
             let air_idx = *self
