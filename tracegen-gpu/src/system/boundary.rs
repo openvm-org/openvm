@@ -99,7 +99,7 @@ impl<const CHUNK: usize> BoundaryChipGPU<CHUNK> {
     pub fn finalize_records(&mut self, final_memory: TimestampedEquipartition<F, CHUNK>) {
         let records: Vec<_> = final_memory
             .par_iter()
-            .flat_map(|(&(addr_space, ptr), &ts_values)| {
+            .flat_map(|&((addr_space, ptr), ts_values)| {
                 let TimestampedValues { timestamp, values } = ts_values;
                 let mut record = vec![addr_space, ptr, timestamp];
                 record.extend_from_slice(&values.map(|x| x.as_canonical_u32()));
