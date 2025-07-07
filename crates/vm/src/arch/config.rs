@@ -87,6 +87,20 @@ where
     ) -> Result<VmChipComplex<SC, RA, PB, Self::SystemChipInventory>, ChipInventoryError>;
 }
 
+impl<SC, VC> VmConfig<SC> for VC
+where
+    SC: StarkGenericConfig,
+    VC: Clone
+        + Serialize
+        + DeserializeOwned
+        + InitFileGenerator
+        + VmExecutionConfig<Val<SC>>
+        + VmCircuitConfig<SC>
+        + AsRef<SystemConfig>
+        + AsMut<SystemConfig>,
+{
+}
+
 pub const OPENVM_DEFAULT_INIT_FILE_BASENAME: &str = "openvm_init";
 pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
 
@@ -294,6 +308,18 @@ impl SystemConfig {
 impl Default for SystemConfig {
     fn default() -> Self {
         Self::default_from_memory(MemoryConfig::default())
+    }
+}
+
+impl AsRef<SystemConfig> for SystemConfig {
+    fn as_ref(&self) -> &SystemConfig {
+        self
+    }
+}
+
+impl AsMut<SystemConfig> for SystemConfig {
+    fn as_mut(&mut self) -> &mut SystemConfig {
+        self
     }
 }
 
