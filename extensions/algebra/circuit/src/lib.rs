@@ -76,7 +76,7 @@ struct FieldExpressionPreCompute<'a, const NUM_READS: usize> {
     // NUM_READS <= 2 as in Rv32VecHeapAdapter
     rs_addrs: [u8; NUM_READS],
     expr: &'a FieldExpr,
-    flag_idx: usize,
+    flag_idx: u8,
 }
 
 impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>
@@ -120,7 +120,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize, const BLOCK_S
 
         // Pre-compute flag_idx
         let needs_setup = self.0.expr.needs_setup();
-        let mut flag_idx = self.0.expr.num_flags();
+        let mut flag_idx = self.0.expr.num_flags() as u8;
         if needs_setup {
             // Find which opcode this is in our local_opcode_idx list
             if let Some(opcode_position) = self
@@ -131,7 +131,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize, const BLOCK_S
             {
                 // If this is NOT the last opcode (setup), get the corresponding flag_idx
                 if opcode_position < self.0.opcode_flag_idx.len() {
-                    flag_idx = self.0.opcode_flag_idx[opcode_position];
+                    flag_idx = self.0.opcode_flag_idx[opcode_position] as u8;
                 }
             }
         }
@@ -182,7 +182,7 @@ unsafe fn execute_e1_impl<
 
     let writes = run_field_expression_precomputed::<NEEDS_SETUP>(
         pre_compute.expr,
-        pre_compute.flag_idx,
+        pre_compute.flag_idx as usize,
         &read_data.0,
     );
 
