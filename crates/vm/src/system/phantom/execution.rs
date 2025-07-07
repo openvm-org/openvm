@@ -9,7 +9,8 @@ use rand::rngs::StdRng;
 
 use crate::{
     arch::{
-        execution_mode::E1ExecutionCtx, ExecuteFunc, ExecutionError, InsExecutorE1,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2,
         PhantomSubExecutor, Streams, VmSegmentState,
     },
     system::{memory::online::GuestMemory, phantom::PhantomChip},
@@ -49,18 +50,7 @@ where
         Ctx: E1ExecutionCtx,
     {
         let data: &mut PhantomPreCompute<F> = data.borrow_mut();
-        let c = inst.c.as_canonical_u32();
-        *data = PhantomPreCompute {
-            operands: PhantomOperands {
-                a: inst.a.as_canonical_u32(),
-                b: inst.b.as_canonical_u32(),
-                c,
-            },
-            sub_executor: self
-                .phantom_executors
-                .get(&PhantomDiscriminant(c as u16))
-                .unwrap(),
-        };
+        self.pre_compute_impl(inst, data);
         Ok(execute_e1_impl)
     }
 
@@ -74,6 +64,7 @@ pub(super) struct PhantomStateMut<'a, F> {
     pub(super) rng: &'a mut StdRng,
 }
 
+#[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
@@ -94,6 +85,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     vm_state.pc += DEFAULT_PC_STEP;
     vm_state.instret += 1;
 }
+
 #[inline(always)]
 pub(super) fn execute_impl<F>(
     state: PhantomStateMut<F>,
@@ -127,4 +119,56 @@ where
     }
 
     Ok(())
+}
+
+impl<F> PhantomChip<F>
+where
+    F: PrimeField32,
+{
+    #[inline(always)]
+    fn pre_compute_impl(&self, inst: &Instruction<F>, data: &mut PhantomPreCompute<F>) {
+        let c = inst.c.as_canonical_u32();
+        *data = PhantomPreCompute {
+            operands: PhantomOperands {
+                a: inst.a.as_canonical_u32(),
+                b: inst.b.as_canonical_u32(),
+                c,
+            },
+            sub_executor: self
+                .phantom_executors
+                .get(&PhantomDiscriminant(c as u16))
+                .unwrap(),
+        };
+    }
+}
+
+impl<F> InsExecutorE2<F> for PhantomChip<F>
+where
+    F: PrimeField32,
+{
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<PhantomPreCompute<F>>>()
+    }
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> crate::arch::Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let e2_data: &mut E2PreCompute<PhantomPreCompute<F>> = data.borrow_mut();
+        e2_data.chip_idx = chip_idx as u32;
+        self.pre_compute_impl(inst, &mut e2_data.data);
+        Ok(|pre_compute, vm_state| {
+            let e2_pre_compute: &E2PreCompute<PhantomPreCompute<F>> = pre_compute.borrow();
+            vm_state
+                .ctx
+                .on_height_change(e2_pre_compute.chip_idx as usize, 1);
+            unsafe { execute_e1_impl(pre_compute, vm_state) };
+        })
+    }
 }

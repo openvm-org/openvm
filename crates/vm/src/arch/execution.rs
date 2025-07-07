@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode,
 };
@@ -128,6 +128,8 @@ pub struct PreComputeInstruction<'a, F, CTX> {
     pub pre_compute: &'a [u8],
 }
 
+#[derive(Clone, AlignedBytesBorrow)]
+#[repr(C)]
 pub struct E2PreCompute<DATA> {
     pub chip_idx: u32,
     pub data: DATA,
@@ -186,6 +188,29 @@ where
     #[inline(always)]
     fn set_trace_height(&mut self, height: usize) {
         self.borrow_mut().set_trace_height(height);
+    }
+}
+
+impl<F, C> InsExecutorE2<F> for RefCell<C>
+where
+    C: InsExecutorE2<F>,
+{
+    #[inline(always)]
+    fn e2_pre_compute_size(&self) -> usize {
+        self.borrow().e2_pre_compute_size()
+    }
+    #[inline(always)]
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        self.borrow().pre_compute_e2(chip_idx, pc, inst, data)
     }
 }
 

@@ -19,13 +19,15 @@ use openvm_stark_backend::{
 
 use crate::{
     arch::{
-        execution_mode::E1ExecutionCtx, get_record_from_slice, AdapterAirContext,
-        AdapterTraceFiller, AdapterTraceStep, BasicAdapterInterface, EmptyAdapterCoreLayout,
-        ExecuteFunc, MinimalInstruction, RecordArena, Result, StepExecutorE1, TraceFiller,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        BasicAdapterInterface, E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, InsExecutorE2,
+        MinimalInstruction, RecordArena, Result, StepExecutorE1, StepExecutorE2, TraceFiller,
         TraceStep, VmCoreAir, VmSegmentState, VmStateMut,
     },
     system::{
         memory::{online::TracingMemory, MemoryAuxColsFactory},
+        phantom::PhantomChip,
         public_values::columns::PublicValuesCoreColsView,
     },
 };
@@ -203,10 +205,8 @@ where
 #[derive(AlignedBytesBorrow)]
 #[repr(C)]
 struct PublicValuesPreCompute<F> {
-    a: u32,
     b: u32,
     c: u32,
-    d: u32,
     e: u32,
     f: u32,
     pvs: *const Mutex<Vec<Option<F>>>,
@@ -259,19 +259,12 @@ where
         Ctx: E1ExecutionCtx,
     {
         let data: &mut PublicValuesPreCompute<F> = data.borrow_mut();
-        *data = PublicValuesPreCompute {
-            a: inst.a.as_canonical_u32(),
-            b: inst.b.as_canonical_u32(),
-            c: inst.c.as_canonical_u32(),
-            d: inst.d.as_canonical_u32(),
-            e: inst.e.as_canonical_u32(),
-            f: inst.f.as_canonical_u32(),
-            pvs: &self.custom_pvs,
-        };
+        self.pre_compute_impl(inst, data);
         Ok(execute_e1_impl)
     }
 }
 
+#[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX>(
     pre_compute: &[u8],
     state: &mut VmSegmentState<F, CTX>,
@@ -297,4 +290,50 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX>(
     }
     state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
     state.instret += 1;
+}
+
+impl<A, F> StepExecutorE2<F> for PublicValuesCoreStep<A, F>
+where
+    F: PrimeField32,
+{
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<PublicValuesPreCompute<F>>>()
+    }
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let data: &mut E2PreCompute<PublicValuesPreCompute<F>> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        self.pre_compute_impl(inst, &mut data.data);
+        Ok(|pre_compute, vm_state| {
+            let e2_pre_compute: &E2PreCompute<PublicValuesPreCompute<F>> = pre_compute.borrow();
+            vm_state
+                .ctx
+                .on_height_change(e2_pre_compute.chip_idx as usize, 1);
+            unsafe { execute_e1_impl(pre_compute, vm_state) }
+        })
+    }
+}
+
+impl<A, F> PublicValuesCoreStep<A, F>
+where
+    F: PrimeField32,
+{
+    fn pre_compute_impl(&self, inst: &Instruction<F>, data: &mut PublicValuesPreCompute<F>) {
+        *data = PublicValuesPreCompute {
+            b: inst.b.as_canonical_u32(),
+            c: inst.c.as_canonical_u32(),
+            e: inst.e.as_canonical_u32(),
+            f: inst.f.as_canonical_u32(),
+            pvs: &self.custom_pvs,
+        };
+    }
 }

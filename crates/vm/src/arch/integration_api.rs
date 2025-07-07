@@ -26,11 +26,14 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    execution_mode::E1ExecutionCtx, ExecuteFunc, ExecutionState, InsExecutorE1,
+    execution_mode::E1ExecutionCtx, ExecuteFunc, ExecutionState, InsExecutorE1, InsExecutorE2,
     InstructionExecutor, Result, Streams, VmStateMut,
 };
-use crate::system::memory::{
-    online::TracingMemory, MemoryAuxColsFactory, MemoryController, SharedMemoryHelper,
+use crate::{
+    arch::execution_mode::E2ExecutionCtx,
+    system::memory::{
+        online::TracingMemory, MemoryAuxColsFactory, MemoryController, SharedMemoryHelper,
+    },
 };
 
 /// The interface between primitive AIR and machine adapter AIR.
@@ -955,6 +958,19 @@ pub trait StepExecutorE1<F> {
         Ctx: E1ExecutionCtx;
 }
 
+pub trait StepExecutorE2<F> {
+    fn e2_pre_compute_size(&self) -> usize;
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx;
+}
+
 impl<F, A, S> InsExecutorE1<F> for NewVmChipWrapper<F, A, S, MatrixRecordArena<F>>
 where
     F: PrimeField32,
@@ -980,6 +996,29 @@ where
 
     fn set_trace_height(&mut self, height: usize) {
         self.set_trace_buffer_height(height);
+    }
+}
+
+impl<F, A, S> InsExecutorE2<F> for NewVmChipWrapper<F, A, S, MatrixRecordArena<F>>
+where
+    F: PrimeField32,
+    S: StepExecutorE2<F>,
+{
+    fn e2_pre_compute_size(&self) -> usize {
+        self.step.e2_pre_compute_size()
+    }
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        self.step.pre_compute_e2(chip_idx, pc, inst, data)
     }
 }
 

@@ -7,7 +7,10 @@ use super::{
     segment_ctx::{Segment, SegmentationCtx},
 };
 use crate::{
-    arch::{execution_mode::E1ExecutionCtx, VmSegmentState},
+    arch::{
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        VmSegmentState,
+    },
     system::memory::dimensions::MemoryDimensions,
 };
 
@@ -159,6 +162,12 @@ impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
     }
 
     fn should_suspend<F>(_vm_state: &VmSegmentState<F, Self>) -> bool {
+        todo!()
+    }
+}
+
+impl<const PAGE_BITS: usize> E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
+    fn on_height_change(&mut self, chip_idx: usize, height_delta: usize) {
         todo!()
     }
 }
