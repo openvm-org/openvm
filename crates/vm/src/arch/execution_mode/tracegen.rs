@@ -4,8 +4,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        execution_control::ExecutionControl, ExecutionError, InstructionExecutor, VmSegmentState,
-        VmStateMut,
+        execution_control::ExecutionControl, Arena, ExecutionError, InstructionExecutor,
+        VmSegmentState, VmStateMut,
     },
     system::{memory::online::TracingMemory, program::PcEntry},
 };
@@ -15,21 +15,22 @@ pub struct TracegenCtx<RA> {
     pub instret_end: Option<u64>,
 }
 
-impl<RA> TracegenCtx<RA> {
-    // /// `capacities` is list of `(height, width)` dimensions for each arena.
-    // pub fn new_with_capacity(capacities: &[(usize, usize)], instret_end: Option<u64>) -> Self {
-    //     let arenas = capacities
-    //         .iter()
-    //         .map(|&(height, width)| {
-    //             MatrixRecordArena::with_capacity(next_power_of_two_or_zero(height), width)
-    //         })
-    //         .collect();
+impl<RA: Arena> TracegenCtx<RA> {
+    /// `capacities` is list of `(height, width)` dimensions for each arena, indexed by AIR index.
+    /// The length of `capacities` must equal the number of AIRs.
+    /// Here `height` will always mean an overestimate of the trace height for that AIR, while
+    /// `width` may have different meanings depending on the `RA` type.
+    pub fn new_with_capacity(capacities: &[(usize, usize)], instret_end: Option<u64>) -> Self {
+        let arenas = capacities
+            .iter()
+            .map(|&(height, width)| RA::with_capacity(height, width))
+            .collect();
 
-    //     Self {
-    //         arenas,
-    //         instret_end,
-    //     }
-    // }
+        Self {
+            arenas,
+            instret_end,
+        }
+    }
 }
 
 pub struct TracegenExecutionControl<RA> {

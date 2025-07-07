@@ -73,7 +73,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         let air_names = (0..chips.len()).map(|i| air_name(1 << (i + 1))).collect();
         Self {
             chips,
-            arena: DenseRecordArena::with_capacity(0),
+            arena: DenseRecordArena::with_byte_capacity(0),
             air_names,
         }
     }
@@ -119,7 +119,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
             size_bound,
             trace_heights
         );
-        self.arena.set_capacity(size_bound);
+        self.arena.set_byte_capacity(size_bound);
     }
 
     pub fn get_heights(&self) -> Vec<usize> {

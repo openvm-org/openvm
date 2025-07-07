@@ -36,8 +36,9 @@ use crate::{
     arch::{
         vm_poseidon2_config, AirInventory, AirInventoryError, BusIndexManager, ChipInventory,
         ChipInventoryError, ExecutionBridge, ExecutionBus, ExecutionState, ExecutorInventory,
-        ExecutorInventoryError, RowMajorMatrixArena, SystemConfig, VmAirWrapper, VmChipComplex,
-        VmChipWrapper, VmCircuitConfig, VmExecutionConfig, VmProverConfig, PUBLIC_VALUES_AIR_ID,
+        ExecutorInventoryError, MatrixRecordArena, RowMajorMatrixArena, SystemConfig, VmAirWrapper,
+        VmChipComplex, VmChipWrapper, VmCircuitConfig, VmExecutionConfig, VmProverConfig,
+        PUBLIC_VALUES_AIR_ID,
     },
     system::{
         connector::VmConnectorChip,
@@ -387,19 +388,21 @@ where
     }
 }
 
-impl<RA, SC> VmProverConfig<SC, RA, CpuBackend<SC>> for SystemConfig
+impl<SC> VmProverConfig<SC, CpuBackend<SC>> for SystemConfig
 where
-    RA: RowMajorMatrixArena<Val<SC>>,
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
 {
+    type RecordArena = MatrixRecordArena<Val<SC>>;
     type SystemChipInventory = SystemChipInventory<SC>;
 
     fn create_chip_complex(
         &self,
         airs: AirInventory<SC>,
-    ) -> Result<VmChipComplex<SC, RA, CpuBackend<SC>, SystemChipInventory<SC>>, ChipInventoryError>
-    {
+    ) -> Result<
+        VmChipComplex<SC, MatrixRecordArena<Val<SC>>, CpuBackend<SC>, SystemChipInventory<SC>>,
+        ChipInventoryError,
+    > {
         let range_bus = airs.range_checker().bus;
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
         let system = SystemChipInventory::new(self, &airs.system().memory, range_checker.clone());

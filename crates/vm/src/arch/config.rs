@@ -6,6 +6,7 @@ use openvm_instructions::NATIVE_AS;
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
+    keygen::types::MultiStarkProvingKey,
     p3_field::Field,
     prover::hal::ProverBackend,
 };
@@ -17,11 +18,13 @@ use super::{
 };
 use crate::{
     arch::{
-        AirInventory, AirInventoryError, ChipInventoryError, ExecutorInventory,
+        AirInventory, AirInventoryError, Arena, ChipInventoryError, ExecutorInventory,
         ExecutorInventoryError,
     },
     system::{
-        memory::{merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, BOUNDARY_AIR_OFFSET},
+        memory::{
+            merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, BOUNDARY_AIR_OFFSET, CHUNK,
+        },
         SystemChipComplex,
     },
 };
@@ -70,21 +73,32 @@ pub trait VmExecutionConfig<F> {
 
 pub trait VmCircuitConfig<SC: StarkGenericConfig> {
     fn create_circuit(&self) -> Result<AirInventory<SC>, AirInventoryError>;
+
+    /// Generate the proving key and verifying key for the circuit defined by this config.
+    fn keygen(&self, stark_config: &SC) -> Result<MultiStarkProvingKey<SC>, AirInventoryError> {
+        let circuit = self.create_circuit()?;
+        let pk = circuit.keygen(stark_config);
+        Ok(pk)
+    }
 }
 
-pub trait VmProverConfig<SC, RA, PB>: VmConfig<SC>
+pub trait VmProverConfig<SC, PB>: VmConfig<SC>
 where
     SC: StarkGenericConfig,
-    PB: ProverBackend,
+    PB: ProverBackend<Val = Val<SC>, Challenge = SC::Challenge, Challenger = SC::Challenger>,
 {
-    type SystemChipInventory: SystemChipComplex<RA, PB>;
+    type RecordArena: Arena;
+    type SystemChipInventory: SystemChipComplex<Self::RecordArena, PB>;
 
     /// Create a [VmChipComplex] from the full [AirInventory], which should be the output of
     /// [VmCircuitConfig::create_circuit].
     fn create_chip_complex(
         &self,
         circuit: AirInventory<SC>,
-    ) -> Result<VmChipComplex<SC, RA, PB, Self::SystemChipInventory>, ChipInventoryError>;
+    ) -> Result<
+        VmChipComplex<SC, Self::RecordArena, PB, Self::SystemChipInventory>,
+        ChipInventoryError,
+    >;
 }
 
 impl<SC, VC> VmConfig<SC> for VC
@@ -302,6 +316,13 @@ impl SystemConfig {
                 self.continuation_enabled,
                 self.memory_config.max_access_adapter_n,
             )
+    }
+
+    pub fn initial_block_size(&self) -> usize {
+        match self.continuation_enabled {
+            true => CHUNK,
+            false => 1,
+        }
     }
 }
 

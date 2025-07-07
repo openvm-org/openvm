@@ -12,6 +12,7 @@ use openvm_instructions::{PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::BusIndex,
+    keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
     prover::{
         cpu::CpuBackend,
         hal::ProverBackend,
@@ -389,6 +390,15 @@ impl<SC: StarkGenericConfig> AirInventory<SC> {
     /// This is O(1). Returns the total number of AIRs and equals the length of [`Self::into_airs`].
     pub fn num_airs(&self) -> usize {
         self.config.num_airs() + self.ext_airs.len()
+    }
+
+    /// Standalone function to generate proving key and verifying key for this circuit.
+    pub fn keygen(self, stark_config: &SC) -> MultiStarkProvingKey<SC> {
+        let mut builder = MultiStarkKeygenBuilder::new(stark_config);
+        for air in self.into_airs() {
+            builder.add_air(air);
+        }
+        builder.generate_pk()
     }
 }
 

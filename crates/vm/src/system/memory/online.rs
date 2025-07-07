@@ -11,10 +11,9 @@ use openvm_stark_backend::{
 
 use super::{adapter::AccessAdapterInventory, offline_checker::MemoryBus};
 use crate::{
-    arch::MemoryConfig,
-    system::memory::{
-        adapter::records::{AccessLayout, AccessRecordHeader, MERGE_AND_NOT_SPLIT_FLAG},
-        MemoryImage,
+    arch::{MemoryConfig, ADDR_SPACE_OFFSET},
+    system::memory::adapter::records::{
+        AccessLayout, AccessRecordHeader, MERGE_AND_NOT_SPLIT_FLAG,
     },
 };
 
@@ -385,7 +384,7 @@ impl<F: PrimeField32> TracingMemory<F> {
         initial_block_size: usize,
     ) -> Self {
         let num_cells = mem_config.addr_space_sizes.clone();
-        let num_addr_sp = 1 + (1 << mem_config.addr_space_height);
+        let num_addr_sp = ADDR_SPACE_OFFSET as usize + (1 << mem_config.addr_space_height);
         let mut min_block_size = vec![1; num_addr_sp];
         // TMP: hardcoding for now
         min_block_size[1] = 4;
@@ -412,16 +411,41 @@ impl<F: PrimeField32> TracingMemory<F> {
         }
     }
 
-    /// Instantiates a new `Memory` data structure from an image.
-    pub fn with_image(mut self, image: MemoryImage) -> Self {
-        for (i, (mem, cell_size)) in izip!(image.get_memory(), &image.cell_size).enumerate() {
-            let num_cells = mem.size() / cell_size;
+    /// Constructor from pre-existing memory image.
+    pub fn with_image(
+        image: AddressMap,
+        mem_config: &MemoryConfig,
+        range_checker: SharedVariableRangeCheckerChip,
+        memory_bus: MemoryBus,
+        initial_block_size: usize,
+    ) -> Self {
+        let num_addr_sp = ADDR_SPACE_OFFSET as usize + (1 << mem_config.addr_space_height);
+        let mut min_block_size = vec![1; num_addr_sp];
+        // TMP: hardcoding for now
+        min_block_size[1] = 4;
+        min_block_size[2] = 4;
+        min_block_size[3] = 4;
 
-            let total_metadata_len = num_cells.div_ceil(self.min_block_size[i] as usize);
-            self.meta[i] = PagedVec::new(total_metadata_len, PAGE_SIZE);
+        let meta = izip!(image.get_memory(), &image.cell_size, &min_block_size)
+            .map(|(mem, cell_size, min_block_size)| {
+                let num_cells = mem.size() / cell_size;
+                let total_metadata_len = num_cells.div_ceil(*min_block_size as usize);
+                PagedVec::new(total_metadata_len, PAGE_SIZE)
+            })
+            .collect::<Vec<_>>();
+        Self {
+            data: GuestMemory::new(image),
+            meta,
+            min_block_size,
+            timestamp: INITIAL_TIMESTAMP + 1,
+            initial_block_size,
+            access_adapter_inventory: AccessAdapterInventory::new(
+                range_checker,
+                memory_bus,
+                mem_config.clk_max_bits,
+                mem_config.max_access_adapter_n,
+            ),
         }
-        self.data = GuestMemory::new(image);
-        self
     }
 
     #[inline(always)]

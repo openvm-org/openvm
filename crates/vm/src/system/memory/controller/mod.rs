@@ -297,13 +297,14 @@ impl<F: PrimeField32> MemoryController<F> {
             }
         }
 
-        self.memory = TracingMemory::new(
+        self.memory = TracingMemory::with_image(
+            memory,
             &self.mem_config,
             self.range_checker.clone(),
             self.memory_bus,
+            INITIAL_TIMESTAMP + 1,
             CHUNK,
-        )
-        .with_image(memory);
+        );
     }
 
     pub fn memory_bridge(&self) -> MemoryBridge {

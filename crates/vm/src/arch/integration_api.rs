@@ -103,6 +103,11 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
     pub instruction: I::ProcessedInstruction,
 }
 
+pub trait Arena {
+    // TODO[jpw]: specify what width is
+    fn with_capacity(height: usize, width: usize) -> Self;
+}
+
 /// Given some minimum layout of type `Layout`, the `RecordArena` should allocate a buffer, of
 /// size possibly larger than the record, and then return mutable pointers to the record within the
 /// buffer.
@@ -135,10 +140,9 @@ pub trait TraceStep<F> {
 }
 
 // TODO[jpw]: this might be temporary trait before moving trace to CTX
-pub trait RowMajorMatrixArena<F> {
+pub trait RowMajorMatrixArena<F>: Arena {
     /// Set the arena's capacity based on the projected trace height.
     fn set_capacity(&mut self, trace_height: usize);
-    fn with_capacity(height: usize, width: usize) -> Self;
     fn width(&self) -> usize;
     fn trace_offset(&self) -> usize;
     fn into_matrix(self) -> RowMajorMatrix<F>;
@@ -398,20 +402,23 @@ impl<F: Field> MatrixRecordArena<F> {
     }
 }
 
-impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
-    fn set_capacity(&mut self, trace_height: usize) {
-        let size = trace_height * self.width;
-        // PERF: use memset
-        self.trace_buffer.resize(size, F::ZERO);
-    }
-
+impl<F: Field> Arena for MatrixRecordArena<F> {
     fn with_capacity(height: usize, width: usize) -> Self {
+        let height = next_power_of_two_or_zero(height);
         let trace_buffer = F::zero_vec(height * width);
         Self {
             trace_buffer,
             width,
             trace_offset: 0,
         }
+    }
+}
+
+impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
+    fn set_capacity(&mut self, trace_height: usize) {
+        let size = trace_height * self.width;
+        // PERF: use memset
+        self.trace_buffer.resize(size, F::ZERO);
     }
 
     fn width(&self) -> usize {
@@ -470,7 +477,7 @@ const MAX_ALIGNMENT: usize = 32;
 
 impl DenseRecordArena {
     /// Creates a new [DenseRecordArena] with the given capacity in bytes.
-    pub fn with_capacity(size_bytes: usize) -> Self {
+    pub fn with_byte_capacity(size_bytes: usize) -> Self {
         let buffer = vec![0; size_bytes + MAX_ALIGNMENT];
         let offset = (MAX_ALIGNMENT - (buffer.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT;
         let mut cursor = Cursor::new(buffer);
@@ -480,7 +487,7 @@ impl DenseRecordArena {
         }
     }
 
-    pub fn set_capacity(&mut self, size_bytes: usize) {
+    pub fn set_byte_capacity(&mut self, size_bytes: usize) {
         let buffer = vec![0; size_bytes + MAX_ALIGNMENT];
         let offset = (MAX_ALIGNMENT - (buffer.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT;
         let mut cursor = Cursor::new(buffer);
@@ -539,6 +546,14 @@ impl DenseRecordArena {
     // Returns a [RecordSeeker] on the allocated buffer
     pub fn get_record_seeker<R, L>(&mut self) -> RecordSeeker<DenseRecordArena, R, L> {
         RecordSeeker::new(self.allocated_mut())
+    }
+}
+
+impl Arena for DenseRecordArena {
+    // TODO[jpw]: treat `width` as AIR width in number of columns for now
+    fn with_capacity(height: usize, width: usize) -> Self {
+        let size_bytes = height * (width * size_of::<u32>());
+        Self::with_byte_capacity(size_bytes)
     }
 }
 
