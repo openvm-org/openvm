@@ -2,7 +2,10 @@
 //! The Air will always constrain a NOP which advances pc by DEFAULT_PC_STEP.
 //! The runtime executor will execute different phantom instructions that may
 //! affect trace generation based on the operand.
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    sync::Arc,
+};
 
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -98,9 +101,9 @@ pub struct PhantomRecord {
 
 /// `PhantomChip` is a special executor because it is stateful and stores all the phantom
 /// sub-executors.
-#[derive(derive_new::new)]
+#[derive(Clone, derive_new::new)]
 pub struct PhantomExecutor<F> {
-    phantom_executors: FxHashMap<PhantomDiscriminant, Box<dyn PhantomSubExecutor<F>>>,
+    phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor<F>>>,
     phantom_opcode: VmOpcode,
 }
 
@@ -112,9 +115,9 @@ impl<F> PhantomExecutor<F> {
         &mut self,
         sub_executor: P,
         discriminant: PhantomDiscriminant,
-    ) -> Option<Box<dyn PhantomSubExecutor<F>>> {
+    ) -> Option<Arc<dyn PhantomSubExecutor<F>>> {
         self.phantom_executors
-            .insert(discriminant, Box::new(sub_executor))
+            .insert(discriminant, Arc::new(sub_executor))
     }
 }
 

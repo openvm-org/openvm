@@ -11,6 +11,7 @@ use crate::{arch::execution_mode::E1E2ExecutionCtx, system::memory::dimensions::
 #[derive(Debug)]
 pub struct MeteredCtx<const PAGE_BITS: usize = 6> {
     pub trace_heights: Vec<u32>,
+    // TODO[jpw]: should this be in Ctrl?
     pub is_trace_height_constant: Vec<bool>,
 
     pub memory_ctx: MemoryCtx<PAGE_BITS>,

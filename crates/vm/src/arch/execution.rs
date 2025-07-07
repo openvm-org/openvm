@@ -20,7 +20,7 @@ use crate::{
     arch::MatrixRecordArena,
     system::{
         memory::online::{GuestMemory, TracingMemory},
-        program::ProgramBus,
+        program::{ProgramBus, StaticProgramError},
     },
 };
 
@@ -71,6 +71,8 @@ pub enum ExecutionError {
     FailedWithExitCode(u32),
     #[error("trace buffer out of bounds: requested {requested} but capacity is {capacity}")]
     TraceBufferOutOfBounds { requested: usize, capacity: usize },
+    #[error("static program error: {0}")]
+    Static(#[from] StaticProgramError),
 }
 
 /// Global VM state accessible during instruction execution.

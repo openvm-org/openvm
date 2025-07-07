@@ -54,12 +54,11 @@ pub trait VmConfig<SC>:
     + InitFileGenerator
     + VmExecutionConfig<Val<SC>>
     + VmCircuitConfig<SC>
+    + AsRef<SystemConfig>
+    + AsMut<SystemConfig>
 where
     SC: StarkGenericConfig,
 {
-    /// Must contain system config
-    fn system(&self) -> &SystemConfig;
-    fn system_mut(&mut self) -> &mut SystemConfig;
 }
 
 pub trait VmExecutionConfig<F> {
@@ -73,7 +72,7 @@ pub trait VmCircuitConfig<SC: StarkGenericConfig> {
     fn create_circuit(&self) -> Result<AirInventory<SC>, AirInventoryError>;
 }
 
-pub trait VmProverConfig<SC, RA, PB>: VmCircuitConfig<SC>
+pub trait VmProverConfig<SC, RA, PB>: VmConfig<SC>
 where
     SC: StarkGenericConfig,
     PB: ProverBackend,
