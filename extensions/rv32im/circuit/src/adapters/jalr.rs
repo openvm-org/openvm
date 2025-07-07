@@ -160,7 +160,6 @@ pub struct Rv32JalrAdapterRecord {
 
 // This adapter reads from [b:4]_d (rs1) and writes to [a:4]_d (rd)
 pub struct Rv32JalrAdapterStep;
-pub type Rv32JalrAdapterChip = Rv32JalrAdapterStep;
 
 impl<F> AdapterTraceStep<F> for Rv32JalrAdapterStep
 where
@@ -228,7 +227,7 @@ where
         }
     }
 }
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32JalrAdapterChip {
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32JalrAdapterStep {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &Rv32JalrAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };

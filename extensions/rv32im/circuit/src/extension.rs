@@ -4,11 +4,11 @@ use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventory, ChipInventoryError, ExecutionBridge, ExecutorInventory,
-        InitFileGenerator, SystemConfig, SystemPort, VmAirWrapper, VmCircuitExtension,
-        VmExecutionExtension, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
-        VmProverExtension,
+        InitFileGenerator, SystemConfig, SystemPort, VmAirWrapper, VmChipWrapper,
+        VmCircuitExtension, VmExecutionExtension, VmExtension, VmInventory, VmInventoryBuilder,
+        VmInventoryError, VmProverExtension,
     },
-    system::phantom::PhantomExecutor,
+    system::{memory::SharedMemoryHelper, phantom::PhantomExecutor},
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::{
@@ -294,88 +294,105 @@ where
         // These calls to next_air are not strictly necessary to construct the chips, but provide a
         // safeguard to ensure that chip construction matches the circuit definition
         inventory.next_air::<Rv32BaseAluAir>()?;
-        let base_alu = Rv32BaseAluChip::new(
-            Rv32BaseAluAdapterChip::new(bitwise_lu.clone()),
-            bitwise_lu_chip.clone(),
-            BaseAluOpcode::CLASS_OFFSET,
+        let base_alu = VmChipWrapper::new(
+            BaseAluFiller::new(
+                Rv32BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                bitwise_lu_chip.clone(),
+                BaseAluOpcode::CLASS_OFFSET,
+            ),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(base_alu);
 
         inventory.next_air::<Rv32LessThanAir>()?;
-        let lt = Rv32LessThanChip::new(
-            Rv32BaseAluAdapterChip::new(bitwise_lu.clone()),
-            bitwise_lu.clone(),
-            LessThanOpcode::CLASS_OFFSET,
+        let lt = VmChipWrapper::new(
+            LessThanChip::new(
+                Rv32BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                bitwise_lu.clone(),
+                LessThanOpcode::CLASS_OFFSET,
+            ),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(lt);
 
         inventory.next_air::<Rv32ShiftAir>()?;
-        let shift = Rv32ShiftChip::new(
-            Rv32BaseAluAdapterChip::new(bitwise_lu.clone()),
-            bitwise_lu.clone(),
-            range_checker.clone(),
-            ShiftOpcode::CLASS_OFFSET,
+        let shift = VmChipWrapper::new(
+            ShiftFiller::new(
+                Rv32BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                bitwise_lu.clone(),
+                range_checker.clone(),
+                ShiftOpcode::CLASS_OFFSET,
+            ),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(shift);
 
         inventory.next_air::<Rv32LoadStoreAir>()?;
-        let load_store_chip = Rv32LoadStoreChip::new(
-            Rv32LoadStoreAdapterChip::new(pointer_max_bits, range_checker.clone()),
-            Rv32LoadStoreOpcode::CLASS_OFFSET,
+        let load_store_chip = VmChipWrapper::new(
+            LoadStoreFiller::new(
+                Rv32LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
+                Rv32LoadStoreOpcode::CLASS_OFFSET,
+            ),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(load_store_chip);
 
         inventory.next_air::<Rv32LoadSignExtendAir>()?;
-        let load_sign_extend = Rv32LoadSignExtendChip::new(
-            Rv32LoadStoreAdapterChip::new(pointer_max_bits, range_checker.clone()),
-            range_checker.clone(),
+        let load_sign_extend = VmChipWrapper::new(
+            LoadSignExtendFiller::new(
+                Rv32LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
+                range_checker.clone(),
+            ),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(load_sign_extend);
 
         inventory.next_air::<Rv32BranchEqualAir>()?;
-        let beq = Rv32BranchEqualChip::new(
-            Rv32BranchAdapterChip,
-            BranchEqualOpcode::CLASS_OFFSET,
-            DEFAULT_PC_STEP,
+        let beq = VmChipWrapper::new(
+            BranchEqualFiller::new(
+                Rv32BranchAdapterStep,
+                BranchEqualOpcode::CLASS_OFFSET,
+                DEFAULT_PC_STEP,
+            ),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(beq);
 
         inventory.next_air::<Rv32BranchLessThanAir>()?;
-        let blt = Rv32BranchLessThanChip::new(
-            Rv32BranchAdapterChip,
-            bitwise_lu.clone(),
-            BranchLessThanOpcode::CLASS_OFFSET,
+        let blt = VmChipWrapper::new(
+            BranchLessThanFiller::new(
+                Rv32BranchAdapterStep,
+                bitwise_lu.clone(),
+                BranchLessThanOpcode::CLASS_OFFSET,
+            ),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(blt);
 
         inventory.next_air::<Rv32JalLuiAir>()?;
-        let jal_lui = Rv32JalLuiChip::new(
-            Rv32CondRdWriteAdapterChip::new(Rv32RdWriteAdapterChip),
-            bitwise_lu_chip.clone(),
+        let jal_lui = VmChipWrapper::new(
+            Rv32JalLuiFiller::new(
+                Rv32CondRdWriteAdapterStep::new(Rv32RdWriteAdapterStep),
+                bitwise_lu_chip.clone(),
+            ),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(jal_lui);
 
         inventory.next_air::<Rv32JalrAir>()?;
-        let jalr = Rv32JalrChip::new(
-            Rv32JalrAdapterChip,
-            bitwise_lu_chip.clone(),
-            range_checker.clone(),
+        let jalr = VmChipWrapper::new(
+            Rv32JalrFiller::new(
+                Rv32JalrAdapterStep,
+                bitwise_lu_chip.clone(),
+                range_checker.clone(),
+            ),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(jalr);
 
         inventory.next_air::<Rv32AuipcAir>()?;
-        let auipc = Rv32AuipcChip::new(
-            Rv32RdWriteAdapterChip,
-            bitwise_lu_chip.clone(),
+        let auipc = VmChipWrapper::new(
+            Rv32AuipcFiller::new(Rv32RdWriteAdapterStep, bitwise_lu_chip.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(auipc);

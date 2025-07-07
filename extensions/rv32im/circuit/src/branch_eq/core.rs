@@ -154,11 +154,10 @@ pub struct BranchEqualStep<A, const NUM_LIMBS: usize> {
 }
 
 #[derive(derive_new::new)]
-pub struct BranchEqualChip<F, A, const NUM_LIMBS: usize> {
+pub struct BranchEqualFiller<F, A, const NUM_LIMBS: usize> {
     adapter: A,
     pub offset: usize,
     pub pc_step: u32,
-    pub mem_helper: SharedMemoryHelper<F>,
 }
 
 impl<F, A, const NUM_LIMBS: usize> TraceStep<F> for BranchEqualStep<A, NUM_LIMBS>
@@ -209,14 +208,14 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize> TraceFiller<F> for BranchEqualChip<F, A, NUM_LIMBS>
+impl<F, A, const NUM_LIMBS: usize> TraceFiller<F> for BranchEqualFiller<F, A, NUM_LIMBS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
-    fn fill_trace_row(&self, row_slice: &mut [F]) {
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(&self.mem_helper, adapter_row);
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
         let record: &BranchEqualCoreRecord<NUM_LIMBS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
         let core_row: &mut BranchEqualCoreCols<F, NUM_LIMBS> = core_row.borrow_mut();

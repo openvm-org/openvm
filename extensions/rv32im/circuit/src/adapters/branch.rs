@@ -119,7 +119,6 @@ pub struct Rv32BranchAdapterRecord {
 /// Reads instructions of the form OP a, b, c, d, e where if(\[a:4\]_d op \[b:4\]_e) pc += c.
 /// Operands d and e can only be 1.
 pub struct Rv32BranchAdapterStep;
-pub type Rv32BranchAdapterChip = Rv32BranchAdapterStep;
 
 impl<F> AdapterTraceStep<F> for Rv32BranchAdapterStep
 where
@@ -177,7 +176,7 @@ where
         // This function is intentionally left empty
     }
 }
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32BranchAdapterChip {
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32BranchAdapterStep {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &Rv32BranchAdapterRecord =

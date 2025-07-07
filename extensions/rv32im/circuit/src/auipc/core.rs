@@ -33,9 +33,7 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 
-use crate::adapters::{
-    Rv32RdWriteAdapterChip, Rv32RdWriteAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
-};
+use crate::adapters::{Rv32RdWriteAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
@@ -210,10 +208,9 @@ pub struct Rv32AuipcStep<A = Rv32RdWriteAdapterStep> {
 }
 
 #[derive(derive_new::new)]
-pub struct Rv32AuipcChip<F, A = Rv32RdWriteAdapterChip> {
+pub struct Rv32AuipcFiller<F, A = Rv32RdWriteAdapterStep> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-    pub mem_helper: SharedMemoryHelper<F>,
 }
 
 impl<F, A> TraceStep<F> for Rv32AuipcStep<A>
@@ -255,14 +252,14 @@ where
     }
 }
 
-impl<F, A> TraceFiller<F> for Rv32AuipcChip<A>
+impl<F, A> TraceFiller<F> for Rv32AuipcFiller<A>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
-    fn fill_trace_row(&self, row_slice: &mut [F]) {
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(&self.mem_helper, adapter_row);
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
 
         let record: &Rv32AuipcCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
 

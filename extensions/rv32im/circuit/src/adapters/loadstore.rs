@@ -327,7 +327,7 @@ pub struct Rv32LoadStoreAdapterStep {
 }
 
 #[derive(derive_new::new)]
-pub struct Rv32LoadStoreAdapterChip {
+pub struct Rv32LoadStoreAdapterFiller {
     pointer_max_bits: usize,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
@@ -492,7 +492,7 @@ where
     }
 }
 
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32LoadStoreAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32LoadStoreAdapterFiller {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // TODO(ayush): should this be here?

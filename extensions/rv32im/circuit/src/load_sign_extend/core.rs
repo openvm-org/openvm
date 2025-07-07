@@ -21,7 +21,12 @@ use openvm_circuit_primitives::{
     AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_CELL_BITS, RV32_NUM_REGISTERS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -30,7 +35,7 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 
-use crate::adapters::LoadStoreInstruction;
+use crate::adapters::{LoadStoreInstruction, Rv32LoadStoreAdapterFiller};
 
 /// LoadSignExtend Core Chip handles byte/halfword into word conversions through sign extend
 /// This chip uses read_data to construct write_data
@@ -188,10 +193,14 @@ pub struct LoadSignExtendStep<A, const NUM_CELLS: usize, const LIMB_BITS: usize>
 }
 
 #[derive(derive_new::new)]
-pub struct LoadSignExtendChip<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> {
+pub struct LoadSignExtendFiller<
+    F,
+    A = Rv32LoadStoreAdapterFiller,
+    const NUM_CELLS: usize = RV32_REGISTER_NUM_LIMBS,
+    const LIMB_BITS: usize = RV32_CELL_BITS,
+> {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-    pub mem_helper: SharedMemoryHelper<F>,
 }
 
 impl<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceStep<F>
@@ -265,14 +274,14 @@ where
 }
 
 impl<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for LoadSignExtendChip<F, A, NUM_CELLS, LIMB_BITS>
+    for LoadSignExtendFiller<F, A, NUM_CELLS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
-    fn fill_trace_row(&self, row_slice: &mut [F]) {
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(&self.mem_helper, adapter_row);
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
         let record: &LoadSignExtendCoreRecord<NUM_CELLS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
 

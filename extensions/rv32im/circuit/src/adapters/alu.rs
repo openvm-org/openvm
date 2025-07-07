@@ -168,7 +168,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
 pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize>;
 
 #[derive(derive_new::new)]
-pub struct Rv32BaseAluAdapterChip<const LIMB_BITS: usize> {
+pub struct Rv32BaseAluAdapterFiller<const LIMB_BITS: usize> {
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 
@@ -271,7 +271,7 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceStep<F>
 }
 
 impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
-    for Rv32BaseAluAdapterChip<LIMB_BITS>
+    for Rv32BaseAluAdapterFiller<LIMB_BITS>
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY: the following is highly unsafe. We are going to cast `adapter_row` to a record

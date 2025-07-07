@@ -31,8 +31,7 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    Rv32CondRdWriteAdapterChip, Rv32CondRdWriteAdapterStep, RV32_CELL_BITS,
-    RV32_REGISTER_NUM_LIMBS, RV_J_TYPE_IMM_BITS,
+    Rv32CondRdWriteAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_J_TYPE_IMM_BITS,
 };
 
 pub(super) const ADDITIONAL_BITS: u32 = 0b11000000;
@@ -164,10 +163,9 @@ pub struct Rv32JalLuiStep<A = Rv32CondRdWriteAdapterStep> {
 }
 
 #[derive(derive_new::new)]
-pub struct Rv32JalLuiChip<F, A = Rv32CondRdWriteAdapterChip> {
+pub struct Rv32JalLuiFiller<F, A = Rv32CondRdWriteAdapterStep> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-    pub mem_helper: SharedMemoryHelper<F>,
 }
 
 impl<F, A> TraceStep<F> for Rv32JalLuiStep<A>
@@ -218,7 +216,7 @@ where
     }
 }
 
-impl<F, A> TraceFiller<F> for Rv32JalLuiChip<A>
+impl<F, A> TraceFiller<F> for Rv32JalLuiFiller<A>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,

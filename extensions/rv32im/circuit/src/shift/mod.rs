@@ -1,9 +1,9 @@
-use openvm_circuit::arch::VmAirWrapper;
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use super::adapters::{
-    Rv32BaseAluAdapterAir, Rv32BaseAluAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+    Rv32BaseAluAdapterAir, Rv32BaseAluAdapterFiller, Rv32BaseAluAdapterStep, RV32_CELL_BITS,
+    RV32_REGISTER_NUM_LIMBS,
 };
-use crate::adapters::Rv32BaseAluAdapterChip;
 
 mod core;
 pub use core::*;
@@ -15,5 +15,12 @@ pub type Rv32ShiftAir =
     VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
 pub type Rv32ShiftStep =
     ShiftStep<Rv32BaseAluAdapterStep<RV32_CELL_BITS>, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>;
-pub type Rv32ShiftChip<F> =
-    ShiftChip<F, Rv32BaseAluAdapterChip<RV32_CELL_BITS>, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>;
+pub type Rv32ShiftChip<F> = VmChipWrapper<
+    F,
+    ShiftFiller<
+        F,
+        Rv32BaseAluAdapterFiller<RV32_CELL_BITS>,
+        RV32_REGISTER_NUM_LIMBS,
+        RV32_CELL_BITS,
+    >,
+>;

@@ -1,8 +1,8 @@
-use openvm_circuit::arch::VmAirWrapper;
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use super::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use crate::adapters::{
-    Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterChip, Rv32LoadStoreAdapterStep,
+    Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterFiller, Rv32LoadStoreAdapterStep,
 };
 
 mod core;
@@ -17,5 +17,4 @@ pub type Rv32LoadSignExtendAir = VmAirWrapper<
 >;
 pub type Rv32LoadSignExtendStep =
     LoadSignExtendStep<Rv32LoadStoreAdapterStep, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>;
-pub type Rv32LoadSignExtendChip<F> =
-    LoadSignExtendChip<F, Rv32LoadStoreAdapterChip, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>;
+pub type Rv32LoadSignExtendChip<F> = VmChipWrapper<F, LoadSignExtendFiller<F>>;

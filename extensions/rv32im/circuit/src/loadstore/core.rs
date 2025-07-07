@@ -26,7 +26,7 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 
-use crate::adapters::LoadStoreInstruction;
+use crate::adapters::{LoadStoreInstruction, Rv32LoadStoreAdapterFiller};
 
 #[derive(Debug, Clone, Copy)]
 enum InstructionOpcode {
@@ -260,10 +260,13 @@ pub struct LoadStoreStep<A, const NUM_CELLS: usize> {
 }
 
 #[derive(derive_new::new)]
-pub struct LoadStoreChip<F, A, const NUM_CELLS: usize> {
+pub struct LoadStoreFiller<
+    F,
+    A = Rv32LoadStoreAdapterFiller,
+    const NUM_CELLS: usize = RV32_REGISTER_NUM_LIMBS,
+> {
     adapter: A,
     pub offset: usize,
-    pub mem_helper: SharedMemoryHelper<F>,
 }
 
 impl<F, A, const NUM_CELLS: usize> TraceStep<F> for LoadStoreStep<A, NUM_CELLS>
@@ -325,7 +328,7 @@ where
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> TraceFiller<F> for LoadStoreChip<F, A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> TraceFiller<F> for LoadStoreFiller<F, A, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,

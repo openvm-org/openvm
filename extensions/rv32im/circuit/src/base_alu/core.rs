@@ -189,11 +189,10 @@ pub struct BaseAluStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(derive_new::new)]
-pub struct BaseAluChip<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BaseAluFiller<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub offset: usize,
-    pub mem_helper: SharedMemoryHelper<F>,
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F>
@@ -254,9 +253,9 @@ where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
-    fn fill_trace_row(&self, row_slice: &mut [F]) {
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(&self.mem_helper, adapter_row);
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
 
         let record: &BaseAluCoreRecord<NUM_LIMBS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
