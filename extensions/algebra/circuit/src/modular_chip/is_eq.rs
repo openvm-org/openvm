@@ -476,8 +476,8 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usiz
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct ModularIsEqualPreCompute<const READ_LIMBS: usize> {
-    a: u32,
-    rs_addrs: [u32; 2],
+    a: u8,
+    rs_addrs: [u8; 2],
     modulus_limbs: [u8; READ_LIMBS],
 }
 
@@ -528,9 +528,9 @@ where
             return Err(InvalidInstruction(pc));
         }
 
-        let rs_addrs = from_fn(|i| if i == 0 { b } else { c });
+        let rs_addrs = from_fn(|i| if i == 0 { b } else { c } as u8);
         *data = ModularIsEqualPreCompute {
-            a,
+            a: a as u8,
             rs_addrs,
             modulus_limbs: self.0.modulus_limbs,
         };
@@ -562,7 +562,7 @@ unsafe fn execute_e1_impl<
     // Read register values
     let rs_vals = pre_compute
         .rs_addrs
-        .map(|addr| u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, addr)));
+        .map(|addr| u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, addr as u32)));
 
     // Read memory values
     let [b, c]: [[u8; TOTAL_READ_SIZE]; 2] = rs_vals.map(|address| {
@@ -589,7 +589,7 @@ unsafe fn execute_e1_impl<
     write_data[0] = (b == c) as u8;
 
     // Write result to register
-    vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a, &write_data);
+    vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &write_data);
 
     vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
     vm_state.instret += 1;

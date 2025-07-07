@@ -437,24 +437,6 @@ where
     }
 }
 
-impl<F, A> StepExecutorE1<F> for FieldExpressionStep<A>
-where
-    F: PrimeField32,
-{
-    fn pre_compute_size(&self) -> usize {
-        unreachable!()
-    }
-
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
-        &self,
-        _pc: u32,
-        _inst: &Instruction<F>,
-        _data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
-        unreachable!()
-    }
-}
-
 fn run_field_expression<A>(
     step: &FieldExpressionStep<A>,
     data: &[u8],

@@ -71,10 +71,11 @@ impl<const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>
 }
 
 #[derive(AlignedBytesBorrow)]
-struct FieldExpressionPreCompute<const NUM_READS: usize> {
-    a: u32,
-    rs_addrs: [u32; NUM_READS],
-    expr: FieldExpr,
+struct FieldExpressionPreCompute<'a, const NUM_READS: usize> {
+    a: u8,
+    // NUM_READS <= 2 as in Rv32VecHeapAdapter
+    rs_addrs: [u8; NUM_READS],
+    expr: &'a FieldExpr,
     flag_idx: usize,
 }
 
@@ -135,11 +136,11 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize, const BLOCK_S
             }
         }
 
-        let rs_addrs = from_fn(|i| if i == 0 { b } else { c });
+        let rs_addrs = from_fn(|i| if i == 0 { b } else { c } as u8);
         *data = FieldExpressionPreCompute {
-            a,
+            a: a as u8,
             rs_addrs,
-            expr: self.0.expr.clone(),
+            expr: &self.0.expr,
             flag_idx,
         };
 
@@ -169,7 +170,7 @@ unsafe fn execute_e1_impl<
     // Read register values
     let rs_vals = pre_compute
         .rs_addrs
-        .map(|addr| u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, addr)));
+        .map(|addr| u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, addr as u32)));
 
     // Read memory values
     let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; NUM_READS] = rs_vals.map(|address| {
@@ -180,12 +181,12 @@ unsafe fn execute_e1_impl<
     let read_data: DynArray<u8> = read_data.into();
 
     let writes = run_field_expression_precomputed::<NEEDS_SETUP>(
-        &pre_compute.expr,
+        pre_compute.expr,
         pre_compute.flag_idx,
         &read_data.0,
     );
 
-    let rd_val = u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a));
+    let rd_val = u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));
     // assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << self.0.pointer_max_bits));
 
     // Write output data to memory
