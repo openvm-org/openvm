@@ -20,7 +20,8 @@ use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_stark_backend::{
-    engine::VerificationData, p3_field::Field, verifier::VerificationError, AirRef, Chip,
+    engine::VerificationData, p3_field::Field, p3_util::log2_strict_usize,
+    verifier::VerificationError, AirRef, Chip,
 };
 use openvm_stark_sdk::{
     config::{setup_tracing_with_log_level, FriParameters},
@@ -67,28 +68,7 @@ pub struct GpuChipTestBuilder {
 
 impl Default for GpuChipTestBuilder {
     fn default() -> Self {
-        setup_tracing_with_log_level(Level::INFO);
-        let mem_bus = MemoryBus::new(MEMORY_BUS);
-        let mem_config = MemoryConfig::default();
-        let range_checker = SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
-            RANGE_CHECKER_BUS,
-            mem_config.decomp,
-        ));
-
-        Self {
-            memory: DeviceMemoryTester::new(MemoryController::with_volatile_memory(
-                mem_bus,
-                mem_config,
-                range_checker.clone(),
-            )),
-            execution: DeviceExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
-            program: DeviceProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
-            streams: Default::default(),
-            var_range_checker: None,
-            bitwise_op_lookup: None,
-            range_tuple_checker: None,
-            rng: StdRng::seed_from_u64(0),
-        }
+        Self::volatile(MemoryConfig::default())
     }
 }
 
@@ -105,8 +85,13 @@ impl GpuChipTestBuilder {
             RANGE_CHECKER_BUS,
             mem_config.decomp,
         ));
-        let memory_controller =
+        let max_access_adapter_n = log2_strict_usize(mem_config.max_access_adapter_n);
+        let mut memory_controller =
             MemoryController::with_volatile_memory(mem_bus, mem_config, range_checker);
+        memory_controller
+            .memory
+            .access_adapter_inventory
+            .set_arena_from_trace_heights(&vec![1 << 16; max_access_adapter_n]);
         Self {
             memory: DeviceMemoryTester::new(memory_controller),
             execution: DeviceExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
