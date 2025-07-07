@@ -63,6 +63,9 @@ pub struct ShiftCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bit_shift_carry: [T; NUM_LIMBS],
 }
 
+/// RV32 shift AIR.
+/// Note: when the shift amount from operand is greater than the number of bits, only shift
+/// `shift_amount % num_bits` bits. This matches the RV32 specs for SLL/SRL/SRA.
 #[derive(Copy, Clone, Debug, derive_new::new)]
 pub struct ShiftCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
@@ -509,19 +512,22 @@ struct SraOp;
 impl ShiftOp for SllOp {
     fn compute(rs1: [u8; 4], rs2: u32) -> [u8; 4] {
         let rs1 = u32::from_le_bytes(rs1);
-        (rs1 << rs2).to_le_bytes()
+        // `rs2`'s  other bits are ignored.
+        (rs1 << (rs2 & 0x1F)).to_le_bytes()
     }
 }
 impl ShiftOp for SrlOp {
     fn compute(rs1: [u8; 4], rs2: u32) -> [u8; 4] {
         let rs1 = u32::from_le_bytes(rs1);
-        (rs1 >> rs2).to_le_bytes()
+        // `rs2`'s  other bits are ignored.
+        (rs1 >> (rs2 & 0x1F)).to_le_bytes()
     }
 }
 impl ShiftOp for SraOp {
     fn compute(rs1: [u8; 4], rs2: u32) -> [u8; 4] {
         let rs1 = i32::from_le_bytes(rs1);
-        (rs1 >> rs2).to_le_bytes()
+        // `rs2`'s  other bits are ignored.
+        (rs1 >> (rs2 & 0x1F)).to_le_bytes()
     }
 }
 
