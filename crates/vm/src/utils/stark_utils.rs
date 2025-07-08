@@ -24,19 +24,11 @@ use openvm_stark_sdk::{
 use crate::arch::vm::VmExecutor;
 use crate::{
     arch::{
-        vm::VirtualMachine, InsExecutorE1, InstructionExecutor, Streams, VmCircuitConfig, VmConfig,
-        VmExecutionConfig, VmProverConfig,
+        vm::VirtualMachine, InsExecutorE1, InstructionExecutor, MatrixRecordArena, Streams,
+        VmCircuitConfig, VmConfig, VmExecutionConfig, VmProverConfig,
     },
     system::memory::MemoryImage,
 };
-
-type Engine = BabyBearPoseidon2Engine;
-// BabyBearPoseidon2Config
-type SC = <Engine as StarkEngine>::SC;
-// CpuBackend<BabyBearPoseidon2Config>
-type PB = <Engine as StarkEngine>::PB;
-// Note: the compiler cannot figure out that Val<BabyBearPoseidon2Config> = BabyBear
-type F = Val<SC>;
 
 // pub fn air_test<VC>(config: VC, exe: impl Into<VmExe<BabyBear>>)
 // where
@@ -64,25 +56,35 @@ type F = Val<SC>;
 /// If `debug` is true, runs the debug prover.
 pub fn air_test_impl<VC>(
     config: VC,
-    exe: impl Into<VmExe<F>>,
-    input: impl Into<Streams<F>>,
+    exe: impl Into<VmExe<BabyBear>>,
+    input: impl Into<Streams<BabyBear>>,
     min_segments: usize,
     debug: bool,
 ) -> Option<MemoryImage>
 where
-    VC: VmProverConfig<SC, PB>,
-    VC::Executor: InsExecutorE1<F> + InstructionExecutor<F, VC::RecordArena>,
+    // NOTE: the compiler cannot figure out Val<SC>=BabyBear without the VmExecutionConfig and
+    // VmCircuitConfig bounds even though VmProverConfig already includes them
+    VC: VmExecutionConfig<BabyBear>
+        + VmCircuitConfig<BabyBearPoseidon2Config>
+        + VmProverConfig<
+            BabyBearPoseidon2Config,
+            CpuBackend<BabyBearPoseidon2Config>,
+            RecordArena = MatrixRecordArena<BabyBear>,
+        >,
+    <VC as VmExecutionConfig<BabyBear>>::Executor:
+        InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear>,
 {
     setup_tracing();
     let mut log_blowup = 1;
     while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
     }
-    let engine = Engine::new(FriParameters::new_for_testing(log_blowup));
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(log_blowup));
     let pk_host = config.keygen(engine.config()).unwrap();
     let vk = pk_host.get_vk();
     let pk_device = engine.device().transport_pk_to_device(&pk_host);
-    let mut vm = VirtualMachine::<Engine, VC>::new(engine, config, pk_device).unwrap();
+    let mut vm =
+        VirtualMachine::<BabyBearPoseidon2Engine, VC>::new(engine, config, pk_device).unwrap();
     let exe = exe.into();
     let input = input.into();
     let segments = vm
