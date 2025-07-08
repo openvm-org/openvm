@@ -1,4 +1,4 @@
-use itertools::multiunzip;
+use itertools::{multiunzip, Itertools};
 use openvm_instructions::{exe::VmExe, program::Program};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -6,6 +6,7 @@ use openvm_stark_backend::{
     prover::{
         cpu::{CpuBackend, CpuDevice},
         hal::DeviceDataTransporter,
+        types::AirProofRawInput,
     },
     verifier::VerificationError,
     Chip,
@@ -24,33 +25,48 @@ use openvm_stark_sdk::{
 use crate::arch::vm::VmExecutor;
 use crate::{
     arch::{
-        vm::VirtualMachine, InsExecutorE1, InstructionExecutor, MatrixRecordArena, Streams,
-        VmCircuitConfig, VmConfig, VmExecutionConfig, VmProverConfig,
+        execution_mode::metered::Segment, vm::VirtualMachine, ExitCode, InsExecutorE1,
+        InstructionExecutor, MatrixRecordArena, Streams, VmCircuitConfig, VmConfig,
+        VmExecutionConfig, VmProverConfig,
     },
-    system::memory::MemoryImage,
+    system::memory::{online::GuestMemory, MemoryImage},
 };
 
-// pub fn air_test<VC>(config: VC, exe: impl Into<VmExe<BabyBear>>)
-// where
-//     VC: VmProverConfig<BabyBearPoseidon2Config, CpuBackend<BabyBearPoseidon2Config>>,
-//     VC::Executor: InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear, VC::RecordArena>,
-// {
-//     air_test_with_min_segments(config, exe, Streams::default(), 1);
-// }
+pub fn air_test<VC>(config: VC, exe: impl Into<VmExe<BabyBear>>)
+where
+    VC: VmExecutionConfig<BabyBear>
+        + VmCircuitConfig<BabyBearPoseidon2Config>
+        + VmProverConfig<
+            BabyBearPoseidon2Config,
+            CpuBackend<BabyBearPoseidon2Config>,
+            RecordArena = MatrixRecordArena<BabyBear>,
+        >,
+    <VC as VmExecutionConfig<BabyBear>>::Executor:
+        InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear>,
+{
+    air_test_with_min_segments(config, exe, Streams::default(), 1);
+}
 
-// /// Executes and proves the VM and returns the final memory state.
-// pub fn air_test_with_min_segments<VC>(
-//     config: VC,
-//     exe: impl Into<VmExe<BabyBear>>,
-//     input: impl Into<Streams<BabyBear>>,
-//     min_segments: usize,
-// ) -> Option<MemoryImage>
-// where
-//     VC: VmProverConfig<BabyBearPoseidon2Config, CpuBackend<BabyBearPoseidon2Config>>,
-//     VC::Executor: InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear, VC::RecordArena>,
-// {
-//     air_test_impl(config, exe, input, min_segments, true)
-// }
+/// Executes and proves the VM and returns the final memory state.
+pub fn air_test_with_min_segments<VC>(
+    config: VC,
+    exe: impl Into<VmExe<BabyBear>>,
+    input: impl Into<Streams<BabyBear>>,
+    min_segments: usize,
+) -> Option<MemoryImage>
+where
+    VC: VmExecutionConfig<BabyBear>
+        + VmCircuitConfig<BabyBearPoseidon2Config>
+        + VmProverConfig<
+            BabyBearPoseidon2Config,
+            CpuBackend<BabyBearPoseidon2Config>,
+            RecordArena = MatrixRecordArena<BabyBear>,
+        >,
+    <VC as VmExecutionConfig<BabyBear>>::Executor:
+        InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear>,
+{
+    air_test_impl(config, exe, input, min_segments, true).unwrap()
+}
 
 /// Executes and proves the VM and returns the final memory state.
 /// If `debug` is true, runs the debug prover.
@@ -60,7 +76,7 @@ pub fn air_test_impl<VC>(
     input: impl Into<Streams<BabyBear>>,
     min_segments: usize,
     debug: bool,
-) -> Option<MemoryImage>
+) -> eyre::Result<Option<MemoryImage>>
 where
     // NOTE: the compiler cannot figure out Val<SC>=BabyBear without the VmExecutionConfig and
     // VmCircuitConfig bounds even though VmProverConfig already includes them
@@ -80,45 +96,84 @@ where
         log_blowup += 1;
     }
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(log_blowup));
-    let pk_host = config.keygen(engine.config()).unwrap();
+    let pk_host = config.keygen(engine.config())?;
     let vk = pk_host.get_vk();
     let pk_device = engine.device().transport_pk_to_device(&pk_host);
-    let mut vm =
-        VirtualMachine::<BabyBearPoseidon2Engine, VC>::new(engine, config, pk_device).unwrap();
+    let mut vm = VirtualMachine::<BabyBearPoseidon2Engine, VC>::new(engine, config, pk_device)?;
     let exe = exe.into();
     let input = input.into();
-    let segments = vm
-        .executor()
-        .execute_metered(
-            exe.clone(),
-            input.clone(),
-            &vk.total_widths(),
-            &vk.num_interactions(),
-        )
-        .unwrap();
-    vm.set_main_widths(vk.main_widths());
-    let mut result = vm.execute_and_generate(exe, input, &segments).unwrap();
-    let final_memory = Option::take(&mut result.final_memory);
-    let global_airs = vm.config().create_circuit().unwrap().into_airs();
-    if debug {
-        for proof_input in &result.per_segment {
-            let (airs, pks, air_proof_inputs): (Vec<_>, Vec<_>, Vec<_>) =
-                multiunzip(proof_input.per_air.iter().map(|(air_id, air_proof_input)| {
+    let metered_ctx = vm.build_metered_ctx();
+    let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+    let segments = vm.executor().execute_metered(
+        exe.clone(),
+        input.clone(),
+        &executor_idx_to_air_idx,
+        metered_ctx,
+    )?;
+    let committed_exe = vm.commit_exe(exe);
+    let cached_program_trace = vm.transport_committed_exe_to_device(&committed_exe);
+    vm.load_program(cached_program_trace);
+    let exe = committed_exe.exe;
+
+    let mut state = Some(vm.executor().create_initial_state(&exe, input));
+    let global_airs = vm
+        .config()
+        .create_circuit()
+        .unwrap()
+        .into_airs()
+        .collect_vec();
+    let mut proofs = Vec::new();
+    let mut exit_code = None;
+    for segment in segments {
+        let Segment {
+            instret_start,
+            num_insns,
+            trace_heights,
+        } = segment;
+        assert_eq!(state.as_ref().unwrap().instret, instret_start);
+        let from_state = Option::take(&mut state).unwrap();
+        let (system_records, record_arenas, to_state) =
+            vm.execute_preflight(exe.clone(), from_state, num_insns, &trace_heights)?;
+        state = Some(to_state);
+        exit_code = system_records.exit_code;
+
+        let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
+        let device = vm.engine.device();
+        if debug {
+            let (airs, pks, proof_inputs): (Vec<_>, Vec<_>, Vec<_>) =
+                multiunzip(ctx.per_air.iter().map(|(air_id, air_ctx)| {
+                    // Unfortunate H2D transfers
+                    let cached_mains = air_ctx
+                        .cached_mains
+                        .iter()
+                        .map(|pre| device.transport_matrix_from_device_to_host(&pre.trace))
+                        .collect_vec();
+                    let common_main = air_ctx
+                        .common_main
+                        .as_ref()
+                        .map(|m| device.transport_matrix_from_device_to_host(m));
+                    let public_values = air_ctx.public_values.clone();
+                    let raw = AirProofRawInput {
+                        cached_mains,
+                        common_main,
+                        public_values,
+                    };
                     (
                         global_airs[*air_id].clone(),
-                        pk.per_air[*air_id].clone(),
-                        air_proof_input.clone(),
+                        pk_host.per_air[*air_id].clone(),
+                        raw,
                     )
                 }));
-            vm.engine.debug(&airs, &pks, &air_proof_inputs);
+            vm.engine.debug(&airs, &pks, &proof_inputs);
         }
+        let proof = vm.engine.prove(vm.pk(), ctx);
+        proofs.push(proof);
     }
-    let proofs = vm.prove(&pk, result);
-
     assert!(proofs.len() >= min_segments);
-    vm.verify(&pk.get_vk(), proofs)
+    vm.verify(&vk, proofs)
         .expect("segment proofs should verify");
-    final_memory
+    let state = state.unwrap();
+    Ok((exit_code == Some(ExitCode::Success as u32)).then(|| state.memory))
 }
 
 // /// Generates the VM STARK circuit, in the form of AIRs and traces, but does not

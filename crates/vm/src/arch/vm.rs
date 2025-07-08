@@ -21,10 +21,14 @@ use openvm_stark_backend::{
     config::{Com, StarkGenericConfig, Val},
     engine::StarkEngine,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField32},
     p3_util::log2_strict_usize,
     proof::Proof,
-    prover::types::{CommittedTraceData, DeviceMultiStarkProvingKey, ProvingContext},
+    prover::{
+        cpu::PcsData,
+        hal::{DeviceDataTransporter, MatrixDimensions},
+        types::{CommittedTraceData, DeviceMultiStarkProvingKey, ProvingContext},
+    },
     verifier::VerificationError,
 };
 use rand::{rngs::StdRng, SeedableRng};
@@ -299,29 +303,13 @@ where
         self.execute_e1_from_state(exe, state, num_insns)
     }
 
-    /// Base metered execution function that operates from a given state
-    pub fn execute_metered_from_state(
+    pub fn build_metered_ctx(
         &self,
-        exe: VmExe<F>,
-        state: VmState<F>,
-        executor_idx_to_air_idx: &[usize],
         constant_trace_heights: &[Option<usize>],
         air_names: &[String],
         widths: &[usize],
         interactions: &[usize],
-    ) -> Result<Vec<Segment>, ExecutionError> {
-        let _span = info_span!("execute_metered").entered();
-
-        let handler = ProgramHandler::new(exe.program, &self.inventory)?;
-        let ctrl = MeteredExecutionControl::new(executor_idx_to_air_idx.to_vec());
-        let mut instance = VmSegmentExecutor::<F, VC::Executor, _>::new(handler, ctrl);
-
-        #[cfg(feature = "bench-metrics")]
-        {
-            instance.metrics = state.metrics;
-            instance.set_fn_bounds(exe.fn_bounds.clone());
-        }
-
+    ) -> MeteredCtx {
         let system_config = self.config.as_ref();
         let num_addr_sp = 1 + (1 << system_config.memory_config.addr_space_height);
         let mut min_block_size = vec![1; num_addr_sp];
@@ -336,7 +324,7 @@ where
             .collect();
 
         let seg_strategy = &system_config.segmentation_strategy;
-        let ctx = MeteredCtx::new(
+        MeteredCtx::new(
             constant_trace_heights.to_vec(),
             system_config.has_public_values_chip(),
             system_config.continuation_enabled,
@@ -347,7 +335,28 @@ where
             interactions.to_vec(),
         )
         .with_max_trace_height(seg_strategy.max_trace_height() as u32)
-        .with_max_cells(seg_strategy.max_cells());
+        .with_max_cells(seg_strategy.max_cells())
+    }
+
+    /// Base metered execution function that operates from a given state
+    pub fn execute_metered_from_state(
+        &self,
+        exe: VmExe<F>,
+        state: VmState<F>,
+        executor_idx_to_air_idx: &[usize],
+        ctx: MeteredCtx,
+    ) -> Result<Vec<Segment>, ExecutionError> {
+        let _span = info_span!("execute_metered").entered();
+
+        let handler = ProgramHandler::new(exe.program, &self.inventory)?;
+        let ctrl = MeteredExecutionControl::new(executor_idx_to_air_idx.to_vec());
+        let mut instance = VmSegmentExecutor::<F, VC::Executor, _>::new(handler, ctrl);
+
+        #[cfg(feature = "bench-metrics")]
+        {
+            instance.metrics = state.metrics;
+            instance.set_fn_bounds(exe.fn_bounds.clone());
+        }
 
         let mut exec_state = VmSegmentState::new(
             state.instret,
@@ -374,23 +383,16 @@ where
         exe: impl Into<VmExe<F>>,
         input: impl Into<Streams<F>>,
         executor_idx_to_air_idx: &[usize],
-        constant_trace_heights: &[Option<usize>],
-        air_names: &[String],
-        widths: &[usize],
-        interactions: &[usize],
+        ctx: MeteredCtx,
     ) -> Result<Vec<Segment>, ExecutionError> {
         let exe = exe.into();
+        let state = self.create_initial_state(&exe, input);
+        self.execute_metered_from_state(exe, state, executor_idx_to_air_idx, ctx)
+    }
+
+    pub fn create_initial_state(&self, exe: &VmExe<F>, input: impl Into<Streams<F>>) -> VmState<F> {
         let memory_config = &self.config.as_ref().memory_config;
-        let state = create_initial_state(memory_config, &exe, input, 0);
-        self.execute_metered_from_state(
-            exe,
-            state,
-            executor_idx_to_air_idx,
-            constant_trace_heights,
-            air_names,
-            widths,
-            interactions,
-        )
+        create_initial_state(memory_config, exe, input, 0)
     }
 }
 
@@ -662,7 +664,6 @@ where
     executor: VmExecutor<Val<E::SC>, VC>,
     #[getset(get = "pub")]
     pk: DeviceMultiStarkProvingKey<E::PB>,
-
     chip_complex: VmChipComplex<E::SC, VC::RecordArena, E::PB, VC::SystemChipInventory>,
 }
 
@@ -714,11 +715,8 @@ where
         self.config().keygen(self.engine.config())
     }
 
-    pub fn commit_exe(&self, exe: impl Into<VmExe<Val<E::SC>>>) -> Arc<VmCommittedExe<E::SC>> {
-        let exe = exe.into();
-        Arc::new(VmCommittedExe::commit(exe, self.engine.config().pcs()))
-    }
-
+    // TODO[jpw]: I'd like to make a VmInstance struct that has a loaded program
+    //
     /// Preflight execution for a single segment. Executes for exactly `num_insns` instructions
     /// using an interpreter. Preflight execution must be provided with `trace_heights`
     /// instrumentation data that was collected from a previous run of metered execution so that the
@@ -732,11 +730,16 @@ where
         state: VmState<Val<E::SC>>,
         num_insns: u64,
         trace_heights: &[u32],
-        main_widths: &[usize],
-    ) -> Result<(SystemRecords<Val<E::SC>>, Vec<VC::RecordArena>, GuestMemory), ExecutionError>
-    {
+    ) -> Result<
+        (
+            SystemRecords<Val<E::SC>>,
+            Vec<VC::RecordArena>,
+            VmState<Val<E::SC>>,
+        ),
+        ExecutionError,
+    > {
         let handler = ProgramHandler::new(exe.program, &self.executor.inventory)?;
-        let executor_idx_to_air_idx = self.chip_complex.inventory.executor_idx_to_air_idx();
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         let ctrl = TracegenExecutionControl::new(executor_idx_to_air_idx);
         let mut instance = VmSegmentExecutor::<Val<E::SC>, VC::Executor, _>::new(handler, ctrl);
 
@@ -748,8 +751,14 @@ where
 
         let instret_end = state.instret + num_insns;
         // TODO[jpw]: figure out how to compute RA specific main_widths
+        let main_widths = self
+            .pk
+            .per_air
+            .iter()
+            .map(|pk| pk.vk.params.width.main_width())
+            .collect_vec();
         let capacities = zip_eq(trace_heights, main_widths)
-            .map(|(&h, &w)| (h as usize, w))
+            .map(|(&h, w)| (h as usize, w))
             .collect::<Vec<_>>();
         let ctx = TracegenCtx::new_with_capacity(&capacities, Some(instret_end));
 
@@ -785,7 +794,16 @@ where
             touched_memory,
         };
         let record_arenas = exec_state.ctx.arenas;
-        Ok((system_records, record_arenas, memory.data))
+        let new_state = VmState {
+            instret: exec_state.instret,
+            pc: exec_state.pc,
+            memory: memory.data.memory,
+            input: exec_state.streams,
+            rng: exec_state.rng,
+            #[cfg(feature = "bench-metrics")]
+            metrics: Default::default(),
+        };
+        Ok((system_records, record_arenas, new_state))
     }
 
     // @dev: This function mutates `self` but should only depend on internal state in the sense
@@ -863,17 +881,11 @@ where
         num_insns: u64,
         trace_heights: &[u32],
     ) -> Result<(Proof<E::SC>, Option<GuestMemory>), VirtualMachineError> {
-        let main_widths = self
-            .pk
-            .per_air
-            .iter()
-            .map(|pk| pk.vk.params.width.main_width())
-            .collect_vec();
-        let (system_records, record_arenas, final_memory) =
-            self.execute_preflight(exe, state, num_insns, trace_heights, &main_widths)?;
+        let (system_records, record_arenas, final_state) =
+            self.execute_preflight(exe, state, num_insns, trace_heights)?;
         // drop final memory unless this is a terminal segment and the exit code is success
-        let final_memory =
-            (system_records.exit_code == Some(ExitCode::Success as u32)).then_some(final_memory);
+        let final_memory = (system_records.exit_code == Some(ExitCode::Success as u32))
+            .then(|| GuestMemory::new(final_state.memory));
         self.chip_complex.system.load_program(cached_program_trace);
         let ctx = self.generate_proving_ctx(system_records, record_arenas)?;
 
@@ -901,6 +913,73 @@ where
             verify_single(&self.engine, vk, &proofs.into_iter().next().unwrap())
                 .map_err(VmVerificationError::StarkError)
         }
+    }
+
+    pub fn commit_exe(&self, exe: impl Into<VmExe<Val<E::SC>>>) -> VmCommittedExe<E::SC> {
+        let exe = exe.into();
+        VmCommittedExe::commit(exe, self.engine.config().pcs())
+    }
+
+    pub fn transport_committed_exe_to_device(
+        &self,
+        committed_exe: &VmCommittedExe<E::SC>,
+    ) -> CommittedTraceData<E::PB> {
+        let commitment = committed_exe.commitment.clone();
+        let trace = self
+            .engine
+            .device()
+            .transport_matrix_to_device(&committed_exe.trace);
+        let data = PcsData::new(
+            committed_exe.prover_data.clone(),
+            vec![log2_strict_usize(trace.height()).try_into().unwrap()],
+        );
+        let data = self.engine.device().transport_pcs_data_to_device(&data);
+        CommittedTraceData {
+            commitment,
+            trace,
+            data,
+        }
+    }
+
+    pub fn load_program(&mut self, cached_program_trace: CommittedTraceData<E::PB>) {
+        self.chip_complex.system.load_program(cached_program_trace);
+    }
+
+    pub fn executor_idx_to_air_idx(&self) -> Vec<usize> {
+        self.chip_complex.inventory.executor_idx_to_air_idx()
+    }
+
+    /// Convenience method to construct a [MeteredCtx] using data from the stored proving key.
+    pub fn build_metered_ctx(&self) -> MeteredCtx {
+        let (constant_trace_heights, air_names, widths, interactions): (
+            Vec<_>,
+            Vec<_>,
+            Vec<_>,
+            Vec<_>,
+        ) = self
+            .pk
+            .per_air
+            .iter()
+            .map(|pk| {
+                let constant_trace_height =
+                    pk.preprocessed_data.as_ref().map(|pd| pd.trace.height());
+                let air_names = pk.air_name.clone();
+                let width = pk
+                    .vk
+                    .params
+                    .width
+                    .total_width(<<E::SC as StarkGenericConfig>::Challenge>::D);
+                let num_interactions = pk.vk.symbolic_constraints.interactions.len();
+                (constant_trace_height, air_names, width, num_interactions)
+            })
+            .multiunzip();
+
+        self.executor().build_metered_ctx(
+            &constant_trace_heights,
+            &air_names,
+            &widths,
+            &interactions,
+        )
     }
 }
 
@@ -1104,14 +1183,14 @@ where
     }
 }
 
-pub fn create_memory_image(
+fn create_memory_image(
     memory_config: &MemoryConfig,
     init_memory: SparseMemoryImage,
 ) -> MemoryImage {
     AddressMap::from_sparse(memory_config.addr_space_sizes.clone(), init_memory)
 }
 
-pub fn create_initial_state<F>(
+fn create_initial_state<F>(
     memory_config: &MemoryConfig,
     exe: &VmExe<F>,
     input: impl Into<Streams<F>>,
