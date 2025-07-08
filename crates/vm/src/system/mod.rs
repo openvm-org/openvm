@@ -92,6 +92,9 @@ pub struct SystemRecords<F> {
     pub from_state: ExecutionState<u32>,
     pub to_state: ExecutionState<u32>,
     pub exit_code: Option<u32>,
+    /// `i` -> frequency of instruction in `i`th row of trace matrix. This requires filtering
+    /// `program.instructions_and_debug_infos` to remove gaps.
+    pub filtered_exec_frequencies: Vec<u32>,
     // We always use a [DenseRecordArena] here, regardless of the generic `RA` used for other
     // execution records.
     pub access_adapter_records: DenseRecordArena,
@@ -391,10 +394,12 @@ where
             from_state,
             to_state,
             exit_code,
+            filtered_exec_frequencies,
             access_adapter_records,
             touched_memory,
         } = system_records;
 
+        self.program_chip.filtered_exec_frequencies = filtered_exec_frequencies;
         let program_ctx = self.program_chip.generate_proving_ctx(());
         self.connector_chip.begin(from_state);
         self.connector_chip.end(to_state, exit_code);

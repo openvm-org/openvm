@@ -183,7 +183,7 @@ pub enum StaticProgramError {
 pub struct ProgramChip<SC: StarkGenericConfig> {
     /// `i` -> frequency of instruction in `i`th row of trace matrix. This requires filtering
     /// `program.instructions_and_debug_infos` to remove gaps.
-    filtered_exec_frequencies: Vec<u32>,
+    pub(super) filtered_exec_frequencies: Vec<u32>,
     pub(super) cached: Option<CommittedTraceData<CpuBackend<SC>>>,
 }
 

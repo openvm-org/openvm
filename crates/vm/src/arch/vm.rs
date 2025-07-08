@@ -15,7 +15,7 @@ use std::{
 };
 
 use getset::{Getters, Setters, WithSetters};
-use itertools::zip_eq;
+use itertools::{zip_eq, Itertools};
 use openvm_circuit::system::program::trace::compute_exe_commit;
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_instructions::{
@@ -29,7 +29,10 @@ use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     p3_util::log2_strict_usize,
     proof::Proof,
-    prover::{hal::DeviceDataTransporter, types::DeviceMultiStarkProvingKey},
+    prover::{
+        hal::DeviceDataTransporter,
+        types::{CommittedTraceData, DeviceMultiStarkProvingKey, ProvingContext},
+    },
     verifier::VerificationError,
 };
 use rand::{rngs::StdRng, SeedableRng};
@@ -69,7 +72,7 @@ use crate::{
             AddressMap, MemoryImage, CHUNK,
         },
         program::{trace::VmCommittedExe, ProgramHandler},
-        SystemRecords,
+        SystemChipComplex, SystemRecords,
     },
 };
 
@@ -638,11 +641,15 @@ pub enum VmVerificationError {
 #[derive(Error, Debug)]
 pub enum VirtualMachineError {
     #[error("executor inventory error: {0}")]
-    ExecutorInventoryError(#[from] ExecutorInventoryError),
+    ExecutorInventory(#[from] ExecutorInventoryError),
     #[error("air inventory error: {0}")]
-    AirInventoryError(#[from] AirInventoryError),
+    AirInventory(#[from] AirInventoryError),
     #[error("chip inventory error: {0}")]
-    ChipInventoryError(#[from] ChipInventoryError),
+    ChipInventory(#[from] ChipInventoryError),
+    #[error("execution error: {0}")]
+    Execution(#[from] ExecutionError),
+    #[error("trace generation error: {0}")]
+    Generation(#[from] GenerationError),
 }
 
 /// The [VirtualMachine] struct contains the API to generate proofs for _arbitrary_ programs for a
@@ -664,9 +671,6 @@ where
     chip_complex: VmChipComplex<E::SC, VC::RecordArena, E::PB, VC::SystemChipInventory>,
     #[getset(get = "pub")]
     pk: DeviceMultiStarkProvingKey<E::PB>,
-
-    #[getset(set = "pub", set_with = "pub")]
-    trace_height_constraints: Vec<LinearConstraint>,
 }
 
 impl<E, VC> VirtualMachine<E, VC>
@@ -689,7 +693,6 @@ where
             executor,
             pk,
             chip_complex,
-            trace_height_constraints: Vec::new(),
         })
     }
 
@@ -736,14 +739,18 @@ where
     /// using an interpreter. Preflight execution must be provided with `trace_heights`
     /// instrumentation data that was collected from a previous run of metered execution so that the
     /// preflight execution knows how much memory to allocate for record arenas.
-    pub fn execute_preflight_from_state(
+    ///
+    /// This function should rarely be called on its own. Users are advised to call
+    /// [`prove`](Self::prove) directly.
+    pub fn execute_preflight(
         &self,
         exe: VmExe<Val<E::SC>>,
         state: VmState<Val<E::SC>>,
         num_insns: u64,
         trace_heights: &[u32],
-        air_widths: &[usize],
-    ) -> Result<(SystemRecords<Val<E::SC>>, GuestMemory), ExecutionError> {
+        main_widths: &[usize],
+    ) -> Result<(SystemRecords<Val<E::SC>>, Vec<VC::RecordArena>, GuestMemory), ExecutionError>
+    {
         let handler = ProgramHandler::new(exe.program, &self.executor.inventory)?;
         let executor_idx_to_air_idx = self.chip_complex.inventory.executor_idx_to_air_idx();
         let ctrl = TracegenExecutionControl::new(executor_idx_to_air_idx);
@@ -757,7 +764,7 @@ where
 
         let instret_end = state.instret + num_insns;
         // TODO[jpw]: figure out how to compute RA specific main_widths
-        let capacities = zip_eq(trace_heights, air_widths)
+        let capacities = zip_eq(trace_heights, main_widths)
             .map(|(&h, &w)| (h as usize, w))
             .collect::<Vec<_>>();
         let ctx = TracegenCtx::new_with_capacity(&capacities, Some(instret_end));
@@ -780,41 +787,107 @@ where
         let mut exec_state =
             VmSegmentState::new(state.instret, state.pc, memory, state.input, state.rng, ctx);
         execute_spanned!("execute_e3", instance, &mut exec_state)?;
+        let filtered_exec_frequencies = instance.handler.filtered_execution_frequencies();
         let mut memory = exec_state.memory;
         let touched_memory = memory.finalize::<Val<E::SC>>(system_config.continuation_enabled);
 
         let to_state = ExecutionState::new(exec_state.pc, memory.timestamp());
-        let records = SystemRecords {
+        let system_records = SystemRecords {
             from_state,
             to_state,
             exit_code: exec_state.exit_code,
+            filtered_exec_frequencies,
             access_adapter_records: memory.access_adapter_records,
             touched_memory,
         };
-        Ok((records, memory.data))
+        let record_arenas = exec_state.ctx.arenas;
+        Ok((system_records, record_arenas, memory.data))
     }
 
-    // pub fn execute(
-    //     &self,
-    //     exe: impl Into<VmExe<F>>,
-    //     input: impl Into<Streams<F>>,
-    //     segments: &[Segment],
-    // ) -> Result<Option<MemoryImage>, ExecutionError> {
-    //     let exe = exe.into();
-    //     let state = create_initial_state(&self.config.system().memory_config, &exe, input, 0);
-    //     self.execute_from_state(exe, state, segments)
-    // }
+    // @dev: This function mutates `self` but should only depend on internal state in the sense
+    // that:
+    // - program must already be loaded as cached trace
+    // - initial memory image was already sent to device
+    // - all other state should be given by `system_records` and `record_arenas`
+    pub fn generate_proving_ctx(
+        &mut self,
+        system_records: SystemRecords<Val<E::SC>>,
+        record_arenas: Vec<VC::RecordArena>,
+    ) -> Result<ProvingContext<E::PB>, GenerationError> {
+        let ctx = self
+            .chip_complex
+            .generate_proving_ctx(system_records, record_arenas)?;
 
-    pub fn prove(&self, results: VmExecutorResult<SC>) -> Vec<Proof<SC>> {
-        results
-            .per_segment
-            .into_iter()
-            .enumerate()
-            .map(|(seg_idx, proof_input)| {
-                tracing::info_span!("prove_segment", segment = seg_idx)
-                    .in_scope(|| self.engine.prove(pk, proof_input))
-            })
-            .collect()
+        // Defensive checks that the trace heights satisfy the linear constraints:
+        let idx_trace_heights = ctx
+            .per_air
+            .iter()
+            .map(|(air_idx, ctx)| (*air_idx, ctx.main_trace_height()))
+            .collect_vec();
+        // TODO[jpw]: put back self.max_trace_height
+        // if let Some(&(air_idx, height)) = idx_trace_heights
+        //     .iter()
+        //     .find(|(_, height)| *height > self.max_trace_height)
+        // {
+        //     return Err(GenerationError::TraceHeightsLimitExceeded {
+        //         air_idx,
+        //         height,
+        //         max_height: self.max_trace_height,
+        //     });
+        // }
+        let trace_height_constraints = &self.pk.trace_height_constraints;
+        if trace_height_constraints.is_empty() {
+            tracing::warn!("generating proving context without trace height constraints");
+        }
+        for (i, constraint) in trace_height_constraints.iter().enumerate() {
+            let value = idx_trace_heights
+                .iter()
+                .map(|&(air_idx, h)| constraint.coefficients[air_idx] as u64 * h as u64)
+                .sum::<u64>();
+
+            if value >= constraint.threshold as u64 {
+                tracing::info!(
+                    "trace heights {:?} violate linear constraint {} ({} >= {})",
+                    idx_trace_heights,
+                    i,
+                    value,
+                    constraint.threshold
+                );
+                return Err(GenerationError::LinearTraceHeightConstraintExceeded {
+                    constraint_idx: i,
+                    value,
+                    threshold: constraint.threshold,
+                });
+            }
+        }
+
+        Ok(ctx)
+    }
+
+    /// Generates proof for zkVM execution for exactly `num_insns` instructions for a given program
+    /// and a given starting state.
+    pub fn prove(
+        &mut self,
+        exe: VmExe<Val<E::SC>>,
+        cached_program_trace: CommittedTraceData<E::PB>,
+        state: VmState<Val<E::SC>>,
+        num_insns: u64,
+        trace_heights: &[u32],
+    ) -> Result<Proof<E::SC>, VirtualMachineError> {
+        let main_widths = self
+            .pk
+            .per_air
+            .iter()
+            .map(|pk| pk.vk.params.width.main_width())
+            .collect_vec();
+        let (system_records, record_arenas, final_memory) =
+            self.execute_preflight(exe, state, num_insns, trace_heights, &main_widths)?;
+        self.chip_complex.system.load_program(cached_program_trace);
+        let ctx = self.generate_proving_ctx(system_records, record_arenas)?;
+
+        let proof = self.engine.prove(&self.pk, ctx);
+
+        Ok(proof)
     }
 
     /// Verify segment proofs, checking continuation boundary conditions between segments if VM
@@ -823,14 +896,13 @@ where
     /// or [`verify_single`] directly instead.
     pub fn verify(
         &self,
-        vk: &MultiStarkVerifyingKey<SC>,
-        proofs: Vec<Proof<SC>>,
+        vk: &MultiStarkVerifyingKey<E::SC>,
+        proofs: Vec<Proof<E::SC>>,
     ) -> Result<(), VmVerificationError>
     where
-        Val<SC>: PrimeField32,
-        Com<SC>: AsRef<[Val<SC>; CHUNK]> + From<[Val<SC>; CHUNK]>,
+        Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
     {
-        if self.config().system().continuation_enabled {
+        if self.config().as_ref().continuation_enabled {
             verify_segments(&self.engine, vk, &proofs).map(|_| ())
         } else {
             assert_eq!(proofs.len(), 1);
@@ -845,14 +917,13 @@ where
 /// ## Note
 /// This function does not check any public values or extract the starting pc or commitment
 /// to the [VmCommittedExe].
-pub fn verify_single<SC, E>(
+pub fn verify_single<E>(
     engine: &E,
-    vk: &MultiStarkVerifyingKey<SC>,
-    proof: &Proof<SC>,
+    vk: &MultiStarkVerifyingKey<E::SC>,
+    proof: &Proof<E::SC>,
 ) -> Result<(), VerificationError>
 where
-    SC: StarkGenericConfig,
-    E: StarkEngine<SC>,
+    E: StarkEngine,
 {
     engine.verify(vk, proof)
 }
@@ -887,16 +958,15 @@ pub struct VerifiedExecutionPayload<F> {
 /// This verification requires an additional Merkle proof with respect to the Merkle root of
 /// the final memory state.
 // @dev: This function doesn't need to be generic in `VC`.
-pub fn verify_segments<SC, E>(
+pub fn verify_segments<E>(
     engine: &E,
-    vk: &MultiStarkVerifyingKey<SC>,
-    proofs: &[Proof<SC>],
-) -> Result<VerifiedExecutionPayload<Val<SC>>, VmVerificationError>
+    vk: &MultiStarkVerifyingKey<E::SC>,
+    proofs: &[Proof<E::SC>],
+) -> Result<VerifiedExecutionPayload<Val<E::SC>>, VmVerificationError>
 where
-    SC: StarkGenericConfig,
-    E: StarkEngine<SC>,
-    Val<SC>: PrimeField32,
-    Com<SC>: AsRef<[Val<SC>; CHUNK]>,
+    E: StarkEngine,
+    Val<E::SC>: PrimeField32,
+    Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]>,
 {
     if proofs.is_empty() {
         return Err(VmVerificationError::ProofNotFound);

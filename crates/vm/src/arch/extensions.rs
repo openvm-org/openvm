@@ -688,47 +688,6 @@ where
             .filter(|(_air_id, ctx)| ctx.main_trace_height() > 0)
             .collect();
 
-        // TODO: move out to VirtualMachine
-        // // Defensive checks that the trace heights satisfy the linear constraints:
-        // let idx_trace_heights = ctx_without_empties
-        //     .iter()
-        //     .map(|(air_idx, ctx)| (*air_idx, ctx.main_trace_height()))
-        //     .collect_vec();
-        // if let Some(&(air_idx, height)) = idx_trace_heights
-        //     .iter()
-        //     .find(|(_, height)| *height > self.max_trace_height)
-        // {
-        //     return Err(GenerationError::TraceHeightsLimitExceeded {
-        //         air_idx,
-        //         height,
-        //         max_height: self.max_trace_height,
-        //     });
-        // }
-        // if trace_height_constraints.is_empty() {
-        //     tracing::warn!("generating proof input without trace height constraints");
-        // }
-        // for (i, constraint) in trace_height_constraints.iter().enumerate() {
-        //     let value = idx_trace_heights
-        //         .iter()
-        //         .map(|&(air_idx, h)| constraint.coefficients[air_idx] as u64 * h as u64)
-        //         .sum::<u64>();
-
-        //     if value >= constraint.threshold as u64 {
-        //         tracing::info!(
-        //             "trace heights {:?} violate linear constraint {} ({} >= {})",
-        //             idx_trace_heights,
-        //             i,
-        //             value,
-        //             constraint.threshold
-        //         );
-        //         return Err(GenerationError::LinearTraceHeightConstraintExceeded {
-        //             constraint_idx: i,
-        //             value,
-        //             threshold: constraint.threshold,
-        //         });
-        //     }
-        // }
-
         Ok(ProvingContext {
             per_air: ctx_without_empties,
         })

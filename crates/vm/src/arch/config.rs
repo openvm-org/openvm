@@ -65,7 +65,7 @@ where
 }
 
 pub trait VmExecutionConfig<F> {
-    type Executor: AnyEnum;
+    type Executor: AnyEnum + Send + Sync;
 
     fn create_executors(&self)
         -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;

@@ -109,14 +109,13 @@ impl<RA, SC: StarkGenericConfig> Chip<RA, CpuBackend<SC>> for ProgramChip<SC> {
             .cached
             .clone()
             .expect("cached program trace must be loaded");
-        assert_eq!(self.filtered_exec_frequencies.len(), cached.trace.height());
-        let common_trace = RowMajorMatrix::new_col(
-            self.filtered_exec_frequencies
-                .par_iter()
-                .copied()
-                .map(Val::<SC>::from_canonical_u32)
-                .collect::<Vec<_>>(),
-        );
+        assert!(self.filtered_exec_frequencies.len() <= cached.trace.height());
+        let mut freqs = Val::<SC>::zero_vec(cached.trace.height());
+        freqs
+            .par_iter_mut()
+            .zip(self.filtered_exec_frequencies.par_iter())
+            .for_each(|(f, x)| *f = Val::<SC>::from_canonical_u32(*x));
+        let common_trace = RowMajorMatrix::new_col(freqs);
         AirProvingContext {
             cached_mains: vec![cached],
             common_main: Some(Arc::new(common_trace)),

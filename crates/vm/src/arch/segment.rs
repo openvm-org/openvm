@@ -55,7 +55,7 @@ impl<F, MEM, CTX> VmSegmentState<F, MEM, CTX> {
 
 // TODO[jpw]: rename. this will essentially be just interpreted instance for preflight(E3)
 pub struct VmSegmentExecutor<F, E, Ctrl> {
-    handler: ProgramHandler<F, E>,
+    pub handler: ProgramHandler<F, E>,
     /// Execution control for determining segmentation and stopping conditions
     pub ctrl: Ctrl,
 
