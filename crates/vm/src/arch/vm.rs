@@ -13,7 +13,7 @@ use std::{
     sync::Arc,
 };
 
-use getset::{Setters, WithSetters};
+use getset::{Getters, Setters, WithSetters};
 use itertools::zip_eq;
 use openvm_circuit::system::program::trace::compute_exe_commit;
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
@@ -28,6 +28,7 @@ use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     p3_util::log2_strict_usize,
     proof::Proof,
+    prover::{hal::DeviceDataTransporter, types::DeviceMultiStarkProvingKey},
     verifier::VerificationError,
 };
 use rand::{rngs::StdRng, SeedableRng};
@@ -646,7 +647,9 @@ pub enum VirtualMachineError {
 /// API is specific to a particular [StarkEngine], which specifies a fixed [StarkGenericConfig] and
 /// [ProverBackend] via associated types. The [VmProverConfig] also fixes the choice of
 /// `RecordArena` associated to the prover backend via an associated type.
-#[derive(Setters, WithSetters)]
+///
+/// In other words, this struct _is_ the zkVM.
+#[derive(Getters, Setters, WithSetters)]
 pub struct VirtualMachine<E: StarkEngine, VC>
 where
     VC: VmProverConfig<E::SC, E::PB>,
@@ -656,6 +659,8 @@ where
     /// Runtime executor
     executor: VmExecutor<Val<E::SC>, VC>,
     chip_complex: VmChipComplex<E::SC, VC::RecordArena, E::PB, VC::SystemChipInventory>,
+    #[getset(get = "pub")]
+    pk: DeviceMultiStarkProvingKey<E::PB>,
 
     #[getset(set = "pub", set_with = "pub")]
     trace_height_constraints: Vec<LinearConstraint>,
@@ -668,16 +673,30 @@ where
     VC: VmProverConfig<E::SC, E::PB>,
     VC::Executor: InsExecutorE1<Val<E::SC>> + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
 {
-    pub fn new(engine: E, config: VC) -> Result<Self, VirtualMachineError> {
+    pub fn new(
+        engine: E,
+        config: VC,
+        pk: DeviceMultiStarkProvingKey<E::PB>,
+    ) -> Result<Self, VirtualMachineError> {
         let circuit = config.create_circuit()?;
         let chip_complex = config.create_chip_complex(circuit)?;
         let executor = VmExecutor::<Val<E::SC>, VC>::new(config)?;
         Ok(Self {
             engine,
             executor,
+            pk,
             chip_complex,
             trace_height_constraints: Vec::new(),
         })
+    }
+
+    /// Constructs a new virtual machine from the config, including performing proving key
+    /// generation and transfering the proving key from host to device. The prover-specific data on
+    /// host is dropped after this constructor.
+    pub fn new_with_keygen(engine: E, config: VC) -> Result<Self, VirtualMachineError> {
+        let pk_host = config.keygen(engine.config())?;
+        let pk_device = engine.device().transport_pk_to_device(&pk_host);
+        Self::new(engine, config, pk_device)
     }
 
     pub fn config(&self) -> &VC {
@@ -717,7 +736,7 @@ where
     pub fn execute_preflight_from_state(
         &self,
         exe: VmExe<Val<E::SC>>,
-        mut state: VmState<Val<E::SC>>,
+        state: VmState<Val<E::SC>>,
         num_insns: u64,
         trace_heights: &[u32],
         air_widths: &[usize],
@@ -771,19 +790,7 @@ where
     //     self.execute_from_state(exe, state, segments)
     // }
 
-    pub fn prove_single(
-        &self,
-        pk: &MultiStarkProvingKey<SC>,
-        proof_input: ProofInput<SC>,
-    ) -> Proof<SC> {
-        self.engine.prove(pk, proof_input)
-    }
-
-    pub fn prove(
-        &self,
-        pk: &MultiStarkProvingKey<SC>,
-        results: VmExecutorResult<SC>,
-    ) -> Vec<Proof<SC>> {
+    pub fn prove(&self, results: VmExecutorResult<SC>) -> Vec<Proof<SC>> {
         results
             .per_segment
             .into_iter()
