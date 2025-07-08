@@ -203,7 +203,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> AdapterTraceStep<F>
     type RecordMut<'a> = &'a mut NativeLoadStoreAdapterRecord<F, NUM_CELLS>;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp();
     }
@@ -211,7 +211,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> AdapterTraceStep<F>
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -270,7 +270,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> AdapterTraceStep<F>
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         _instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,

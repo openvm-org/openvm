@@ -138,7 +138,7 @@ impl<F: PrimeField32> TraceStep<F> for KeccakVmStep {
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
+        state: VmStateMut<'buf, F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where

@@ -35,16 +35,17 @@ use public_values::PublicValuesAir;
 use crate::{
     arch::{
         vm_poseidon2_config, AirInventory, AirInventoryError, BusIndexManager, ChipInventory,
-        ChipInventoryError, ExecutionBridge, ExecutionBus, ExecutionState, ExecutorInventory,
-        ExecutorInventoryError, MatrixRecordArena, RowMajorMatrixArena, SystemConfig, VmAirWrapper,
-        VmChipComplex, VmChipWrapper, VmCircuitConfig, VmExecutionConfig, VmProverConfig,
-        PUBLIC_VALUES_AIR_ID,
+        ChipInventoryError, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
+        ExecutorInventory, ExecutorInventoryError, MatrixRecordArena, RowMajorMatrixArena,
+        SystemConfig, VmAirWrapper, VmChipComplex, VmChipWrapper, VmCircuitConfig,
+        VmExecutionConfig, VmProverConfig, PUBLIC_VALUES_AIR_ID,
     },
     system::{
         connector::VmConnectorChip,
         memory::{
             interface::MemoryInterfaceAirs,
             offline_checker::{MemoryBridge, MemoryBus},
+            online::GuestMemory,
             MemoryAirInventory, MemoryController,
         },
         native_adapter::{NativeAdapterAir, NativeAdapterStep},
@@ -71,7 +72,13 @@ const PV_EXECUTOR_IDX: usize = 0;
 /// configuration. The [SystemChipComplex] is meant to persistent between instances of proof
 /// generation.
 pub trait SystemChipComplex<RA, PB: ProverBackend> {
+    /// Loads the program in the form of a cached trace with prover data.
     fn load_program(&mut self, cached_program_trace: CommittedTraceData<PB>);
+
+    /// Transport the initial memory state to device. This may be called before preflight execution
+    /// begins and start async device processes in parallel to execution.
+    fn transport_init_memory_to_device(&mut self, memory: &GuestMemory);
+
     /// The caller must guarantee that `record_arenas` has length equal to the number of system
     /// AIRs, although some arenas may be empty if they are unused.
     fn generate_proving_ctx(
@@ -85,6 +92,10 @@ pub struct SystemRecords {
     pub from_state: ExecutionState<u32>,
     pub to_state: ExecutionState<u32>,
     pub exit_code: Option<u32>,
+    // We always use a [DenseRecordArena] here, regardless of the generic `RA` used for other
+    // execution records.
+    pub access_adapter_records: DenseRecordArena,
+    pub touched_memory: ?
 }
 
 #[derive(AnyEnum, From)]
@@ -283,6 +294,7 @@ pub struct SystemChipInventory<SC: StarkGenericConfig> {
     /// Contains all memory chips
     pub memory_controller: MemoryController<Val<SC>>,
     pub public_values_chip: Option<PublicValuesChip<Val<SC>>>,
+    pub hasher_chip: Option<Arc<Poseidon2PeripheryChip<Val<SC>>>>,
 }
 
 // Note[jpw]: We could get rid of the `mem_inventory` input because `MemoryController` doesn't need
@@ -295,6 +307,7 @@ where
         config: &SystemConfig,
         mem_inventory: &MemoryAirInventory<SC>,
         range_checker: SharedVariableRangeCheckerChip,
+        hasher_chip: Option<Arc<Poseidon2PeripheryChip<Val<SC>>>>,
     ) -> Self {
         // We create an empty program chip: the program should be loaded later (and can be swapped
         // out). The execution frequencies are supplied only after execution.
@@ -338,12 +351,14 @@ where
                 memory_controller.helper(),
             )
         });
+        assert_eq!(config.continuation_enabled, hasher_chip.is_some());
 
         Self {
             program_chip,
             connector_chip,
             memory_controller,
             public_values_chip,
+            hasher_chip
         }
     }
 }
@@ -358,6 +373,11 @@ where
         let _ = self.program_chip.cached.replace(cached_program_trace);
     }
 
+    fn transport_init_memory_to_device(&mut self, memory: &GuestMemory) {
+        self.memory_controller
+            .set_initial_memory(memory.memory.clone());
+    }
+
     fn generate_proving_ctx(
         &mut self,
         system_records: SystemRecords,
@@ -367,6 +387,7 @@ where
             from_state,
             to_state,
             exit_code,
+            access_adapter_records,
         } = system_records;
 
         let program_ctx = self.program_chip.generate_proving_ctx(());
@@ -378,7 +399,9 @@ where
             let arena = record_arenas.remove(PUBLIC_VALUES_AIR_ID);
             chip.generate_proving_ctx(arena)
         });
-        let memory_ctxs = self.memory_controller.generate_proving_ctx();
+
+        self.memory_controller.finalize(self.hasher_chip.as_ref().map(|arc| arc.as_ref()));
+        let memory_ctxs = self.memory_controller.generate_proving_ctx(access_adapter_records);
 
         [program_ctx, connector_ctx]
             .into_iter()
@@ -405,7 +428,6 @@ where
     > {
         let range_bus = airs.range_checker().bus;
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let system = SystemChipInventory::new(self, &airs.system().memory, range_checker.clone());
 
         let mut inventory = ChipInventory::new(airs);
         // PublicValuesChip is required when num_public_values > 0 in single segment mode.
@@ -418,9 +440,9 @@ where
             inventory.executor_idx_to_insertion_idx.push(usize::MAX);
         }
         inventory.next_air::<VariableRangeCheckerAir>()?;
-        inventory.add_periphery_chip(range_checker);
+        inventory.add_periphery_chip(range_checker.clone());
 
-        if self.continuation_enabled {
+        let hasher_chip = if self.continuation_enabled {
             assert_eq!(inventory.chips().len(), POSEIDON2_INSERTION_IDX);
             // ATTENTION: The threshold 7 here must match the one in `new_poseidon2_periphery_air`
             let direct_bus = if self.max_constraint_degree >= 7 {
@@ -432,13 +454,17 @@ where
                     .next_air::<Poseidon2PeripheryAir<Val<SC>, 1>>()?
                     .bus
             };
-            let chip = Poseidon2PeripheryChip::new(
+            let chip = Arc::new(Poseidon2PeripheryChip::new(
                 vm_poseidon2_config(),
                 direct_bus.index,
                 self.max_constraint_degree,
-            );
-            inventory.add_periphery_chip(chip);
-        }
+            ));
+            inventory.add_periphery_chip(chip.clone());
+           Some(chip)
+        } else {
+            None
+        };
+        let system = SystemChipInventory::new(self, &inventory.airs().system().memory, range_checker, hasher_chip);
 
         let phantom_chip = PhantomChip::new(PhantomFiller, system.memory_controller.helper());
         inventory.add_executor_chip(phantom_chip);

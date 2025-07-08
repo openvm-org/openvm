@@ -130,7 +130,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> TraceStep<F>
     type RecordMut<'a> = NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS>;
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
+        state: VmStateMut<'buf, F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> openvm_circuit::arch::Result<()>
     where
@@ -790,7 +790,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> TraceFiller<F>
 }
 
 fn tracing_read_native_helper<F: PrimeField32, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     ptr: u32,
     base_aux: &mut MemoryBaseAuxCols<F>,
 ) -> [F; BLOCK_SIZE] {

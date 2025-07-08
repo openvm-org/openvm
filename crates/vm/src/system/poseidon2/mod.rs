@@ -15,7 +15,7 @@ use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::{BusIndex, LookupBus},
-    p3_field::PrimeField32,
+    p3_field::{Field, PrimeField32},
     AirRef, ChipUsageGetter,
 };
 
@@ -37,8 +37,8 @@ pub const PERIPHERY_POSEIDON2_WIDTH: usize = 16;
 pub const PERIPHERY_POSEIDON2_CHUNK_SIZE: usize = 8;
 
 #[derive(Chip)]
-#[chip(where = "F: PrimeField32")]
-pub enum Poseidon2PeripheryChip<F: PrimeField32> {
+#[chip(where = "F: Field")]
+pub enum Poseidon2PeripheryChip<F: Field> {
     Register0(Poseidon2PeripheryBaseChip<F, 0>),
     Register1(Poseidon2PeripheryBaseChip<F, 1>),
 }

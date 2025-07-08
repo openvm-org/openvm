@@ -212,14 +212,14 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterTra
     type WriteData = ();
     type RecordMut<'a> = &'a mut Rv32HeapBranchAdapterRecord<NUM_READS>;
 
-    fn start(pc: u32, memory: &TracingMemory<F>, adapter_record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, adapter_record: &mut Self::RecordMut<'_>) {
         adapter_record.from_pc = pc;
         adapter_record.from_timestamp = memory.timestamp;
     }
 
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -253,7 +253,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterTra
 
     fn write(
         &self,
-        _memory: &mut TracingMemory<F>,
+        _memory: &mut TracingMemory,
         _instruction: &Instruction<F>,
         _data: Self::WriteData,
         _record: &mut Self::RecordMut<'_>,

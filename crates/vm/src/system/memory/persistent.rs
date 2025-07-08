@@ -213,7 +213,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         initial_memory: &MemoryImage,
         // Only touched stuff
         final_memory: &TimestampedEquipartition<F, CHUNK>,
-        hasher: &mut H,
+        hasher: &H,
     ) where
         H: Hasher<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {

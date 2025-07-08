@@ -52,7 +52,7 @@ where
     F: PrimeField32,
     Executor: InstructionExecutor<F, RA>,
 {
-    type Memory = TracingMemory<F>;
+    type Memory = TracingMemory;
     type Ctx = TracegenCtx<RA>;
 
     fn should_suspend(&self, state: &mut VmSegmentState<F, Self::Memory, Self::Ctx>) -> bool {

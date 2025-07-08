@@ -32,7 +32,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
         &mut self,
         initial_memory: &MemoryImage,
         final_memory: &Equipartition<F, CHUNK>,
-        hasher: &mut impl HasherChip<CHUNK, F>,
+        hasher: &impl HasherChip<CHUNK, F>,
     ) {
         assert!(self.final_state.is_none(), "Merkle chip already finalized");
         let mut tree = MerkleTree::from_memory(initial_memory, &self.air.memory_dimensions, hasher);
@@ -103,7 +103,7 @@ impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<C
 }
 
 pub trait SerialReceiver<T> {
-    fn receive(&mut self, msg: T);
+    fn receive(&self, msg: T);
 }
 
 impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> SerialReceiver<&'a [F]>
@@ -111,7 +111,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> SerialReceiver<&'a [F]>
 {
     /// Receives a permutation preimage, pads with zeros to the permutation width, and records.
     /// The permutation preimage must have length at most the permutation width (panics otherwise).
-    fn receive(&mut self, perm_preimage: &'a [F]) {
+    fn receive(&self, perm_preimage: &'a [F]) {
         assert!(perm_preimage.len() <= PERIPHERY_POSEIDON2_WIDTH);
         let mut state = [F::ZERO; PERIPHERY_POSEIDON2_WIDTH];
         state[..perm_preimage.len()].copy_from_slice(perm_preimage);
@@ -121,7 +121,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> SerialReceiver<&'a [F]>
 }
 
 impl<'a, F: PrimeField32> SerialReceiver<&'a [F]> for Poseidon2PeripheryChip<F> {
-    fn receive(&mut self, perm_preimage: &'a [F]) {
+    fn receive(&self, perm_preimage: &'a [F]) {
         match self {
             Poseidon2PeripheryChip::Register0(chip) => chip.receive(perm_preimage),
             Poseidon2PeripheryChip::Register1(chip) => chip.receive(perm_preimage),

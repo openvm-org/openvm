@@ -130,7 +130,7 @@ where
     type RecordMut<'a> = &'a mut Rv32BranchAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut &mut Rv32BranchAdapterRecord) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut &mut Rv32BranchAdapterRecord) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
@@ -138,7 +138,7 @@ where
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut &mut Rv32BranchAdapterRecord,
     ) -> Self::ReadData {
@@ -168,7 +168,7 @@ where
     #[inline(always)]
     fn write(
         &self,
-        _memory: &mut TracingMemory<F>,
+        _memory: &mut TracingMemory,
         _instruction: &Instruction<F>,
         _data: Self::WriteData,
         _record: &mut Self::RecordMut<'_>,

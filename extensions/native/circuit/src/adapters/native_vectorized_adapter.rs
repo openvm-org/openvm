@@ -148,7 +148,7 @@ impl<F: PrimeField32, const N: usize> AdapterTraceStep<F> for NativeVectorizedAd
     type RecordMut<'a> = &'a mut NativeVectorizedAdapterRecord<F, N>;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp();
     }
@@ -156,7 +156,7 @@ impl<F: PrimeField32, const N: usize> AdapterTraceStep<F> for NativeVectorizedAd
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -183,7 +183,7 @@ impl<F: PrimeField32, const N: usize> AdapterTraceStep<F> for NativeVectorizedAd
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,

@@ -2,16 +2,14 @@ use std::{fmt::Debug, slice::from_raw_parts};
 
 use getset::Getters;
 use itertools::{izip, zip_eq};
-use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_instructions::{exe::SparseMemoryImage, NATIVE_AS};
 use openvm_stark_backend::{
     p3_field::PrimeField32,
     p3_maybe_rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
 };
 
-use super::{adapter::AccessAdapterInventory, offline_checker::MemoryBus};
 use crate::{
-    arch::{MemoryConfig, ADDR_SPACE_OFFSET},
+    arch::{DenseRecordArena, MemoryConfig, RecordArena, ADDR_SPACE_OFFSET},
     system::memory::adapter::records::{
         AccessLayout, AccessRecordHeader, MERGE_AND_NOT_SPLIT_FLAG,
     },
@@ -357,7 +355,7 @@ pub struct AccessMetadata {
 /// Online memory that stores additional information for trace generation purposes.
 /// In particular, keeps track of timestamp.
 #[derive(Getters)]
-pub struct TracingMemory<F> {
+pub struct TracingMemory {
     pub timestamp: u32,
     /// The initial block size -- this depends on the type of boundary chip.
     initial_block_size: usize,
@@ -372,52 +370,31 @@ pub struct TracingMemory<F> {
     /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
     /// all memory accesses in `addr_space` must be aligned to this block size.
     pub min_block_size: Vec<u32>,
-    pub access_adapter_inventory: AccessAdapterInventory<F>,
+    pub(super) access_adapter_records: DenseRecordArena,
 }
 
-impl<F: PrimeField32> TracingMemory<F> {
+impl TracingMemory {
     // TODO: per-address space memory capacity specification
     pub fn new(
         mem_config: &MemoryConfig,
-        range_checker: SharedVariableRangeCheckerChip,
-        memory_bus: MemoryBus,
         initial_block_size: usize,
+        access_adapter_arena_size_bound: usize,
     ) -> Self {
-        let num_cells = mem_config.addr_space_sizes.clone();
-        let num_addr_sp = ADDR_SPACE_OFFSET as usize + (1 << mem_config.addr_space_height);
-        let mut min_block_size = vec![1; num_addr_sp];
-        // TMP: hardcoding for now
-        min_block_size[1] = 4;
-        min_block_size[2] = 4;
-        min_block_size[3] = 4;
-        let meta = zip_eq(&min_block_size, &num_cells)
-            .map(|(min_block_size, num_cells)| {
-                let total_metadata_len = num_cells.div_ceil(*min_block_size as usize);
-                PagedVec::new(total_metadata_len, PAGE_SIZE)
-            })
-            .collect();
-        Self {
-            data: GuestMemory::new(AddressMap::from_mem_config(mem_config)),
-            meta,
-            min_block_size,
-            timestamp: INITIAL_TIMESTAMP + 1,
+        let image = GuestMemory::new(AddressMap::from_mem_config(mem_config));
+        Self::from_image(
+            image,
+            mem_config,
             initial_block_size,
-            access_adapter_inventory: AccessAdapterInventory::new(
-                range_checker,
-                memory_bus,
-                mem_config.clk_max_bits,
-                mem_config.max_access_adapter_n,
-            ),
-        }
+            access_adapter_arena_size_bound,
+        )
     }
 
     /// Constructor from pre-existing memory image.
-    pub fn with_image(
-        image: AddressMap,
+    pub fn from_image(
+        image: GuestMemory,
         mem_config: &MemoryConfig,
-        range_checker: SharedVariableRangeCheckerChip,
-        memory_bus: MemoryBus,
         initial_block_size: usize,
+        access_adapter_arena_size_bound: usize,
     ) -> Self {
         let num_addr_sp = ADDR_SPACE_OFFSET as usize + (1 << mem_config.addr_space_height);
         let mut min_block_size = vec![1; num_addr_sp];
@@ -426,25 +403,26 @@ impl<F: PrimeField32> TracingMemory<F> {
         min_block_size[2] = 4;
         min_block_size[3] = 4;
 
-        let meta = izip!(image.get_memory(), &image.cell_size, &min_block_size)
-            .map(|(mem, cell_size, min_block_size)| {
-                let num_cells = mem.size() / cell_size;
-                let total_metadata_len = num_cells.div_ceil(*min_block_size as usize);
-                PagedVec::new(total_metadata_len, PAGE_SIZE)
-            })
-            .collect::<Vec<_>>();
+        let meta = izip!(
+            image.memory.get_memory(),
+            &image.memory.cell_size,
+            &min_block_size
+        )
+        .map(|(mem, cell_size, min_block_size)| {
+            let num_cells = mem.size() / cell_size;
+            let total_metadata_len = num_cells.div_ceil(*min_block_size as usize);
+            PagedVec::new(total_metadata_len, PAGE_SIZE)
+        })
+        .collect::<Vec<_>>();
+        let access_adapter_records =
+            DenseRecordArena::with_byte_capacity(access_adapter_arena_size_bound);
         Self {
-            data: GuestMemory::new(image),
+            data: image,
             meta,
             min_block_size,
             timestamp: INITIAL_TIMESTAMP + 1,
             initial_block_size,
-            access_adapter_inventory: AccessAdapterInventory::new(
-                range_checker,
-                memory_bus,
-                mem_config.clk_max_bits,
-                mem_config.max_access_adapter_n,
-            ),
+            access_adapter_records,
         }
     }
 
@@ -499,8 +477,8 @@ impl<F: PrimeField32> TracingMemory<F> {
         };
 
         let record_mut = self
-            .access_adapter_inventory
-            .alloc_record(AccessLayout::from_record_header(&header));
+            .access_adapter_records
+            .alloc(AccessLayout::from_record_header(&header));
         *record_mut.header = header;
         record_mut.data.copy_from_slice(data_slice);
         // we don't mind garbage values in prev_*
@@ -520,8 +498,8 @@ impl<F: PrimeField32> TracingMemory<F> {
             unsafe { from_raw_parts(data.as_ptr() as *const u8, std::mem::size_of_val(data)) };
 
         let record_mut = self
-            .access_adapter_inventory
-            .alloc_record(AccessLayout::from_record_header(&header));
+            .access_adapter_records
+            .alloc(AccessLayout::from_record_header(&header));
         *record_mut.header = header;
         record_mut.header.timestamp_and_mask |= MERGE_AND_NOT_SPLIT_FLAG;
         record_mut.data.copy_from_slice(data_slice);

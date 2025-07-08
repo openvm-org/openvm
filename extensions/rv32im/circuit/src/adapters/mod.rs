@@ -101,7 +101,7 @@ pub fn memory_write<const N: usize>(
 /// access.
 #[inline(always)]
 pub fn timed_read<F: PrimeField32, const N: usize>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     address_space: u32,
     ptr: u32,
 ) -> (u32, [u8; N]) {
@@ -119,7 +119,7 @@ pub fn timed_read<F: PrimeField32, const N: usize>(
 
 #[inline(always)]
 pub fn timed_write<F: PrimeField32, const N: usize>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     address_space: u32,
     ptr: u32,
     data: [u8; N],
@@ -141,7 +141,7 @@ pub fn timed_write<F: PrimeField32, const N: usize>(
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
 #[inline(always)]
 pub fn tracing_read<F, const N: usize>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     address_space: u32,
     ptr: u32,
     prev_timestamp: &mut u32,
@@ -156,7 +156,7 @@ where
 
 #[inline(always)]
 pub fn tracing_read_imm<F>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     imm: u32,
     imm_mut: &mut u32,
 ) -> [u8; RV32_REGISTER_NUM_LIMBS]
@@ -179,7 +179,7 @@ where
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
 #[inline(always)]
 pub fn tracing_write<F, const N: usize>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     address_space: u32,
     ptr: u32,
     data: [u8; N],

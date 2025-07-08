@@ -8,6 +8,7 @@ use std::{
 pub use air::*;
 pub use columns::*;
 use enum_dispatch::enum_dispatch;
+use getset::Setters;
 use openvm_circuit_primitives::{
     is_less_than::IsLtSubAir, utils::next_power_of_two_or_zero,
     var_range::SharedVariableRangeCheckerChip, ChipUsageGetter, TraceSubRowGenerator,
@@ -28,7 +29,7 @@ use crate::{
     arch::{CustomBorrow, DenseRecordArena, RecordArena, SizedRecord},
     system::memory::{
         adapter::records::{
-            size_by_layout, AccessLayout, AccessRecordHeader, AccessRecordMut,
+            arena_size_bound, AccessLayout, AccessRecordHeader, AccessRecordMut,
             MERGE_AND_NOT_SPLIT_FLAG,
         },
         offline_checker::MemoryBus,
@@ -42,8 +43,10 @@ pub(crate) mod records;
 #[cfg(test)]
 mod tests;
 
+#[derive(Setters)]
 pub struct AccessAdapterInventory<F> {
     chips: Vec<GenericAccessAdapterChip<F>>,
+    #[getset(set = "pub")]
     arena: DenseRecordArena,
     air_names: Vec<String>,
 }
@@ -82,7 +85,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         self.chips.len()
     }
 
-    pub fn set_override_trace_heights(&mut self, overridden_heights: Vec<usize>) {
+    pub(super) fn set_override_trace_heights(&mut self, overridden_heights: Vec<usize>) {
         self.set_arena_from_trace_heights(
             &overridden_heights
                 .iter()
@@ -94,26 +97,9 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         }
     }
 
-    pub fn set_arena_from_trace_heights(&mut self, trace_heights: &[u32]) {
+    pub(super) fn set_arena_from_trace_heights(&mut self, trace_heights: &[u32]) {
         assert_eq!(trace_heights.len(), self.chips.len());
-        // At the very worst, each row in `Adapter<N>`
-        // corresponds to a unique record of `block_size` being `2 * N`,
-        // and its `lowest_block_size` is at least 1 and `type_size` is at most 4.
-        let size_bound = trace_heights
-            .iter()
-            .enumerate()
-            .map(|(i, &h)| {
-                size_by_layout(&AccessLayout {
-                    block_size: 1 << (i + 1),
-                    lowest_block_size: 1,
-                    type_size: 4,
-                }) * h as usize
-            })
-            .sum::<usize>();
-        assert!(self
-            .chips
-            .iter()
-            .all(|chip| chip.overridden_trace_height().is_none()));
+        let size_bound = arena_size_bound(trace_heights);
         tracing::debug!(
             "Allocating {} bytes for memory adapters arena from heights {:?}",
             size_bound,
@@ -128,7 +114,6 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
             .map(|chip| chip.current_trace_height())
             .collect()
     }
-    #[allow(dead_code)]
     pub fn get_widths(&self) -> Vec<usize> {
         self.chips
             .iter()

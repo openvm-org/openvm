@@ -129,7 +129,7 @@ pub trait TraceStep<F> {
     /// The context in `state` is expected to be the record arena for this specific step.
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
+        state: VmStateMut<'buf, F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
@@ -500,6 +500,11 @@ impl DenseRecordArena {
         self.records_buffer.position() as usize
     }
 
+    /// Returns the allocated size of the arena in bytes.
+    pub fn capacity(&self) -> usize {
+        self.records_buffer.get_ref().len()
+    }
+
     /// Allocates `count` bytes and returns as a mutable slice.
     pub fn alloc_bytes<'a>(&mut self, count: usize) -> &'a mut [u8] {
         let begin = self.records_buffer.position();
@@ -813,18 +818,18 @@ pub trait AdapterTraceStep<F> {
     where
         Self: 'a;
 
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>);
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>);
 
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData;
 
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,

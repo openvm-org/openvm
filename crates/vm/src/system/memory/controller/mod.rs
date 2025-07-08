@@ -25,11 +25,11 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use self::interface::MemoryInterface;
-use super::{online::INITIAL_TIMESTAMP, volatile::VolatileBoundaryChip, AddressMap, MemoryAddress};
+use super::{volatile::VolatileBoundaryChip, AddressMap, MemoryAddress};
 use crate::{
-    arch::{hasher::HasherChip, MemoryConfig, ADDR_SPACE_OFFSET},
+    arch::{hasher::HasherChip, DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET},
     system::memory::{
-        adapter::records::AccessRecordHeader,
+        adapter::{records::AccessRecordHeader, AccessAdapterInventory},
         dimensions::MemoryDimensions,
         merkle::{MemoryMerkleChip, SerialReceiver},
         offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
@@ -80,8 +80,9 @@ pub struct MemoryController<F> {
     pub range_checker: SharedVariableRangeCheckerChip,
     // Store separately to avoid smart pointer reference each time
     range_checker_bus: VariableRangeCheckerBus,
-    // addr_space -> Memory data structure
-    pub memory: TracingMemory<F>,
+    access_adapter_inventory: AccessAdapterInventory<F>,
+    // TODO[jpw]: revisit if this should be removed from the struct
+    pub memory: TracingMemory,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -207,7 +208,13 @@ impl<F: PrimeField32> MemoryController<F> {
                     range_checker.clone(),
                 ),
             },
-            memory: TracingMemory::new(&mem_config, range_checker.clone(), memory_bus, 1),
+            memory: TracingMemory::new(&mem_config, 1, 0), // this is empty and should be set later
+            access_adapter_inventory: AccessAdapterInventory::new(
+                range_checker.clone(),
+                memory_bus,
+                mem_config.clk_max_bits,
+                mem_config.max_access_adapter_n,
+            ),
             range_checker,
             range_checker_bus,
         }
@@ -242,8 +249,14 @@ impl<F: PrimeField32> MemoryController<F> {
             memory_bus,
             mem_config: mem_config.clone(),
             interface_chip,
-            memory: TracingMemory::new(&mem_config, range_checker.clone(), memory_bus, CHUNK), /* it is expected that the memory will be
-                                                                                                * set later */
+            // memory is empty on construction and must be set later
+            memory: TracingMemory::new(&mem_config, CHUNK, 0),
+            access_adapter_inventory: AccessAdapterInventory::new(
+                range_checker.clone(),
+                memory_bus,
+                mem_config.clk_max_bits,
+                mem_config.max_access_adapter_n,
+            ),
             range_checker,
             range_checker_bus,
         }
@@ -258,8 +271,7 @@ impl<F: PrimeField32> MemoryController<F> {
             MemoryInterface::Volatile { boundary_chip } => match overridden_heights {
                 MemoryTraceHeights::Volatile(oh) => {
                     boundary_chip.set_overridden_height(oh.boundary);
-                    self.memory
-                        .access_adapter_inventory
+                    self.access_adapter_inventory
                         .set_override_trace_heights(oh.access_adapters);
                 }
                 _ => panic!("Expect overridden_heights to be MemoryTraceHeights::Volatile"),
@@ -272,8 +284,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 MemoryTraceHeights::Persistent(oh) => {
                     boundary_chip.set_overridden_height(oh.boundary);
                     merkle_chip.set_overridden_height(oh.merkle);
-                    self.memory
-                        .access_adapter_inventory
+                    self.access_adapter_inventory
                         .set_override_trace_heights(oh.access_adapters);
                 }
                 _ => panic!("Expect overridden_heights to be MemoryTraceHeights::Persistent"),
@@ -281,30 +292,18 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
-    // TODO[jpw]: change MemoryImage interface here
-    pub fn set_initial_memory(&mut self, memory: MemoryImage) {
-        if self.timestamp() > INITIAL_TIMESTAMP + 1 {
-            panic!("Cannot set initial memory after first timestamp");
-        }
-
+    /// This only sets the initial memory image for the persistent boundary and merkle tree chips.
+    /// Tracing memory should be set separately.
+    pub(crate) fn set_initial_memory(&mut self, memory: AddressMap) {
         match &mut self.interface_chip {
             MemoryInterface::Volatile { .. } => {
                 // Skip initialization for volatile memory
                 return;
             }
             MemoryInterface::Persistent { initial_memory, .. } => {
-                *initial_memory = memory.clone();
+                *initial_memory = memory;
             }
         }
-
-        self.memory = TracingMemory::with_image(
-            memory,
-            &self.mem_config,
-            self.range_checker.clone(),
-            self.memory_bus,
-            INITIAL_TIMESTAMP + 1,
-            CHUNK,
-        );
     }
 
     pub fn memory_bridge(&self) -> MemoryBridge {
@@ -368,6 +367,8 @@ impl<F: PrimeField32> MemoryController<F> {
         final_memory
     }
 
+    // TODO[jpw]: this uses tracing_memory, even though it should modify records in
+    // access_adapter_inventory instead
     fn handle_touched_blocks<T: Copy + Debug + Default, const CHUNK: usize>(
         &mut self,
         final_memory: &mut Vec<((u32, u32), TimestampedValues<F, CHUNK>)>,
@@ -483,14 +484,14 @@ impl<F: PrimeField32> MemoryController<F> {
 
     /// Finalize the boundary and merkle chips.
     #[instrument(name = "memory_finalize", skip_all)]
-    pub fn finalize<H>(&mut self, hasher: Option<&mut H>)
+    pub fn finalize<H>(&mut self, hasher: Option<&H>)
     where
         H: HasherChip<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
         let touched_blocks = self.memory.touched_blocks();
 
         // Compute trace heights for access adapter chips and update their stored heights
-        self.memory.access_adapter_inventory.compute_trace_heights();
+        self.access_adapter_inventory.compute_trace_heights();
 
         let mut final_memory_volatile = None;
         let mut final_memory_persistent = None;
@@ -505,6 +506,9 @@ impl<F: PrimeField32> MemoryController<F> {
                     Some(self.touched_blocks_to_equipartition::<CHUNK>(touched_blocks));
             }
         }
+
+        // TODO: separate ^above to before generate_proving_ctx, while after is part of
+        // generate_proving_ctx
 
         match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
@@ -535,13 +539,15 @@ impl<F: PrimeField32> MemoryController<F> {
     // _somehow_.
     pub fn generate_proving_ctx<SC: StarkGenericConfig>(
         &mut self,
+        access_adapter_records: DenseRecordArena,
     ) -> Vec<AirProvingContext<CpuBackend<SC>>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         let mut ret = Vec::new();
 
-        let access_adapters = &mut self.memory.access_adapter_inventory;
+        let access_adapters = &mut self.access_adapter_inventory;
+        access_adapters.set_arena(access_adapter_records);
         match &mut self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 ret.push(boundary_chip.generate_proving_ctx(()));
@@ -567,7 +573,7 @@ impl<F: PrimeField32> MemoryController<F> {
         if self.continuation_enabled() {
             num_airs += 1;
         }
-        num_airs += self.memory.access_adapter_inventory.num_access_adapters();
+        num_airs += self.access_adapter_inventory.num_access_adapters();
         num_airs
     }
 
@@ -579,7 +585,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn get_memory_trace_heights(&self) -> MemoryTraceHeights {
-        let access_adapters = self.memory.access_adapter_inventory.get_heights();
+        let access_adapters = self.access_adapter_inventory.get_heights();
         match &self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
@@ -600,7 +606,7 @@ impl<F: PrimeField32> MemoryController<F> {
     }
 
     pub fn get_dummy_memory_trace_heights(&self) -> MemoryTraceHeights {
-        let access_adapters = vec![1; self.memory.access_adapter_inventory.num_access_adapters()];
+        let access_adapters = vec![1; self.access_adapter_inventory.num_access_adapters()];
         match &self.interface_chip {
             MemoryInterface::Volatile { .. } => {
                 MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
@@ -633,7 +639,7 @@ impl<F: PrimeField32> MemoryController<F> {
                 ret.push(merkle_chip.current_trace_cells());
             }
         }
-        ret.extend(self.memory.access_adapter_inventory.get_cells());
+        ret.extend(self.access_adapter_inventory.get_cells());
         ret
     }
 }

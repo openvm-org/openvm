@@ -199,7 +199,7 @@ where
 
     fn execute<'buf, RA>(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory<F>, RA>,
+        state: VmStateMut<'buf, F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError>
     where

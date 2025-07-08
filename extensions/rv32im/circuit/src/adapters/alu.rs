@@ -199,7 +199,7 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceStep<F>
     type RecordMut<'a> = &'a mut Rv32BaseAluAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut &mut Rv32BaseAluAdapterRecord) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut &mut Rv32BaseAluAdapterRecord) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
@@ -208,7 +208,7 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceStep<F>
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut &mut Rv32BaseAluAdapterRecord,
     ) -> Self::ReadData {
@@ -249,7 +249,7 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceStep<F>
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut &mut Rv32BaseAluAdapterRecord,

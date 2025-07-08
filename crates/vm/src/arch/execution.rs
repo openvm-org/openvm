@@ -94,7 +94,7 @@ pub trait InstructionExecutor<F, RA = MatrixRecordArena<F>> {
     /// current instance. May internally store records of this call for later trace generation.
     fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, RA>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<()>;
 
@@ -157,7 +157,7 @@ where
 impl<F, C: InstructionExecutor<F, RA>, RA> InstructionExecutor<F, RA> for RefCell<C> {
     fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, RA>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<()> {
         self.borrow_mut().execute(state, instruction)
