@@ -589,7 +589,7 @@ impl LoadStoreOp for StoreHOp {
             return false;
         }
         write_data[shift_amount] = read_data[0];
-        write_data[shift_amount] = read_data[1];
+        write_data[shift_amount + 1] = read_data[1];
         true
     }
 }
