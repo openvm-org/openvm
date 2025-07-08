@@ -300,18 +300,20 @@ impl SystemConfig {
 
     /// Returns the AIR ID of the memory boundary AIR. Panic if the boundary AIR is not enabled.
     pub fn memory_boundary_air_id(&self) -> usize {
-        let mut ret = PUBLIC_VALUES_AIR_ID;
-        if self.has_public_values_chip() {
-            ret += 1;
-        }
-        ret += BOUNDARY_AIR_OFFSET;
-        ret
+        PUBLIC_VALUES_AIR_ID + usize::from(self.has_public_values_chip())
+    }
+
+    /// AIR ID for the first memory access adapter AIR.
+    pub fn access_adapter_air_id_offset(&self) -> usize {
+        let boundary_idx = self.memory_boundary_air_id();
+        // boundary, (if persistent memory) merkle AIRs
+        boundary_idx + 1 + usize::from(self.continuation_enabled)
     }
 
     /// This is O(1) and returns the length of
     /// [`SystemAirInventory::into_airs`](crate::system::SystemAirInventory::into_airs).
     pub fn num_airs(&self) -> usize {
-        2 + usize::from(self.has_public_values_chip())
+        self.memory_boundary_air_id()
             + num_memory_airs(
                 self.continuation_enabled,
                 self.memory_config.max_access_adapter_n,

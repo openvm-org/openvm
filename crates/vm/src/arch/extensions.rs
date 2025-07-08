@@ -643,7 +643,7 @@ where
     /// not require a record arena.
     pub(crate) fn generate_proving_ctx(
         &mut self,
-        system_records: SystemRecords,
+        system_records: SystemRecords<PB::Val>,
         record_arenas: Vec<RA>,
         // trace_height_constraints: &[LinearConstraint],
     ) -> Result<ProvingContext<PB>, GenerationError> {

@@ -1,17 +1,22 @@
-use std::{fmt::Debug, slice::from_raw_parts};
+use std::{array::from_fn, fmt::Debug, slice::from_raw_parts};
 
 use getset::Getters;
 use itertools::{izip, zip_eq};
 use openvm_instructions::{exe::SparseMemoryImage, NATIVE_AS};
 use openvm_stark_backend::{
-    p3_field::PrimeField32,
+    p3_field::{Field, PrimeField32},
     p3_maybe_rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
 };
+use tracing::instrument;
 
 use crate::{
     arch::{DenseRecordArena, MemoryConfig, RecordArena, ADDR_SPACE_OFFSET},
-    system::memory::adapter::records::{
-        AccessLayout, AccessRecordHeader, MERGE_AND_NOT_SPLIT_FLAG,
+    system::{
+        memory::{
+            adapter::records::{AccessLayout, AccessRecordHeader, MERGE_AND_NOT_SPLIT_FLAG},
+            MemoryAddress, TimestampedEquipartition, TimestampedValues, CHUNK,
+        },
+        TouchedMemory,
     },
 };
 
@@ -730,8 +735,27 @@ impl TracingMemory {
         self.timestamp
     }
 
+    /// Finalize the boundary and merkle chips.
+    #[instrument(name = "memory_finalize", skip_all)]
+    pub fn finalize<F: Field>(&mut self, is_persistent: bool) -> TouchedMemory<F> {
+        let touched_blocks = self.touched_blocks();
+
+        // TODO[jpw]: Do we need this??
+        // Compute trace heights for access adapter chips and update their stored heights
+        // self.access_adapter_inventory.compute_trace_heights();
+
+        match is_persistent {
+            false => TouchedMemory::Volatile(
+                self.touched_blocks_to_equipartition::<F, 1>(touched_blocks),
+            ),
+            true => TouchedMemory::Persistent(
+                self.touched_blocks_to_equipartition::<F, CHUNK>(touched_blocks),
+            ),
+        }
+    }
+
     /// Returns the list of all touched blocks. The list is sorted by address.
-    pub fn touched_blocks(&self) -> Vec<(Address, AccessMetadata)> {
+    fn touched_blocks(&self) -> Vec<(Address, AccessMetadata)> {
         assert_eq!(self.meta.len(), self.min_block_size.len());
         self.meta
             .par_iter()
@@ -750,6 +774,143 @@ impl TracingMemory {
                     .collect::<Vec<_>>()
             })
             .collect()
+    }
+
+    /// Returns the equipartition of the touched blocks.
+    /// Modifies records and adds new to account for the initial/final segments.
+    fn touched_blocks_to_equipartition<F: Field, const CHUNK: usize>(
+        &mut self,
+        touched_blocks: Vec<((u32, u32), AccessMetadata)>,
+    ) -> TimestampedEquipartition<F, CHUNK> {
+        // [perf] We can `.with_capacity()` if we keep track of the number of segments we initialize
+        let mut final_memory = Vec::new();
+
+        debug_assert!(touched_blocks.is_sorted_by_key(|(addr, _)| addr));
+        let (bytes, fs): (Vec<_>, Vec<_>) = touched_blocks
+            .into_iter()
+            .partition(|((addr_sp, _), _)| *addr_sp < NATIVE_AS); // TODO: normal way
+
+        self.handle_touched_blocks::<F, u8, CHUNK>(&mut final_memory, bytes, 4, |x| {
+            F::from_canonical_u8(x)
+        });
+        self.handle_touched_blocks::<F, F, CHUNK>(&mut final_memory, fs, 1, |x| x);
+
+        debug_assert!(final_memory.is_sorted_by_key(|(key, _)| *key));
+        final_memory
+    }
+
+    // TODO[jpw]: this uses tracing_memory, even though it should modify records in
+    // access_adapter_inventory instead
+    fn handle_touched_blocks<F, T: Copy + Debug + Default, const CHUNK: usize>(
+        &mut self,
+        final_memory: &mut Vec<((u32, u32), TimestampedValues<F, CHUNK>)>,
+        touched_blocks: Vec<((u32, u32), AccessMetadata)>,
+        min_block_size: usize,
+        convert: impl Fn(T) -> F,
+    ) {
+        let mut current_values = [T::default(); CHUNK];
+        let mut current_cnt = 0;
+        let mut current_address = MemoryAddress::new(0, 0);
+        let mut current_timestamps = vec![0; CHUNK];
+        for ((addr_space, ptr), metadata) in touched_blocks {
+            let AccessMetadata {
+                start_ptr,
+                timestamp,
+                block_size,
+            } = metadata;
+            assert!(
+                current_cnt == 0
+                    || (current_address.address_space == addr_space
+                        && current_address.pointer + current_cnt as u32 == ptr),
+                "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`"
+            );
+            debug_assert!(block_size >= min_block_size as u32);
+            debug_assert!(ptr % min_block_size as u32 == 0);
+
+            if current_cnt == 0 {
+                assert_eq!(
+                    ptr & (CHUNK as u32 - 1),
+                    0,
+                    "The union of all touched blocks must consist of `CHUNK`-aligned blocks"
+                );
+                current_address = MemoryAddress::new(addr_space, ptr);
+            }
+
+            if block_size > min_block_size as u32 {
+                self.add_split_record(AccessRecordHeader {
+                    timestamp_and_mask: timestamp,
+                    address_space: addr_space,
+                    pointer: start_ptr,
+                    block_size,
+                    lowest_block_size: min_block_size as u32,
+                    type_size: size_of::<T>() as u32,
+                });
+            }
+            if min_block_size > CHUNK {
+                assert_eq!(current_cnt, 0);
+                for i in (0..block_size).step_by(min_block_size) {
+                    self.add_split_record(AccessRecordHeader {
+                        timestamp_and_mask: timestamp,
+                        address_space: addr_space,
+                        pointer: start_ptr + i,
+                        block_size: min_block_size as u32,
+                        lowest_block_size: CHUNK as u32,
+                        type_size: size_of::<T>() as u32,
+                    });
+                }
+                let values = unsafe {
+                    self.data
+                        .memory
+                        .get_slice::<T>((addr_space, ptr), block_size as usize)
+                };
+                for i in (0..block_size).step_by(CHUNK) {
+                    final_memory.push((
+                        (addr_space, ptr + i),
+                        TimestampedValues {
+                            timestamp,
+                            values: from_fn(|j| convert(values[i as usize + j])),
+                        },
+                    ));
+                }
+            } else {
+                for i in 0..block_size {
+                    current_values[current_cnt] =
+                        unsafe { self.data.memory.get((addr_space, ptr + i)) };
+                    if current_cnt & (min_block_size - 1) == 0 {
+                        current_timestamps[current_cnt / min_block_size] = timestamp;
+                    }
+                    current_cnt += 1;
+                    if current_cnt == CHUNK {
+                        let timestamp = *current_timestamps[..CHUNK / min_block_size]
+                            .iter()
+                            .max()
+                            .unwrap();
+                        self.add_merge_record(
+                            AccessRecordHeader {
+                                timestamp_and_mask: timestamp,
+                                address_space: addr_space,
+                                pointer: current_address.pointer,
+                                block_size: CHUNK as u32,
+                                lowest_block_size: min_block_size as u32,
+                                type_size: size_of::<T>() as u32,
+                            },
+                            &current_values,
+                            &current_timestamps[..CHUNK / min_block_size],
+                        );
+                        final_memory.push((
+                            (current_address.address_space, current_address.pointer),
+                            TimestampedValues {
+                                timestamp,
+                                values: from_fn(|i| convert(current_values[i])),
+                            },
+                        ));
+                        current_address.pointer += current_cnt as u32;
+                        current_cnt = 0;
+                    }
+                }
+            }
+        }
+        assert_eq!(current_cnt, 0, "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`");
     }
 }
 

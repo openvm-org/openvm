@@ -1,7 +1,5 @@
 //! [MemoryController] can be considered as the Memory Chip Complex for the CPU Backend.
-use std::{
-    array::from_fn, collections::BTreeMap, fmt::Debug, iter, marker::PhantomData, sync::Arc,
-};
+use std::{collections::BTreeMap, fmt::Debug, iter, marker::PhantomData, sync::Arc};
 
 use getset::{Getters, MutGetters};
 use openvm_circuit_primitives::{
@@ -12,31 +10,29 @@ use openvm_circuit_primitives::{
     },
     TraceSubRowGenerator,
 };
-use openvm_instructions::NATIVE_AS;
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     interaction::PermutationCheckBus,
     p3_commit::PolynomialSpace,
-    p3_field::PrimeField32,
+    p3_field::{Field, PrimeField32},
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
     p3_util::{log2_ceil_usize, log2_strict_usize},
     prover::{cpu::CpuBackend, types::AirProvingContext},
     Chip, ChipUsageGetter,
 };
 use serde::{Deserialize, Serialize};
-use tracing::instrument;
 
 use self::interface::MemoryInterface;
-use super::{volatile::VolatileBoundaryChip, AddressMap, MemoryAddress};
+use super::{volatile::VolatileBoundaryChip, AddressMap};
 use crate::{
-    arch::{hasher::HasherChip, DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET},
+    arch::{DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET},
     system::{
         memory::{
-            adapter::{records::AccessRecordHeader, AccessAdapterInventory},
+            adapter::AccessAdapterInventory,
             dimensions::MemoryDimensions,
-            merkle::{MemoryMerkleChip, SerialReceiver},
+            merkle::MemoryMerkleChip,
             offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
-            online::{AccessMetadata, TracingMemory},
+            online::TracingMemory,
             persistent::PersistentBoundaryChip,
         },
         poseidon2::Poseidon2PeripheryChip,
@@ -78,7 +74,7 @@ pub type TimestampedEquipartition<F, const N: usize> = Vec<((u32, u32), Timestam
 pub type Equipartition<F, const N: usize> = BTreeMap<(u32, u32), [F; N]>;
 
 #[derive(Getters, MutGetters)]
-pub struct MemoryController<F> {
+pub struct MemoryController<F: Field> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<F>,
     #[getset(get = "pub")]
@@ -352,162 +348,6 @@ impl<F: PrimeField32> MemoryController<F> {
 
     pub fn timestamp(&self) -> u32 {
         self.memory.timestamp()
-    }
-
-    /// Returns the equipartition of the touched blocks.
-    /// Modifies records and adds new to account for the initial/final segments.
-    fn touched_blocks_to_equipartition<const CHUNK: usize>(
-        &mut self,
-        touched_blocks: Vec<((u32, u32), AccessMetadata)>,
-    ) -> TimestampedEquipartition<F, CHUNK> {
-        // [perf] We can `.with_capacity()` if we keep track of the number of segments we initialize
-        let mut final_memory = Vec::new();
-
-        debug_assert!(touched_blocks.is_sorted_by_key(|(addr, _)| addr));
-        let (bytes, fs): (Vec<_>, Vec<_>) = touched_blocks
-            .into_iter()
-            .partition(|((addr_sp, _), _)| *addr_sp < NATIVE_AS); // TODO: normal way
-
-        self.handle_touched_blocks::<u8, CHUNK>(&mut final_memory, bytes, 4, |x| {
-            F::from_canonical_u8(x)
-        });
-        self.handle_touched_blocks::<F, CHUNK>(&mut final_memory, fs, 1, |x| x);
-
-        debug_assert!(final_memory.is_sorted_by_key(|(key, _)| *key));
-        final_memory
-    }
-
-    // TODO[jpw]: this uses tracing_memory, even though it should modify records in
-    // access_adapter_inventory instead
-    fn handle_touched_blocks<T: Copy + Debug + Default, const CHUNK: usize>(
-        &mut self,
-        final_memory: &mut Vec<((u32, u32), TimestampedValues<F, CHUNK>)>,
-        touched_blocks: Vec<((u32, u32), AccessMetadata)>,
-        min_block_size: usize,
-        convert: impl Fn(T) -> F,
-    ) {
-        let mut current_values = [T::default(); CHUNK];
-        let mut current_cnt = 0;
-        let mut current_address = MemoryAddress::new(0, 0);
-        let mut current_timestamps = vec![0; CHUNK];
-        for ((addr_space, ptr), metadata) in touched_blocks {
-            let AccessMetadata {
-                start_ptr,
-                timestamp,
-                block_size,
-            } = metadata;
-            assert!(
-                current_cnt == 0
-                    || (current_address.address_space == addr_space
-                        && current_address.pointer + current_cnt as u32 == ptr),
-                "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`"
-            );
-            debug_assert!(block_size >= min_block_size as u32);
-            debug_assert!(ptr % min_block_size as u32 == 0);
-
-            if current_cnt == 0 {
-                assert_eq!(
-                    ptr & (CHUNK as u32 - 1),
-                    0,
-                    "The union of all touched blocks must consist of `CHUNK`-aligned blocks"
-                );
-                current_address = MemoryAddress::new(addr_space, ptr);
-            }
-
-            if block_size > min_block_size as u32 {
-                self.memory.add_split_record(AccessRecordHeader {
-                    timestamp_and_mask: timestamp,
-                    address_space: addr_space,
-                    pointer: start_ptr,
-                    block_size,
-                    lowest_block_size: min_block_size as u32,
-                    type_size: size_of::<T>() as u32,
-                });
-            }
-            if min_block_size > CHUNK {
-                assert_eq!(current_cnt, 0);
-                for i in (0..block_size).step_by(min_block_size) {
-                    self.memory.add_split_record(AccessRecordHeader {
-                        timestamp_and_mask: timestamp,
-                        address_space: addr_space,
-                        pointer: start_ptr + i,
-                        block_size: min_block_size as u32,
-                        lowest_block_size: CHUNK as u32,
-                        type_size: size_of::<T>() as u32,
-                    });
-                }
-                let values = unsafe {
-                    self.memory
-                        .data
-                        .memory
-                        .get_slice::<T>((addr_space, ptr), block_size as usize)
-                };
-                for i in (0..block_size).step_by(CHUNK) {
-                    final_memory.push((
-                        (addr_space, ptr + i),
-                        TimestampedValues {
-                            timestamp,
-                            values: from_fn(|j| convert(values[i as usize + j])),
-                        },
-                    ));
-                }
-            } else {
-                for i in 0..block_size {
-                    current_values[current_cnt] =
-                        unsafe { self.memory.data.memory.get((addr_space, ptr + i)) };
-                    if current_cnt & (min_block_size - 1) == 0 {
-                        current_timestamps[current_cnt / min_block_size] = timestamp;
-                    }
-                    current_cnt += 1;
-                    if current_cnt == CHUNK {
-                        let timestamp = *current_timestamps[..CHUNK / min_block_size]
-                            .iter()
-                            .max()
-                            .unwrap();
-                        self.memory.add_merge_record(
-                            AccessRecordHeader {
-                                timestamp_and_mask: timestamp,
-                                address_space: addr_space,
-                                pointer: current_address.pointer,
-                                block_size: CHUNK as u32,
-                                lowest_block_size: min_block_size as u32,
-                                type_size: size_of::<T>() as u32,
-                            },
-                            &current_values,
-                            &current_timestamps[..CHUNK / min_block_size],
-                        );
-                        final_memory.push((
-                            (current_address.address_space, current_address.pointer),
-                            TimestampedValues {
-                                timestamp,
-                                values: from_fn(|i| convert(current_values[i])),
-                            },
-                        ));
-                        current_address.pointer += current_cnt as u32;
-                        current_cnt = 0;
-                    }
-                }
-            }
-        }
-        assert_eq!(current_cnt, 0, "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`");
-    }
-
-    /// Finalize the boundary and merkle chips.
-    #[instrument(name = "memory_finalize", skip_all)]
-    pub fn finalize(&mut self) -> TouchedMemory<F> {
-        let touched_blocks = self.memory.touched_blocks();
-
-        // Compute trace heights for access adapter chips and update their stored heights
-        self.access_adapter_inventory.compute_trace_heights();
-
-        match &self.interface_chip {
-            MemoryInterface::Volatile { .. } => {
-                TouchedMemory::Volatile(self.touched_blocks_to_equipartition::<1>(touched_blocks))
-            }
-            MemoryInterface::Persistent { .. } => TouchedMemory::Persistent(
-                self.touched_blocks_to_equipartition::<CHUNK>(touched_blocks),
-            ),
-        }
     }
 
     // @dev: Memory is complicated and allowed to break all the rules (e.g., 1 arena per chip) and

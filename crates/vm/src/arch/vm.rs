@@ -59,6 +59,7 @@ use crate::{
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{
+            adapter::records,
             merkle::{
                 public_values::{UserPublicValuesProof, UserPublicValuesProofError},
                 MemoryMerklePvs,
@@ -67,6 +68,7 @@ use crate::{
             AddressMap, MemoryImage, CHUNK,
         },
         program::{trace::VmCommittedExe, ProgramHandler},
+        SystemRecords,
     },
 };
 
@@ -740,7 +742,7 @@ where
         num_insns: u64,
         trace_heights: &[u32],
         air_widths: &[usize],
-    ) -> Result<(), ExecutionError> {
+    ) -> Result<SystemRecords<Val<E::SC>>, ExecutionError> {
         let handler = ProgramHandler::new(exe.program, &self.executor.inventory)?;
         let executor_idx_to_air_idx = self.chip_complex.inventory.executor_idx_to_air_idx();
         let ctrl = TracegenExecutionControl::new(executor_idx_to_air_idx);
@@ -758,23 +760,27 @@ where
             .map(|(&h, &w)| (h as usize, w))
             .collect::<Vec<_>>();
         let ctx = TracegenCtx::new_with_capacity(&capacities, Some(instret_end));
-        // TEMP[jpw]: remove this from TracingMemory
-        let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
-            u16::MAX,
-            16,
-        )));
+
         let system_config: &SystemConfig = &self.config().as_ref();
-        let system_port = self.chip_complex.inventory.airs().system().port();
-        let memory = TracingMemory::with_image(
-            state.memory,
+        let adapter_offset = system_config.access_adapter_air_id_offset();
+        // ATTENTION: this must agree with `num_memory_airs`
+        let num_adapters = log2_strict_usize(system_config.memory_config.max_access_adapter_n);
+        assert_eq!(adapter_offset + num_adapters, system_config.num_airs());
+        let access_adapter_arena_size_bound = records::arena_size_bound(
+            &trace_heights[adapter_offset..adapter_offset + num_adapters],
+        );
+        let memory = TracingMemory::from_image(
+            GuestMemory::new(state.memory),
             &system_config.memory_config,
-            range_checker,
-            system_port.memory_bridge.memory_bus(),
             system_config.initial_block_size(),
+            access_adapter_arena_size_bound,
         );
         let mut exec_state =
             VmSegmentState::new(state.instret, state.pc, memory, state.input, state.rng, ctx);
         execute_spanned!("execute_e3", instance, &mut exec_state)?;
+        let touched_memory = exec_state
+            .memory
+            .finalize::<Val<E::SC>>(system_config.continuation_enabled);
 
         todo!("return: arenas, boundary state, final memory, etc")
     }
