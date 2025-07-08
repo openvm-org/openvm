@@ -100,6 +100,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         // At the very worst, each row in `Adapter<N>`
         // corresponds to a unique record of `block_size` being `2 * N`,
         // and its `lowest_block_size` is at least 1 and `type_size` is at most 4.
+        println!("trace_heights: {:?}", trace_heights);
         let size_bound = trace_heights
             .iter()
             .enumerate()
@@ -111,6 +112,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
                 }) * h as usize
             })
             .sum::<usize>();
+        println!("size_bound: {:?}", size_bound);
         assert!(self
             .chips
             .iter()
