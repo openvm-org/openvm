@@ -1,6 +1,6 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_bigint_transpiler::Rv32BranchEqual256Opcode;
+use openvm_bigint_transpiler::Rv32BranchLessThan256Opcode;
 use openvm_circuit::arch::{
     execution_mode::E1ExecutionCtx, ExecuteFunc, ExecutionError::InvalidInstruction,
     MatrixRecordArena, NewVmChipWrapper, StepExecutorE1, VmAirWrapper, VmSegmentState,
@@ -54,7 +54,7 @@ impl Rv32BranchLessThan256Step {
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct BranchLtPreCompute {
-    c: u32,
+    imm: isize,
     a: u8,
     b: u8,
 }
@@ -83,17 +83,23 @@ impl<F: PrimeField32> StepExecutorE1<F> for Rv32BranchLessThan256Step {
             e,
             ..
         } = inst;
+        let c = c.as_canonical_u32();
+        let imm = if F::ORDER_U32 - c < c {
+            -((F::ORDER_U32 - c) as isize)
+        } else {
+            c as isize
+        };
         let e_u32 = e.as_canonical_u32();
         if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
             return Err(InvalidInstruction(pc));
         }
         *data = BranchLtPreCompute {
-            c: c.as_canonical_u32(),
+            imm,
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
         };
         let local_opcode = BranchLessThanOpcode::from_usize(
-            opcode.local_opcode_idx(Rv32BranchEqual256Opcode::CLASS_OFFSET),
+            opcode.local_opcode_idx(Rv32BranchLessThan256Opcode::CLASS_OFFSET),
         );
         let fn_ptr = match local_opcode {
             BranchLessThanOpcode::BLT => execute_e1_impl::<_, _, BltOp>,
@@ -116,9 +122,9 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: BranchLessTh
     let rs2 = vm_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
     let cmp_result = OP::compute(rs1, rs2);
     if cmp_result {
-        vm_state.pc += pre_compute.c;
+        vm_state.pc = (vm_state.pc as isize + pre_compute.imm) as u32;
     } else {
-        vm_state.pc += DEFAULT_PC_STEP;
+        vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
     }
     vm_state.instret += 1;
 }

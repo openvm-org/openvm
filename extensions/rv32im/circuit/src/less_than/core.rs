@@ -338,9 +338,9 @@ where
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct LessThanPreCompute {
+    c: u32,
     a: u8,
     b: u8,
-    c: u8,
 }
 
 impl<F, A, const LIMB_BITS: usize> StepExecutorE1<F>
@@ -378,9 +378,9 @@ where
         let local_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         let pre_compute: &mut LessThanPreCompute = data.borrow_mut();
         *pre_compute = LessThanPreCompute {
+            c: c.as_canonical_u32(),
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
-            c: c.as_canonical_u32() as u8,
         };
         let fn_ptr = match (e_u32 == RV32_IMM_AS, local_opcode == LessThanOpcode::SLTU) {
             (true, true) => execute_e1_impl::<_, _, true, true>,
@@ -405,9 +405,9 @@ unsafe fn execute_e1_impl<
 
     let rs1 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs2 = if E_IS_IMM {
-        imm_to_bytes(pre_compute.c as u32)
+        imm_to_bytes(pre_compute.c)
     } else {
-        vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32)
+        vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c)
     };
     let cmp_result = if IS_U32 {
         u32::from_le_bytes(rs1) < u32::from_le_bytes(rs2)
