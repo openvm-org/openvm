@@ -1,4 +1,7 @@
-use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_circuit::arch::testing::{
+    memory::{gen_reg_pointer, gen_reg_pointer_excluding},
+    VmChipTestBuilder,
+};
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -18,9 +21,9 @@ pub fn rv32_rand_write_register_or_imm<const NUM_LIMBS: usize>(
 ) -> (Instruction<BabyBear>, usize) {
     let rs2_is_imm = imm.is_some();
 
-    let rs1 = gen_pointer(rng, NUM_LIMBS);
-    let rs2 = imm.unwrap_or_else(|| gen_pointer(rng, NUM_LIMBS));
-    let rd = gen_pointer(rng, NUM_LIMBS);
+    let rs1 = gen_reg_pointer(rng);
+    let rs2 = imm.unwrap_or_else(|| gen_reg_pointer_excluding(rng, &[rs1]));
+    let rd = gen_reg_pointer(rng);
 
     tester.write::<NUM_LIMBS>(1, rs1, rs1_writes.map(BabyBear::from_canonical_u8));
     if !rs2_is_imm {

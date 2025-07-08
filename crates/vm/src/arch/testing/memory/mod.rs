@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use air::{MemoryDummyAir, MemoryDummyChip};
 use openvm_circuit::system::memory::MemoryController;
+use openvm_instructions::riscv::{RV32_NUM_REGISTERS, RV32_REGISTER_NUM_LIMBS};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::Rng;
 
@@ -106,4 +107,23 @@ where
 {
     const MAX_MEMORY: usize = 1 << 29;
     rng.gen_range(0..MAX_MEMORY - len) / len * len
+}
+
+pub fn gen_reg_pointer<R>(rng: &mut R) -> usize
+where
+    R: Rng + ?Sized,
+{
+    rng.gen_range(0..RV32_NUM_REGISTERS) * RV32_REGISTER_NUM_LIMBS
+}
+
+pub fn gen_reg_pointer_excluding<R>(rng: &mut R, excluded: &[usize]) -> usize
+where
+    R: Rng + ?Sized,
+{
+    loop {
+        let candidate = gen_reg_pointer(rng);
+        if !excluded.contains(&candidate) {
+            return candidate;
+        }
+    }
 }

@@ -2,7 +2,7 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::arch::{
     testing::{VmChipTestBuilder, RANGE_TUPLE_CHECKER_BUS},
-    InstructionExecutor, VmAirWrapper,
+    InsExecutorE1, InstructionExecutor, VmAirWrapper,
 };
 use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip};
 use openvm_instructions::LocalOpcode;
@@ -59,7 +59,7 @@ fn create_test_chip(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: InstructionExecutor<F>>(
+fn set_and_execute<E: InstructionExecutor<F> + InsExecutorE1<F>>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut E,
     rng: &mut StdRng,

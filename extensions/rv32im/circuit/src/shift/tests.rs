@@ -2,7 +2,7 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::arch::{
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    InstructionExecutor, VmAirWrapper,
+    InsExecutorE1, InstructionExecutor, VmAirWrapper,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -71,7 +71,7 @@ fn create_test_chip(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: InstructionExecutor<F>>(
+fn set_and_execute<E: InstructionExecutor<F> + InsExecutorE1<F>>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut E,
     rng: &mut StdRng,

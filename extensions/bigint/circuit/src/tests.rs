@@ -46,7 +46,7 @@ const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_BRANCH: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
 
 #[allow(clippy::type_complexity)]
-fn set_and_execute_rand<E: InstructionExecutor<F>>(
+fn set_and_execute_rand<E: InstructionExecutor<F> + InsExecutorE1<F>>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut E,
     rng: &mut StdRng,

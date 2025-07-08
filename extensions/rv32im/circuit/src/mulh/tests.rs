@@ -3,9 +3,10 @@ use std::borrow::BorrowMut;
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
+            memory::{gen_pointer, gen_reg_pointer, gen_reg_pointer_excluding},
+            VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
-        InstructionExecutor, VmAirWrapper,
+        InsExecutorE1, InstructionExecutor, VmAirWrapper,
     },
     utils::generate_long_number,
 };
@@ -75,7 +76,7 @@ fn create_test_chip(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: InstructionExecutor<F>>(
+fn set_and_execute<E: InstructionExecutor<F> + InsExecutorE1<F>>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut E,
     rng: &mut StdRng,
@@ -92,9 +93,9 @@ fn set_and_execute<E: InstructionExecutor<F>>(
         RV32_CELL_BITS,
     >(rng));
 
-    let rs1 = gen_pointer(rng, 4);
-    let rs2 = gen_pointer(rng, 4);
-    let rd = gen_pointer(rng, 4);
+    let rs1 = gen_reg_pointer(rng);
+    let rs2 = gen_reg_pointer_excluding(rng, &[rs1]);
+    let rd = gen_reg_pointer(rng);
 
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));

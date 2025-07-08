@@ -1,7 +1,10 @@
 use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, VmChipTestBuilder},
+    testing::{
+        memory::{gen_reg_pointer, gen_reg_pointer_excluding},
+        VmChipTestBuilder,
+    },
     VmAirWrapper,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
@@ -79,8 +82,8 @@ fn set_and_execute(
     let ptr_val: u32 = rng.gen_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
     let rs1 = rs1.unwrap_or(ptr_val.wrapping_sub(imm_ext).to_le_bytes());
     let ptr_val = imm_ext.wrapping_add(u32::from_le_bytes(rs1));
-    let a = gen_pointer(rng, 4);
-    let b = gen_pointer(rng, 4);
+    let a = gen_reg_pointer(rng);
+    let b = gen_reg_pointer_excluding(rng, &[a]);
 
     let shift_amount = ptr_val % 4;
     tester.write(1, b, rs1.map(F::from_canonical_u8));
