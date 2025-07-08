@@ -4562,6 +4562,7 @@ dependencies = [
  "openvm-algebra-transpiler",
  "openvm-benchmarks-utils",
  "openvm-circuit",
+ "openvm-continuations",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
  "openvm-keccak256-circuit",
