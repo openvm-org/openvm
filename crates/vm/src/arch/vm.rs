@@ -10,22 +10,17 @@ use std::{
     borrow::Borrow,
     collections::{HashMap, VecDeque},
     marker::PhantomData,
-    mem,
     sync::Arc,
 };
 
 use getset::{Getters, Setters, WithSetters};
 use itertools::{zip_eq, Itertools};
 use openvm_circuit::system::program::trace::compute_exe_commit;
-use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-use openvm_instructions::{
-    exe::{SparseMemoryImage, VmExe},
-    program::Program,
-};
+use openvm_instructions::exe::{SparseMemoryImage, VmExe};
 use openvm_stark_backend::{
     config::{Com, StarkGenericConfig, Val},
     engine::StarkEngine,
-    keygen::types::{LinearConstraint, MultiStarkProvingKey, MultiStarkVerifyingKey},
+    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_field::{FieldAlgebra, PrimeField32},
     p3_util::log2_strict_usize,
     proof::Proof,
@@ -42,8 +37,7 @@ use tracing::info_span;
 
 use super::{
     execution_mode::e1::E1Ctx, ExecutionError, InsExecutorE1, MemoryConfig, VmChipComplex,
-    VmConfig, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
-    PUBLIC_VALUES_AIR_ID,
+    CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -866,6 +860,11 @@ where
 
     /// Generates proof for zkVM execution for exactly `num_insns` instructions for a given program
     /// and a given starting state.
+    ///
+    /// Returns:
+    /// - proof for the execution segment
+    /// - final memory state only if execution ends in successful termination (exit code 0). This
+    ///   final memory state may be used to extract user public values afterwards.
     pub fn prove(
         &mut self,
         exe: VmExe<Val<E::SC>>,
@@ -873,7 +872,7 @@ where
         state: VmState<Val<E::SC>>,
         num_insns: u64,
         trace_heights: &[u32],
-    ) -> Result<Proof<E::SC>, VirtualMachineError> {
+    ) -> Result<(Proof<E::SC>, Option<GuestMemory>), VirtualMachineError> {
         let main_widths = self
             .pk
             .per_air
@@ -882,12 +881,15 @@ where
             .collect_vec();
         let (system_records, record_arenas, final_memory) =
             self.execute_preflight(exe, state, num_insns, trace_heights, &main_widths)?;
+        // drop final memory unless this is a terminal segment and the exit code is success
+        let final_memory =
+            (system_records.exit_code == Some(ExitCode::Success as u32)).then_some(final_memory);
         self.chip_complex.system.load_program(cached_program_trace);
         let ctx = self.generate_proving_ctx(system_records, record_arenas)?;
 
         let proof = self.engine.prove(&self.pk, ctx);
 
-        Ok(proof)
+        Ok((proof, final_memory))
     }
 
     /// Verify segment proofs, checking continuation boundary conditions between segments if VM

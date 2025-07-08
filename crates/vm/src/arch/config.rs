@@ -22,9 +22,7 @@ use crate::{
         ExecutorInventoryError,
     },
     system::{
-        memory::{
-            merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, BOUNDARY_AIR_OFFSET, CHUNK,
-        },
+        memory::{merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, CHUNK},
         SystemChipComplex,
     },
 };

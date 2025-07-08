@@ -378,7 +378,7 @@ impl<T: FieldAlgebra> From<(u32, Option<T>)> for PcIncOrSet<T> {
 /// Phantom sub-instructions are only allowed to use operands
 /// `a,b` and `c_upper = c.as_canonical_u32() >> 16`.
 #[allow(clippy::too_many_arguments)]
-pub trait PhantomSubExecutor<F>: Send {
+pub trait PhantomSubExecutor<F>: Send + Sync {
     fn phantom_execute(
         &self,
         memory: &GuestMemory,
