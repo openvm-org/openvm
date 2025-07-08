@@ -11,12 +11,10 @@ pub mod trace;
 pub mod utils;
 
 mod extension;
-pub use extension::*;
-
 // #[cfg(test)]
 // mod tests;
-
 pub use air::KeccakVmAir;
+pub use extension::*;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},

@@ -13,7 +13,6 @@ use openvm_circuit_derive::AnyEnum;
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
-
 use openvm_instructions::*;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
