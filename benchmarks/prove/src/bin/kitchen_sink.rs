@@ -92,12 +92,10 @@ fn main() -> Result<()> {
     {
         let app_proof =
             sdk.generate_app_proof(app_pk.clone(), app_committed_exe.clone(), StdIn::default())?;
-        let leaf_input = LeafVmVerifierInput::chunk_continuation_vm_proof(
+        let leaf_inputs = LeafVmVerifierInput::chunk_continuation_vm_proof(
             &app_proof,
             args.agg_tree_config.num_children_leaf,
-        )
-        .pop()
-        .unwrap();
+        );
 
         let names = full_agg_pk
             .agg_stark_pk
@@ -109,28 +107,34 @@ fn main() -> Result<()> {
             .collect::<Vec<_>>();
         println!("names: {:?}", names);
 
-        let executor = {
-            let mut executor =
-                SingleSegmentVmExecutor::new(full_agg_pk.agg_stark_pk.leaf_vm_pk.vm_config.clone());
-            executor.set_trace_height_constraints(
-                full_agg_pk
-                    .agg_stark_pk
-                    .leaf_vm_pk
-                    .vm_pk
-                    .trace_height_constraints
-                    .clone(),
-            );
-            executor
-        };
+        leaf_inputs.iter().for_each(|leaf_input| {
+            println!("leaf_input len: {:?}", leaf_input.proofs.len());
+            let executor = {
+                let mut executor = SingleSegmentVmExecutor::new(
+                    full_agg_pk.agg_stark_pk.leaf_vm_pk.vm_config.clone(),
+                );
+                executor.set_trace_height_constraints(
+                    full_agg_pk
+                        .agg_stark_pk
+                        .leaf_vm_pk
+                        .vm_pk
+                        .trace_height_constraints
+                        .clone(),
+                );
+                executor
+            };
 
-        let vm_vk = full_agg_pk.agg_stark_pk.leaf_vm_pk.vm_pk.get_vk();
-        let max_trace_heights = executor.execute_metered(
-            app_pk.leaf_committed_exe.exe.clone(),
-            leaf_input.write_to_stream(),
-            &vm_vk.total_widths(),
-            &vm_vk.num_interactions(),
-        )?;
-        println!("max_trace_heights: {:?}", max_trace_heights);
+            let vm_vk = full_agg_pk.agg_stark_pk.leaf_vm_pk.vm_pk.get_vk();
+            let max_trace_heights = executor
+                .execute_metered(
+                    app_pk.leaf_committed_exe.exe.clone(),
+                    leaf_input.write_to_stream(),
+                    &vm_vk.total_widths(),
+                    &vm_vk.num_interactions(),
+                )
+                .expect("execute_metered failed");
+            println!("max_trace_heights: {:?}", max_trace_heights);
+        });
     }
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
