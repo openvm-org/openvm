@@ -46,7 +46,7 @@ use crate::{
             interface::MemoryInterfaceAirs,
             offline_checker::{MemoryBridge, MemoryBus},
             online::GuestMemory,
-            MemoryAirInventory, MemoryController,
+            MemoryAirInventory, MemoryController, TimestampedEquipartition, CHUNK,
         },
         native_adapter::{NativeAdapterAir, NativeAdapterStep},
         phantom::{PhantomAir, PhantomChip, PhantomExecutor, PhantomFiller},
@@ -83,19 +83,25 @@ pub trait SystemChipComplex<RA, PB: ProverBackend> {
     /// AIRs, although some arenas may be empty if they are unused.
     fn generate_proving_ctx(
         &mut self,
-        system_records: SystemRecords,
+        system_records: SystemRecords<PB::Val>,
         record_arenas: Vec<RA>,
     ) -> Vec<AirProvingContext<PB>>;
 }
 
-pub struct SystemRecords {
+pub struct SystemRecords<F> {
     pub from_state: ExecutionState<u32>,
     pub to_state: ExecutionState<u32>,
     pub exit_code: Option<u32>,
     // We always use a [DenseRecordArena] here, regardless of the generic `RA` used for other
     // execution records.
     pub access_adapter_records: DenseRecordArena,
-    pub touched_memory: ?
+    // Perf[jpw]: this should be computed on-device and changed to just touched blocks
+    pub touched_memory: TouchedMemory<F>,
+}
+
+pub enum TouchedMemory<F> {
+    Persistent(TimestampedEquipartition<F, CHUNK>),
+    Volatile(TimestampedEquipartition<F, 1>),
 }
 
 #[derive(AnyEnum, From)]
@@ -294,7 +300,6 @@ pub struct SystemChipInventory<SC: StarkGenericConfig> {
     /// Contains all memory chips
     pub memory_controller: MemoryController<Val<SC>>,
     pub public_values_chip: Option<PublicValuesChip<Val<SC>>>,
-    pub hasher_chip: Option<Arc<Poseidon2PeripheryChip<Val<SC>>>>,
 }
 
 // Note[jpw]: We could get rid of the `mem_inventory` input because `MemoryController` doesn't need
@@ -329,6 +334,7 @@ where
                     range_checker.clone(),
                     merkle.merkle_bus,
                     merkle.compression_bus,
+                    hasher_chip.unwrap(),
                 )
             }
             MemoryInterfaceAirs::Volatile { boundary: _ } => {
@@ -351,14 +357,12 @@ where
                 memory_controller.helper(),
             )
         });
-        assert_eq!(config.continuation_enabled, hasher_chip.is_some());
 
         Self {
             program_chip,
             connector_chip,
             memory_controller,
             public_values_chip,
-            hasher_chip
         }
     }
 }
@@ -380,7 +384,7 @@ where
 
     fn generate_proving_ctx(
         &mut self,
-        system_records: SystemRecords,
+        system_records: SystemRecords<Val<SC>>,
         mut record_arenas: Vec<RA>,
     ) -> Vec<AirProvingContext<CpuBackend<SC>>> {
         let SystemRecords {
@@ -388,6 +392,7 @@ where
             to_state,
             exit_code,
             access_adapter_records,
+            touched_memory,
         } = system_records;
 
         let program_ctx = self.program_chip.generate_proving_ctx(());
@@ -400,8 +405,9 @@ where
             chip.generate_proving_ctx(arena)
         });
 
-        self.memory_controller.finalize(self.hasher_chip.as_ref().map(|arc| arc.as_ref()));
-        let memory_ctxs = self.memory_controller.generate_proving_ctx(access_adapter_records);
+        let memory_ctxs = self
+            .memory_controller
+            .generate_proving_ctx(access_adapter_records, touched_memory);
 
         [program_ctx, connector_ctx]
             .into_iter()
@@ -460,11 +466,16 @@ where
                 self.max_constraint_degree,
             ));
             inventory.add_periphery_chip(chip.clone());
-           Some(chip)
+            Some(chip)
         } else {
             None
         };
-        let system = SystemChipInventory::new(self, &inventory.airs().system().memory, range_checker, hasher_chip);
+        let system = SystemChipInventory::new(
+            self,
+            &inventory.airs().system().memory,
+            range_checker,
+            hasher_chip,
+        );
 
         let phantom_chip = PhantomChip::new(PhantomFiller, system.memory_controller.helper());
         inventory.add_executor_chip(phantom_chip);

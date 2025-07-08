@@ -1,5 +1,7 @@
 //! [MemoryController] can be considered as the Memory Chip Complex for the CPU Backend.
-use std::{array::from_fn, collections::BTreeMap, fmt::Debug, iter, marker::PhantomData};
+use std::{
+    array::from_fn, collections::BTreeMap, fmt::Debug, iter, marker::PhantomData, sync::Arc,
+};
 
 use getset::{Getters, MutGetters};
 use openvm_circuit_primitives::{
@@ -28,13 +30,17 @@ use self::interface::MemoryInterface;
 use super::{volatile::VolatileBoundaryChip, AddressMap, MemoryAddress};
 use crate::{
     arch::{hasher::HasherChip, DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET},
-    system::memory::{
-        adapter::{records::AccessRecordHeader, AccessAdapterInventory},
-        dimensions::MemoryDimensions,
-        merkle::{MemoryMerkleChip, SerialReceiver},
-        offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
-        online::{AccessMetadata, TracingMemory},
-        persistent::PersistentBoundaryChip,
+    system::{
+        memory::{
+            adapter::{records::AccessRecordHeader, AccessAdapterInventory},
+            dimensions::MemoryDimensions,
+            merkle::{MemoryMerkleChip, SerialReceiver},
+            offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
+            online::{AccessMetadata, TracingMemory},
+            persistent::PersistentBoundaryChip,
+        },
+        poseidon2::Poseidon2PeripheryChip,
+        TouchedMemory,
     },
 };
 
@@ -81,6 +87,7 @@ pub struct MemoryController<F> {
     // Store separately to avoid smart pointer reference each time
     range_checker_bus: VariableRangeCheckerBus,
     access_adapter_inventory: AccessAdapterInventory<F>,
+    hasher_chip: Option<Arc<Poseidon2PeripheryChip<F>>>,
     // TODO[jpw]: revisit if this should be removed from the struct
     pub memory: TracingMemory,
 }
@@ -217,6 +224,7 @@ impl<F: PrimeField32> MemoryController<F> {
             ),
             range_checker,
             range_checker_bus,
+            hasher_chip: None,
         }
     }
 
@@ -229,6 +237,7 @@ impl<F: PrimeField32> MemoryController<F> {
         range_checker: SharedVariableRangeCheckerChip,
         merkle_bus: PermutationCheckBus,
         compression_bus: PermutationCheckBus,
+        hasher_chip: Arc<Poseidon2PeripheryChip<F>>,
     ) -> Self {
         let memory_dims = MemoryDimensions {
             addr_space_height: mem_config.addr_space_height,
@@ -259,6 +268,7 @@ impl<F: PrimeField32> MemoryController<F> {
             ),
             range_checker,
             range_checker_bus,
+            hasher_chip: Some(hasher_chip),
         }
     }
 
@@ -484,52 +494,19 @@ impl<F: PrimeField32> MemoryController<F> {
 
     /// Finalize the boundary and merkle chips.
     #[instrument(name = "memory_finalize", skip_all)]
-    pub fn finalize<H>(&mut self, hasher: Option<&H>)
-    where
-        H: HasherChip<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
-    {
+    pub fn finalize(&mut self) -> TouchedMemory<F> {
         let touched_blocks = self.memory.touched_blocks();
 
         // Compute trace heights for access adapter chips and update their stored heights
         self.access_adapter_inventory.compute_trace_heights();
 
-        let mut final_memory_volatile = None;
-        let mut final_memory_persistent = None;
-
         match &self.interface_chip {
             MemoryInterface::Volatile { .. } => {
-                final_memory_volatile =
-                    Some(self.touched_blocks_to_equipartition::<1>(touched_blocks));
+                TouchedMemory::Volatile(self.touched_blocks_to_equipartition::<1>(touched_blocks))
             }
-            MemoryInterface::Persistent { .. } => {
-                final_memory_persistent =
-                    Some(self.touched_blocks_to_equipartition::<CHUNK>(touched_blocks));
-            }
-        }
-
-        // TODO: separate ^above to before generate_proving_ctx, while after is part of
-        // generate_proving_ctx
-
-        match &mut self.interface_chip {
-            MemoryInterface::Volatile { boundary_chip } => {
-                let final_memory = final_memory_volatile.unwrap();
-                boundary_chip.finalize(final_memory);
-            }
-            MemoryInterface::Persistent {
-                boundary_chip,
-                merkle_chip,
-                initial_memory,
-            } => {
-                let final_memory = final_memory_persistent.unwrap();
-
-                let hasher = hasher.unwrap();
-                boundary_chip.finalize(initial_memory, &final_memory, hasher);
-                let final_memory_values = final_memory
-                    .into_par_iter()
-                    .map(|(key, value)| (key, value.values))
-                    .collect();
-                merkle_chip.finalize(initial_memory, &final_memory_values, hasher);
-            }
+            MemoryInterface::Persistent { .. } => TouchedMemory::Persistent(
+                self.touched_blocks_to_equipartition::<CHUNK>(touched_blocks),
+            ),
         }
     }
 
@@ -540,10 +517,37 @@ impl<F: PrimeField32> MemoryController<F> {
     pub fn generate_proving_ctx<SC: StarkGenericConfig>(
         &mut self,
         access_adapter_records: DenseRecordArena,
+        touched_memory: TouchedMemory<F>,
     ) -> Vec<AirProvingContext<CpuBackend<SC>>>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
+        match (&mut self.interface_chip, touched_memory) {
+            (
+                MemoryInterface::Volatile { boundary_chip },
+                TouchedMemory::Volatile(final_memory),
+            ) => {
+                boundary_chip.finalize(final_memory);
+            }
+            (
+                MemoryInterface::Persistent {
+                    boundary_chip,
+                    merkle_chip,
+                    initial_memory,
+                },
+                TouchedMemory::Persistent(final_memory),
+            ) => {
+                let hasher = self.hasher_chip.as_ref().unwrap();
+                boundary_chip.finalize(initial_memory, &final_memory, hasher.as_ref());
+                let final_memory_values = final_memory
+                    .into_par_iter()
+                    .map(|(key, value)| (key, value.values))
+                    .collect();
+                merkle_chip.finalize(initial_memory, &final_memory_values, hasher.as_ref());
+            }
+            _ => panic!("TouchedMemory incorrect type"),
+        }
+
         let mut ret = Vec::new();
 
         let access_adapters = &mut self.access_adapter_inventory;
