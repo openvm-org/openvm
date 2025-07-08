@@ -1,6 +1,6 @@
-# Sha2
+# SHA-2
 
-The OpenVM SHA2 guest library provides access to a set of accelerated SHA-2 family hash functions. Currently, it supports the following:
+The OpenVM SHA-2 guest library provides access to a set of accelerated SHA-2 family hash functions. Currently, it supports the following:
 
 - SHA-256
 

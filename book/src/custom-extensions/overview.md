@@ -3,7 +3,7 @@
 OpenVM ships with a set of pre-built extensions maintained by the OpenVM team. Below, we highlight six of these extensions designed to accelerate common arithmetic and cryptographic operations that are notoriously expensive to execute. Some of these extensions have corresponding guest libraries which provide convenient, high-level interfaces for your guest program to interact with the extension.
 
 - [`openvm-keccak-guest`](./keccak.md) - Keccak256 hash function. See the [Keccak256 guest library](../guest-libs/keccak256.md) for usage details.
-- [`openvm-sha256-guest`](./sha256.md) - SHA-256 hash function. See the [Sha2 guest library](../guest-libs/sha2.md) for usage details.
+- [`openvm-sha256-guest`](./sha256.md) - SHA-256 hash function. See the [SHA-2 guest library](../guest-libs/sha2.md) for usage details.
 - [`openvm-bigint-guest`](./bigint.md) - Big integer arithmetic for 256-bit signed and unsigned integers. See the [ruint guest library](../guest-libs/ruint.md) for using accelerated 256-bit integer ops in rust.
 - [`openvm-algebra-guest`](./algebra.md) - Modular arithmetic and complex field extensions.
 - [`openvm-ecc-guest`](./ecc.md) - Elliptic curve cryptography. See the [k256](../guest-libs/k256.md) and [p256](../guest-libs/p256.md) guest libraries for using this extension over the respective curves.
