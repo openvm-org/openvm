@@ -193,7 +193,7 @@ where
 impl<F, A, const NUM_CELLS: usize> TraceFiller<F> for NativeLoadStoreCoreFiller<A, NUM_CELLS>
 where
     F: PrimeField32,
-    A: 'static + Send + Sync + AdapterTraceFiller<F>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
