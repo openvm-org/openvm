@@ -200,7 +200,11 @@ pub struct Rv32RdWriteAdapterRecord {
     pub rd_aux_record: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
+#[derive(derive_new::new)]
 pub struct Rv32RdWriteAdapterStep;
+
+#[derive(derive_new::new)]
+pub struct Rv32RdWriteAdapterFiller;
 
 impl<F> AdapterTraceStep<F> for Rv32RdWriteAdapterStep
 where
@@ -251,7 +255,9 @@ where
     }
 }
 
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32RdWriteAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32RdWriteAdapterFiller {
+    const WIDTH: usize = size_of::<Rv32RdWriteAdapterCols<u8>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &Rv32RdWriteAdapterRecord =
@@ -313,6 +319,11 @@ pub struct Rv32CondRdWriteAdapterStep {
     inner: Rv32RdWriteAdapterStep,
 }
 
+#[derive(derive_new::new)]
+pub struct Rv32CondRdWriteAdapterFiller {
+    inner: Rv32RdWriteAdapterFiller,
+}
+
 impl<F> AdapterTraceStep<F> for Rv32CondRdWriteAdapterStep
 where
     F: PrimeField32,
@@ -368,7 +379,9 @@ where
     }
 }
 
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32CondRdWriteAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32CondRdWriteAdapterFiller {
+    const WIDTH: usize = size_of::<Rv32CondRdWriteAdapterCols<u8>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &Rv32RdWriteAdapterRecord =
@@ -379,8 +392,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32CondRdWriteAdapterStep {
 
         if record.rd_ptr != u32::MAX {
             unsafe {
-                <Rv32RdWriteAdapterStep as AdapterTraceFiller<F>>::fill_trace_row(
-                    &self.inner,
+                self.inner.fill_trace_row(
                     mem_helper,
                     adapter_row
                         .split_at_mut_unchecked(size_of::<Rv32RdWriteAdapterCols<u8>>())

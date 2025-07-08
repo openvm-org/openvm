@@ -12,7 +12,7 @@ use openvm_circuit::{
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory, SharedMemoryHelper,
+        MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
@@ -185,7 +185,7 @@ pub struct LessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(derive_new::new)]
-pub struct LessThanFiller<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct LessThanFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub offset: usize,
@@ -196,7 +196,7 @@ impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
+        + AdapterTraceStep<
             F,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
@@ -258,10 +258,10 @@ where
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for LessThanFiller<F, A, NUM_LIMBS, LIMB_BITS>
+    for LessThanFiller<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
+    A: 'static + Send + Sync + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
@@ -339,7 +339,7 @@ impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterExecutorE1<
+        + AdapterExecutorE1<
             F,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,

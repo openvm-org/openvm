@@ -40,6 +40,10 @@ use crate::poseidon2::{
 };
 
 pub struct NativePoseidon2Step<F: Field, const SBOX_REGISTERS: usize> {
+    pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
+}
+
+pub struct NativePoseidon2Filler<F: Field, const SBOX_REGISTERS: usize> {
     // pre-computed Poseidon2 sub cols for dummy rows.
     empty_poseidon2_sub_cols: Vec<F>,
     pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
@@ -48,11 +52,7 @@ pub struct NativePoseidon2Step<F: Field, const SBOX_REGISTERS: usize> {
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_REGISTERS> {
     pub fn new(poseidon2_config: Poseidon2Config<F>) -> Self {
         let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
-        let empty_poseidon2_sub_cols = subchip.generate_trace(vec![[F::ZERO; CHUNK * 2]]).values;
-        Self {
-            empty_poseidon2_sub_cols,
-            subchip,
-        }
+        Self { subchip }
     }
 
     fn compress(&self, left: [F; CHUNK], right: [F; CHUNK]) -> ([F; 2 * CHUNK], [F; CHUNK]) {
@@ -60,6 +60,17 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_R
             std::array::from_fn(|i| if i < CHUNK { left[i] } else { right[i - CHUNK] });
         let permuted = self.subchip.permute(concatenated);
         (concatenated, std::array::from_fn(|i| permuted[i]))
+    }
+}
+
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Filler<F, SBOX_REGISTERS> {
+    pub fn new(poseidon2_config: Poseidon2Config<F>) -> Self {
+        let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
+        let empty_poseidon2_sub_cols = subchip.generate_trace(vec![[F::ZERO; CHUNK * 2]]).values;
+        Self {
+            empty_poseidon2_sub_cols,
+            subchip,
+        }
     }
 }
 
@@ -642,7 +653,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> TraceStep<F>
 }
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> TraceFiller<F>
-    for NativePoseidon2Step<F, SBOX_REGISTERS>
+    for NativePoseidon2Filler<F, SBOX_REGISTERS>
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let inner_cols = {
@@ -783,7 +794,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> TraceFiller<F>
         }
     }
 
-    fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    fn fill_dummy_trace_row(&self, row_slice: &mut [F]) {
         let width = self.subchip.air.width();
         row_slice[..width].copy_from_slice(&self.empty_poseidon2_sub_cols);
     }

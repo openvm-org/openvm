@@ -493,6 +493,8 @@ where
 }
 
 impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32LoadStoreAdapterFiller {
+    const WIDTH: usize = size_of::<Rv32LoadStoreAdapterCols<u8>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // TODO(ayush): should this be here?

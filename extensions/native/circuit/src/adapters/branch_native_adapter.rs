@@ -138,6 +138,9 @@ pub struct BranchNativeAdapterRecord<F> {
 #[derive(derive_new::new)]
 pub struct BranchNativeAdapterStep;
 
+#[derive(derive_new::new)]
+pub struct BranchNativeAdapterFiller;
+
 impl<F> AdapterTraceStep<F> for BranchNativeAdapterStep
 where
     F: PrimeField32,
@@ -191,7 +194,9 @@ where
     }
 }
 
-impl<F: PrimeField32> AdapterTraceFiller<F> for BranchNativeAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for BranchNativeAdapterFiller {
+    const WIDTH: usize = size_of::<BranchNativeAdapterCols<u8>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &BranchNativeAdapterRecord<F> =

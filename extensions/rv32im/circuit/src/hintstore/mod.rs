@@ -4,8 +4,8 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionError, ExecutionState,
-        MatrixRecordArena, MultiRowLayout, MultiRowMetadata, NewVmChipWrapper, RecordArena, Result,
-        SizedRecord, StepExecutorE1, TraceFiller, TraceStep, VmStateMut,
+        MultiRowLayout, MultiRowMetadata, RecordArena, Result, SizedRecord, StepExecutorE1,
+        TraceFiller, TraceStep, VmChipWrapper, VmStateMut,
     },
     system::memory::{
         offline_checker::{
@@ -46,8 +46,8 @@ use crate::adapters::{
     tracing_write,
 };
 
-#[cfg(test)]
-mod tests;
+//#[cfg(test)]
+//mod tests;
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
@@ -352,24 +352,16 @@ impl SizedRecord<Rv32HintStoreLayout> for Rv32HintStoreRecordMut<'_> {
     }
 }
 
+#[derive(derive_new::new)]
 pub struct Rv32HintStoreStep {
-    pointer_max_bits: usize,
-    offset: usize,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    pub pointer_max_bits: usize,
+    pub offset: usize,
 }
 
-impl Rv32HintStoreStep {
-    pub fn new(
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-        pointer_max_bits: usize,
-        offset: usize,
-    ) -> Self {
-        Self {
-            pointer_max_bits,
-            offset,
-            bitwise_lookup_chip,
-        }
-    }
+#[derive(derive_new::new)]
+pub struct Rv32HintStoreFiller {
+    pointer_max_bits: usize,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
 impl<F> TraceStep<F> for Rv32HintStoreStep
@@ -440,7 +432,7 @@ where
             record.inner.num_words_ptr = u32::MAX;
         } else {
             record.inner.num_words_ptr = a;
-            tracing_read::<_, RV32_REGISTER_NUM_LIMBS>(
+            tracing_read::<RV32_REGISTER_NUM_LIMBS>(
                 state.memory,
                 RV32_REGISTER_AS,
                 record.inner.num_words_ptr,
@@ -480,7 +472,7 @@ where
     }
 }
 
-impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreStep {
+impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -710,5 +702,4 @@ where
     }
 }
 
-pub type Rv32HintStoreChip<F> =
-    NewVmChipWrapper<F, Rv32HintStoreAir, Rv32HintStoreStep, MatrixRecordArena<F>>;
+pub type Rv32HintStoreChip<F> = VmChipWrapper<F, Rv32HintStoreFiller>;

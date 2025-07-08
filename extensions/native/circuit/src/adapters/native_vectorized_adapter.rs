@@ -141,6 +141,9 @@ pub struct NativeVectorizedAdapterRecord<F, const N: usize> {
 #[derive(derive_new::new)]
 pub struct NativeVectorizedAdapterStep<const N: usize>;
 
+#[derive(derive_new::new)]
+pub struct NativeVectorizedAdapterFiller<const N: usize>;
+
 impl<F: PrimeField32, const N: usize> AdapterTraceStep<F> for NativeVectorizedAdapterStep<N> {
     const WIDTH: usize = size_of::<NativeVectorizedAdapterCols<u8, N>>();
     type ReadData = [[F; N]; 2];
@@ -203,7 +206,9 @@ impl<F: PrimeField32, const N: usize> AdapterTraceStep<F> for NativeVectorizedAd
     }
 }
 
-impl<F: PrimeField32, const N: usize> AdapterTraceFiller<F> for NativeVectorizedAdapterStep<N> {
+impl<F: PrimeField32, const N: usize> AdapterTraceFiller<F> for NativeVectorizedAdapterFiller<N> {
+    const WIDTH: usize = size_of::<NativeVectorizedAdapterCols<u8, N>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &NativeVectorizedAdapterRecord<F, N> =

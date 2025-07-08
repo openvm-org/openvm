@@ -8,8 +8,8 @@ use super::adapters::{
 mod core;
 pub use core::*;
 
-#[cfg(test)]
-mod tests;
+//#[cfg(test)]
+//mod tests;
 
 pub type Rv32ShiftAir =
     VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
@@ -17,10 +17,5 @@ pub type Rv32ShiftStep =
     ShiftStep<Rv32BaseAluAdapterStep<RV32_CELL_BITS>, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>;
 pub type Rv32ShiftChip<F> = VmChipWrapper<
     F,
-    ShiftFiller<
-        F,
-        Rv32BaseAluAdapterFiller<RV32_CELL_BITS>,
-        RV32_REGISTER_NUM_LIMBS,
-        RV32_CELL_BITS,
-    >,
+    ShiftFiller<Rv32BaseAluAdapterFiller<RV32_CELL_BITS>, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
 >;

@@ -12,7 +12,7 @@ use openvm_circuit::{
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory, SharedMemoryHelper,
+        MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
@@ -24,7 +24,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_NUM_REGISTERS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
@@ -194,7 +194,6 @@ pub struct LoadSignExtendStep<A, const NUM_CELLS: usize, const LIMB_BITS: usize>
 
 #[derive(derive_new::new)]
 pub struct LoadSignExtendFiller<
-    F,
     A = Rv32LoadStoreAdapterFiller,
     const NUM_CELLS: usize = RV32_REGISTER_NUM_LIMBS,
     const LIMB_BITS: usize = RV32_CELL_BITS,
@@ -208,7 +207,7 @@ impl<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceStep<F>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
+        + AdapterTraceStep<
             F,
             ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
             WriteData = [u32; NUM_CELLS],
@@ -274,10 +273,10 @@ where
 }
 
 impl<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for LoadSignExtendFiller<F, A, NUM_CELLS, LIMB_BITS>
+    for LoadSignExtendFiller<A, NUM_CELLS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
+    A: 'static + Send + Sync + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };

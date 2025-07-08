@@ -125,15 +125,21 @@ pub struct MultiplicationCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usi
     pub c: [u8; NUM_LIMBS],
 }
 
-#[derive(Debug)]
+#[derive(derive_new::new)]
 pub struct MultiplicationStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
+    pub offset: usize,
+}
+
+#[derive(Debug)]
+pub struct MultiplicationFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
     pub range_tuple_chip: SharedRangeTupleCheckerChip<2>,
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    MultiplicationStep<A, NUM_LIMBS, LIMB_BITS>
+    MultiplicationFiller<A, NUM_LIMBS, LIMB_BITS>
 {
     pub fn new(
         adapter: A,
@@ -167,7 +173,7 @@ impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
+        + AdapterTraceStep<
             F,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
@@ -220,10 +226,10 @@ where
     }
 }
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for MultiplicationStep<A, NUM_LIMBS, LIMB_BITS>
+    for MultiplicationFiller<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
+    A: 'static + Send + Sync + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
@@ -253,7 +259,7 @@ impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterExecutorE1<
+        + AdapterExecutorE1<
             F,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,

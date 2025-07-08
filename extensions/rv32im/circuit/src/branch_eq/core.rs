@@ -9,7 +9,7 @@ use openvm_circuit::{
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory, SharedMemoryHelper,
+        MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{utils::not, AlignedBytesBorrow};
@@ -154,7 +154,7 @@ pub struct BranchEqualStep<A, const NUM_LIMBS: usize> {
 }
 
 #[derive(derive_new::new)]
-pub struct BranchEqualFiller<F, A, const NUM_LIMBS: usize> {
+pub struct BranchEqualFiller<A, const NUM_LIMBS: usize> {
     adapter: A,
     pub offset: usize,
     pub pc_step: u32,
@@ -163,7 +163,7 @@ pub struct BranchEqualFiller<F, A, const NUM_LIMBS: usize> {
 impl<F, A, const NUM_LIMBS: usize> TraceStep<F> for BranchEqualStep<A, NUM_LIMBS>
 where
     F: PrimeField32,
-    A: 'static + for<'a> AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
+    A: 'static + AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
 {
     type RecordLayout = EmptyAdapterCoreLayout<F, A>;
     type RecordMut<'a> = (A::RecordMut<'a>, &'a mut BranchEqualCoreRecord<NUM_LIMBS>);
@@ -208,10 +208,10 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize> TraceFiller<F> for BranchEqualFiller<F, A, NUM_LIMBS>
+impl<F, A, const NUM_LIMBS: usize> TraceFiller<F> for BranchEqualFiller<A, NUM_LIMBS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
+    A: 'static + Send + Sync + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
@@ -244,7 +244,7 @@ where
 impl<F, A, const NUM_LIMBS: usize> StepExecutorE1<F> for BranchEqualStep<A, NUM_LIMBS>
 where
     F: PrimeField32,
-    A: 'static + for<'a> AdapterExecutorE1<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
+    A: 'static + AdapterExecutorE1<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
 {
     fn execute_e1<Ctx>(
         &self,

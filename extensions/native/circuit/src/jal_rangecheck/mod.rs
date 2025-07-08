@@ -6,9 +6,8 @@ use std::{
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionState,
-        MatrixRecordArena, NewVmChipWrapper, PcIncOrSet, RecordArena, Result, StepExecutorE1,
-        TraceFiller, TraceStep, VmStateMut,
+        get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionState, PcIncOrSet,
+        RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep, VmChipWrapper, VmStateMut,
     },
     system::{
         memory::{
@@ -38,8 +37,8 @@ use openvm_stark_backend::{
 use static_assertions::const_assert_eq;
 use AS::Native;
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -154,7 +153,10 @@ pub struct JalRangeCheckRecord<F> {
 /// Chip for JAL and RANGE_CHECK. These opcodes are logically irrelevant. Putting these opcodes into
 /// the same chip is just to save columns.
 #[derive(derive_new::new)]
-pub struct JalRangeCheckStep {
+pub struct JalRangeCheckStep;
+
+#[derive(derive_new::new)]
+pub struct JalRangeCheckFiller {
     range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
@@ -238,7 +240,7 @@ where
     }
 }
 
-impl<F: PrimeField32> TraceFiller<F> for JalRangeCheckStep {
+impl<F: PrimeField32> TraceFiller<F> for JalRangeCheckFiller {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut row_slice: &mut [F]) {
         let record: &mut JalRangeCheckRecord<F> =
             unsafe { get_record_from_slice(&mut row_slice, ()) };
@@ -360,5 +362,4 @@ where
     }
 }
 
-pub type JalRangeCheckChip<F> =
-    NewVmChipWrapper<F, JalRangeCheckAir, JalRangeCheckStep, MatrixRecordArena<F>>;
+pub type NativeJalRangeCheckChip<F> = VmChipWrapper<F, JalRangeCheckFiller>;

@@ -138,6 +138,9 @@ pub struct ConvertAdapterRecord<F, const READ_SIZE: usize, const WRITE_SIZE: usi
 #[derive(derive_new::new)]
 pub struct ConvertAdapterStep<const READ_SIZE: usize, const WRITE_SIZE: usize>;
 
+#[derive(derive_new::new)]
+pub struct ConvertAdapterFiller<const READ_SIZE: usize, const WRITE_SIZE: usize>;
+
 impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> AdapterTraceStep<F>
     for ConvertAdapterStep<READ_SIZE, WRITE_SIZE>
 {
@@ -196,8 +199,10 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> AdapterTr
 }
 
 impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> AdapterTraceFiller<F>
-    for ConvertAdapterStep<READ_SIZE, WRITE_SIZE>
+    for ConvertAdapterFiller<READ_SIZE, WRITE_SIZE>
 {
+    const WIDTH: usize = size_of::<ConvertAdapterCols<u8, READ_SIZE, WRITE_SIZE>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut row_slice: &mut [F]) {
         let record: &ConvertAdapterRecord<F, READ_SIZE, WRITE_SIZE> =

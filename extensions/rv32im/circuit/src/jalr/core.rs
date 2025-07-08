@@ -12,7 +12,7 @@ use openvm_circuit::{
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory, SharedMemoryHelper,
+        MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
@@ -185,12 +185,12 @@ pub struct Rv32JalrCoreRecord {
     pub imm_sign: bool,
 }
 
-#[derive_new::new]
+#[derive(derive_new::new)]
 pub struct Rv32JalrStep<A = Rv32JalrAdapterStep> {
     adapter: A,
 }
 
-pub struct Rv32JalrFiller<F, A = Rv32JalrAdapterStep> {
+pub struct Rv32JalrFiller<A = Rv32JalrAdapterStep> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
@@ -215,7 +215,7 @@ impl<F, A> TraceStep<F> for Rv32JalrStep<A>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
+        + AdapterTraceStep<
             F,
             ReadData = [u8; RV32_REGISTER_NUM_LIMBS],
             WriteData = [u8; RV32_REGISTER_NUM_LIMBS],
@@ -279,7 +279,7 @@ where
 impl<F, A> TraceFiller<F> for Rv32JalrFiller<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
+    A: 'static + Send + Sync + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
@@ -326,7 +326,7 @@ impl<F, A> StepExecutorE1<F> for Rv32JalrStep<A>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterExecutorE1<
+        + AdapterExecutorE1<
             F,
             ReadData = [u8; RV32_REGISTER_NUM_LIMBS],
             WriteData = [u8; RV32_REGISTER_NUM_LIMBS],

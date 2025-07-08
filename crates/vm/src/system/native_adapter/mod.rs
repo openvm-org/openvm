@@ -264,6 +264,8 @@ where
 impl<F: PrimeField32, const R: usize, const W: usize> AdapterTraceFiller<F>
     for NativeAdapterStep<F, R, W>
 {
+    const WIDTH: usize = size_of::<NativeAdapterCols<u8, R, W>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &NativeAdapterRecord<F, R, W> =
