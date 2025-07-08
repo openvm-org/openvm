@@ -55,12 +55,14 @@ supported_moduli = ["<modulus_1>", "<modulus_2>", ...]
 supported_curves = ["Bls12_381", "Bn254"]
 
 [[app_vm_config.ecc.supported_curves]]
+struct_name = "<curve_name_1>"
 modulus = "<modulus_1>"
 scalar = "<scalar_1>"
 a = "<a_1>"
 b = "<b_1>"
 
 [[app_vm_config.ecc.supported_curves]]
+struct_name = "<curve_name_2>"
 modulus = "<modulus_2>"
 scalar = "<scalar_2>"
 a = "<a_2>"
