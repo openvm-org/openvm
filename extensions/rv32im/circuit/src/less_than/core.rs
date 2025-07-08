@@ -338,9 +338,9 @@ where
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct LessThanPreCompute {
+    c: u32,
     a: u8,
     b: u8,
-    c: u32,
 }
 
 impl<F, A, const LIMB_BITS: usize> StepExecutorE1<F>
@@ -378,9 +378,9 @@ where
         let local_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         let pre_compute: &mut LessThanPreCompute = data.borrow_mut();
         *pre_compute = LessThanPreCompute {
+            c: c.as_canonical_u32(),
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
-            c: c.as_canonical_u32(),
         };
         let fn_ptr = match (e_u32 == RV32_IMM_AS, local_opcode == LessThanOpcode::SLTU) {
             (true, true) => execute_e1_impl::<_, _, true, true>,
