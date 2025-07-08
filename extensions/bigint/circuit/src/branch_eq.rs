@@ -42,7 +42,7 @@ impl Rv32BranchEqual256Step {
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct BranchEqPreCompute {
-    c: u32,
+    imm: isize,
     a: u8,
     b: u8,
 }
@@ -71,12 +71,18 @@ impl<F: PrimeField32> StepExecutorE1<F> for Rv32BranchEqual256Step {
             e,
             ..
         } = inst;
+        let c = c.as_canonical_u32();
+        let imm = if F::ORDER_U32 - c < c {
+            -((F::ORDER_U32 - c) as isize)
+        } else {
+            c as isize
+        };
         let e_u32 = e.as_canonical_u32();
         if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
             return Err(InvalidInstruction(pc));
         }
         *data = BranchEqPreCompute {
-            c: c.as_canonical_u32(),
+            imm,
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
         };
@@ -103,9 +109,9 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_NE: boo
     let rs2 = vm_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
     let cmp_result = u256_eq(rs1, rs2);
     if cmp_result ^ IS_NE {
-        vm_state.pc += pre_compute.c;
+        vm_state.pc = (vm_state.pc as isize + pre_compute.imm) as u32;
     } else {
-        vm_state.pc += DEFAULT_PC_STEP;
+        vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
     }
 
     vm_state.instret += 1;
