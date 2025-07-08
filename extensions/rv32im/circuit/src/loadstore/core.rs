@@ -11,7 +11,9 @@ use openvm_circuit::{
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode, NATIVE_AS,
+};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -425,26 +427,34 @@ where
         let imm_sign = g.as_canonical_u32();
         let imm_extended = imm + imm_sign * 0xffff0000;
 
+        let is_native_store = e_u32 == NATIVE_AS;
+
         *pre_compute = LoadStorePreCompute {
             imm_extended,
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
             e: e_u32 as u8,
         };
-        let fn_ptr = match (local_opcode, enabled) {
-            (LOADW, true) => execute_e1_impl::<_, _, LoadWOp, true>,
-            (LOADW, false) => execute_e1_impl::<_, _, LoadWOp, false>,
-            (LOADHU, true) => execute_e1_impl::<_, _, LoadHUOp, true>,
-            (LOADHU, false) => execute_e1_impl::<_, _, LoadHUOp, false>,
-            (LOADBU, true) => execute_e1_impl::<_, _, LoadBUOp, true>,
-            (LOADBU, false) => execute_e1_impl::<_, _, LoadBUOp, false>,
-            (STOREW, true) => execute_e1_impl::<_, _, StoreWOp, true>,
-            (STOREW, false) => execute_e1_impl::<_, _, StoreWOp, false>,
-            (STOREH, true) => execute_e1_impl::<_, _, StoreHOp, true>,
-            (STOREH, false) => execute_e1_impl::<_, _, StoreHOp, false>,
-            (STOREB, true) => execute_e1_impl::<_, _, StoreBOp, true>,
-            (STOREB, false) => execute_e1_impl::<_, _, StoreBOp, false>,
-            (_, _) => unreachable!(),
+        let fn_ptr = match (local_opcode, enabled, is_native_store) {
+            (LOADW, true, _) => execute_e1_impl::<_, _, LoadWOp, true, false>,
+            (LOADW, false, _) => execute_e1_impl::<_, _, LoadWOp, false, false>,
+            (LOADHU, true, _) => execute_e1_impl::<_, _, LoadHUOp, true, false>,
+            (LOADHU, false, _) => execute_e1_impl::<_, _, LoadHUOp, false, false>,
+            (LOADBU, true, _) => execute_e1_impl::<_, _, LoadBUOp, true, false>,
+            (LOADBU, false, _) => execute_e1_impl::<_, _, LoadBUOp, false, false>,
+            (STOREW, true, false) => execute_e1_impl::<_, _, StoreWOp, true, false>,
+            (STOREW, false, false) => execute_e1_impl::<_, _, StoreWOp, false, false>,
+            (STOREW, true, true) => execute_e1_impl::<_, _, StoreWOp, true, true>,
+            (STOREW, false, true) => execute_e1_impl::<_, _, StoreWOp, false, true>,
+            (STOREH, true, false) => execute_e1_impl::<_, _, StoreHOp, true, false>,
+            (STOREH, false, false) => execute_e1_impl::<_, _, StoreHOp, false, false>,
+            (STOREH, true, true) => execute_e1_impl::<_, _, StoreHOp, true, true>,
+            (STOREH, false, true) => execute_e1_impl::<_, _, StoreHOp, false, true>,
+            (STOREB, true, false) => execute_e1_impl::<_, _, StoreBOp, true, false>,
+            (STOREB, false, false) => execute_e1_impl::<_, _, StoreBOp, false, false>,
+            (STOREB, true, true) => execute_e1_impl::<_, _, StoreBOp, true, true>,
+            (STOREB, false, true) => execute_e1_impl::<_, _, StoreBOp, false, true>,
+            (_, _, _) => unreachable!(),
         };
         Ok(fn_ptr)
     }
@@ -455,6 +465,7 @@ unsafe fn execute_e1_impl<
     CTX: E1ExecutionCtx,
     OP: LoadStoreOp,
     const ENABLED: bool,
+    const IS_NATIVE_STORE: bool,
 >(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
@@ -476,9 +487,17 @@ unsafe fn execute_e1_impl<
         vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32)
     };
 
-    // We need to write 4-byte for STORE.
-    let mut write_data: [u8; RV32_REGISTER_NUM_LIMBS] = if OP::HOST_READ {
-        vm_state.host_read(pre_compute.e as u32, ptr_val)
+    // We need to write 4 u32s for STORE.
+    let mut write_data: [u32; RV32_REGISTER_NUM_LIMBS] = if OP::HOST_READ {
+        if IS_NATIVE_STORE {
+            vm_state
+                .host_read(pre_compute.e as u32, ptr_val)
+                .map(|x: F| x.as_canonical_u32())
+        } else {
+            vm_state
+                .host_read::<u8, RV32_REGISTER_NUM_LIMBS>(pre_compute.e as u32, ptr_val)
+                .map(|x| x as u32)
+        }
     } else {
         [0; RV32_REGISTER_NUM_LIMBS]
     };
@@ -490,22 +509,33 @@ unsafe fn execute_e1_impl<
 
     if ENABLED {
         if OP::IS_LOAD {
-            vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &write_data);
+            vm_state.vm_write(
+                RV32_REGISTER_AS,
+                pre_compute.a as u32,
+                &write_data.map(|x| x as u8),
+            );
+        } else if IS_NATIVE_STORE {
+            vm_state.vm_write(
+                pre_compute.e as u32,
+                ptr_val,
+                &write_data.map(F::from_canonical_u32),
+            );
         } else {
-            vm_state.vm_write(pre_compute.e as u32, ptr_val, &write_data);
+            vm_state.vm_write(pre_compute.e as u32, ptr_val, &write_data.map(|x| x as u8));
         }
     }
 
     vm_state.pc += DEFAULT_PC_STEP;
     vm_state.instret += 1;
 }
+
 trait LoadStoreOp {
     const IS_LOAD: bool;
     const HOST_READ: bool;
 
     /// Return if the operation is valid.
     fn compute_write_data(
-        write_data: &mut [u8; RV32_REGISTER_NUM_LIMBS],
+        write_data: &mut [u32; RV32_REGISTER_NUM_LIMBS],
         read_data: [u8; RV32_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool;
@@ -522,11 +552,11 @@ impl LoadStoreOp for LoadWOp {
 
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [u8; RV32_REGISTER_NUM_LIMBS],
+        write_data: &mut [u32; RV32_REGISTER_NUM_LIMBS],
         read_data: [u8; RV32_REGISTER_NUM_LIMBS],
         _shift_amount: usize,
     ) -> bool {
-        *write_data = read_data;
+        *write_data = read_data.map(|byte| byte as u32);
         true
     }
 }
@@ -536,15 +566,15 @@ impl LoadStoreOp for LoadHUOp {
     const HOST_READ: bool = false;
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [u8; RV32_REGISTER_NUM_LIMBS],
+        write_data: &mut [u32; RV32_REGISTER_NUM_LIMBS],
         read_data: [u8; RV32_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
         if shift_amount != 0 && shift_amount != 2 {
             return false;
         }
-        write_data[0] = read_data[shift_amount];
-        write_data[1] = read_data[shift_amount + 1];
+        write_data[0] = read_data[shift_amount] as u32;
+        write_data[1] = read_data[shift_amount + 1] as u32;
         true
     }
 }
@@ -553,11 +583,11 @@ impl LoadStoreOp for LoadBUOp {
     const HOST_READ: bool = false;
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [u8; RV32_REGISTER_NUM_LIMBS],
+        write_data: &mut [u32; RV32_REGISTER_NUM_LIMBS],
         read_data: [u8; RV32_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
-        write_data[0] = read_data[shift_amount];
+        write_data[0] = read_data[shift_amount] as u32;
         true
     }
 }
@@ -567,11 +597,11 @@ impl LoadStoreOp for StoreWOp {
     const HOST_READ: bool = false;
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [u8; RV32_REGISTER_NUM_LIMBS],
+        write_data: &mut [u32; RV32_REGISTER_NUM_LIMBS],
         read_data: [u8; RV32_REGISTER_NUM_LIMBS],
         _shift_amount: usize,
     ) -> bool {
-        *write_data = read_data;
+        *write_data = read_data.map(|byte| byte as u32);
         true
     }
 }
@@ -581,15 +611,15 @@ impl LoadStoreOp for StoreHOp {
 
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [u8; RV32_REGISTER_NUM_LIMBS],
+        write_data: &mut [u32; RV32_REGISTER_NUM_LIMBS],
         read_data: [u8; RV32_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
         if shift_amount != 0 && shift_amount != 2 {
             return false;
         }
-        write_data[shift_amount] = read_data[0];
-        write_data[shift_amount + 1] = read_data[1];
+        write_data[shift_amount] = read_data[0] as u32;
+        write_data[shift_amount + 1] = read_data[1] as u32;
         true
     }
 }
@@ -598,11 +628,11 @@ impl LoadStoreOp for StoreBOp {
     const HOST_READ: bool = true;
     #[inline(always)]
     fn compute_write_data(
-        write_data: &mut [u8; RV32_REGISTER_NUM_LIMBS],
+        write_data: &mut [u32; RV32_REGISTER_NUM_LIMBS],
         read_data: [u8; RV32_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
-        write_data[shift_amount] = read_data[0];
+        write_data[shift_amount] = read_data[0] as u32;
         true
     }
 }
