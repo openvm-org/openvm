@@ -1,3 +1,4 @@
 [toolchain]
-channel = "nightly-aarch64-apple-darwin"
+channel = "nightly"
+targets = ["aarch64-apple-darwin"]
 components = ["clippy", "rustfmt"]
