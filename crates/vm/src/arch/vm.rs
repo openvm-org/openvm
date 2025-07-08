@@ -10,6 +10,7 @@ use std::{
     borrow::Borrow,
     collections::{HashMap, VecDeque},
     marker::PhantomData,
+    mem,
     sync::Arc,
 };
 
@@ -51,9 +52,9 @@ use crate::{
             tracegen::{TracegenCtx, TracegenExecutionControl},
         },
         hasher::poseidon2::vm_poseidon2_hasher,
-        AirInventoryError, ChipInventoryError, ExecutorInventory, ExecutorInventoryError,
-        InstructionExecutor, SystemConfig, VmExecutionConfig, VmProverConfig, VmSegmentExecutor,
-        VmSegmentState,
+        AirInventoryError, ChipInventoryError, ExecutionState, ExecutorInventory,
+        ExecutorInventoryError, InstructionExecutor, SystemConfig, VmExecutionConfig,
+        VmProverConfig, VmSegmentExecutor, VmSegmentState,
     },
     execute_spanned,
     system::{
@@ -775,14 +776,22 @@ where
             system_config.initial_block_size(),
             access_adapter_arena_size_bound,
         );
+        let from_state = ExecutionState::new(state.pc, memory.timestamp());
         let mut exec_state =
             VmSegmentState::new(state.instret, state.pc, memory, state.input, state.rng, ctx);
         execute_spanned!("execute_e3", instance, &mut exec_state)?;
-        let touched_memory = exec_state
-            .memory
-            .finalize::<Val<E::SC>>(system_config.continuation_enabled);
+        let mut memory = exec_state.memory;
+        let touched_memory = memory.finalize::<Val<E::SC>>(system_config.continuation_enabled);
 
-        todo!("return: arenas, boundary state, final memory, etc")
+        let to_state = ExecutionState::new(exec_state.pc, memory.timestamp());
+        let records = SystemRecords {
+            from_state,
+            to_state,
+            exit_code: exec_state.exit_code,
+            access_adapter_records: memory.access_adapter_records,
+            touched_memory,
+        };
+        Ok(records)
     }
 
     // pub fn execute(
