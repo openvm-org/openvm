@@ -743,7 +743,7 @@ where
         num_insns: u64,
         trace_heights: &[u32],
         air_widths: &[usize],
-    ) -> Result<SystemRecords<Val<E::SC>>, ExecutionError> {
+    ) -> Result<(SystemRecords<Val<E::SC>>, GuestMemory), ExecutionError> {
         let handler = ProgramHandler::new(exe.program, &self.executor.inventory)?;
         let executor_idx_to_air_idx = self.chip_complex.inventory.executor_idx_to_air_idx();
         let ctrl = TracegenExecutionControl::new(executor_idx_to_air_idx);
@@ -791,7 +791,7 @@ where
             access_adapter_records: memory.access_adapter_records,
             touched_memory,
         };
-        Ok(records)
+        Ok((records, memory.data))
     }
 
     // pub fn execute(
