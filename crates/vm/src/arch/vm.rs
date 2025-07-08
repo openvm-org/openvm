@@ -24,10 +24,7 @@ use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     p3_util::log2_strict_usize,
     proof::Proof,
-    prover::{
-        hal::DeviceDataTransporter,
-        types::{CommittedTraceData, DeviceMultiStarkProvingKey, ProvingContext},
-    },
+    prover::types::{CommittedTraceData, DeviceMultiStarkProvingKey, ProvingContext},
     verifier::VerificationError,
 };
 use rand::{rngs::StdRng, SeedableRng};
@@ -661,10 +658,12 @@ where
     /// Proving engine
     pub engine: E,
     /// Runtime executor
+    #[getset(get = "pub")]
     executor: VmExecutor<Val<E::SC>, VC>,
-    chip_complex: VmChipComplex<E::SC, VC::RecordArena, E::PB, VC::SystemChipInventory>,
     #[getset(get = "pub")]
     pk: DeviceMultiStarkProvingKey<E::PB>,
+
+    chip_complex: VmChipComplex<E::SC, VC::RecordArena, E::PB, VC::SystemChipInventory>,
 }
 
 impl<E, VC> VirtualMachine<E, VC>
@@ -688,15 +687,6 @@ where
             pk,
             chip_complex,
         })
-    }
-
-    /// Constructs a new virtual machine from the config, including performing proving key
-    /// generation and transfering the proving key from host to device. The prover-specific data on
-    /// host is dropped after this constructor.
-    pub fn new_with_keygen(engine: E, config: VC) -> Result<Self, VirtualMachineError> {
-        let pk_host = config.keygen(engine.config())?;
-        let pk_device = engine.device().transport_pk_to_device(&pk_host);
-        Self::new(engine, config, pk_device)
     }
 
     pub fn config(&self) -> &VC {

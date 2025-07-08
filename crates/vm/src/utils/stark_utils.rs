@@ -3,6 +3,10 @@ use openvm_instructions::{exe::VmExe, program::Program};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::PrimeField32,
+    prover::{
+        cpu::{CpuBackend, CpuDevice},
+        hal::DeviceDataTransporter,
+    },
     verifier::VerificationError,
     Chip,
 };
@@ -19,61 +23,70 @@ use openvm_stark_sdk::{
 #[cfg(feature = "bench-metrics")]
 use crate::arch::vm::VmExecutor;
 use crate::{
-    arch::{vm::VirtualMachine, InsExecutorE1, Streams, VmConfig},
+    arch::{
+        vm::VirtualMachine, InsExecutorE1, InstructionExecutor, Streams, VmCircuitConfig, VmConfig,
+        VmExecutionConfig, VmProverConfig,
+    },
     system::memory::MemoryImage,
 };
 
-pub fn air_test<VC>(config: VC, exe: impl Into<VmExe<BabyBear>>)
-where
-    VC: VmConfig<BabyBear>,
-    VC::Executor: Chip<BabyBearPoseidon2Config> + InsExecutorE1<BabyBear>,
-    VC::Periphery: Chip<BabyBearPoseidon2Config>,
-{
-    air_test_with_min_segments(config, exe, Streams::default(), 1);
-}
+type Engine = BabyBearPoseidon2Engine;
+// BabyBearPoseidon2Config
+type SC = <Engine as StarkEngine>::SC;
+// CpuBackend<BabyBearPoseidon2Config>
+type PB = <Engine as StarkEngine>::PB;
+// Note: the compiler cannot figure out that Val<BabyBearPoseidon2Config> = BabyBear
+type F = Val<SC>;
 
-/// Executes and proves the VM and returns the final memory state.
-pub fn air_test_with_min_segments<VC>(
-    config: VC,
-    exe: impl Into<VmExe<BabyBear>>,
-    input: impl Into<Streams<BabyBear>>,
-    min_segments: usize,
-) -> Option<MemoryImage>
-where
-    VC: VmConfig<BabyBear>,
-    VC::Executor: Chip<BabyBearPoseidon2Config> + InsExecutorE1<BabyBear>,
-    VC::Periphery: Chip<BabyBearPoseidon2Config>,
-{
-    air_test_impl(config, exe, input, min_segments, true)
-}
+// pub fn air_test<VC>(config: VC, exe: impl Into<VmExe<BabyBear>>)
+// where
+//     VC: VmProverConfig<BabyBearPoseidon2Config, CpuBackend<BabyBearPoseidon2Config>>,
+//     VC::Executor: InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear, VC::RecordArena>,
+// {
+//     air_test_with_min_segments(config, exe, Streams::default(), 1);
+// }
+
+// /// Executes and proves the VM and returns the final memory state.
+// pub fn air_test_with_min_segments<VC>(
+//     config: VC,
+//     exe: impl Into<VmExe<BabyBear>>,
+//     input: impl Into<Streams<BabyBear>>,
+//     min_segments: usize,
+// ) -> Option<MemoryImage>
+// where
+//     VC: VmProverConfig<BabyBearPoseidon2Config, CpuBackend<BabyBearPoseidon2Config>>,
+//     VC::Executor: InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear, VC::RecordArena>,
+// {
+//     air_test_impl(config, exe, input, min_segments, true)
+// }
 
 /// Executes and proves the VM and returns the final memory state.
 /// If `debug` is true, runs the debug prover.
 pub fn air_test_impl<VC>(
     config: VC,
-    exe: impl Into<VmExe<BabyBear>>,
-    input: impl Into<Streams<BabyBear>>,
+    exe: impl Into<VmExe<F>>,
+    input: impl Into<Streams<F>>,
     min_segments: usize,
     debug: bool,
 ) -> Option<MemoryImage>
 where
-    VC: VmConfig<BabyBear>,
-    VC::Executor: Chip<BabyBearPoseidon2Config> + InsExecutorE1<BabyBear>,
-    VC::Periphery: Chip<BabyBearPoseidon2Config>,
+    VC: VmProverConfig<SC, PB>,
+    VC::Executor: InsExecutorE1<F> + InstructionExecutor<F, VC::RecordArena>,
 {
     setup_tracing();
     let mut log_blowup = 1;
-    while config.system().max_constraint_degree > (1 << log_blowup) + 1 {
+    while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
     }
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(log_blowup));
-    let mut vm = VirtualMachine::new(engine, config);
-    let pk = vm.keygen();
-    let vk = pk.get_vk();
+    let engine = Engine::new(FriParameters::new_for_testing(log_blowup));
+    let pk_host = config.keygen(engine.config()).unwrap();
+    let vk = pk_host.get_vk();
+    let pk_device = engine.device().transport_pk_to_device(&pk_host);
+    let mut vm = VirtualMachine::<Engine, VC>::new(engine, config, pk_device).unwrap();
     let exe = exe.into();
     let input = input.into();
     let segments = vm
-        .executor
+        .executor()
         .execute_metered(
             exe.clone(),
             input.clone(),
@@ -84,7 +97,7 @@ where
     vm.set_main_widths(vk.main_widths());
     let mut result = vm.execute_and_generate(exe, input, &segments).unwrap();
     let final_memory = Option::take(&mut result.final_memory);
-    let global_airs = vm.config().create_chip_complex().unwrap().airs();
+    let global_airs = vm.config().create_circuit().unwrap().into_airs();
     if debug {
         for proof_input in &result.per_segment {
             let (airs, pks, air_proof_inputs): (Vec<_>, Vec<_>, Vec<_>) =
@@ -106,100 +119,98 @@ where
     final_memory
 }
 
-/// Generates the VM STARK circuit, in the form of AIRs and traces, but does not
-/// do any proving. Output is the payload of everything the prover needs.
-///
-/// The output AIRs and traces are sorted by height in descending order.
-pub fn gen_vm_program_test_proof_input<SC, VC, E>(
-    program: Program<Val<SC>>,
-    input_stream: impl Into<Streams<Val<SC>>> + Clone,
-    #[allow(unused_mut)] mut config: VC,
-) -> ProofInputForTest<SC>
-where
-    E: StarkFriEngine<SC>,
-    SC: StarkGenericConfig,
-    Val<SC>: PrimeField32,
-    VC: VmConfig<Val<SC>> + Clone,
-    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
-    VC::Periphery: Chip<SC>,
-{
-    let program_exe = VmExe::new(program);
-    let input = input_stream.into();
+// /// Generates the VM STARK circuit, in the form of AIRs and traces, but does not
+// /// do any proving. Output is the payload of everything the prover needs.
+// ///
+// /// The output AIRs and traces are sorted by height in descending order.
+// pub fn gen_vm_program_test_proof_input<VC, E>(
+//     program: Program<Val<E::SC>>,
+//     input_stream: impl Into<Streams<Val<E::SC>>> + Clone,
+//     #[allow(unused_mut)] mut config: VC,
+// ) -> ProofInputForTest<E::SC>
+// where
+//     E: StarkFriEngine,
+//     Val<E::SC>: PrimeField32,
+//     VC: VmProverConfig<E::SC, E::PB>,
+//     VC::Executor: InsExecutorE1<Val<E::SC>>,
+// {
+//     let program_exe = VmExe::new(program);
+//     let input = input_stream.into();
 
-    let airs = config.create_chip_complex().unwrap().airs();
-    let engine = E::new(FriParameters::new_for_testing(1));
-    let vm = VirtualMachine::new(engine, config.clone());
+//     let airs = config.create_chip_complex().unwrap().airs();
+//     let engine = E::new(FriParameters::new_for_testing(1));
+//     let vm = VirtualMachine::new(engine, config.clone());
 
-    let pk = vm.keygen();
-    let vk = pk.get_vk();
-    let segments = vm
-        .executor
-        .execute_metered(
-            program_exe.clone(),
-            input.clone(),
-            &vk.total_widths(),
-            &vk.num_interactions(),
-        )
-        .unwrap();
+//     let pk = vm.keygen();
+//     let vk = pk.get_vk();
+//     let segments = vm
+//         .executor
+//         .execute_metered(
+//             program_exe.clone(),
+//             input.clone(),
+//             &vk.total_widths(),
+//             &vk.num_interactions(),
+//         )
+//         .unwrap();
 
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "bench-metrics")] {
-            // Run once with metrics collection enabled, which can improve runtime performance
-            config.system_mut().profiling = true;
-            {
-                let executor = VmExecutor::<Val<SC>, VC>::new(config.clone());
-                executor.execute(program_exe.clone(), input.clone(), &segments).unwrap();
-            }
-            // Run again with metrics collection disabled and measure trace generation time
-            config.system_mut().profiling = false;
-            let start = std::time::Instant::now();
-        }
-    }
-    let mut result = vm
-        .executor
-        .execute_and_generate(program_exe, input, &segments)
-        .unwrap();
+//     cfg_if::cfg_if! {
+//         if #[cfg(feature = "bench-metrics")] {
+//             // Run once with metrics collection enabled, which can improve runtime performance
+//             config.as_mut().profiling = true;
+//             {
+//                 let executor = VmExecutor::<Val<E::SC>, VC>::new(config.clone()).unwrap();
+//                 executor.execute(program_exe.clone(), input.clone(), &segments).unwrap();
+//             }
+//             // Run again with metrics collection disabled and measure trace generation time
+//             config.as_mut().profiling = false;
+//             let start = std::time::Instant::now();
+//         }
+//     }
+//     let mut result = vm
+//         .executor
+//         .execute_and_generate(program_exe, input, &segments)
+//         .unwrap();
 
-    assert_eq!(
-        result.per_segment.len(),
-        1,
-        "only proving one segment for now"
-    );
+//     assert_eq!(
+//         result.per_segment.len(),
+//         1,
+//         "only proving one segment for now"
+//     );
 
-    let result = result.per_segment.pop().unwrap();
-    #[cfg(feature = "bench-metrics")]
-    metrics::gauge!("execute_and_trace_gen_time_ms").set(start.elapsed().as_millis() as f64);
-    // Filter out unused AIRS (where trace is empty)
-    let (used_airs, per_air) = result
-        .per_air
-        .into_iter()
-        .map(|(air_id, x)| (airs[air_id].clone(), x))
-        .unzip();
-    ProofInputForTest {
-        airs: used_airs,
-        per_air,
-    }
-}
+//     let result = result.per_segment.pop().unwrap();
+//     #[cfg(feature = "bench-metrics")]
+//     metrics::gauge!("execute_and_trace_gen_time_ms").set(start.elapsed().as_millis() as f64);
+//     // Filter out unused AIRS (where trace is empty)
+//     let (used_airs, per_air) = result
+//         .per_air
+//         .into_iter()
+//         .map(|(air_id, x)| (airs[air_id].clone(), x))
+//         .unzip();
+//     ProofInputForTest {
+//         airs: used_airs,
+//         per_air,
+//     }
+// }
 
-type ExecuteAndProveResult<SC> = Result<VerificationDataWithFriParams<SC>, VerificationError>;
+// type ExecuteAndProveResult<SC> = Result<VerificationDataWithFriParams<SC>, VerificationError>;
 
-/// Executes program and runs simple STARK prover test (keygen, prove, verify).
-pub fn execute_and_prove_program<SC: StarkGenericConfig, E: StarkFriEngine<SC>, VC>(
-    program: Program<Val<SC>>,
-    input_stream: impl Into<Streams<Val<SC>>> + Clone,
-    config: VC,
-    engine: &E,
-) -> ExecuteAndProveResult<SC>
-where
-    Val<SC>: PrimeField32,
-    VC: VmConfig<Val<SC>> + Clone,
-    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
-    VC::Periphery: Chip<SC>,
-{
-    let span = tracing::info_span!("execute_and_prove_program").entered();
-    let test_proof_input =
-        gen_vm_program_test_proof_input::<_, _, E>(program, input_stream, config);
-    let vparams = test_proof_input.run_test(engine)?;
-    span.exit();
-    Ok(vparams)
-}
+// /// Executes program and runs simple STARK prover test (keygen, prove, verify).
+// pub fn execute_and_prove_program<SC, E, VC>(
+//     program: Program<Val<SC>>,
+//     input_stream: impl Into<Streams<Val<SC>>> + Clone,
+//     config: VC,
+//     engine: &E,
+// ) -> ExecuteAndProveResult<SC>
+// where
+//     SC: StarkGenericConfig,
+//     E: StarkFriEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+//     Val<E::SC>: PrimeField32,
+//     VC: VmProverConfig<SC, E::PB>,
+//     VC::Executor: InsExecutorE1<Val<SC>>,
+// {
+//     let span = tracing::info_span!("execute_and_prove_program").entered();
+//     let test_proof_input = gen_vm_program_test_proof_input::<_, E>(program, input_stream,
+// config);     let vparams = test_proof_input.run_test(engine)?;
+//     span.exit();
+//     Ok(vparams)
+// }
