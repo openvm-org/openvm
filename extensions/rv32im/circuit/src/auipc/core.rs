@@ -12,7 +12,7 @@ use openvm_circuit::{
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory, SharedMemoryHelper,
+        MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
@@ -208,7 +208,7 @@ pub struct Rv32AuipcStep<A = Rv32RdWriteAdapterStep> {
 }
 
 #[derive(derive_new::new)]
-pub struct Rv32AuipcFiller<F, A = Rv32RdWriteAdapterStep> {
+pub struct Rv32AuipcFiller<A = Rv32RdWriteAdapterStep> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
@@ -255,7 +255,7 @@ where
 impl<F, A> TraceFiller<F> for Rv32AuipcFiller<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
+    A: 'static + Send + Sync + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
@@ -297,8 +297,7 @@ where
 impl<F, A> StepExecutorE1<F> for Rv32AuipcStep<A>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
+    A: 'static + AdapterExecutorE1<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
 {
     fn execute_e1<Ctx>(
         &self,

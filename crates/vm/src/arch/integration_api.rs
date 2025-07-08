@@ -838,7 +838,8 @@ pub trait AdapterTraceStep<F> {
 
 // NOTE[jpw]: cannot reuse `TraceSubRowGenerator` trait because we need associated constant
 // `WIDTH`.
-pub trait AdapterTraceFiller<F>: AdapterTraceStep<F> {
+pub trait AdapterTraceFiller<F> {
+    const WIDTH: usize;
     /// Post-execution filling of rest of adapter row.
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]);
 }

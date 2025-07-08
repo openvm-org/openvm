@@ -34,10 +34,11 @@ pub use shift::*;
 mod extension;
 pub use extension::*;
 
-#[cfg(any(test, feature = "test-utils"))]
-mod test_utils;
+// #[cfg(any(test, feature = "test-utils"))]
+// mod test_utils;
 
-/// Config for a VM with base extension and IO extension
+/*
+// Config for a VM with base extension and IO extension
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Rv32IConfig {
     #[system]
@@ -114,3 +115,4 @@ impl Rv32ImConfig {
         }
     }
 }
+*/

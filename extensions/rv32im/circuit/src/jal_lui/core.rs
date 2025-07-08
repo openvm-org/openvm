@@ -9,7 +9,7 @@ use openvm_circuit::{
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory, SharedMemoryHelper,
+        MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
@@ -163,7 +163,7 @@ pub struct Rv32JalLuiStep<A = Rv32CondRdWriteAdapterStep> {
 }
 
 #[derive(derive_new::new)]
-pub struct Rv32JalLuiFiller<F, A = Rv32CondRdWriteAdapterStep> {
+pub struct Rv32JalLuiFiller<A = Rv32CondRdWriteAdapterStep> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
@@ -219,11 +219,11 @@ where
 impl<F, A> TraceFiller<F> for Rv32JalLuiFiller<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
+    A: 'static + Send + Sync + AdapterTraceFiller<F>,
 {
-    fn fill_trace_row(&self, row_slice: &mut [F]) {
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(&self.mem_helper, adapter_row);
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
         let record: &Rv32JalLuiStepRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let core_row: &mut Rv32JalLuiCoreCols<F> = core_row.borrow_mut();
 
@@ -247,8 +247,7 @@ where
 impl<F, A> StepExecutorE1<F> for Rv32JalLuiStep<A>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
+    A: 'static + AdapterExecutorE1<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
 {
     fn execute_e1<Ctx>(
         &self,

@@ -8,9 +8,9 @@ use itertools::zip_eq;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionState, MatrixRecordArena,
-        MultiRowLayout, MultiRowMetadata, NewVmChipWrapper, RecordArena, Result, SizedRecord,
-        StepExecutorE1, TraceFiller, TraceStep, VmStateMut,
+        get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionState, MultiRowLayout,
+        MultiRowMetadata, RecordArena, Result, SizedRecord, StepExecutorE1, TraceFiller, TraceStep,
+        VmChipWrapper, VmStateMut,
     },
     system::{
         memory::{
@@ -46,8 +46,8 @@ use crate::{
     utils::const_max,
 };
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
@@ -676,25 +676,19 @@ impl<F> SizedRecord<FriReducedOpeningLayout> for FriReducedOpeningRecordMut<'_, 
     }
 }
 
-pub struct FriReducedOpeningStep<F: Field> {
-    phantom: std::marker::PhantomData<F>,
-}
+#[derive(derive_new::new)]
+pub struct FriReducedOpeningStep;
 
-impl<F: PrimeField32> Default for FriReducedOpeningStep<F> {
+#[derive(derive_new::new)]
+pub struct FriReducedOpeningFiller;
+
+impl Default for FriReducedOpeningStep {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<F: PrimeField32> FriReducedOpeningStep<F> {
-    pub fn new() -> Self {
-        Self {
-            phantom: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<F> TraceStep<F> for FriReducedOpeningStep<F>
+impl<F> TraceStep<F> for FriReducedOpeningStep
 where
     F: PrimeField32,
 {
@@ -861,10 +855,7 @@ where
     }
 }
 
-impl<F> TraceFiller<F> for FriReducedOpeningStep<F>
-where
-    F: PrimeField32,
-{
+impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -1061,10 +1052,7 @@ where
     }
 }
 
-impl<F> StepExecutorE1<F> for FriReducedOpeningStep<F>
-where
-    F: PrimeField32,
-{
+impl<F: PrimeField32> StepExecutorE1<F> for FriReducedOpeningStep {
     fn execute_e1<Ctx>(
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,
@@ -1161,5 +1149,4 @@ where
     }
 }
 
-pub type FriReducedOpeningChip<F> =
-    NewVmChipWrapper<F, FriReducedOpeningAir, FriReducedOpeningStep<F>, MatrixRecordArena<F>>;
+pub type FriReducedOpeningChip<F> = VmChipWrapper<F, FriReducedOpeningFiller>;

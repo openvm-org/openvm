@@ -12,12 +12,14 @@ use openvm_circuit::{
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory, SharedMemoryHelper,
+        MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode,
+};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -261,7 +263,6 @@ pub struct LoadStoreStep<A, const NUM_CELLS: usize> {
 
 #[derive(derive_new::new)]
 pub struct LoadStoreFiller<
-    F,
     A = Rv32LoadStoreAdapterFiller,
     const NUM_CELLS: usize = RV32_REGISTER_NUM_LIMBS,
 > {
@@ -273,7 +274,7 @@ impl<F, A, const NUM_CELLS: usize> TraceStep<F> for LoadStoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
+        + AdapterTraceStep<
             F,
             ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
             WriteData = [u32; NUM_CELLS],
@@ -328,14 +329,14 @@ where
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> TraceFiller<F> for LoadStoreFiller<F, A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> TraceFiller<F> for LoadStoreFiller<A, NUM_CELLS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
+    A: 'static + Send + Sync + AdapterTraceFiller<F>,
 {
-    fn fill_trace_row(&self, row_slice: &mut [F]) {
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(&self.mem_helper, adapter_row);
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
 
         let record: &LoadStoreCoreRecord<NUM_CELLS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };

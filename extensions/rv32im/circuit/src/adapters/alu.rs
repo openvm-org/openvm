@@ -165,6 +165,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
     }
 }
 
+#[derive(derive_new::new)]
 pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize>;
 
 #[derive(derive_new::new)]
@@ -273,6 +274,8 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceStep<F>
 impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
     for Rv32BaseAluAdapterFiller<LIMB_BITS>
 {
+    const WIDTH: usize = size_of::<Rv32BaseAluAdapterCols<u8>>();
+
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY: the following is highly unsafe. We are going to cast `adapter_row` to a record
         // buffer, and then do an _overlapping_ write to the `adapter_row` as a row of field

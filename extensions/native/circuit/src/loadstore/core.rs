@@ -119,16 +119,15 @@ pub struct NativeLoadStoreCoreRecord<F, const NUM_CELLS: usize> {
     pub local_opcode: u8,
 }
 
-#[derive(Debug)]
+#[derive(derive_new::new, Debug)]
 pub struct NativeLoadStoreCoreStep<A, const NUM_CELLS: usize> {
     adapter: A,
     offset: usize,
 }
 
-impl<A, const NUM_CELLS: usize> NativeLoadStoreCoreStep<A, NUM_CELLS> {
-    pub fn new(adapter: A, offset: usize) -> Self {
-        Self { adapter, offset }
-    }
+#[derive(derive_new::new)]
+pub struct NativeLoadStoreCoreFiller<A, const NUM_CELLS: usize> {
+    adapter: A,
 }
 
 impl<F, A, const NUM_CELLS: usize> TraceStep<F> for NativeLoadStoreCoreStep<A, NUM_CELLS>
@@ -191,10 +190,10 @@ where
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> TraceFiller<F> for NativeLoadStoreCoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> TraceFiller<F> for NativeLoadStoreCoreFiller<A, NUM_CELLS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
+    A: 'static + Send + Sync + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };

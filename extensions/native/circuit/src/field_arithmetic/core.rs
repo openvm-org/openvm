@@ -126,6 +126,11 @@ pub struct FieldArithmeticCoreStep<A> {
     adapter: A,
 }
 
+#[derive(derive_new::new)]
+pub struct FieldArithmeticCoreFiller<A> {
+    adapter: A,
+}
+
 impl<F, A> TraceStep<F> for FieldArithmeticCoreStep<A>
 where
     F: PrimeField32,
@@ -173,10 +178,10 @@ where
     }
 }
 
-impl<F, A> TraceFiller<F> for FieldArithmeticCoreStep<A>
+impl<F, A> TraceFiller<F> for FieldArithmeticCoreFiller<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
+    A: 'static + Send + Sync + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };

@@ -302,7 +302,17 @@ pub struct Rv32VecHeapAdapterStep<
     const WRITE_SIZE: usize,
 > {
     pointer_max_bits: usize,
-    // TODO(arayi): use reference to bitwise lookup chip with lifetimes instead
+}
+
+#[derive(derive_new::new)]
+pub struct Rv32VecHeapAdapterFiller<
+    const NUM_READS: usize,
+    const BLOCKS_PER_READ: usize,
+    const BLOCKS_PER_WRITE: usize,
+    const READ_SIZE: usize,
+    const WRITE_SIZE: usize,
+> {
+    pointer_max_bits: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
@@ -378,7 +388,7 @@ impl<
 
         // Read memory values
         from_fn(|i| {
-            assert!(
+            debug_assert!(
                 (record.rs_vals[i] + (READ_SIZE * BLOCKS_PER_READ - 1) as u32)
                     < (1 << self.pointer_max_bits) as u32
             );
@@ -408,7 +418,7 @@ impl<
     ) {
         debug_assert_eq!(instruction.e.as_canonical_u32(), RV32_MEMORY_AS);
 
-        assert!(
+        debug_assert!(
             record.rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1
                 < (1 << self.pointer_max_bits)
         );
@@ -435,8 +445,23 @@ impl<
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
     > AdapterTraceFiller<F>
-    for Rv32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+    for Rv32VecHeapAdapterFiller<
+        NUM_READS,
+        BLOCKS_PER_READ,
+        BLOCKS_PER_WRITE,
+        READ_SIZE,
+        WRITE_SIZE,
+    >
 {
+    const WIDTH: usize = Rv32VecHeapAdapterCols::<
+        F,
+        NUM_READS,
+        BLOCKS_PER_READ,
+        BLOCKS_PER_WRITE,
+        READ_SIZE,
+        WRITE_SIZE,
+    >::width();
+
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &Rv32VecHeapAdapterRecord<
             NUM_READS,

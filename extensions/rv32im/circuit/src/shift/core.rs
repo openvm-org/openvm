@@ -12,7 +12,7 @@ use openvm_circuit::{
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory, SharedMemoryHelper,
+        MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
@@ -257,7 +257,7 @@ pub struct ShiftStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 
-pub struct ShiftFiller<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
@@ -271,7 +271,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, 
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftFiller<F, A, NUM_LIMBS, LIMB_BITS> {
+impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftFiller<A, NUM_LIMBS, LIMB_BITS> {
     pub fn new(
         adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
@@ -293,7 +293,7 @@ impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
+        + AdapterTraceStep<
             F,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
@@ -349,10 +349,10 @@ where
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for ShiftFiller<F, A, NUM_LIMBS, LIMB_BITS>
+    for ShiftFiller<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
+    A: 'static + Send + Sync + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
@@ -430,7 +430,7 @@ impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterExecutorE1<
+        + AdapterExecutorE1<
             F,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,

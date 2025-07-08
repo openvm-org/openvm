@@ -194,6 +194,9 @@ pub struct NativeLoadStoreAdapterStep<const NUM_CELLS: usize> {
     offset: usize,
 }
 
+#[derive(derive_new::new)]
+pub struct NativeLoadStoreAdapterFiller<const NUM_CELLS: usize>;
+
 impl<F: PrimeField32, const NUM_CELLS: usize> AdapterTraceStep<F>
     for NativeLoadStoreAdapterStep<NUM_CELLS>
 {
@@ -287,8 +290,10 @@ impl<F: PrimeField32, const NUM_CELLS: usize> AdapterTraceStep<F>
 }
 
 impl<F: PrimeField32, const NUM_CELLS: usize> AdapterTraceFiller<F>
-    for NativeLoadStoreAdapterStep<NUM_CELLS>
+    for NativeLoadStoreAdapterFiller<NUM_CELLS>
 {
+    const WIDTH: usize = size_of::<NativeLoadStoreAdapterCols<u8, NUM_CELLS>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &NativeLoadStoreAdapterRecord<F, NUM_CELLS> =

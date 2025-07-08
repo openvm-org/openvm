@@ -123,6 +123,11 @@ pub struct CastFCoreRecord {
 #[derive(derive_new::new)]
 pub struct CastFCoreStep<A> {
     adapter: A,
+}
+
+#[derive(derive_new::new)]
+pub struct CastFCoreFiller<A> {
+    adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
@@ -166,10 +171,10 @@ where
     }
 }
 
-impl<F, A> TraceFiller<F> for CastFCoreStep<A>
+impl<F, A> TraceFiller<F> for CastFCoreFiller<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F>,
+    A: 'static + Send + Sync + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };

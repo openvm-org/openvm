@@ -5429,6 +5429,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.0-rc.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=4772fa6f609b00dd14d0f19087030d20c4843f71#4772fa6f609b00dd14d0f19087030d20c4843f71"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -5456,6 +5457,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.0-rc.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=4772fa6f609b00dd14d0f19087030d20c4843f71#4772fa6f609b00dd14d0f19087030d20c4843f71"
 dependencies = [
  "dashmap",
  "derivative",
