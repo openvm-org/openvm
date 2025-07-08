@@ -41,7 +41,7 @@ use super::{
 use crate::{
     columns::NUM_KECCAK_VM_COLS,
     utils::{keccak256, keccak_f, num_keccak_f},
-    KeccakVmStep, KECCAK_DIGEST_BYTES, KECCAK_RATE_U16S, KECCAK_WORD_SIZE,
+    KeccakVmFiller, KeccakVmStep, KECCAK_DIGEST_BYTES, KECCAK_RATE_U16S, KECCAK_WORD_SIZE,
 };
 
 #[derive(Clone, Copy)]
@@ -206,7 +206,7 @@ impl<F: PrimeField32> TraceStep<F> for KeccakVmStep {
                     .memory
                     .increment_timestamp_by(KECCAK_REGISTER_READS as u32);
             }
-            let read = tracing_read::<_, KECCAK_WORD_SIZE>(
+            let read = tracing_read::<KECCAK_WORD_SIZE>(
                 state.memory,
                 RV32_MEMORY_AS,
                 record.inner.src + (idx * KECCAK_WORD_SIZE) as u32,
@@ -222,7 +222,7 @@ impl<F: PrimeField32> TraceStep<F> for KeccakVmStep {
 
         let digest = keccak256(&record.input[..len]);
         for (i, word) in digest.chunks_exact(KECCAK_WORD_SIZE).enumerate() {
-            tracing_write::<_, KECCAK_WORD_SIZE>(
+            tracing_write::<KECCAK_WORD_SIZE>(
                 state.memory,
                 RV32_MEMORY_AS,
                 record.inner.dst + (i * KECCAK_WORD_SIZE) as u32,
@@ -240,7 +240,7 @@ impl<F: PrimeField32> TraceStep<F> for KeccakVmStep {
     }
 }
 
-impl<F: PrimeField32> TraceFiller<F> for KeccakVmStep {
+impl<F: PrimeField32> TraceFiller<F> for KeccakVmFiller {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,

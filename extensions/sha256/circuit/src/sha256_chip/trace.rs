@@ -40,8 +40,8 @@ use super::{
 };
 use crate::{
     sha256_chip::{PaddingFlags, SHA256_READ_SIZE, SHA256_REGISTER_READS, SHA256_WRITE_SIZE},
-    sha256_solve, Sha256VmControlCols, SHA256VM_ROUND_WIDTH, SHA256VM_WIDTH, SHA256_BLOCK_CELLS,
-    SHA256_MAX_MESSAGE_LEN, SHA256_NUM_READ_ROWS,
+    sha256_solve, Sha256VmControlCols, Sha256VmFiller, SHA256VM_ROUND_WIDTH, SHA256VM_WIDTH,
+    SHA256_BLOCK_CELLS, SHA256_MAX_MESSAGE_LEN, SHA256_NUM_READ_ROWS,
 };
 
 #[derive(Clone, Copy)]
@@ -242,7 +242,7 @@ impl<F: PrimeField32> TraceStep<F> for Sha256VmStep {
     }
 }
 
-impl<F: PrimeField32> TraceFiller<F> for Sha256VmStep {
+impl<F: PrimeField32> TraceFiller<F> for Sha256VmFiller {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -384,7 +384,7 @@ impl<F: PrimeField32> TraceFiller<F> for Sha256VmStep {
     }
 }
 
-impl Sha256VmStep {
+impl Sha256VmFiller {
     #[allow(clippy::too_many_arguments)]
     fn fill_block_trace<F: PrimeField32>(
         &self,
