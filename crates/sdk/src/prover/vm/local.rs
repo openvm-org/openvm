@@ -187,6 +187,7 @@ where
                 &vm_vk.num_interactions(),
             )
             .expect("execute_metered failed");
+        println!("max_trace_heights part 2: {:?}", max_trace_heights);
         let proof_input = executor
             .execute_and_generate(self.committed_exe.clone(), input, &max_trace_heights)
             .unwrap();
