@@ -8,7 +8,7 @@ use openvm_circuit::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, EmptyAdapterCoreLayout, InsExecutorE1, InstructionExecutor, RecordArena,
-        Result, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        Result, TraceFiller, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -270,20 +270,6 @@ pub struct LoadStoreFiller<
     pub offset: usize,
 }
 
-impl<F, A, const NUM_CELLS: usize> TraceStep<F> for LoadStoreStep<A, NUM_CELLS>
-where
-    F: 'static,
-    A: 'static
-        + AdapterTraceStep<
-            F,
-            ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
-            WriteData = [u32; NUM_CELLS],
-        >,
-{
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut LoadStoreCoreRecord<NUM_CELLS>);
-}
-
 impl<F, A, RA, const NUM_CELLS: usize> InstructionExecutor<F, RA> for LoadStoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
@@ -295,8 +281,8 @@ where
         >,
     for<'buf> RA: RecordArena<
         'buf,
-        <Self as TraceStep<F>>::RecordLayout,
-        <Self as TraceStep<F>>::RecordMut<'buf>,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut LoadStoreCoreRecord<NUM_CELLS>),
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {

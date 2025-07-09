@@ -5,8 +5,8 @@ use openvm_circuit::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, EmptyAdapterCoreLayout, ImmInstruction, InsExecutorE1,
-        InstructionExecutor, RecordArena, Result, TraceFiller, TraceStep, VmAdapterInterface,
-        VmCoreAir, VmStateMut,
+        InstructionExecutor, RecordArena, Result, TraceFiller, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -214,19 +214,6 @@ pub struct BranchLessThanFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usiz
     pub offset: usize,
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F>
-    for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: 'static,
-    A: 'static + AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
-{
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (
-        A::RecordMut<'a>,
-        &'a mut BranchLessThanCoreRecord<NUM_LIMBS, LIMB_BITS>,
-    );
-}
-
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> InstructionExecutor<F, RA>
     for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
 where
@@ -234,8 +221,11 @@ where
     A: 'static + AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
     for<'buf> RA: RecordArena<
         'buf,
-        <Self as TraceStep<F>>::RecordLayout,
-        <Self as TraceStep<F>>::RecordMut<'buf>,
+        EmptyAdapterCoreLayout<F, A>,
+        (
+            A::RecordMut<'buf>,
+            &'buf mut BranchLessThanCoreRecord<NUM_LIMBS, LIMB_BITS>,
+        ),
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {

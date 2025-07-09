@@ -8,8 +8,7 @@ use openvm_circuit::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, EmptyAdapterCoreLayout, InsExecutorE1, InstructionExecutor, RecordArena,
-        Result, SignedImmInstruction, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir,
-        VmStateMut,
+        Result, SignedImmInstruction, TraceFiller, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -213,20 +212,6 @@ impl<A> Rv32JalrFiller<A> {
     }
 }
 
-impl<F, A> TraceStep<F> for Rv32JalrStep<A>
-where
-    F: 'static,
-    A: 'static
-        + AdapterTraceStep<
-            F,
-            ReadData = [u8; RV32_REGISTER_NUM_LIMBS],
-            WriteData = [u8; RV32_REGISTER_NUM_LIMBS],
-        >,
-{
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut Rv32JalrCoreRecord);
-}
-
 impl<F, A, RA> InstructionExecutor<F, RA> for Rv32JalrStep<A>
 where
     F: PrimeField32,
@@ -238,8 +223,8 @@ where
         >,
     for<'buf> RA: RecordArena<
         'buf,
-        <Self as TraceStep<F>>::RecordLayout,
-        <Self as TraceStep<F>>::RecordMut<'buf>,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut Rv32JalrCoreRecord),
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {

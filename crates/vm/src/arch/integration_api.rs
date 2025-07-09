@@ -115,17 +115,17 @@ pub trait RecordArena<'a, Layout, RecordMut> {
     fn alloc(&'a mut self, layout: Layout) -> RecordMut;
 }
 
-/// This is a helper trait for implementing [InstructionExecutor](crate::arch::InstructionExecutor)
-/// to provide associated types.
-///
-/// Interface for trace generation of a single instruction. The trace is provided as a mutable
-/// buffer during both instruction execution and trace generation.
-/// It is expected that no additional memory allocation is necessary and the trace buffer
-/// is sufficient, with possible overwriting.
-pub trait TraceStep<F> {
-    type RecordLayout;
-    type RecordMut<'a>;
-}
+// /// This is a helper trait for implementing [InstructionExecutor](crate::arch::InstructionExecutor)
+// /// to provide associated types.
+// ///
+// /// Interface for trace generation of a single instruction. The trace is provided as a mutable
+// /// buffer during both instruction execution and trace generation.
+// /// It is expected that no additional memory allocation is necessary and the trace buffer
+// /// is sufficient, with possible overwriting.
+// pub trait TraceStep<F> {
+//     type RecordLayout;
+//     type RecordMut<'a>;
+// }
 
 // TODO[jpw]: this might be temporary trait before moving trace to CTX
 pub trait RowMajorMatrixArena<F>: Arena {
