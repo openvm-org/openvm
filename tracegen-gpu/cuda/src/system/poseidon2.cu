@@ -24,7 +24,7 @@ __global__ void cukernel_system_poseidon2_tracegen(
     if (idx < num_records) {
         using Poseidon2Row = poseidon2::
             Poseidon2Row<WIDTH, SBOX_DEGREE, SBOX_REGS, HALF_FULL_ROUNDS, PARTIAL_ROUNDS>;
-        assert(Poseidon2Row::TOTAL_SIZE + 1 == trace_width);
+        assert(Poseidon2Row::get_total_size() + 1 == trace_width);
 
         Poseidon2Row row(d_trace + idx, trace_height);
         RowSlice state(d_records + idx * WIDTH, 1);
@@ -35,7 +35,7 @@ __global__ void cukernel_system_poseidon2_tracegen(
             HALF_FULL_ROUNDS,
             PARTIAL_ROUNDS>(row, state);
 
-        d_trace[idx + Poseidon2Row::TOTAL_SIZE * trace_height] = d_counts[idx];
+        d_trace[idx + Poseidon2Row::get_total_size() * trace_height] = d_counts[idx];
     } else if (idx < trace_height) {
         RowSlice row(d_trace + idx, trace_height);
         for (size_t i = 0; i < trace_width; ++i) {
@@ -116,7 +116,7 @@ extern "C" int _system_poseidon2_deduplicate_records(
         d_counts,
         d_counts,
         d_num_records,
-        cuda::std::plus(),
+        std::plus(),
         *num_records,
         cudaStreamPerThread
     );
@@ -149,7 +149,7 @@ extern "C" int _system_poseidon2_deduplicate_records(
         d_counts,
         d_counts,
         d_num_records,
-        cuda::std::plus(),
+        std::plus(),
         *num_records,
         cudaStreamPerThread
     );

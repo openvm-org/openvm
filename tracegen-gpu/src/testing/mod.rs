@@ -5,6 +5,7 @@ use openvm_circuit::{
         instructions::instruction::Instruction,
         testing::{EXECUTION_BUS, MEMORY_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS},
         ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor, MemoryConfig, Streams,
+        SystemPort,
     },
     system::{
         memory::{
@@ -20,8 +21,11 @@ use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_stark_backend::{
-    engine::VerificationData, p3_field::Field, p3_util::log2_strict_usize,
-    verifier::VerificationError, AirRef, Chip,
+    engine::VerificationData,
+    p3_field::{Field, FieldAlgebra},
+    p3_util::log2_strict_usize,
+    verifier::VerificationError,
+    AirRef, Chip,
 };
 use openvm_stark_sdk::{
     config::{setup_tracing_with_log_level, FriParameters},
@@ -172,6 +176,23 @@ impl GpuChipTestBuilder {
 
     pub fn write<const N: usize>(&mut self, address_space: usize, pointer: usize, value: [F; N]) {
         self.memory.write(address_space, pointer, value);
+    }
+
+    pub fn write_usize<const N: usize>(
+        &mut self,
+        address_space: usize,
+        pointer: usize,
+        value: [usize; N],
+    ) {
+        self.write(address_space, pointer, value.map(F::from_canonical_usize));
+    }
+
+    pub fn system_port(&self) -> SystemPort {
+        SystemPort {
+            execution_bus: self.execution_bus(),
+            program_bus: self.program_bus(),
+            memory_bridge: self.memory_bridge(),
+        }
     }
 
     pub fn execution_bridge(&self) -> ExecutionBridge {

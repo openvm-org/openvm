@@ -4,6 +4,39 @@
 
 namespace poseidon2 {
 
+template <typename T, size_t DEGREE, size_t REGISTERS> struct SBox {
+    T registers[REGISTERS];
+};
+
+template <typename T, size_t WIDTH, size_t SBOX_DEGREE, size_t SBOX_REGISTERS> struct FullRound {
+    /// Possible intermediate results within each S-box.
+    SBox<T, SBOX_DEGREE, SBOX_REGISTERS> sbox[WIDTH];
+    /// The post-state, i.e. the entire layer after this full round.
+    T post[WIDTH];
+};
+
+template <typename T, size_t WIDTH, size_t SBOX_DEGREE, size_t SBOX_REGISTERS> struct PartialRound {
+    /// Possible intermediate results within the S-box.
+    SBox<T, SBOX_DEGREE, SBOX_REGISTERS> sbox;
+    /// The output of the S-box.
+    T post;
+};
+
+template <
+    typename T,
+    size_t WIDTH,
+    size_t SBOX_DEGREE,
+    size_t SBOX_REGISTERS,
+    size_t HALF_FULL_ROUNDS,
+    size_t PARTIAL_ROUNDS>
+struct Poseidon2SubCols {
+    T export_col;
+    T inputs[WIDTH];
+    FullRound<T, WIDTH, SBOX_DEGREE, SBOX_REGISTERS> beginning_full_rounds[HALF_FULL_ROUNDS];
+    PartialRound<T, WIDTH, SBOX_DEGREE, SBOX_REGISTERS> partial_rounds[PARTIAL_ROUNDS];
+    FullRound<T, WIDTH, SBOX_DEGREE, SBOX_REGISTERS> ending_full_rounds[HALF_FULL_ROUNDS];
+};
+
 template <
     size_t WIDTH,
     size_t SBOX_DEGREE,
@@ -11,21 +44,12 @@ template <
     size_t HALF_FULL_ROUNDS,
     size_t PARTIAL_ROUNDS>
 struct Poseidon2Row {
-    /// Assumed that trace is contiguous in memory
-    /// Assumed layout is [export_col, inputs, beginning_full, partial, ending_full]
-    RowSlice slice; // Single RowSlice for all data
+    // Single RowSlice for entire Poseidon2 subrow
+    RowSlice slice;
 
-    // Memory layout constants
-    static constexpr size_t EXPORT_COL_SIZE = 1;
-    static constexpr size_t INPUTS_SIZE = WIDTH;
-    static constexpr size_t BEGINNING_FULL_SIZE =
-        WIDTH * SBOX_REGS * HALF_FULL_ROUNDS + WIDTH * HALF_FULL_ROUNDS;
-    static constexpr size_t PARTIAL_SIZE = (SBOX_REGS + 1) * PARTIAL_ROUNDS;
-    static constexpr size_t ENDING_FULL_SIZE =
-        WIDTH * SBOX_REGS * HALF_FULL_ROUNDS + WIDTH * HALF_FULL_ROUNDS;
-
-    static constexpr size_t TOTAL_SIZE =
-        EXPORT_COL_SIZE + INPUTS_SIZE + BEGINNING_FULL_SIZE + PARTIAL_SIZE + ENDING_FULL_SIZE;
+    template <typename T>
+    using Cols =
+        Poseidon2SubCols<T, WIDTH, SBOX_DEGREE, SBOX_REGS, HALF_FULL_ROUNDS, PARTIAL_ROUNDS>;
 
     __device__ Poseidon2Row(Fp *input, uint32_t n) : slice(input, n) {}
 
@@ -37,27 +61,33 @@ struct Poseidon2Row {
     __device__ bool is_valid() const { return slice.is_valid(); }
 
     // Basic accessors
-    __device__ RowSlice export_col() const { return slice.slice_from(0); }
+    __device__ RowSlice export_col() const {
+        if (!is_valid()) {
+            return RowSlice::null();
+        }
+        return slice.slice_from(COL_INDEX(Cols, export_col));
+    }
 
-    __device__ RowSlice inputs() const { return slice.slice_from(EXPORT_COL_SIZE); }
+    __device__ RowSlice inputs() const {
+        if (!is_valid()) {
+            return RowSlice::null();
+        }
+        return slice.slice_from(COL_INDEX(Cols, inputs));
+    }
 
     // Beginning full rounds accessors
     __device__ RowSlice beginning_full_sbox(size_t round, size_t lane) const {
         if (!is_valid()) {
             return RowSlice::null();
         }
-        size_t offset = EXPORT_COL_SIZE + INPUTS_SIZE + (round * (WIDTH * SBOX_REGS + WIDTH)) +
-                        (lane * SBOX_REGS);
-        return slice.slice_from(offset);
+        return slice.slice_from(COL_INDEX(Cols, beginning_full_rounds[round].sbox[lane]));
     }
 
     __device__ RowSlice beginning_full_post(size_t round) const {
         if (!is_valid()) {
             return RowSlice::null();
         }
-        size_t offset = EXPORT_COL_SIZE + INPUTS_SIZE + (round * (WIDTH * SBOX_REGS + WIDTH)) +
-                        (WIDTH * SBOX_REGS);
-        return slice.slice_from(offset);
+        return slice.slice_from(COL_INDEX(Cols, beginning_full_rounds[round].post));
     }
 
     // Partial rounds accessors
@@ -65,18 +95,14 @@ struct Poseidon2Row {
         if (!is_valid()) {
             return RowSlice::null();
         }
-        size_t offset =
-            EXPORT_COL_SIZE + INPUTS_SIZE + BEGINNING_FULL_SIZE + (round * (SBOX_REGS + 1));
-        return slice.slice_from(offset);
+        return slice.slice_from(COL_INDEX(Cols, partial_rounds[round].sbox));
     }
 
     __device__ RowSlice partial_post(size_t round) const {
         if (!is_valid()) {
             return RowSlice::null();
         }
-        size_t offset = EXPORT_COL_SIZE + INPUTS_SIZE + BEGINNING_FULL_SIZE +
-                        (round * (SBOX_REGS + 1)) + SBOX_REGS;
-        return slice.slice_from(offset);
+        return slice.slice_from(COL_INDEX(Cols, partial_rounds[round].post));
     }
 
     // Ending full rounds accessors
@@ -84,22 +110,18 @@ struct Poseidon2Row {
         if (!is_valid()) {
             return RowSlice::null();
         }
-        size_t offset = EXPORT_COL_SIZE + INPUTS_SIZE + BEGINNING_FULL_SIZE + PARTIAL_SIZE +
-                        (round * (WIDTH * SBOX_REGS + WIDTH)) + (lane * SBOX_REGS);
-        return slice.slice_from(offset);
+        return slice.slice_from(COL_INDEX(Cols, ending_full_rounds[round].sbox[lane]));
     }
 
     __device__ RowSlice ending_full_post(size_t round) const {
         if (!is_valid()) {
             return RowSlice::null();
         }
-        size_t offset = EXPORT_COL_SIZE + INPUTS_SIZE + BEGINNING_FULL_SIZE + PARTIAL_SIZE +
-                        (round * (WIDTH * SBOX_REGS + WIDTH)) + (WIDTH * SBOX_REGS);
-        return slice.slice_from(offset);
+        return slice.slice_from(COL_INDEX(Cols, ending_full_rounds[round].post));
     }
 
     // Helper to get total size needed for the buffer
-    static constexpr size_t get_total_size() { return TOTAL_SIZE; }
+    static constexpr size_t get_total_size() { return sizeof(Cols<uint8_t>); }
 };
 
 } // namespace poseidon2

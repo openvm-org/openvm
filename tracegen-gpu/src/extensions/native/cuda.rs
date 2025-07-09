@@ -1,7 +1,7 @@
 #![allow(clippy::missing_safety_doc)]
 
+use openvm_stark_backend::prover::hal::MatrixDimensions;
 use stark_backend_gpu::cuda::{d_buffer::DeviceBuffer, error::CudaError};
-
 pub mod castf_cuda {
     use super::*;
 
@@ -107,5 +107,70 @@ pub mod field_arithmetic_cuda {
             range_bins,
         );
         CudaError::from_result(result)
+    }
+}
+
+pub mod poseidon2_cuda {
+    use stark_backend_gpu::base::DeviceMatrix;
+
+    use super::*;
+
+    unsafe extern "C" {
+        fn _inplace_native_poseidon2_tracegen(
+            d_trace: *mut std::ffi::c_void,
+            height: usize,
+            width: usize,
+            num_records: usize,
+            d_rc_buffer: *mut u32,
+            rc_num_bins: u32,
+            sbox_regs: usize,
+        ) -> i32;
+
+        fn _native_poseidon2_tracegen(
+            d_trace: *mut std::ffi::c_void,
+            height: usize,
+            width: usize,
+            d_records: *const std::ffi::c_void,
+            num_records: usize,
+            d_rc_buffer: *mut u32,
+            rc_num_bins: u32,
+            sbox_regs: usize,
+        ) -> i32;
+    }
+
+    pub unsafe fn inplace_tracegen<T>(
+        d_trace: &DeviceMatrix<T>,
+        num_records: usize,
+        d_rc_buffer: &DeviceBuffer<T>,
+        sbox_regs: usize,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_inplace_native_poseidon2_tracegen(
+            d_trace.buffer().as_mut_raw_ptr(),
+            d_trace.height(),
+            d_trace.width(),
+            num_records,
+            d_rc_buffer.as_mut_ptr() as *mut u32,
+            d_rc_buffer.len() as u32,
+            sbox_regs,
+        ))
+    }
+
+    pub unsafe fn tracegen<T>(
+        d_trace: &DeviceMatrix<T>,
+        d_records: &DeviceBuffer<T>,
+        num_records: usize,
+        d_rc_buffer: &DeviceBuffer<T>,
+        sbox_regs: usize,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_native_poseidon2_tracegen(
+            d_trace.buffer().as_mut_raw_ptr(),
+            d_trace.height(),
+            d_trace.width(),
+            d_records.as_raw_ptr(),
+            num_records,
+            d_rc_buffer.as_mut_ptr() as *mut u32,
+            d_rc_buffer.len() as u32,
+            sbox_regs,
+        ))
     }
 }
