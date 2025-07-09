@@ -117,6 +117,11 @@ pub struct ExecutorInventory<E> {
     ext_start: Vec<usize>,
 }
 
+// @dev: We need ExecutorInventoryBuilder separate from ExecutorInventory because of how
+// ExecutorInventory::extend works: we want to build an inventory with some big E3 enum that
+// includes both enum types E1, E2. However the interface for an ExecutionExtension will only know
+// about the enum E2. In order to be able to allow access to the old executors with type E1 without
+// referring to the type E1, we need to create this separate builder struct.
 pub struct ExecutorInventoryBuilder<'a, F, E> {
     /// Chips that are already included in the chipset and may be used
     /// as dependencies. The order should be that depended-on chips are ordered
