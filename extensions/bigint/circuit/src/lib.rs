@@ -1,17 +1,3 @@
-// use openvm_circuit::{
-//     self,
-//     arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper},
-// };
-// use openvm_rv32_adapters::{
-//     Rv32HeapAdapterAir, Rv32HeapAdapterStep, Rv32HeapBranchAdapterAir, Rv32HeapBranchAdapterStep,
-// };
-// use openvm_rv32im_circuit::{
-//     adapters::{INT256_NUM_LIMBS, RV32_CELL_BITS},
-//     BaseAluCoreAir, BaseAluStep, BranchEqualCoreAir, BranchEqualStep, BranchLessThanCoreAir,
-//     BranchLessThanStep, LessThanCoreAir, LessThanStep, MultiplicationCoreAir, MultiplicationStep,
-//     ShiftCoreAir, ShiftStep,
-// };
-
 mod extension;
 pub use extension::*;
 
