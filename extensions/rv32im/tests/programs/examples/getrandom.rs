@@ -1,5 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
+#[cfg(feature = "getrandom-v02")]
+compile_error!("this program is not compatible with getrandom v0.2");
+
 use getrandom::Error;
 
 fn get_random_u128() -> Result<u128, Error> {
