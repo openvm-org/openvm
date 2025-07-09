@@ -5,8 +5,8 @@ use itertools::{multiunzip, Itertools};
 use proc_macro::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{
-    punctuated::Punctuated, spanned::Spanned, Data, DataStruct, Field, Fields, GenericParam, Ident,
-    Meta, Token,
+    parse_quote, punctuated::Punctuated, spanned::Spanned, Data, DataStruct, Field, Fields,
+    GenericParam, Ident, Meta, Token,
 };
 
 #[proc_macro_derive(InstructionExecutor)]
@@ -396,6 +396,14 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     let mut create_executors = Vec::new();
     let mut create_circuit = Vec::new();
     let mut create_chip_complex = Vec::new();
+    let mut execution_where_predicates: Vec<syn::WherePredicate> = Vec::new();
+    let mut circuit_where_predicates: Vec<syn::WherePredicate> = Vec::new();
+    let mut prover_where_predicates: Vec<syn::WherePredicate> = Vec::new();
+
+    let source_field_ty = source_field.ty.clone();
+    let record_arena =
+        quote! {<#source_field_ty as ::openvm_circuit::arch::VmProverConfig<SC, PB>>::RecordArena };
+
     for e in extensions.iter() {
         let (ext_field_name, ext_name_upper) =
             gen_name_with_uppercase_idents(e.ident.as_ref().unwrap());
@@ -412,14 +420,24 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
         create_executors.push(quote! {
             let inventory: ::openvm_circuit::arch::ExecutorInventory<Self::Executor> = inventory.extend::<F, _, _>(&self.#ext_field_name)?;
         });
+        let extension_ty = e.ty.clone();
+        execution_where_predicates.push(parse_quote! {
+            #extension_ty: ::openvm_circuit::arch::VmExecutionExtension<F, Executor = #executor_type>
+        });
         create_circuit.push(quote! {
             inventory.start_new_extension();
             ::openvm_circuit::arch::VmCircuitExtension::extend_circuit(&self.#ext_field_name, &mut inventory)?;
         });
+        circuit_where_predicates.push(parse_quote! {
+            #extension_ty: ::openvm_circuit::arch::VmCircuitExtension<SC>
+        });
         create_chip_complex.push(quote! {
-            inventory.start_new_extension();
+            inventory.start_new_extension()?;
             ::openvm_circuit::arch::VmProverExtension::extend_prover(&self.#ext_field_name, &mut inventory)?;
-        })
+        });
+        prover_where_predicates.push(parse_quote! {
+            #extension_ty: ::openvm_circuit::arch::VmProverExtension<SC, #record_arena, PB>
+        });
     }
 
     let (source_executor_name, source_needs_generics) = parse_executor_name(source_field)?;
@@ -428,6 +446,24 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     } else {
         quote! { #source_executor_name }
     };
+    execution_where_predicates.push(parse_quote! {
+        #source_field_ty: ::openvm_circuit::arch::VmExecutionConfig<F, Executor = #source_executor_type>
+    });
+    circuit_where_predicates.push(parse_quote! {
+        #source_field_ty: ::openvm_circuit::arch::VmCircuitConfig<SC>
+    });
+    prover_where_predicates.push(parse_quote! {
+        #source_field_ty: ::openvm_circuit::arch::VmProverConfig<SC, PB>
+    });
+    let execution_where_clause = quote! { where #(#execution_where_predicates),* };
+    let circuit_where_clause = quote! { where #(#circuit_where_predicates),* };
+    let prover_where_clause = quote! { where
+        SC: StarkGenericConfig,
+        PB: ProverBackend<Val = Val<SC>, Challenge = SC::Challenge, Challenger = SC::Challenger>,
+        Self: ::openvm_circuit::arch::VmConfig<SC>,
+        #(#prover_where_predicates),*
+    };
+
     let executor_type = Ident::new(&format!("{}Executor", name), name.span());
 
     let token_stream = TokenStream::from(quote! {
@@ -444,15 +480,55 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
             #(#executor_enum_fields)*
         }
 
-        impl<F: PrimeField32> ::openvm_circuit::arch::VmExecutionConfig<F> for #name {
+        impl<F: Field> ::openvm_circuit::arch::VmExecutionConfig<F> for #name #execution_where_clause {
             type Executor = #executor_type<F>;
 
             fn create_executors(
                 &self,
             ) -> Result<::openvm_circuit::arch::ExecutorInventory<Self::Executor>, ::openvm_circuit::arch::ExecutorInventoryError> {
-                let inventory = self.#source_name.create_executors()?;
+                let inventory = self.#source_name.create_executors()?.transmute::<Self::Executor>();
                 #(#create_executors)*
                 Ok(inventory)
+            }
+        }
+
+        impl<SC: StarkGenericConfig> ::openvm_circuit::arch::VmCircuitConfig<SC> for #name #circuit_where_clause {
+            fn create_circuit(
+                &self,
+            ) -> Result<::openvm_circuit::arch::AirInventory<SC>, ::openvm_circuit::arch::AirInventoryError> {
+                let mut inventory = self.#source_name.create_circuit()?;
+                #(#create_circuit)*
+                Ok(inventory)
+            }
+        }
+
+        impl<SC, PB> ::openvm_circuit::arch::VmProverConfig<SC, PB> for #name #prover_where_clause {
+            type RecordArena = #record_arena;
+            type SystemChipInventory = <#source_field_ty as ::openvm_circuit::arch::VmProverConfig<SC, PB>>::SystemChipInventory;
+
+            fn create_chip_complex(
+                &self,
+                circuit: ::openvm_circuit::arch::AirInventory<SC>,
+            ) -> Result<
+                ::openvm_circuit::arch::VmChipComplex<SC, Self::RecordArena, PB, Self::SystemChipInventory>,
+                ::openvm_circuit::arch::ChipInventoryError,
+            > {
+                let mut chip_complex = self.#source_name.create_chip_complex(circuit)?;
+                let mut inventory = &mut chip_complex.inventory;
+                #(#create_chip_complex)*
+                Ok(chip_complex)
+            }
+        }
+
+        impl AsRef<SystemConfig> for #name {
+            fn as_ref(&self) -> &SystemConfig {
+                self.#source_name.as_ref()
+            }
+        }
+
+        impl AsMut<SystemConfig> for #name {
+            fn as_mut(&mut self) -> &mut SystemConfig {
+                self.#source_name.as_mut()
             }
         }
     });
