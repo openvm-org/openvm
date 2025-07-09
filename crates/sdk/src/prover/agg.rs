@@ -200,7 +200,6 @@ impl LeafProvingController {
                 .into_iter()
                 .enumerate()
                 .map(|(leaf_node_idx, input)| {
-                    println!("input len: {:?}", input.proofs.len());
                     info_span!("single_leaf_agg", idx = leaf_node_idx)
                         .in_scope(|| SingleSegmentVmProver::prove(prover, input.write_to_stream()))
                 })
