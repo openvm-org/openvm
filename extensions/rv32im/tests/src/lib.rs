@@ -62,21 +62,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        // The ELF might still have Mul instructions even though the program doesn't use them. We
-        // mask those to NOP here.
-        for (insn, _) in exe
-            .program
-            .instructions_and_debug_infos
-            .iter_mut()
-            .flatten()
-        {
-            if MulOpcode::iter().any(|op| op.global_opcode() == insn.opcode)
-                || MulHOpcode::iter().any(|op| op.global_opcode() == insn.opcode)
-                || DivRemOpcode::iter().any(|op| op.global_opcode() == insn.opcode)
-            {
-                insn.opcode = SystemOpcode::PHANTOM.global_opcode();
-            }
-        }
+        change_rv32m_insn_to_nop(&mut exe);
         air_test_with_min_segments(config, exe, vec![], min_segments);
         Ok(())
     }
@@ -120,7 +106,7 @@ mod tests {
 
     #[test]
     fn test_read_vec() -> Result<()> {
-        let config = test_rv32i_config();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -136,7 +122,7 @@ mod tests {
 
     #[test]
     fn test_hint_load_by_key() -> Result<()> {
-        let config = test_rv32i_config();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint_load_by_key", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -159,7 +145,7 @@ mod tests {
 
     #[test]
     fn test_read() -> Result<()> {
-        let config = test_rv32i_config();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "read", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -244,7 +230,7 @@ mod tests {
 
     #[test]
     fn test_print() -> Result<()> {
-        let config = test_rv32i_config();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "print", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -355,5 +341,24 @@ mod tests {
         )
         .unwrap();
         air_test(config, exe);
+    }
+
+    // For testing programs that should only execute RV32I:
+    // The ELF might still have Mul instructions even though the program doesn't use them. We
+    // mask those to NOP here.
+    fn change_rv32m_insn_to_nop(exe: &mut VmExe<F>) {
+        for (insn, _) in exe
+            .program
+            .instructions_and_debug_infos
+            .iter_mut()
+            .flatten()
+        {
+            if MulOpcode::iter().any(|op| op.global_opcode() == insn.opcode)
+                || MulHOpcode::iter().any(|op| op.global_opcode() == insn.opcode)
+                || DivRemOpcode::iter().any(|op| op.global_opcode() == insn.opcode)
+            {
+                insn.opcode = SystemOpcode::PHANTOM.global_opcode();
+            }
+        }
     }
 }
