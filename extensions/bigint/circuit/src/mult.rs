@@ -110,17 +110,24 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 }
 
 #[inline(always)]
-fn u256_mul(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-    let rs1_u64: [u32; 8] = unsafe { std::mem::transmute(rs1) };
-    let rs2_u64: [u32; 8] = unsafe { std::mem::transmute(rs2) };
-    let mut rd = [0u32; 8];
-    for i in 0..8 {
-        let mut carry = 0u64;
-        for j in 0..(8 - i) {
-            let res = rs1_u64[i] as u64 * rs2_u64[j] as u64 + rd[i + j] as u64 + carry;
-            rd[i + j] = res as u32;
-            carry = res >> 32;
+pub(crate) fn u256_mul(
+    rs1: [u8; INT256_NUM_LIMBS],
+    rs2: [u8; INT256_NUM_LIMBS],
+) -> [u8; INT256_NUM_LIMBS] {
+    // Match the old algorithm exactly: diagonal multiplication with carry handling
+    let mut result = [0u8; INT256_NUM_LIMBS];
+    let mut carry = [0u32; INT256_NUM_LIMBS];
+    for i in 0..INT256_NUM_LIMBS {
+        let mut res = 0u32;
+        if i > 0 {
+            res = carry[i - 1];
         }
+        for j in 0..=i {
+            res += (rs1[j] as u32) * (rs2[i - j] as u32);
+        }
+        carry[i] = res >> RV32_CELL_BITS;
+        res %= 1u32 << RV32_CELL_BITS;
+        result[i] = res as u8;
     }
-    unsafe { std::mem::transmute(rd) }
+    result
 }

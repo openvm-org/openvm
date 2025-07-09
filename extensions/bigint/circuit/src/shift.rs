@@ -129,37 +129,39 @@ struct SraOp;
 impl ShiftOp for SllOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        let rs1_u64: [u64; 4] = unsafe { std::mem::transmute(rs1) };
-        let rs2_u64: [u64; 4] = unsafe { std::mem::transmute(rs2) };
-        let mut rd = [0u64; 4];
-        if !(rs2_u64[0] > 0xff || rs2_u64[1] > 0 || rs2_u64[2] > 0 || rs2_u64[3] > 0) {
-            let shift = rs2_u64[0] as u32;
-            let index_offset = (shift / u64::BITS) as usize;
-            let bit_offset = shift % u64::BITS;
-            let mut carry = 0u64;
-            for i in index_offset..4 {
-                let curr = rs1_u64[i - index_offset];
-                rd[i] = (curr << bit_offset) + carry;
-                carry = curr >> (u64::BITS - bit_offset);
-            }
+        // Match old algorithm: get_shift then run_shift_left
+        let mut result = [0u8; INT256_NUM_LIMBS];
+        
+        // We assume `INT256_NUM_LIMBS * RV32_CELL_BITS <= 2^RV32_CELL_BITS` so the shift is defined
+        // entirely in rs2[0].
+        let shift = (rs2[0] as usize) % (INT256_NUM_LIMBS * RV32_CELL_BITS);
+        let limb_shift = shift / RV32_CELL_BITS;
+        let bit_shift = shift % RV32_CELL_BITS;
+
+        for i in limb_shift..INT256_NUM_LIMBS {
+            result[i] = if i > limb_shift {
+                (((rs1[i - limb_shift] as u16) << bit_shift)
+                    | ((rs1[i - limb_shift - 1] as u16) >> (RV32_CELL_BITS - bit_shift)))
+                    % (1u16 << RV32_CELL_BITS)
+            } else {
+                ((rs1[i - limb_shift] as u16) << bit_shift) % (1u16 << RV32_CELL_BITS)
+            } as u8;
         }
-        unsafe { std::mem::transmute(rd) }
+        result
     }
 }
 impl ShiftOp for SrlOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        shift_right(rs1, rs2, 0)
+        // Logical right shift - fill with 0
+        shift_right(rs1, rs2, true)
     }
 }
 impl ShiftOp for SraOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        if rs1[INT256_NUM_LIMBS - 1] & 0x80 > 0 {
-            shift_right(rs1, rs2, u64::MAX)
-        } else {
-            shift_right(rs1, rs2, 0)
-        }
+        // Arithmetic right shift - fill with sign bit
+        shift_right(rs1, rs2, false)
     }
 }
 
@@ -167,21 +169,30 @@ impl ShiftOp for SraOp {
 fn shift_right(
     rs1: [u8; INT256_NUM_LIMBS],
     rs2: [u8; INT256_NUM_LIMBS],
-    init_value: u64,
+    logical: bool,
 ) -> [u8; INT256_NUM_LIMBS] {
-    let rs1_u64: [u64; 4] = unsafe { std::mem::transmute(rs1) };
-    let rs2_u64: [u64; 4] = unsafe { std::mem::transmute(rs2) };
-    let mut rd = [init_value; 4];
-    if !(rs2_u64[0] > 0xff || rs2_u64[1] > 0 || rs2_u64[2] > 0 || rs2_u64[3] > 0) {
-        let shift = rs2_u64[0] as u32;
-        let index_offset = (shift / u64::BITS) as usize;
-        let bit_offset = shift % u64::BITS;
-        let mut carry = 0u64;
-        for i in (index_offset..4).rev() {
-            let curr = rs1_u64[i];
-            rd[i - index_offset] = (curr >> bit_offset) + carry;
-            carry = curr << (u64::BITS - bit_offset);
-        }
+    // Match old algorithm exactly
+    let fill = if logical {
+        0
+    } else {
+        (((1u16 << RV32_CELL_BITS) - 1) as u8) * (rs1[INT256_NUM_LIMBS - 1] >> (RV32_CELL_BITS - 1))
+    };
+    let mut result = [fill; INT256_NUM_LIMBS];
+
+    let shift = (rs2[0] as usize) % (INT256_NUM_LIMBS * RV32_CELL_BITS);
+    let limb_shift = shift / RV32_CELL_BITS;
+    let bit_shift = shift % RV32_CELL_BITS;
+
+    for i in 0..(INT256_NUM_LIMBS - limb_shift) {
+        let res = if i + limb_shift + 1 < INT256_NUM_LIMBS {
+            (((rs1[i + limb_shift] >> bit_shift) as u16)
+                | ((rs1[i + limb_shift + 1] as u16) << (RV32_CELL_BITS - bit_shift)))
+                % (1u16 << RV32_CELL_BITS)
+        } else {
+            (((rs1[i + limb_shift] >> bit_shift) as u16) | ((fill as u16) << (RV32_CELL_BITS - bit_shift)))
+                % (1u16 << RV32_CELL_BITS)
+        };
+        result[i] = res as u8;
     }
-    unsafe { std::mem::transmute(rd) }
+    result
 }
