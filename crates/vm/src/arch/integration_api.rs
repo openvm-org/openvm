@@ -26,9 +26,12 @@ use super::{
     execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
     Result, VmStateMut,
 };
-use crate::system::memory::{
-    online::{GuestMemory, TracingMemory},
-    MemoryAuxColsFactory, SharedMemoryHelper,
+use crate::{
+    arch::InstructionExecutor,
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory, SharedMemoryHelper,
+    },
 };
 
 /// The interface between primitive AIR and machine adapter AIR.

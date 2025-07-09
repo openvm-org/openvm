@@ -94,7 +94,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic> for #name #ty_generics {
                     fn execute(
                         &mut self,
-                        state: ::openvm_circuit::arch::VmStateMut<#field_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory<#field_ty_generic>, ::openvm_circuit::arch::MatrixRecordArena<#field_ty_generic>>,
+                        state: ::openvm_circuit::arch::VmStateMut<#field_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory, ::openvm_circuit::arch::MatrixRecordArena<#field_ty_generic>>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#field_ty_generic>,
                     ) -> ::openvm_circuit::arch::Result<()> {
                         match self {
@@ -372,10 +372,15 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     for e in extensions.iter() {
         let (ext_field_name, ext_name_upper) =
             gen_name_with_uppercase_idents(e.ident.as_ref().unwrap());
-        let executor_name = parse_executor_name(e)?;
+        let (executor_name, needs_generics) = parse_executor_name(e)?;
+        let executor_type = if needs_generics {
+            quote! { #executor_name<F> }
+        } else {
+            quote! { #executor_name }
+        };
         executor_enum_fields.push(quote! {
             #[any_enum]
-            #ext_name_upper(#executor_name<F>),
+            #ext_name_upper(#executor_type),
         });
         create_executors.push(quote! {
             let inventory: ::openvm_circuit::arch::ExecutorInventory<Self::Executor> = inventory.extend(&self.#ext_field_name)?;
@@ -390,14 +395,19 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
         })
     }
 
-    let source_executor_name = parse_executor_name(source_field)?;
+    let (source_executor_name, source_needs_generics) = parse_executor_name(source_field)?;
+    let source_executor_type = if source_needs_generics {
+        quote! { #source_executor_name<F> }
+    } else {
+        quote! { #source_executor_name }
+    };
     let executor_type = Ident::new(&format!("{}Executor", name), name.span());
 
     let token_stream = TokenStream::from(quote! {
-        #[derive(::openvm_circuit::circuit_derive::ChipUsageGetter, ::openvm_circuit::circuit_derive::Chip, ::openvm_circuit::derive::InstructionExecutor, ::openvm_circuit::derive::InsExecutorE1, ::derive_more::derive::From, ::openvm_circuit::derive::AnyEnum)]
+        #[derive(::openvm_circuit::derive::InstructionExecutor, ::openvm_circuit::derive::InsExecutorE1, ::derive_more::derive::From, ::openvm_circuit::derive::AnyEnum)]
         pub enum #executor_type<F: PrimeField32> {
             #[any_enum]
-            #source_name_upper(#source_executor_name<F>),
+            #source_name_upper(#source_executor_type),
             #(#executor_enum_fields)*
         }
 
@@ -418,13 +428,16 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
 
 // Parse the executor name as either
 // `{type_name}Executor` or whatever the attribute `executor = ` specifies
-fn parse_executor_name(f: &Field) -> syn::Result<Ident> {
+// Also determines whether the executor type needs generic parameters
+fn parse_executor_name(f: &Field) -> syn::Result<(Ident, bool)> {
     // TRACKING ISSUE:
     // We cannot just use <e.ty.to_token_stream() as VmExecutionExtension<F>>::Executor because of this: <https://github.com/rust-lang/rust/issues/85576>
     let mut executor_name = Ident::new(
         &format!("{}Executor", f.ty.to_token_stream()),
         Span::call_site().into(),
     );
+    let mut needs_generics = true; // Default to true for backward compatibility
+
     if let Some(attr) = f
         .attrs
         .iter()
@@ -451,8 +464,20 @@ fn parse_executor_name(f: &Field) -> syn::Result<Ident> {
                                     Span::call_site().into(),
                                 );
                                 Ok(())
+                            } else if nv.path.is_ident("generics") {
+                                // Parse boolean value for generics
+                                let value_str = nv.value.to_token_stream().to_string();
+                                needs_generics = match value_str.as_str() {
+                                    "true" => true,
+                                    "false" => false,
+                                    _ => return Err(syn::Error::new(
+                                        nv.value.span(),
+                                        "generics attribute must be either true or false"
+                                    ))
+                                };
+                                Ok(())
                             } else {
-                                Err("only executor key is supported")
+                                Err("only executor and generics keys are supported")
                             }
                         }
                         _ => Err("only name = value format is supported"),
@@ -462,5 +487,5 @@ fn parse_executor_name(f: &Field) -> syn::Result<Ident> {
             }
         }
     };
-    Ok(executor_name)
+    Ok((executor_name, needs_generics))
 }

@@ -145,6 +145,17 @@ impl<F: Clone, A> PublicValuesStep<F, A> {
     }
 }
 
+// We clone when we want to run a new instance of the program, so we reset the custom public values.
+impl<F: Clone, A: Clone> Clone for PublicValuesStep<F, A> {
+    fn clone(&self) -> Self {
+        Self {
+            adapter: self.adapter.clone(),
+            encoder: self.encoder.clone(),
+            custom_pvs: Mutex::new(vec![None; self.custom_pvs.lock().unwrap().len()]),
+        }
+    }
+}
+
 impl<F, A> TraceStep<F> for PublicValuesStep<F, A>
 where
     F: PrimeField32,

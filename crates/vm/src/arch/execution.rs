@@ -17,7 +17,7 @@ use super::{
     Streams,
 };
 use crate::{
-    arch::MatrixRecordArena,
+    arch::{MatrixRecordArena, TraceStep},
     system::{
         memory::online::{GuestMemory, TracingMemory},
         program::{ProgramBus, StaticProgramError},
@@ -111,7 +111,6 @@ pub trait InsExecutorE1<F>: Clone {
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
-        F: PrimeField32,
         Ctx: E1E2ExecutionCtx;
 
     fn execute_metered(
@@ -119,53 +118,7 @@ pub trait InsExecutorE1<F>: Clone {
         state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
-    ) -> Result<()>
-    where
-        F: PrimeField32;
-}
-
-impl<F, C> InsExecutorE1<F> for RefCell<C>
-where
-    C: InsExecutorE1<F>,
-{
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        F: PrimeField32,
-        Ctx: E1E2ExecutionCtx,
-    {
-        self.borrow_mut().execute_e1(state, instruction)
-    }
-
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()>
-    where
-        F: PrimeField32,
-    {
-        self.borrow_mut()
-            .execute_metered(state, instruction, chip_index)
-    }
-}
-
-impl<F, C: InstructionExecutor<F, RA>, RA> InstructionExecutor<F, RA> for RefCell<C> {
-    fn execute(
-        &mut self,
-        state: VmStateMut<F, TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<()> {
-        self.borrow_mut().execute(state, instruction)
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        self.borrow().get_opcode_name(opcode)
-    }
+    ) -> Result<()>;
 }
 
 #[repr(C)]
