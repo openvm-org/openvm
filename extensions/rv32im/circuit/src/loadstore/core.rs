@@ -44,8 +44,9 @@ enum InstructionOpcode {
 }
 
 use openvm_circuit::arch::{
-    get_record_from_slice, AdapterTraceFiller, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError,
-    ExecutionError::InvalidInstruction, RecordArena, TraceFiller, VmSegmentState,
+    execution_mode::E2ExecutionCtx, get_record_from_slice, AdapterTraceFiller, E2PreCompute,
+    EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, ExecutionError::InvalidInstruction,
+    RecordArena, StepExecutorE2, TraceFiller, VmSegmentState,
 };
 use openvm_instructions::riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
 use InstructionOpcode::*;
@@ -395,49 +396,8 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>> {
         let pre_compute: &mut LoadStorePreCompute = data.borrow_mut();
-        let Instruction {
-            opcode,
-            a,
-            b,
-            c,
-            d,
-            e,
-            f,
-            g,
-            ..
-        } = inst;
-        let enabled = !f.is_zero();
-
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 == RV32_IMM_AS {
-            return Err(InvalidInstruction(pc));
-        }
-
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(
-            opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
-        );
-        match local_opcode {
-            LOADW | LOADBU | LOADHU => {}
-            STOREW | STOREH | STOREB => {
-                if !enabled {
-                    return Err(InvalidInstruction(pc));
-                }
-            }
-            _ => unreachable!("LoadStoreStep should not handle LOADB/LOADH opcodes"),
-        }
-
-        let imm = c.as_canonical_u32();
-        let imm_sign = g.as_canonical_u32();
-        let imm_extended = imm + imm_sign * 0xffff0000;
-
-        let is_native_store = e_u32 == NATIVE_AS;
-
-        *pre_compute = LoadStorePreCompute {
-            imm_extended,
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
-            e: e_u32 as u8,
-        };
+        let (local_opcode, enabled, is_native_store) =
+            self.pre_compute_impl(pc, inst, pre_compute)?;
         let fn_ptr = match (local_opcode, enabled, is_native_store) {
             (LOADW, true, _) => execute_e1_impl::<_, _, U8, LoadWOp, true>,
             (LOADW, false, _) => execute_e1_impl::<_, _, U8, LoadWOp, false>,
@@ -463,18 +423,64 @@ where
     }
 }
 
-unsafe fn execute_e1_impl<
+impl<F, A, const NUM_CELLS: usize> StepExecutorE2<F> for LoadStoreStep<A, NUM_CELLS>
+where
+    F: PrimeField32,
+{
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<LoadStorePreCompute>>()
+    }
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let pre_compute: &mut E2PreCompute<LoadStorePreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+        let (local_opcode, enabled, is_native_store) =
+            self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        let fn_ptr = match (local_opcode, enabled, is_native_store) {
+            (LOADW, true, _) => execute_e2_impl::<_, _, U8, LoadWOp, true>,
+            (LOADW, false, _) => execute_e2_impl::<_, _, U8, LoadWOp, false>,
+            (LOADHU, true, _) => execute_e2_impl::<_, _, U8, LoadHUOp, true>,
+            (LOADHU, false, _) => execute_e2_impl::<_, _, U8, LoadHUOp, false>,
+            (LOADBU, true, _) => execute_e2_impl::<_, _, U8, LoadBUOp, true>,
+            (LOADBU, false, _) => execute_e2_impl::<_, _, U8, LoadBUOp, false>,
+            (STOREW, true, false) => execute_e2_impl::<_, _, U8, StoreWOp, true>,
+            (STOREW, false, false) => execute_e2_impl::<_, _, U8, StoreWOp, false>,
+            (STOREW, true, true) => execute_e2_impl::<_, _, F, StoreWOp, true>,
+            (STOREW, false, true) => execute_e2_impl::<_, _, F, StoreWOp, false>,
+            (STOREH, true, false) => execute_e2_impl::<_, _, U8, StoreHOp, true>,
+            (STOREH, false, false) => execute_e2_impl::<_, _, U8, StoreHOp, false>,
+            (STOREH, true, true) => execute_e2_impl::<_, _, F, StoreHOp, true>,
+            (STOREH, false, true) => execute_e2_impl::<_, _, F, StoreHOp, false>,
+            (STOREB, true, false) => execute_e2_impl::<_, _, U8, StoreBOp, true>,
+            (STOREB, false, false) => execute_e2_impl::<_, _, U8, StoreBOp, false>,
+            (STOREB, true, true) => execute_e2_impl::<_, _, F, StoreBOp, true>,
+            (STOREB, false, true) => execute_e2_impl::<_, _, F, StoreBOp, false>,
+            (_, _, _) => unreachable!(),
+        };
+        Ok(fn_ptr)
+    }
+}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<
     F: PrimeField32,
     CTX: E1ExecutionCtx,
     T: Copy + Debug + Default,
     OP: LoadStoreOp<T>,
     const ENABLED: bool,
 >(
-    pre_compute: &[u8],
+    pre_compute: &LoadStorePreCompute,
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
-    let pre_compute: &LoadStorePreCompute = pre_compute.borrow();
-
     let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
         vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs1_val = u32::from_le_bytes(rs1_bytes);
@@ -512,6 +518,91 @@ unsafe fn execute_e1_impl<
 
     vm_state.pc += DEFAULT_PC_STEP;
     vm_state.instret += 1;
+}
+
+unsafe fn execute_e1_impl<
+    F: PrimeField32,
+    CTX: E1ExecutionCtx,
+    T: Copy + Debug + Default,
+    OP: LoadStoreOp<T>,
+    const ENABLED: bool,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &LoadStorePreCompute = pre_compute.borrow();
+    execute_e12_impl::<F, CTX, T, OP, ENABLED>(pre_compute, vm_state);
+}
+
+unsafe fn execute_e2_impl<
+    F: PrimeField32,
+    CTX: E2ExecutionCtx,
+    T: Copy + Debug + Default,
+    OP: LoadStoreOp<T>,
+    const ENABLED: bool,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &E2PreCompute<LoadStorePreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl::<F, CTX, T, OP, ENABLED>(&pre_compute.data, vm_state);
+}
+
+impl<A, const NUM_CELLS: usize> LoadStoreStep<A, NUM_CELLS> {
+    /// Return (local_opcode, enabled, is_native_store)
+    fn pre_compute_impl<F: PrimeField32>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut LoadStorePreCompute,
+    ) -> Result<(Rv32LoadStoreOpcode, bool, bool)> {
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
+            ..
+        } = inst;
+        let enabled = !f.is_zero();
+
+        let e_u32 = e.as_canonical_u32();
+        if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 == RV32_IMM_AS {
+            return Err(InvalidInstruction(pc));
+        }
+
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(
+            opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        );
+        match local_opcode {
+            LOADW | LOADBU | LOADHU => {}
+            STOREW | STOREH | STOREB => {
+                if !enabled {
+                    return Err(InvalidInstruction(pc));
+                }
+            }
+            _ => unreachable!("LoadStoreStep should not handle LOADB/LOADH opcodes"),
+        }
+
+        let imm = c.as_canonical_u32();
+        let imm_sign = g.as_canonical_u32();
+        let imm_extended = imm + imm_sign * 0xffff0000;
+        let is_native_store = e_u32 == NATIVE_AS;
+
+        *data = LoadStorePreCompute {
+            imm_extended,
+            a: a.as_canonical_u32() as u8,
+            b: b.as_canonical_u32() as u8,
+            e: e_u32 as u8,
+        };
+        Ok((local_opcode, enabled, is_native_store))
+    }
 }
 
 trait LoadStoreOp<T> {

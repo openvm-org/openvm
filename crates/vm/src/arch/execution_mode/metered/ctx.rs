@@ -161,13 +161,15 @@ impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
         }
     }
 
+    #[inline(always)]
     fn should_suspend<F>(_vm_state: &VmSegmentState<F, Self>) -> bool {
-        todo!()
+        // TODO: support specifying end instret.
+        false
     }
 }
 
 impl<const PAGE_BITS: usize> E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
-    fn on_height_change(&mut self, chip_idx: usize, height_delta: usize) {
-        todo!()
+    fn on_height_change(&mut self, chip_idx: usize, height_delta: u32) {
+        self.trace_heights[chip_idx] += height_delta;
     }
 }

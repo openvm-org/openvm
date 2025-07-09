@@ -20,7 +20,10 @@ use openvm_stark_sdk::{
 use crate::arch::vm::VmExecutor;
 use crate::{
     arch::{
-        execution_mode::e1::{E1Ctx, E1ExecutionControl},
+        execution_mode::{
+            e1::{E1Ctx, E1ExecutionControl},
+            metered::MeteredCtx,
+        },
         interpreter::InterpretedInstance,
         vm::VirtualMachine,
         InsExecutorE1, Streams, VmConfig,
@@ -74,6 +77,9 @@ where
         executor
             .execute(E1Ctx { instret_end: None }, input.clone())
             .expect("Failed to execute");
+        // executor
+        //     .execute(MeteredCtx::new(), input.clone())
+        //     .expect("Failed to execute");
     }
     return None;
     let mut log_blowup = 1;

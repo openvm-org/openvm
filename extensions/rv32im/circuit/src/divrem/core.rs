@@ -7,11 +7,12 @@ use num_bigint::BigUint;
 use num_integer::Integer;
 use openvm_circuit::{
     arch::{
-        execution_mode::E1ExecutionCtx, get_record_from_slice, AdapterAirContext,
-        AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc,
-        ExecutionError::InvalidInstruction, MinimalInstruction, RecordArena, Result,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmSegmentState,
-        VmStateMut,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc,
+        ExecutionError::InvalidInstruction,
+        MinimalInstruction, RecordArena, Result, StepExecutorE1, StepExecutorE2, TraceFiller,
+        TraceStep, VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
@@ -594,6 +595,89 @@ where
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>> {
+        let data: &mut DivRemPreCompute = data.borrow_mut();
+        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
+        let fn_ptr = match local_opcode {
+            DivRemOpcode::DIV => execute_e1_impl::<_, _, DivOp>,
+            DivRemOpcode::DIVU => execute_e1_impl::<_, _, DivuOp>,
+            DivRemOpcode::REM => execute_e1_impl::<_, _, RemOp>,
+            DivRemOpcode::REMU => execute_e1_impl::<_, _, RemuOp>,
+        };
+        Ok(fn_ptr)
+    }
+}
+
+impl<F, A, const LIMB_BITS: usize> StepExecutorE2<F>
+    for DivRemStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
+{
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<DivRemPreCompute>>()
+    }
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let data: &mut E2PreCompute<DivRemPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        let fn_ptr = match local_opcode {
+            DivRemOpcode::DIV => execute_e2_impl::<_, _, DivOp>,
+            DivRemOpcode::DIVU => execute_e2_impl::<_, _, DivuOp>,
+            DivRemOpcode::REM => execute_e2_impl::<_, _, RemOp>,
+            DivRemOpcode::REMU => execute_e2_impl::<_, _, RemuOp>,
+        };
+        Ok(fn_ptr)
+    }
+}
+
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: DivRemOp>(
+    pre_compute: &DivRemPreCompute,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let rs1 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs2 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
+    let result = <OP as DivRemOp>::compute(rs1, rs2);
+    vm_state.vm_write::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32, &result);
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: DivRemOp>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &DivRemPreCompute = pre_compute.borrow();
+    execute_e12_impl::<F, CTX, OP>(pre_compute, vm_state);
+}
+
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, OP: DivRemOp>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &E2PreCompute<DivRemPreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl::<F, CTX, OP>(&pre_compute.data, vm_state);
+}
+
+impl<A, const LIMB_BITS: usize> DivRemStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+    #[inline(always)]
+    fn pre_compute_impl<F: PrimeField32>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut DivRemPreCompute,
+    ) -> Result<DivRemOpcode> {
         let &Instruction {
             opcode, a, b, c, d, ..
         } = inst;
@@ -607,27 +691,8 @@ where
             b: b.as_canonical_u32() as u8,
             c: c.as_canonical_u32() as u8,
         };
-        let fn_ptr = match local_opcode {
-            DivRemOpcode::DIV => execute_e1_impl::<_, _, DivOp>,
-            DivRemOpcode::DIVU => execute_e1_impl::<_, _, DivuOp>,
-            DivRemOpcode::REM => execute_e1_impl::<_, _, RemOp>,
-            DivRemOpcode::REMU => execute_e1_impl::<_, _, RemuOp>,
-        };
-        Ok(fn_ptr)
+        Ok(local_opcode)
     }
-}
-
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: DivRemOp>(
-    pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
-) {
-    let pre_compute: &DivRemPreCompute = pre_compute.borrow();
-    let rs1 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
-    let rs2 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
-    let result = <OP as DivRemOp>::compute(rs1, rs2);
-    vm_state.vm_write::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32, &result);
-    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    vm_state.instret += 1;
 }
 
 trait DivRemOp {

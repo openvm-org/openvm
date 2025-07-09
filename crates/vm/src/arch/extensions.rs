@@ -10,7 +10,7 @@ use getset::Getters;
 use itertools::{zip_eq, Itertools};
 #[cfg(feature = "bench-metrics")]
 use metrics::counter;
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
 use openvm_circuit_primitives::{
     utils::next_power_of_two_or_zero,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
@@ -324,6 +324,10 @@ impl<E, P> VmInventory<E, P> {
         self.executors.get(*id)
     }
 
+    pub fn get_executor_id(&self, opcode: VmOpcode) -> Option<ExecutorId> {
+        self.instruction_lookup.get(&opcode).cloned()
+    }
+
     pub fn get_mut_executor(&mut self, opcode: &VmOpcode) -> Option<&mut E> {
         let id = self.instruction_lookup.get(opcode)?;
         self.executors.get_mut(*id)
@@ -531,7 +535,9 @@ impl<F: PrimeField32> SystemBase<F> {
     }
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor, InsExecutorE1)]
+#[derive(
+    ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor, InsExecutorE1, InsExecutorE2,
+)]
 pub enum SystemExecutor<F: PrimeField32> {
     PublicValues(PublicValuesChip<F>),
     Phantom(RefCell<PhantomChip<F>>),

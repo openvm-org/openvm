@@ -2,10 +2,13 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1ExecutionCtx, get_record_from_slice, CustomBorrow, ExecuteFunc,
-        ExecutionBridge, ExecutionError, ExecutionError::InvalidInstruction, ExecutionState,
-        MatrixRecordArena, MultiRowLayout, MultiRowMetadata, NewVmChipWrapper, RecordArena, Result,
-        SizedRecord, StepExecutorE1, TraceFiller, TraceStep, VmSegmentState, VmStateMut,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        get_record_from_slice, CustomBorrow, E2PreCompute, ExecuteFunc, ExecutionBridge,
+        ExecutionError,
+        ExecutionError::InvalidInstruction,
+        ExecutionState, MatrixRecordArena, MultiRowLayout, MultiRowMetadata, NewVmChipWrapper,
+        RecordArena, Result, SizedRecord, StepExecutorE1, StepExecutorE2, TraceFiller, TraceStep,
+        VmSegmentState, VmStateMut,
     },
     system::memory::{
         offline_checker::{
@@ -620,27 +623,9 @@ where
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>> {
-        let &Instruction {
-            opcode,
-            a,
-            b,
-            c,
-            d,
-            e,
-            ..
-        } = inst;
-        if d.as_canonical_u32() != RV32_REGISTER_AS || e.as_canonical_u32() != RV32_MEMORY_AS {
-            return Err(InvalidInstruction(pc));
-        }
         let pre_compute: &mut HintStorePreCompute = data.borrow_mut();
-        *pre_compute = {
-            HintStorePreCompute {
-                c: c.as_canonical_u32(),
-                a: a.as_canonical_u32() as u8,
-                b: b.as_canonical_u32() as u8,
-            }
-        };
-        let fn_ptr = match Rv32HintStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset)) {
+        let local_opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
+        let fn_ptr = match local_opcode {
             HINT_STOREW => execute_e1_impl::<_, _, true>,
             HINT_BUFFER => execute_e1_impl::<_, _, false>,
         };
@@ -648,11 +633,40 @@ where
     }
 }
 
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_HINT_STOREW: bool>(
-    pre_compute: &[u8],
+impl<F> StepExecutorE2<F> for Rv32HintStoreStep
+where
+    F: PrimeField32,
+{
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<HintStorePreCompute>>()
+    }
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let pre_compute: &mut E2PreCompute<HintStorePreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+        let local_opcode = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        let fn_ptr = match local_opcode {
+            HINT_STOREW => execute_e2_impl::<_, _, true>,
+            HINT_BUFFER => execute_e2_impl::<_, _, false>,
+        };
+        Ok(fn_ptr)
+    }
+}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_HINT_STOREW: bool>(
+    pre_compute: &HintStorePreCompute,
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
-    let pre_compute: &HintStorePreCompute = pre_compute.borrow();
     let mem_ptr_limbs = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
     let mem_ptr = u32::from_le_bytes(mem_ptr_limbs);
 
@@ -687,6 +701,58 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_HINT_ST
 
     vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
     vm_state.instret += 1;
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_HINT_STOREW: bool>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &HintStorePreCompute = pre_compute.borrow();
+    execute_e12_impl::<F, CTX, IS_HINT_STOREW>(pre_compute, vm_state);
+}
+
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const IS_HINT_STOREW: bool>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &E2PreCompute<HintStorePreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl::<F, CTX, IS_HINT_STOREW>(&pre_compute.data, vm_state);
+}
+
+impl Rv32HintStoreStep {
+    #[inline(always)]
+    fn pre_compute_impl<F: PrimeField32>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut HintStorePreCompute,
+    ) -> Result<Rv32HintStoreOpcode> {
+        let &Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
+        } = inst;
+        if d.as_canonical_u32() != RV32_REGISTER_AS || e.as_canonical_u32() != RV32_MEMORY_AS {
+            return Err(InvalidInstruction(pc));
+        }
+        *data = {
+            HintStorePreCompute {
+                c: c.as_canonical_u32(),
+                a: a.as_canonical_u32() as u8,
+                b: b.as_canonical_u32() as u8,
+            }
+        };
+        Ok(Rv32HintStoreOpcode::from_usize(
+            opcode.local_opcode_idx(self.offset),
+        ))
+    }
 }
 
 pub type Rv32HintStoreChip<F> =

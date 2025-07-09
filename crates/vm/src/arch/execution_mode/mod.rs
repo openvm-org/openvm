@@ -11,5 +11,5 @@ pub trait E1ExecutionCtx: Sized {
 }
 
 pub trait E2ExecutionCtx: E1ExecutionCtx {
-    fn on_height_change(&mut self, chip_idx: usize, height_delta: usize);
+    fn on_height_change(&mut self, chip_idx: usize, height_delta: u32);
 }

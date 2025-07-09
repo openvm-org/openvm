@@ -451,7 +451,7 @@ pub fn ins_executor_e2_executor_derive(input: TokenStream) -> TokenStream {
             let where_clause = new_generics.make_where_clause();
             where_clause
                 .predicates
-                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InsExecutorE1<F> });
+                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InsExecutorE2<F> });
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE2<F> for #name #ty_generics #where_clause {
                     #[inline(always)]
@@ -504,7 +504,7 @@ pub fn ins_executor_e2_executor_derive(input: TokenStream) -> TokenStream {
             let pre_compute_size_arms = variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>>::pre_compute_size(x)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>>::e2_pre_compute_size(x)
                 }
             }).collect::<Vec<_>>();
             let pre_compute_e2_arms = variants.iter().map(|(variant_name, field)| {
@@ -513,17 +513,11 @@ pub fn ins_executor_e2_executor_derive(input: TokenStream) -> TokenStream {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>>::pre_compute_e2(x, chip_idx, pc, instruction, data)
                 }
             }).collect::<Vec<_>>();
-            let set_trace_height_arms = variants.iter().map(|(variant_name, field)| {
-                let field_ty = &field.ty;
-                quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>>::set_trace_height(x, height)
-                }
-            }).collect::<Vec<_>>();
 
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic> for #name #ty_generics {
                     #[inline(always)]
-                    fn pre_compute_size(&self) -> usize {
+                    fn e2_pre_compute_size(&self) -> usize {
                         match self {
                             #(#pre_compute_size_arms,)*
                         }
@@ -532,6 +526,7 @@ pub fn ins_executor_e2_executor_derive(input: TokenStream) -> TokenStream {
                     #[inline(always)]
                     fn pre_compute_e2<Ctx>(
                         &self,
+                        chip_idx: usize,
                         pc: u32,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         data: &mut [u8],
@@ -540,15 +535,6 @@ pub fn ins_executor_e2_executor_derive(input: TokenStream) -> TokenStream {
                         Ctx: ::openvm_circuit::arch::execution_mode::E2ExecutionCtx, {
                         match self {
                             #(#pre_compute_e2_arms,)*
-                        }
-                    }
-
-                    fn set_trace_height(
-                        &mut self,
-                        height: usize,
-                    ) {
-                        match self {
-                            #(#set_trace_height_arms,)*
                         }
                     }
                 }
@@ -793,7 +779,7 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
             let periphery_type = Ident::new(&format!("{}Periphery", name), name.span());
 
             TokenStream::from(quote! {
-                #[derive(::openvm_circuit::circuit_derive::ChipUsageGetter, ::openvm_circuit::circuit_derive::Chip, ::openvm_circuit::derive::InstructionExecutor, ::openvm_circuit::derive::InsExecutorE1, ::derive_more::derive::From, ::openvm_circuit::derive::AnyEnum)]
+                #[derive(::openvm_circuit::circuit_derive::ChipUsageGetter, ::openvm_circuit::circuit_derive::Chip, ::openvm_circuit::derive::InstructionExecutor, ::openvm_circuit::derive::InsExecutorE1, ::openvm_circuit::derive::InsExecutorE2, ::derive_more::derive::From, ::openvm_circuit::derive::AnyEnum)]
                 pub enum #executor_type<F: PrimeField32> {
                     #[any_enum]
                     #source_name_upper(#source_executor_type<F>),
