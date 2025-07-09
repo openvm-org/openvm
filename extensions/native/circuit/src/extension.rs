@@ -471,3 +471,11 @@ impl Default for Rv32WithKernelsConfig {
 
 // Default implementation uses no init file
 impl InitFileGenerator for Rv32WithKernelsConfig {}
+
+// Pre-computed maximum trace heights for NativeConfig. Found by doubling
+// the actual trace heights of kitchen-sink leaf verification (except for
+// VariableRangeChecker, which has a fixed height).
+pub const NATIVE_MAX_TRACE_HEIGHTS: &[usize] = &[
+    4194304, 4, 128, 2097152, 8388608, 4194304, 131072, 524288, 8388608, 2097152, 8388608, 131072,
+    2097152, 524288, 4194304, 32768, 262144,
+];
