@@ -8,6 +8,7 @@ use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::{instructions::exe::VmExe, SingleSegmentVmExecutor, SystemConfig};
 use openvm_continuations::verifier::leaf::types::LeafVmVerifierInput;
 use openvm_ecc_circuit::{WeierstrassExtension, P256_CONFIG, SECP256K1_CONFIG};
+use openvm_native_circuit::NATIVE_MAX_TRACE_HEIGHTS;
 use openvm_native_recursion::halo2::utils::{CacheHalo2ParamsReader, DEFAULT_PARAMS_DIR};
 use openvm_pairing_circuit::{PairingCurve, PairingExtension};
 use openvm_pairing_guest::{
@@ -96,19 +97,9 @@ fn main() -> Result<()> {
             &app_proof,
             args.agg_tree_config.num_children_leaf,
         );
-
-        let names = full_agg_pk
-            .agg_stark_pk
-            .leaf_vm_pk
-            .vm_pk
-            .per_air
-            .iter()
-            .map(|k| k.air_name.clone())
-            .collect::<Vec<_>>();
-        println!("names: {:?}", names);
+        let vm_vk = full_agg_pk.agg_stark_pk.leaf_vm_pk.vm_pk.get_vk();
 
         leaf_inputs.iter().for_each(|leaf_input| {
-            println!("leaf_input len: {:?}", leaf_input.proofs.len());
             let executor = {
                 let mut executor = SingleSegmentVmExecutor::new(
                     full_agg_pk.agg_stark_pk.leaf_vm_pk.vm_config.clone(),
@@ -123,8 +114,6 @@ fn main() -> Result<()> {
                 );
                 executor
             };
-
-            let vm_vk = full_agg_pk.agg_stark_pk.leaf_vm_pk.vm_pk.get_vk();
             let max_trace_heights = executor
                 .execute_metered(
                     app_pk.leaf_committed_exe.exe.clone(),
@@ -145,8 +134,20 @@ fn main() -> Result<()> {
                 .per_air
                 .iter()
                 .map(|(_, air)| air.raw.height())
-                .collect::<Vec<_>>();
+                .collect::<Vec<usize>>();
             println!("actual_trace_heights: {:?}", actual_trace_heights);
+
+            actual_trace_heights
+                .iter()
+                .zip(NATIVE_MAX_TRACE_HEIGHTS)
+                .for_each(|(&actual, &expected)| {
+                    assert!(
+                        actual <= expected,
+                        "Actual trace height {} exceeds expected height {}",
+                        actual,
+                        expected
+                    );
+                });
         });
     }
 
