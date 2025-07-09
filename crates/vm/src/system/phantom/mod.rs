@@ -29,8 +29,8 @@ use crate::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionError,
-        ExecutionState, InsExecutorE1, PcIncOrSet, PhantomSubExecutor, RecordArena, TraceFiller,
-        TraceStep, VmChipWrapper, VmStateMut,
+        ExecutionState, InsExecutorE1, InstructionExecutor, PcIncOrSet, PhantomSubExecutor,
+        RecordArena, TraceFiller, TraceStep, VmChipWrapper, VmStateMut,
     },
     system::memory::MemoryAuxColsFactory,
 };
@@ -190,21 +190,25 @@ where
     }
 }
 
-impl<F> TraceStep<F> for PhantomExecutor<F>
-where
-    F: PrimeField32,
-{
+impl<F> TraceStep<F> for PhantomExecutor<F> {
     type RecordLayout = EmptyMultiRowLayout;
     type RecordMut<'a> = &'a mut PhantomRecord;
+}
 
-    fn execute<'buf, RA>(
+impl<F, RA> InstructionExecutor<F, RA> for PhantomExecutor<F>
+where
+    F: PrimeField32,
+    for<'buf> RA: RecordArena<
+        'buf,
+        <Self as TraceStep<F>>::RecordLayout,
+        <Self as TraceStep<F>>::RecordMut<'buf>,
+    >,
+{
+    fn execute(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory, RA>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<(), ExecutionError> {
         let pc = *state.pc;
         let record: &mut PhantomRecord = state.ctx.alloc(EmptyMultiRowLayout::default());
         record.pc = pc;

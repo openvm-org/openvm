@@ -22,16 +22,10 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::{
-    execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-    Result, VmStateMut,
-};
-use crate::{
-    arch::InstructionExecutor,
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory, SharedMemoryHelper,
-    },
+use super::{execution_mode::E1E2ExecutionCtx, VmStateMut};
+use crate::system::memory::{
+    online::{GuestMemory, TracingMemory},
+    MemoryAuxColsFactory, SharedMemoryHelper,
 };
 
 /// The interface between primitive AIR and machine adapter AIR.
@@ -121,6 +115,9 @@ pub trait RecordArena<'a, Layout, RecordMut> {
     fn alloc(&'a mut self, layout: Layout) -> RecordMut;
 }
 
+/// This is a helper trait for implementing [InstructionExecutor](crate::arch::InstructionExecutor)
+/// to provide associated types.
+///
 /// Interface for trace generation of a single instruction. The trace is provided as a mutable
 /// buffer during both instruction execution and trace generation.
 /// It is expected that no additional memory allocation is necessary and the trace buffer
@@ -128,18 +125,6 @@ pub trait RecordArena<'a, Layout, RecordMut> {
 pub trait TraceStep<F> {
     type RecordLayout;
     type RecordMut<'a>;
-
-    /// The context in `state` is expected to be the record arena for this specific step.
-    fn execute<'buf, RA>(
-        &mut self,
-        state: VmStateMut<'buf, F, TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>;
-
-    /// Displayable opcode name for logging and debugging purposes.
-    fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
 // TODO[jpw]: this might be temporary trait before moving trace to CTX

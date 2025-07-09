@@ -10,7 +10,7 @@ use openvm_instructions::{LocalOpcode, PublishOpcode, SystemOpcode};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::{LookupBus, PermutationCheckBus},
-    p3_field::{Field, PrimeField32},
+    p3_field::PrimeField32,
     prover::{
         cpu::CpuBackend,
         hal::ProverBackend,
@@ -206,7 +206,7 @@ impl<SC: StarkGenericConfig> SystemAirInventory<SC> {
     }
 }
 
-impl<F: Field> VmExecutionConfig<F> for SystemConfig {
+impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
     type Executor = SystemExecutor<F>;
 
     /// The only way to create an [ExecutorInventory] is from a [SystemConfig]. This will add an

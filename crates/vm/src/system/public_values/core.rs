@@ -19,7 +19,8 @@ use crate::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, BasicAdapterInterface, EmptyAdapterCoreLayout, InsExecutorE1,
-        MinimalInstruction, RecordArena, Result, TraceFiller, TraceStep, VmCoreAir, VmStateMut,
+        InstructionExecutor, MinimalInstruction, RecordArena, Result, TraceFiller, TraceStep,
+        VmCoreAir, VmStateMut,
     },
     system::{
         memory::{
@@ -158,12 +159,23 @@ impl<F: Clone, A: Clone> Clone for PublicValuesStep<F, A> {
 
 impl<F, A> TraceStep<F> for PublicValuesStep<F, A>
 where
-    F: PrimeField32,
+    F: 'static,
     A: 'static + AdapterTraceStep<F, ReadData = [[F; 1]; 2], WriteData = [[F; 1]; 0]>,
 {
     type RecordLayout = EmptyAdapterCoreLayout<F, A>;
     type RecordMut<'a> = (A::RecordMut<'a>, &'a mut PublicValuesRecord<F>);
+}
 
+impl<F, A, RA> InstructionExecutor<F, RA> for PublicValuesStep<F, A>
+where
+    F: PrimeField32,
+    A: 'static + Clone + AdapterTraceStep<F, ReadData = [[F; 1]; 2], WriteData = [[F; 1]; 0]>,
+    for<'buf> RA: RecordArena<
+        'buf,
+        <Self as TraceStep<F>>::RecordLayout,
+        <Self as TraceStep<F>>::RecordMut<'buf>,
+    >,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -171,14 +183,11 @@ where
         )
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory, RA>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);

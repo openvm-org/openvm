@@ -1,12 +1,10 @@
-use std::cell::RefCell;
-
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode,
 };
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::FieldAlgebra,
 };
 use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
@@ -17,7 +15,7 @@ use super::{
     Streams,
 };
 use crate::{
-    arch::{MatrixRecordArena, TraceStep},
+    arch::MatrixRecordArena,
     system::{
         memory::online::{GuestMemory, TracingMemory},
         program::{ProgramBus, StaticProgramError},
@@ -87,9 +85,8 @@ pub struct VmStateMut<'a, F, MEM, CTX> {
     pub ctx: &'a mut CTX,
 }
 
-// TODO: old
-// TEMPORARY: same as TraceStep but without associated types
-pub trait InstructionExecutor<F, RA = MatrixRecordArena<F>> {
+// TODO[jpw]: Can we avoid Clone by making executors stateless?
+pub trait InstructionExecutor<F, RA = MatrixRecordArena<F>>: Clone {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.
     fn execute(
