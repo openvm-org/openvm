@@ -871,24 +871,6 @@ where
         Ctx: E1E2ExecutionCtx;
 }
 
-// TODO: Rename core/step to operator
-pub trait StepExecutorE1<F> {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Ctx: E1E2ExecutionCtx;
-
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()>;
-}
-
 #[derive(Clone, Copy, derive_new::new)]
 pub struct VmAirWrapper<A, C> {
     pub adapter: A,

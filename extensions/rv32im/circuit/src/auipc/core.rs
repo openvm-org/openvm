@@ -7,8 +7,8 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, ImmInstruction, RecordArena, Result,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterTraceStep, EmptyAdapterCoreLayout, ImmInstruction, InsExecutorE1, RecordArena,
+        Result, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -294,7 +294,7 @@ where
     }
 }
 
-impl<F, A> StepExecutorE1<F> for Rv32AuipcStep<A>
+impl<F, A> InsExecutorE1<F> for Rv32AuipcStep<A>
 where
     F: PrimeField32,
     A: 'static + AdapterExecutorE1<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,

@@ -8,8 +8,8 @@ use openvm_circuit::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterCoreMetadata,
         AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, CustomBorrow, DynAdapterInterface,
-        DynArray, MinimalInstruction, RecordArena, Result, SizedRecord, StepExecutorE1,
-        TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        DynArray, InsExecutorE1, MinimalInstruction, RecordArena, Result, SizedRecord, TraceFiller,
+        TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -434,7 +434,7 @@ where
     }
 }
 
-impl<F, A> StepExecutorE1<F> for FieldExpressionStep<A>
+impl<F, A> InsExecutorE1<F> for FieldExpressionStep<A>
 where
     F: PrimeField32,
     A: 'static

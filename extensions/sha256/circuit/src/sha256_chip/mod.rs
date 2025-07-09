@@ -6,7 +6,7 @@ use std::cmp::min;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        Result, StepExecutorE1, VmChipWrapper, VmStateMut,
+        InsExecutorE1, Result, VmChipWrapper, VmStateMut,
     },
     system::memory::online::GuestMemory,
 };
@@ -83,7 +83,7 @@ impl Sha256VmFiller {
     }
 }
 
-impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
+impl<F: PrimeField32> InsExecutorE1<F> for Sha256VmStep {
     fn execute_e1<Ctx>(
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,

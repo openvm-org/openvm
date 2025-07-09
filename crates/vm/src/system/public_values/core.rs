@@ -18,8 +18,8 @@ use crate::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, BasicAdapterInterface, EmptyAdapterCoreLayout, MinimalInstruction,
-        RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep, VmCoreAir, VmStateMut,
+        AdapterTraceStep, BasicAdapterInterface, EmptyAdapterCoreLayout, InsExecutorE1,
+        MinimalInstruction, RecordArena, Result, TraceFiller, TraceStep, VmCoreAir, VmStateMut,
     },
     system::{
         memory::{
@@ -241,7 +241,7 @@ where
     }
 }
 
-impl<F, A> StepExecutorE1<F> for PublicValuesStep<F, A>
+impl<F, A> InsExecutorE1<F> for PublicValuesStep<F, A>
 where
     F: PrimeField32,
     A: 'static + for<'a> AdapterExecutorE1<F, ReadData = [F; 2], WriteData = [F; 0]>,

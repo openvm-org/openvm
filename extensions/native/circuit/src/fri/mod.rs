@@ -8,8 +8,8 @@ use itertools::zip_eq;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionState, MultiRowLayout,
-        MultiRowMetadata, RecordArena, Result, SizedRecord, StepExecutorE1, TraceFiller, TraceStep,
+        get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionState, InsExecutorE1,
+        MultiRowLayout, MultiRowMetadata, RecordArena, Result, SizedRecord, TraceFiller, TraceStep,
         VmChipWrapper, VmStateMut,
     },
     system::{
@@ -1052,7 +1052,7 @@ impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
     }
 }
 
-impl<F: PrimeField32> StepExecutorE1<F> for FriReducedOpeningStep {
+impl<F: PrimeField32> InsExecutorE1<F> for FriReducedOpeningStep {
     fn execute_e1<Ctx>(
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,

@@ -4,7 +4,7 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep,
-        EmptyAdapterCoreLayout, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
+        EmptyAdapterCoreLayout, InsExecutorE1, RecordArena, Result, TraceFiller, TraceStep,
         VmStateMut,
     },
     system::memory::{
@@ -116,7 +116,7 @@ where
     }
 }
 
-impl<F, A> StepExecutorE1<F> for NativeBranchEqualStep<A>
+impl<F, A> InsExecutorE1<F> for NativeBranchEqualStep<A>
 where
     F: PrimeField32,
     A: 'static + for<'a> AdapterExecutorE1<F, ReadData: Into<[F; 2]>, WriteData = ()>,

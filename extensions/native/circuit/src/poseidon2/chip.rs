@@ -3,7 +3,7 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        CustomBorrow, MultiRowLayout, MultiRowMetadata, RecordArena, SizedRecord, StepExecutorE1,
+        CustomBorrow, InsExecutorE1, MultiRowLayout, MultiRowMetadata, RecordArena, SizedRecord,
         TraceFiller, TraceStep, VmStateMut,
     },
     system::{
@@ -821,7 +821,7 @@ fn mem_fill_helper<F: PrimeField32>(
     mem_helper.fill(prev_ts, timestamp, base_aux);
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE1<F>
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> InsExecutorE1<F>
     for NativePoseidon2Step<F, SBOX_REGISTERS>
 {
     fn execute_e1<Ctx>(

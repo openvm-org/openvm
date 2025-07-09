@@ -18,7 +18,7 @@ pub use extension::*;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        ExecutionBridge, Result, StepExecutorE1, VmChipWrapper, VmStateMut,
+        ExecutionBridge, InsExecutorE1, Result, VmChipWrapper, VmStateMut,
     },
     system::memory::online::GuestMemory,
 };
@@ -81,7 +81,7 @@ pub struct KeccakVmFiller {
     pub pointer_max_bits: usize,
 }
 
-impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
+impl<F: PrimeField32> InsExecutorE1<F> for KeccakVmStep {
     fn execute_e1<Ctx>(
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,

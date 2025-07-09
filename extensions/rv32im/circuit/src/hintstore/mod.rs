@@ -4,7 +4,7 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionError, ExecutionState,
-        MultiRowLayout, MultiRowMetadata, RecordArena, Result, SizedRecord, StepExecutorE1,
+        InsExecutorE1, MultiRowLayout, MultiRowMetadata, RecordArena, Result, SizedRecord,
         TraceFiller, TraceStep, VmChipWrapper, VmStateMut,
     },
     system::memory::{
@@ -592,7 +592,7 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
     }
 }
 
-impl<F> StepExecutorE1<F> for Rv32HintStoreStep
+impl<F> InsExecutorE1<F> for Rv32HintStoreStep
 where
     F: PrimeField32,
 {

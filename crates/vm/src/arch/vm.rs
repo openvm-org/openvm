@@ -236,11 +236,12 @@ where
     }
 }
 
+// TODO[jpw]: Can we avoid Executor: Clone by making executors stateless?
 impl<F, VC> VmExecutor<F, VC>
 where
     F: PrimeField32,
     VC: VmExecutionConfig<F> + AsRef<SystemConfig>,
-    VC::Executor: InsExecutorE1<F>,
+    VC::Executor: Clone + InsExecutorE1<F>,
 {
     /// Base E1 execution function that operates from a given state
     pub fn execute_e1_from_state(
@@ -672,7 +673,8 @@ where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
     VC: VmProverConfig<E::SC, E::PB>,
-    VC::Executor: InsExecutorE1<Val<E::SC>> + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+    VC::Executor:
+        Clone + InsExecutorE1<Val<E::SC>> + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
 {
     pub fn new(
         engine: E,

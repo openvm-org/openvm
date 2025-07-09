@@ -7,7 +7,7 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, RecordArena, Result, StepExecutorE1, TraceFiller,
+        AdapterTraceStep, EmptyAdapterCoreLayout, InsExecutorE1, RecordArena, Result, TraceFiller,
         TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
@@ -376,7 +376,7 @@ where
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> StepExecutorE1<F> for LoadStoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> InsExecutorE1<F> for LoadStoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static

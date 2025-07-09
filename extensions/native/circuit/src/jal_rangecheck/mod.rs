@@ -6,8 +6,8 @@ use std::{
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionState, PcIncOrSet,
-        RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep, VmChipWrapper, VmStateMut,
+        get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionState, InsExecutorE1,
+        PcIncOrSet, RecordArena, Result, TraceFiller, TraceStep, VmChipWrapper, VmStateMut,
     },
     system::{
         memory::{
@@ -297,7 +297,7 @@ impl<F: PrimeField32> TraceFiller<F> for JalRangeCheckFiller {
     }
 }
 
-impl<F> StepExecutorE1<F> for JalRangeCheckStep
+impl<F> InsExecutorE1<F> for JalRangeCheckStep
 where
     F: PrimeField32,
 {
