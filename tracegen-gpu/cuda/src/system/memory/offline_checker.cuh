@@ -2,7 +2,6 @@
 
 #include "constants.h"
 #include "less_than.cuh"
-#include "trace_access.h"
 
 using namespace riscv;
 

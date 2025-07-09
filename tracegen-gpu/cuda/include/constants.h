@@ -17,3 +17,7 @@ namespace native {
 static const size_t AS_IMMEDIATE = 0;
 static const size_t AS_NATIVE = 4;
 } // namespace native
+
+namespace poseidon2 {
+static const size_t CHUNK = 8;
+} // namespace poseidon2

@@ -74,6 +74,7 @@ fn main() {
         .file("cuda/src/extensions/native/field_arithmetic.cu")
         .file("cuda/src/extensions/native/branch_eq.cu")
         .file("cuda/src/extensions/native/castf.cu")
+        .file("cuda/src/extensions/native/poseidon2/kernels.cu")
         .file("cuda/src/primitives/bitwise_op_lookup.cu")
         .file("cuda/src/primitives/var_range.cu")
         .file("cuda/src/primitives/range_tuple.cu")
