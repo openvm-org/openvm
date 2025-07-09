@@ -130,13 +130,12 @@ impl AluOp for AddOp {
         let rs1_u64: [u64; 4] = unsafe { transmute(rs1) };
         let rs2_u64: [u64; 4] = unsafe { transmute(rs2) };
         let mut rd_u64 = [0u64; 4];
-        let (res, mut overflow) = rs1_u64[0].overflowing_add(rs2_u64[0]);
+        let (res, mut carry) = rs1_u64[0].overflowing_add(rs2_u64[0]);
         rd_u64[0] = res;
-        // Compiler will expand this loop.
         for i in 1..4 {
             let (res1, c1) = rs1_u64[i].overflowing_add(rs2_u64[i]);
-            let (res2, c2) = res1.overflowing_add(overflow as u64);
-            overflow = c1 || c2;
+            let (res2, c2) = res1.overflowing_add(carry as u64);
+            carry = c1 || c2;
             rd_u64[i] = res2;
         }
         unsafe { transmute(rd_u64) }
@@ -148,13 +147,12 @@ impl AluOp for SubOp {
         let rs1_u64: [u64; 4] = unsafe { transmute(rs1) };
         let rs2_u64: [u64; 4] = unsafe { transmute(rs2) };
         let mut rd_u64 = [0u64; 4];
-        let (res, mut overflow) = rs1_u64[0].overflowing_sub(rs2_u64[0]);
+        let (res, mut borrow) = rs1_u64[0].overflowing_sub(rs2_u64[0]);
         rd_u64[0] = res;
-        // Compiler will expand this loop.
         for i in 1..4 {
             let (res1, c1) = rs1_u64[i].overflowing_sub(rs2_u64[i]);
-            let (res2, c2) = res1.overflowing_sub(overflow as u64);
-            overflow = c1 || c2;
+            let (res2, c2) = res1.overflowing_sub(borrow as u64);
+            borrow = c1 || c2;
             rd_u64[i] = res2;
         }
         unsafe { transmute(rd_u64) }
