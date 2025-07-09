@@ -208,7 +208,7 @@ where
     };
     // For the dummy proof, we must override the trace heights.
     let app_prover =
-        VmLocalProver::<SC, VC, BabyBearPoseidon2Engine>::new_with_overridden_trace_heights(
+        VmLocalProver::<SC, VC, BabyBearPoseidon2Engine>::new_with_overridden_continuation_trace_heights(
             app_vm_pk,
             dummy_exe,
             Some(overridden_heights),

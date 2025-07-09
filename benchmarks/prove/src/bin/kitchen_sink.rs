@@ -90,6 +90,7 @@ fn main() -> Result<()> {
         &DefaultStaticVerifierPvHandler,
     )?;
 
+    // Verify that NATIVE_MAX_TRACE_HEIGHTS remains valid
     {
         let app_proof =
             sdk.generate_app_proof(app_pk.clone(), app_committed_exe.clone(), StdIn::default())?;
@@ -142,7 +143,7 @@ fn main() -> Result<()> {
                 .zip(NATIVE_MAX_TRACE_HEIGHTS)
                 .for_each(|(&actual, &expected)| {
                     assert!(
-                        actual <= expected,
+                        actual <= (expected as usize),
                         "Actual trace height {} exceeds expected height {}",
                         actual,
                         expected
