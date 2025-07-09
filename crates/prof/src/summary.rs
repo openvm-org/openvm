@@ -56,8 +56,14 @@ impl GithubSummary {
             .zip_eq(md_paths.iter())
             .zip_eq(names)
             .map(|(((aggregated, prev_aggregated), md_path), name)| {
-                let md_filename = md_path.file_name().unwrap().to_str().unwrap();
-                let mut row = aggregated.get_summary_row(md_filename).unwrap();
+                let md_filename = md_path
+                    .file_name()
+                    .expect("Path should have a filename")
+                    .to_str()
+                    .expect("Filename should be valid UTF-8");
+                let mut row = aggregated.get_summary_row(md_filename).unwrap_or_else(|| {
+                    panic!("Failed to get summary row for file '{}'", md_filename)
+                });
                 if let Some(prev_aggregated) = prev_aggregated {
                     // md_filename doesn't matter
                     if let Some(prev_row) = prev_aggregated.get_summary_row(md_filename) {
