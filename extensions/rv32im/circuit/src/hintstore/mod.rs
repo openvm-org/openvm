@@ -5,7 +5,7 @@ use openvm_circuit::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionError, ExecutionState,
         InsExecutorE1, InstructionExecutor, MultiRowLayout, MultiRowMetadata, RecordArena, Result,
-        SizedRecord, TraceFiller, TraceStep, VmChipWrapper, VmStateMut,
+        SizedRecord, TraceFiller, VmChipWrapper, VmStateMut,
     },
     system::memory::{
         offline_checker::{
@@ -364,19 +364,11 @@ pub struct Rv32HintStoreFiller {
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl<F> TraceStep<F> for Rv32HintStoreStep {
-    type RecordLayout = MultiRowLayout<Rv32HintStoreMetadata>;
-    type RecordMut<'a> = Rv32HintStoreRecordMut<'a>;
-}
-
 impl<F, RA> InstructionExecutor<F, RA> for Rv32HintStoreStep
 where
     F: PrimeField32,
-    for<'buf> RA: RecordArena<
-        'buf,
-        <Self as TraceStep<F>>::RecordLayout,
-        <Self as TraceStep<F>>::RecordMut<'buf>,
-    >,
+    for<'buf> RA:
+        RecordArena<'buf, MultiRowLayout<Rv32HintStoreMetadata>, Rv32HintStoreRecordMut<'buf>>,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         if opcode == HINT_STOREW.global_opcode().as_usize() {

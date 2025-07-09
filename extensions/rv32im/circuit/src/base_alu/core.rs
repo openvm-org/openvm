@@ -9,8 +9,8 @@ use openvm_circuit::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, EmptyAdapterCoreLayout, InsExecutorE1, InstructionExecutor,
-        MinimalInstruction, RecordArena, Result, TraceFiller, TraceStep, VmAdapterInterface,
-        VmCoreAir, VmStateMut,
+        MinimalInstruction, RecordArena, Result, TraceFiller, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -196,22 +196,6 @@ pub struct BaseAluFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F>
-    for BaseAluStep<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: 'static,
-    A: 'static
-        + AdapterTraceStep<
-            F,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-        >,
-{
-    /// Instructions that use one trace row per instruction have implicit layout
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut BaseAluCoreRecord<NUM_LIMBS>);
-}
-
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> InstructionExecutor<F, RA>
     for BaseAluStep<A, NUM_LIMBS, LIMB_BITS>
 where
@@ -224,8 +208,8 @@ where
         >,
     for<'buf> RA: RecordArena<
         'buf,
-        <Self as TraceStep<F>>::RecordLayout,
-        <Self as TraceStep<F>>::RecordMut<'buf>,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut BaseAluCoreRecord<NUM_LIMBS>),
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {

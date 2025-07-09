@@ -293,7 +293,7 @@ pub struct Rv32VecHeapAdapterRecord<
     pub writes_aux: [MemoryWriteBytesAuxRecord<WRITE_SIZE>; BLOCKS_PER_WRITE],
 }
 
-#[derive(derive_new::new)]
+#[derive(derive_new::new, Clone, Copy)]
 pub struct Rv32VecHeapAdapterStep<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,

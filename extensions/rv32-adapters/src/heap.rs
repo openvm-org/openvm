@@ -94,6 +94,7 @@ impl<
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct Rv32HeapAdapterStep<
     const NUM_READS: usize,
     const READ_SIZE: usize,

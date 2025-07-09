@@ -9,7 +9,7 @@ use native_vectorized_adapter::{NativeVectorizedAdapterAir, NativeVectorizedAdap
 use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
-        ExecutorInventory, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
+        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
         VmExecutionExtension, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
@@ -91,7 +91,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Native {
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventory<NativeExecutor<F>>,
+        inventory: &mut ExecutorInventoryBuilder<F, NativeExecutor<F>>,
     ) -> Result<(), ExecutorInventoryError> {
         let load_store = NativeLoadStoreStep::<1>::new(
             NativeLoadStoreAdapterStep::new(NativeLoadStoreOpcode::CLASS_OFFSET),
@@ -158,27 +158,27 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Native {
             ],
         )?;
 
-        inventory.add_phantom_sub_executor::<F, _>(
+        inventory.add_phantom_sub_executor(
             NativeHintInputSubEx,
             PhantomDiscriminant(NativePhantom::HintInput as u16),
         )?;
 
-        inventory.add_phantom_sub_executor::<F, _>(
+        inventory.add_phantom_sub_executor(
             NativeHintSliceSubEx::<1>,
             PhantomDiscriminant(NativePhantom::HintFelt as u16),
         )?;
 
-        inventory.add_phantom_sub_executor::<F, _>(
+        inventory.add_phantom_sub_executor(
             NativeHintBitsSubEx,
             PhantomDiscriminant(NativePhantom::HintBits as u16),
         )?;
 
-        inventory.add_phantom_sub_executor::<F, _>(
+        inventory.add_phantom_sub_executor(
             NativePrintSubEx,
             PhantomDiscriminant(NativePhantom::Print as u16),
         )?;
 
-        inventory.add_phantom_sub_executor::<F, _>(
+        inventory.add_phantom_sub_executor(
             NativeHintLoadSubEx,
             PhantomDiscriminant(NativePhantom::HintLoad as u16),
         )?;
@@ -485,7 +485,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for CastFExtension {
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventory<CastFExtensionExecutor>,
+        inventory: &mut ExecutorInventoryBuilder<F, CastFExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let castf = CastFStep::new(ConvertAdapterStep::new());
         inventory.add_executor(castf, [CastfOpcode::CASTF.global_opcode()])?;

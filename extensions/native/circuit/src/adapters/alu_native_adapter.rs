@@ -146,7 +146,7 @@ pub struct AluNativeAdapterRecord<F> {
     pub write_aux: MemoryWriteAuxRecord<F, 1>,
 }
 
-#[derive(derive_new::new)]
+#[derive(derive_new::new, Clone, Copy)]
 pub struct AluNativeAdapterStep;
 
 #[derive(derive_new::new)]

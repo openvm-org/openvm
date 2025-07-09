@@ -6,8 +6,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, CustomBorrow, MultiRowLayout, MultiRowMetadata, RecordArena, Result,
-        SizedRecord, TraceFiller, TraceStep, VmStateMut,
+        get_record_from_slice, CustomBorrow, InstructionExecutor, MultiRowLayout, MultiRowMetadata,
+        RecordArena, Result, SizedRecord, TraceFiller, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
@@ -128,22 +128,20 @@ impl SizedRecord<KeccakVmRecordLayout> for KeccakVmRecordMut<'_> {
     }
 }
 
-impl<F: PrimeField32> TraceStep<F> for KeccakVmStep {
-    type RecordLayout = KeccakVmRecordLayout;
-    type RecordMut<'a> = KeccakVmRecordMut<'a>;
-
+impl<F, RA> InstructionExecutor<F, RA> for KeccakVmStep
+where
+    F: PrimeField32,
+    for<'buf> RA: RecordArena<'buf, KeccakVmRecordLayout, KeccakVmRecordMut<'buf>>,
+{
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{:?}", Rv32KeccakOpcode::KECCAK256)
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory, RA>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let &Instruction {
             opcode,
             a,

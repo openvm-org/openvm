@@ -10,8 +10,8 @@ use openvm_circuit::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, EmptyAdapterCoreLayout, InsExecutorE1, InstructionExecutor,
-        MinimalInstruction, RecordArena, Result, TraceFiller, TraceStep, VmAdapterInterface,
-        VmCoreAir, VmStateMut,
+        MinimalInstruction, RecordArena, Result, TraceFiller, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -360,7 +360,7 @@ pub(super) enum DivRemCoreSpecialCase {
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct DivRemCoreRecords<const NUM_LIMBS: usize> {
+pub struct DivRemCoreRecord<const NUM_LIMBS: usize> {
     pub b: [u8; NUM_LIMBS],
     pub c: [u8; NUM_LIMBS],
     pub local_opcode: u8,
@@ -409,20 +409,6 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemFiller<A, NUM_LIMB
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F>
-    for DivRemStep<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: 'static,
-    A: 'static
-        + AdapterTraceStep<
-            F,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-        >,
-{
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut DivRemCoreRecords<NUM_LIMBS>);
-}
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> InstructionExecutor<F, RA>
     for DivRemStep<A, NUM_LIMBS, LIMB_BITS>
 where
@@ -435,8 +421,8 @@ where
         >,
     for<'buf> RA: RecordArena<
         'buf,
-        <Self as TraceStep<F>>::RecordLayout,
-        <Self as TraceStep<F>>::RecordMut<'buf>,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut DivRemCoreRecord<NUM_LIMBS>),
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -494,7 +480,7 @@ where
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
-        let record: &DivRemCoreRecords<NUM_LIMBS> =
+        let record: &DivRemCoreRecord<NUM_LIMBS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
         let core_row: &mut DivRemCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 

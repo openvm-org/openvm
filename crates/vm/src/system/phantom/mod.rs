@@ -30,7 +30,7 @@ use crate::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionError,
         ExecutionState, InsExecutorE1, InstructionExecutor, PcIncOrSet, PhantomSubExecutor,
-        RecordArena, TraceFiller, TraceStep, VmChipWrapper, VmStateMut,
+        RecordArena, TraceFiller, VmChipWrapper, VmStateMut,
     },
     system::memory::MemoryAuxColsFactory,
 };
@@ -179,19 +179,10 @@ where
     }
 }
 
-impl<F> TraceStep<F> for PhantomExecutor<F> {
-    type RecordLayout = EmptyMultiRowLayout;
-    type RecordMut<'a> = &'a mut PhantomRecord;
-}
-
 impl<F, RA> InstructionExecutor<F, RA> for PhantomExecutor<F>
 where
     F: PrimeField32,
-    for<'buf> RA: RecordArena<
-        'buf,
-        <Self as TraceStep<F>>::RecordLayout,
-        <Self as TraceStep<F>>::RecordMut<'buf>,
-    >,
+    for<'buf> RA: RecordArena<'buf, EmptyMultiRowLayout, &'buf mut PhantomRecord>,
 {
     fn execute(
         &mut self,

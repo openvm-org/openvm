@@ -246,6 +246,7 @@ pub struct Rv32IsEqualModAdapterRecord<
     pub writes_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
+#[derive(Clone, Copy)]
 pub struct Rv32IsEqualModeAdapterStep<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,

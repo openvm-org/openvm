@@ -3,8 +3,8 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        CustomBorrow, InsExecutorE1, MultiRowLayout, MultiRowMetadata, RecordArena, SizedRecord,
-        TraceFiller, TraceStep, VmStateMut,
+        CustomBorrow, InsExecutorE1, InstructionExecutor, MultiRowLayout, MultiRowMetadata,
+        RecordArena, SizedRecord, TraceFiller, VmStateMut,
     },
     system::{
         memory::{
@@ -39,6 +39,7 @@ use crate::poseidon2::{
     CHUNK,
 };
 
+#[derive(Clone)]
 pub struct NativePoseidon2Step<F: Field, const SBOX_REGISTERS: usize> {
     pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
 }
@@ -134,19 +135,20 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> SizedRecord<NativePoseidon2Re
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> TraceStep<F>
+impl<F: PrimeField32, RA, const SBOX_REGISTERS: usize> InstructionExecutor<F, RA>
     for NativePoseidon2Step<F, SBOX_REGISTERS>
+where
+    for<'buf> RA: RecordArena<
+        'buf,
+        MultiRowLayout<NativePoseidon2Metadata>,
+        NativePoseidon2RecordMut<'buf, F, SBOX_REGISTERS>,
+    >,
 {
-    type RecordLayout = MultiRowLayout<NativePoseidon2Metadata>;
-    type RecordMut<'a> = NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS>;
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory, RA>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> openvm_circuit::arch::Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> openvm_circuit::arch::Result<()> {
         let arena = state.ctx;
         let init_timestamp_u32 = state.memory.timestamp;
         if instruction.opcode == PERM_POS2.global_opcode()

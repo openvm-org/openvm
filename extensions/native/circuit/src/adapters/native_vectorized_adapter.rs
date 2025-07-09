@@ -138,7 +138,7 @@ pub struct NativeVectorizedAdapterRecord<F, const N: usize> {
     pub write_aux: MemoryWriteAuxRecord<F, N>,
 }
 
-#[derive(derive_new::new)]
+#[derive(derive_new::new, Clone, Copy)]
 pub struct NativeVectorizedAdapterStep<const N: usize>;
 
 #[derive(derive_new::new)]

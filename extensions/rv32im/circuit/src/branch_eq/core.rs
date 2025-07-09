@@ -5,7 +5,7 @@ use openvm_circuit::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, EmptyAdapterCoreLayout, ImmInstruction, InsExecutorE1,
-        InstructionExecutor, RecordArena, Result, TraceFiller, TraceStep, VmAdapterInterface,
+        InstructionExecutor, RecordArena, Result, TraceFiller, VmAdapterInterface,
         VmCoreAir, VmStateMut,
     },
     system::memory::{
@@ -161,23 +161,14 @@ pub struct BranchEqualFiller<A, const NUM_LIMBS: usize> {
     pub pc_step: u32,
 }
 
-impl<F, A, const NUM_LIMBS: usize> TraceStep<F> for BranchEqualStep<A, NUM_LIMBS>
-where
-    F: 'static,
-    A: 'static + AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
-{
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut BranchEqualCoreRecord<NUM_LIMBS>);
-}
-
 impl<F, A, RA, const NUM_LIMBS: usize> InstructionExecutor<F, RA> for BranchEqualStep<A, NUM_LIMBS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
     for<'buf> RA: RecordArena<
         'buf,
-        <Self as TraceStep<F>>::RecordLayout,
-        <Self as TraceStep<F>>::RecordMut<'buf>,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut BranchEqualCoreRecord<NUM_LIMBS>),
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {

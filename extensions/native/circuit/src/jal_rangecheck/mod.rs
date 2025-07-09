@@ -7,7 +7,8 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionState, InsExecutorE1,
-        PcIncOrSet, RecordArena, Result, TraceFiller, TraceStep, VmChipWrapper, VmStateMut,
+        InstructionExecutor, PcIncOrSet, RecordArena, Result, TraceFiller, VmChipWrapper,
+        VmStateMut,
     },
     system::{
         memory::{
@@ -152,7 +153,7 @@ pub struct JalRangeCheckRecord<F> {
 
 /// Chip for JAL and RANGE_CHECK. These opcodes are logically irrelevant. Putting these opcodes into
 /// the same chip is just to save columns.
-#[derive(derive_new::new)]
+#[derive(derive_new::new, Clone, Copy)]
 pub struct JalRangeCheckStep;
 
 #[derive(derive_new::new)]
@@ -160,13 +161,11 @@ pub struct JalRangeCheckFiller {
     range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F> TraceStep<F> for JalRangeCheckStep
+impl<F, RA> InstructionExecutor<F, RA> for JalRangeCheckStep
 where
     F: PrimeField32,
+    for<'buf> RA: RecordArena<'buf, EmptyMultiRowLayout, &'buf mut JalRangeCheckRecord<F>>,
 {
-    type RecordLayout = EmptyMultiRowLayout;
-    type RecordMut<'a> = &'a mut JalRangeCheckRecord<F>;
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         let jal_opcode = NativeJalOpcode::JAL.global_opcode().as_usize();
         let range_check_opcode = NativeRangeCheckOpcode::RANGE_CHECK
@@ -181,14 +180,11 @@ where
         panic!("Unknown opcode {}", opcode);
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory, RA>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let &Instruction {
             opcode, a, b, c, ..
         } = instruction;
