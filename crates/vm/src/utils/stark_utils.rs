@@ -70,7 +70,7 @@ where
     let exe = exe.into();
     let input = input.into();
     {
-        let executor = InterpretedInstance::<BabyBear, _>::new(config.clone(), exe.clone());
+        let executor = InterpretedInstance::<BabyBear, _>::new(config, exe.clone());
         executor
             .execute(E1Ctx { instret_end: None }, input.clone())
             .expect("Failed to execute");

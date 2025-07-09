@@ -12,17 +12,14 @@ use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SysPhantom, SystemOpcode,
 };
-use openvm_stark_backend::{
-    p3_field::{Field, PrimeField32},
-    p3_maybe_rayon::prelude::ParallelIterator,
-};
+use openvm_stark_backend::p3_field::{Field, PrimeField32};
 use rand::{rngs::StdRng, SeedableRng};
+use tracing::info_span;
 
 use crate::{
     arch::{
-        execution_control::ExecutionControl, execution_mode::E1ExecutionCtx, ExecutionError,
-        ExecutionError::InvalidInstruction, InsExecutorE1, PreComputeInstruction, Streams,
-        VmChipComplex, VmConfig, VmSegmentState,
+        execution_mode::E1ExecutionCtx, ExecutionError, ExecutionError::InvalidInstruction,
+        InsExecutorE1, PreComputeInstruction, Streams, VmChipComplex, VmConfig, VmSegmentState,
     },
     system::memory::{online::GuestMemory, AddressMap},
 };
@@ -59,7 +56,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
         inputs: impl Into<Streams<F>>,
     ) -> Result<VmSegmentState<F, Ctx>, ExecutionError> {
         // Initialize the chip complex
-        let mut chip_complex = self.vm_config.create_chip_complex().unwrap();
+        let chip_complex = self.vm_config.create_chip_complex().unwrap();
         // Initialize the memory
         let memory = if self.vm_config.system().continuation_enabled {
             let mem_config = self.vm_config.system().memory_config.clone();
@@ -100,14 +97,38 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
             &chip_complex,
             &mut split_pre_compute_buf,
         )?;
-        unsafe {
-            execute_impl(program, &mut vm_state, &pre_compute_insts);
-        }
+
+        execute_with_metrics(program, &mut vm_state, &pre_compute_insts);
+
         if vm_state.exit_code.is_err() {
             Err(vm_state.exit_code.err().unwrap())
         } else {
             Ok(vm_state)
         }
+    }
+}
+
+fn execute_with_metrics<F: PrimeField32, Ctx: E1ExecutionCtx>(
+    program: &Program<F>,
+    vm_state: &mut VmSegmentState<F, Ctx>,
+    pre_compute_insts: &[PreComputeInstruction<F, Ctx>],
+) {
+    #[cfg(feature = "bench-metrics")]
+    let start = std::time::Instant::now();
+    #[cfg(feature = "bench-metrics")]
+    let start_instret = vm_state.instret;
+
+    info_span!("execute_e1").in_scope(|| unsafe {
+        execute_impl(program, vm_state, pre_compute_insts);
+    });
+
+    #[cfg(feature = "bench-metrics")]
+    {
+        let elapsed = start.elapsed();
+        let insns = vm_state.instret - start_instret;
+        metrics::counter!("insns").absolute(insns);
+        metrics::gauge!(concat!("execute_e1", "_insn_mi/s"))
+            .set(insns as f64 / elapsed.as_micros() as f64);
     }
 }
 
@@ -261,7 +282,7 @@ fn get_pre_compute_instructions<
         .zip_eq(pre_compute.iter_mut())
         .enumerate()
         .map(|(i, (inst_opt, buf))| {
-            let buf: &mut [u8] = *buf;
+            let buf: &mut [u8] = buf;
             let pre_inst = if let Some((inst, _)) = inst_opt {
                 let pc = program.pc_base + i as u32 * program.step;
                 let discriminant = SysPhantom::from_repr(inst.c.as_canonical_u32() as u16);
@@ -287,18 +308,16 @@ fn get_pre_compute_instructions<
                         handler: terminate_execute_e1_impl,
                         pre_compute: buf,
                     }
-                } else {
-                    if let Some(executor) = chip_complex.inventory.get_executor(inst.opcode) {
-                        PreComputeInstruction {
-                            handler: executor.pre_compute_e1(pc, inst, buf)?,
-                            pre_compute: buf,
-                        }
-                    } else {
-                        return Err(ExecutionError::DisabledOperation {
-                            pc,
-                            opcode: inst.opcode,
-                        });
+                } else if let Some(executor) = chip_complex.inventory.get_executor(inst.opcode) {
+                    PreComputeInstruction {
+                        handler: executor.pre_compute_e1(pc, inst, buf)?,
+                        pre_compute: buf,
                     }
+                } else {
+                    return Err(ExecutionError::DisabledOperation {
+                        pc,
+                        opcode: inst.opcode,
+                    });
                 }
             } else {
                 PreComputeInstruction {

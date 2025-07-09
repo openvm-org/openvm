@@ -135,8 +135,8 @@ fn shared_widths_and_interactions() -> &'static (Vec<usize>, Vec<usize>) {
 fn benchmark_execute(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
-            let exe = load_program_executable(program).expect("Failed to load program executable");
             let vm_config = ExecuteConfig::default();
+            let exe = load_program_executable(program).expect("Failed to load program executable");
             let interpreter = InterpretedInstance::new(vm_config, exe);
             (interpreter, vec![])
         })
