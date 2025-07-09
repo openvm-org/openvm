@@ -179,12 +179,21 @@ where
             return Ok(());
         }
 
+        // Track instruction start time
+        #[cfg(feature = "metrics")]
+        let start = std::time::Instant::now();
+
         // Execute the instruction using the control implementation
         self.ctrl.execute_instruction(state, executor, pc_entry)?;
 
         #[cfg(feature = "metrics")]
         {
-            crate::metrics::update_instruction_metrics(state, executor, pc_entry);
+            crate::metrics::update_instruction_metrics(
+                state,
+                executor,
+                pc_entry,
+                start.elapsed().as_nanos(),
+            );
         }
 
         Ok(())

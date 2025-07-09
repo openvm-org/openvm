@@ -584,6 +584,8 @@ where
             #[cfg(feature = "metrics")]
             metrics: exec_state.ctx.metrics,
         };
+        #[cfg(feature = "metrics")]
+        to_state.metrics.emit();
         Ok(PreflightExecutionOutput {
             system_records,
             record_arenas,
