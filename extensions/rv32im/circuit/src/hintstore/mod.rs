@@ -488,6 +488,7 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
         }
 
         let width = trace.width;
+        assert_eq!(width, size_of::<Rv32HintStoreCols<u8>>());
         let mut trace = &mut trace.values[..width * rows_used];
         let mut sizes = Vec::with_capacity(rows_used);
         let mut chunks = Vec::with_capacity(rows_used);

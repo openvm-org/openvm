@@ -21,6 +21,7 @@ impl<RA: Arena> TracegenCtx<RA> {
     /// Here `height` will always mean an overestimate of the trace height for that AIR, while
     /// `width` may have different meanings depending on the `RA` type.
     pub fn new_with_capacity(capacities: &[(usize, usize)], instret_end: Option<u64>) -> Self {
+        println!("{:?}", capacities);
         let arenas = capacities
             .iter()
             .map(|&(height, width)| RA::with_capacity(height, width))

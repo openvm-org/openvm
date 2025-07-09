@@ -346,6 +346,10 @@ where
         executor_idx_to_air_idx: &[usize],
         ctx: MeteredCtx,
     ) -> Result<Vec<Segment>, ExecutionError> {
+        assert_eq!(
+            executor_idx_to_air_idx.len(),
+            self.inventory.executors().len()
+        );
         let _span = info_span!("execute_metered").entered();
 
         let handler = ProgramHandler::new(exe.program, &self.inventory)?;
@@ -763,7 +767,7 @@ where
             .collect::<Vec<_>>();
         let ctx = TracegenCtx::new_with_capacity(&capacities, Some(instret_end));
 
-        let system_config: &SystemConfig = &self.config().as_ref();
+        let system_config: &SystemConfig = self.config().as_ref();
         let adapter_offset = system_config.access_adapter_air_id_offset();
         // ATTENTION: this must agree with `num_memory_airs`
         let num_adapters = log2_strict_usize(system_config.memory_config.max_access_adapter_n);
@@ -947,7 +951,10 @@ where
     }
 
     pub fn executor_idx_to_air_idx(&self) -> Vec<usize> {
-        self.chip_complex.inventory.executor_idx_to_air_idx()
+        let ret = self.chip_complex.inventory.executor_idx_to_air_idx();
+        tracing::debug!("executor_idx_to_air_idx: {:?}", ret);
+        assert_eq!(self.executor().inventory.executors().len(), ret.len());
+        ret
     }
 
     /// Convenience method to construct a [MeteredCtx] using data from the stored proving key.
