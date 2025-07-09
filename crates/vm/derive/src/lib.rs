@@ -15,7 +15,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
 
     let name = &ast.ident;
     let generics = &ast.generics;
-    let (impl_generics, ty_generics, _) = generics.split_for_impl();
+    let (_, ty_generics, _) = generics.split_for_impl();
 
     match &ast.data {
         Data::Struct(inner) => {
@@ -32,16 +32,17 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
             // crate. Assume F is already generic of the field.
             let mut new_generics = generics.clone();
+            new_generics.params.push(syn::parse_quote! { RA });
             let where_clause = new_generics.make_where_clause();
             where_clause.predicates.push(
-                syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InstructionExecutor<F> },
+                syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InstructionExecutor<F, RA> },
             );
+            let (impl_generics, _, where_clause) = new_generics.split_for_impl();
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<F> for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<F, RA> for #name #ty_generics #where_clause {
                     fn execute(
                         &mut self,
-                        state: ::openvm_circuit::arch::VmStateMut<F, ::openvm_circuit::system::memory::online::TracingMemory,
-                        ::openvm_circuit::arch::MatrixRecordArena<F>>,
+                        state: ::openvm_circuit::arch::VmStateMut<F, ::openvm_circuit::system::memory::online::TracingMemory, RA>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                     ) -> ::openvm_circuit::arch::Result<()> {
                         self.0.execute(state, instruction)
@@ -69,6 +70,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 .collect::<Vec<_>>();
             let default_ty_generic = Ident::new("F", proc_macro2::Span::call_site());
             let mut new_generics = generics.clone();
+            new_generics.params.push(syn::parse_quote! { RA });
             let field_ty_generic = ast
                 .generics
                 .params
@@ -87,13 +89,13 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 multiunzip(variants.iter().map(|(variant_name, field)| {
                     let field_ty = &field.ty;
                     let execute_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic>>::execute(x, state, instruction)
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic, RA>>::execute(x, state, instruction)
                     };
                     let get_opcode_name_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic>>::get_opcode_name(x, opcode)
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic, RA>>::get_opcode_name(x, opcode)
                     };
                     let where_predicate = syn::parse_quote! {
-                        #field_ty: ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic>
+                        #field_ty: ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic, RA>
                     };
                     (execute_arm, get_opcode_name_arm, where_predicate)
                 }));
@@ -104,10 +106,10 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
             // Don't use these ty_generics because it might have extra "F"
             let (impl_generics, _, where_clause) = new_generics.split_for_impl();
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic> for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic, RA> for #name #ty_generics #where_clause {
                     fn execute(
                         &mut self,
-                        state: ::openvm_circuit::arch::VmStateMut<#field_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory, ::openvm_circuit::arch::MatrixRecordArena<#field_ty_generic>>,
+                        state: ::openvm_circuit::arch::VmStateMut<#field_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory, RA>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#field_ty_generic>,
                     ) -> ::openvm_circuit::arch::Result<()> {
                         match self {

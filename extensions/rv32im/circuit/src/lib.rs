@@ -32,11 +32,10 @@ use openvm_circuit::{
     arch::{InitFileGenerator, SystemConfig},
     system::SystemExecutor,
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{InsExecutorE1, InstructionExecutor, VmConfig};
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
 use serde::{Deserialize, Serialize};
 pub use shift::*;
-use strum::IntoEnumIterator;
 
 mod extension;
 pub use extension::*;

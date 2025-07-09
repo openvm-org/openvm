@@ -84,7 +84,7 @@ pub enum Rv32IExecutor {
 }
 
 /// RISC-V 32-bit Multiplication Extension (RV32M) Instruction Executors
-#[derive(Clone, From, AnyEnum, InsExecutorE1)]
+#[derive(Clone, From, AnyEnum, InsExecutorE1, InstructionExecutor)]
 pub enum Rv32MExecutor {
     Multiplication(Rv32MultiplicationStep),
     MultiplicationHigh(Rv32MulHStep),
@@ -92,7 +92,7 @@ pub enum Rv32MExecutor {
 }
 
 /// RISC-V 32-bit Io Instruction Executors
-#[derive(Clone, Copy, From, AnyEnum, InsExecutorE1)]
+#[derive(Clone, Copy, From, AnyEnum, InsExecutorE1, InstructionExecutor)]
 pub enum Rv32IoExecutor {
     HintStore(Rv32HintStoreStep),
 }
