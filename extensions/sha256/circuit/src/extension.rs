@@ -3,9 +3,9 @@ use std::sync::Arc;
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutorInventory,
-        ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension, VmExecutionExtension,
-        VmProverExtension,
+        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
+        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
+        VmExecutionExtension, VmProverExtension,
     },
     system::memory::SharedMemoryHelper,
 };
@@ -76,7 +76,7 @@ impl<F> VmExecutionExtension<F> for Sha256 {
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventory<Sha256Executor>,
+        inventory: &mut ExecutorInventoryBuilder<F, Sha256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
         // TODO: getter for pointer_max_bits
         let pointer_max_bits = 29;

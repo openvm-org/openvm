@@ -69,7 +69,7 @@ pub const KECCAK_DIGEST_U64S: usize = KECCAK_DIGEST_BYTES / 8;
 
 pub type KeccakVmChip<F> = VmChipWrapper<F, KeccakVmFiller>;
 
-#[derive(derive_new::new)]
+#[derive(derive_new::new, Clone, Copy)]
 pub struct KeccakVmStep {
     pub offset: usize,
     pub pointer_max_bits: usize,

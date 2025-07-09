@@ -6,8 +6,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, CustomBorrow, MultiRowLayout, MultiRowMetadata, RecordArena, Result,
-        SizedRecord, TraceFiller, TraceStep, VmStateMut,
+        get_record_from_slice, CustomBorrow, InstructionExecutor, MultiRowLayout, MultiRowMetadata,
+        RecordArena, Result, SizedRecord, TraceFiller, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
@@ -138,22 +138,20 @@ impl SizedRecord<Sha256VmRecordLayout> for Sha256VmRecordMut<'_> {
     }
 }
 
-impl<F: PrimeField32> TraceStep<F> for Sha256VmStep {
-    type RecordLayout = Sha256VmRecordLayout;
-    type RecordMut<'a> = Sha256VmRecordMut<'a>;
-
+impl<F, RA> InstructionExecutor<F, RA> for Sha256VmStep
+where
+    F: PrimeField32,
+    for<'buf> RA: RecordArena<'buf, Sha256VmRecordLayout, Sha256VmRecordMut<'buf>>,
+{
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{:?}", Rv32Sha256Opcode::SHA256)
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory, RA>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let Instruction {
             opcode,
             a,

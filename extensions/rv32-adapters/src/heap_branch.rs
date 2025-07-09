@@ -179,6 +179,7 @@ pub struct Rv32HeapBranchAdapterRecord<const NUM_READS: usize> {
     pub heap_read_aux: [MemoryReadAuxRecord; NUM_READS],
 }
 
+#[derive(Clone, Copy)]
 pub struct Rv32HeapBranchAdapterStep<const NUM_READS: usize, const READ_SIZE: usize> {
     pub pointer_max_bits: usize,
 }

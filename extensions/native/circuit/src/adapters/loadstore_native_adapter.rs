@@ -189,7 +189,7 @@ pub struct NativeLoadStoreAdapterRecord<F, const NUM_CELLS: usize> {
     pub data_write: MemoryWriteAuxRecord<F, NUM_CELLS>,
 }
 
-#[derive(derive_new::new)]
+#[derive(derive_new::new, Clone, Copy)]
 pub struct NativeLoadStoreAdapterStep<const NUM_CELLS: usize> {
     offset: usize,
 }

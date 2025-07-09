@@ -135,7 +135,7 @@ pub struct ConvertAdapterRecord<F, const READ_SIZE: usize, const WRITE_SIZE: usi
     pub write_aux: MemoryWriteBytesAuxRecord<WRITE_SIZE>,
 }
 
-#[derive(derive_new::new)]
+#[derive(derive_new::new, Clone, Copy)]
 pub struct ConvertAdapterStep<const READ_SIZE: usize, const WRITE_SIZE: usize>;
 
 #[derive(derive_new::new)]

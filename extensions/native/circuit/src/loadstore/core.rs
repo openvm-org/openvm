@@ -9,8 +9,8 @@ use openvm_circuit::{
         get_record_from_slice,
         instructions::LocalOpcode,
         AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep,
-        EmptyAdapterCoreLayout, ExecutionError, InsExecutorE1, RecordArena, Result, TraceFiller,
-        TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        EmptyAdapterCoreLayout, ExecutionError, InsExecutorE1, InstructionExecutor, RecordArena,
+        Result, TraceFiller, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -119,7 +119,7 @@ pub struct NativeLoadStoreCoreRecord<F, const NUM_CELLS: usize> {
     pub local_opcode: u8,
 }
 
-#[derive(derive_new::new, Debug)]
+#[derive(derive_new::new, Debug, Clone, Copy)]
 pub struct NativeLoadStoreCoreStep<A, const NUM_CELLS: usize> {
     adapter: A,
     offset: usize,
@@ -130,17 +130,20 @@ pub struct NativeLoadStoreCoreFiller<A, const NUM_CELLS: usize> {
     adapter: A,
 }
 
-impl<F, A, const NUM_CELLS: usize> TraceStep<F> for NativeLoadStoreCoreStep<A, NUM_CELLS>
+impl<F, A, RA, const NUM_CELLS: usize> InstructionExecutor<F, RA>
+    for NativeLoadStoreCoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceStep<F, ReadData = (F, [F; NUM_CELLS]), WriteData = [F; NUM_CELLS]>,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (
+            A::RecordMut<'buf>,
+            &'buf mut NativeLoadStoreCoreRecord<F, NUM_CELLS>,
+        ),
+    >,
 {
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (
-        A::RecordMut<'a>,
-        &'a mut NativeLoadStoreCoreRecord<F, NUM_CELLS>,
-    );
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -148,14 +151,11 @@ where
         )
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory, RA>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let &Instruction { opcode, .. } = instruction;
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());

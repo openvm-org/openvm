@@ -135,7 +135,7 @@ pub struct BranchNativeAdapterRecord<F> {
     pub reads_aux: [MemoryReadAuxRecord; 2],
 }
 
-#[derive(derive_new::new)]
+#[derive(derive_new::new, Clone, Copy)]
 pub struct BranchNativeAdapterStep;
 
 #[derive(derive_new::new)]

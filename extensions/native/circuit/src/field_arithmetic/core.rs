@@ -5,8 +5,9 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, InsExecutorE1, MinimalInstruction, RecordArena,
-        Result, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterTraceStep, EmptyAdapterCoreLayout, InsExecutorE1, InstructionExecutor,
+        MinimalInstruction, RecordArena, Result, TraceFiller, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -121,7 +122,7 @@ pub struct FieldArithmeticRecord<F> {
     pub local_opcode: u8,
 }
 
-#[derive(derive_new::new)]
+#[derive(derive_new::new, Clone, Copy)]
 pub struct FieldArithmeticCoreStep<A> {
     adapter: A,
 }
@@ -131,13 +132,16 @@ pub struct FieldArithmeticCoreFiller<A> {
     adapter: A,
 }
 
-impl<F, A> TraceStep<F> for FieldArithmeticCoreStep<A>
+impl<F, A, RA> InstructionExecutor<F, RA> for FieldArithmeticCoreStep<A>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceStep<F, ReadData = [F; 2], WriteData = [F; 1]>,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut FieldArithmeticRecord<F>),
+    >,
 {
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut FieldArithmeticRecord<F>);
 
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
@@ -146,14 +150,11 @@ where
         )
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory, RA>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let &Instruction { opcode, .. } = instruction;
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 

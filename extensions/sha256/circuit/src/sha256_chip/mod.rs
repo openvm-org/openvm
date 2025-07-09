@@ -56,7 +56,7 @@ pub const SHA256_MAX_MESSAGE_LEN: usize = 1 << 29;
 
 pub type Sha256VmChip<F> = VmChipWrapper<F, Sha256VmFiller>;
 
-#[derive(derive_new::new)]
+#[derive(derive_new::new, Clone)]
 pub struct Sha256VmStep {
     pub offset: usize,
     pub pointer_max_bits: usize,

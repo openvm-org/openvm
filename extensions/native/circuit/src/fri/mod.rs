@@ -9,8 +9,8 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionState, InsExecutorE1,
-        MultiRowLayout, MultiRowMetadata, RecordArena, Result, SizedRecord, TraceFiller, TraceStep,
-        VmChipWrapper, VmStateMut,
+        InstructionExecutor, MultiRowLayout, MultiRowMetadata, RecordArena, Result, SizedRecord,
+        TraceFiller, VmChipWrapper, VmStateMut,
     },
     system::{
         memory::{
@@ -676,7 +676,7 @@ impl<F> SizedRecord<FriReducedOpeningLayout> for FriReducedOpeningRecordMut<'_, 
     }
 }
 
-#[derive(derive_new::new)]
+#[derive(derive_new::new, Copy, Clone)]
 pub struct FriReducedOpeningStep;
 
 #[derive(derive_new::new)]
@@ -688,26 +688,21 @@ impl Default for FriReducedOpeningStep {
     }
 }
 
-impl<F> TraceStep<F> for FriReducedOpeningStep
+impl<F, RA> InstructionExecutor<F, RA> for FriReducedOpeningStep
 where
     F: PrimeField32,
+    for<'buf> RA: RecordArena<'buf, FriReducedOpeningLayout, FriReducedOpeningRecordMut<'buf, F>>,
 {
-    type RecordLayout = FriReducedOpeningLayout;
-    type RecordMut<'a> = FriReducedOpeningRecordMut<'a, F>;
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         assert_eq!(opcode, FRI_REDUCED_OPENING.global_opcode().as_usize());
         String::from("FRI_REDUCED_OPENING")
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory, RA>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let &Instruction {
             a,
             b,
