@@ -219,7 +219,7 @@ where
         inputs: impl Into<Streams<F>>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F>, ExecutionError> {
-        let interpreter = InterpretedInstance::new(self.config.clone(), exe);
+        let interpreter = InterpretedInstance::new(&self.config, exe);
 
         let ctx = E1Ctx::new(num_insns);
         let state = interpreter.execute(ctx, inputs)?;

@@ -133,11 +133,11 @@ fn shared_widths_and_interactions() -> &'static (Vec<usize>, Vec<usize>) {
 
 #[divan::bench(args = AVAILABLE_PROGRAMS, sample_count=10)]
 fn benchmark_execute(bencher: Bencher, program: &str) {
+    let vm_config = ExecuteConfig::default();
     bencher
         .with_inputs(|| {
             let exe = load_program_executable(program).expect("Failed to load program executable");
-            let vm_config = ExecuteConfig::default();
-            let interpreter = InterpretedInstance::new(vm_config, exe);
+            let interpreter = InterpretedInstance::new(&vm_config, exe);
             (interpreter, vec![])
         })
         .bench_values(|(interpreter, input)| {

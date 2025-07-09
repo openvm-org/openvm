@@ -14,6 +14,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
 use rand::{rngs::StdRng, SeedableRng};
+use tracing::info_span;
 
 use crate::{
     arch::{
@@ -25,9 +26,9 @@ use crate::{
 
 /// VM pure executor(E1/E2 executor) which doesn't consider trace generation.
 /// Note: This executor doesn't hold any VM state and can be used for multiple execution.
-pub struct InterpretedInstance<F: PrimeField32, VC: VmConfig<F>> {
+pub struct InterpretedInstance<'a, F: PrimeField32, VC: VmConfig<F>> {
     exe: VmExe<F>,
-    vm_config: VC,
+    vm_config: &'a VC,
 }
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -41,8 +42,8 @@ struct DebugPanicPreCompute {
     pc: u32,
 }
 
-impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
-    pub fn new(vm_config: VC, exe: impl Into<VmExe<F>>) -> Self {
+impl<'a, F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<'a, F, VC> {
+    pub fn new(vm_config: &'a VC, exe: impl Into<VmExe<F>>) -> Self {
         let exe = exe.into();
         Self { exe, vm_config }
     }
@@ -96,14 +97,38 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
             &chip_complex,
             &mut split_pre_compute_buf,
         )?;
-        unsafe {
-            execute_impl(program, &mut vm_state, &pre_compute_insts);
-        }
+
+        execute_with_metrics(program, &mut vm_state, &pre_compute_insts);
+
         if vm_state.exit_code.is_err() {
             Err(vm_state.exit_code.err().unwrap())
         } else {
             Ok(vm_state)
         }
+    }
+}
+
+fn execute_with_metrics<F: PrimeField32, Ctx: E1ExecutionCtx>(
+    program: &Program<F>,
+    vm_state: &mut VmSegmentState<F, Ctx>,
+    pre_compute_insts: &[PreComputeInstruction<F, Ctx>],
+) {
+    #[cfg(feature = "bench-metrics")]
+    let start = std::time::Instant::now();
+    #[cfg(feature = "bench-metrics")]
+    let start_instret = vm_state.instret;
+
+    info_span!("execute_e1").in_scope(|| unsafe {
+        execute_impl(program, vm_state, pre_compute_insts);
+    });
+
+    #[cfg(feature = "bench-metrics")]
+    {
+        let elapsed = start.elapsed();
+        let insns = vm_state.instret - start_instret;
+        metrics::counter!("insns").absolute(insns);
+        metrics::gauge!(concat!("execute_e1", "_insn_mi/s"))
+            .set(insns as f64 / elapsed.as_micros() as f64);
     }
 }
 

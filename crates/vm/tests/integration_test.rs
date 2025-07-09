@@ -926,7 +926,7 @@ fn test_vm_pure_execution_non_continuation() {
 
     let program = Program::from_instructions(&instructions);
 
-    let executor = InterpretedInstance::<F, _>::new(test_native_config(), program);
+    let executor = InterpretedInstance::<F, _>::new(&test_native_config(), program);
     executor
         .execute(E1Ctx { instret_end: None }, vec![])
         .expect("Failed to execute");
@@ -953,7 +953,7 @@ fn test_vm_pure_execution_continuation() {
     ];
 
     let program = Program::from_instructions(&instructions);
-    let executor = InterpretedInstance::<F, _>::new(test_native_continuations_config(), program);
+    let executor = InterpretedInstance::<F, _>::new(&test_native_continuations_config(), program);
     executor
         .execute(E1Ctx { instret_end: None }, vec![])
         .expect("Failed to execute");
@@ -1062,7 +1062,7 @@ fn test_vm_e1_native_chips() {
     let program = Program::from_instructions(&instructions);
     let input_stream: Vec<Vec<F>> = vec![vec![]];
 
-    let executor = InterpretedInstance::<F, _>::new(test_rv32_with_kernels_config(), program);
+    let executor = InterpretedInstance::<F, _>::new(&test_rv32_with_kernels_config(), program);
     executor
         .execute(E1Ctx { instret_end: None }, input_stream)
         .expect("Failed to execute");
