@@ -11,11 +11,12 @@ mod tests {
         system::memory::merkle::public_values::UserPublicValuesProof,
         utils::{air_test, air_test_with_min_segments, test_system_config_with_continuations},
     };
-    use openvm_instructions::exe::VmExe;
+    use openvm_instructions::{exe::VmExe, LocalOpcode, SystemOpcode};
     use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
     use openvm_rv32im_guest::hint_load_by_key_encode;
     use openvm_rv32im_transpiler::{
-        Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+        DivRemOpcode, MulHOpcode, MulOpcode, Rv32ITranspilerExtension, Rv32IoTranspilerExtension,
+        Rv32MTranspilerExtension,
     };
     use openvm_stark_sdk::{
         config::baby_bear_poseidon2::default_engine, openvm_stark_backend::p3_field::FieldAlgebra,
@@ -26,6 +27,7 @@ mod tests {
         get_programs_dir,
     };
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
+    use strum::IntoEnumIterator;
     use test_case::test_case;
 
     type F = BabyBear;
@@ -53,17 +55,33 @@ mod tests {
     fn test_rv32i(example_name: &str, min_segments: usize) -> Result<()> {
         let config = test_rv32i_config();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
-        let exe = VmExe::from_elf(
+        let mut exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
+        // The ELF might still have Mul instructions even though the program doesn't use them. We
+        // mask those to NOP here.
+        for (insn, _) in exe
+            .program
+            .instructions_and_debug_infos
+            .iter_mut()
+            .flatten()
+        {
+            if MulOpcode::iter().any(|op| op.global_opcode() == insn.opcode)
+                || MulHOpcode::iter().any(|op| op.global_opcode() == insn.opcode)
+                || DivRemOpcode::iter().any(|op| op.global_opcode() == insn.opcode)
+            {
+                insn.opcode = SystemOpcode::PHANTOM.global_opcode();
+            }
+        }
         air_test_with_min_segments(config, exe, vec![], min_segments);
         Ok(())
     }
 
+    #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
     fn test_rv32im(example_name: &str, min_segments: usize) -> Result<()> {
         let config = test_rv32im_config();

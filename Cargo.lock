@@ -5282,6 +5282,7 @@ dependencies = [
  "openvm-toolchain-tests",
  "openvm-transpiler",
  "serde",
+ "strum",
  "test-case",
 ]
 

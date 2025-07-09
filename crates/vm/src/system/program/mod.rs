@@ -1,7 +1,7 @@
 use openvm_instructions::{
     instruction::{DebugInfo, Instruction},
     program::Program,
-    VmOpcode,
+    LocalOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::{
     config::StarkGenericConfig,
@@ -83,11 +83,16 @@ impl<F: Field, E> ProgramHandler<F, E> {
         let mut debug_infos = Vec::with_capacity(len);
         for insn_and_debug_info in program.instructions_and_debug_infos {
             if let Some((insn, debug_info)) = insn_and_debug_info {
-                let executor_idx = *inventory.instruction_lookup.get(&insn.opcode).ok_or(
-                    StaticProgramError::ExecutorNotFound {
-                        opcode: insn.opcode,
-                    },
-                )?;
+                let executor_idx = if insn.opcode == SystemOpcode::TERMINATE.global_opcode() {
+                    // The execution loop will always branch to terminate before using this executor
+                    0
+                } else {
+                    *inventory.instruction_lookup.get(&insn.opcode).ok_or(
+                        StaticProgramError::ExecutorNotFound {
+                            opcode: insn.opcode,
+                        },
+                    )?
+                };
                 assert!(
                     (executor_idx as usize) < inventory.executors.len(),
                     "ExecutorInventory ensures executor_idx is in bounds"
@@ -100,10 +105,11 @@ impl<F: Field, E> ProgramHandler<F, E> {
                 debug_infos.push(None);
             }
         }
+        let executors = inventory.executors.clone();
 
         Ok(Self {
             execution_frequencies: vec![0u32; len],
-            executors: inventory.executors.clone(),
+            executors,
             pc_handler,
             debug_infos,
             pc_base: program.pc_base,
