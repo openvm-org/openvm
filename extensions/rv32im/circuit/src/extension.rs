@@ -4,7 +4,7 @@ use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
-        ExecutorInventory, ExecutorInventoryError, RowMajorMatrixArena, VmChipWrapper,
+        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmChipWrapper,
         VmCircuitExtension, VmExecutionExtension, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
@@ -104,7 +104,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv32I {
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventory<Rv32IExecutor>,
+        inventory: &mut ExecutorInventoryBuilder<F, Rv32IExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         // TODO: [ExecutorInventory] needs to have pointer_max_bits
         let pointer_max_bits = 29;
@@ -157,19 +157,19 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv32I {
         inventory.add_executor(auipc, Rv32AuipcOpcode::iter().map(|x| x.global_opcode()))?;
 
         // There is no downside to adding phantom sub-executors, so we do it in the base extension.
-        inventory.add_phantom_sub_executor::<F, _>(
+        inventory.add_phantom_sub_executor(
             phantom::Rv32HintInputSubEx,
             PhantomDiscriminant(Rv32Phantom::HintInput as u16),
         )?;
-        inventory.add_phantom_sub_executor::<F, _>(
+        inventory.add_phantom_sub_executor(
             phantom::Rv32HintRandomSubEx,
             PhantomDiscriminant(Rv32Phantom::HintRandom as u16),
         )?;
-        inventory.add_phantom_sub_executor::<F, _>(
+        inventory.add_phantom_sub_executor(
             phantom::Rv32PrintStrSubEx,
             PhantomDiscriminant(Rv32Phantom::PrintStr as u16),
         )?;
-        inventory.add_phantom_sub_executor::<F, _>(
+        inventory.add_phantom_sub_executor(
             phantom::Rv32HintLoadByKeySubEx,
             PhantomDiscriminant(Rv32Phantom::HintLoadByKey as u16),
         )?;
@@ -424,7 +424,7 @@ impl<F> VmExecutionExtension<F> for Rv32M {
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventory<Rv32MExecutor>,
+        inventory: &mut ExecutorInventoryBuilder<F, Rv32MExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let mult = Rv32MultiplicationStep::new(Rv32MultAdapterStep, MulOpcode::CLASS_OFFSET);
         inventory.add_executor(mult, MulOpcode::iter().map(|x| x.global_opcode()))?;
@@ -592,7 +592,7 @@ impl<F> VmExecutionExtension<F> for Rv32Io {
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventory<Rv32IoExecutor>,
+        inventory: &mut ExecutorInventoryBuilder<F, Rv32IoExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         // TODO: getter for pointer_max_bits
         let pointer_max_bits = 29;

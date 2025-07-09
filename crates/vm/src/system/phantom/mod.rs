@@ -103,23 +103,12 @@ pub struct PhantomRecord {
 /// sub-executors.
 #[derive(Clone, derive_new::new)]
 pub struct PhantomExecutor<F> {
-    phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor<F>>>,
+    pub(crate) phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor<F>>>,
     phantom_opcode: VmOpcode,
 }
 
 pub struct PhantomFiller;
 pub type PhantomChip<F> = VmChipWrapper<F, PhantomFiller>;
-
-impl<F> PhantomExecutor<F> {
-    pub(crate) fn add_sub_executor<P: PhantomSubExecutor<F> + 'static>(
-        &mut self,
-        sub_executor: P,
-        discriminant: PhantomDiscriminant,
-    ) -> Option<Arc<dyn PhantomSubExecutor<F>>> {
-        self.phantom_executors
-            .insert(discriminant, Arc::new(sub_executor))
-    }
-}
 
 impl<F> InsExecutorE1<F> for PhantomExecutor<F>
 where

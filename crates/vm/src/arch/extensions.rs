@@ -79,7 +79,7 @@ pub trait VmExecutionExtension<F> {
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventory<Self::Executor>,
+        inventory: &mut ExecutorInventoryBuilder<F, Self::Executor>,
     ) -> Result<(), ExecutorInventoryError>;
 }
 
@@ -115,6 +115,15 @@ pub struct ExecutorInventory<E> {
     pub executors: Vec<E>,
     /// `ext_start[i]` will have the starting index in `executors` for extension `i`
     ext_start: Vec<usize>,
+}
+
+pub struct ExecutorInventoryBuilder<'a, F, E> {
+    /// Chips that are already included in the chipset and may be used
+    /// as dependencies. The order should be that depended-on chips are ordered
+    /// **before** their dependents.
+    old_executors: Vec<&'a dyn AnyEnum>,
+    new_inventory: ExecutorInventory<E>,
+    phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor<F>>>,
 }
 
 #[derive(Clone, Getters, CopyGetters)]
@@ -223,28 +232,6 @@ impl<E> ExecutorInventory<E> {
         Ok(())
     }
 
-    /// The generic `F` must match that of the `PhantomChip<F>`.
-    pub fn add_phantom_sub_executor<F, PE>(
-        &mut self,
-        phantom_sub: PE,
-        discriminant: PhantomDiscriminant,
-    ) -> Result<(), ExecutorInventoryError>
-    where
-        E: AnyEnum,
-        F: 'static,
-        PE: PhantomSubExecutor<F> + 'static,
-    {
-        let phantom_chip: &mut PhantomExecutor<F> = self
-            .find_executor_mut()
-            .next()
-            .expect("system always has phantom chip");
-        let existing = phantom_chip.add_sub_executor(phantom_sub, discriminant);
-        if existing.is_some() {
-            return Err(ExecutorInventoryError::PhantomSubExecutorExists { discriminant });
-        }
-        Ok(())
-    }
-
     /// Extend the inventory with a new extension.
     /// A new inventory with different type generics is returned with the combined inventory.
     pub fn extend<F, E3, EXT>(
@@ -252,15 +239,46 @@ impl<E> ExecutorInventory<E> {
         other: &EXT,
     ) -> Result<ExecutorInventory<E3>, ExecutorInventoryError>
     where
-        EXT: VmExecutionExtension<F>,
+        F: 'static,
         E: Into<E3> + AnyEnum,
+        E3: AnyEnum,
+        EXT: VmExecutionExtension<F>,
         EXT::Executor: Into<E3>,
     {
-        let mut other_inventory = ExecutorInventory::new();
-        other.extend_execution(&mut other_inventory)?;
+        let mut builder: ExecutorInventoryBuilder<F, EXT::Executor> = self.builder();
+        other.extend_execution(&mut builder)?;
+        let other_inventory = builder.new_inventory;
+        let other_phantom_executors = builder.phantom_executors;
         let mut inventory_ext = self.transmute();
         inventory_ext.append(other_inventory.transmute())?;
+        let phantom_chip: &mut PhantomExecutor<F> = inventory_ext
+            .find_executor_mut()
+            .next()
+            .expect("system always has phantom chip");
+        let phantom_executors = &mut phantom_chip.phantom_executors;
+        for (discriminant, sub_executor) in other_phantom_executors {
+            if phantom_executors
+                .insert(discriminant, sub_executor)
+                .is_some()
+            {
+                return Err(ExecutorInventoryError::PhantomSubExecutorExists { discriminant });
+            }
+        }
+
         Ok(inventory_ext)
+    }
+
+    pub fn builder<F, E2>(&self) -> ExecutorInventoryBuilder<'_, F, E2>
+    where
+        F: 'static,
+        E: AnyEnum,
+    {
+        let old_executors = self.executors.iter().map(|e| e as &dyn AnyEnum).collect();
+        ExecutorInventoryBuilder {
+            old_executors,
+            new_inventory: ExecutorInventory::new(),
+            phantom_executors: Default::default(),
+        }
     }
 
     pub fn transmute<E2>(self) -> ExecutorInventory<E2>
@@ -276,10 +294,7 @@ impl<E> ExecutorInventory<E> {
 
     /// Append `other` to current inventory. This means `self` comes earlier in the dependency
     /// chain.
-    pub fn append(
-        &mut self,
-        mut other: ExecutorInventory<E>,
-    ) -> Result<(), ExecutorInventoryError> {
+    fn append(&mut self, mut other: ExecutorInventory<E>) -> Result<(), ExecutorInventoryError> {
         let num_executors = self.executors.len();
         for (opcode, mut id) in other.instruction_lookup.into_iter() {
             id = id.checked_add(num_executors.try_into().unwrap()).unwrap();
@@ -325,6 +340,44 @@ impl<E> ExecutorInventory<E> {
         self.executors
             .iter_mut()
             .filter_map(|e| e.as_any_kind_mut().downcast_mut())
+    }
+}
+
+impl<F, E> ExecutorInventoryBuilder<'_, F, E> {
+    pub fn add_executor(
+        &mut self,
+        executor: impl Into<E>,
+        opcodes: impl IntoIterator<Item = VmOpcode>,
+    ) -> Result<(), ExecutorInventoryError> {
+        self.new_inventory.add_executor(executor, opcodes)
+    }
+
+    pub fn add_phantom_sub_executor<PE>(
+        &mut self,
+        phantom_sub: PE,
+        discriminant: PhantomDiscriminant,
+    ) -> Result<(), ExecutorInventoryError>
+    where
+        E: AnyEnum,
+        F: 'static,
+        PE: PhantomSubExecutor<F> + 'static,
+    {
+        let existing = self
+            .phantom_executors
+            .insert(discriminant, Arc::new(phantom_sub));
+        if existing.is_some() {
+            return Err(ExecutorInventoryError::PhantomSubExecutorExists { discriminant });
+        }
+        Ok(())
+    }
+
+    pub fn find_executor<EX: 'static>(&self) -> impl Iterator<Item = &'_ EX>
+    where
+        E: AnyEnum,
+    {
+        self.old_executors
+            .iter()
+            .filter_map(|e| e.as_any_kind().downcast_ref())
     }
 }
 
@@ -605,23 +658,6 @@ where
     // }
 
     // Note[jpw]: do we still need this?
-    /// Return trace heights of (SystemBase, Inventory). Usually this is for aggregation and not
-    /// useful for regular users.
-    ///
-    /// **Warning**: the order of `get_trace_heights` is deterministic, but it is not the same as
-    /// the order of `air_names`. In other words, the order here does not match the order of AIR
-    /// IDs.
-    // pub fn get_internal_trace_heights(&self) -> VmComplexTraceHeights
-    // where
-    //     E: ChipUsageGetter,
-    //     P: ChipUsageGetter,
-    // {
-    //     VmComplexTraceHeights::new(
-    //         self.base.get_system_trace_heights(),
-    //         self.inventory.get_trace_heights(),
-    //     )
-    // }
-
     // /// Return dummy trace heights of (SystemBase, Inventory). Usually this is for aggregation to
     // /// generate a dummy proof and not useful for regular users.
     // ///
@@ -721,7 +757,7 @@ impl<F, EXT: VmExecutionExtension<F>> VmExecutionExtension<F> for Option<EXT> {
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventory<Self::Executor>,
+        inventory: &mut ExecutorInventoryBuilder<F, Self::Executor>,
     ) -> Result<(), ExecutorInventoryError> {
         if let Some(extension) = self {
             extension.extend_execution(inventory)
