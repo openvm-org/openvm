@@ -1,75 +1,69 @@
-use std::sync::Arc;
+use std::{result::Result, sync::Arc};
 
+use crate::*;
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
-        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension,
+        ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator, RowMajorMatrixArena,
+        SystemConfig, VmCircuitExtension, VmExecutionExtension, VmProverExtension,
     },
-    system::memory::SharedMemoryHelper,
+    system::{memory::SharedMemoryHelper, SystemExecutor},
 };
-use openvm_circuit_derive::AnyEnum;
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::*;
+use openvm_rv32im_circuit::{Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor};
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_field::PrimeField32,
-    prover::cpu::CpuBackend,
+    p3_field::{Field, PrimeField32},
+    prover::{cpu::CpuBackend, hal::ProverBackend},
 };
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use crate::*;
-
 // TODO: this should be decided after e2 execution
 
-// #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
-// pub struct Sha256Rv32Config {
-//     #[system]
-//     pub system: SystemConfig,
-//     #[extension]
-//     pub rv32i: Rv32I,
-//     #[extension]
-//     pub rv32m: Rv32M,
-//     #[extension]
-//     pub io: Rv32Io,
-//     #[extension]
-//     pub sha256: Sha256,
-// }
+#[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
+pub struct Sha256Rv32Config {
+    #[config(executor = SystemExecutor)]
+    pub system: SystemConfig,
+    #[extension(generics = false)]
+    pub rv32i: Rv32I,
+    #[extension(generics = false)]
+    pub rv32m: Rv32M,
+    #[extension(generics = false)]
+    pub io: Rv32Io,
+    #[extension(generics = false)]
+    pub sha256: Sha256,
+}
 
-// impl Default for Sha256Rv32Config {
-//     fn default() -> Self {
-//         Self {
-//             system: SystemConfig::default().with_continuations(),
-//             rv32i: Rv32I,
-//             rv32m: Rv32M::default(),
-//             io: Rv32Io,
-//             sha256: Sha256,
-//         }
-//     }
-// }
+impl Default for Sha256Rv32Config {
+    fn default() -> Self {
+        Self {
+            system: SystemConfig::default().with_continuations(),
+            rv32i: Rv32I,
+            rv32m: Rv32M::default(),
+            io: Rv32Io,
+            sha256: Sha256,
+        }
+    }
+}
 
 // Default implementation uses no init file
-// impl InitFileGenerator for Sha256Rv32Config {}
+impl InitFileGenerator for Sha256Rv32Config {}
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Sha256;
 
-#[derive(From, AnyEnum)]
+#[derive(Clone, From, AnyEnum, InsExecutorE1, InstructionExecutor)]
 pub enum Sha256Executor {
     Sha256(Sha256VmStep),
 }
-
-// #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
-// pub enum Sha256Periphery<F: PrimeField32> {
-//     BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
-//     Phantom(PhantomExecutor<F>),
-// }
 
 impl<F> VmExecutionExtension<F> for Sha256 {
     type Executor = Sha256Executor;

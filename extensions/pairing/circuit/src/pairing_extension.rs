@@ -62,33 +62,23 @@ pub struct PairingExtension {
     pub supported_curves: Vec<PairingCurve>,
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, InsExecutorE1)]
+#[derive(Clone, Copy, From, AnyEnum, InsExecutorE1, InstructionExecutor)]
 pub enum PairingExtensionExecutor<F: PrimeField32> {
     Phantom(PhantomExecutor<F>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
-pub enum PairingExtensionPeriphery<F: PrimeField32> {
-    BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
-    Phantom(PhantomExecutor<F>),
-}
-
-impl<F: PrimeField32> VmExtension<F> for PairingExtension {
+impl<F: PrimeField32> VmExecutionExtension<F> for PairingExtension {
     type Executor = PairingExtensionExecutor<F>;
-    type Periphery = PairingExtensionPeriphery<F>;
 
-    fn build(
+    fn extend_execution(
         &self,
-        builder: &mut VmInventoryBuilder<F>,
-    ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
-        let inventory = VmInventory::new();
-
-        builder.add_phantom_sub_executor(
+        inventory: &mut ExecutorInventoryBuilder<F, PairingExtensionExecutor<F>>,
+    ) -> Result<(), ExecutorInventoryError> {
+        inventory.add_phantom_sub_executor(
             phantom::PairingHintSubEx,
             PhantomDiscriminant(PairingPhantom::HintFinalExp as u16),
         )?;
-
-        Ok(inventory)
+        Ok(())
     }
 }
 

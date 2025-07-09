@@ -3,9 +3,13 @@ pub use addsub::*;
 
 mod muldiv;
 pub use muldiv::*;
-use openvm_circuit::arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper};
-use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionStep};
-use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
+use openvm_mod_circuit_builder::{
+    FieldExpressionCoreAir, FieldExpressionFiller, FieldExpressionStep,
+};
+use openvm_rv32_adapters::{
+    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
+};
 
 pub(crate) type Fp2Air<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper<
     Rv32VecHeapAdapterAir<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
@@ -15,9 +19,7 @@ pub(crate) type Fp2Air<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrap
 pub(crate) type Fp2Step<const BLOCKS: usize, const BLOCK_SIZE: usize> =
     FieldExpressionStep<Rv32VecHeapAdapterStep<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>;
 
-pub(crate) type Fp2Chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> = NewVmChipWrapper<
+pub(crate) type Fp2Chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> = VmChipWrapper<
     F,
-    Fp2Air<BLOCKS, BLOCK_SIZE>,
-    Fp2Step<BLOCKS, BLOCK_SIZE>,
-    MatrixRecordArena<F>,
+    FieldExpressionFiller<Rv32VecHeapAdapterFiller<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
 >;

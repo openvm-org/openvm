@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, sync::Arc};
 
 use itertools::Itertools;
 use num_bigint::BigUint;
@@ -8,8 +8,8 @@ use openvm_circuit::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterCoreMetadata,
         AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, CustomBorrow, DynAdapterInterface,
-        DynArray, InsExecutorE1, MinimalInstruction, RecordArena, Result, SizedRecord, TraceFiller,
-        TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        DynArray, InsExecutorE1, InstructionExecutor, MinimalInstruction, RecordArena, Result,
+        SizedRecord, TraceFiller, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -17,7 +17,8 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    var_range::SharedVariableRangeCheckerChip, SubAir, TraceSubRowGenerator,
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerChip},
+    SubAir, TraceSubRowGenerator,
 };
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::{
@@ -275,16 +276,14 @@ impl<'a> FieldExpressionCoreRecordMut<'a> {
     }
 }
 
-// TODO(arayi): use lifetimes and references for fields
+#[derive(Clone)]
 pub struct FieldExpressionStep<A> {
     adapter: A,
     pub expr: FieldExpr,
     pub offset: usize,
     pub local_opcode_idx: Vec<usize>,
     pub opcode_flag_idx: Vec<usize>,
-    pub range_checker: SharedVariableRangeCheckerChip,
     pub name: String,
-    pub should_finalize: bool,
 }
 
 impl<A> FieldExpressionStep<A> {
@@ -295,9 +294,7 @@ impl<A> FieldExpressionStep<A> {
         offset: usize,
         local_opcode_idx: Vec<usize>,
         opcode_flag_idx: Vec<usize>,
-        range_checker: SharedVariableRangeCheckerChip,
         name: &str,
-        should_finalize: bool,
     ) -> Self {
         let opcode_flag_idx = if opcode_flag_idx.is_empty() && expr.needs_setup() {
             // single op chip that needs setup, so there is only one default flag, must be 0.
@@ -317,8 +314,52 @@ impl<A> FieldExpressionStep<A> {
             offset,
             local_opcode_idx,
             opcode_flag_idx,
-            range_checker,
             name: name.to_string(),
+        }
+    }
+
+    pub fn get_record_layout<F>(&self) -> FieldExpressionRecordLayout<F, A> {
+        FieldExpressionRecordLayout {
+            metadata: FieldExpressionMetadata::new(
+                self.expr.builder.num_input * self.expr.canonical_num_limbs(),
+            ),
+        }
+    }
+}
+
+pub struct FieldExpressionFiller<A> {
+    adapter: A,
+    pub expr: FieldExpr,
+    pub local_opcode_idx: Vec<usize>,
+    pub opcode_flag_idx: Vec<usize>,
+    pub range_checker: SharedVariableRangeCheckerChip,
+    pub should_finalize: bool,
+}
+
+impl<A> FieldExpressionFiller<A> {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        adapter: A,
+        expr: FieldExpr,
+        local_opcode_idx: Vec<usize>,
+        opcode_flag_idx: Vec<usize>,
+        range_checker: SharedVariableRangeCheckerChip,
+        should_finalize: bool,
+    ) -> Self {
+        let opcode_flag_idx = if opcode_flag_idx.is_empty() && expr.needs_setup() {
+            // single op chip that needs setup, so there is only one default flag, must be 0.
+            vec![0]
+        } else {
+            // multi ops chip or no-setup chip, use as is.
+            opcode_flag_idx
+        };
+        assert_eq!(opcode_flag_idx.len(), local_opcode_idx.len() - 1);
+        Self {
+            adapter,
+            expr,
+            local_opcode_idx,
+            opcode_flag_idx,
+            range_checker,
             should_finalize,
         }
     }
@@ -326,17 +367,10 @@ impl<A> FieldExpressionStep<A> {
         self.expr.builder.num_input
     }
 
-    pub fn num_vars(&self) -> usize {
-        self.expr.builder.num_variables
-    }
-
     pub fn num_flags(&self) -> usize {
         self.expr.builder.num_flags
     }
 
-    pub fn output_indices(&self) -> &[usize] {
-        &self.expr.builder.output_indices
-    }
     pub fn get_record_layout<F>(&self) -> FieldExpressionRecordLayout<F, A> {
         FieldExpressionRecordLayout {
             metadata: FieldExpressionMetadata::new(
@@ -346,22 +380,21 @@ impl<A> FieldExpressionStep<A> {
     }
 }
 
-impl<F, A> TraceStep<F> for FieldExpressionStep<A>
+impl<F, A, RA> InstructionExecutor<F, RA> for FieldExpressionStep<A>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceStep<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
+    for<'buf> RA: RecordArena<
+        'buf,
+        FieldExpressionRecordLayout<F, A>,
+        (A::RecordMut<'buf>, FieldExpressionCoreRecordMut<'buf>),
+    >,
 {
-    type RecordLayout = FieldExpressionRecordLayout<F, A>;
-    type RecordMut<'a> = (A::RecordMut<'a>, FieldExpressionCoreRecordMut<'a>);
-
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory, RA>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let (mut adapter_record, mut core_record) = state.ctx.alloc(self.get_record_layout());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
@@ -376,8 +409,13 @@ where
             &data.0,
         );
 
-        let (writes, _, _) =
-            run_field_expression(self, core_record.input_limbs, *core_record.opcode as usize);
+        let (writes, _, _) = run_field_expression(
+            &self.expr,
+            &self.local_opcode_idx,
+            &self.opcode_flag_idx,
+            &core_record.input_limbs,
+            *core_record.opcode as usize,
+        );
 
         self.adapter.write(
             state.memory,
@@ -395,7 +433,7 @@ where
     }
 }
 
-impl<F, A> TraceFiller<F> for FieldExpressionStep<A>
+impl<F, A> TraceFiller<F> for FieldExpressionFiller<A>
 where
     F: PrimeField32 + Send + Sync + Clone,
     A: 'static + AdapterTraceFiller<F>,
@@ -409,15 +447,20 @@ where
         let record: FieldExpressionCoreRecordMut =
             unsafe { get_record_from_slice(&mut core_row, self.get_record_layout::<F>()) };
 
-        let (_, inputs, flags) =
-            run_field_expression(self, record.input_limbs, *record.opcode as usize);
+        let (_, inputs, flags) = run_field_expression(
+            &self.expr,
+            &self.local_opcode_idx,
+            &self.opcode_flag_idx,
+            &record.input_limbs,
+            *record.opcode as usize,
+        );
 
         let range_checker = self.range_checker.as_ref();
         self.expr
             .generate_subrow((range_checker, inputs, flags), core_row);
     }
 
-    fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    fn fill_dummy_trace_row(&self, row_slice: &mut [F]) {
         if !self.should_finalize {
             return;
         }
@@ -427,9 +470,9 @@ where
         let core_row = &mut row_slice[A::WIDTH..];
         // We **do not** want this trace row to update the range checker
         // so we must create a temporary range checker
-        let tmp_range_checker = SharedVariableRangeCheckerChip::new(self.range_checker.bus());
+        let tmp_range_checker = Arc::new(VariableRangeCheckerChip::new(self.range_checker.bus()));
         self.expr
-            .generate_subrow((tmp_range_checker.as_ref(), inputs, flags), core_row);
+            .generate_subrow((&tmp_range_checker, inputs, flags), core_row);
         core_row[0] = F::ZERO; // is_valid = 0
     }
 }
@@ -449,8 +492,13 @@ where
         Ctx: E1E2ExecutionCtx,
     {
         let data: &[u8] = &self.adapter.read(state, instruction).into().0;
-        let (writes, _, _) =
-            run_field_expression(self, data, instruction.opcode.local_opcode_idx(self.offset));
+        let (writes, _, _) = run_field_expression(
+            &self.expr,
+            &self.local_opcode_idx,
+            &self.opcode_flag_idx,
+            data,
+            instruction.opcode.local_opcode_idx(self.offset),
+        );
 
         self.adapter.write(state, instruction, writes.into());
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
@@ -470,16 +518,18 @@ where
     }
 }
 
-fn run_field_expression<A>(
-    step: &FieldExpressionStep<A>,
+fn run_field_expression(
+    expr: &FieldExpr,
+    local_opcode_flags: &[usize],
+    opcode_flag_idx: &[usize],
     data: &[u8],
     local_opcode_idx: usize,
 ) -> (DynArray<u8>, Vec<BigUint>, Vec<bool>) {
-    let field_element_limbs = step.expr.canonical_num_limbs();
-    assert_eq!(data.len(), step.num_inputs() * field_element_limbs);
+    let field_element_limbs = expr.canonical_num_limbs();
+    assert_eq!(data.len(), expr.builder.num_input * field_element_limbs);
 
-    let mut inputs = Vec::with_capacity(step.num_inputs());
-    for i in 0..step.num_inputs() {
+    let mut inputs = Vec::with_capacity(expr.builder.num_input);
+    for i in 0..expr.builder.num_input {
         let start = i * field_element_limbs;
         let end = start + field_element_limbs;
         let limb_slice = &data[start..end];
@@ -488,18 +538,17 @@ fn run_field_expression<A>(
     }
 
     let mut flags = vec![];
-    if step.expr.needs_setup() {
-        flags = vec![false; step.num_flags()];
+    if expr.needs_setup() {
+        flags = vec![false; expr.builder.num_flags];
 
         // Find which opcode this is in our local_opcode_idx list
-        if let Some(opcode_position) = step
-            .local_opcode_idx
+        if let Some(opcode_position) = local_opcode_flags
             .iter()
             .position(|&idx| idx == local_opcode_idx)
         {
             // If this is NOT the last opcode (setup), set the corresponding flag
-            if opcode_position < step.opcode_flag_idx.len() {
-                let flag_idx = step.opcode_flag_idx[opcode_position];
+            if opcode_position < opcode_flag_idx.len() {
+                let flag_idx = opcode_flag_idx[opcode_position];
                 flags[flag_idx] = true;
             }
             // If opcode_position == step.opcode_flag_idx.len(), it's the setup operation
@@ -507,11 +556,12 @@ fn run_field_expression<A>(
         }
     }
 
-    let vars = step.expr.execute(inputs.clone(), flags.clone());
-    assert_eq!(vars.len(), step.num_vars());
+    let vars = expr.execute(inputs.clone(), flags.clone());
+    assert_eq!(vars.len(), expr.builder.num_variables);
 
-    let outputs: Vec<BigUint> = step
-        .output_indices()
+    let outputs: Vec<BigUint> = expr
+        .builder
+        .output_indices
         .iter()
         .map(|&i| vars[i].clone())
         .collect();

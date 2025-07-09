@@ -12,7 +12,9 @@ use openvm_circuit::{
         MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
+};
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
@@ -114,12 +116,30 @@ impl<const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
     }
 }
 
-#[derive(derive_new::new)]
 pub struct Rv32HeapAdapterFiller<
     const NUM_READS: usize,
     const READ_SIZE: usize,
     const WRITE_SIZE: usize,
 >(Rv32VecHeapAdapterFiller<NUM_READS, 1, 1, READ_SIZE, WRITE_SIZE>);
+
+impl<const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
+    Rv32HeapAdapterFiller<NUM_READS, READ_SIZE, WRITE_SIZE>
+{
+    pub fn new(
+        pointer_max_bits: usize,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    ) -> Self {
+        assert!(NUM_READS <= 2);
+        assert!(
+            RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - pointer_max_bits < RV32_CELL_BITS,
+            "pointer_max_bits={pointer_max_bits} needs to be large enough for high limb range check"
+        );
+        Rv32HeapAdapterFiller(Rv32VecHeapAdapterFiller::new(
+            pointer_max_bits,
+            bitwise_lookup_chip,
+        ))
+    }
+}
 
 impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
     AdapterTraceStep<F> for Rv32HeapAdapterStep<NUM_READS, READ_SIZE, WRITE_SIZE>

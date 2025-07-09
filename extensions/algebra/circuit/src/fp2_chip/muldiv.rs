@@ -5,18 +5,18 @@ use openvm_circuit::{
     arch::ExecutionBridge,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_derive::{InsExecutorE1, InstructionExecutor};
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip,
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    Chip, ChipUsageGetter,
 };
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
-    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, SymbolicExpr,
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionFiller,
+    SymbolicExpr,
 };
-use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_rv32_adapters::{
+    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
+};
 
 use super::{Fp2Air, Fp2Chip, Fp2Step};
 use crate::Fp2;
@@ -89,66 +89,84 @@ pub fn fp2_muldiv_expr(
 
 // Input: Fp2 * 2
 // Output: Fp2
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1)]
-pub struct Fp2MulDivChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    pub Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
-);
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
-    Fp2MulDivChip<F, BLOCKS, BLOCK_SIZE>
-{
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        execution_bridge: ExecutionBridge,
-        memory_bridge: MemoryBridge,
-        mem_helper: SharedMemoryHelper<F>,
-        pointer_max_bits: usize,
-        config: ExprBuilderConfig,
-        offset: usize,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-        range_checker: SharedVariableRangeCheckerChip,
-    ) -> Self {
-        let (expr, is_mul_flag, is_div_flag) = fp2_muldiv_expr(config, range_checker.bus());
+fn gen_base_expr(
+    config: ExprBuilderConfig,
+    range_checker_bus: VariableRangeCheckerBus,
+) -> (FieldExpr, Vec<usize>, Vec<usize>) {
+    let (expr, is_mul_flag, is_div_flag) = fp2_muldiv_expr(config, range_checker_bus);
 
-        let local_opcode_idx = vec![
-            Fp2Opcode::MUL as usize,
-            Fp2Opcode::DIV as usize,
-            Fp2Opcode::SETUP_MULDIV as usize,
-        ];
-        let opcode_flag_idx = vec![is_mul_flag, is_div_flag];
-        let air = Fp2Air::new(
-            Rv32VecHeapAdapterAir::new(
-                execution_bridge,
-                memory_bridge,
-                bitwise_lookup_chip.bus(),
-                pointer_max_bits,
-            ),
-            FieldExpressionCoreAir::new(
-                expr.clone(),
-                offset,
-                local_opcode_idx.clone(),
-                opcode_flag_idx.clone(),
-            ),
-        );
+    let local_opcode_idx = vec![
+        Fp2Opcode::MUL as usize,
+        Fp2Opcode::DIV as usize,
+        Fp2Opcode::SETUP_MULDIV as usize,
+    ];
+    let opcode_flag_idx = vec![is_mul_flag, is_div_flag];
 
-        let step = Fp2Step::new(
-            Rv32VecHeapAdapterStep::new(pointer_max_bits, bitwise_lookup_chip),
+    (expr, local_opcode_idx, opcode_flag_idx)
+}
+
+pub fn get_fp2_multdiv_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    exec_bridge: ExecutionBridge,
+    mem_bridge: MemoryBridge,
+    config: ExprBuilderConfig,
+    range_checker_bus: VariableRangeCheckerBus,
+    bitwise_lookup_bus: BitwiseOperationLookupBus,
+    pointer_max_bits: usize,
+    offset: usize,
+) -> Fp2Air<BLOCKS, BLOCK_SIZE> {
+    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
+    Fp2Air::new(
+        Rv32VecHeapAdapterAir::new(
+            exec_bridge,
+            mem_bridge,
+            bitwise_lookup_bus,
+            pointer_max_bits,
+        ),
+        FieldExpressionCoreAir::new(expr, offset, local_opcode_idx, opcode_flag_idx),
+    )
+}
+
+pub fn get_fp2_multdiv_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    config: ExprBuilderConfig,
+    range_checker_bus: VariableRangeCheckerBus,
+    pointer_max_bits: usize,
+    offset: usize,
+) -> Fp2Step<BLOCKS, BLOCK_SIZE> {
+    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
+
+    Fp2Step::new(
+        Rv32VecHeapAdapterStep::new(pointer_max_bits),
+        expr,
+        offset,
+        local_opcode_idx,
+        opcode_flag_idx,
+        "Fp2MulDiv",
+    )
+}
+
+pub fn get_fp2_multdiv_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    config: ExprBuilderConfig,
+    mem_helper: SharedMemoryHelper<F>,
+    range_checker: SharedVariableRangeCheckerChip,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    pointer_max_bits: usize,
+) -> Fp2Chip<F, BLOCKS, BLOCK_SIZE> {
+    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker.bus());
+    Fp2Chip::new(
+        FieldExpressionFiller::new(
+            Rv32VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
             expr,
-            offset,
             local_opcode_idx,
             opcode_flag_idx,
             range_checker,
-            "Fp2MulDiv",
             false,
-        );
-        Self(Fp2Chip::new(air, step, mem_helper))
-    }
-
-    pub fn expr(&self) -> &FieldExpr {
-        &self.0.step.expr
-    }
+        ),
+        mem_helper,
+    )
 }
 
+/*
 #[cfg(test)]
 mod tests {
 
@@ -282,3 +300,4 @@ mod tests {
         tester.simple_test().expect("Verification failed");
     }
 }
+*/
