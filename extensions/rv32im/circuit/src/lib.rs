@@ -33,7 +33,7 @@ use openvm_circuit::{
     system::SystemExecutor,
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::{Field, PrimeField32};
 use serde::{Deserialize, Serialize};
 pub use shift::*;
 use strum::IntoEnumIterator;
@@ -45,7 +45,7 @@ pub use extension::*;
 // mod test_utils;
 
 // Config for a VM with base extension and IO extension
-#[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
+#[derive(Clone, Debug, derive_new::new, VmConfig, Serialize, Deserialize)]
 pub struct Rv32IConfig {
     #[config(executor = SystemExecutor)]
     pub system: SystemConfig,
@@ -53,36 +53,6 @@ pub struct Rv32IConfig {
     pub base: Rv32I,
     #[extension(generics = false)]
     pub io: Rv32Io,
-}
-#[derive(
-    ::openvm_circuit::derive::InstructionExecutor,
-    ::openvm_circuit::derive::InsExecutorE1,
-    ::derive_more::derive::From,
-    ::openvm_circuit::derive::AnyEnum,
-)]
-pub enum Rv32IConfigExecutor<F: PrimeField32> {
-    #[any_enum]
-    System(SystemExecutor<F>),
-    #[any_enum]
-    Base(Rv32IExecutor),
-    #[any_enum]
-    Io(Rv32IoExecutor),
-}
-impl<F: PrimeField32> ::openvm_circuit::arch::VmExecutionConfig<F> for Rv32IConfig {
-    type Executor = Rv32IConfigExecutor<F>;
-    fn create_executors(
-        &self,
-    ) -> Result<
-        ::openvm_circuit::arch::ExecutorInventory<Self::Executor>,
-        ::openvm_circuit::arch::ExecutorInventoryError,
-    > {
-        let inventory = self.system.create_executors()?;
-        let inventory: ::openvm_circuit::arch::ExecutorInventory<Self::Executor> =
-            inventory.extend(&self.base)?;
-        let inventory: ::openvm_circuit::arch::ExecutorInventory<Self::Executor> =
-            inventory.extend(&self.io)?;
-        Ok(inventory)
-    }
 }
 
 // Default implementation uses no init file

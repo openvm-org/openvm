@@ -236,7 +236,6 @@ where
     }
 }
 
-// TODO[jpw]: Can we avoid Executor: Clone by making executors stateless?
 impl<F, VC> VmExecutor<F, VC>
 where
     F: PrimeField32,

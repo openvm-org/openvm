@@ -165,7 +165,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
     }
 }
 
-#[derive(derive_new::new)]
+#[derive(Clone, derive_new::new)]
 pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize>;
 
 #[derive(derive_new::new)]

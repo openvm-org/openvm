@@ -795,7 +795,7 @@ where
 /// [TraceStep]. Note that this is only a helper trait when the same interface of state access
 /// is reused or shared by multiple implementations. It is not required to implement this trait if
 /// it is easier to implement the [TraceStep] trait directly without this trait.
-pub trait AdapterTraceStep<F> {
+pub trait AdapterTraceStep<F>: Clone {
     const WIDTH: usize;
     type ReadData;
     type WriteData;

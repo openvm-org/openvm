@@ -159,10 +159,10 @@ pub struct Rv32JalrAdapterRecord {
 }
 
 // This adapter reads from [b:4]_d (rs1) and writes to [a:4]_d (rd)
-#[derive(derive_new::new)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct Rv32JalrAdapterStep;
 
-#[derive(derive_new::new)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct Rv32JalrAdapterFiller;
 
 impl<F> AdapterTraceStep<F> for Rv32JalrAdapterStep

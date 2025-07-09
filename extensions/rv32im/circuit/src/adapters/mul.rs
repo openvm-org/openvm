@@ -142,10 +142,10 @@ pub struct Rv32MultAdapterRecord {
     pub writes_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
-#[derive(derive_new::new)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct Rv32MultAdapterStep;
 
-#[derive(derive_new::new)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct Rv32MultAdapterFiller;
 
 impl<F> AdapterTraceStep<F> for Rv32MultAdapterStep

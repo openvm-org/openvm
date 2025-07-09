@@ -67,6 +67,8 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                     (variant_name, field)
                 })
                 .collect::<Vec<_>>();
+            let default_ty_generic = Ident::new("F", proc_macro2::Span::call_site());
+            let mut new_generics = generics.clone();
             let field_ty_generic = ast
                 .generics
                 .params
@@ -75,10 +77,13 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                     GenericParam::Type(type_param) => Some(&type_param.ident),
                     _ => None,
                 })
-                .expect("First generic must be type for Field");
+                .unwrap_or_else(|| {
+                    new_generics.params.push(syn::parse_quote! { F });
+                    &default_ty_generic
+                });
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
             // crate. Assume F is already generic of the field.
-            let (execute_arms, get_opcode_name_arms): (Vec<_>, Vec<_>) =
+            let (execute_arms, get_opcode_name_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>) =
                 multiunzip(variants.iter().map(|(variant_name, field)| {
                     let field_ty = &field.ty;
                     let execute_arm = quote! {
@@ -87,11 +92,19 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                     let get_opcode_name_arm = quote! {
                         #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic>>::get_opcode_name(x, opcode)
                     };
-
-                    (execute_arm, get_opcode_name_arm)
+                    let where_predicate = syn::parse_quote! {
+                        #field_ty: ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic>
+                    };
+                    (execute_arm, get_opcode_name_arm, where_predicate)
                 }));
+            let where_clause = new_generics.make_where_clause();
+            for predicate in where_predicates {
+                where_clause.predicates.push(predicate);
+            }
+            // Don't use these ty_generics because it might have extra "F"
+            let (impl_generics, _, where_clause) = new_generics.split_for_impl();
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic> for #name #ty_generics {
+                impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic> for #name #ty_generics #where_clause {
                     fn execute(
                         &mut self,
                         state: ::openvm_circuit::arch::VmStateMut<#field_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory, ::openvm_circuit::arch::MatrixRecordArena<#field_ty_generic>>,
@@ -180,6 +193,8 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     (variant_name, field)
                 })
                 .collect::<Vec<_>>();
+            let default_ty_generic = Ident::new("F", proc_macro2::Span::call_site());
+            let mut new_generics = generics.clone();
             let first_ty_generic = ast
                 .generics
                 .params
@@ -188,24 +203,34 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     GenericParam::Type(type_param) => Some(&type_param.ident),
                     _ => None,
                 })
-                .expect("First generic must be type for Field");
+                .unwrap_or_else(|| {
+                    new_generics.params.push(syn::parse_quote! { F });
+                    &default_ty_generic
+                });
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
             // crate. Assume F is already generic of the field.
-            let execute_e1_arms = variants.iter().map(|(variant_name, field)| {
+            let (execute_e1_arms, execute_metered_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
-                quote! {
+                let execute_e1_arm= quote! {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_e1(x, state, instruction)
-                }
-            }).collect::<Vec<_>>();
-            let execute_metered_arms = variants.iter().map(|(variant_name, field)| {
-                let field_ty = &field.ty;
-                quote! {
+                };
+                let execute_metered_arm =quote! {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_metered(x, state, instruction, chip_index)
-                }
-            }).collect::<Vec<_>>();
+                };
+                let where_predicate = syn::parse_quote! {
+                    #field_ty: ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>
+                };
+                (execute_e1_arm, execute_metered_arm, where_predicate)
+            }));
+            let where_clause = new_generics.make_where_clause();
+            for predicate in where_predicates {
+                where_clause.predicates.push(predicate);
+            }
+            // Don't use these ty_generics because it might have extra "F"
+            let (impl_generics, _, where_clause) = new_generics.split_for_impl();
 
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic> for #name #ty_generics {
+                impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic> for #name #ty_generics #where_clause {
                     fn execute_e1<Ctx>(
                         &self,
                         state: &mut ::openvm_circuit::arch::VmStateMut<F,::openvm_circuit::system::memory::online::GuestMemory, Ctx>,
@@ -383,7 +408,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
             #ext_name_upper(#executor_type),
         });
         create_executors.push(quote! {
-            let inventory: ::openvm_circuit::arch::ExecutorInventory<Self::Executor> = inventory.extend(&self.#ext_field_name)?;
+            let inventory: ::openvm_circuit::arch::ExecutorInventory<Self::Executor> = inventory.extend::<F, _, _>(&self.#ext_field_name)?;
         });
         create_circuit.push(quote! {
             inventory.start_new_extension();
@@ -404,8 +429,14 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     let executor_type = Ident::new(&format!("{}Executor", name), name.span());
 
     let token_stream = TokenStream::from(quote! {
-        #[derive(::openvm_circuit::derive::InstructionExecutor, ::openvm_circuit::derive::InsExecutorE1, ::derive_more::derive::From, ::openvm_circuit::derive::AnyEnum)]
-        pub enum #executor_type<F: PrimeField32> {
+        #[derive(
+            Clone,
+            ::openvm_circuit::derive::InstructionExecutor,
+            ::openvm_circuit::derive::InsExecutorE1,
+            ::derive_more::derive::From,
+            ::openvm_circuit::derive::AnyEnum
+        )]
+        pub enum #executor_type<F: Field> {
             #[any_enum]
             #source_name_upper(#source_executor_type),
             #(#executor_enum_fields)*

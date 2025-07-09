@@ -10,7 +10,7 @@ use openvm_instructions::{LocalOpcode, PublishOpcode, SystemOpcode};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::{LookupBus, PermutationCheckBus},
-    p3_field::PrimeField32,
+    p3_field::{Field, PrimeField32},
     prover::{
         cpu::CpuBackend,
         hal::ProverBackend,
@@ -108,7 +108,7 @@ pub enum TouchedMemory<F> {
 }
 
 #[derive(Clone, AnyEnum, InsExecutorE1, InstructionExecutor, From)]
-pub enum SystemExecutor<F: PrimeField32> {
+pub enum SystemExecutor<F: Field> {
     PublicValues(PublicValuesStep<F>),
     Phantom(PhantomExecutor<F>),
 }

@@ -7,8 +7,8 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, InsExecutorE1, RecordArena, Result, TraceFiller,
-        TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterTraceStep, EmptyAdapterCoreLayout, InsExecutorE1, InstructionExecutor, RecordArena,
+        Result, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -187,12 +187,12 @@ pub struct LoadSignExtendCoreRecord<const NUM_CELLS: usize> {
     pub prev_data: [u8; NUM_CELLS],
 }
 
-#[derive(derive_new::new)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct LoadSignExtendStep<A, const NUM_CELLS: usize, const LIMB_BITS: usize> {
     adapter: A,
 }
 
-#[derive(derive_new::new)]
+#[derive(Clone, derive_new::new)]
 pub struct LoadSignExtendFiller<
     A = Rv32LoadStoreAdapterFiller,
     const NUM_CELLS: usize = RV32_REGISTER_NUM_LIMBS,
@@ -218,7 +218,24 @@ where
         A::RecordMut<'a>,
         &'a mut LoadSignExtendCoreRecord<NUM_CELLS>,
     );
+}
 
+impl<F, A, RA, const NUM_CELLS: usize, const LIMB_BITS: usize> InstructionExecutor<F, RA>
+    for LoadSignExtendStep<A, NUM_CELLS, LIMB_BITS>
+where
+    F: PrimeField32,
+    A: 'static
+        + AdapterTraceStep<
+            F,
+            ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
+            WriteData = [u32; NUM_CELLS],
+        >,
+    for<'buf> RA: RecordArena<
+        'buf,
+        <Self as TraceStep<F>>::RecordLayout,
+        <Self as TraceStep<F>>::RecordMut<'buf>,
+    >,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -226,14 +243,11 @@ where
         )
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory, RA>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(

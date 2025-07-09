@@ -4,8 +4,9 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, ImmInstruction, InsExecutorE1, RecordArena,
-        Result, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterTraceStep, EmptyAdapterCoreLayout, ImmInstruction, InsExecutorE1,
+        InstructionExecutor, RecordArena, Result, TraceFiller, TraceStep, VmAdapterInterface,
+        VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -200,13 +201,13 @@ pub struct BranchLessThanCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usi
     pub local_opcode: u8,
 }
 
-#[derive(derive_new::new)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct BranchLessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
 }
 
-#[derive(derive_new::new)]
+#[derive(Clone, derive_new::new)]
 pub struct BranchLessThanFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
@@ -216,7 +217,7 @@ pub struct BranchLessThanFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usiz
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F>
     for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
 where
-    F: PrimeField32,
+    F: 'static,
     A: 'static + AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
 {
     type RecordLayout = EmptyAdapterCoreLayout<F, A>;
@@ -224,7 +225,19 @@ where
         A::RecordMut<'a>,
         &'a mut BranchLessThanCoreRecord<NUM_LIMBS, LIMB_BITS>,
     );
+}
 
+impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> InstructionExecutor<F, RA>
+    for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
+    for<'buf> RA: RecordArena<
+        'buf,
+        <Self as TraceStep<F>>::RecordLayout,
+        <Self as TraceStep<F>>::RecordMut<'buf>,
+    >,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -232,14 +245,11 @@ where
         )
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory, RA>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let &Instruction { opcode, c: imm, .. } = instruction;
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());

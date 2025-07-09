@@ -68,7 +68,7 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 // ============ Executor and Periphery Enums for Extension ============
 
 /// RISC-V 32-bit Base (RV32I) Instruction Executors
-#[derive(From, AnyEnum)]
+#[derive(Clone, From, AnyEnum, InsExecutorE1, InstructionExecutor)]
 pub enum Rv32IExecutor {
     // Rv32 (for standard 32-bit integers):
     BaseAlu(Rv32BaseAluStep),
@@ -84,7 +84,7 @@ pub enum Rv32IExecutor {
 }
 
 /// RISC-V 32-bit Multiplication Extension (RV32M) Instruction Executors
-#[derive(From, AnyEnum)]
+#[derive(Clone, From, AnyEnum, InsExecutorE1)]
 pub enum Rv32MExecutor {
     Multiplication(Rv32MultiplicationStep),
     MultiplicationHigh(Rv32MulHStep),
@@ -92,7 +92,7 @@ pub enum Rv32MExecutor {
 }
 
 /// RISC-V 32-bit Io Instruction Executors
-#[derive(From, AnyEnum)]
+#[derive(Clone, Copy, From, AnyEnum, InsExecutorE1)]
 pub enum Rv32IoExecutor {
     HintStore(Rv32HintStoreStep),
 }

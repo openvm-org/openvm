@@ -63,7 +63,7 @@ where
             RecordArena = MatrixRecordArena<BabyBear>,
         >,
     <VC as VmExecutionConfig<BabyBear>>::Executor:
-        Clone + InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear>,
+        InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear>,
 {
     air_test_impl(config, exe, input, min_segments, true).unwrap()
 }
@@ -88,7 +88,7 @@ where
             RecordArena = MatrixRecordArena<BabyBear>,
         >,
     <VC as VmExecutionConfig<BabyBear>>::Executor:
-        Clone + InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear>,
+        InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear>,
 {
     setup_tracing();
     let mut log_blowup = 1;

@@ -200,10 +200,10 @@ pub struct Rv32RdWriteAdapterRecord {
     pub rd_aux_record: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
-#[derive(derive_new::new)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct Rv32RdWriteAdapterStep;
 
-#[derive(derive_new::new)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct Rv32RdWriteAdapterFiller;
 
 impl<F> AdapterTraceStep<F> for Rv32RdWriteAdapterStep
@@ -314,12 +314,12 @@ where
 }
 
 /// This adapter doesn't read anything, and **maybe** writes to \[a:4\]_d, where d == 1
-#[derive(derive_new::new)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct Rv32CondRdWriteAdapterStep {
     inner: Rv32RdWriteAdapterStep,
 }
 
-#[derive(derive_new::new)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct Rv32CondRdWriteAdapterFiller {
     inner: Rv32RdWriteAdapterFiller,
 }

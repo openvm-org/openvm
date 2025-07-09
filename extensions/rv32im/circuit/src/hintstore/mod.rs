@@ -4,8 +4,8 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionError, ExecutionState,
-        InsExecutorE1, MultiRowLayout, MultiRowMetadata, RecordArena, Result, SizedRecord,
-        TraceFiller, TraceStep, VmChipWrapper, VmStateMut,
+        InsExecutorE1, InstructionExecutor, MultiRowLayout, MultiRowMetadata, RecordArena, Result,
+        SizedRecord, TraceFiller, TraceStep, VmChipWrapper, VmStateMut,
     },
     system::memory::{
         offline_checker::{
@@ -352,25 +352,32 @@ impl SizedRecord<Rv32HintStoreLayout> for Rv32HintStoreRecordMut<'_> {
     }
 }
 
-#[derive(derive_new::new)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct Rv32HintStoreStep {
     pub pointer_max_bits: usize,
     pub offset: usize,
 }
 
-#[derive(derive_new::new)]
+#[derive(Clone, derive_new::new)]
 pub struct Rv32HintStoreFiller {
     pointer_max_bits: usize,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl<F> TraceStep<F> for Rv32HintStoreStep
-where
-    F: PrimeField32,
-{
+impl<F> TraceStep<F> for Rv32HintStoreStep {
     type RecordLayout = MultiRowLayout<Rv32HintStoreMetadata>;
     type RecordMut<'a> = Rv32HintStoreRecordMut<'a>;
+}
 
+impl<F, RA> InstructionExecutor<F, RA> for Rv32HintStoreStep
+where
+    F: PrimeField32,
+    for<'buf> RA: RecordArena<
+        'buf,
+        <Self as TraceStep<F>>::RecordLayout,
+        <Self as TraceStep<F>>::RecordMut<'buf>,
+    >,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         if opcode == HINT_STOREW.global_opcode().as_usize() {
             String::from("HINT_STOREW")
@@ -381,14 +388,11 @@ where
         }
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory, RA>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let &Instruction {
             opcode, a, b, d, e, ..
         } = instruction;

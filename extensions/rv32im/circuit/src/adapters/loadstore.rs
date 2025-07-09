@@ -321,7 +321,7 @@ pub struct Rv32LoadStoreAdapterRecord {
 /// This chip reads rs1 and gets a intermediate memory pointer address with rs1 + imm.
 /// In case of Loads, reads from the shifted intermediate pointer and writes to rd.
 /// In case of Stores, reads from rs2 and writes to the shifted intermediate pointer.
-#[derive(derive_new::new)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct Rv32LoadStoreAdapterStep {
     pointer_max_bits: usize,
 }

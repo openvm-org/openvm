@@ -7,8 +7,9 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, InsExecutorE1, RecordArena, Result,
-        SignedImmInstruction, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterTraceStep, EmptyAdapterCoreLayout, InsExecutorE1, InstructionExecutor, RecordArena,
+        Result, SignedImmInstruction, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -185,11 +186,12 @@ pub struct Rv32JalrCoreRecord {
     pub imm_sign: bool,
 }
 
-#[derive(derive_new::new)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct Rv32JalrStep<A = Rv32JalrAdapterStep> {
     adapter: A,
 }
 
+#[derive(Clone)]
 pub struct Rv32JalrFiller<A = Rv32JalrAdapterStep> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
@@ -213,7 +215,7 @@ impl<A> Rv32JalrFiller<A> {
 
 impl<F, A> TraceStep<F> for Rv32JalrStep<A>
 where
-    F: PrimeField32,
+    F: 'static,
     A: 'static
         + AdapterTraceStep<
             F,
@@ -223,7 +225,23 @@ where
 {
     type RecordLayout = EmptyAdapterCoreLayout<F, A>;
     type RecordMut<'a> = (A::RecordMut<'a>, &'a mut Rv32JalrCoreRecord);
+}
 
+impl<F, A, RA> InstructionExecutor<F, RA> for Rv32JalrStep<A>
+where
+    F: PrimeField32,
+    A: 'static
+        + AdapterTraceStep<
+            F,
+            ReadData = [u8; RV32_REGISTER_NUM_LIMBS],
+            WriteData = [u8; RV32_REGISTER_NUM_LIMBS],
+        >,
+    for<'buf> RA: RecordArena<
+        'buf,
+        <Self as TraceStep<F>>::RecordLayout,
+        <Self as TraceStep<F>>::RecordMut<'buf>,
+    >,
+{
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -231,14 +249,11 @@ where
         )
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory, RA>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let Instruction { opcode, c, g, .. } = *instruction;
 
         debug_assert_eq!(
