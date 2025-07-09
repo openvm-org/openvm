@@ -114,7 +114,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_U256: b
     };
     let mut rd = [0u8; INT256_NUM_LIMBS];
     rd[0] = cmp_result as u8;
-    vm_state.vm_write(RV32_REGISTER_AS, u32::from_le_bytes(rd_ptr), &rd);
+    vm_state.vm_write(RV32_MEMORY_AS, u32::from_le_bytes(rd_ptr), &rd);
 
     vm_state.pc += DEFAULT_PC_STEP;
     vm_state.instret += 1;
