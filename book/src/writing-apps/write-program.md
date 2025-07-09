@@ -136,4 +136,4 @@ To override the default behavior and provide a custom implementation, turn off t
 
 OpenVM partially supports [reflective programming](https://en.wikipedia.org/wiki/Reflective_programming) by allowing **read-only** access to the program code itself during runtime execution. Program code that is modified during runtime will **not** be executed.
 
-More specifically, data and executable code from the RISC-V ELF are loaded into the initial memory image at the start of runtime execution, and this memory may be freely accessed during execution. However execution will always run with respect to the initial executable code from the ELF and all runtime modifications will be ignored.
+More specifically, data and executable code from the RISC-V ELF are loaded into the initial memory image at the start of runtime execution, and this memory may be freely accessed during execution. However, execution will always run with respect to the initial executable code from the ELF, and all runtime modifications will be ignored.
