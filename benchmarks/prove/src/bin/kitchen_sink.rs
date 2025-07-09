@@ -134,6 +134,19 @@ fn main() -> Result<()> {
                 )
                 .expect("execute_metered failed");
             println!("max_trace_heights: {:?}", max_trace_heights);
+
+            let actual_trace_heights = executor
+                .execute_and_generate(
+                    app_pk.leaf_committed_exe.clone(),
+                    leaf_input.write_to_stream(),
+                    &max_trace_heights,
+                )
+                .expect("execute_and_generate failed")
+                .per_air
+                .iter()
+                .map(|(_, air)| air.raw.height())
+                .collect::<Vec<_>>();
+            println!("actual_trace_heights: {:?}", actual_trace_heights);
         });
     }
 
