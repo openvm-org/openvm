@@ -1,4 +1,4 @@
-## Pairing
+# Elliptic Curve Pairing
 
 We'll be working with an example using the BLS12-381 elliptic curve. This is in addition to the setup that needs to be done in the [Writing a Program](../writing-apps/write-program.md) section.
 

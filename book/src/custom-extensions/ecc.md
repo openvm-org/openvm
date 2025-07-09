@@ -43,10 +43,10 @@ sw_declare! {
 Each declared curve must specify the `mod_type` (implementing `IntMod`) and a constant `b` for the Weierstrass curve equation \\(y^2 = x^3 + ax + b\\). `a` is optional and defaults to 0 for short Weierstrass curves.
 This creates `Bls12_381G1Affine` and `P256Affine` structs which implement the `Group` and `WeierstrassPoint` traits. The underlying memory layout of the structs uses the memory layout of the `Bls12_381Fp` and `P256Coord` structs, respectively.
 
-2. **Init**: Called once, the `init!` macro produces a call to `sw_init!` that enumerates these curves and allows the compiler to produce optimized instructions:
+2. **Init**: Called once, the [`openvm::init!` macro](./overview.md#automating-the-init-step) produces a call to `sw_init!` that enumerates these curves and allows the compiler to produce optimized instructions:
 
 ```rust
-init!();
+openvm::init!();
 /* This expands to
 sw_init! {
     Bls12_381G1Affine, P256Affine,

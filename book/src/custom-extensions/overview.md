@@ -11,15 +11,21 @@ OpenVM ships with a set of pre-built extensions maintained by the OpenVM team. B
 
 ## Optimizing Modular Arithmetic
 
-Some of these extensions—specifically `algebra`, `ecc`, and `pairing`—perform modular arithmetic, which can be significantly optimized when the modulus is known at compile time.  Therefore, these extensions provide a framework to inform the compiler about all the moduli and associated arithmetic structures we intend to use. To achieve this, three steps are involved:
+Some of these extensions—specifically `algebra`, `ecc`, and `pairing`—perform modular arithmetic, which can be significantly optimized when the modulus is known at compile time.  Therefore, these extensions provide a framework to inform the compiler about all the moduli and associated arithmetic structures we intend to use. To achieve this, two steps are involved:
 
 1. **Declare**: Introduce a modular arithmetic or related structure, along with its modulus and functionality. This can be done in any library or binary file.
 2. **Init**: Performed exactly once in the final binary. It aggregates all previously declared structures, assigns them stable indices, and sets up linkage so that they can be referenced in generated code.
-3. **Setup**: A one-time runtime procedure for security. This ensures that the compiled code matches the virtual machine’s expectations and that each instruction set is tied to the correct modulus or extension.
 
 These steps ensure both performance and security: performance because the modulus is known at compile time, and security because runtime checks confirm that the correct structures have been initialized.
 
 Our design for the configuration procedure above was inspired by the [EVMMAX proposal](https://github.com/jwasinger/EIPs/blob/evmmax-2/EIPS/eip-6601.md).
+
+### Automating the `init!` step
+
+The `openvm` crate provides an `init!` macro to automate the **init** step:
+1. Call `openvm::init!()` exactly once in the code of the final program binary.
+2. When [compiling the program](../writing-apps/build.md), `cargo openvm build` will read the [configuration file](#configuration) to automatically generate the correct init code and write it to `<INIT_FILE_NAME>`, which defaults to `openvm_init.rs` in the manifest directory.
+3. The `openvm::init!()` macro will include the `openvm_init.rs` file into the final binary to complete the init process. You can call `openvm::init!(INIT_FILE_NAME)` to include init code from a different file if needed.
 
 ## Configuration
 
