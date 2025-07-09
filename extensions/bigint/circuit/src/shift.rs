@@ -151,7 +151,7 @@ impl ShiftOp for SrlOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
         // Logical right shift - fill with 0
-        shift_right(rs1, rs2, 0)
+        shift_right::<false>(rs1, rs2)
     }
 }
 impl ShiftOp for SraOp {
@@ -159,21 +159,21 @@ impl ShiftOp for SraOp {
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
         // Arithmetic right shift - fill with sign bit
         if rs1[INT256_NUM_LIMBS - 1] & 0x80 > 0 {
-            shift_right(rs1, rs2, u64::MAX)
+            shift_right::<true>(rs1, rs2)
         } else {
-            shift_right(rs1, rs2, 0)
+            shift_right::<false>(rs1, rs2)
         }
     }
 }
 
 #[inline(always)]
-fn shift_right(
+fn shift_right<const SIGN: bool>(
     rs1: [u8; INT256_NUM_LIMBS],
     rs2: [u8; INT256_NUM_LIMBS],
-    init_value: u64,
 ) -> [u8; INT256_NUM_LIMBS] {
     let rs1_u64: [u64; 4] = unsafe { std::mem::transmute(rs1) };
     let rs2_u64: [u64; 4] = unsafe { std::mem::transmute(rs2) };
+    let init_value = if SIGN { u64::MAX } else { 0 };
     let mut rd = [init_value; 4];
     let shift = (rs2_u64[0] & 0xff) as u32;
     let index_offset = (shift / u64::BITS) as usize;
