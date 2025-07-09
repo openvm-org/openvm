@@ -222,7 +222,21 @@ where
         let interpreter = InterpretedInstance::new(self.config.clone(), exe);
 
         let ctx = E1Ctx::new(num_insns);
-        let state = interpreter.execute(ctx, inputs)?;
+        #[cfg(feature = "bench-metrics")]
+        let start = std::time::Instant::now();
+        #[cfg(feature = "bench-metrics")]
+        let start_instret = 0u64;
+
+        let state =
+            tracing::info_span!("execute_e1").in_scope(|| interpreter.execute(ctx, inputs))?;
+
+        #[cfg(feature = "bench-metrics")]
+        {
+            let elapsed = start.elapsed();
+            let insns = state.instret - start_instret;
+            metrics::counter!("insns").absolute(insns);
+            metrics::gauge!("execute_e1_insn_mi/s").set(insns as f64 / elapsed.as_micros() as f64);
+        }
 
         Ok(VmState {
             instret: state.instret,
