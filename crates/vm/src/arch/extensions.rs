@@ -539,6 +539,7 @@ where
     /// **Caution:** you must add chips in the order matching the order that executors were added in
     /// the [VmExecutionExtension] implementation.
     pub fn add_executor_chip<C: Chip<RA, PB> + 'static>(&mut self, chip: C) {
+        tracing::debug!("add_executor_chip: {}", type_name::<C>());
         self.executor_idx_to_insertion_idx.push(self.chips.len());
         self.chips.push(Box::new(chip));
     }
@@ -722,9 +723,8 @@ where
                     .generate_proving_ctx(system_records, sys_record_arenas),
             )
             .chain(
-                zip(&mut self.inventory.chips, record_arenas)
-                    .map(|(chip, records)| chip.generate_proving_ctx(records))
-                    .rev(),
+                zip(self.inventory.chips.iter().rev(), record_arenas)
+                    .map(|(chip, records)| chip.generate_proving_ctx(records)),
             )
             .enumerate()
             .filter(|(_air_id, ctx)| ctx.main_trace_height() > 0)

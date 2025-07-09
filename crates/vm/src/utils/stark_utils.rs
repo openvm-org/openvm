@@ -132,6 +132,7 @@ where
         } = segment;
         assert_eq!(state.as_ref().unwrap().instret, instret_start);
         let from_state = Option::take(&mut state).unwrap();
+        vm.transport_init_memory_to_device(&from_state.memory);
         let (system_records, record_arenas, to_state) =
             vm.execute_preflight(exe.clone(), from_state, num_insns, &trace_heights)?;
         state = Some(to_state);
@@ -173,7 +174,7 @@ where
     vm.verify(&vk, proofs)
         .expect("segment proofs should verify");
     let state = state.unwrap();
-    Ok((exit_code == Some(ExitCode::Success as u32)).then(|| state.memory))
+    Ok((exit_code == Some(ExitCode::Success as u32)).then_some(state.memory.memory))
 }
 
 // /// Generates the VM STARK circuit, in the form of AIRs and traces, but does not

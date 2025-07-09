@@ -182,7 +182,7 @@ where
 {
     pub instret: u64,
     pub pc: u32,
-    pub memory: MemoryImage,
+    pub memory: GuestMemory,
     pub input: Streams<F>,
     // TODO(ayush): make generic over SeedableRng
     pub rng: StdRng,
@@ -194,7 +194,7 @@ impl<F: PrimeField32> VmState<F> {
     pub fn new(
         instret: u64,
         pc: u32,
-        memory: MemoryImage,
+        memory: GuestMemory,
         input: impl Into<Streams<F>>,
         seed: u64,
     ) -> Self {
@@ -264,7 +264,7 @@ where
         let mut exec_state = VmSegmentState::new(
             state.instret,
             state.pc,
-            GuestMemory::new(state.memory),
+            state.memory,
             state.input,
             state.rng,
             ctx,
@@ -281,7 +281,7 @@ where
         let state = VmState {
             instret: exec_state.instret,
             pc: exec_state.pc,
-            memory: exec_state.memory.memory,
+            memory: exec_state.memory,
             input: exec_state.streams,
             rng: exec_state.rng,
             #[cfg(feature = "bench-metrics")]
@@ -346,6 +346,10 @@ where
         executor_idx_to_air_idx: &[usize],
         ctx: MeteredCtx,
     ) -> Result<Vec<Segment>, ExecutionError> {
+        assert_eq!(
+            executor_idx_to_air_idx.len(),
+            self.inventory.executors().len()
+        );
         let _span = info_span!("execute_metered").entered();
 
         let handler = ProgramHandler::new(exe.program, &self.inventory)?;
@@ -361,7 +365,7 @@ where
         let mut exec_state = VmSegmentState::new(
             state.instret,
             state.pc,
-            GuestMemory::new(state.memory),
+            state.memory,
             state.input,
             state.rng,
             ctx,
@@ -763,7 +767,7 @@ where
             .collect::<Vec<_>>();
         let ctx = TracegenCtx::new_with_capacity(&capacities, Some(instret_end));
 
-        let system_config: &SystemConfig = &self.config().as_ref();
+        let system_config: &SystemConfig = self.config().as_ref();
         let adapter_offset = system_config.access_adapter_air_id_offset();
         // ATTENTION: this must agree with `num_memory_airs`
         let num_adapters = log2_strict_usize(system_config.memory_config.max_access_adapter_n);
@@ -772,7 +776,7 @@ where
             &trace_heights[adapter_offset..adapter_offset + num_adapters],
         );
         let memory = TracingMemory::from_image(
-            GuestMemory::new(state.memory),
+            state.memory,
             &system_config.memory_config,
             system_config.initial_block_size(),
             access_adapter_arena_size_bound,
@@ -798,7 +802,7 @@ where
         let new_state = VmState {
             instret: exec_state.instret,
             pc: exec_state.pc,
-            memory: memory.data.memory,
+            memory: memory.data,
             input: exec_state.streams,
             rng: exec_state.rng,
             #[cfg(feature = "bench-metrics")]
@@ -882,11 +886,13 @@ where
         num_insns: u64,
         trace_heights: &[u32],
     ) -> Result<(Proof<E::SC>, Option<GuestMemory>), VirtualMachineError> {
+        self.transport_init_memory_to_device(&state.memory);
+
         let (system_records, record_arenas, final_state) =
             self.execute_preflight(exe, state, num_insns, trace_heights)?;
         // drop final memory unless this is a terminal segment and the exit code is success
         let final_memory = (system_records.exit_code == Some(ExitCode::Success as u32))
-            .then(|| GuestMemory::new(final_state.memory));
+            .then_some(final_state.memory);
         self.chip_complex.system.load_program(cached_program_trace);
         let ctx = self.generate_proving_ctx(system_records, record_arenas)?;
 
@@ -946,8 +952,17 @@ where
         self.chip_complex.system.load_program(cached_program_trace);
     }
 
+    pub fn transport_init_memory_to_device(&mut self, memory: &GuestMemory) {
+        self.chip_complex
+            .system
+            .transport_init_memory_to_device(memory);
+    }
+
     pub fn executor_idx_to_air_idx(&self) -> Vec<usize> {
-        self.chip_complex.inventory.executor_idx_to_air_idx()
+        let ret = self.chip_complex.inventory.executor_idx_to_air_idx();
+        tracing::debug!("executor_idx_to_air_idx: {:?}", ret);
+        assert_eq!(self.executor().inventory.executors().len(), ret.len());
+        ret
     }
 
     /// Convenience method to construct a [MeteredCtx] using data from the stored proving key.
@@ -1187,8 +1202,11 @@ where
 fn create_memory_image(
     memory_config: &MemoryConfig,
     init_memory: SparseMemoryImage,
-) -> MemoryImage {
-    AddressMap::from_sparse(memory_config.addr_space_sizes.clone(), init_memory)
+) -> GuestMemory {
+    GuestMemory::new(AddressMap::from_sparse(
+        memory_config.addr_space_sizes.clone(),
+        init_memory,
+    ))
 }
 
 fn create_initial_state<F>(
