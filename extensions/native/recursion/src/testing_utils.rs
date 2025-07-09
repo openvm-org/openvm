@@ -107,7 +107,7 @@ where
 {
     let (program, witness_stream) = build_verification_program(vparams, compiler_options);
 
-    let interpreter = InterpretedInstance::new(&vm_config, program.clone());
+    let interpreter = InterpretedInstance::new(vm_config.clone(), program.clone());
     interpreter
         .execute(E1Ctx { instret_end: None }, witness_stream.clone())
         .unwrap();

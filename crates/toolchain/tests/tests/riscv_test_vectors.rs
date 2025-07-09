@@ -42,7 +42,7 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
                         .with_extension(Rv32MTranspilerExtension)
                         .with_extension(Rv32IoTranspilerExtension),
                 )?;
-                let interpreter = InterpretedInstance::new(&config, exe);
+                let interpreter = InterpretedInstance::new(config.clone(), exe);
                 let state = interpreter.execute(E1Ctx { instret_end: None }, vec![])?;
                 state.exit_code?;
                 Ok(())

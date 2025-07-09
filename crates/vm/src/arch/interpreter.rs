@@ -26,9 +26,9 @@ use crate::{
 
 /// VM pure executor(E1/E2 executor) which doesn't consider trace generation.
 /// Note: This executor doesn't hold any VM state and can be used for multiple execution.
-pub struct InterpretedInstance<'a, F: PrimeField32, VC: VmConfig<F>> {
+pub struct InterpretedInstance<F: PrimeField32, VC: VmConfig<F>> {
     exe: VmExe<F>,
-    vm_config: &'a VC,
+    vm_config: VC,
 }
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -42,8 +42,8 @@ struct DebugPanicPreCompute {
     pc: u32,
 }
 
-impl<'a, F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<'a, F, VC> {
-    pub fn new(vm_config: &'a VC, exe: impl Into<VmExe<F>>) -> Self {
+impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
+    pub fn new(vm_config: VC, exe: impl Into<VmExe<F>>) -> Self {
         let exe = exe.into();
         Self { exe, vm_config }
     }

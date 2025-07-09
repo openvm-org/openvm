@@ -319,7 +319,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )
         .unwrap();
-        let interpreter = InterpretedInstance::new(&config, exe);
+        let interpreter = InterpretedInstance::new(config, exe);
         interpreter
             .execute(E1Ctx { instret_end: None }, vec![])
             .unwrap();
