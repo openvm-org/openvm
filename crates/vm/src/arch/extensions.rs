@@ -188,6 +188,7 @@ where
 
 impl<E> ExecutorInventory<E> {
     /// Empty inventory should be created at the start of the declaration of a new extension.
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             instruction_lookup: Default::default(),

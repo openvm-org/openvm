@@ -4,7 +4,10 @@ extern crate proc_macro;
 use itertools::{multiunzip, Itertools};
 use proc_macro::{Span, TokenStream};
 use quote::{quote, ToTokens};
-use syn::{punctuated::Punctuated, Data, Fields, GenericParam, Ident, Meta, Token};
+use syn::{
+    punctuated::Punctuated, spanned::Spanned, Data, DataStruct, Field, Fields, GenericParam, Ident,
+    Meta, Token,
+};
 
 #[proc_macro_derive(InstructionExecutor)]
 pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
@@ -47,10 +50,6 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                     fn get_opcode_name(&self, opcode: usize) -> String {
                         self.0.get_opcode_name(opcode)
                     }
-
-                    fn give_me_my_arena(&mut self, arena: ::openvm_circuit::arch::MatrixRecordArena<F>) {
-                        self.0.give_me_my_arena(arena);
-                    }
                 }
             }
             .into()
@@ -79,7 +78,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 .expect("First generic must be type for Field");
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
             // crate. Assume F is already generic of the field.
-            let (execute_arms, get_opcode_name_arms, give_me_my_arena_arms): (Vec<_>, Vec<_>, Vec<_>) =
+            let (execute_arms, get_opcode_name_arms): (Vec<_>, Vec<_>) =
                 multiunzip(variants.iter().map(|(variant_name, field)| {
                     let field_ty = &field.ty;
                     let execute_arm = quote! {
@@ -88,11 +87,8 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                     let get_opcode_name_arm = quote! {
                         #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic>>::get_opcode_name(x, opcode)
                     };
-                    let give_me_my_arena_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic>>::give_me_my_arena(x, arena)
-                    };
 
-                    (execute_arm, get_opcode_name_arm, give_me_my_arena_arm)
+                    (execute_arm, get_opcode_name_arm)
                 }));
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic> for #name #ty_generics {
@@ -111,13 +107,6 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                             #(#get_opcode_name_arms,)*
                         }
                     }
-
-                    fn give_me_my_arena(&mut self, arena: ::openvm_circuit::arch::MatrixRecordArena<#field_ty_generic>) {
-                        match self {
-                            #(#give_me_my_arena_arms,)*
-                        }
-                    }
-
                 }
             }
             .into()
@@ -324,18 +313,23 @@ pub fn any_enum_derive(input: TokenStream) -> TokenStream {
     }
 }
 
-// VmConfig derive macro
-#[derive(Debug)]
-enum Source {
-    System(Ident),
-    Config(Ident),
-}
-
-#[proc_macro_derive(VmConfig, attributes(system, config, extension))]
+#[proc_macro_derive(VmConfig, attributes(config, extension))]
 pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = syn::parse_macro_input!(input as syn::DeriveInput);
     let name = &ast.ident;
 
+    match &ast.data {
+        syn::Data::Struct(inner) => match generate_config_traits_impl(name, inner) {
+            Ok(tokens) => tokens,
+            Err(err) => err.to_compile_error().into(),
+        },
+        _ => syn::Error::new(name.span(), "Only structs are supported")
+            .to_compile_error()
+            .into(),
+    }
+}
+
+fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<TokenStream> {
     let gen_name_with_uppercase_idents = |ident: &Ident| {
         let mut name = ident.to_string().chars().collect::<Vec<_>>();
         assert!(name[0].is_lowercase(), "Field name must not be capitalized");
@@ -345,180 +339,128 @@ pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::T
         (res_lower, res_upper)
     };
 
-    match &ast.data {
-        syn::Data::Struct(inner) => {
-            let fields = match &inner.fields {
-                Fields::Named(named) => named.named.iter().collect(),
-                Fields::Unnamed(_) => {
-                    return syn::Error::new(name.span(), "Only named fields are supported")
-                        .to_compile_error()
-                        .into();
-                }
-                Fields::Unit => vec![],
-            };
+    let fields = match &inner.fields {
+        Fields::Named(named) => named.named.iter().collect(),
+        Fields::Unnamed(_) => {
+            return Err(syn::Error::new(
+                name.span(),
+                "Only named fields are supported",
+            ))
+        }
+        Fields::Unit => vec![],
+    };
 
-            let source = fields
-                .iter()
-                .filter_map(|f| {
-                    if f.attrs.iter().any(|attr| attr.path().is_ident("system")) {
-                        Some(Source::System(f.ident.clone().unwrap()))
-                    } else if f.attrs.iter().any(|attr| attr.path().is_ident("config")) {
-                        Some(Source::Config(f.ident.clone().unwrap()))
-                    } else {
-                        None
-                    }
-                })
-                .exactly_one()
-                .expect("Exactly one field must have #[system] or #[config] attribute");
-            let (source_name, source_name_upper) = match &source {
-                Source::System(ident) | Source::Config(ident) => {
-                    gen_name_with_uppercase_idents(ident)
-                }
-            };
+    let source_field = fields
+        .iter()
+        .filter(|f| f.attrs.iter().any(|attr| attr.path().is_ident("config")))
+        .exactly_one()
+        .clone()
+        .expect("Exactly one field must have the #[config] attribute");
+    let (source_name, source_name_upper) =
+        gen_name_with_uppercase_idents(source_field.ident.as_ref().unwrap());
 
-            let extensions = fields
-                .iter()
-                .filter(|f| f.attrs.iter().any(|attr| attr.path().is_ident("extension")))
-                .cloned()
-                .collect::<Vec<_>>();
+    let extensions = fields
+        .iter()
+        .filter(|f| f.attrs.iter().any(|attr| attr.path().is_ident("extension")))
+        .cloned()
+        .collect::<Vec<_>>();
 
-            let mut executor_enum_fields = Vec::new();
-            let mut periphery_enum_fields = Vec::new();
-            let mut create_chip_complex = Vec::new();
-            for &e in extensions.iter() {
-                let (field_name, field_name_upper) =
-                    gen_name_with_uppercase_idents(&e.ident.clone().unwrap());
-                // TRACKING ISSUE:
-                // We cannot just use <e.ty.to_token_stream() as VmExtension<F>>::Executor because of this: <https://github.com/rust-lang/rust/issues/85576>
-                let mut executor_name = Ident::new(
-                    &format!("{}Executor", e.ty.to_token_stream()),
-                    Span::call_site().into(),
-                );
-                let mut periphery_name = Ident::new(
-                    &format!("{}Periphery", e.ty.to_token_stream()),
-                    Span::call_site().into(),
-                );
-                if let Some(attr) = e
-                    .attrs
-                    .iter()
-                    .find(|attr| attr.path().is_ident("extension"))
-                {
-                    match attr.meta {
-                        Meta::Path(_) => {}
-                        Meta::NameValue(_) => {
-                            return syn::Error::new(
-                                name.span(),
-                                "Only `#[extension]` or `#[extension(...)] formats are supported",
-                            )
-                            .to_compile_error()
-                            .into()
-                        }
-                        _ => {
-                            let nested = attr
-                                .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
-                                .unwrap();
-                            for meta in nested {
-                                match meta {
-                                    Meta::NameValue(nv) => {
-                                        if nv.path.is_ident("executor") {
-                                            executor_name = Ident::new(
-                                                &nv.value.to_token_stream().to_string(),
-                                                Span::call_site().into(),
-                                            );
-                                            Ok(())
-                                        } else if nv.path.is_ident("periphery") {
-                                            periphery_name = Ident::new(
-                                                &nv.value.to_token_stream().to_string(),
-                                                Span::call_site().into(),
-                                            );
-                                            Ok(())
-                                        } else {
-                                            Err("only executor and periphery keys are supported")
-                                        }
-                                    }
-                                    _ => Err("only name = value format is supported"),
-                                }
-                                .expect("wrong attributes format");
+    let mut executor_enum_fields = Vec::new();
+    let mut create_executors = Vec::new();
+    let mut create_circuit = Vec::new();
+    let mut create_chip_complex = Vec::new();
+    for e in extensions.iter() {
+        let (ext_field_name, ext_name_upper) =
+            gen_name_with_uppercase_idents(e.ident.as_ref().unwrap());
+        let executor_name = parse_executor_name(e)?;
+        executor_enum_fields.push(quote! {
+            #[any_enum]
+            #ext_name_upper(#executor_name<F>),
+        });
+        create_executors.push(quote! {
+            let inventory: ::openvm_circuit::arch::ExecutorInventory<Self::Executor> = inventory.extend(&self.#ext_field_name)?;
+        });
+        create_circuit.push(quote! {
+            inventory.start_new_extension();
+            ::openvm_circuit::arch::VmCircuitExtension::extend_circuit(&self.#ext_field_name, &mut inventory)?;
+        });
+        create_chip_complex.push(quote! {
+            inventory.start_new_extension();
+            ::openvm_circuit::arch::VmProverExtension::extend_prover(&self.#ext_field_name, &mut inventory)?;
+        })
+    }
+
+    let source_executor_name = parse_executor_name(source_field)?;
+    let executor_type = Ident::new(&format!("{}Executor", name), name.span());
+
+    let token_stream = TokenStream::from(quote! {
+        #[derive(::openvm_circuit::circuit_derive::ChipUsageGetter, ::openvm_circuit::circuit_derive::Chip, ::openvm_circuit::derive::InstructionExecutor, ::openvm_circuit::derive::InsExecutorE1, ::derive_more::derive::From, ::openvm_circuit::derive::AnyEnum)]
+        pub enum #executor_type<F: PrimeField32> {
+            #[any_enum]
+            #source_name_upper(#source_executor_name<F>),
+            #(#executor_enum_fields)*
+        }
+
+        impl<F: PrimeField32> ::openvm_circuit::arch::VmExecutionConfig<F> for #name {
+            type Executor = #executor_type<F>;
+
+            fn create_executors(
+                &self,
+            ) -> Result<::openvm_circuit::arch::ExecutorInventory<Self::Executor>, ::openvm_circuit::arch::ExecutorInventoryError> {
+                let inventory = self.#source_name.create_executors()?;
+                #(#create_executors)*
+                Ok(inventory)
+            }
+        }
+    });
+    Ok(token_stream)
+}
+
+// Parse the executor name as either
+// `{type_name}Executor` or whatever the attribute `executor = ` specifies
+fn parse_executor_name(f: &Field) -> syn::Result<Ident> {
+    // TRACKING ISSUE:
+    // We cannot just use <e.ty.to_token_stream() as VmExecutionExtension<F>>::Executor because of this: <https://github.com/rust-lang/rust/issues/85576>
+    let mut executor_name = Ident::new(
+        &format!("{}Executor", f.ty.to_token_stream()),
+        Span::call_site().into(),
+    );
+    if let Some(attr) = f
+        .attrs
+        .iter()
+        .find(|attr| attr.path().is_ident("extension") || attr.path().is_ident("config"))
+    {
+        match attr.meta {
+            Meta::Path(_) => {}
+            Meta::NameValue(_) => {
+                return Err(syn::Error::new(
+                    f.ty.span(),
+                    "Only `#[config]`, `#[extension]`, `#[config(...)]` or `#[extension(...)]` formats are supported",
+                ))
+            }
+            _ => {
+                let nested = attr
+                    .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
+                    .unwrap();
+                for meta in nested {
+                    match meta {
+                        Meta::NameValue(nv) => {
+                            if nv.path.is_ident("executor") {
+                                executor_name = Ident::new(
+                                    &nv.value.to_token_stream().to_string(),
+                                    Span::call_site().into(),
+                                );
+                                Ok(())
+                            } else {
+                                Err("only executor key is supported")
                             }
                         }
+                        _ => Err("only name = value format is supported"),
                     }
-                };
-                executor_enum_fields.push(quote! {
-                    #[any_enum]
-                    #field_name_upper(#executor_name<F>),
-                });
-                periphery_enum_fields.push(quote! {
-                    #[any_enum]
-                    #field_name_upper(#periphery_name<F>),
-                });
-                create_chip_complex.push(quote! {
-                    let complex: ::openvm_circuit::arch::VmChipComplex<F, Self::Executor, Self::Periphery> = complex.extend(&self.#field_name)?;
-                });
+                    .expect("wrong attributes format");
+                }
             }
-
-            let (source_executor_type, source_periphery_type) = match &source {
-                Source::System(_) => (
-                    quote! { ::openvm_circuit::arch::SystemExecutor },
-                    quote! { ::openvm_circuit::arch::SystemPeriphery },
-                ),
-                Source::Config(field_ident) => {
-                    let field_type = fields
-                        .iter()
-                        .find(|f| f.ident.as_ref() == Some(field_ident))
-                        .map(|f| &f.ty)
-                        .expect("Field not found");
-
-                    let executor_type = format!("{}Executor", quote!(#field_type));
-                    let periphery_type = format!("{}Periphery", quote!(#field_type));
-
-                    let executor_ident = Ident::new(&executor_type, field_ident.span());
-                    let periphery_ident = Ident::new(&periphery_type, field_ident.span());
-
-                    (quote! { #executor_ident }, quote! { #periphery_ident })
-                }
-            };
-
-            let executor_type = Ident::new(&format!("{}Executor", name), name.span());
-            let periphery_type = Ident::new(&format!("{}Periphery", name), name.span());
-
-            TokenStream::from(quote! {
-                #[derive(::openvm_circuit::circuit_derive::ChipUsageGetter, ::openvm_circuit::circuit_derive::Chip, ::openvm_circuit::derive::InstructionExecutor, ::openvm_circuit::derive::InsExecutorE1, ::derive_more::derive::From, ::openvm_circuit::derive::AnyEnum)]
-                pub enum #executor_type<F: PrimeField32> {
-                    #[any_enum]
-                    #source_name_upper(#source_executor_type<F>),
-                    #(#executor_enum_fields)*
-                }
-
-                #[derive(::openvm_circuit::circuit_derive::ChipUsageGetter, ::openvm_circuit::circuit_derive::Chip, ::derive_more::derive::From, ::openvm_circuit::derive::AnyEnum)]
-                pub enum #periphery_type<F: PrimeField32> {
-                    #[any_enum]
-                    #source_name_upper(#source_periphery_type<F>),
-                    #(#periphery_enum_fields)*
-                }
-
-                impl<F: PrimeField32> ::openvm_circuit::arch::VmConfig<F> for #name {
-                    type Executor = #executor_type<F>;
-                    type Periphery = #periphery_type<F>;
-
-                    fn system(&self) -> &::openvm_circuit::arch::SystemConfig {
-                        ::openvm_circuit::arch::VmConfig::<F>::system(&self.#source_name)
-                    }
-                    fn system_mut(&mut self) -> &mut ::openvm_circuit::arch::SystemConfig {
-                        ::openvm_circuit::arch::VmConfig::<F>::system_mut(&mut self.#source_name)
-                    }
-
-                    fn create_chip_complex(
-                        &self,
-                    ) -> Result<::openvm_circuit::arch::VmChipComplex<F, Self::Executor, Self::Periphery>, ::openvm_circuit::arch::VmInventoryError> {
-                        let complex = self.#source_name.create_chip_complex()?;
-                        #(#create_chip_complex)*
-                        Ok(complex)
-                    }
-                }
-            })
         }
-        _ => syn::Error::new(name.span(), "Only structs are supported")
-            .to_compile_error()
-            .into(),
-    }
+    };
+    Ok(executor_name)
 }

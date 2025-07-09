@@ -28,8 +28,15 @@ pub use load_sign_extend::*;
 pub use loadstore::*;
 pub use mul::*;
 pub use mulh::*;
-use openvm_circuit::arch::{InitFileGenerator, SystemConfig};
+use openvm_circuit::{
+    arch::{InitFileGenerator, SystemConfig},
+    system::SystemExecutor,
+};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
+use openvm_stark_backend::p3_field::PrimeField32;
+use serde::{Deserialize, Serialize};
 pub use shift::*;
+use strum::IntoEnumIterator;
 
 mod extension;
 pub use extension::*;
@@ -37,11 +44,10 @@ pub use extension::*;
 // #[cfg(any(test, feature = "test-utils"))]
 // mod test_utils;
 
-/*
 // Config for a VM with base extension and IO extension
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Rv32IConfig {
-    #[system]
+    #[config(executor = SystemExecutor)]
     pub system: SystemConfig,
     #[extension]
     pub base: Rv32I,
@@ -115,4 +121,3 @@ impl Rv32ImConfig {
         }
     }
 }
-*/
