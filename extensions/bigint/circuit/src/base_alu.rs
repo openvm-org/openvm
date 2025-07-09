@@ -116,14 +116,14 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: AluOp>(
     vm_state.instret += 1;
 }
 
-trait AluOp {
+pub(crate) trait AluOp {
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS];
 }
-struct AddOp;
-struct SubOp;
-struct XorOp;
-struct OrOp;
-struct AndOp;
+pub(crate) struct AddOp;
+pub(crate) struct SubOp;
+pub(crate) struct XorOp;
+pub(crate) struct OrOp;
+pub(crate) struct AndOp;
 impl AluOp for AddOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {

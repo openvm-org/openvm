@@ -110,7 +110,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 }
 
 #[inline(always)]
-fn u256_mul(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
+pub(crate) fn u256_mul(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
     let rs1_u64: [u32; 8] = unsafe { std::mem::transmute(rs1) };
     let rs2_u64: [u32; 8] = unsafe { std::mem::transmute(rs2) };
     let mut rd = [0u32; 8];

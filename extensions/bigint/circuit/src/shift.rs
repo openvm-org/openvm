@@ -120,12 +120,12 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: ShiftOp>(
     vm_state.instret += 1;
 }
 
-trait ShiftOp {
+pub(crate) trait ShiftOp {
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS];
 }
-struct SllOp;
-struct SrlOp;
-struct SraOp;
+pub(crate) struct SllOp;
+pub(crate) struct SrlOp;
+pub(crate) struct SraOp;
 impl ShiftOp for SllOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {

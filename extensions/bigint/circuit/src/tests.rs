@@ -15,7 +15,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::{
     program::{DEFAULT_PC_STEP, PC_BITS},
-    riscv::RV32_CELL_BITS,
+    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
 use openvm_rv32_adapters::{
@@ -36,6 +36,10 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
 use crate::{
+    base_alu::{AddOp, AluOp, AndOp, OrOp, SubOp, XorOp},
+    common::{i256_lt, u256_lt},
+    mult::u256_mul,
+    shift::{ShiftOp, SllOp, SraOp, SrlOp},
     Rv32BaseAlu256Chip, Rv32BaseAlu256Step, Rv32BranchEqual256Chip, Rv32BranchEqual256Step,
     Rv32BranchLessThan256Chip, Rv32BranchLessThan256Step, Rv32LessThan256Chip, Rv32LessThan256Step,
     Rv32Multiplication256Chip, Rv32Multiplication256Step, Rv32Shift256Chip, Rv32Shift256Step,
@@ -45,6 +49,81 @@ type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_BRANCH: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
 
+fn convert_u32_to_u8(data: &[u32; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
+    let mut result = [0u8; INT256_NUM_LIMBS];
+    for i in 0..INT256_NUM_LIMBS {
+        result[i] = data[i] as u8;
+    }
+    result
+}
+
+fn run_alu_256(
+    opcode: BaseAluOpcode,
+    b: &[u32; INT256_NUM_LIMBS],
+    c: &[u32; INT256_NUM_LIMBS],
+) -> [u32; INT256_NUM_LIMBS] {
+    let b_u8 = convert_u32_to_u8(b);
+    let c_u8 = convert_u32_to_u8(c);
+    let result_u8 = match opcode {
+        BaseAluOpcode::ADD => AddOp::compute(b_u8, c_u8),
+        BaseAluOpcode::SUB => SubOp::compute(b_u8, c_u8),
+        BaseAluOpcode::XOR => XorOp::compute(b_u8, c_u8),
+        BaseAluOpcode::OR => OrOp::compute(b_u8, c_u8),
+        BaseAluOpcode::AND => AndOp::compute(b_u8, c_u8),
+    };
+    let mut result = [0u32; INT256_NUM_LIMBS];
+    for i in 0..INT256_NUM_LIMBS {
+        result[i] = result_u8[i] as u32;
+    }
+    result
+}
+
+fn run_lt_256(
+    opcode: LessThanOpcode,
+    b: &[u32; INT256_NUM_LIMBS],
+    c: &[u32; INT256_NUM_LIMBS],
+) -> bool {
+    let b_u8 = convert_u32_to_u8(b);
+    let c_u8 = convert_u32_to_u8(c);
+    match opcode {
+        LessThanOpcode::SLT => i256_lt(b_u8, c_u8),
+        LessThanOpcode::SLTU => u256_lt(b_u8, c_u8),
+    }
+}
+
+fn run_mul_256(
+    b: &[u32; INT256_NUM_LIMBS],
+    c: &[u32; INT256_NUM_LIMBS],
+) -> [u32; INT256_NUM_LIMBS] {
+    let b_u8 = convert_u32_to_u8(b);
+    let c_u8 = convert_u32_to_u8(c);
+    let result_u8 = u256_mul(b_u8, c_u8);
+    let mut result = [0u32; INT256_NUM_LIMBS];
+    for i in 0..INT256_NUM_LIMBS {
+        result[i] = result_u8[i] as u32;
+    }
+    result
+}
+
+fn run_shift_256(
+    opcode: ShiftOpcode,
+    b: &[u32; INT256_NUM_LIMBS],
+    c: &[u32; INT256_NUM_LIMBS],
+) -> [u32; INT256_NUM_LIMBS] {
+    let b_u8 = convert_u32_to_u8(b);
+    let c_u8 = convert_u32_to_u8(c);
+    let result_u8 = match opcode {
+        ShiftOpcode::SLL => SllOp::compute(b_u8, c_u8),
+        ShiftOpcode::SRL => SrlOp::compute(b_u8, c_u8),
+        ShiftOpcode::SRA => SraOp::compute(b_u8, c_u8),
+    };
+    let mut result = [0u32; INT256_NUM_LIMBS];
+    for i in 0..INT256_NUM_LIMBS {
+        result[i] = result_u8[i] as u32;
+    }
+    result
+}
+
 #[allow(clippy::type_complexity)]
 fn set_and_execute_rand<E: InstructionExecutor<F> + InsExecutorE1<F>>(
     tester: &mut VmChipTestBuilder<F>,
@@ -52,11 +131,15 @@ fn set_and_execute_rand<E: InstructionExecutor<F> + InsExecutorE1<F>>(
     rng: &mut StdRng,
     opcode: usize,
     branch_fn: Option<fn(usize, &[u32; INT256_NUM_LIMBS], &[u32; INT256_NUM_LIMBS]) -> bool>,
+    output_fn: Option<
+        fn(usize, &[u32; INT256_NUM_LIMBS], &[u32; INT256_NUM_LIMBS]) -> [u32; INT256_NUM_LIMBS],
+    >,
 ) {
     let branch = branch_fn.is_some();
 
     let b = generate_long_number::<INT256_NUM_LIMBS, RV32_CELL_BITS>(rng);
     let c = generate_long_number::<INT256_NUM_LIMBS, RV32_CELL_BITS>(rng);
+
     if branch {
         let imm = rng.gen_range((-ABS_MAX_BRANCH)..ABS_MAX_BRANCH);
         let instruction = rv32_heap_branch_default(
@@ -76,7 +159,15 @@ fn set_and_execute_rand<E: InstructionExecutor<F> + InsExecutorE1<F>>(
         let cmp_result = branch_fn.unwrap()(opcode, &b, &c);
         let from_pc = tester.execution.last_from_pc().as_canonical_u32() as i32;
         let to_pc = tester.execution.last_to_pc().as_canonical_u32() as i32;
-        assert_eq!(to_pc, from_pc + if cmp_result { imm } else { 4 });
+        assert_eq!(
+            to_pc,
+            from_pc
+                + if cmp_result {
+                    imm
+                } else {
+                    DEFAULT_PC_STEP as i32
+                }
+        );
     } else {
         let instruction = rv32_write_heap_default(
             tester,
@@ -84,7 +175,33 @@ fn set_and_execute_rand<E: InstructionExecutor<F> + InsExecutorE1<F>>(
             vec![c.map(F::from_canonical_u32)],
             opcode,
         );
+
+        // Get the destination register before execution
+        let rd_reg = instruction.a.as_canonical_u32();
+
         tester.execute(chip, &instruction);
+
+        // Validate output if output function is provided
+        if let Some(output_fn) = output_fn {
+            let expected = output_fn(opcode, &b, &c);
+            // Read the pointer from the destination register
+            let rd_ptr_data =
+                tester.read::<4>(RV32_REGISTER_AS as usize, rd_reg.try_into().unwrap());
+            let rd_ptr = u32::from_le_bytes([
+                rd_ptr_data[0].as_canonical_u32() as u8,
+                rd_ptr_data[1].as_canonical_u32() as u8,
+                rd_ptr_data[2].as_canonical_u32() as u8,
+                rd_ptr_data[3].as_canonical_u32() as u8,
+            ]);
+            // Read the actual result from memory at that pointer
+            let actual = tester
+                .read::<INT256_NUM_LIMBS>(RV32_MEMORY_AS as usize, rd_ptr.try_into().unwrap());
+            assert_eq!(
+                expected.map(F::from_canonical_u32),
+                actual,
+                "Output mismatch for opcode {opcode} with inputs b={b:?}, c={c:?}",
+            );
+        }
     }
 }
 
@@ -120,6 +237,15 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
     );
     chip.set_trace_height(MAX_INS_CAPACITY);
 
+    let output_fn =
+        |opcode_offset: usize, b: &[u32; INT256_NUM_LIMBS], c: &[u32; INT256_NUM_LIMBS]| {
+            run_alu_256(
+                BaseAluOpcode::from_usize(opcode_offset - Rv32BaseAlu256Opcode::CLASS_OFFSET),
+                b,
+                c,
+            )
+        };
+
     for _ in 0..num_ops {
         set_and_execute_rand(
             &mut tester,
@@ -127,6 +253,7 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
             &mut rng,
             opcode.local_usize() + offset,
             None,
+            Some(output_fn),
         );
     }
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
@@ -161,6 +288,21 @@ fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     );
     chip.set_trace_height(MAX_INS_CAPACITY);
 
+    let output_fn =
+        |opcode_offset: usize, b: &[u32; INT256_NUM_LIMBS], c: &[u32; INT256_NUM_LIMBS]| {
+            let mut result = [0u32; INT256_NUM_LIMBS];
+            result[0] = if run_lt_256(
+                LessThanOpcode::from_usize(opcode_offset - Rv32LessThan256Opcode::CLASS_OFFSET),
+                b,
+                c,
+            ) {
+                1
+            } else {
+                0
+            };
+            result
+        };
+
     for _ in 0..num_ops {
         set_and_execute_rand(
             &mut tester,
@@ -168,6 +310,7 @@ fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
             &mut rng,
             opcode.local_usize() + offset,
             None,
+            Some(output_fn),
         );
     }
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
@@ -210,6 +353,10 @@ fn run_mul_256_rand_test(opcode: MulOpcode, num_ops: usize) {
     );
     chip.set_trace_height(MAX_INS_CAPACITY);
 
+    let output_fn = |_opcode: usize, b: &[u32; INT256_NUM_LIMBS], c: &[u32; INT256_NUM_LIMBS]| {
+        run_mul_256(b, c)
+    };
+
     for _ in 0..num_ops {
         set_and_execute_rand(
             &mut tester,
@@ -217,6 +364,7 @@ fn run_mul_256_rand_test(opcode: MulOpcode, num_ops: usize) {
             &mut rng,
             opcode.local_usize() + offset,
             None,
+            Some(output_fn),
         );
     }
     let tester = tester
@@ -260,6 +408,15 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
     );
     chip.set_trace_height(MAX_INS_CAPACITY);
 
+    let output_fn =
+        |opcode_offset: usize, b: &[u32; INT256_NUM_LIMBS], c: &[u32; INT256_NUM_LIMBS]| {
+            run_shift_256(
+                ShiftOpcode::from_usize(opcode_offset - Rv32Shift256Opcode::CLASS_OFFSET),
+                b,
+                c,
+            )
+        };
+
     for _ in 0..num_ops {
         set_and_execute_rand(
             &mut tester,
@@ -267,6 +424,7 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
             &mut rng,
             opcode.local_usize() + offset,
             None,
+            Some(output_fn),
         );
     }
 
@@ -318,6 +476,7 @@ fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
             &mut rng,
             opcode.local_usize() + offset,
             Some(branch_fn),
+            None,
         );
     }
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
@@ -383,6 +542,7 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
             &mut rng,
             opcode.local_usize() + offset,
             Some(branch_fn),
+            None,
         );
     }
     let tester = tester.build().load(chip).load(bitwise_chip).finalize();
