@@ -2,13 +2,12 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
-        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, BasicAdapterInterface,
-        ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryWriteAuxCols, MemoryWriteBytesAuxRecord},
-        online::{GuestMemory, TracingMemory},
+        online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
@@ -24,7 +23,7 @@ use openvm_stark_backend::{
 };
 
 use super::RV32_REGISTER_NUM_LIMBS;
-use crate::adapters::{memory_write_from_state, tracing_write};
+use crate::adapters::tracing_write;
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
@@ -273,41 +272,6 @@ impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32RdWriteAdapterStep
     }
 }
 
-impl<F> AdapterExecutorE1<F> for Rv32RdWriteAdapterStep
-where
-    F: PrimeField32,
-{
-    type ReadData = ();
-    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
-
-    #[inline(always)]
-    fn read<Ctx>(
-        &self,
-        _state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        _instruction: &Instruction<F>,
-    ) -> Self::ReadData
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-    }
-
-    #[inline(always)]
-    fn write<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-        rd: Self::WriteData,
-    ) where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let Instruction { a, d, .. } = instruction;
-
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-
-        memory_write_from_state(state, RV32_REGISTER_AS, a.as_canonical_u32(), rd);
-    }
-}
-
 /// This adapter doesn't read anything, and **maybe** writes to \[a:4\]_d, where d == 1
 #[derive(derive_new::new)]
 pub struct Rv32CondRdWriteAdapterStep {
@@ -393,47 +357,6 @@ impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32CondRdWriteAdapter
             mem_helper.fill_zero(adapter_cols.inner.rd_aux_cols.as_mut());
             adapter_cols.inner.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
             adapter_cols.inner.from_state.pc = F::from_canonical_u32(record.from_pc);
-        }
-    }
-}
-
-impl<F> AdapterExecutorE1<F> for Rv32CondRdWriteAdapterStep
-where
-    F: PrimeField32,
-{
-    type ReadData = ();
-    type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
-
-    #[inline(always)]
-    fn read<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Self::ReadData
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        <Rv32RdWriteAdapterStep as AdapterExecutorE1<F>>::read(&self.inner, state, instruction)
-    }
-
-    #[inline(always)]
-    fn write<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-        rd: Self::WriteData,
-    ) where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let Instruction { f: enabled, .. } = instruction;
-
-        if *enabled != F::ZERO {
-            <Rv32RdWriteAdapterStep as AdapterExecutorE1<F>>::write(
-                &self.inner,
-                state,
-                instruction,
-                rd,
-            )
         }
     }
 }

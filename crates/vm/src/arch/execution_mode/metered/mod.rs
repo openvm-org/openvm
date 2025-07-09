@@ -9,7 +9,7 @@ pub use segment_ctx::Segment;
 
 use crate::arch::{
     execution_control::ExecutionControl, ExecutionError, InsExecutorE1, VmChipComplex, VmConfig,
-    VmSegmentState, VmStateMut, PUBLIC_VALUES_AIR_ID,
+    VmSegmentState,
 };
 
 #[derive(Default)]
@@ -57,38 +57,37 @@ where
     /// Execute a single instruction
     fn execute_instruction(
         &self,
-        state: &mut VmSegmentState<F, Self::Ctx>,
-        instruction: &Instruction<F>,
-        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        _state: &mut VmSegmentState<F, Self::Ctx>,
+        _instruction: &Instruction<F>,
+        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
     ) -> Result<(), ExecutionError>
     where
         F: PrimeField32,
     {
         // Check if segmentation needs to happen
-        state.ctx.check_and_segment(state.instret);
-
-        let offset = if chip_complex.config().has_public_values_chip() {
-            PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
-        } else {
-            PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
-        };
-        let &Instruction { opcode, .. } = instruction;
-        if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode) {
-            let mut vm_state = VmStateMut {
-                pc: &mut state.pc,
-                memory: state.memory.as_mut().unwrap(),
-                streams: &mut state.streams,
-                rng: &mut state.rng,
-                ctx: &mut state.ctx,
-            };
-            executor.execute_metered(&mut vm_state, instruction, offset + i)?;
-        } else {
-            return Err(ExecutionError::DisabledOperation {
-                pc: state.pc,
-                opcode,
-            });
-        };
-
-        Ok(())
+        todo!()
+        // let offset = if chip_complex.config().has_public_values_chip() {
+        //     PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
+        // } else {
+        //     PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
+        // };
+        // let &Instruction { opcode, .. } = instruction;
+        // if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode)
+        // {     let mut vm_state = VmStateMut {
+        //         pc: &mut state.pc,
+        //         memory: state.memory.as_mut().unwrap(),
+        //         streams: &mut state.streams,
+        //         rng: &mut state.rng,
+        //         ctx: &mut state.ctx,
+        //     };
+        //     executor.execute_metered(&mut vm_state, instruction, offset + i)?;
+        // } else {
+        //     return Err(ExecutionError::DisabledOperation {
+        //         pc: state.pc,
+        //         opcode,
+        //     });
+        // };
+        //
+        // Ok(())
     }
 }

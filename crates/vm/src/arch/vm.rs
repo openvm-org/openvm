@@ -37,11 +37,11 @@ use crate::metrics::VmMetrics;
 use crate::{
     arch::{
         execution_mode::{
-            e1::E1ExecutionControl,
             metered::{MeteredCtx, MeteredExecutionControl, Segment},
             tracegen::{TracegenCtx, TracegenExecutionControl},
         },
         hasher::poseidon2::vm_poseidon2_hasher,
+        interpreter::InterpretedInstance,
         VmSegmentExecutor, VmSegmentState,
     },
     execute_spanned,
@@ -213,69 +213,26 @@ where
         self.config.system().continuation_enabled
     }
 
-    /// Base E1 execution function that operates from a given state
-    pub fn execute_e1_from_state(
-        &self,
-        exe: VmExe<F>,
-        state: VmState<F>,
-        num_insns: Option<u64>,
-    ) -> Result<VmState<F>, ExecutionError> {
-        let instret_end = num_insns.map(|n| state.instret + n);
-
-        let chip_complex =
-            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
-                .unwrap();
-        let mut segment = VmSegmentExecutor::<F, VC, _>::new(
-            chip_complex,
-            self.trace_height_constraints.clone(),
-            exe.fn_bounds.clone(),
-            E1ExecutionControl,
-        );
-        #[cfg(feature = "bench-metrics")]
-        {
-            segment.metrics = state.metrics;
-        }
-
-        let ctx = E1Ctx::new(instret_end);
-        let mut exec_state = VmSegmentState::new(
-            state.instret,
-            state.pc,
-            Some(GuestMemory::new(state.memory)),
-            state.input,
-            state.rng,
-            ctx,
-        );
-        execute_spanned!("execute_e1", segment, &mut exec_state)?;
-
-        if let Some(exit_code) = exec_state.exit_code {
-            check_exit_code(exit_code)?;
-        }
-        if let Some(instret_end) = instret_end {
-            assert_eq!(exec_state.instret, instret_end);
-        }
-
-        let state = VmState {
-            instret: exec_state.instret,
-            pc: exec_state.pc,
-            memory: exec_state.memory.unwrap().memory,
-            input: exec_state.streams,
-            rng: exec_state.rng,
-            #[cfg(feature = "bench-metrics")]
-            metrics: segment.metrics.partial_take(),
-        };
-
-        Ok(state)
-    }
-
     pub fn execute_e1(
         &self,
         exe: impl Into<VmExe<F>>,
-        input: impl Into<Streams<F>>,
+        inputs: impl Into<Streams<F>>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F>, ExecutionError> {
-        let exe = exe.into();
-        let state = create_initial_state(&self.config.system().memory_config, &exe, input, 0);
-        self.execute_e1_from_state(exe, state, num_insns)
+        let interpreter = InterpretedInstance::new(self.config.clone(), exe);
+
+        let ctx = E1Ctx::new(num_insns);
+        let state = interpreter.execute(ctx, inputs)?;
+
+        Ok(VmState {
+            instret: state.instret,
+            pc: state.pc,
+            memory: state.memory.memory,
+            input: state.streams,
+            rng: state.rng,
+            #[cfg(feature = "bench-metrics")]
+            metrics: VmMetrics::default(),
+        })
     }
 
     /// Base metered execution function that operates from a given state
@@ -655,41 +612,6 @@ where
 
     pub fn set_trace_height_constraints(&mut self, constraints: Vec<LinearConstraint>) {
         self.trace_height_constraints = constraints;
-    }
-
-    pub fn execute_e1(
-        &self,
-        exe: VmExe<F>,
-        input: impl Into<Streams<F>>,
-    ) -> Result<(), ExecutionError> {
-        let memory =
-            create_memory_image(&self.config.system().memory_config, exe.init_memory.clone());
-        let rng = StdRng::seed_from_u64(0);
-        let chip_complex =
-            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
-                .unwrap();
-        let mut executor = VmSegmentExecutor::<F, VC, _>::new(
-            chip_complex,
-            self.trace_height_constraints.clone(),
-            exe.fn_bounds.clone(),
-            E1ExecutionControl,
-        );
-
-        let ctx = E1Ctx::default();
-
-        let mut exec_state = VmSegmentState::new(
-            0,
-            exe.pc_start,
-            Some(GuestMemory::new(memory)),
-            input.into(),
-            rng,
-            ctx,
-        );
-        execute_spanned!("execute_e1", executor, &mut exec_state)?;
-
-        check_termination(exec_state.exit_code)?;
-
-        Ok(())
     }
 
     pub fn execute_metered(
@@ -1341,7 +1263,8 @@ fn check_exit_code(exit_code: u32) -> Result<(), ExecutionError> {
     Ok(())
 }
 
-fn check_termination(exit_code: Option<u32>) -> Result<(), ExecutionError> {
+fn check_termination(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(), ExecutionError> {
+    let exit_code = exit_code?;
     match exit_code {
         Some(code) => check_exit_code(code),
         None => Err(ExecutionError::DidNotTerminate),

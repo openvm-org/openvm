@@ -47,6 +47,6 @@ fn main() {
     builder.halt();
 
     let program = builder.compile_isa();
-    println!("{}", program);
+    println!("{program}");
     execute_program(program, vec![]);
 }

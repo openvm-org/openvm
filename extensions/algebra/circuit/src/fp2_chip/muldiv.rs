@@ -145,7 +145,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
     }
 
     pub fn expr(&self) -> &FieldExpr {
-        &self.0.step.expr
+        &self.0.step.0.expr
     }
 }
 

@@ -2,15 +2,10 @@ use std::borrow::Borrow;
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, BasicAdapterInterface, ExecutionBridge, MinimalInstruction, VmAdapterAir,
-        VmStateMut,
+        AdapterAirContext, AdapterTraceFiller, AdapterTraceStep, BasicAdapterInterface,
+        ExecutionBridge, MinimalInstruction, VmAdapterAir,
     },
-    system::memory::{
-        offline_checker::MemoryBridge,
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    system::memory::{offline_checker::MemoryBridge, online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
@@ -172,35 +167,5 @@ impl<
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
         AdapterTraceFiller::<F, CTX>::fill_trace_row(&self.0, mem_helper, adapter_row);
-    }
-}
-
-impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
-    AdapterExecutorE1<F> for Rv32HeapAdapterStep<NUM_READS, READ_SIZE, WRITE_SIZE>
-{
-    type ReadData = [[u8; READ_SIZE]; NUM_READS];
-    type WriteData = [[u8; WRITE_SIZE]; 1];
-
-    fn read<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Self::ReadData
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let read_data = AdapterExecutorE1::<F>::read(&self.0, state, instruction);
-        read_data.map(|r| r[0])
-    }
-
-    fn write<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-    ) where
-        Ctx: E1E2ExecutionCtx,
-    {
-        AdapterExecutorE1::<F>::write(&self.0, state, instruction, data);
     }
 }

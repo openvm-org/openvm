@@ -337,7 +337,7 @@ pub(crate) mod phantom {
             c_upper: u16,
         ) -> eyre::Result<()> {
             let [value] = unsafe { memory.read::<F, 1>(c_upper as u32, a) };
-            println!("{}", value);
+            println!("{value}");
             Ok(())
         }
     }

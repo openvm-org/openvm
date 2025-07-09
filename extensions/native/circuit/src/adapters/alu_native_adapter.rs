@@ -5,9 +5,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
-        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, BasicAdapterInterface,
-        ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
     },
     system::{
         memory::{
@@ -15,13 +14,10 @@ use openvm_circuit::{
                 MemoryBridge, MemoryReadAuxRecord, MemoryReadOrImmediateAuxCols,
                 MemoryWriteAuxCols, MemoryWriteAuxRecord,
             },
-            online::{GuestMemory, TracingMemory},
+            online::TracingMemory,
             MemoryAddress, MemoryAuxColsFactory,
         },
-        native_adapter::util::{
-            memory_read_or_imm_native_from_state, memory_write_native_from_state,
-            tracing_read_or_imm_native, tracing_write_native,
-        },
+        native_adapter::util::{tracing_read_or_imm_native, tracing_write_native},
     },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -262,44 +258,5 @@ impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for AluNativeAdapterStep {
 
         adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
         adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
-    }
-}
-
-impl<F> AdapterExecutorE1<F> for AluNativeAdapterStep
-where
-    F: PrimeField32,
-{
-    type ReadData = [F; 2];
-    type WriteData = [F; 1];
-
-    #[inline(always)]
-    fn read<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Self::ReadData
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let &Instruction { b, c, e, f, .. } = instruction;
-
-        let rs1 = memory_read_or_imm_native_from_state(state, e.as_canonical_u32(), b);
-        let rs2 = memory_read_or_imm_native_from_state(state, f.as_canonical_u32(), c);
-
-        [rs1, rs2]
-    }
-
-    #[inline(always)]
-    fn write<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-    ) where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let &Instruction { a, .. } = instruction;
-
-        memory_write_native_from_state(state, a.as_canonical_u32(), data);
     }
 }

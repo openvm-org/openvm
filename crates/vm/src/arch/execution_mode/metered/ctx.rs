@@ -6,7 +6,13 @@ use super::{
     memory_ctx::MemoryCtx,
     segment_ctx::{Segment, SegmentationCtx},
 };
-use crate::{arch::execution_mode::E1E2ExecutionCtx, system::memory::dimensions::MemoryDimensions};
+use crate::{
+    arch::{
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        VmSegmentState,
+    },
+    system::memory::dimensions::MemoryDimensions,
+};
 
 #[derive(Debug)]
 pub struct MeteredCtx<const PAGE_BITS: usize = 6> {
@@ -126,7 +132,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     }
 }
 
-impl<const PAGE_BITS: usize> E1E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
+impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
     #[inline(always)]
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32) {
         debug_assert!(
@@ -153,5 +159,15 @@ impl<const PAGE_BITS: usize> E1E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
                 size,
             );
         }
+    }
+
+    fn should_suspend<F>(_vm_state: &VmSegmentState<F, Self>) -> bool {
+        todo!()
+    }
+}
+
+impl<const PAGE_BITS: usize> E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
+    fn on_height_change(&mut self, chip_idx: usize, height_delta: usize) {
+        todo!()
     }
 }

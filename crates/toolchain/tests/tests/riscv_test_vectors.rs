@@ -2,7 +2,10 @@ use std::{fs::read_dir, path::PathBuf};
 
 use eyre::Result;
 use openvm_circuit::{
-    arch::{instructions::exe::VmExe, VmExecutor},
+    arch::{
+        execution_mode::e1::E1Ctx, instructions::exe::VmExe, interpreter::InterpretedInstance,
+        VmExecutor,
+    },
     utils::air_test,
 };
 use openvm_rv32im_circuit::Rv32ImConfig;
@@ -39,9 +42,10 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
                         .with_extension(Rv32MTranspilerExtension)
                         .with_extension(Rv32IoTranspilerExtension),
                 )?;
-                let executor = VmExecutor::<F, _>::new(config.clone());
-                let res = executor.execute_e1(exe, vec![], None)?;
-                Ok(res)
+                let interpreter = InterpretedInstance::new(config.clone(), exe);
+                let state = interpreter.execute(E1Ctx { instret_end: None }, vec![])?;
+                state.exit_code?;
+                Ok(())
             });
 
             match result {
