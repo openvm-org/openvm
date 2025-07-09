@@ -114,20 +114,38 @@ pub(crate) fn u256_mul(
     rs1: [u8; INT256_NUM_LIMBS],
     rs2: [u8; INT256_NUM_LIMBS],
 ) -> [u8; INT256_NUM_LIMBS] {
-    // Match the old algorithm exactly: diagonal multiplication with carry handling
-    let mut result = [0u8; INT256_NUM_LIMBS];
-    let mut carry = [0u32; INT256_NUM_LIMBS];
-    for i in 0..INT256_NUM_LIMBS {
-        let mut res = 0u32;
-        if i > 0 {
-            res = carry[i - 1];
+    let rs1_u64: [u32; 8] = unsafe { std::mem::transmute(rs1) };
+    let rs2_u64: [u32; 8] = unsafe { std::mem::transmute(rs2) };
+    let mut rd = [0u32; 8];
+    for i in 0..8 {
+        let mut carry = 0u64;
+        for j in 0..(8 - i) {
+            let res = rs1_u64[i] as u64 * rs2_u64[j] as u64 + rd[i + j] as u64 + carry;
+            rd[i + j] = res as u32;
+            carry = res >> 32;
         }
-        for j in 0..=i {
-            res += (rs1[j] as u32) * (rs2[i - j] as u32);
-        }
-        carry[i] = res >> RV32_CELL_BITS;
-        res %= 1u32 << RV32_CELL_BITS;
-        result[i] = res as u8;
     }
-    result
+    unsafe { std::mem::transmute(rd) }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloy_primitives::U256;
+    use rand::{prelude::StdRng, Rng, SeedableRng};
+
+    use crate::{mult::u256_mul, INT256_NUM_LIMBS};
+
+    #[test]
+    fn test_u256_mul() {
+        let mut rng = StdRng::from_seed([42; 32]);
+        for _ in 0..10000 {
+            let limbs_a: [u64; 4] = rng.gen();
+            let limbs_b: [u64; 4] = rng.gen();
+            let a = U256::from_limbs(limbs_a);
+            let b = U256::from_limbs(limbs_b);
+            let a_u8: [u8; INT256_NUM_LIMBS] = unsafe { std::mem::transmute(limbs_a) };
+            let b_u8: [u8; INT256_NUM_LIMBS] = unsafe { std::mem::transmute(limbs_b) };
+            assert_eq!(U256::from_le_bytes(u256_mul(a_u8, b_u8)), a.wrapping_mul(b));
+        }
+    }
 }
