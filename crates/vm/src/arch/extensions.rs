@@ -820,10 +820,11 @@ impl AnyEnum for () {
 
 #[cfg(test)]
 mod tests {
-    use p3_baby_bear::BabyBear;
+    use openvm_circuit_derive::AnyEnum;
+    use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
     use super::*;
-    use crate::system::memory::interface::MemoryInterface;
+    use crate::{arch::VmCircuitConfig, system::memory::interface::MemoryInterfaceAirs};
 
     #[allow(dead_code)]
     #[derive(Copy, Clone)]
@@ -897,15 +898,17 @@ mod tests {
     #[test]
     fn test_system_bus_indices() {
         let config = SystemConfig::default().with_continuations();
-        let complex = SystemComplex::<BabyBear>::new(config);
-        assert_eq!(complex.base.execution_bus().index(), 0);
-        assert_eq!(complex.base.memory_bus().index(), 1);
-        assert_eq!(complex.base.program_bus().index(), 2);
-        assert_eq!(complex.base.range_checker_bus().index(), 3);
-        match &complex.memory_controller().interface_chip {
-            MemoryInterface::Persistent { boundary_chip, .. } => {
-                assert_eq!(boundary_chip.air.merkle_bus.index, 4);
-                assert_eq!(boundary_chip.air.compression_bus.index, 5);
+        let inventory: AirInventory<BabyBearPoseidon2Config> = config.create_circuit().unwrap();
+        let system = inventory.system();
+        let port = system.port();
+        assert_eq!(port.execution_bus.index(), 0);
+        assert_eq!(port.memory_bridge.memory_bus().index(), 1);
+        assert_eq!(port.program_bus.index(), 2);
+        assert_eq!(port.memory_bridge.range_bus().index(), 3);
+        match &system.memory.interface {
+            MemoryInterfaceAirs::Persistent { boundary, .. } => {
+                assert_eq!(boundary.merkle_bus.index, 4);
+                assert_eq!(boundary.compression_bus.index, 5);
             }
             _ => unreachable!(),
         };

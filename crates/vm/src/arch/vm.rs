@@ -64,7 +64,7 @@ use crate::{
                 MemoryMerklePvs,
             },
             online::{GuestMemory, TracingMemory},
-            AddressMap, MemoryImage, CHUNK,
+            AddressMap, CHUNK,
         },
         program::{trace::VmCommittedExe, ProgramHandler},
         SystemChipComplex, SystemRecords,
