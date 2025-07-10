@@ -10,8 +10,7 @@ use openvm_mod_circuit_builder::{
     FieldExpressionCoreAir, FieldExpressionFiller, FieldExpressionStep,
 };
 use openvm_rv32_adapters::{
-    Rv32IsEqualModAdapterAir, Rv32IsEqualModeAdapterStep, Rv32VecHeapAdapterAir,
-    Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
+    Rv32IsEqualModAdapterAir, Rv32IsEqualModeAdapterFiller, Rv32IsEqualModeAdapterStep, Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep
 };
 
 // #[cfg(test)]
@@ -58,7 +57,7 @@ pub type ModularIsEqualChip<
 > = VmChipWrapper<
     F,
     ModularIsEqualFiller<
-        Rv32IsEqualModeAdapterStep<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        Rv32IsEqualModeAdapterFiller<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         TOTAL_LIMBS,
         RV32_REGISTER_NUM_LIMBS,
         RV32_CELL_BITS,

@@ -2,12 +2,11 @@ use derive_more::derive::From;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use openvm_circuit::{
-    arch::{VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
+    arch::{ExecutorInventoryBuilder, ExecutorInventoryError, VmExecutionExtension},
     system::phantom::PhantomExecutor,
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
-use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+
 use openvm_ecc_circuit::CurveConfig;
 use openvm_instructions::PhantomDiscriminant;
 use openvm_pairing_guest::{
@@ -17,7 +16,7 @@ use openvm_pairing_guest::{
     bn254::{BN254_ECC_STRUCT_NAME, BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
 use openvm_pairing_transpiler::PairingPhantom;
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::{Field, PrimeField32};
 use serde::{Deserialize, Serialize};
 use strum::FromRepr;
 
@@ -57,13 +56,13 @@ impl PairingCurve {
     }
 }
 
-#[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
+#[derive(Clone, Debug, From, derive_new::new, Serialize, Deserialize)]
 pub struct PairingExtension {
     pub supported_curves: Vec<PairingCurve>,
 }
 
-#[derive(Clone, Copy, From, AnyEnum, InsExecutorE1, InstructionExecutor)]
-pub enum PairingExtensionExecutor<F: PrimeField32> {
+#[derive(Clone, AnyEnum, InsExecutorE1, InstructionExecutor)]
+pub enum PairingExtensionExecutor<F: Field> {
     Phantom(PhantomExecutor<F>),
 }
 

@@ -1,25 +1,34 @@
-use openvm_algebra_circuit::*;
-use openvm_circuit::arch::{InitFileGenerator, SystemConfig};
-use openvm_circuit_derive::VmConfig;
-use openvm_rv32im_circuit::*;
-use openvm_stark_backend::p3_field::PrimeField32;
-use serde::{Deserialize, Serialize};
+use std::result::Result;
 
 use super::*;
 
+use openvm_algebra_circuit::{ModularExtension, ModularExtensionExecutor};
+use openvm_circuit::{
+    arch::{InitFileGenerator, SystemConfig},
+    system::SystemExecutor,
+};
+use openvm_circuit_derive::VmConfig;
+use openvm_rv32im_circuit::{Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor};
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    p3_field::Field,
+    prover::hal::ProverBackend,
+};
+use serde::{Deserialize, Serialize};
+
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32WeierstrassConfig {
-    #[system]
+    #[config(executor = SystemExecutor)]
     pub system: SystemConfig,
-    #[extension]
+    #[extension(generics = false)]
     pub base: Rv32I,
-    #[extension]
+    #[extension(generics = false)]
     pub mul: Rv32M,
-    #[extension]
+    #[extension(generics = false)]
     pub io: Rv32Io,
-    #[extension]
+    #[extension(generics = false)]
     pub modular: ModularExtension,
-    #[extension]
+    #[extension(generics = false)]
     pub weierstrass: WeierstrassExtension,
 }
 

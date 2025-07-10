@@ -1,4 +1,5 @@
-use derive_more::derive::From;
+use std::sync::Arc;
+
 use hex_literal::hex;
 use lazy_static::lazy_static;
 use num_bigint::BigUint;
@@ -6,26 +7,36 @@ use num_traits::{FromPrimitive, Zero};
 use once_cell::sync::Lazy;
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
+        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
+        VmExecutionExtension, VmProverExtension,
     },
-    system::phantom::PhantomExecutor,
+    system::{memory::SharedMemoryHelper, SystemPort},
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    var_range::VariableRangeCheckerBus,
 };
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    p3_field::PrimeField32,
+    prover::cpu::CpuBackend,
+};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
 
-use super::{EcAddNeChip, EcDoubleChip};
-
-// TODO: this should be decided after e2 execution
+use crate::{
+    get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step, get_ec_double_air, get_ec_double_chip,
+    get_ec_double_step, WeierstrassAir, WeierstrassStep,
+};
 
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
@@ -80,140 +91,97 @@ impl WeierstrassExtension {
     }
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, InsExecutorE1)]
-pub enum WeierstrassExtensionExecutor<F: PrimeField32> {
+#[derive(Clone, AnyEnum, InsExecutorE1, InstructionExecutor)]
+pub enum WeierstrassExtensionExecutor {
     // 32 limbs prime
-    EcAddNeRv32_32(EcAddNeChip<F, 2, 32>),
-    EcDoubleRv32_32(EcDoubleChip<F, 2, 32>),
+    EcAddNeRv32_32(WeierstrassStep<2, 2, 32>),
+    EcDoubleRv32_32(WeierstrassStep<1, 2, 32>),
     // 48 limbs prime
-    EcAddNeRv32_48(EcAddNeChip<F, 6, 16>),
-    EcDoubleRv32_48(EcDoubleChip<F, 6, 16>),
+    EcAddNeRv32_48(WeierstrassStep<2, 6, 16>),
+    EcDoubleRv32_48(WeierstrassStep<1, 6, 16>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
-pub enum WeierstrassExtensionPeriphery<F: PrimeField32> {
-    BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
-    Phantom(PhantomExecutor<F>),
-}
+impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
+    type Executor = WeierstrassExtensionExecutor;
 
-impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
-    type Executor = WeierstrassExtensionExecutor<F>;
-    type Periphery = WeierstrassExtensionPeriphery<F>;
-
-    fn build(
+    fn extend_execution(
         &self,
-        builder: &mut VmInventoryBuilder<F>,
-    ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
-        let mut inventory = VmInventory::new();
-        let SystemPort {
-            execution_bus,
-            program_bus,
-            memory_bridge,
-        } = builder.system_port();
-
-        let execution_bridge = ExecutionBridge::new(execution_bus, program_bus);
-        let range_checker = builder.system_base().range_checker_chip.clone();
-        let pointer_max_bits = builder.system_config().memory_config.pointer_max_bits;
-
-        let bitwise_lu_chip = if let Some(&chip) = builder
-            .find_chip::<SharedBitwiseOperationLookupChip<8>>()
-            .first()
-        {
-            chip.clone()
-        } else {
-            let bitwise_lu_bus = BitwiseOperationLookupBus::new(builder.new_bus_idx());
-            let chip = SharedBitwiseOperationLookupChip::new(bitwise_lu_bus);
-            inventory.add_periphery_chip(chip.clone());
-            chip
-        };
-
-        let ec_add_ne_opcodes = (Rv32WeierstrassOpcode::EC_ADD_NE as usize)
-            ..=(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize);
-        let ec_double_opcodes = (Rv32WeierstrassOpcode::EC_DOUBLE as usize)
-            ..=(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize);
-
+        inventory: &mut ExecutorInventoryBuilder<F, WeierstrassExtensionExecutor>,
+    ) -> Result<(), ExecutorInventoryError> {
+        // TODO: add getter for pointer_max_bits and range_checker_bus
+        let pointer_max_bits = 29;
+        let range_checker_bus = VariableRangeCheckerBus::new(1, 22);
         for (i, curve) in self.supported_curves.iter().enumerate() {
             let start_offset =
                 Rv32WeierstrassOpcode::CLASS_OFFSET + i * Rv32WeierstrassOpcode::COUNT;
             let bytes = curve.modulus.bits().div_ceil(8);
-            let config32 = ExprBuilderConfig {
-                modulus: curve.modulus.clone(),
-                num_limbs: 32,
-                limb_bits: 8,
-            };
-            let config48 = ExprBuilderConfig {
-                modulus: curve.modulus.clone(),
-                num_limbs: 48,
-                limb_bits: 8,
-            };
+
             if bytes <= 32 {
-                let add_ne_chip = EcAddNeChip::new(
-                    execution_bridge,
-                    memory_bridge,
-                    builder.system_base().memory_controller.helper(),
+                let config = ExprBuilderConfig {
+                    modulus: curve.modulus.clone(),
+                    num_limbs: 32,
+                    limb_bits: 8,
+                };
+                let addne = get_ec_addne_step(
+                    config.clone(),
+                    range_checker_bus,
                     pointer_max_bits,
-                    config32.clone(),
                     start_offset,
-                    bitwise_lu_chip.clone(),
-                    range_checker.clone(),
                 );
 
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcAddNeRv32_32(add_ne_chip),
-                    ec_add_ne_opcodes
-                        .clone()
+                    WeierstrassExtensionExecutor::EcAddNeRv32_32(addne),
+                    ((Rv32WeierstrassOpcode::EC_ADD_NE as usize)
+                        ..=(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
-                let double_chip = EcDoubleChip::new(
-                    execution_bridge,
-                    memory_bridge,
-                    builder.system_base().memory_controller.helper(),
+
+                let double = get_ec_double_step(
+                    config,
+                    range_checker_bus,
                     pointer_max_bits,
-                    config32.clone(),
                     start_offset,
-                    bitwise_lu_chip.clone(),
-                    range_checker.clone(),
                     curve.a.clone(),
                 );
+
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcDoubleRv32_32(double_chip),
-                    ec_double_opcodes
-                        .clone()
+                    WeierstrassExtensionExecutor::EcDoubleRv32_32(double),
+                    ((Rv32WeierstrassOpcode::EC_DOUBLE as usize)
+                        ..=(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else if bytes <= 48 {
-                let add_ne_chip = EcAddNeChip::new(
-                    execution_bridge,
-                    memory_bridge,
-                    builder.system_base().memory_controller.helper(),
+                let config = ExprBuilderConfig {
+                    modulus: curve.modulus.clone(),
+                    num_limbs: 48,
+                    limb_bits: 8,
+                };
+                let addne = get_ec_addne_step(
+                    config.clone(),
+                    range_checker_bus,
                     pointer_max_bits,
-                    config48.clone(),
                     start_offset,
-                    bitwise_lu_chip.clone(),
-                    range_checker.clone(),
                 );
 
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcAddNeRv32_48(add_ne_chip),
-                    ec_add_ne_opcodes
-                        .clone()
+                    WeierstrassExtensionExecutor::EcAddNeRv32_48(addne),
+                    ((Rv32WeierstrassOpcode::EC_ADD_NE as usize)
+                        ..=(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
-                let double_chip = EcDoubleChip::new(
-                    execution_bridge,
-                    memory_bridge,
-                    builder.system_base().memory_controller.helper(),
+
+                let double = get_ec_double_step(
+                    config,
+                    range_checker_bus,
                     pointer_max_bits,
-                    config48.clone(),
                     start_offset,
-                    bitwise_lu_chip.clone(),
-                    range_checker.clone(),
                     curve.a.clone(),
                 );
+
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcDoubleRv32_48(double_chip),
-                    ec_double_opcodes
-                        .clone()
+                    WeierstrassExtensionExecutor::EcDoubleRv32_48(double),
+                    ((Rv32WeierstrassOpcode::EC_DOUBLE as usize)
+                        ..=(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else {
@@ -221,7 +189,200 @@ impl<F: PrimeField32> VmExtension<F> for WeierstrassExtension {
             }
         }
 
-        Ok(inventory)
+        Ok(())
+    }
+}
+
+impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
+    fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
+        let SystemPort {
+            execution_bus,
+            program_bus,
+            memory_bridge,
+        } = inventory.system().port();
+
+        let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
+        let range_checker_bus = inventory.range_checker().bus;
+        // TODO: add a getter for pointer_max_bits
+        let pointer_max_bits = inventory.config().memory_config.pointer_max_bits;
+
+        let bitwise_lu = {
+            // A trick to get around Rust's borrow rules
+            let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
+            if let Some(air) = existing_air {
+                air.bus
+            } else {
+                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
+                let air = BitwiseOperationLookupAir::<8>::new(bus);
+                inventory.add_air(air);
+                air.bus
+            }
+        };
+        for (i, curve) in self.supported_curves.iter().enumerate() {
+            let start_offset =
+                Rv32WeierstrassOpcode::CLASS_OFFSET + i * Rv32WeierstrassOpcode::COUNT;
+            let bytes = curve.modulus.bits().div_ceil(8);
+
+            if bytes <= 32 {
+                let config = ExprBuilderConfig {
+                    modulus: curve.modulus.clone(),
+                    num_limbs: 32,
+                    limb_bits: 8,
+                };
+
+                let addne = get_ec_addne_air::<1, 32>(
+                    exec_bridge,
+                    memory_bridge,
+                    config.clone(),
+                    range_checker_bus,
+                    bitwise_lu,
+                    pointer_max_bits,
+                    start_offset,
+                );
+                inventory.add_air(addne);
+
+                let double = get_ec_double_air::<1, 32>(
+                    exec_bridge,
+                    memory_bridge,
+                    config,
+                    range_checker_bus,
+                    bitwise_lu,
+                    pointer_max_bits,
+                    start_offset,
+                    curve.a.clone(),
+                );
+                inventory.add_air(double);
+            } else if bytes <= 48 {
+                let config = ExprBuilderConfig {
+                    modulus: curve.modulus.clone(),
+                    num_limbs: 48,
+                    limb_bits: 8,
+                };
+
+                let addne = get_ec_addne_air::<3, 16>(
+                    exec_bridge,
+                    memory_bridge,
+                    config.clone(),
+                    range_checker_bus,
+                    bitwise_lu,
+                    pointer_max_bits,
+                    start_offset,
+                );
+                inventory.add_air(addne);
+
+                let double = get_ec_double_air::<3, 16>(
+                    exec_bridge,
+                    memory_bridge,
+                    config,
+                    range_checker_bus,
+                    bitwise_lu,
+                    pointer_max_bits,
+                    start_offset,
+                    curve.a.clone(),
+                );
+                inventory.add_air(double);
+            } else {
+                panic!("Modulus too large");
+            }
+        }
+
+        Ok(())
+    }
+}
+
+// This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
+// BitwiseOperationLookupChip) are specific to CpuBackend.
+impl<SC, RA> VmProverExtension<SC, RA, CpuBackend<SC>> for WeierstrassExtension
+where
+    SC: StarkGenericConfig,
+    RA: RowMajorMatrixArena<Val<SC>>,
+    Val<SC>: PrimeField32,
+{
+    fn extend_prover(
+        &self,
+        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+    ) -> Result<(), ChipInventoryError> {
+        let range_checker = inventory.range_checker()?.clone();
+        let timestamp_max_bits = inventory.airs().config().memory_config.clk_max_bits;
+        // TODO: add a getter for pointer_max_bits
+        let pointer_max_bits = 29;
+        let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
+        let bitwise_lu = {
+            let existing_chip = inventory
+                .find_chip::<SharedBitwiseOperationLookupChip<8>>()
+                .next();
+            if let Some(chip) = existing_chip {
+                chip.clone()
+            } else {
+                let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
+                let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
+                inventory.add_periphery_chip(chip.clone());
+                chip
+            }
+        };
+        for curve in self.supported_curves.iter() {
+            let bytes = curve.modulus.bits().div_ceil(8);
+
+            if bytes <= 32 {
+                let config = ExprBuilderConfig {
+                    modulus: curve.modulus.clone(),
+                    num_limbs: 32,
+                    limb_bits: 8,
+                };
+
+                inventory.next_air::<WeierstrassAir<2, 2, 32>>()?;
+                let addne = get_ec_addne_chip::<Val<SC>, 1, 32>(
+                    config.clone(),
+                    mem_helper.clone(),
+                    range_checker.clone(),
+                    bitwise_lu.clone(),
+                    pointer_max_bits,
+                );
+                inventory.add_executor_chip(addne);
+
+                inventory.next_air::<WeierstrassAir<1, 2, 32>>()?;
+                let double = get_ec_double_chip::<Val<SC>, 1, 32>(
+                    config,
+                    mem_helper.clone(),
+                    range_checker.clone(),
+                    bitwise_lu.clone(),
+                    pointer_max_bits,
+                    curve.a.clone(),
+                );
+                inventory.add_executor_chip(double);
+            } else if bytes <= 48 {
+                let config = ExprBuilderConfig {
+                    modulus: curve.modulus.clone(),
+                    num_limbs: 48,
+                    limb_bits: 8,
+                };
+
+                inventory.next_air::<WeierstrassAir<2, 6, 16>>()?;
+                let addne = get_ec_addne_chip::<Val<SC>, 3, 16>(
+                    config.clone(),
+                    mem_helper.clone(),
+                    range_checker.clone(),
+                    bitwise_lu.clone(),
+                    pointer_max_bits,
+                );
+                inventory.add_executor_chip(addne);
+
+                inventory.next_air::<WeierstrassAir<1, 6, 16>>()?;
+                let double = get_ec_double_chip::<Val<SC>, 3, 16>(
+                    config,
+                    mem_helper.clone(),
+                    range_checker.clone(),
+                    bitwise_lu.clone(),
+                    pointer_max_bits,
+                    curve.a.clone(),
+                );
+                inventory.add_executor_chip(double);
+            } else {
+                panic!("Modulus too large");
+            }
+        }
+
+        Ok(())
     }
 }
 
