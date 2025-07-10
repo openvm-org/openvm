@@ -16,6 +16,8 @@ static const size_t DEFAULT_PC_STEP = 4;
 namespace native {
 static const size_t AS_IMMEDIATE = 0;
 static const size_t AS_NATIVE = 4;
+static const size_t EXT_DEG = 4;
+static const size_t BETA = 11;
 } // namespace native
 
 namespace poseidon2 {

@@ -110,6 +110,42 @@ pub mod field_arithmetic_cuda {
     }
 }
 
+pub mod fri_cuda {
+    use super::*;
+    use crate::extensions::native::RowInfo;
+
+    unsafe extern "C" {
+        unsafe fn _fri_reduced_opening_tracegen(
+            d_trace: *mut std::ffi::c_void,
+            height: u32,
+            d_records: *const u8,
+            rows_used: u32,
+            d_record_info: *const RowInfo,
+            d_range_checker: *mut u32,
+            range_checker_max_bins: u32,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen<T>(
+        d_trace: &DeviceBuffer<T>,
+        height: u32,
+        d_records: &DeviceBuffer<u8>,
+        rows_used: u32,
+        d_record_info: &DeviceBuffer<RowInfo>,
+        d_range_checker: &DeviceBuffer<T>,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_fri_reduced_opening_tracegen(
+            d_trace.as_mut_raw_ptr(),
+            height,
+            d_records.as_ptr(),
+            rows_used,
+            d_record_info.as_ptr(),
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+        ))
+    }
+}
+
 pub mod poseidon2_cuda {
     use stark_backend_gpu::base::DeviceMatrix;
 
