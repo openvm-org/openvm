@@ -256,12 +256,7 @@ fn test_vm_1_optional_air() {
         let vk = pk.get_vk();
         let segments = vm
             .executor
-            .execute_metered(
-                program.clone(),
-                vec![],
-                &vk.total_widths(),
-                &vk.num_interactions(),
-            )
+            .execute_metered(program.clone(), vec![], &vk.num_interactions())
             .unwrap();
 
         let result = vm
@@ -402,12 +397,7 @@ fn test_vm_1_persistent() {
 
     let segments = vm
         .executor
-        .execute_metered(
-            program.clone(),
-            vec![],
-            &vk.total_widths(),
-            &vk.num_interactions(),
-        )
+        .execute_metered(program.clone(), vec![], &vk.num_interactions())
         .unwrap();
 
     let result = vm
@@ -773,12 +763,7 @@ fn test_hint_load_1() {
     let vk = pk.get_vk();
     let mut segments = vm
         .executor
-        .execute_metered(
-            program.clone(),
-            input.clone(),
-            &vk.total_widths(),
-            &vk.num_interactions(),
-        )
+        .execute_metered(program.clone(), input.clone(), &vk.num_interactions())
         .unwrap();
     assert_eq!(segments.len(), 1);
     let segment = segments.pop().unwrap();
@@ -838,12 +823,7 @@ fn test_hint_load_2() {
     let vk = pk.get_vk();
     let mut segments = vm
         .executor
-        .execute_metered(
-            program.clone(),
-            input.clone(),
-            &vk.total_widths(),
-            &vk.num_interactions(),
-        )
+        .execute_metered(program.clone(), input.clone(), &vk.num_interactions())
         .unwrap();
     assert_eq!(segments.len(), 1);
     let segment = segments.pop().unwrap();
@@ -928,7 +908,7 @@ fn test_vm_pure_execution_non_continuation() {
 
     let executor = InterpretedInstance::<F, _>::new(test_native_config(), program);
     executor
-        .execute(E1Ctx { instret_end: None }, vec![])
+        .execute(E1Ctx::new(None), vec![])
         .expect("Failed to execute");
 }
 
@@ -955,7 +935,7 @@ fn test_vm_pure_execution_continuation() {
     let program = Program::from_instructions(&instructions);
     let executor = InterpretedInstance::<F, _>::new(test_native_continuations_config(), program);
     executor
-        .execute(E1Ctx { instret_end: None }, vec![])
+        .execute(E1Ctx::new(None), vec![])
         .expect("Failed to execute");
 }
 
@@ -1064,7 +1044,7 @@ fn test_vm_e1_native_chips() {
 
     let executor = InterpretedInstance::<F, _>::new(test_rv32_with_kernels_config(), program);
     executor
-        .execute(E1Ctx { instret_end: None }, input_stream)
+        .execute(E1Ctx::new(None), input_stream)
         .expect("Failed to execute");
 }
 

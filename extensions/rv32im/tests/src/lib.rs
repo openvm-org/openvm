@@ -5,10 +5,8 @@ mod tests {
     use eyre::Result;
     use openvm_circuit::{
         arch::{
-            execution_mode::e1::{E1Ctx, E1ExecutionControl},
-            hasher::poseidon2::vm_poseidon2_hasher,
-            interpreter::InterpretedInstance,
-            ExecutionError, Streams, VirtualMachine, VmExecutor,
+            execution_mode::e1::E1Ctx, hasher::poseidon2::vm_poseidon2_hasher,
+            interpreter::InterpretedInstance, ExecutionError, Streams, VirtualMachine, VmExecutor,
         },
         system::memory::merkle::public_values::UserPublicValuesProof,
         utils::{air_test, air_test_with_min_segments, test_system_config_with_continuations},
@@ -320,9 +318,7 @@ mod tests {
         )
         .unwrap();
         let interpreter = InterpretedInstance::new(config, exe);
-        interpreter
-            .execute(E1Ctx { instret_end: None }, vec![])
-            .unwrap();
+        interpreter.execute(E1Ctx::new(None), vec![]).unwrap();
     }
 
     #[test_case(vec!["getrandom", "getrandom-unsupported"])]

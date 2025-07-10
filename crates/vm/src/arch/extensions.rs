@@ -1015,6 +1015,20 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .collect()
     }
 
+    pub fn get_air_widths(&self) -> Vec<usize>
+    where
+        E: ChipUsageGetter,
+        P: ChipUsageGetter,
+    {
+        once(self.program_chip().trace_width())
+            .chain([self.connector_chip().trace_width()])
+            .chain(self._public_values_chip().map(|c| c.trace_width()))
+            .chain(self.memory_controller().get_memory_trace_widths())
+            .chain(self.chips_excluding_pv_chip().map(|c| c.trace_width()))
+            .chain([self.range_checker_chip().trace_width()])
+            .collect()
+    }
+
     pub(crate) fn generate_proof_input<SC: StarkGenericConfig>(
         mut self,
         cached_program: Option<CommittedTraceData<SC>>,

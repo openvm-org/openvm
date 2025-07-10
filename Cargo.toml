@@ -100,7 +100,7 @@ codegen-units = 1
 
 [profile.dev]
 opt-level = 0
-debug = 0
+debug = 2
 
 # For O1 optimization but still fast(ish) compile times
 [profile.fast]

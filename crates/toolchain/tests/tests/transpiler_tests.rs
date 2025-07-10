@@ -84,7 +84,7 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     )?;
     let config = Rv32ImConfig::default();
     let interpreter = InterpretedInstance::new(config, exe);
-    interpreter.execute(E1Ctx { instret_end: None }, vec![])?;
+    interpreter.execute(E1Ctx::new(None), vec![])?;
     Ok(())
 }
 
@@ -147,7 +147,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
             .with_extension(Fp2TranspilerExtension),
     )?;
     let interpreter = InterpretedInstance::new(config, openvm_exe);
-    interpreter.execute(E1Ctx { instret_end: None }, vec![])?;
+    interpreter.execute(E1Ctx::new(None), vec![])?;
     Ok(())
 }
 

@@ -188,12 +188,7 @@ where
         let vm_vk = app_vm_pk.vm_pk.get_vk();
         let executor = VmExecutor::new(app_vm_pk.vm_config.clone());
         let segments = executor
-            .execute_metered(
-                dummy_exe.exe.clone(),
-                vec![],
-                &vm_vk.total_widths(),
-                &vm_vk.num_interactions(),
-            )
+            .execute_metered(dummy_exe.exe.clone(), vec![], &vm_vk.num_interactions())
             .unwrap();
         assert_eq!(segments.len(), 1, "dummy exe should have only 1 segment");
         let mut results = executor

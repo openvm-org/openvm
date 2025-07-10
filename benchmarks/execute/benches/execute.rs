@@ -142,7 +142,7 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
         })
         .bench_values(|(interpreter, input)| {
             interpreter
-                .execute(E1Ctx { instret_end: None }, input)
+                .execute(E1Ctx::new(None), input)
                 .expect("Failed to execute program in interpreted mode");
         });
 }

@@ -214,12 +214,19 @@ unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
         .as_ref()
         .is_ok_and(|exit_code| exit_code.is_none())
     {
-        let pc_index = get_pc_index(program, vm_state.pc).unwrap();
-        let inst = &fn_ptrs[pc_index];
-        unsafe { (inst.handler)(inst.pre_compute, vm_state) };
         if Ctx::should_suspend(vm_state) {
             break;
         }
+        let pc_index = get_pc_index(program, vm_state.pc).unwrap();
+        let inst = &fn_ptrs[pc_index];
+        unsafe { (inst.handler)(inst.pre_compute, vm_state) };
+    }
+    if vm_state
+        .exit_code
+        .as_ref()
+        .is_ok_and(|exit_code| exit_code.is_some())
+    {
+        Ctx::on_terminate(vm_state);
     }
     println!("execute time: {}ms", start.elapsed().as_millis());
 }

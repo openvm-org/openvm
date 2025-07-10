@@ -7,6 +7,7 @@ use openvm_instructions::{exe::SparseMemoryImage, NATIVE_AS};
 use openvm_stark_backend::{
     p3_field::PrimeField32,
     p3_maybe_rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
+    p3_util::log2_strict_usize,
 };
 
 use super::{adapter::AccessAdapterInventory, offline_checker::MemoryBus};
@@ -755,6 +756,12 @@ impl<F: PrimeField32> TracingMemory<F> {
                     })
                     .collect::<Vec<_>>()
             })
+            .collect()
+    }
+    pub fn address_space_alignment(&self) -> Vec<u8> {
+        self.min_block_size
+            .iter()
+            .map(|&x| log2_strict_usize(x as usize) as u8)
             .collect()
     }
 }

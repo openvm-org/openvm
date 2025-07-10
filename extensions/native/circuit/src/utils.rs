@@ -20,12 +20,7 @@ pub fn execute_program_with_system_config(
     let vk = pk.get_vk();
     let segments = vm
         .executor
-        .execute_metered(
-            program.clone(),
-            input.clone(),
-            &vk.total_widths(),
-            &vk.num_interactions(),
-        )
+        .execute_metered(program.clone(), input.clone(), &vk.num_interactions())
         .unwrap();
     vm.execute(program, input, &segments).unwrap();
 }

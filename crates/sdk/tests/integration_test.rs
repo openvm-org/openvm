@@ -214,7 +214,6 @@ fn test_public_values_and_leaf_verification() {
         .execute_metered(
             app_committed_exe.exe.clone(),
             vec![],
-            &app_vm_vk.total_widths(),
             &app_vm_vk.num_interactions(),
         )
         .unwrap();
