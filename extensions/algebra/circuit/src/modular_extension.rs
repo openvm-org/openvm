@@ -83,7 +83,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, ModularExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = inventory.address_bits();
+        let pointer_max_bits = inventory.pointer_max_bits();
         // TODO: somehow get the range checker bus from `ExecutorInventory`
         let range_checker_bus = VariableRangeCheckerBus::new(1, 22);
         for (i, modulus) in self.supported_moduli.iter().enumerate() {

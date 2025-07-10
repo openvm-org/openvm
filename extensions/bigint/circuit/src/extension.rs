@@ -99,7 +99,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Int256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = inventory.address_bits();
+        let pointer_max_bits = inventory.pointer_max_bits();
 
         let alu = Rv32BaseAlu256Step::new(
             Rv32HeapAdapterStep::new(pointer_max_bits),

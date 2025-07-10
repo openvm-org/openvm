@@ -71,7 +71,7 @@ impl<F> VmExecutionExtension<F> for Sha256 {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Sha256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = inventory.address_bits();
+        let pointer_max_bits = inventory.pointer_max_bits();
         let sha256_step = Sha256VmStep::new(Rv32Sha256Opcode::CLASS_OFFSET, pointer_max_bits);
         inventory.add_executor(
             sha256_step,

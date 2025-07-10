@@ -108,7 +108,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, WeierstrassExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = inventory.address_bits();
+        let pointer_max_bits = inventory.pointer_max_bits();
         // TODO: somehow get the range checker bus from `ExecutorInventory`
         let range_checker_bus = VariableRangeCheckerBus::new(1, 22);
         for (i, curve) in self.supported_curves.iter().enumerate() {

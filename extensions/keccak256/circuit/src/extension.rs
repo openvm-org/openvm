@@ -69,7 +69,7 @@ impl<F> VmExecutionExtension<F> for Keccak256 {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Keccak256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = inventory.address_bits();
+        let pointer_max_bits = inventory.pointer_max_bits();
         let keccak_step = KeccakVmStep::new(Rv32KeccakOpcode::CLASS_OFFSET, pointer_max_bits);
         inventory.add_executor(
             keccak_step,

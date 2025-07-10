@@ -394,7 +394,7 @@ impl<F, E> ExecutorInventoryBuilder<'_, F, E> {
     }
 
     /// Returns the maximum number of bits used to represent addresses in memory
-    pub fn address_bits(&self) -> usize {
+    pub fn pointer_max_bits(&self) -> usize {
         self.new_inventory.config().memory_config.pointer_max_bits
     }
 }

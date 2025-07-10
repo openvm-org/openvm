@@ -106,7 +106,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv32I {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Rv32IExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = inventory.address_bits();
+        let pointer_max_bits = inventory.pointer_max_bits();
 
         let base_alu = Rv32BaseAluStep::new(Rv32BaseAluAdapterStep, BaseAluOpcode::CLASS_OFFSET);
         inventory.add_executor(base_alu, BaseAluOpcode::iter().map(|x| x.global_opcode()))?;
@@ -592,7 +592,7 @@ impl<F> VmExecutionExtension<F> for Rv32Io {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Rv32IoExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let pointer_max_bits = inventory.address_bits();
+        let pointer_max_bits = inventory.pointer_max_bits();
         let hint_store =
             Rv32HintStoreStep::new(pointer_max_bits, Rv32HintStoreOpcode::CLASS_OFFSET);
         inventory.add_executor(
