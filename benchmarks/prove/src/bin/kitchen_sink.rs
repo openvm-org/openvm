@@ -15,13 +15,80 @@ use openvm_pairing_guest::{
     bls12_381::BLS12_381_COMPLEX_STRUCT_NAME, bn254::BN254_COMPLEX_STRUCT_NAME,
 };
 use openvm_sdk::{
-    commit::commit_app_exe, config::SdkVmConfig, prover::EvmHalo2Prover,
-    DefaultStaticVerifierPvHandler, Sdk, StdIn,
+    commit::commit_app_exe,
+    config::SdkVmConfig,
+    keygen::{AggStarkProvingKey, AppProvingKey},
+    prover::EvmHalo2Prover,
+    DefaultStaticVerifierPvHandler, NonRootCommittedExe, Sdk, StdIn,
 };
 use openvm_stark_sdk::{
     bench::run_with_metric_collection, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
 };
 use openvm_transpiler::FromElf;
+
+fn verify_native_max_trace_heights(
+    sdk: &Sdk,
+    app_pk: Arc<AppProvingKey<SdkVmConfig>>,
+    app_committed_exe: Arc<NonRootCommittedExe>,
+    agg_stark_pk: &AggStarkProvingKey,
+    num_children_leaf: usize,
+) -> Result<()> {
+    let app_proof =
+        sdk.generate_app_proof(app_pk.clone(), app_committed_exe.clone(), StdIn::default())?;
+    let leaf_inputs =
+        LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proof, num_children_leaf);
+    let vm_vk = agg_stark_pk.leaf_vm_pk.vm_pk.get_vk();
+
+    leaf_inputs.iter().for_each(|leaf_input| {
+        let executor = {
+            let mut executor =
+                SingleSegmentVmExecutor::new(agg_stark_pk.leaf_vm_pk.vm_config.clone());
+            executor.set_trace_height_constraints(
+                agg_stark_pk
+                    .leaf_vm_pk
+                    .vm_pk
+                    .trace_height_constraints
+                    .clone(),
+            );
+            executor
+        };
+        let max_trace_heights = executor
+            .execute_metered(
+                app_pk.leaf_committed_exe.exe.clone(),
+                leaf_input.write_to_stream(),
+                &vm_vk.total_widths(),
+                &vm_vk.num_interactions(),
+            )
+            .expect("execute_metered failed");
+        println!("max_trace_heights: {:?}", max_trace_heights);
+
+        let actual_trace_heights = executor
+            .execute_and_generate(
+                app_pk.leaf_committed_exe.clone(),
+                leaf_input.write_to_stream(),
+                &max_trace_heights,
+            )
+            .expect("execute_and_generate failed")
+            .per_air
+            .iter()
+            .map(|(_, air)| air.raw.height())
+            .collect::<Vec<usize>>();
+        println!("actual_trace_heights: {:?}", actual_trace_heights);
+
+        actual_trace_heights
+            .iter()
+            .zip(NATIVE_MAX_TRACE_HEIGHTS)
+            .for_each(|(&actual, &expected)| {
+                assert!(
+                    actual <= (expected as usize),
+                    "Actual trace height {} exceeds expected height {}",
+                    actual,
+                    expected
+                );
+            });
+    });
+    Ok(())
+}
 
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
@@ -91,66 +158,13 @@ fn main() -> Result<()> {
     )?;
 
     // Verify that NATIVE_MAX_TRACE_HEIGHTS remains valid
-    {
-        let app_proof =
-            sdk.generate_app_proof(app_pk.clone(), app_committed_exe.clone(), StdIn::default())?;
-        let leaf_inputs = LeafVmVerifierInput::chunk_continuation_vm_proof(
-            &app_proof,
-            args.agg_tree_config.num_children_leaf,
-        );
-        let vm_vk = full_agg_pk.agg_stark_pk.leaf_vm_pk.vm_pk.get_vk();
-
-        leaf_inputs.iter().for_each(|leaf_input| {
-            let executor = {
-                let mut executor = SingleSegmentVmExecutor::new(
-                    full_agg_pk.agg_stark_pk.leaf_vm_pk.vm_config.clone(),
-                );
-                executor.set_trace_height_constraints(
-                    full_agg_pk
-                        .agg_stark_pk
-                        .leaf_vm_pk
-                        .vm_pk
-                        .trace_height_constraints
-                        .clone(),
-                );
-                executor
-            };
-            let max_trace_heights = executor
-                .execute_metered(
-                    app_pk.leaf_committed_exe.exe.clone(),
-                    leaf_input.write_to_stream(),
-                    &vm_vk.total_widths(),
-                    &vm_vk.num_interactions(),
-                )
-                .expect("execute_metered failed");
-            println!("max_trace_heights: {:?}", max_trace_heights);
-
-            let actual_trace_heights = executor
-                .execute_and_generate(
-                    app_pk.leaf_committed_exe.clone(),
-                    leaf_input.write_to_stream(),
-                    &max_trace_heights,
-                )
-                .expect("execute_and_generate failed")
-                .per_air
-                .iter()
-                .map(|(_, air)| air.raw.height())
-                .collect::<Vec<usize>>();
-            println!("actual_trace_heights: {:?}", actual_trace_heights);
-
-            actual_trace_heights
-                .iter()
-                .zip(NATIVE_MAX_TRACE_HEIGHTS)
-                .for_each(|(&actual, &expected)| {
-                    assert!(
-                        actual <= (expected as usize),
-                        "Actual trace height {} exceeds expected height {}",
-                        actual,
-                        expected
-                    );
-                });
-        });
-    }
+    verify_native_max_trace_heights(
+        &sdk,
+        app_pk.clone(),
+        app_committed_exe.clone(),
+        &full_agg_pk.agg_stark_pk,
+        args.agg_tree_config.num_children_leaf,
+    )?;
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let mut prover = EvmHalo2Prover::<_, BabyBearPoseidon2Engine>::new(
