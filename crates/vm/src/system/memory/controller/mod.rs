@@ -401,32 +401,7 @@ impl<F: PrimeField32> MemoryController<F> {
     // The following functions are for instrumentation but not necessarily required by any traits.
     // They may be deleted in the future.
 
-    pub fn current_trace_heights(&self) -> Vec<usize> {
-        self.get_memory_trace_heights().flatten()
-    }
-
-    pub fn get_memory_trace_heights(&self) -> MemoryTraceHeights {
-        let access_adapters = self.access_adapter_inventory.get_heights();
-        match &self.interface_chip {
-            MemoryInterface::Volatile { boundary_chip } => {
-                MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
-                    boundary: boundary_chip.current_trace_height(),
-                    access_adapters,
-                })
-            }
-            MemoryInterface::Persistent {
-                boundary_chip,
-                merkle_chip,
-                ..
-            } => MemoryTraceHeights::Persistent(PersistentMemoryTraceHeights {
-                boundary: boundary_chip.current_trace_height(),
-                merkle: merkle_chip.current_trace_height(),
-                access_adapters,
-            }),
-        }
-    }
-
-    pub fn get_dummy_memory_trace_heights(&self) -> MemoryTraceHeights {
+    fn get_dummy_memory_trace_heights(&self) -> MemoryTraceHeights {
         let access_adapters = vec![1; self.access_adapter_inventory.num_access_adapters()];
         match &self.interface_chip {
             MemoryInterface::Volatile { .. } => {
@@ -445,7 +420,7 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
-    pub fn current_trace_cells(&self) -> Vec<usize> {
+    fn current_trace_cells(&self) -> Vec<usize> {
         let mut ret = Vec::new();
         match &self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
