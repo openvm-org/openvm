@@ -38,8 +38,6 @@ use crate::{
     ModularExtension,
 };
 
-// TODO: this should be decided after e2 execution
-
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
 pub struct Fp2Extension {
@@ -93,9 +91,9 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Fp2ExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        // TODO: add getter for pointer_max_bits
-        let pointer_max_bits = 29;
-        let range_checker_bus = VariableRangeCheckerBus::new(1, pointer_max_bits);
+        let pointer_max_bits = inventory.address_bits();
+        // TODO: somehow get the range checker bus from `ExecutorInventory`
+        let range_checker_bus = VariableRangeCheckerBus::new(1, 22);
         for (i, (_, modulus)) in self.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8);
@@ -173,8 +171,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Fp2Extension {
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let range_checker_bus = inventory.range_checker().bus;
-        // TODO: add a getter for pointer_max_bits
-        let pointer_max_bits = inventory.config().memory_config.pointer_max_bits;
+        let pointer_max_bits = inventory.address_bits();
 
         let bitwise_lu = {
             // A trick to get around Rust's borrow rules
@@ -271,9 +268,8 @@ where
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
-        let timestamp_max_bits = inventory.airs().config().memory_config.clk_max_bits;
-        // TODO: add a getter for pointer_max_bits
-        let pointer_max_bits = 29;
+        let timestamp_max_bits = inventory.timestamp_max_bits();
+        let pointer_max_bits = inventory.airs().address_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let bitwise_lu = {
             let existing_chip = inventory

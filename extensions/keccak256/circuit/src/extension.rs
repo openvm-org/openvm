@@ -69,8 +69,7 @@ impl<F> VmExecutionExtension<F> for Keccak256 {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Keccak256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
-        // TODO: getter for pointer_max_bits
-        let pointer_max_bits = 29;
+        let pointer_max_bits = inventory.address_bits();
         let keccak_step = KeccakVmStep::new(Rv32KeccakOpcode::CLASS_OFFSET, pointer_max_bits);
         inventory.add_executor(
             keccak_step,
@@ -90,8 +89,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Keccak256 {
         } = inventory.system().port();
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
-        // TODO: add a getter for pointer_max_bits
-        let pointer_max_bits = inventory.config().memory_config.pointer_max_bits;
+        let pointer_max_bits = inventory.address_bits();
 
         let bitwise_lu = {
             let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
@@ -131,10 +129,9 @@ where
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
-        let timestamp_max_bits = inventory.airs().config().memory_config.clk_max_bits;
+        let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        // TODO: add a getter for pointer_max_bits
-        let pointer_max_bits = 29;
+        let pointer_max_bits = inventory.airs().address_bits();
 
         let bitwise_lu = {
             let existing_chip = inventory

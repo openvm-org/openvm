@@ -268,7 +268,7 @@ where
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
-        let timestamp_max_bits = inventory.airs().config().memory_config.clk_max_bits;
+        let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
 
         // These calls to next_air are not strictly necessary to construct the chips, but provide a
@@ -523,7 +523,7 @@ where
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
-        let timestamp_max_bits = inventory.airs().config().memory_config.clk_max_bits;
+        let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
 
         inventory.next_air::<CastFAir>()?;

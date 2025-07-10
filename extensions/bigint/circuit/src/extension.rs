@@ -35,8 +35,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::*;
 
-// TODO: this should be decided after e2 execution
-
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Int256Rv32Config {
     #[config(executor = SystemExecutor)]
@@ -101,8 +99,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Int256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
-        // TODO: add a getter for pointer_max_bits
-        let pointer_max_bits = 29;
+        let pointer_max_bits = inventory.address_bits();
 
         let alu = Rv32BaseAlu256Step::new(
             Rv32HeapAdapterStep::new(pointer_max_bits),
@@ -161,8 +158,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Int256 {
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let range_checker = inventory.range_checker().bus;
-        // TODO: add a getter for pointer_max_bits
-        let pointer_max_bits = inventory.config().memory_config.pointer_max_bits;
+        let pointer_max_bits = inventory.address_bits();
 
         let bitwise_lu = {
             // A trick to get around Rust's borrow rules
@@ -248,7 +244,7 @@ where
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
-        let timestamp_max_bits = inventory.airs().config().memory_config.clk_max_bits;
+        let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let pointer_max_bits = inventory.airs().config().memory_config.pointer_max_bits;
 

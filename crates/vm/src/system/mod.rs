@@ -215,7 +215,7 @@ impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
     fn create_executors(
         &self,
     ) -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError> {
-        let mut inventory = ExecutorInventory::new();
+        let mut inventory = ExecutorInventory::new(self.clone());
         // PublicValuesChip is required when num_public_values > 0 in single segment mode.
         if self.has_public_values_chip() {
             assert_eq!(inventory.executors().len(), PV_EXECUTOR_IDX);

@@ -108,6 +108,7 @@ where
 // ======================= Different Inventory Struct Definitions =============================
 
 pub struct ExecutorInventory<E> {
+    config: SystemConfig,
     /// Lookup table to executor ID.
     /// This is stored in a hashmap because it is _not_ expected to be used in the hot path.
     /// A direct opcode -> executor mapping should be generated before runtime execution.
@@ -203,8 +204,9 @@ where
 impl<E> ExecutorInventory<E> {
     /// Empty inventory should be created at the start of the declaration of a new extension.
     #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
+    pub fn new(config: SystemConfig) -> Self {
         Self {
+            config,
             instruction_lookup: Default::default(),
             executors: Default::default(),
             ext_start: vec![0],
@@ -281,7 +283,7 @@ impl<E> ExecutorInventory<E> {
         let old_executors = self.executors.iter().map(|e| e as &dyn AnyEnum).collect();
         ExecutorInventoryBuilder {
             old_executors,
-            new_inventory: ExecutorInventory::new(),
+            new_inventory: ExecutorInventory::new(self.config.clone()),
             phantom_executors: Default::default(),
         }
     }
@@ -291,6 +293,7 @@ impl<E> ExecutorInventory<E> {
         E: Into<E2>,
     {
         ExecutorInventory {
+            config: self.config,
             instruction_lookup: self.instruction_lookup,
             executors: self.executors.into_iter().map(|e| e.into()).collect(),
             ext_start: self.ext_start,
@@ -346,6 +349,11 @@ impl<E> ExecutorInventory<E> {
             .iter_mut()
             .filter_map(|e| e.as_any_kind_mut().downcast_mut())
     }
+
+    /// Returns the system config of the inventory.
+    pub fn config(&self) -> &SystemConfig {
+        &self.config
+    }
 }
 
 impl<F, E> ExecutorInventoryBuilder<'_, F, E> {
@@ -383,6 +391,11 @@ impl<F, E> ExecutorInventoryBuilder<'_, F, E> {
         self.old_executors
             .iter()
             .filter_map(|e| e.as_any_kind().downcast_ref())
+    }
+
+    /// Returns the maximum number of bits used to represent addresses in memory
+    pub fn address_bits(&self) -> usize {
+        self.new_inventory.config().memory_config.pointer_max_bits
     }
 }
 
@@ -458,6 +471,11 @@ impl<SC: StarkGenericConfig> AirInventory<SC> {
             builder.add_air(air);
         }
         builder.generate_pk()
+    }
+
+    /// Returns the maximum number of bits used to represent addresses in memory
+    pub fn address_bits(&self) -> usize {
+        self.config.memory_config.pointer_max_bits
     }
 }
 
@@ -565,6 +583,10 @@ where
                     .unwrap()
             })
             .collect()
+    }
+
+    pub fn timestamp_max_bits(&self) -> usize {
+        self.airs.config().memory_config.clk_max_bits
     }
 }
 

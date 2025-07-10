@@ -108,8 +108,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, WeierstrassExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        // TODO: add getter for pointer_max_bits and range_checker_bus
-        let pointer_max_bits = 29;
+        let pointer_max_bits = inventory.address_bits();
+        // TODO: somehow get the range checker bus from `ExecutorInventory`
         let range_checker_bus = VariableRangeCheckerBus::new(1, 22);
         for (i, curve) in self.supported_curves.iter().enumerate() {
             let start_offset =
@@ -203,8 +203,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let range_checker_bus = inventory.range_checker().bus;
-        // TODO: add a getter for pointer_max_bits
-        let pointer_max_bits = inventory.config().memory_config.pointer_max_bits;
+        let pointer_max_bits = inventory.address_bits();
 
         let bitwise_lu = {
             // A trick to get around Rust's borrow rules
@@ -303,9 +302,8 @@ where
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
-        let timestamp_max_bits = inventory.airs().config().memory_config.clk_max_bits;
-        // TODO: add a getter for pointer_max_bits
-        let pointer_max_bits = 29;
+        let timestamp_max_bits = inventory.timestamp_max_bits();
+        let pointer_max_bits = inventory.airs().address_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let bitwise_lu = {
             let existing_chip = inventory
