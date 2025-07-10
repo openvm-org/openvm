@@ -2,7 +2,11 @@ use derive_more::derive::From;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use openvm_circuit::{
-    arch::{ExecutorInventoryBuilder, ExecutorInventoryError, VmExecutionExtension},
+    arch::{
+        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
+        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
+        VmExecutionExtension, VmProverExtension,
+    },
     system::phantom::PhantomExecutor,
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
@@ -16,7 +20,11 @@ use openvm_pairing_guest::{
     bn254::{BN254_ECC_STRUCT_NAME, BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
 use openvm_pairing_transpiler::PairingPhantom;
-use openvm_stark_backend::p3_field::{Field, PrimeField32};
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    p3_field::{Field, PrimeField32},
+    prover::cpu::CpuBackend,
+};
 use serde::{Deserialize, Serialize};
 use strum::FromRepr;
 
@@ -77,6 +85,26 @@ impl<F: PrimeField32> VmExecutionExtension<F> for PairingExtension {
             phantom::PairingHintSubEx,
             PhantomDiscriminant(PairingPhantom::HintFinalExp as u16),
         )?;
+        Ok(())
+    }
+}
+
+impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for PairingExtension {
+    fn extend_circuit(&self, _inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
+        Ok(())
+    }
+}
+
+impl<SC, RA> VmProverExtension<SC, RA, CpuBackend<SC>> for PairingExtension
+where
+    SC: StarkGenericConfig,
+    RA: RowMajorMatrixArena<Val<SC>>,
+    Val<SC>: PrimeField32,
+{
+    fn extend_prover(
+        &self,
+        _inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+    ) -> Result<(), ChipInventoryError> {
         Ok(())
     }
 }
