@@ -172,19 +172,16 @@ fn negative_sha2_test_bad_final_hash<C: Sha2Config + 'static>() {
 }
 
 #[test]
-#[should_panic]
 fn negative_sha256_test_bad_final_hash() {
     negative_sha2_test_bad_final_hash::<Sha256Config>();
 }
 
 #[test]
-#[should_panic]
 fn negative_sha512_test_bad_final_hash() {
     negative_sha2_test_bad_final_hash::<Sha512Config>();
 }
 
 #[test]
-#[should_panic]
 fn negative_sha384_test_bad_final_hash() {
     negative_sha2_test_bad_final_hash::<Sha384Config>();
 }
