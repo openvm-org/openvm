@@ -6,19 +6,19 @@ use openvm_circuit::{
     arch::ExecutionBridge,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_derive::{InsExecutorE1, InstructionExecutor};
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip,
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    Chip, ChipUsageGetter,
 };
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
-    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldVariable,
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionFiller,
+    FieldVariable,
 };
-use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_rv32_adapters::{
+    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
+};
 
 use super::{WeierstrassAir, WeierstrassChip, WeierstrassStep};
 
@@ -56,53 +56,79 @@ pub fn ec_double_ne_expr(
 /// BLOCKS: how many blocks do we need to represent one input or output
 /// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1)]
-pub struct EcDoubleChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    pub WeierstrassChip<F, 1, BLOCKS, BLOCK_SIZE>,
-);
+fn gen_base_expr(
+    config: ExprBuilderConfig,
+    range_checker_bus: VariableRangeCheckerBus,
+    a_biguint: BigUint,
+) -> (FieldExpr, Vec<usize>) {
+    let expr = ec_double_ne_expr(config, range_checker_bus, a_biguint);
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
-    EcDoubleChip<F, BLOCKS, BLOCK_SIZE>
-{
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        execution_bridge: ExecutionBridge,
-        memory_bridge: MemoryBridge,
-        mem_helper: SharedMemoryHelper<F>,
-        pointer_max_bits: usize,
-        config: ExprBuilderConfig,
-        offset: usize,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-        range_checker: SharedVariableRangeCheckerChip,
-        a_biguint: BigUint,
-    ) -> Self {
-        let expr = ec_double_ne_expr(config, range_checker.bus(), a_biguint);
+    let local_opcode_idx = vec![
+        Rv32WeierstrassOpcode::EC_DOUBLE as usize,
+        Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+    ];
 
-        let local_opcode_idx = vec![
-            Rv32WeierstrassOpcode::EC_DOUBLE as usize,
-            Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
-        ];
+    (expr, local_opcode_idx)
+}
 
-        let air = WeierstrassAir::new(
-            Rv32VecHeapAdapterAir::new(
-                execution_bridge,
-                memory_bridge,
-                bitwise_lookup_chip.bus(),
-                pointer_max_bits,
-            ),
-            FieldExpressionCoreAir::new(expr.clone(), offset, local_opcode_idx.clone(), vec![]),
-        );
+pub fn get_ec_double_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    exec_bridge: ExecutionBridge,
+    mem_bridge: MemoryBridge,
+    config: ExprBuilderConfig,
+    range_checker_bus: VariableRangeCheckerBus,
+    bitwise_lookup_bus: BitwiseOperationLookupBus,
+    pointer_max_bits: usize,
+    offset: usize,
+    a_biguint: BigUint,
+) -> WeierstrassAir<1, BLOCKS, BLOCK_SIZE> {
+    let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
+    WeierstrassAir::new(
+        Rv32VecHeapAdapterAir::new(
+            exec_bridge,
+            mem_bridge,
+            bitwise_lookup_bus,
+            pointer_max_bits,
+        ),
+        FieldExpressionCoreAir::new(expr.clone(), offset, local_opcode_idx.clone(), vec![]),
+    )
+}
 
-        let step = WeierstrassStep::new(
-            Rv32VecHeapAdapterStep::new(pointer_max_bits, bitwise_lookup_chip),
+pub fn get_ec_double_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    config: ExprBuilderConfig,
+    range_checker_bus: VariableRangeCheckerBus,
+    pointer_max_bits: usize,
+    offset: usize,
+    a_biguint: BigUint,
+) -> WeierstrassStep<1, BLOCKS, BLOCK_SIZE> {
+    let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
+    WeierstrassStep::new(
+        Rv32VecHeapAdapterStep::new(pointer_max_bits),
+        expr,
+        offset,
+        local_opcode_idx,
+        vec![],
+        "EcDouble",
+    )
+}
+
+pub fn get_ec_double_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    config: ExprBuilderConfig,
+    mem_helper: SharedMemoryHelper<F>,
+    range_checker: SharedVariableRangeCheckerChip,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    pointer_max_bits: usize,
+    a_biguint: BigUint,
+) -> WeierstrassChip<F, 1, BLOCKS, BLOCK_SIZE> {
+    let (expr, local_opcode_idx) = gen_base_expr(config, range_checker.bus(), a_biguint);
+    WeierstrassChip::new(
+        FieldExpressionFiller::new(
+            Rv32VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
             expr,
-            offset,
             local_opcode_idx,
             vec![],
             range_checker,
-            "EcDouble",
             true,
-        );
-        Self(WeierstrassChip::new(air, step, mem_helper))
-    }
+        ),
+        mem_helper,
+    )
 }

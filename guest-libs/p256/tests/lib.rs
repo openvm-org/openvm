@@ -83,42 +83,41 @@ mod guest_tests {
     }
 
     mod ecdsa_config {
-        use eyre::Result;
-        use openvm_algebra_circuit::{
-            ModularExtension, ModularExtensionExecutor, ModularExtensionPeriphery,
-        };
+
+        use openvm_algebra_circuit::{ModularExtension, ModularExtensionExecutor};
         use openvm_circuit::{
             arch::{InitFileGenerator, SystemConfig},
             derive::VmConfig,
+            system::SystemExecutor,
             utils::test_system_config_with_continuations,
         };
-        use openvm_ecc_circuit::{
-            CurveConfig, WeierstrassExtension, WeierstrassExtensionExecutor,
-            WeierstrassExtensionPeriphery,
-        };
+        use openvm_ecc_circuit::{CurveConfig, WeierstrassExtension, WeierstrassExtensionExecutor};
         use openvm_rv32im_circuit::{
-            Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
-            Rv32MExecutor, Rv32MPeriphery,
+            Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
         };
-        use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
-        use openvm_stark_backend::p3_field::PrimeField32;
+        use openvm_sha256_circuit::{Sha256, Sha256Executor};
+        use openvm_stark_backend::{
+            config::{StarkGenericConfig, Val},
+            p3_field::Field,
+            prover::hal::ProverBackend,
+        };
         use serde::{Deserialize, Serialize};
 
         #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
         pub struct EcdsaConfig {
-            #[system]
+            #[config(executor = SystemExecutor)]
             pub system: SystemConfig,
-            #[extension]
+            #[extension(generics = false)]
             pub base: Rv32I,
-            #[extension]
+            #[extension(generics = false)]
             pub mul: Rv32M,
-            #[extension]
+            #[extension(generics = false)]
             pub io: Rv32Io,
-            #[extension]
+            #[extension(generics = false)]
             pub modular: ModularExtension,
-            #[extension]
+            #[extension(generics = false)]
             pub weierstrass: WeierstrassExtension,
-            #[extension]
+            #[extension(generics = false)]
             pub sha256: Sha256,
         }
 

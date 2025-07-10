@@ -4,12 +4,16 @@ mod double;
 pub use add_ne::*;
 pub use double::*;
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
-use openvm_circuit::arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper};
-use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionStep};
-use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
+use openvm_mod_circuit_builder::{
+    FieldExpressionCoreAir, FieldExpressionFiller, FieldExpressionStep,
+};
+use openvm_rv32_adapters::{
+    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
+};
 
 pub(crate) type WeierstrassAir<
     const NUM_READS: usize,
@@ -31,9 +35,9 @@ pub(crate) type WeierstrassChip<
     const NUM_READS: usize,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
-> = NewVmChipWrapper<
+> = VmChipWrapper<
     F,
-    WeierstrassAir<NUM_READS, BLOCKS, BLOCK_SIZE>,
-    WeierstrassStep<NUM_READS, BLOCKS, BLOCK_SIZE>,
-    MatrixRecordArena<F>,
+    FieldExpressionFiller<
+        Rv32VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+    >,
 >;

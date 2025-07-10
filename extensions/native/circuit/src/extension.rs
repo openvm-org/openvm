@@ -9,12 +9,13 @@ use native_vectorized_adapter::{NativeVectorizedAdapterAir, NativeVectorizedAdap
 use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
-        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension,
+        ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator, MemoryConfig,
+        RowMajorMatrixArena, SystemConfig, VmCircuitExtension, VmExecutionExtension,
+        VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
-use openvm_circuit_derive::AnyEnum;
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_native_compiler::{
     CastfOpcode, FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
@@ -39,36 +40,40 @@ use crate::{
     *,
 };
 
-// #[derive(Clone, Debug, Serialize, Deserialize, VmConfig, derive_new::new)]
-// pub struct NativeConfig {
-//     #[system]
-//     pub system: SystemConfig,
-//     #[extension]
-//     pub native: Native,
-// }
+use openvm_circuit::system::SystemExecutor;
+use openvm_circuit_derive::VmConfig;
+use openvm_stark_backend::{p3_field::Field, prover::hal::ProverBackend};
 
-// impl NativeConfig {
-//     pub fn aggregation(num_public_values: usize, max_constraint_degree: usize) -> Self {
-//         Self {
-//             system: SystemConfig::new(
-//                 max_constraint_degree,
-//                 MemoryConfig::aggregation(),
-//                 num_public_values,
-//             )
-//             .with_max_segment_len((1 << 24) - 100),
-//             native: Default::default(),
-//         }
-//     }
-// }
+#[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
+pub struct NativeConfig {
+    #[config(executor = SystemExecutor)]
+    pub system: SystemConfig,
+    #[extension]
+    pub native: Native,
+}
 
-// // Default implementation uses no init file
-// impl InitFileGenerator for NativeConfig {}
+impl NativeConfig {
+    pub fn aggregation(num_public_values: usize, max_constraint_degree: usize) -> Self {
+        Self {
+            system: SystemConfig::new(
+                max_constraint_degree,
+                MemoryConfig::aggregation(),
+                num_public_values,
+            )
+            .with_max_segment_len((1 << 24) - 100),
+            native: Default::default(),
+        }
+    }
+}
+
+// Default implementation uses no init file
+impl InitFileGenerator for NativeConfig {}
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Native;
 
-#[derive(From, AnyEnum)]
-pub enum NativeExecutor<F: PrimeField32> {
+#[derive(Clone, From, AnyEnum, InsExecutorE1, InstructionExecutor)]
+pub enum NativeExecutor<F: Field> {
     LoadStore(NativeLoadStoreStep<1>),
     BlockLoadStore(NativeLoadStoreStep<BLOCK_LOAD_STORE_SIZE>),
     BranchEqual(NativeBranchEqStep),
@@ -78,11 +83,6 @@ pub enum NativeExecutor<F: PrimeField32> {
     FriReducedOpening(FriReducedOpeningStep),
     VerifyBatch(NativePoseidon2Step<F, 1>),
 }
-
-// #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
-// pub enum NativePeriphery<F: PrimeField32> {
-//     Phantom(PhantomExecutor<F>),
-// }
 
 // ============ VmExtension Implementations ============
 
@@ -268,7 +268,7 @@ where
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
-        let timestamp_max_bits = inventory.airs().config().memory_config.clk_max_bits;
+        let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
 
         // These calls to next_air are not strictly necessary to construct the chips, but provide a
@@ -523,7 +523,7 @@ where
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
-        let timestamp_max_bits = inventory.airs().config().memory_config.clk_max_bits;
+        let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
 
         inventory.next_air::<CastFAir>()?;
