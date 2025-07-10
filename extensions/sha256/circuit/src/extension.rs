@@ -1,6 +1,5 @@
 use std::{result::Result, sync::Arc};
 
-use crate::*;
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
@@ -25,6 +24,8 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
+
+use crate::*;
 
 // TODO: this should be decided after e2 execution
 
