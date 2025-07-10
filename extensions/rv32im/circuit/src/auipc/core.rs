@@ -34,7 +34,9 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 
-use crate::adapters::{Rv32RdWriteAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use crate::adapters::{
+    Rv32RdWriteAdapterFiller, Rv32RdWriteAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
@@ -209,7 +211,7 @@ pub struct Rv32AuipcStep<A = Rv32RdWriteAdapterStep> {
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct Rv32AuipcFiller<A = Rv32RdWriteAdapterStep> {
+pub struct Rv32AuipcFiller<A = Rv32RdWriteAdapterFiller> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }

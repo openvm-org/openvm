@@ -17,17 +17,17 @@ pub mod segmentation_strategy;
 /// Top level [VmExecutor] and [VirtualMachine] constructor and API.
 pub mod vm;
 
-pub use openvm_instructions as instructions;
-
 pub mod hasher;
 // pub mod interpreter;
 /// Testing framework
-// #[cfg(any(test, feature = "test-utils"))]
-// pub mod testing;
+#[cfg(any(test, feature = "test-utils"))]
+pub mod testing;
+
 pub use config::*;
 pub use execution::*;
 pub use extensions::*;
 pub use integration_api::*;
+pub use openvm_instructions as instructions;
 pub use segment::*;
 pub use segmentation_strategy::*;
 pub use vm::*;

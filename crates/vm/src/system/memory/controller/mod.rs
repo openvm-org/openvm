@@ -82,7 +82,7 @@ pub struct MemoryController<F: Field> {
     // Store separately to avoid smart pointer reference each time
     range_checker_bus: VariableRangeCheckerBus,
     access_adapter_inventory: AccessAdapterInventory<F>,
-    hasher_chip: Option<Arc<Poseidon2PeripheryChip<F>>>,
+    pub(crate) hasher_chip: Option<Arc<Poseidon2PeripheryChip<F>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
