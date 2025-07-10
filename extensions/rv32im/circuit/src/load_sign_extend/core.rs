@@ -215,7 +215,10 @@ where
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
-        (A::RecordMut<'buf>, &'buf mut LoadSignExtendCoreRecord<NUM_CELLS>),
+        (
+            A::RecordMut<'buf>,
+            &'buf mut LoadSignExtendCoreRecord<NUM_CELLS>,
+        ),
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {

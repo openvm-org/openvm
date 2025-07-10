@@ -142,7 +142,6 @@ where
         (A::RecordMut<'buf>, &'buf mut FieldArithmeticRecord<F>),
     >,
 {
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",

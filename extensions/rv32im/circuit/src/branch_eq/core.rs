@@ -5,8 +5,8 @@ use openvm_circuit::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, EmptyAdapterCoreLayout, ImmInstruction, InsExecutorE1,
-        InstructionExecutor, RecordArena, Result, TraceFiller, VmAdapterInterface,
-        VmCoreAir, VmStateMut,
+        InstructionExecutor, RecordArena, Result, TraceFiller, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -168,7 +168,10 @@ where
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
-        (A::RecordMut<'buf>, &'buf mut BranchEqualCoreRecord<NUM_LIMBS>),
+        (
+            A::RecordMut<'buf>,
+            &'buf mut BranchEqualCoreRecord<NUM_LIMBS>,
+        ),
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
