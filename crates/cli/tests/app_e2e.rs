@@ -1,4 +1,4 @@
-use std::{env, process::Command};
+use std::{env, fs::OpenOptions, io::Write, path::Path, process::Command};
 
 use eyre::Result;
 use tempfile::tempdir;
@@ -134,6 +134,9 @@ fn test_cli_init_build() -> Result<()> {
             "cli-package",
         ],
     )?;
+    if matches!(env::var("USE_LOCAL_OPENVM"), Ok(x) if x == "1") {
+        append_patch_to_cargo_toml(&manifest_path)?;
+    }
 
     run_cmd(
         "cargo",
@@ -169,5 +172,31 @@ fn run_cmd(program: &str, args: &[&str]) -> Result<()> {
     if !output.status.success() {
         return Err(eyre::eyre!("Command failed with status: {}", output.status));
     }
+    Ok(())
+}
+
+fn append_patch_to_cargo_toml(file_path: impl AsRef<Path>) -> Result<()> {
+    const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
+    let openvm_path = Path::new(MANIFEST_DIR)
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("crates")
+        .join("toolchain")
+        .join("openvm");
+    let mut file = OpenOptions::new()
+        .create(false)
+        .append(true)
+        .open(file_path)?;
+
+    // Add a newline first to ensure proper formatting
+    writeln!(file)?;
+    writeln!(
+        file,
+        r#"[patch."https://github.com/openvm-org/openvm.git"]"#
+    )?;
+    writeln!(file, r#"openvm = {{ path = "{}" }}"#, openvm_path.display())?;
+
     Ok(())
 }
