@@ -7,11 +7,13 @@ use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::{
-        execution_mode::E1ExecutionCtx, get_record_from_slice, AdapterAirContext,
-        AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc,
-        ExecutionError::InvalidInstruction, MatrixRecordArena, MinimalInstruction,
-        NewVmChipWrapper, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
-        VmAdapterInterface, VmAirWrapper, VmCoreAir, VmSegmentState, VmStateMut,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc,
+        ExecutionError::InvalidInstruction,
+        MatrixRecordArena, MinimalInstruction, NewVmChipWrapper, RecordArena, Result,
+        StepExecutorE1, StepExecutorE2, TraceFiller, TraceStep, VmAdapterInterface, VmAirWrapper,
+        VmCoreAir, VmSegmentState, VmStateMut,
     },
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
@@ -481,23 +483,15 @@ struct ModularIsEqualPreCompute<const READ_LIMBS: usize> {
     modulus_limbs: [u8; READ_LIMBS],
 }
 
-impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize>
-    StepExecutorE1<F> for VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
-where
-    F: PrimeField32,
+impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize>
+    VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
 {
-    #[inline(always)]
-    fn pre_compute_size(&self) -> usize {
-        std::mem::size_of::<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>()
-    }
-
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
-        let data: &mut ModularIsEqualPreCompute<TOTAL_READ_SIZE> = data.borrow_mut();
+        data: &mut ModularIsEqualPreCompute<TOTAL_READ_SIZE>,
+    ) -> Result<bool> {
         let Instruction {
             opcode,
             a,
@@ -536,6 +530,62 @@ where
         };
 
         let is_setup = local_opcode == Rv32ModularArithmeticOpcode::SETUP_ISEQ;
+
+        Ok(is_setup)
+    }
+}
+
+impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize>
+    StepExecutorE1<F> for VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
+where
+    F: PrimeField32,
+{
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        std::mem::size_of::<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>()
+    }
+
+    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>> {
+        let pre_compute: &mut ModularIsEqualPreCompute<TOTAL_READ_SIZE> = data.borrow_mut();
+
+        let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
+        let fn_ptr = if is_setup {
+            execute_e1_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, true>
+        } else {
+            execute_e1_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, false>
+        };
+
+        Ok(fn_ptr)
+    }
+}
+
+impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize>
+    StepExecutorE2<F> for VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
+where
+    F: PrimeField32,
+{
+    #[inline(always)]
+    fn e2_pre_compute_size(&self) -> usize {
+        std::mem::size_of::<E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>>()
+    }
+
+    fn pre_compute_e2<Ctx: E2ExecutionCtx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>> {
+        let pre_compute: &mut E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>> =
+            data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+
+        let is_setup = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
         let fn_ptr = if is_setup {
             execute_e1_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, true>
         } else {
@@ -559,6 +609,45 @@ unsafe fn execute_e1_impl<
 ) {
     let pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE> = pre_compute.borrow();
 
+    execute_e12_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, IS_SETUP>(
+        pre_compute,
+        vm_state,
+    );
+}
+
+unsafe fn execute_e2_impl<
+    F: PrimeField32,
+    CTX: E2ExecutionCtx,
+    const NUM_LANES: usize,
+    const LANE_SIZE: usize,
+    const TOTAL_READ_SIZE: usize,
+    const IS_SETUP: bool,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>> =
+        pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, IS_SETUP>(
+        &pre_compute.data,
+        vm_state,
+    );
+}
+
+unsafe fn execute_e12_impl<
+    F: PrimeField32,
+    CTX: E1ExecutionCtx,
+    const NUM_LANES: usize,
+    const LANE_SIZE: usize,
+    const TOTAL_READ_SIZE: usize,
+    const IS_SETUP: bool,
+>(
+    pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE>,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
     // Read register values
     let rs_vals = pre_compute
         .rs_addrs
