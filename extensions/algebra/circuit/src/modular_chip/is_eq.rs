@@ -9,8 +9,9 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, InsExecutorE1, MinimalInstruction, RecordArena,
-        Result, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterTraceStep, EmptyAdapterCoreLayout, InsExecutorE1, InstructionExecutor,
+        MinimalInstruction, RecordArena, Result, TraceFiller, VmAdapterInterface, VmCoreAir,
+        VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -292,7 +293,7 @@ pub struct ModularIsEqualRecord<const READ_LIMBS: usize> {
     pub c: [u8; READ_LIMBS],
 }
 
-#[derive(derive_new::new)]
+#[derive(derive_new::new, Clone)]
 pub struct ModularIsEqualStep<
     A,
     const READ_LIMBS: usize,
@@ -300,13 +301,25 @@ pub struct ModularIsEqualStep<
     const LIMB_BITS: usize,
 > {
     adapter: A,
-    pub modulus_limbs: [u8; READ_LIMBS],
     pub offset: usize,
+    pub modulus_limbs: [u8; READ_LIMBS],
+}
+
+#[derive(derive_new::new, Clone)]
+pub struct ModularIsEqualFiller<
+    A,
+    const READ_LIMBS: usize,
+    const WRITE_LIMBS: usize,
+    const LIMB_BITS: usize,
+> {
+    adapter: A,
+    pub offset: usize,
+    pub modulus_limbs: [u8; READ_LIMBS],
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 
-impl<F, A, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F>
-    for ModularIsEqualStep<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
+impl<F, A, RA, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
+    InstructionExecutor<F, RA> for ModularIsEqualFiller<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
@@ -315,18 +328,20 @@ where
             ReadData: Into<[[u8; READ_LIMBS]; 2]>,
             WriteData: From<[u8; WRITE_LIMBS]>,
         >,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (
+            A::RecordMut<'buf>,
+            &'buf mut ModularIsEqualRecord<READ_LIMBS>,
+        ),
+    >,
 {
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut ModularIsEqualRecord<READ_LIMBS>);
-
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<'buf, F, TracingMemory, RA>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode =
@@ -371,7 +386,7 @@ where
 }
 
 impl<F, A, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for ModularIsEqualStep<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
+    for ModularIsEqualFiller<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,

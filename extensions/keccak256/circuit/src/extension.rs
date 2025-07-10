@@ -4,61 +4,60 @@ use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
-        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension,
+        ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator, RowMajorMatrixArena,
+        SystemConfig, VmCircuitExtension, VmExecutionExtension, VmProverExtension,
     },
-    system::{memory::SharedMemoryHelper, SystemPort},
+    system::{memory::SharedMemoryHelper, SystemExecutor, SystemPort},
 };
-use openvm_circuit_derive::AnyEnum;
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use openvm_instructions::*;
+use openvm_rv32im_circuit::{Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_field::PrimeField32,
-    prover::cpu::CpuBackend,
+    p3_field::{Field, PrimeField32},
+    prover::{cpu::CpuBackend, hal::ProverBackend},
 };
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
 use crate::*;
 
-// TODO: this should be decided after e2 execution
+#[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
+pub struct Keccak256Rv32Config {
+    #[config(executor = SystemExecutor)]
+    pub system: SystemConfig,
+    #[extension(generics = false)]
+    pub rv32i: Rv32I,
+    #[extension(generics = false)]
+    pub rv32m: Rv32M,
+    #[extension(generics = false)]
+    pub io: Rv32Io,
+    #[extension(generics = false)]
+    pub keccak: Keccak256,
+}
 
-// #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
-// pub struct Keccak256Rv32Config {
-//     #[system]
-//     pub system: SystemConfig,
-//     #[extension]
-//     pub rv32i: Rv32I,
-//     #[extension]
-//     pub rv32m: Rv32M,
-//     #[extension]
-//     pub io: Rv32Io,
-//     #[extension]
-//     pub keccak: Keccak256,
-// }
+impl Default for Keccak256Rv32Config {
+    fn default() -> Self {
+        Self {
+            system: SystemConfig::default().with_continuations(),
+            rv32i: Rv32I,
+            rv32m: Rv32M::default(),
+            io: Rv32Io,
+            keccak: Keccak256,
+        }
+    }
+}
 
-// impl Default for Keccak256Rv32Config {
-//     fn default() -> Self {
-//         Self {
-//             system: SystemConfig::default().with_continuations(),
-//             rv32i: Rv32I,
-//             rv32m: Rv32M::default(),
-//             io: Rv32Io,
-//             keccak: Keccak256,
-//         }
-//     }
-// }
-
-// // Default implementation uses no init file
-// impl InitFileGenerator for Keccak256Rv32Config {}
+// Default implementation uses no init file
+impl InitFileGenerator for Keccak256Rv32Config {}
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Keccak256;
 
-#[derive(From, AnyEnum)]
+#[derive(Clone, Copy, From, AnyEnum, InsExecutorE1, InstructionExecutor)]
 pub enum Keccak256Executor {
     Keccak256(KeccakVmStep),
 }

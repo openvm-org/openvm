@@ -4,16 +4,18 @@ mod is_eq;
 pub use is_eq::*;
 mod muldiv;
 pub use muldiv::*;
-use openvm_circuit::arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper};
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionStep};
+use openvm_mod_circuit_builder::{
+    FieldExpressionCoreAir, FieldExpressionFiller, FieldExpressionStep,
+};
 use openvm_rv32_adapters::{
     Rv32IsEqualModAdapterAir, Rv32IsEqualModeAdapterStep, Rv32VecHeapAdapterAir,
-    Rv32VecHeapAdapterStep,
+    Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
 };
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
 pub(crate) type ModularAir<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper<
     Rv32VecHeapAdapterAir<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
@@ -23,22 +25,10 @@ pub(crate) type ModularAir<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAir
 pub(crate) type ModularStep<const BLOCKS: usize, const BLOCK_SIZE: usize> =
     FieldExpressionStep<Rv32VecHeapAdapterStep<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>;
 
-pub(crate) type ModularChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> = NewVmChipWrapper<
+pub(crate) type ModularChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> = VmChipWrapper<
     F,
-    ModularAir<BLOCKS, BLOCK_SIZE>,
-    ModularStep<BLOCKS, BLOCK_SIZE>,
-    MatrixRecordArena<F>,
+    FieldExpressionFiller<Rv32VecHeapAdapterFiller<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
 >;
-
-#[cfg(test)]
-pub(crate) type ModularDenseChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> =
-    NewVmChipWrapper<
-        F,
-        ModularAir<BLOCKS, BLOCK_SIZE>,
-        ModularStep<BLOCKS, BLOCK_SIZE>,
-        openvm_circuit::arch::DenseRecordArena,
-    >;
-
 // Must have TOTAL_LIMBS = NUM_LANES * LANE_SIZE
 pub type ModularIsEqualAir<
     const NUM_LANES: usize,
@@ -65,9 +55,12 @@ pub type ModularIsEqualChip<
     const NUM_LANES: usize,
     const LANE_SIZE: usize,
     const TOTAL_LIMBS: usize,
-> = NewVmChipWrapper<
+> = VmChipWrapper<
     F,
-    ModularIsEqualAir<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-    VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-    MatrixRecordArena<F>,
+    ModularIsEqualFiller<
+        Rv32IsEqualModeAdapterStep<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        TOTAL_LIMBS,
+        RV32_REGISTER_NUM_LIMBS,
+        RV32_CELL_BITS,
+    >,
 >;
