@@ -180,9 +180,6 @@ fn append_patch_to_cargo_toml(file_path: impl AsRef<Path>) -> Result<()> {
     let openvm_path = Path::new(MANIFEST_DIR)
         .parent()
         .unwrap()
-        .parent()
-        .unwrap()
-        .join("crates")
         .join("toolchain")
         .join("openvm");
     let mut file = OpenOptions::new()
