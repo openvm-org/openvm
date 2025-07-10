@@ -110,7 +110,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
         // TODO: somehow get the range checker bus from `ExecutorInventory`
-        let range_checker_bus = VariableRangeCheckerBus::new(1, 22);
+        let dummy_range_checker_bus = VariableRangeCheckerBus::new(3, 16);
         for (i, curve) in self.supported_curves.iter().enumerate() {
             let start_offset =
                 Rv32WeierstrassOpcode::CLASS_OFFSET + i * Rv32WeierstrassOpcode::COUNT;
@@ -124,7 +124,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                 };
                 let addne = get_ec_addne_step(
                     config.clone(),
-                    range_checker_bus,
+                    dummy_range_checker_bus,
                     pointer_max_bits,
                     start_offset,
                 );
@@ -138,7 +138,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
 
                 let double = get_ec_double_step(
                     config,
-                    range_checker_bus,
+                    dummy_range_checker_bus,
                     pointer_max_bits,
                     start_offset,
                     curve.a.clone(),
@@ -158,7 +158,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                 };
                 let addne = get_ec_addne_step(
                     config.clone(),
-                    range_checker_bus,
+                    dummy_range_checker_bus,
                     pointer_max_bits,
                     start_offset,
                 );
@@ -172,7 +172,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
 
                 let double = get_ec_double_step(
                     config,
-                    range_checker_bus,
+                    dummy_range_checker_bus,
                     pointer_max_bits,
                     start_offset,
                     curve.a.clone(),

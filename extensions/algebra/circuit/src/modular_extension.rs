@@ -85,7 +85,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
         // TODO: somehow get the range checker bus from `ExecutorInventory`
-        let range_checker_bus = VariableRangeCheckerBus::new(1, 22);
+        let dummy_range_checker_bus = VariableRangeCheckerBus::new(3, 16);
         for (i, modulus) in self.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8);
@@ -100,7 +100,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 };
                 let addsub = get_modular_addsub_step(
                     config.clone(),
-                    range_checker_bus,
+                    dummy_range_checker_bus,
                     pointer_max_bits,
                     start_offset,
                 );
@@ -114,7 +114,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
 
                 let muldiv = get_modular_multdiv_step(
                     config,
-                    range_checker_bus,
+                    dummy_range_checker_bus,
                     pointer_max_bits,
                     start_offset,
                 );
@@ -154,7 +154,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 };
                 let addsub = get_modular_addsub_step(
                     config.clone(),
-                    range_checker_bus,
+                    dummy_range_checker_bus,
                     pointer_max_bits,
                     start_offset,
                 );
@@ -168,7 +168,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
 
                 let muldiv = get_modular_multdiv_step(
                     config,
-                    range_checker_bus,
+                    dummy_range_checker_bus,
                     pointer_max_bits,
                     start_offset,
                 );
