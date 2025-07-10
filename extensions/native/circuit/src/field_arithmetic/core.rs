@@ -3,9 +3,10 @@ use std::borrow::{Borrow, BorrowMut};
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        execution_mode::E1ExecutionCtx, get_record_from_slice, AdapterAirContext,
-        AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError,
-        MinimalInstruction, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, MinimalInstruction,
+        RecordArena, Result, StepExecutorE1, StepExecutorE2, TraceFiller, TraceStep,
         VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
@@ -220,23 +221,14 @@ struct FieldArithmeticPreCompute {
     f: u32,
 }
 
-impl<F, A> StepExecutorE1<F> for FieldArithmeticCoreStep<A>
-where
-    F: PrimeField32,
-{
+impl<A> FieldArithmeticCoreStep<A> {
     #[inline(always)]
-    fn pre_compute_size(&self) -> usize {
-        size_of::<FieldArithmeticPreCompute>()
-    }
-
-    #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute_impl<F: PrimeField32>(
         &self,
         _pc: u32,
         inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
-        let data: &mut FieldArithmeticPreCompute = data.borrow_mut();
+        data: &mut FieldArithmeticPreCompute,
+    ) -> Result<(bool, bool, FieldArithmeticOpcode)> {
         let &Instruction {
             opcode,
             a,
@@ -276,6 +268,30 @@ where
             e,
             f,
         };
+
+        Ok((a_is_imm, b_is_imm, local_opcode))
+    }
+}
+
+impl<F, A> StepExecutorE1<F> for FieldArithmeticCoreStep<A>
+where
+    F: PrimeField32,
+{
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<FieldArithmeticPreCompute>()
+    }
+
+    #[inline(always)]
+    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>> {
+        let pre_compute: &mut FieldArithmeticPreCompute = data.borrow_mut();
+
+        let (a_is_imm, b_is_imm, local_opcode) = self.pre_compute_impl(pc, inst, pre_compute)?;
 
         let fn_ptr = match (local_opcode, a_is_imm, b_is_imm) {
             (FieldArithmeticOpcode::ADD, true, true) => {
@@ -332,6 +348,84 @@ where
     }
 }
 
+impl<F, A> StepExecutorE2<F> for FieldArithmeticCoreStep<A>
+where
+    F: PrimeField32,
+{
+    #[inline(always)]
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<FieldArithmeticPreCompute>>()
+    }
+
+    #[inline(always)]
+    fn pre_compute_e2<Ctx: E2ExecutionCtx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>> {
+        let pre_compute: &mut E2PreCompute<FieldArithmeticPreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+
+        let (a_is_imm, b_is_imm, local_opcode) =
+            self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+
+        let fn_ptr = match (local_opcode, a_is_imm, b_is_imm) {
+            (FieldArithmeticOpcode::ADD, true, true) => {
+                execute_e2_impl::<_, _, true, true, { FieldArithmeticOpcode::ADD as u8 }>
+            }
+            (FieldArithmeticOpcode::ADD, true, false) => {
+                execute_e2_impl::<_, _, true, false, { FieldArithmeticOpcode::ADD as u8 }>
+            }
+            (FieldArithmeticOpcode::ADD, false, true) => {
+                execute_e2_impl::<_, _, false, true, { FieldArithmeticOpcode::ADD as u8 }>
+            }
+            (FieldArithmeticOpcode::ADD, false, false) => {
+                execute_e2_impl::<_, _, false, false, { FieldArithmeticOpcode::ADD as u8 }>
+            }
+            (FieldArithmeticOpcode::SUB, true, true) => {
+                execute_e2_impl::<_, _, true, true, { FieldArithmeticOpcode::SUB as u8 }>
+            }
+            (FieldArithmeticOpcode::SUB, true, false) => {
+                execute_e2_impl::<_, _, true, false, { FieldArithmeticOpcode::SUB as u8 }>
+            }
+            (FieldArithmeticOpcode::SUB, false, true) => {
+                execute_e2_impl::<_, _, false, true, { FieldArithmeticOpcode::SUB as u8 }>
+            }
+            (FieldArithmeticOpcode::SUB, false, false) => {
+                execute_e2_impl::<_, _, false, false, { FieldArithmeticOpcode::SUB as u8 }>
+            }
+            (FieldArithmeticOpcode::MUL, true, true) => {
+                execute_e2_impl::<_, _, true, true, { FieldArithmeticOpcode::MUL as u8 }>
+            }
+            (FieldArithmeticOpcode::MUL, true, false) => {
+                execute_e2_impl::<_, _, true, false, { FieldArithmeticOpcode::MUL as u8 }>
+            }
+            (FieldArithmeticOpcode::MUL, false, true) => {
+                execute_e2_impl::<_, _, false, true, { FieldArithmeticOpcode::MUL as u8 }>
+            }
+            (FieldArithmeticOpcode::MUL, false, false) => {
+                execute_e2_impl::<_, _, false, false, { FieldArithmeticOpcode::MUL as u8 }>
+            }
+            (FieldArithmeticOpcode::DIV, true, true) => {
+                execute_e2_impl::<_, _, true, true, { FieldArithmeticOpcode::DIV as u8 }>
+            }
+            (FieldArithmeticOpcode::DIV, true, false) => {
+                execute_e2_impl::<_, _, true, false, { FieldArithmeticOpcode::DIV as u8 }>
+            }
+            (FieldArithmeticOpcode::DIV, false, true) => {
+                execute_e2_impl::<_, _, false, true, { FieldArithmeticOpcode::DIV as u8 }>
+            }
+            (FieldArithmeticOpcode::DIV, false, false) => {
+                execute_e2_impl::<_, _, false, false, { FieldArithmeticOpcode::DIV as u8 }>
+            }
+        };
+
+        Ok(fn_ptr)
+    }
+}
+
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: E1ExecutionCtx,
@@ -343,7 +437,37 @@ unsafe fn execute_e1_impl<
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
     let pre_compute: &FieldArithmeticPreCompute = pre_compute.borrow();
+    execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(pre_compute, vm_state);
+}
 
+unsafe fn execute_e2_impl<
+    F: PrimeField32,
+    CTX: E2ExecutionCtx,
+    const A_IS_IMM: bool,
+    const B_IS_IMM: bool,
+    const OPCODE: u8,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &E2PreCompute<FieldArithmeticPreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(&pre_compute.data, vm_state);
+}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<
+    F: PrimeField32,
+    CTX: E1ExecutionCtx,
+    const A_IS_IMM: bool,
+    const B_IS_IMM: bool,
+    const OPCODE: u8,
+>(
+    pre_compute: &FieldArithmeticPreCompute,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
     // Read values based on the adapter logic
     let b_val = if A_IS_IMM {
         transmute_u32_to_field(&pre_compute.b_or_imm)
