@@ -456,22 +456,19 @@ pub fn ins_executor_e2_executor_derive(input: TokenStream) -> TokenStream {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE2<F> for #name #ty_generics #where_clause {
                     #[inline(always)]
                     fn e2_pre_compute_size(&self) -> usize {
-                        self.0.pre_compute_size()
+                        self.0.e2_pre_compute_size()
                     }
                     #[inline(always)]
                     fn pre_compute_e2<Ctx>(
                         &self,
+                        chip_idx: usize,
                         pc: u32,
                         inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         data: &mut [u8],
                     ) -> ::openvm_circuit::arch::execution::Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>>
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::E2ExecutionCtx, {
-                        self.0.pre_compute_e2(pc, inst, data)
-                    }
-
-                    fn set_trace_height(&mut self, height: usize) {
-                        self.0.set_trace_buffer_height(height);
+                        self.0.pre_compute_e2(chip_idx, pc, inst, data)
                     }
                 }
             }
