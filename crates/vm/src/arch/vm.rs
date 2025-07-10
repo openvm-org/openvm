@@ -29,9 +29,10 @@ use thiserror::Error;
 use tracing::info_span;
 
 use super::{
-    execution_mode::e1::E1Ctx, ChipId, ExecutionError, InsExecutorE1, MemoryConfig, VmChipComplex,
-    VmComplexTraceHeights, VmConfig, VmInventoryError, CONNECTOR_AIR_ID, MERKLE_AIR_ID,
-    PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
+    execution_mode::{e1::E1Ctx, metered::ctx::DEFAULT_PAGE_BITS},
+    ChipId, ExecutionError, InsExecutorE1, MemoryConfig, VmChipComplex, VmComplexTraceHeights,
+    VmConfig, VmInventoryError, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
+    PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
@@ -291,9 +292,21 @@ where
         input: impl Into<Streams<F>>,
         interactions: &[usize],
     ) -> Result<Vec<Segment>, ExecutionError> {
-        let exe = exe.into();
-        let state = create_initial_state(&self.config.system().memory_config, &exe, input, 0);
-        self.execute_metered_from_state(exe, state, interactions)
+        let interpreter = InterpretedInstance::new(self.config.clone(), exe);
+
+        let chip_complex = self.config.create_chip_complex().unwrap();
+        let segmentation_strategy = &self.config.system().segmentation_strategy;
+
+        let ctx: MeteredCtx<DEFAULT_PAGE_BITS> =
+            MeteredCtx::new(&chip_complex, interactions.to_vec())
+                // TODO(ayush): get rid of segmentation_strategy altogether
+                .with_max_trace_height(segmentation_strategy.max_trace_height() as u32)
+                .with_max_cells(segmentation_strategy.max_cells());
+
+        let state = interpreter.execute_e2(ctx, input)?;
+        check_termination(state.exit_code)?;
+
+        Ok(state.ctx.into_segments())
     }
 
     /// Base execution function that operates from a given state

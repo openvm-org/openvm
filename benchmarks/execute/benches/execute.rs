@@ -3,14 +3,14 @@ use std::{path::Path, sync::OnceLock};
 use divan::Bencher;
 use eyre::Result;
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
+use openvm_circuit::arch::execution_mode::metered::ctx::DEFAULT_PAGE_BITS;
+use openvm_circuit::arch::execution_mode::metered::MeteredCtx;
 use openvm_circuit::arch::{execution_mode::e1::E1Ctx, interpreter::InterpretedInstance};
+use openvm_circuit::arch::{VmChipComplex, VmConfig};
 // use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 // use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
-    arch::{
-        create_initial_state, instructions::exe::VmExe, InitFileGenerator, SystemConfig,
-        VirtualMachine,
-    },
+    arch::{instructions::exe::VmExe, InitFileGenerator, SystemConfig, VirtualMachine},
     derive::VmConfig,
 };
 // use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
@@ -49,7 +49,7 @@ static AVAILABLE_PROGRAMS: &[&str] = &[
     // "pairing",
 ];
 
-static SHARED_WIDTHS_AND_INTERACTIONS: OnceLock<(Vec<usize>, Vec<usize>)> = OnceLock::new();
+static SHARED_INTERACTIONS: OnceLock<Vec<usize>> = OnceLock::new();
 
 // TODO(ayush): remove from here
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
@@ -122,12 +122,12 @@ fn load_program_executable(program: &str) -> Result<VmExe<BabyBear>> {
     Ok(VmExe::from_elf(elf, transpiler)?)
 }
 
-fn shared_widths_and_interactions() -> &'static (Vec<usize>, Vec<usize>) {
-    SHARED_WIDTHS_AND_INTERACTIONS.get_or_init(|| {
+fn shared_interactions() -> &'static Vec<usize> {
+    SHARED_INTERACTIONS.get_or_init(|| {
         let vm = create_default_vm();
         let pk = vm.keygen();
         let vk = pk.get_vk();
-        (vk.total_widths(), vk.num_interactions())
+        vk.num_interactions()
     })
 }
 
@@ -147,24 +147,33 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
         });
 }
 
-// #[divan::bench(args = AVAILABLE_PROGRAMS, sample_count=5)]
-// fn benchmark_execute_metered(bencher: Bencher, program: &str) {
-//     bencher
-//         .with_inputs(|| {
-//             let vm = create_default_vm();
-//             let exe = load_program_executable(program).expect("Failed to load program
-// executable");             let state = create_initial_state(&vm.config().system.memory_config,
-// &exe, vec![]);
-//
-//             let (widths, interactions) = shared_widths_and_interactions();
-//             (vm.executor, exe, state, widths, interactions)
-//         })
-//         .bench_values(|(executor, exe, state, widths, interactions)| {
-//             executor
-//                 .execute_metered_from_state(exe, state, widths, interactions)
-//                 .expect("Failed to execute program");
-//         });
-// }
+#[divan::bench(args = AVAILABLE_PROGRAMS, sample_count=5)]
+fn benchmark_execute_metered(bencher: Bencher, program: &str) {
+    bencher
+        .with_inputs(|| {
+            let vm_config = ExecuteConfig::default();
+            let exe = load_program_executable(program).expect("Failed to load program executable");
+
+            let chip_complex: VmChipComplex<BabyBear, _, _> =
+                vm_config.create_chip_complex().unwrap();
+            let interactions = shared_interactions();
+            let segmentation_strategy =
+                &<ExecuteConfig as VmConfig<BabyBear>>::system(&vm_config).segmentation_strategy;
+
+            let ctx: MeteredCtx<DEFAULT_PAGE_BITS> =
+                MeteredCtx::new(&chip_complex, interactions.to_vec())
+                    .with_max_trace_height(segmentation_strategy.max_trace_height() as u32)
+                    .with_max_cells(segmentation_strategy.max_cells());
+            let interpreter = InterpretedInstance::new(vm_config, exe);
+
+            (interpreter, vec![], ctx)
+        })
+        .bench_values(|(interpreter, input, ctx)| {
+            interpreter
+                .execute_e2(ctx, input)
+                .expect("Failed to execute program");
+        });
+}
 
 // #[divan::bench(args = AVAILABLE_PROGRAMS, sample_count=3)]
 // fn benchmark_execute_e3(bencher: Bencher, program: &str) {

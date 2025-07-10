@@ -15,8 +15,10 @@ use crate::{
     system::memory::dimensions::MemoryDimensions,
 };
 
+pub const DEFAULT_PAGE_BITS: usize = 6;
+
 #[derive(Debug)]
-pub struct MeteredCtx<const PAGE_BITS: usize = 6> {
+pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub trace_heights: Vec<u32>,
     pub is_trace_height_constant: Vec<bool>,
 
