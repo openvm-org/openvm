@@ -316,7 +316,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 }
 
 // Use Blake3 as hash for faster tests.
-type TestSC = BabyBearBlake3Config;
+pub(crate) type TestSC = BabyBearBlake3Config;
 
 impl VmChipTestBuilder<BabyBear> {
     pub fn build(self) -> VmChipTester<TestSC> {
