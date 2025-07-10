@@ -229,7 +229,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                     limb_bits: 8,
                 };
 
-                let addne = get_ec_addne_air::<1, 32>(
+                let addne = get_ec_addne_air::<2, 32>(
                     exec_bridge,
                     memory_bridge,
                     config.clone(),
@@ -240,7 +240,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                 );
                 inventory.add_air(addne);
 
-                let double = get_ec_double_air::<1, 32>(
+                let double = get_ec_double_air::<2, 32>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -258,7 +258,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                     limb_bits: 8,
                 };
 
-                let addne = get_ec_addne_air::<3, 16>(
+                let addne = get_ec_addne_air::<6, 16>(
                     exec_bridge,
                     memory_bridge,
                     config.clone(),
@@ -269,7 +269,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                 );
                 inventory.add_air(addne);
 
-                let double = get_ec_double_air::<3, 16>(
+                let double = get_ec_double_air::<6, 16>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -329,7 +329,7 @@ where
                 };
 
                 inventory.next_air::<WeierstrassAir<2, 2, 32>>()?;
-                let addne = get_ec_addne_chip::<Val<SC>, 1, 32>(
+                let addne = get_ec_addne_chip::<Val<SC>, 2, 32>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -339,7 +339,7 @@ where
                 inventory.add_executor_chip(addne);
 
                 inventory.next_air::<WeierstrassAir<1, 2, 32>>()?;
-                let double = get_ec_double_chip::<Val<SC>, 1, 32>(
+                let double = get_ec_double_chip::<Val<SC>, 2, 32>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -356,7 +356,7 @@ where
                 };
 
                 inventory.next_air::<WeierstrassAir<2, 6, 16>>()?;
-                let addne = get_ec_addne_chip::<Val<SC>, 3, 16>(
+                let addne = get_ec_addne_chip::<Val<SC>, 6, 16>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -366,7 +366,7 @@ where
                 inventory.add_executor_chip(addne);
 
                 inventory.next_air::<WeierstrassAir<1, 6, 16>>()?;
-                let double = get_ec_double_chip::<Val<SC>, 3, 16>(
+                let double = get_ec_double_chip::<Val<SC>, 6, 16>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),

@@ -294,7 +294,7 @@ where
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<Fp2Air<1, 32>>()?;
+                inventory.next_air::<Fp2Air<2, 32>>()?;
                 let addsub = get_fp2_addsub_chip::<Val<SC>, 2, 32>(
                     config.clone(),
                     mem_helper.clone(),
@@ -304,7 +304,7 @@ where
                 );
                 inventory.add_executor_chip(addsub);
 
-                inventory.next_air::<Fp2Air<1, 32>>()?;
+                inventory.next_air::<Fp2Air<2, 32>>()?;
                 let muldiv = get_fp2_multdiv_chip::<Val<SC>, 2, 32>(
                     config,
                     mem_helper.clone(),
@@ -320,7 +320,7 @@ where
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<Fp2Air<1, 32>>()?;
+                inventory.next_air::<Fp2Air<6, 16>>()?;
                 let addsub = get_fp2_addsub_chip::<Val<SC>, 6, 16>(
                     config.clone(),
                     mem_helper.clone(),
@@ -330,7 +330,7 @@ where
                 );
                 inventory.add_executor_chip(addsub);
 
-                inventory.next_air::<Fp2Air<1, 32>>()?;
+                inventory.next_air::<Fp2Air<6, 16>>()?;
                 let muldiv = get_fp2_multdiv_chip::<Val<SC>, 6, 16>(
                     config,
                     mem_helper.clone(),
