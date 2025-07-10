@@ -30,7 +30,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         widths: Vec<usize>,
         interactions: Vec<usize>,
     ) -> Self {
-        let (mut trace_heights, is_trace_height_constant): (Vec<u32>, Vec<bool>) =
+        let (trace_heights, is_trace_height_constant): (Vec<u32>, Vec<bool>) =
             constant_trace_heights
                 .iter()
                 .map(|&constant_height| {
@@ -42,7 +42,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
                 })
                 .unzip();
 
-        let mut memory_ctx = MemoryCtx::new(
+        let memory_ctx = MemoryCtx::new(
             has_public_values_chip,
             continuations_enabled,
             as_byte_alignment_bits,
