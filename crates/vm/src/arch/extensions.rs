@@ -474,7 +474,7 @@ impl<SC: StarkGenericConfig> AirInventory<SC> {
     }
 
     /// Returns the maximum number of bits used to represent addresses in memory
-    pub fn address_bits(&self) -> usize {
+    pub fn pointer_max_bits(&self) -> usize {
         self.config.memory_config.pointer_max_bits
     }
 }

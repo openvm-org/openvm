@@ -84,7 +84,7 @@ impl<F> VmExecutionExtension<F> for Sha256 {
 
 impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Sha256 {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
-        let pointer_max_bits = inventory.address_bits();
+        let pointer_max_bits = inventory.pointer_max_bits();
 
         let bitwise_lu = {
             let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
@@ -125,7 +125,7 @@ where
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
-        let pointer_max_bits = inventory.airs().address_bits();
+        let pointer_max_bits = inventory.airs().pointer_max_bits();
 
         let bitwise_lu = {
             let existing_chip = inventory

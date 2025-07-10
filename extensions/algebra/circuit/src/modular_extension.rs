@@ -231,7 +231,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for ModularExtension {
 
         let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
         let range_checker_bus = inventory.range_checker().bus;
-        let pointer_max_bits = inventory.address_bits();
+        let pointer_max_bits = inventory.pointer_max_bits();
 
         let bitwise_lu = {
             // A trick to get around Rust's borrow rules
@@ -352,7 +352,7 @@ where
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
-        let pointer_max_bits = inventory.airs().address_bits();
+        let pointer_max_bits = inventory.airs().pointer_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let bitwise_lu = {
             let existing_chip = inventory
