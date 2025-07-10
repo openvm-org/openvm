@@ -74,7 +74,7 @@ pub fn set_sha384(input: &[u8], output: &mut [u8; 48]) {
     }
     #[cfg(target_os = "zkvm")]
     {
-        let output_64: [u8; 64] = [0; 64];
+        let mut output_64: [u8; 64] = [0; 64];
         openvm_sha2_guest::zkvm_sha384_impl(
             input.as_ptr(),
             input.len(),
