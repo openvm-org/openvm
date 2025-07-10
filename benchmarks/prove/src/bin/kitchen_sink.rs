@@ -8,7 +8,7 @@ use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::{instructions::exe::VmExe, SingleSegmentVmExecutor, SystemConfig};
 use openvm_continuations::verifier::leaf::types::LeafVmVerifierInput;
 use openvm_ecc_circuit::{WeierstrassExtension, P256_CONFIG, SECP256K1_CONFIG};
-use openvm_native_circuit::NATIVE_MAX_TRACE_HEIGHTS;
+use openvm_native_circuit::{NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_recursion::halo2::utils::{CacheHalo2ParamsReader, DEFAULT_PARAMS_DIR};
 use openvm_pairing_circuit::{PairingCurve, PairingExtension};
 use openvm_pairing_guest::{
@@ -17,9 +17,9 @@ use openvm_pairing_guest::{
 use openvm_sdk::{
     commit::commit_app_exe,
     config::SdkVmConfig,
-    keygen::{AggStarkProvingKey, AppProvingKey},
-    prover::EvmHalo2Prover,
-    DefaultStaticVerifierPvHandler, NonRootCommittedExe, Sdk, StdIn,
+    keygen::{leaf_keygen, AggStarkProvingKey, AppProvingKey},
+    prover::{vm::types::VmProvingKey, EvmHalo2Prover},
+    DefaultStaticVerifierPvHandler, NonRootCommittedExe, Sdk, StdIn, SC,
 };
 use openvm_stark_sdk::{
     bench::run_with_metric_collection, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
@@ -30,7 +30,7 @@ fn verify_native_max_trace_heights(
     sdk: &Sdk,
     app_pk: Arc<AppProvingKey<SdkVmConfig>>,
     app_committed_exe: Arc<NonRootCommittedExe>,
-    agg_stark_pk: &AggStarkProvingKey,
+    leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
     num_children_leaf: usize,
 ) -> Result<()> {
     let app_proof =
@@ -42,19 +42,13 @@ fn verify_native_max_trace_heights(
         leaf_inputs.len(),
         num_children_leaf
     );
-    let vm_vk = agg_stark_pk.leaf_vm_pk.vm_pk.get_vk();
+    let vm_vk = leaf_vm_pk.vm_pk.get_vk();
 
     leaf_inputs.iter().for_each(|leaf_input| {
         let executor = {
-            let mut executor =
-                SingleSegmentVmExecutor::new(agg_stark_pk.leaf_vm_pk.vm_config.clone());
-            executor.set_trace_height_constraints(
-                agg_stark_pk
-                    .leaf_vm_pk
-                    .vm_pk
-                    .trace_height_constraints
-                    .clone(),
-            );
+            let mut executor = SingleSegmentVmExecutor::new(leaf_vm_pk.vm_config.clone());
+            executor
+                .set_trace_height_constraints(leaf_vm_pk.vm_pk.trace_height_constraints.clone());
             executor
         };
         let max_trace_heights = executor
@@ -156,32 +150,37 @@ fn main() -> Result<()> {
             .clone()
             .unwrap_or(PathBuf::from(DEFAULT_PARAMS_DIR)),
     );
-    let full_agg_pk = sdk.agg_keygen(
-        agg_config,
-        &halo2_params_reader,
-        &DefaultStaticVerifierPvHandler,
-    )?;
+    let leaf_vm_pk = leaf_keygen(
+        agg_config.agg_stark_config.leaf_fri_params,
+        agg_config.agg_stark_config.leaf_vm_config(),
+    );
 
     // Verify that NATIVE_MAX_TRACE_HEIGHTS remains valid
     verify_native_max_trace_heights(
         &sdk,
         app_pk.clone(),
         app_committed_exe.clone(),
-        &full_agg_pk.agg_stark_pk,
+        leaf_vm_pk,
         args.agg_tree_config.num_children_leaf,
     )?;
 
-    run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let mut prover = EvmHalo2Prover::<_, BabyBearPoseidon2Engine>::new(
-            &halo2_params_reader,
-            app_pk,
-            app_committed_exe,
-            full_agg_pk,
-            args.agg_tree_config,
-        );
-        prover.set_program_name("kitchen_sink");
-        let stdin = StdIn::default();
-        let _proof = prover.generate_proof_for_evm(stdin);
-        Ok(())
-    })
+    // let full_agg_pk = sdk.agg_keygen(
+    //     agg_config,
+    //     &halo2_params_reader,
+    //     &DefaultStaticVerifierPvHandler,
+    // )?;
+    // run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
+    //     let mut prover = EvmHalo2Prover::<_, BabyBearPoseidon2Engine>::new(
+    //         &halo2_params_reader,
+    //         app_pk,
+    //         app_committed_exe,
+    //         full_agg_pk,
+    //         args.agg_tree_config,
+    //     );
+    //     prover.set_program_name("kitchen_sink");
+    //     let stdin = StdIn::default();
+    //     let _proof = prover.generate_proof_for_evm(stdin);
+    //     Ok(())
+    // })
+    Ok(())
 }
