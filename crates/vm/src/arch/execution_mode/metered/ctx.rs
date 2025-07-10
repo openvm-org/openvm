@@ -15,6 +15,7 @@ pub struct MeteredCtx<const PAGE_BITS: usize = 6> {
 
     pub memory_ctx: MemoryCtx<PAGE_BITS>,
     pub segmentation_ctx: SegmentationCtx,
+    pub continuations_enabled: bool,
 }
 
 impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
@@ -57,21 +58,28 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
         let segmentation_ctx = SegmentationCtx::new(air_names, widths, interactions);
 
-        // Add merkle height contributions for all registers
-        if continuations_enabled {
-            memory_ctx.update_boundary_merkle_heights(
-                &mut trace_heights,
-                RV32_REGISTER_AS,
-                0,
-                (RV32_NUM_REGISTERS * RV32_REGISTER_NUM_LIMBS) as u32,
-            );
-        }
-
-        Self {
+        let mut ctx = Self {
             trace_heights,
             is_trace_height_constant,
             memory_ctx,
             segmentation_ctx,
+            continuations_enabled,
+        };
+
+        // Add merkle height contributions for all registers
+        ctx.add_register_merkle_heights();
+
+        ctx
+    }
+
+    fn add_register_merkle_heights(&mut self) {
+        if self.continuations_enabled {
+            self.memory_ctx.update_boundary_merkle_heights(
+                &mut self.trace_heights,
+                RV32_REGISTER_AS,
+                0,
+                (RV32_NUM_REGISTERS * RV32_REGISTER_NUM_LIMBS) as u32,
+            );
         }
     }
 
@@ -111,6 +119,9 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
                 self.trace_heights[i] = 0;
             }
         }
+
+        // Add merkle height contributions for all registers
+        self.add_register_merkle_heights();
     }
 
     pub fn check_and_segment(&mut self, instret: u64) {
@@ -122,6 +133,21 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
         if did_segment {
             self.reset_segment();
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn print_heights(&self) {
+        println!("{:>10} {:<30}", "Height", "Air Name");
+        println!("{}", "-".repeat(42));
+        for (i, height) in self.trace_heights.iter().enumerate() {
+            let air_name = self
+                .segmentation_ctx
+                .air_names
+                .get(i)
+                .map(|s| s.as_str())
+                .unwrap_or("Unknown");
+            println!("{:>10} {:<30}", height, air_name);
         }
     }
 }
