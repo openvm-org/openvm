@@ -37,6 +37,11 @@ fn verify_native_max_trace_heights(
         sdk.generate_app_proof(app_pk.clone(), app_committed_exe.clone(), StdIn::default())?;
     let leaf_inputs =
         LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proof, num_children_leaf);
+    println!(
+        "{} inputs, num_children_leaf: {}",
+        leaf_inputs.len(),
+        num_children_leaf
+    );
     let vm_vk = agg_stark_pk.leaf_vm_pk.vm_pk.get_vk();
 
     leaf_inputs.iter().for_each(|leaf_input| {
