@@ -394,7 +394,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
 
     let mut executor_enum_fields = Vec::new();
     let mut create_executors = Vec::new();
-    let mut create_circuit = Vec::new();
+    let mut create_airs = Vec::new();
     let mut create_chip_complex = Vec::new();
     let mut execution_where_predicates: Vec<syn::WherePredicate> = Vec::new();
     let mut circuit_where_predicates: Vec<syn::WherePredicate> = Vec::new();
@@ -424,7 +424,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
         execution_where_predicates.push(parse_quote! {
             #extension_ty: ::openvm_circuit::arch::VmExecutionExtension<F, Executor = #executor_type>
         });
-        create_circuit.push(quote! {
+        create_airs.push(quote! {
             inventory.start_new_extension();
             ::openvm_circuit::arch::VmCircuitExtension::extend_circuit(&self.#ext_field_name, &mut inventory)?;
         });
@@ -493,11 +493,11 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
         }
 
         impl<SC: StarkGenericConfig> ::openvm_circuit::arch::VmCircuitConfig<SC> for #name #circuit_where_clause {
-            fn create_circuit(
+            fn create_airs(
                 &self,
             ) -> Result<::openvm_circuit::arch::AirInventory<SC>, ::openvm_circuit::arch::AirInventoryError> {
-                let mut inventory = self.#source_name.create_circuit()?;
-                #(#create_circuit)*
+                let mut inventory = self.#source_name.create_airs()?;
+                #(#create_airs)*
                 Ok(inventory)
             }
         }

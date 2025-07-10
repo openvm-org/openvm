@@ -898,7 +898,7 @@ mod tests {
     #[test]
     fn test_system_bus_indices() {
         let config = SystemConfig::default().with_continuations();
-        let inventory: AirInventory<BabyBearPoseidon2Config> = config.create_circuit().unwrap();
+        let inventory: AirInventory<BabyBearPoseidon2Config> = config.create_airs().unwrap();
         let system = inventory.system();
         let port = system.port();
         assert_eq!(port.execution_bus.index(), 0);

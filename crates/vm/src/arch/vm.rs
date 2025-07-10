@@ -684,7 +684,7 @@ where
         config: VC,
         pk: DeviceMultiStarkProvingKey<E::PB>,
     ) -> Result<Self, VirtualMachineError> {
-        let circuit = config.create_circuit()?;
+        let circuit = config.create_airs()?;
         let chip_complex = config.create_chip_complex(circuit)?;
         let executor = VmExecutor::<Val<E::SC>, VC>::new(config)?;
         Ok(Self {

@@ -238,7 +238,7 @@ impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
 impl<SC: StarkGenericConfig> VmCircuitConfig<SC> for SystemConfig {
     /// Every VM circuit within the OpenVM circuit architecture **must** be initialized from the
     /// [SystemConfig].
-    fn create_circuit(&self) -> Result<AirInventory<SC>, AirInventoryError> {
+    fn create_airs(&self) -> Result<AirInventory<SC>, AirInventoryError> {
         let mut bus_idx_mgr = BusIndexManager::new();
         let execution_bus = ExecutionBus::new(bus_idx_mgr.new_bus_idx());
         let memory_bus = MemoryBus::new(bus_idx_mgr.new_bus_idx());

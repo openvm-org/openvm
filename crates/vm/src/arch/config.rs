@@ -70,11 +70,11 @@ pub trait VmExecutionConfig<F> {
 }
 
 pub trait VmCircuitConfig<SC: StarkGenericConfig> {
-    fn create_circuit(&self) -> Result<AirInventory<SC>, AirInventoryError>;
+    fn create_airs(&self) -> Result<AirInventory<SC>, AirInventoryError>;
 
     /// Generate the proving key and verifying key for the circuit defined by this config.
     fn keygen(&self, stark_config: &SC) -> Result<MultiStarkProvingKey<SC>, AirInventoryError> {
-        let circuit = self.create_circuit()?;
+        let circuit = self.create_airs()?;
         let pk = circuit.keygen(stark_config);
         Ok(pk)
     }
@@ -89,7 +89,7 @@ where
     type SystemChipInventory: SystemChipComplex<Self::RecordArena, PB>;
 
     /// Create a [VmChipComplex] from the full [AirInventory], which should be the output of
-    /// [VmCircuitConfig::create_circuit].
+    /// [VmCircuitConfig::create_airs].
     fn create_chip_complex(
         &self,
         circuit: AirInventory<SC>,
