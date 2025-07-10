@@ -43,40 +43,20 @@ impl<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> VmLocalProver<SC, VC, E>
         }
     }
 
-    pub fn new_with_overridden_continuation_trace_heights(
-        pk: Arc<VmProvingKey<SC, VC>>,
-        committed_exe: Arc<VmCommittedExe<SC>>,
-        overridden_heights: Option<VmComplexTraceHeights>,
+    pub fn with_overridden_continuation_trace_heights(
+        mut self,
+        overridden_heights: VmComplexTraceHeights,
     ) -> Self {
-        Self {
-            pk,
-            committed_exe,
-            continuation_heights: overridden_heights,
-            single_segment_heights: None,
-            _marker: PhantomData,
-        }
-    }
-
-    pub fn new_with_overridden_single_segment_trace_heights(
-        pk: Arc<VmProvingKey<SC, VC>>,
-        committed_exe: Arc<VmCommittedExe<SC>>,
-        overridden_heights: Option<Vec<u32>>,
-    ) -> Self {
-        Self {
-            pk,
-            committed_exe,
-            continuation_heights: None,
-            single_segment_heights: overridden_heights,
-            _marker: PhantomData,
-        }
-    }
-
-    pub fn set_continuation_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
         self.continuation_heights = Some(overridden_heights);
+        self
     }
 
-    pub fn set_single_segment_trace_heights(&mut self, overridden_heights: Vec<u32>) {
+    pub fn with_overridden_single_segment_trace_heights(
+        mut self,
+        overridden_heights: Vec<u32>,
+    ) -> Self {
         self.single_segment_heights = Some(overridden_heights);
+        self
     }
 
     pub fn vm_config(&self) -> &VC {
