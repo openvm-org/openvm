@@ -26,7 +26,7 @@ use openvm_stark_backend::{
 };
 
 use crate::{
-    arch::{CustomBorrow, DenseRecordArena, RecordArena, SizedRecord},
+    arch::{CustomBorrow, DenseRecordArena, SizedRecord},
     system::memory::{
         adapter::records::{
             arena_size_bound, AccessLayout, AccessRecordHeader, AccessRecordMut,
@@ -108,7 +108,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         self.arena.set_byte_capacity(size_bound);
     }
 
-    pub fn get_heights(&self) -> Vec<usize> {
+    fn get_heights(&self) -> Vec<usize> {
         self.chips
             .iter()
             .map(|chip| chip.current_trace_height())
@@ -120,7 +120,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
             .map(|chip: &GenericAccessAdapterChip<F>| chip.trace_width())
             .collect()
     }
-    pub fn get_cells(&self) -> Vec<usize> {
+    pub(crate) fn get_cells(&self) -> Vec<usize> {
         self.chips
             .iter()
             .map(|chip| chip.current_trace_cells())
@@ -289,10 +289,6 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         } else {
             None
         }
-    }
-
-    pub(crate) fn alloc_record(&mut self, layout: AccessLayout) -> AccessRecordMut {
-        self.arena.alloc(layout)
     }
 }
 

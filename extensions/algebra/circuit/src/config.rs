@@ -1,7 +1,5 @@
 use std::result::Result;
 
-use super::*;
-
 use num_bigint::BigUint;
 use openvm_circuit::{
     arch::{InitFileGenerator, SystemConfig},
@@ -15,6 +13,8 @@ use openvm_stark_backend::{
     prover::hal::ProverBackend,
 };
 use serde::{Deserialize, Serialize};
+
+use super::*;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32ModularConfig {

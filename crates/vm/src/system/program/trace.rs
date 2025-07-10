@@ -10,7 +10,11 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32, PrimeField64},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::{cpu::CpuBackend, types::AirProvingContext},
+    p3_util::log2_strict_usize,
+    prover::{
+        cpu::{self, CpuBackend},
+        types::{AirProvingContext, CommittedTraceData},
+    },
     Chip,
 };
 use serde::{Deserialize, Serialize};
@@ -64,6 +68,16 @@ where
     }
     pub fn get_program_commit(&self) -> Com<SC> {
         self.commitment.clone()
+    }
+
+    pub fn get_committed_trace(&self) -> CommittedTraceData<CpuBackend<SC>> {
+        let log_trace_height: u8 = log2_strict_usize(self.trace.height()).try_into().unwrap();
+        let data = cpu::PcsData::new(self.prover_data.clone(), vec![log_trace_height]);
+        CommittedTraceData {
+            commitment: self.commitment.clone(),
+            trace: self.trace.clone(),
+            data,
+        }
     }
 
     /// Computes a commitment to [VmCommittedExe]. This is a Merklelized hash of:

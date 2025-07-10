@@ -401,32 +401,7 @@ impl<F: PrimeField32> MemoryController<F> {
     // The following functions are for instrumentation but not necessarily required by any traits.
     // They may be deleted in the future.
 
-    pub fn current_trace_heights(&self) -> Vec<usize> {
-        self.get_memory_trace_heights().flatten()
-    }
-
-    pub fn get_memory_trace_heights(&self) -> MemoryTraceHeights {
-        let access_adapters = self.access_adapter_inventory.get_heights();
-        match &self.interface_chip {
-            MemoryInterface::Volatile { boundary_chip } => {
-                MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
-                    boundary: boundary_chip.current_trace_height(),
-                    access_adapters,
-                })
-            }
-            MemoryInterface::Persistent {
-                boundary_chip,
-                merkle_chip,
-                ..
-            } => MemoryTraceHeights::Persistent(PersistentMemoryTraceHeights {
-                boundary: boundary_chip.current_trace_height(),
-                merkle: merkle_chip.current_trace_height(),
-                access_adapters,
-            }),
-        }
-    }
-
-    pub fn get_dummy_memory_trace_heights(&self) -> MemoryTraceHeights {
+    fn get_dummy_memory_trace_heights(&self) -> MemoryTraceHeights {
         let access_adapters = vec![1; self.access_adapter_inventory.num_access_adapters()];
         match &self.interface_chip {
             MemoryInterface::Volatile { .. } => {
@@ -445,7 +420,7 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
-    pub fn current_trace_cells(&self) -> Vec<usize> {
+    fn current_trace_cells(&self) -> Vec<usize> {
         let mut ret = Vec::new();
         match &self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
@@ -531,68 +506,5 @@ impl<F> SharedMemoryHelper<F> {
             timestamp_lt_air: self.timestamp_lt_air,
             _marker: PhantomData,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use openvm_circuit_primitives::var_range::{
-        SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
-    };
-    use openvm_stark_backend::{interaction::BusIndex, p3_field::FieldAlgebra};
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
-    use rand::{thread_rng, Rng};
-
-    use super::MemoryController;
-    use crate::{
-        arch::{testing::MEMORY_BUS, MemoryConfig},
-        system::memory::offline_checker::MemoryBus,
-    };
-
-    const RANGE_CHECKER_BUS: BusIndex = 3;
-
-    #[test]
-    fn test_no_adapter_records_for_singleton_accesses() {
-        type F = BabyBear;
-
-        let memory_bus = MemoryBus::new(MEMORY_BUS);
-        let memory_config = MemoryConfig::default();
-        let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
-        let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
-
-        let mut memory_controller = MemoryController::<F>::with_volatile_memory(
-            memory_bus,
-            memory_config.clone(),
-            range_checker.clone(),
-        );
-
-        let mut rng = thread_rng();
-        for _ in 0..1000 {
-            // TODO[jpw]: test other address spaces?
-            let address_space = 4u32;
-            let pointer = rng.gen_range(0..1 << memory_config.pointer_max_bits);
-
-            if rng.gen_bool(0.5) {
-                let data = F::from_canonical_u32(rng.gen_range(0..1 << 30));
-                // address space is 4 so cell type is `F`
-                unsafe {
-                    memory_controller
-                        .memory
-                        .write::<F, 1, 1>(address_space, pointer, [data]);
-                }
-            } else {
-                unsafe {
-                    memory_controller
-                        .memory
-                        .read::<F, 1, 1>(address_space, pointer);
-                }
-            }
-        }
-        assert!(memory_controller
-            .memory
-            .access_adapter_inventory
-            .get_heights()
-            .iter()
-            .all(|&h| h == 0));
     }
 }

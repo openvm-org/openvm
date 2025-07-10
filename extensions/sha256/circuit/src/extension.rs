@@ -1,6 +1,5 @@
 use std::{result::Result, sync::Arc};
 
-use crate::*;
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
@@ -25,6 +24,8 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
+
+use crate::*;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Sha256Rv32Config {

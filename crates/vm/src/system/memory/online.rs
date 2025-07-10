@@ -919,11 +919,13 @@ mod tests {
     use std::array;
 
     use openvm_stark_backend::p3_field::FieldAlgebra;
-    use openvm_stark_sdk::utils::create_seeded_rng;
-    use p3_baby_bear::BabyBear;
-    use rand::Rng;
+    use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+    use rand::{thread_rng, Rng};
 
-    use crate::arch::{testing::VmChipTestBuilder, MemoryConfig};
+    use crate::{
+        arch::{testing::VmChipTestBuilder, MemoryConfig},
+        system::memory::online::TracingMemory,
+    };
 
     type F = BabyBear;
 
@@ -986,5 +988,31 @@ mod tests {
     #[test]
     fn test_memory_write_persistent() {
         test_memory_write_by_tester(VmChipTestBuilder::<F>::persistent(MemoryConfig::default()));
+    }
+
+    #[test]
+    fn test_no_adapter_records_for_singleton_accesses() {
+        let memory_config = MemoryConfig::default();
+        let mut memory = TracingMemory::new(&memory_config, 1, 0);
+
+        let mut rng = thread_rng();
+        for _ in 0..1000 {
+            // TODO[jpw]: test other address spaces?
+            let address_space = 4u32;
+            let pointer = rng.gen_range(0..1 << memory_config.pointer_max_bits);
+
+            if rng.gen_bool(0.5) {
+                let data = F::from_canonical_u32(rng.gen_range(0..1 << 30));
+                // address space is 4 so cell type is `F`
+                unsafe {
+                    memory.write::<F, 1, 1>(address_space, pointer, [data]);
+                }
+            } else {
+                unsafe {
+                    memory.read::<F, 1, 1>(address_space, pointer);
+                }
+            }
+        }
+        assert_eq!(memory.access_adapter_records.current_size(), 0);
     }
 }

@@ -18,7 +18,6 @@ use openvm_circuit_primitives::{
     },
     var_range::VariableRangeCheckerBus,
 };
-
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_stark_backend::{
