@@ -95,7 +95,12 @@ impl MetricDb {
 
             let label_values: Vec<String> = label_keys
                 .iter()
-                .map(|key| label_dict.get(key).unwrap().clone())
+                .map(|key| {
+                    label_dict
+                        .get(key)
+                        .unwrap_or_else(|| panic!("Label key '{}' should exist in label_dict", key))
+                        .clone()
+                })
                 .collect();
 
             // Add to dict_by_label_types

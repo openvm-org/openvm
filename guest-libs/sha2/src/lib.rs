@@ -19,9 +19,9 @@ pub fn sha512(input: &[u8]) -> [u8; 64] {
 /// The sha384 cryptographic hash function.
 #[inline(always)]
 pub fn sha384(input: &[u8]) -> [u8; 48] {
-    let mut output = [0u8; 64];
+    let mut output = [0u8; 48];
     set_sha384(input, &mut output);
-    output[..48].try_into().unwrap()
+    output
 }
 
 /// Sets `output` to the sha256 hash of `input`.
@@ -64,21 +64,22 @@ pub fn set_sha512(input: &[u8], output: &mut [u8; 64]) {
 
 /// Sets the first 48 bytes of `output` to the sha384 hash of `input`.
 /// Sets the last 16 bytes to zeros.
-pub fn set_sha384(input: &[u8], output: &mut [u8; 64]) {
+pub fn set_sha384(input: &[u8], output: &mut [u8; 48]) {
     #[cfg(not(target_os = "zkvm"))]
     {
         use sha2::{Digest, Sha384};
         let mut hasher = Sha384::new();
         hasher.update(input);
-        output[..48].copy_from_slice(hasher.finalize().as_ref());
-        output[48..].fill(0);
+        output.copy_from_slice(hasher.finalize().as_ref());
     }
     #[cfg(target_os = "zkvm")]
     {
+        let output_64: [u8; 64] = [0; 64];
         openvm_sha2_guest::zkvm_sha384_impl(
             input.as_ptr(),
             input.len(),
-            output.as_mut_ptr() as *mut u8,
+            output_64.as_mut_ptr() as *mut u8,
         );
+        output.copy_from_slice(&output_64[..48]);
     }
 }
