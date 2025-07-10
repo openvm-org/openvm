@@ -549,8 +549,8 @@ meaning all memory cells are constrained to be bytes.
 | Name        | Operands    | Description                                                                                                                                                              |
 | ----------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | SHA256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = sha256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Does the necessary padding. Performs memory reads with block size `16` and writes with block size `32`. |
-| SHA512_RV32 | `a,b,c,1,2` | `[r32{0}(a):64]_2 = sha512([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Does the necessary padding. Performs memory reads with block size `16` and writes with block size `32`. |
-| SHA384_RV32 | `a,b,c,1,2` | `[r32{0}(a):64]_2 = sha384([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Does the necessary padding. Performs memory reads with block size `16` and writes with block size `32`. Writes 64 bytes to memory: the first 48 are the SHA-384 digest and the last 16 are zeros. |
+| SHA512_RV32 | `a,b,c,1,2` | `[r32{0}(a):64]_2 = sha512([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Does the necessary padding. Performs memory reads with block size `32` and writes with block size `32`. |
+| SHA384_RV32 | `a,b,c,1,2` | `[r32{0}(a):64]_2 = sha384([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Does the necessary padding. Performs memory reads with block size `32` and writes with block size `32`. Writes 64 bytes to memory: the first 48 are the SHA-384 digest and the last 16 are zeros. |
 
 ### BigInt Extension
 

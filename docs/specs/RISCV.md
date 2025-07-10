@@ -5,7 +5,7 @@ The default VM extensions that support transpilation are:
 
 - [RV32IM](#rv32im-extension): An extension supporting the 32-bit RISC-V ISA with multiplication.
 - [Keccak-256](#keccak-extension): An extension implementing the Keccak-256 hash function compatibly with RISC-V memory.
-- [SHA2](#sha2-extension): An extension implementing the SHA-256, SHA-512, and SHA-384 hash functions compatibly with RISC-V memory.
+- [SHA2](#sha-2-extension): An extension implementing the SHA-256, SHA-512, and SHA-384 hash functions compatibly with RISC-V memory.
 - [BigInt](#bigint-extension): An extension supporting 256-bit signed and unsigned integer arithmetic, including multiplication. This extension respects the RISC-V memory format.
 - [Algebra](#algebra-extension): An extension supporting modular arithmetic over arbitrary fields and their complex field extensions. This extension respects the RISC-V memory format.
 - [Elliptic curve](#elliptic-curve-extension): An extension for elliptic curve operations over Weierstrass curves, including addition and doubling. This can be used to implement multi-scalar multiplication and ECDSA scalar multiplication. This extension respects the RISC-V memory format.
