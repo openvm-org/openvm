@@ -41,7 +41,7 @@ impl ChipUsageGetter for Rv32HintStoreChipGpu {
     }
 
     fn current_trace_height(&self) -> usize {
-        // TEMP[arayi]: This is temporary we probably need to get rid of `current_trace_height` or add a counter to `arena`
+        // TODO[arayi]: This is temporary we probably need to get rid of `current_trace_height` or add a counter to `arena`
         self.arena.allocated().len()
     }
 
@@ -67,8 +67,8 @@ impl DeviceChip<SC, GpuBackend> for Rv32HintStoreChipGpu {
         let width = Rv32HintStoreCols::<u8>::width();
         let records = self.arena.allocated();
 
-        // TEMP[arayi]: Temporary hack to get mut access to `records`, should have `self` or `&mut self` as a parameter
-        // **SAFATY**: `records` should be non-empty at this point
+        // TODO[arayi]: Temporary hack to get mut access to `records`, should have `self` or `&mut self` as a parameter
+        // **SAFETY**: `records` should be non-empty at this point
         let records =
             unsafe { std::slice::from_raw_parts_mut(records.as_ptr() as *mut u8, records.len()) };
 
