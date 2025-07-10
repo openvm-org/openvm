@@ -427,7 +427,7 @@ where
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<ModularAir<1, 32>>()?;
+                inventory.next_air::<ModularAir<3, 16>>()?;
                 let addsub = get_modular_addsub_chip::<Val<SC>, 3, 16>(
                     config.clone(),
                     mem_helper.clone(),
@@ -437,7 +437,7 @@ where
                 );
                 inventory.add_executor_chip(addsub);
 
-                inventory.next_air::<ModularAir<1, 32>>()?;
+                inventory.next_air::<ModularAir<3, 16>>()?;
                 let muldiv = get_modular_multdiv_chip::<Val<SC>, 3, 16>(
                     config,
                     mem_helper.clone(),
@@ -454,8 +454,8 @@ where
                         0
                     }
                 });
-                inventory.next_air::<ModularIsEqualAir<1, 32, 32>>()?;
-                let is_eq = ModularIsEqualChip::<Val<SC>, 1, 32, 32>::new(
+                inventory.next_air::<ModularIsEqualAir<3, 16, 48>>()?;
+                let is_eq = ModularIsEqualChip::<Val<SC>, 3, 16, 48>::new(
                     ModularIsEqualFiller::new(
                         Rv32IsEqualModeAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
