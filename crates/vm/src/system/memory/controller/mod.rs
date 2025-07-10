@@ -32,7 +32,6 @@ use crate::{
             dimensions::MemoryDimensions,
             merkle::MemoryMerkleChip,
             offline_checker::{MemoryBaseAuxCols, MemoryBridge, MemoryBus, AUX_LEN},
-            online::TracingMemory,
             persistent::PersistentBoundaryChip,
         },
         poseidon2::Poseidon2PeripheryChip,
@@ -84,8 +83,6 @@ pub struct MemoryController<F: Field> {
     range_checker_bus: VariableRangeCheckerBus,
     access_adapter_inventory: AccessAdapterInventory<F>,
     hasher_chip: Option<Arc<Poseidon2PeripheryChip<F>>>,
-    // TODO[jpw]: revisit if this should be removed from the struct
-    pub memory: TracingMemory,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -211,7 +208,6 @@ impl<F: PrimeField32> MemoryController<F> {
                     range_checker.clone(),
                 ),
             },
-            memory: TracingMemory::new(&mem_config, 1, 0), // this is empty and should be set later
             access_adapter_inventory: AccessAdapterInventory::new(
                 range_checker.clone(),
                 memory_bus,
@@ -254,8 +250,6 @@ impl<F: PrimeField32> MemoryController<F> {
             memory_bus,
             mem_config: mem_config.clone(),
             interface_chip,
-            // memory is empty on construction and must be set later
-            memory: TracingMemory::new(&mem_config, CHUNK, 0),
             access_adapter_inventory: AccessAdapterInventory::new(
                 range_checker.clone(),
                 memory_bus,
@@ -266,10 +260,6 @@ impl<F: PrimeField32> MemoryController<F> {
             range_checker_bus,
             hasher_chip: Some(hasher_chip),
         }
-    }
-
-    pub fn memory_image(&self) -> &MemoryImage {
-        &self.memory.data.memory
     }
 
     pub fn set_override_trace_heights(&mut self, overridden_heights: MemoryTraceHeights) {
@@ -304,7 +294,6 @@ impl<F: PrimeField32> MemoryController<F> {
         match &mut self.interface_chip {
             MemoryInterface::Volatile { .. } => {
                 // Skip initialization for volatile memory
-                return;
             }
             MemoryInterface::Persistent { initial_memory, .. } => {
                 *initial_memory = memory;
@@ -336,18 +325,6 @@ impl<F: PrimeField32> MemoryController<F> {
             timestamp_lt_air: AssertLtSubAir::new(range_bus, self.mem_config.clk_max_bits),
             _marker: Default::default(),
         }
-    }
-
-    pub fn increment_timestamp(&mut self) {
-        self.memory.increment_timestamp_by(1);
-    }
-
-    pub fn increment_timestamp_by(&mut self, change: u32) {
-        self.memory.increment_timestamp_by(change);
-    }
-
-    pub fn timestamp(&self) -> u32 {
-        self.memory.timestamp()
     }
 
     // @dev: Memory is complicated and allowed to break all the rules (e.g., 1 arena per chip) and
