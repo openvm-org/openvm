@@ -11,6 +11,7 @@ openvm-circuit-primitives-derive = { workspace = true }
 sha2 = { version = "0.10", features = ["compress"] }
 rand.workspace = true
 ndarray.workspace = true
+num_enum = { workspace = true }
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }

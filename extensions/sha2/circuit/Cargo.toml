@@ -23,7 +23,6 @@ rand.workspace = true
 serde.workspace = true
 sha2 = { version = "0.10", default-features = false }
 ndarray = { workspace = true, default-features = false }
-num_enum = { workspace = true }
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }

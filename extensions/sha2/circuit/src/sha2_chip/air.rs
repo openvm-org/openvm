@@ -14,7 +14,7 @@ use openvm_instructions::{
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_sha2_air::{compose, Sha256Config, Sha2Air, Sha512Config};
+use openvm_sha2_air::{compose, Sha256Config, Sha2Air, Sha2Variant, Sha512Config};
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder},
     p3_air::{Air, AirBuilder, BaseAir},
@@ -23,7 +23,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 
-use super::{Sha2Variant, Sha2VmDigestColsRef, Sha2VmRoundColsRef, ShaChipConfig};
+use super::{Sha2VmDigestColsRef, Sha2VmRoundColsRef, ShaChipConfig};
 
 /// Sha2VmAir does all constraints related to message padding and
 /// the Sha2Air subair constrains the actual hash

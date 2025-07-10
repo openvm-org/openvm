@@ -11,7 +11,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
-use openvm_sha2_air::{Sha256Config, Sha384Config, Sha512Config};
+use openvm_sha2_air::{Sha256Config, Sha2Variant, Sha384Config, Sha512Config};
 use openvm_sha2_transpiler::Rv32Sha2Opcode;
 use openvm_stark_backend::{interaction::BusIndex, p3_field::FieldAlgebra};
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
@@ -19,8 +19,7 @@ use rand::{rngs::StdRng, Rng};
 
 use super::{Sha2VmAir, Sha2VmChip, Sha2VmStep, ShaChipConfig};
 use crate::{
-    sha2_chip::trace::Sha2VmRecordLayout, sha2_solve, Sha2Variant, Sha2VmDigestColsRef,
-    Sha2VmRoundColsRef,
+    sha2_chip::trace::Sha2VmRecordLayout, sha2_solve, Sha2VmDigestColsRef, Sha2VmRoundColsRef,
 };
 
 type F = BabyBear;

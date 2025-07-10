@@ -2,6 +2,14 @@ use std::ops::{BitAnd, BitOr, BitXor, Not, Shl, Shr};
 
 use crate::{ShaDigestColsRef, ShaRoundColsRef};
 
+#[repr(u32)]
+#[derive(num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
+pub enum Sha2Variant {
+    Sha256,
+    Sha512,
+    Sha384,
+}
+
 pub trait Sha2Config: Send + Sync + Clone {
     type Word: 'static
         + Shr<usize, Output = Self::Word>
@@ -18,6 +26,8 @@ pub trait Sha2Config: Send + Sync + Clone {
         + Copy
         + Send
         + Sync;
+    // Differentiate between the SHA-2 variants
+    const VARIANT: Sha2Variant;
     /// Number of bits in a SHA word
     const WORD_BITS: usize;
     /// Number of 16-bit limbs in a SHA word
@@ -74,6 +84,7 @@ pub struct Sha256Config;
 
 impl Sha2Config for Sha256Config {
     // ==== Do not change these constants! ====
+    const VARIANT: Sha2Variant = Sha2Variant::Sha256;
     type Word = u32;
     /// Number of bits in a SHA256 word
     const WORD_BITS: usize = 32;
@@ -138,6 +149,7 @@ pub struct Sha512Config;
 
 impl Sha2Config for Sha512Config {
     // ==== Do not change these constants! ====
+    const VARIANT: Sha2Variant = Sha2Variant::Sha512;
     type Word = u64;
     /// Number of bits in a SHA512 word
     const WORD_BITS: usize = 64;
@@ -284,6 +296,7 @@ pub struct Sha384Config;
 
 impl Sha2Config for Sha384Config {
     // ==== Do not change these constants! ====
+    const VARIANT: Sha2Variant = Sha2Variant::Sha384;
     type Word = u64;
     /// Number of bits in a SHA384 word
     const WORD_BITS: usize = 64;

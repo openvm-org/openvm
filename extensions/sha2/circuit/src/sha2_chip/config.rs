@@ -4,17 +4,7 @@ use openvm_sha2_transpiler::Rv32Sha2Opcode;
 
 use super::{Sha2VmControlColsRef, Sha2VmDigestColsRef, Sha2VmRoundColsRef};
 
-#[repr(u32)]
-#[derive(num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
-pub enum Sha2Variant {
-    Sha256,
-    Sha512,
-    Sha384,
-}
-
 pub trait ShaChipConfig: Sha2Config {
-    // Differentiate between the SHA-2 variants
-    const VARIANT: Sha2Variant;
     // Name of the opcode
     const OPCODE_NAME: &'static str;
     /// Width of the ShaVmControlCols
@@ -62,7 +52,6 @@ pub trait ShaChipConfig: Sha2Config {
 pub const SHA_REGISTER_READS: usize = 3;
 
 impl ShaChipConfig for Sha256Config {
-    const VARIANT: Sha2Variant = Sha2Variant::Sha256;
     const OPCODE_NAME: &'static str = "SHA256";
     const MESSAGE_LENGTH_BITS: usize = 64;
     const WRITE_SIZE: usize = SHA_WRITE_SIZE;
@@ -72,7 +61,6 @@ impl ShaChipConfig for Sha256Config {
 }
 
 impl ShaChipConfig for Sha512Config {
-    const VARIANT: Sha2Variant = Sha2Variant::Sha512;
     const OPCODE_NAME: &'static str = "SHA512";
     const MESSAGE_LENGTH_BITS: usize = 128;
     const WRITE_SIZE: usize = SHA_WRITE_SIZE;
@@ -82,7 +70,6 @@ impl ShaChipConfig for Sha512Config {
 }
 
 impl ShaChipConfig for Sha384Config {
-    const VARIANT: Sha2Variant = Sha2Variant::Sha384;
     const OPCODE_NAME: &'static str = "SHA384";
     const MESSAGE_LENGTH_BITS: usize = 128;
     const WRITE_SIZE: usize = SHA_WRITE_SIZE;

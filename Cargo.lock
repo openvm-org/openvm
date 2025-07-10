@@ -5406,6 +5406,7 @@ name = "openvm-sha2-air"
 version = "1.4.0-rc.0"
 dependencies = [
  "ndarray",
+ "num_enum",
  "openvm-circuit",
  "openvm-circuit-primitives",
  "openvm-circuit-primitives-derive",
@@ -5422,7 +5423,6 @@ dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "ndarray",
- "num_enum",
  "openvm-circuit",
  "openvm-circuit-derive",
  "openvm-circuit-primitives",

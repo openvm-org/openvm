@@ -22,7 +22,7 @@ use openvm_rv32im_circuit::adapters::{
     memory_read_from_state, memory_write, memory_write_from_state, read_rv32_register,
     read_rv32_register_from_state,
 };
-use openvm_sha2_air::{Sha256Config, Sha2StepHelper, Sha384Config, Sha512Config};
+use openvm_sha2_air::{Sha256Config, Sha2StepHelper, Sha2Variant, Sha384Config, Sha512Config};
 use openvm_sha2_transpiler::Rv32Sha2Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use sha2::{Digest, Sha256, Sha384, Sha512};

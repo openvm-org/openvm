@@ -15,8 +15,8 @@ use super::{
 };
 use crate::{
     big_sig0, big_sig1, ch, le_limbs_into_word, maj, small_sig0, small_sig1, word_into_bits,
-    word_into_u16_limbs, word_into_u8_limbs, Sha2Config, ShaDigestColsRefMut, ShaRoundColsRef,
-    WrappingAdd,
+    word_into_u16_limbs, word_into_u8_limbs, Sha2Config, Sha2Variant, ShaDigestColsRefMut,
+    ShaRoundColsRef, WrappingAdd,
 };
 
 /// A helper struct for the SHA256 trace generation.
@@ -51,18 +51,21 @@ impl<C: Sha2Config> Sha2StepHelper<C> {
         debug_assert!(prev_hash.len() == C::HASH_WORDS);
         debug_assert!(input.len() == C::BLOCK_U8S);
         let mut new_hash: [C::Word; 8] = prev_hash.try_into().unwrap();
-        if C::WORD_BITS == 32 {
-            let hash_ptr: &mut [u32; 8] = unsafe { std::mem::transmute(&mut new_hash) };
-            let input_array = [*GenericArray::<u8, sha2::digest::consts::U64>::from_slice(
-                &input,
-            )];
-            compress256(hash_ptr, &input_array);
-        } else if C::WORD_BITS == 64 {
-            let hash_ptr: &mut [u64; 8] = unsafe { std::mem::transmute(&mut new_hash) };
-            let input_array = [*GenericArray::<u8, sha2::digest::consts::U128>::from_slice(
-                &input,
-            )];
-            compress512(hash_ptr, &input_array);
+        match C::VARIANT {
+            Sha2Variant::Sha256 => {
+                let input_array = [*GenericArray::<u8, sha2::digest::consts::U64>::from_slice(
+                    &input,
+                )];
+                let hash_ptr: &mut [u32; 8] = unsafe { std::mem::transmute(&mut new_hash) };
+                compress256(hash_ptr, &input_array);
+            }
+            Sha2Variant::Sha512 | Sha2Variant::Sha384 => {
+                let hash_ptr: &mut [u64; 8] = unsafe { std::mem::transmute(&mut new_hash) };
+                let input_array = [*GenericArray::<u8, sha2::digest::consts::U128>::from_slice(
+                    &input,
+                )];
+                compress512(hash_ptr, &input_array);
+            }
         }
         new_hash.to_vec()
     }
