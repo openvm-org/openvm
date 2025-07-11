@@ -11,7 +11,7 @@ use openvm_circuit::{
     },
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
@@ -54,7 +54,9 @@ impl ModularExtension {
     }
 }
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From, InsExecutorE1)]
+#[derive(
+    ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From, InsExecutorE1, InsExecutorE2,
+)]
 pub enum ModularExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
     ModularAddSubRv32_32(ModularAddSubChip<F, 1, 32>),

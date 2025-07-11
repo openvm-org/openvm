@@ -2,10 +2,10 @@ use std::{cell::RefCell, rc::Rc};
 
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
-    arch::ExecutionBridge,
+    arch::{ExecutionBridge, InsExecutorE1},
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_derive::{InsExecutorE1, InstructionExecutor};
+use openvm_circuit_derive::{InsExecutorE1, InsExecutorE2, InstructionExecutor};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::SharedBitwiseOperationLookupChip,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
@@ -61,7 +61,7 @@ pub fn muldiv_expr(
     )
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1, InsExecutorE2)]
 pub struct ModularMulDivChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     pub ModularChip<F, BLOCKS, BLOCK_SIZE>,
 );
