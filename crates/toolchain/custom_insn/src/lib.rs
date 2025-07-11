@@ -340,7 +340,7 @@ pub fn custom_insn_r(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 /// This macro is used to define custom I-type RISC-V instructions for the zkVM.
 /// Usage:
 /// ```rust
-/// custom_insn_r!(
+/// custom_insn_i!(
 ///     opcode = OPCODE,
 ///     funct3 = FUNCT3,
 ///     rd = InOut x0,
