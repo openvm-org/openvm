@@ -7,7 +7,7 @@ extern crate alloc;
 use hex_literal::hex;
 use openvm::io::read_vec;
 use openvm_ecc_guest::{
-    algebra::{DivUnsafe, Field, IntMod},
+    algebra::{Field, IntMod},
     ed25519::{Ed25519Coord, Ed25519Point},
     edwards::TwistedEdwardsPoint,
     weierstrass::WeierstrassPoint,
@@ -64,13 +64,13 @@ pub fn main() {
 
     test_possible_sw_decompression::<CurvePoint5mod8>(&x, &y, rec_id);
     // x = 0 is not on the x-coordinate of any point on the CurvePoint5mod8 curve
-    test_impossible_sw_decompression::<CurvePoint5mod8>(&Fp5mod8::ZERO, rec_id);
+    test_impossible_sw_decompression::<CurvePoint5mod8>(&<Fp5mod8 as Field>::ZERO, rec_id);
     // this x is such that y^2 = x^3 + 6 = 0
     // we want to test the case where y^2 = 0 and rec_id = 1
     let x = Fp5mod8::from_le_bytes_unchecked(&hex!(
         "d634a701c3b9b8cbf7797988be3953b442863b74d2d5c4d5f1a9de3c0c256d90"
     ));
-    test_possible_sw_decompression::<CurvePoint5mod8>(&x, &Fp5mod8::ZERO, 0);
+    test_possible_sw_decompression::<CurvePoint5mod8>(&x, &<Fp5mod8 as Field>::ZERO, 0);
     test_impossible_sw_decompression::<CurvePoint5mod8>(&x, 1);
 
     let x = Fp1mod4::from_le_bytes_unchecked(&bytes[128..160]);
