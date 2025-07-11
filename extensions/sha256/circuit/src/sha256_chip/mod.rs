@@ -37,8 +37,8 @@ mod trace;
 pub use air::*;
 pub use columns::*;
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 // ==== Constants for register/memory adapter ====
 /// Register reads to get dst, src, len
