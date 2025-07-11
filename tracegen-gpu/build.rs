@@ -77,6 +77,7 @@ fn main() {
         .file("cuda/src/extensions/native/fri/fri.cu")
         .file("cuda/src/extensions/native/poseidon2/kernels.cu")
         .file("cuda/src/primitives/bitwise_op_lookup.cu")
+        .file("cuda/src/extensions/algebra/modular_chip/is_eq.cu")
         .file("cuda/src/primitives/var_range.cu")
         .file("cuda/src/primitives/range_tuple.cu")
         .file("cuda/src/dummy/dummy_chip.cu")

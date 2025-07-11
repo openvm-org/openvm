@@ -26,12 +26,17 @@ openvm-native-compiler = { git = "https://github.com/openvm-org/openvm.git", bra
 openvm-rv32-adapters = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
 openvm-rv32im-transpiler = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
 openvm-rv32im-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
+openvm-algebra-circuit = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
+openvm-algebra-transpiler = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
 
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84085efb609f4f62cb03cf49588388abdb" }
 p3-field = { workspace = true }
 p3-baby-bear = { workspace = true }
 
 openvm-poseidon2-air = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
+
+num-bigint = "0.4"
+
 [build-dependencies]
 cc = { version = "1.0", features = ["parallel"] }  # For CUDA compilation
 
