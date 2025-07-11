@@ -24,6 +24,7 @@ use openvm_native_compiler::{
 };
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::BranchEqualCoreAir;
+use openvm_rv32im_circuit::{Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::{Field, PrimeField32},
@@ -466,15 +467,10 @@ pub(crate) mod phantom {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct CastFExtension;
 
-#[derive(From, AnyEnum)]
+#[derive(Clone, From, AnyEnum, InsExecutorE1, InstructionExecutor)]
 pub enum CastFExtensionExecutor {
     CastF(CastFStep),
 }
-
-// #[derive(From, ChipUsageGetter, Chip, AnyEnum)]
-// pub enum CastFExtensionPeriphery<F: PrimeField32> {
-//     Placeholder(CastFChip<F>),
-// }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for CastFExtension {
     type Executor = CastFExtensionExecutor;
@@ -533,37 +529,37 @@ where
     }
 }
 
-// #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
-// pub struct Rv32WithKernelsConfig {
-//     #[system]
-//     pub system: SystemConfig,
-//     #[extension]
-//     pub rv32i: Rv32I,
-//     #[extension]
-//     pub rv32m: Rv32M,
-//     #[extension]
-//     pub io: Rv32Io,
-//     #[extension]
-//     pub native: Native,
-//     #[extension]
-//     pub castf: CastFExtension,
-// }
+#[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
+pub struct Rv32WithKernelsConfig {
+    #[config(executor = SystemExecutor)]
+    pub system: SystemConfig,
+    #[extension(generics = false)]
+    pub rv32i: Rv32I,
+    #[extension(generics = false)]
+    pub rv32m: Rv32M,
+    #[extension(generics = false)]
+    pub io: Rv32Io,
+    #[extension]
+    pub native: Native,
+    #[extension(generics = false)]
+    pub castf: CastFExtension,
+}
 
-// impl Default for Rv32WithKernelsConfig {
-//     fn default() -> Self {
-//         Self {
-//             system: SystemConfig::default().with_continuations(),
-//             rv32i: Rv32I,
-//             rv32m: Rv32M::default(),
-//             io: Rv32Io,
-//             native: Native,
-//             castf: CastFExtension,
-//         }
-//     }
-// }
+impl Default for Rv32WithKernelsConfig {
+    fn default() -> Self {
+        Self {
+            system: SystemConfig::default().with_continuations(),
+            rv32i: Rv32I,
+            rv32m: Rv32M::default(),
+            io: Rv32Io,
+            native: Native,
+            castf: CastFExtension,
+        }
+    }
+}
 
-// // Default implementation uses no init file
-// impl InitFileGenerator for Rv32WithKernelsConfig {}
+// Default implementation uses no init file
+impl InitFileGenerator for Rv32WithKernelsConfig {}
 
 // Pre-computed maximum trace heights for NativeConfig. Found by doubling
 // the actual trace heights of kitchen-sink leaf verification (except for
