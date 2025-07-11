@@ -143,7 +143,7 @@ impl RangeCheckerGateChip {
             .iter()
             .enumerate()
             .flat_map(|(i, count)| {
-                let c = count.load(std::sync::atomic::Ordering::Relaxed);
+                let c = count.swap(0, std::sync::atomic::Ordering::Relaxed);
                 vec![F::from_canonical_usize(i), F::from_canonical_u32(c)]
             })
             .collect();

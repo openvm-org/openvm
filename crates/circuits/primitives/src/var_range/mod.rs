@@ -152,12 +152,13 @@ impl VariableRangeCheckerChip {
         }
     }
 
+    /// Generates trace and resets the internal counters all to 0.
     pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
         let mut rows = F::zero_vec(self.count.len() * NUM_VARIABLE_RANGE_COLS);
         for (n, row) in rows.chunks_mut(NUM_VARIABLE_RANGE_COLS).enumerate() {
             let cols: &mut VariableRangeCols<F> = row.borrow_mut();
             cols.mult =
-                F::from_canonical_u32(self.count[n].load(std::sync::atomic::Ordering::SeqCst));
+                F::from_canonical_u32(self.count[n].swap(0, std::sync::atomic::Ordering::Relaxed));
         }
         RowMajorMatrix::new(rows, NUM_VARIABLE_RANGE_COLS)
     }
@@ -190,6 +191,7 @@ impl<R, SC: StarkGenericConfig> Chip<R, CpuBackend<SC>> for VariableRangeChecker
 where
     Val<SC>: PrimeField32,
 {
+    /// Generates trace and resets the internal counters all to 0.
     fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
         let trace = self.generate_trace::<Val<SC>>();
         AirProvingContext::simple_no_pis(Arc::new(trace))

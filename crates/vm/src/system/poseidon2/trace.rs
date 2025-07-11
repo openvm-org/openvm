@@ -21,6 +21,7 @@ impl<RA, SC: StarkGenericConfig, const SBOX_REGISTERS: usize> Chip<RA, CpuBacken
 where
     Val<SC>: PrimeField32,
 {
+    /// Generates trace and clears internal records state.
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         let height = next_power_of_two_or_zero(self.current_trace_height());
         let width = self.trace_width();
@@ -57,6 +58,7 @@ where
                 let cols: &mut Poseidon2PeripheryCols<Val<SC>, SBOX_REGISTERS> = row.borrow_mut();
                 cols.mult = Val::<SC>::from_canonical_u32(mult);
             });
+        self.records.clear();
 
         AirProvingContext::simple_no_pis(Arc::new(RowMajorMatrix::new(values, width)))
     }

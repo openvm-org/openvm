@@ -157,15 +157,17 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
         }
     }
 
+    /// Generates trace and resets all internal counters to 0.
     pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
         let mut rows = F::zero_vec(self.count_range.len() * NUM_BITWISE_OP_LOOKUP_COLS);
         for (n, row) in rows.chunks_mut(NUM_BITWISE_OP_LOOKUP_COLS).enumerate() {
             let cols: &mut BitwiseOperationLookupCols<F> = row.borrow_mut();
             cols.mult_range = F::from_canonical_u32(
-                self.count_range[n].load(std::sync::atomic::Ordering::SeqCst),
+                self.count_range[n].swap(0, std::sync::atomic::Ordering::SeqCst),
             );
-            cols.mult_xor =
-                F::from_canonical_u32(self.count_xor[n].load(std::sync::atomic::Ordering::SeqCst));
+            cols.mult_xor = F::from_canonical_u32(
+                self.count_xor[n].swap(0, std::sync::atomic::Ordering::SeqCst),
+            );
         }
         RowMajorMatrix::new(rows, NUM_BITWISE_OP_LOOKUP_COLS)
     }
@@ -178,6 +180,7 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
 impl<R, SC: StarkGenericConfig, const NUM_BITS: usize> Chip<R, CpuBackend<SC>>
     for BitwiseOperationLookupChip<NUM_BITS>
 {
+    /// Generates trace and resets all internal counters to 0.
     fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
         let trace = self.generate_trace::<Val<SC>>();
         AirProvingContext::simple_no_pis(Arc::new(trace))

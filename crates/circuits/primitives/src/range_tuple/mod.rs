@@ -153,7 +153,7 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
         let rows = self
             .count
             .iter()
-            .map(|c| F::from_canonical_u32(c.load(std::sync::atomic::Ordering::SeqCst)))
+            .map(|c| F::from_canonical_u32(c.swap(0, std::sync::atomic::Ordering::Relaxed)))
             .collect::<Vec<_>>();
         RowMajorMatrix::new(rows, 1)
     }
