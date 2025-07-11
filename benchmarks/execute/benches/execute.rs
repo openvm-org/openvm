@@ -3,10 +3,14 @@ use std::{path::Path, sync::OnceLock};
 use divan::Bencher;
 use eyre::Result;
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
-use openvm_circuit::arch::execution_mode::metered::ctx::DEFAULT_PAGE_BITS;
-use openvm_circuit::arch::execution_mode::metered::MeteredCtx;
-use openvm_circuit::arch::{execution_mode::e1::E1Ctx, interpreter::InterpretedInstance};
-use openvm_circuit::arch::{VmChipComplex, VmConfig};
+use openvm_circuit::arch::{
+    execution_mode::{
+        e1::E1Ctx,
+        metered::{ctx::DEFAULT_PAGE_BITS, MeteredCtx},
+    },
+    interpreter::InterpretedInstance,
+    VmChipComplex, VmConfig,
+};
 // use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 // use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
@@ -187,7 +191,7 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
 //             let (widths, interactions) = shared_widths_and_interactions();
 //             let segments = vm
 //                 .executor
-//                 .execute_metered(exe.clone(), vec![], widths, interactions)
+//                 .execute_metered(exe.clone(), vec![], interactions)
 //                 .expect("Failed to execute program");
 
 //             (vm.executor, exe, state, segments)

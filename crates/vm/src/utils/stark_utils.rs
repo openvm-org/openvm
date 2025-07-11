@@ -222,7 +222,7 @@ where
 //     let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
 //     let segments = vm
 //         .executor
-//         .execute_metered(program_exe.clone(), input.clone(), widths, interactions)
+//         .execute_metered(program_exe.clone(), input.clone(), interactions)
 //         .unwrap();
 //
 //     cfg_if::cfg_if! {

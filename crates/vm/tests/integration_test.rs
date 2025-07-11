@@ -135,12 +135,7 @@ fn test_vm_override_executor_height() {
     let executor = SingleSegmentVmExecutor::new(vm_config.clone());
 
     let max_trace_heights = executor
-        .execute_metered(
-            committed_exe.exe.clone(),
-            vec![],
-            &vk.total_widths(),
-            &vk.num_interactions(),
-        )
+        .execute_metered(committed_exe.exe.clone(), vec![], &vk.num_interactions())
         .unwrap();
 
     let res = executor
@@ -300,12 +295,7 @@ fn test_vm_public_values() {
         let single_vm = SingleSegmentVmExecutor::new(config);
 
         let max_trace_heights = single_vm
-            .execute_metered(
-                program.clone().into(),
-                vec![],
-                &vk.total_widths(),
-                &vk.num_interactions(),
-            )
+            .execute_metered(program.clone().into(), vec![], &vk.num_interactions())
             .unwrap();
 
         let exe_result = single_vm
@@ -1080,11 +1070,6 @@ fn test_single_segment_executor_no_segmentation() {
     let single_vm = SingleSegmentVmExecutor::<F, _>::new(config);
 
     let _ = single_vm
-        .execute_metered(
-            program.clone().into(),
-            vec![],
-            &vk.total_widths(),
-            &vk.num_interactions(),
-        )
+        .execute_metered(program.clone().into(), vec![], &vk.num_interactions())
         .unwrap();
 }
