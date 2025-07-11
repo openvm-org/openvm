@@ -51,8 +51,11 @@ fn public_values_happy_path_1() {
     let trace = RowMajorMatrix::new_row(cols.flatten());
     let pvs = to_field_vec(vec![0, 0, 12]);
 
-    BabyBearPoseidon2Engine::run_test_fast(vec![air], vec![AirProvingContext::simple(trace, pvs)])
-        .expect("Verification failed");
+    BabyBearPoseidon2Engine::run_test_fast(
+        vec![air],
+        vec![AirProvingContext::simple(Arc::new(trace), pvs)],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -72,7 +75,7 @@ fn public_values_neg_pv_not_match() {
     assert_eq!(
         BabyBearPoseidon2Engine::run_test_fast(
             vec![air],
-            vec![AirProvingContext::simple(trace, pvs)]
+            vec![AirProvingContext::simple(Arc::new(trace), pvs)]
         )
         .err(),
         Some(VerificationError::OodEvaluationMismatch)
@@ -96,7 +99,7 @@ fn public_values_neg_index_out_of_bound() {
     assert_eq!(
         BabyBearPoseidon2Engine::run_test_fast(
             vec![air],
-            vec![AirProvingContext::simple(trace, pvs)]
+            vec![AirProvingContext::simple(Arc::new(trace), pvs)]
         )
         .err(),
         Some(VerificationError::OodEvaluationMismatch)
@@ -137,7 +140,7 @@ fn public_values_neg_double_publish_impl(actual_pv: u32) {
     assert_eq!(
         BabyBearPoseidon2Engine::run_test_fast(
             vec![air],
-            vec![AirProvingContext::simple(trace, pvs)]
+            vec![AirProvingContext::simple(Arc::new(trace), pvs)]
         )
         .err(),
         Some(VerificationError::OodEvaluationMismatch)

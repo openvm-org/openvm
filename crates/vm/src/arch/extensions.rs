@@ -578,9 +578,17 @@ where
         self.executor_idx_to_insertion_idx
             .iter()
             .map(|insertion_idx| {
-                num_airs
-                    .checked_sub(insertion_idx.checked_add(1).unwrap())
-                    .unwrap()
+                if *insertion_idx == usize::MAX {
+                    // This should never be used
+                    usize::MAX
+                } else {
+                    num_airs.checked_sub(insertion_idx + 1).unwrap_or_else(|| {
+                        panic!(
+                            "Attempt to subtract num_airs={num_airs} by {}",
+                            insertion_idx + 1
+                        )
+                    })
+                }
             })
             .collect()
     }
