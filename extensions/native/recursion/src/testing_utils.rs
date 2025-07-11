@@ -86,19 +86,18 @@ pub mod inner {
 ///
 /// The `vparams` must be from the BabyBearPoseidon2 stark config for the recursion
 /// program to work at the moment.
-#[allow(clippy::type_complexity)]
-pub fn recursive_stark_test<AggSC: StarkGenericConfig, E: StarkFriEngine<AggSC>>(
+pub fn recursive_stark_test<E: StarkFriEngine>(
     vparams: VerificationDataWithFriParams<InnerSC>,
     compiler_options: CompilerOptions,
     vm_config: NativeConfig,
     engine: &E,
-) -> Result<VerificationDataWithFriParams<AggSC>, VerificationError>
+) -> Result<VerificationDataWithFriParams<E::SC>, VerificationError>
 where
-    Domain<AggSC>: PolynomialSpace<Val = BabyBear>,
-    Domain<AggSC>: Send + Sync,
-    PcsProverData<AggSC>: Send + Sync,
-    Com<AggSC>: Send + Sync,
-    PcsProof<AggSC>: Send + Sync,
+    Domain<E::SC>: PolynomialSpace<Val = BabyBear>,
+    Domain<E::SC>: Send + Sync,
+    PcsProverData<E::SC>: Send + Sync,
+    Com<E::SC>: Send + Sync,
+    PcsProof<E::SC>: Send + Sync,
 {
     let (program, witness_stream) = build_verification_program(vparams, compiler_options);
 

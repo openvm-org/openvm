@@ -4,10 +4,7 @@ mod tests {
 
     use eyre::Result;
     use openvm_circuit::{
-        arch::{
-            hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, Streams, VirtualMachine,
-            VmExecutor,
-        },
+        arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, Streams, VmExecutor},
         system::memory::merkle::public_values::UserPublicValuesProof,
         utils::{air_test, air_test_with_min_segments, test_system_config_with_continuations},
     };
@@ -18,10 +15,7 @@ mod tests {
         DivRemOpcode, MulHOpcode, MulOpcode, Rv32ITranspilerExtension, Rv32IoTranspilerExtension,
         Rv32MTranspilerExtension,
     };
-    use openvm_stark_sdk::{
-        config::baby_bear_poseidon2::default_engine, openvm_stark_backend::p3_field::FieldAlgebra,
-        p3_baby_bear::BabyBear,
-    };
+    use openvm_stark_sdk::{openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear};
     use openvm_toolchain_tests::{
         build_example_program_at_path, build_example_program_at_path_with_features,
         get_programs_dir,
