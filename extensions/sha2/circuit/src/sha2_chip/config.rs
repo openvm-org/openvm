@@ -4,7 +4,7 @@ use openvm_sha2_transpiler::Rv32Sha2Opcode;
 
 use super::{Sha2VmControlColsRef, Sha2VmDigestColsRef, Sha2VmRoundColsRef};
 
-pub trait ShaChipConfig: Sha2Config {
+pub trait Sha2ChipConfig: Sha2Config {
     // Name of the opcode
     const OPCODE_NAME: &'static str;
     /// Width of the ShaVmControlCols
@@ -51,7 +51,7 @@ pub trait ShaChipConfig: Sha2Config {
 /// Register reads to get dst, src, len
 pub const SHA_REGISTER_READS: usize = 3;
 
-impl ShaChipConfig for Sha256Config {
+impl Sha2ChipConfig for Sha256Config {
     const OPCODE_NAME: &'static str = "SHA256";
     const MESSAGE_LENGTH_BITS: usize = 64;
     const WRITE_SIZE: usize = SHA_WRITE_SIZE;
@@ -60,7 +60,7 @@ impl ShaChipConfig for Sha256Config {
     const DIGEST_SIZE: usize = Self::HASH_SIZE;
 }
 
-impl ShaChipConfig for Sha512Config {
+impl Sha2ChipConfig for Sha512Config {
     const OPCODE_NAME: &'static str = "SHA512";
     const MESSAGE_LENGTH_BITS: usize = 128;
     const WRITE_SIZE: usize = SHA_WRITE_SIZE;
@@ -69,7 +69,7 @@ impl ShaChipConfig for Sha512Config {
     const DIGEST_SIZE: usize = Self::HASH_SIZE;
 }
 
-impl ShaChipConfig for Sha384Config {
+impl Sha2ChipConfig for Sha384Config {
     const OPCODE_NAME: &'static str = "SHA384";
     const MESSAGE_LENGTH_BITS: usize = 128;
     const WRITE_SIZE: usize = SHA_WRITE_SIZE;

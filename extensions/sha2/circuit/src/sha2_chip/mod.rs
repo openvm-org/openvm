@@ -43,7 +43,7 @@ mod tests;
 
 pub type Sha2VmChip<F, C> = NewVmChipWrapper<F, Sha2VmAir<C>, Sha2VmStep<C>, MatrixRecordArena<F>>;
 
-pub struct Sha2VmStep<C: ShaChipConfig> {
+pub struct Sha2VmStep<C: Sha2ChipConfig> {
     pub inner: Sha2StepHelper<C>,
     pub padding_encoder: Encoder,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
@@ -51,7 +51,7 @@ pub struct Sha2VmStep<C: ShaChipConfig> {
     pub pointer_max_bits: usize,
 }
 
-impl<C: ShaChipConfig> Sha2VmStep<C> {
+impl<C: Sha2ChipConfig> Sha2VmStep<C> {
     pub fn new(
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         offset: usize,
@@ -67,7 +67,7 @@ impl<C: ShaChipConfig> Sha2VmStep<C> {
     }
 }
 
-impl<F: PrimeField32, C: ShaChipConfig> StepExecutorE1<F> for Sha2VmStep<C> {
+impl<F: PrimeField32, C: Sha2ChipConfig> StepExecutorE1<F> for Sha2VmStep<C> {
     fn execute_e1<Ctx>(
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,
@@ -266,7 +266,7 @@ impl<F: PrimeField32, C: ShaChipConfig> StepExecutorE1<F> for Sha2VmStep<C> {
     }
 }
 
-pub fn sha2_solve<C: ShaChipConfig>(input_message: &[u8]) -> Vec<u8> {
+pub fn sha2_solve<C: Sha2ChipConfig>(input_message: &[u8]) -> Vec<u8> {
     match C::VARIANT {
         Sha2Variant::Sha256 => {
             let mut hasher = Sha256::new();

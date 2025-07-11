@@ -23,12 +23,12 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 
-use super::{Sha2VmDigestColsRef, Sha2VmRoundColsRef, ShaChipConfig};
+use super::{Sha2VmDigestColsRef, Sha2VmRoundColsRef, Sha2ChipConfig};
 
 /// Sha2VmAir does all constraints related to message padding and
 /// the Sha2Air subair constrains the actual hash
 #[derive(Clone, Debug)]
-pub struct Sha2VmAir<C: ShaChipConfig> {
+pub struct Sha2VmAir<C: Sha2ChipConfig> {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
     /// Bus to send byte checks to
@@ -40,7 +40,7 @@ pub struct Sha2VmAir<C: ShaChipConfig> {
     pub(super) padding_encoder: Encoder,
 }
 
-impl<C: ShaChipConfig> Sha2VmAir<C> {
+impl<C: Sha2ChipConfig> Sha2VmAir<C> {
     pub fn new(
         SystemPort {
             execution_bus,
@@ -63,15 +63,15 @@ impl<C: ShaChipConfig> Sha2VmAir<C> {
     }
 }
 
-impl<F: Field, C: ShaChipConfig> BaseAirWithPublicValues<F> for Sha2VmAir<C> {}
-impl<F: Field, C: ShaChipConfig> PartitionedBaseAir<F> for Sha2VmAir<C> {}
-impl<F: Field, C: ShaChipConfig> BaseAir<F> for Sha2VmAir<C> {
+impl<F: Field, C: Sha2ChipConfig> BaseAirWithPublicValues<F> for Sha2VmAir<C> {}
+impl<F: Field, C: Sha2ChipConfig> PartitionedBaseAir<F> for Sha2VmAir<C> {}
+impl<F: Field, C: Sha2ChipConfig> BaseAir<F> for Sha2VmAir<C> {
     fn width(&self) -> usize {
         C::VM_WIDTH
     }
 }
 
-impl<AB: InteractionBuilder, C: ShaChipConfig> Air<AB> for Sha2VmAir<C> {
+impl<AB: InteractionBuilder, C: Sha2ChipConfig> Air<AB> for Sha2VmAir<C> {
     fn eval(&self, builder: &mut AB) {
         self.eval_padding(builder);
         self.eval_transitions(builder);
@@ -156,7 +156,7 @@ impl PaddingFlags {
 }
 
 use PaddingFlags::*;
-impl<C: ShaChipConfig> Sha2VmAir<C> {
+impl<C: Sha2ChipConfig> Sha2VmAir<C> {
     /// Implement all necessary constraints for the padding
     fn eval_padding<AB: InteractionBuilder>(&self, builder: &mut AB) {
         let main = builder.main();

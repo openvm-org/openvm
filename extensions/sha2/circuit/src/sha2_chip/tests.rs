@@ -17,7 +17,7 @@ use openvm_stark_backend::{interaction::BusIndex, p3_field::FieldAlgebra};
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{Sha2VmAir, Sha2VmChip, Sha2VmStep, ShaChipConfig};
+use super::{Sha2ChipConfig, Sha2VmAir, Sha2VmChip, Sha2VmStep};
 use crate::{
     sha2_chip::trace::Sha2VmRecordLayout, sha2_solve, Sha2VmDigestColsRef, Sha2VmRoundColsRef,
 };
@@ -27,7 +27,7 @@ const SELF_BUS_IDX: BusIndex = 28;
 const MAX_INS_CAPACITY: usize = 8192;
 type Sha2VmChipDense<C> = NewVmChipWrapper<F, Sha2VmAir<C>, Sha2VmStep<C>, DenseRecordArena>;
 
-fn create_test_chips<C: ShaChipConfig>(
+fn create_test_chips<C: Sha2ChipConfig>(
     tester: &mut VmChipTestBuilder<F>,
 ) -> (
     Sha2VmChip<F, C>,
@@ -54,7 +54,7 @@ fn create_test_chips<C: ShaChipConfig>(
     (chip, bitwise_chip)
 }
 
-fn set_and_execute<E: InstructionExecutor<F>, C: ShaChipConfig>(
+fn set_and_execute<E: InstructionExecutor<F>, C: Sha2ChipConfig>(
     tester: &mut VmChipTestBuilder<F>,
     chip: &mut E,
     rng: &mut StdRng,
@@ -131,7 +131,7 @@ fn set_and_execute<E: InstructionExecutor<F>, C: ShaChipConfig>(
 /// Randomly generate computations and execute, ensuring that the generated trace
 /// passes all constraints.
 ///////////////////////////////////////////////////////////////////////////////////////
-fn rand_sha_test<C: ShaChipConfig + 'static>() {
+fn rand_sha_test<C: Sha2ChipConfig + 'static>() {
     setup_tracing();
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -166,7 +166,7 @@ fn rand_sha384_test() {
 ///
 /// Ensure that solve functions produce the correct results.
 ///////////////////////////////////////////////////////////////////////////////////////
-fn execute_roundtrip_sanity_test<C: ShaChipConfig>() {
+fn execute_roundtrip_sanity_test<C: Sha2ChipConfig>() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut chip, _) = create_test_chips::<C>(&mut tester);
@@ -246,7 +246,7 @@ fn sha384_solve_sanity_check() {
 /// to a [MatrixRecordArena]. After transferring we generate the trace and make sure that
 /// all the constraints pass.
 ///////////////////////////////////////////////////////////////////////////////////////
-fn create_test_chip_dense<C: ShaChipConfig>(
+fn create_test_chip_dense<C: Sha2ChipConfig>(
     tester: &mut VmChipTestBuilder<F>,
 ) -> Sha2VmChipDense<C> {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
@@ -271,7 +271,7 @@ fn create_test_chip_dense<C: ShaChipConfig>(
     chip
 }
 
-fn dense_record_arena_test<C: ShaChipConfig + 'static>() {
+fn dense_record_arena_test<C: Sha2ChipConfig + 'static>() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut sparse_chip, bitwise_chip) = create_test_chips::<C>(&mut tester);

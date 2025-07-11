@@ -12,13 +12,13 @@ use openvm_sha2_air::{
 };
 
 use super::SHA_REGISTER_READS;
-use crate::ShaChipConfig;
+use crate::Sha2ChipConfig;
 
 /// the first C::ROUND_ROWS rows of every SHA block will be of type ShaVmRoundCols and the last row
 /// will be of type ShaVmDigestCols
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
-#[config(ShaChipConfig)]
+#[config(Sha2ChipConfig)]
 pub struct Sha2VmRoundCols<
     T,
     const WORD_BITS: usize,
@@ -44,7 +44,7 @@ pub struct Sha2VmRoundCols<
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
-#[config(ShaChipConfig)]
+#[config(Sha2ChipConfig)]
 pub struct Sha2VmDigestCols<
     T,
     const WORD_BITS: usize,
@@ -90,7 +90,7 @@ pub struct Sha2VmDigestCols<
 /// These are the columns that are used on both round and digest rows
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
-#[config(ShaChipConfig)]
+#[config(Sha2ChipConfig)]
 pub struct Sha2VmControlCols<T> {
     /// Note: We will use the buffer in `inner.message_schedule` as the message data
     /// This is the length of the entire message in bytes

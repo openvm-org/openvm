@@ -34,7 +34,7 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    Sha2Variant, Sha2VmDigestColsRefMut, Sha2VmRoundColsRefMut, Sha2VmStep, ShaChipConfig,
+    Sha2Variant, Sha2VmDigestColsRefMut, Sha2VmRoundColsRefMut, Sha2VmStep, Sha2ChipConfig,
 };
 use crate::{
     get_sha2_num_blocks, sha2_chip::PaddingFlags, sha2_solve, Sha2VmControlColsRefMut,
@@ -42,12 +42,12 @@ use crate::{
 };
 
 #[derive(Clone, Copy)]
-pub struct Sha2VmMetadata<C: ShaChipConfig> {
+pub struct Sha2VmMetadata<C: Sha2ChipConfig> {
     pub num_blocks: u32,
     _phantom: PhantomData<C>,
 }
 
-impl<C: ShaChipConfig> MultiRowMetadata for Sha2VmMetadata<C> {
+impl<C: Sha2ChipConfig> MultiRowMetadata for Sha2VmMetadata<C> {
     #[inline(always)]
     fn get_num_rows(&self) -> usize {
         self.num_blocks as usize * C::ROWS_PER_BLOCK
@@ -87,7 +87,7 @@ pub struct Sha2VmRecordMut<'a> {
 /// `C::NUM_READ_ROWS * num_blocks`. Uses `align_to_mut()` to make sure the slice is properly
 /// aligned to `MemoryReadAuxRecord`. Has debug assertions that check the size and alignment of the
 /// slices.
-impl<'a, C: ShaChipConfig> CustomBorrow<'a, Sha2VmRecordMut<'a>, Sha2VmRecordLayout<C>> for [u8] {
+impl<'a, C: Sha2ChipConfig> CustomBorrow<'a, Sha2VmRecordMut<'a>, Sha2VmRecordLayout<C>> for [u8] {
     fn custom_borrow(&'a mut self, layout: Sha2VmRecordLayout<C>) -> Sha2VmRecordMut<'a> {
         let (header_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<Sha2VmRecordHeader>()) };
@@ -123,7 +123,7 @@ impl<'a, C: ShaChipConfig> CustomBorrow<'a, Sha2VmRecordMut<'a>, Sha2VmRecordLay
     }
 }
 
-impl<C: ShaChipConfig> SizedRecord<Sha2VmRecordLayout<C>> for Sha2VmRecordMut<'_> {
+impl<C: Sha2ChipConfig> SizedRecord<Sha2VmRecordLayout<C>> for Sha2VmRecordMut<'_> {
     fn size(layout: &Sha2VmRecordLayout<C>) -> usize {
         let mut total_len = size_of::<Sha2VmRecordHeader>();
         total_len += layout.metadata.num_blocks as usize * C::BLOCK_CELLS;
@@ -140,7 +140,7 @@ impl<C: ShaChipConfig> SizedRecord<Sha2VmRecordLayout<C>> for Sha2VmRecordMut<'_
     }
 }
 
-impl<F: PrimeField32, CTX, C: ShaChipConfig> TraceStep<F, CTX> for Sha2VmStep<C> {
+impl<F: PrimeField32, CTX, C: Sha2ChipConfig> TraceStep<F, CTX> for Sha2VmStep<C> {
     type RecordLayout = Sha2VmRecordLayout<C>;
     type RecordMut<'a> = Sha2VmRecordMut<'a>;
 
@@ -310,7 +310,7 @@ impl<F: PrimeField32, CTX, C: ShaChipConfig> TraceStep<F, CTX> for Sha2VmStep<C>
     }
 }
 
-impl<F: PrimeField32, CTX, C: ShaChipConfig> TraceFiller<F, CTX> for Sha2VmStep<C> {
+impl<F: PrimeField32, CTX, C: Sha2ChipConfig> TraceFiller<F, CTX> for Sha2VmStep<C> {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -450,7 +450,7 @@ impl<F: PrimeField32, CTX, C: ShaChipConfig> TraceFiller<F, CTX> for Sha2VmStep<
     }
 }
 
-impl<C: ShaChipConfig> Sha2VmStep<C> {
+impl<C: Sha2ChipConfig> Sha2VmStep<C> {
     #[allow(clippy::too_many_arguments)]
     fn fill_block_trace<F: PrimeField32>(
         &self,
