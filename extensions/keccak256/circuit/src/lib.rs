@@ -11,8 +11,8 @@ pub mod trace;
 pub mod utils;
 
 mod extension;
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 pub use air::KeccakVmAir;
 pub use extension::*;
 use openvm_circuit::{
