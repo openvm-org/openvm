@@ -7,11 +7,7 @@ on:
     branches: ["**"]
     paths:
       - "crates/vm/**"
-      - "crates/toolchain/platform/**"
-      - "crates/toolchain/instructions/**"
-      - "crates/toolchain/build/**"
-      - "crates/toolchain/macros/**"
-      - "crates/toolchain/tests/**"
+      - "crates/toolchain/**"
       - "Cargo.toml"
       - ".github/workflows/riscv.yml"
 

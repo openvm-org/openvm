@@ -1,6 +1,12 @@
-use std::{env, process::Command};
+use std::{
+    env,
+    fs::{self, read_to_string},
+    path::Path,
+    process::Command,
+};
 
 use eyre::Result;
+use itertools::Itertools;
 use tempfile::tempdir;
 
 #[test]
@@ -124,6 +130,7 @@ fn test_cli_init_build() -> Result<()> {
     let manifest_path = temp_path.join("Cargo.toml");
     run_cmd("cargo", &["install", "--path", ".", "--force"])?;
 
+    // Cargo will not respect patches if run within a workspace
     run_cmd(
         "cargo",
         &[
@@ -134,6 +141,9 @@ fn test_cli_init_build() -> Result<()> {
             "cli-package",
         ],
     )?;
+    if matches!(env::var("USE_LOCAL_OPENVM"), Ok(x) if x == "1") {
+        replace_with_local_openvm(&manifest_path)?;
+    }
 
     run_cmd(
         "cargo",
@@ -169,5 +179,33 @@ fn run_cmd(program: &str, args: &[&str]) -> Result<()> {
     if !output.status.success() {
         return Err(eyre::eyre!("Command failed with status: {}", output.status));
     }
+    Ok(())
+}
+
+fn replace_with_local_openvm(file_path: impl AsRef<Path>) -> Result<()> {
+    const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
+    let openvm_path = Path::new(MANIFEST_DIR)
+        .parent()
+        .unwrap()
+        .join("toolchain")
+        .join("openvm");
+    let content = read_to_string(&file_path)?;
+    let lines = content.lines().collect::<Vec<_>>();
+    let new_content = lines
+        .iter()
+        .map(|line| {
+            if line.starts_with("openvm = { git = \"https://github.com/openvm-org/openvm.git\"") {
+                format!(
+                    r#"openvm = {{ path = "{}", features = ["std"] }}"#,
+                    openvm_path.display()
+                )
+            } else {
+                line.to_string()
+            }
+        })
+        .join("\n");
+
+    fs::write(file_path, new_content)?;
+
     Ok(())
 }

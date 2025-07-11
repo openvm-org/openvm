@@ -1,27 +1,31 @@
-# Using Existing Extensions
+# Acceleration Using Pre-Built Extensions
 
-You can seamlessly integrate certain performance-optimized extensions maintained by the OpenVM team to enhance your arithmetic operations and cryptographic computations.
+OpenVM ships with a set of pre-built extensions maintained by the OpenVM team. Below, we highlight six of these extensions designed to accelerate common arithmetic and cryptographic operations that are notoriously expensive to execute. Some of these extensions have corresponding guest libraries which provide convenient, high-level interfaces for your guest program to interact with the extension.
 
-In this chapter, we will explain how to use the following existing extensions:
-
-- [`openvm-keccak-guest`](./keccak.md) - Keccak256 hash function.
-- [`openvm-sha256-guest`](./sha256.md) - SHA2-256 hash function.
-- [`openvm-bigint-guest`](./bigint.md) - Big integer arithmetic for 256-bit signed and unsigned integers.
+- [`openvm-keccak-guest`](./keccak.md) - Keccak256 hash function. See the [Keccak256 guest library](../guest-libs/keccak256.md) for usage details.
+- [`openvm-sha256-guest`](./sha256.md) - SHA-256 hash function. See the [SHA-2 guest library](../guest-libs/sha2.md) for usage details.
+- [`openvm-bigint-guest`](./bigint.md) - Big integer arithmetic for 256-bit signed and unsigned integers. See the [ruint guest library](../guest-libs/ruint.md) for using accelerated 256-bit integer ops in rust.
 - [`openvm-algebra-guest`](./algebra.md) - Modular arithmetic and complex field extensions.
-- [`openvm-ecc-guest`](./ecc.md) - Elliptic curve cryptography.
-- [`openvm-pairing-guest`](./pairing.md) - Elliptic curve optimal Ate pairings.
+- [`openvm-ecc-guest`](./ecc.md) - Elliptic curve cryptography. See the [k256](../guest-libs/k256.md) and [p256](../guest-libs/p256.md) guest libraries for using this extension over the respective curves.
+- [`openvm-pairing-guest`](./pairing.md) - Elliptic curve optimal Ate pairings. See the [pairing guest library](../guest-libs/pairing.md) for usage details.
 
-Some extensions such as `openvm-keccak-guest`, `openvm-sha256-guest`, and `openvm-bigint-guest` can be enabled without specifying any additional configuration.
+## Optimizing Modular Arithmetic
 
-On the other hand certain arithmetic operations, particularly modular arithmetic, can be optimized significantly when the modulus is known at compile time. This approach requires a framework to inform the compiler about all the moduli and associated arithmetic structures we intend to use. To achieve this, three steps are involved:
+Some of these extensions—specifically `algebra`, `ecc`, and `pairing`—perform modular arithmetic, which can be significantly optimized when the modulus is known at compile time.  Therefore, these extensions provide a framework to inform the compiler about all the moduli and associated arithmetic structures we intend to use. To achieve this, two steps are involved:
 
 1. **Declare**: Introduce a modular arithmetic or related structure, along with its modulus and functionality. This can be done in any library or binary file.
 2. **Init**: Performed exactly once in the final binary. It aggregates all previously declared structures, assigns them stable indices, and sets up linkage so that they can be referenced in generated code.
-3. **Setup**: A one-time runtime procedure for security. This ensures that the compiled code matches the virtual machine’s expectations and that each instruction set is tied to the correct modulus or extension.
 
 These steps ensure both performance and security: performance because the modulus is known at compile time, and security because runtime checks confirm that the correct structures have been initialized.
 
 Our design for the configuration procedure above was inspired by the [EVMMAX proposal](https://github.com/jwasinger/EIPs/blob/evmmax-2/EIPS/eip-6601.md).
+
+### Automating the `init!` step
+
+The `openvm` crate provides an `init!` macro to automate the **init** step:
+1. Call `openvm::init!()` exactly once in the code of the final program binary.
+2. When [compiling the program](../writing-apps/build.md), `cargo openvm build` will read the [configuration file](#configuration) to automatically generate the correct init code and write it to `<INIT_FILE_NAME>`, which defaults to `openvm_init.rs` in the manifest directory.
+3. The `openvm::init!()` macro will include the `openvm_init.rs` file into the final binary to complete the init process. You can call `openvm::init!(INIT_FILE_NAME)` to include init code from a different file if needed.
 
 ## Configuration
 
@@ -57,12 +61,14 @@ supported_moduli = ["<modulus_1>", "<modulus_2>", ...]
 supported_curves = ["Bls12_381", "Bn254"]
 
 [[app_vm_config.ecc.supported_curves]]
+struct_name = "<curve_name_1>"
 modulus = "<modulus_1>"
 scalar = "<scalar_1>"
 a = "<a_1>"
 b = "<b_1>"
 
 [[app_vm_config.ecc.supported_curves]]
+struct_name = "<curve_name_2>"
 modulus = "<modulus_2>"
 scalar = "<scalar_2>"
 a = "<a_2>"

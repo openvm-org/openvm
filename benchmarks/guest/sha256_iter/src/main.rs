@@ -1,7 +1,7 @@
 use core::hint::black_box;
 use openvm as _;
 
-use openvm_sha256_guest::sha256;
+use openvm_sha2::sha256;
 
 const ITERATIONS: usize = 20_000;
 

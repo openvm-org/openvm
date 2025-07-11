@@ -29,20 +29,6 @@ All of the operations can be used in 6 different ways:
 
 When using the `U256` struct with `target_os = "zkvm"`, the struct utilizes efficient implementations of comparison operators as well as the `clone` method.
 
-### Example matrix multiplication using `U256`
-
-See the full example [here](https://github.com/openvm-org/openvm/blob/main/examples/u256/src/main.rs).
-
-```rust,no_run,noplayground
-{{ #include ../../../examples/u256/src/main.rs }}
-```
-
-To be able to import the `U256` struct, add the following to your `Cargo.toml` file:
-
-```toml
-openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git" }
-```
-
 ## `I256`
 
 The `I256` struct is a 256-bit signed integer type. The `I256` struct is very similar to the `U256` struct.
@@ -70,19 +56,7 @@ The `I256` struct implements the following constructors: `from_i8`, `from_i32`, 
 
 When using the `I256` struct with `target_os = "zkvm"`, the struct utilizes efficient implementations of comparison operators as well as the `clone` method.
 
-### Example matrix multiplication using `I256`
 
-See the full example [here](https://github.com/openvm-org/openvm/blob/main/examples/i256/src/main.rs).
-
-```rust,no_run,noplayground
-{{ #include ../../../examples/i256/src/main.rs }}
-```
-
-To be able to import the `I256` struct, add the following to your `Cargo.toml` file:
-
-```toml
-openvm-bigint-guest = { git = "https://github.com/openvm-org/openvm.git" }
-```
 
 ## External Linking
 

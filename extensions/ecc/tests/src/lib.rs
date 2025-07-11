@@ -119,7 +119,7 @@ mod tests {
                         .unwrap(),
                     coeffs: SwCurveCoeffs {
                         a: BigUint::ZERO,
-                        b: BigUint::from_str("3").unwrap(),
+                        b: BigUint::from_str("6").unwrap(),
                     },
                 },
                 CurveConfig {
@@ -160,7 +160,7 @@ mod tests {
         let q_x: [u8; 32] =
             hex!("0100000000000000000000000000000000000000000000000000000000000000");
         let q_y: [u8; 32] =
-            hex!("0200000000000000000000000000000000000000000000000000000000000000");
+            hex!("73ddc5d182c5a74827354174f6b5dd42303d65af55428d050e8e1856f4a3efd4");
         let r_x: [u8; 32] =
             hex!("211D5C11D68032342211C256D3C1034AB99013327FBFB46BBD0C0EB700000000");
         let r_y: [u8; 32] =

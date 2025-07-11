@@ -391,6 +391,10 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                                 } else {
                                     -y
                                 };
+                                // If y = 0 then negating y doesn't change its parity
+                                if correct_y.as_le_bytes()[0] & 1 != *rec_id & 1 {
+                                    return None;
+                                }
                                 // In order for sqrt() to return Some, we are guaranteed that y * y == y_squared, which already proves (x, correct_y) is on the curve
                                 Some(<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::from_xy_unchecked(x, correct_y))
                             }

@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 openvm = { path = "../../../crates/toolchain/openvm", features = ["std"] }
-openvm-sha256-guest = { path = "../../../extensions/sha256/guest" }
+openvm-sha2 = { path = "../../../guest-libs/sha2" }
 
 [features]
 default = []
