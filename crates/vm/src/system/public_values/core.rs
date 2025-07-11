@@ -264,34 +264,6 @@ where
     }
 }
 
-#[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX>(
-    pre_compute: &[u8],
-    state: &mut VmSegmentState<F, CTX>,
-) where
-    CTX: E1ExecutionCtx,
-{
-    let pre_compute: &PublicValuesPreCompute<F> = pre_compute.borrow();
-    let [value] = state.vm_read::<F, 1>(pre_compute.e, pre_compute.b);
-    let [index] = state.vm_read::<F, 1>(pre_compute.f, pre_compute.c);
-
-    let idx: usize = index.as_canonical_u32() as usize;
-    {
-        let custom_pvs = unsafe { &*pre_compute.pvs };
-        let mut custom_pvs = custom_pvs.lock().unwrap();
-
-        if custom_pvs[idx].is_none() {
-            custom_pvs[idx] = Some(value);
-        } else {
-            // Not a hard constraint violation when publishing the same value twice but the
-            // program should avoid that.
-            panic!("Custom public value {} already set", idx);
-        }
-    }
-    state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-    state.instret += 1;
-}
-
 impl<A, F> StepExecutorE2<F> for PublicValuesCoreStep<A, F>
 where
     F: PrimeField32,
@@ -313,14 +285,58 @@ where
         let data: &mut E2PreCompute<PublicValuesPreCompute<F>> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(inst, &mut data.data);
-        Ok(|pre_compute, vm_state| {
-            let e2_pre_compute: &E2PreCompute<PublicValuesPreCompute<F>> = pre_compute.borrow();
-            vm_state
-                .ctx
-                .on_height_change(e2_pre_compute.chip_idx as usize, 1);
-            unsafe { execute_e1_impl(pre_compute, vm_state) }
-        })
+        Ok(execute_e2_impl)
     }
+}
+
+#[inline(always)]
+unsafe fn execute_e1_impl<F: PrimeField32, CTX>(
+    pre_compute: &[u8],
+    state: &mut VmSegmentState<F, CTX>,
+) where
+    CTX: E1ExecutionCtx,
+{
+    let pre_compute: &PublicValuesPreCompute<F> = pre_compute.borrow();
+    execute_e12_impl(pre_compute, state);
+}
+
+#[inline(always)]
+unsafe fn execute_e2_impl<F: PrimeField32, CTX>(
+    pre_compute: &[u8],
+    state: &mut VmSegmentState<F, CTX>,
+) where
+    CTX: E2ExecutionCtx,
+{
+    let pre_compute: &E2PreCompute<PublicValuesPreCompute<F>> = pre_compute.borrow();
+    state.ctx.on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl(&pre_compute.data, state);
+}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<F: PrimeField32, CTX>(
+    pre_compute: &PublicValuesPreCompute<F>,
+    state: &mut VmSegmentState<F, CTX>,
+) where
+    CTX: E1ExecutionCtx,
+{
+    let [value] = state.vm_read::<F, 1>(pre_compute.e, pre_compute.b);
+    let [index] = state.vm_read::<F, 1>(pre_compute.f, pre_compute.c);
+
+    let idx: usize = index.as_canonical_u32() as usize;
+    {
+        let custom_pvs = unsafe { &*pre_compute.pvs };
+        let mut custom_pvs = custom_pvs.lock().unwrap();
+
+        if custom_pvs[idx].is_none() {
+            custom_pvs[idx] = Some(value);
+        } else {
+            // Not a hard constraint violation when publishing the same value twice but the
+            // program should avoid that.
+            panic!("Custom public value {} already set", idx);
+        }
+    }
+    state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+    state.instret += 1;
 }
 
 impl<A, F> PublicValuesCoreStep<A, F>
