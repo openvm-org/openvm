@@ -13,7 +13,7 @@ mod guest_tests {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_sha256_transpiler::Sha256TranspilerExtension;
+    use openvm_sha2_transpiler::Sha2TranspilerExtension;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -101,7 +101,7 @@ mod guest_tests {
             Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
             Rv32MExecutor, Rv32MPeriphery,
         };
-        use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
+        use openvm_sha2_circuit::{Sha2, Sha2Executor, Sha2Periphery};
         use openvm_stark_backend::p3_field::PrimeField32;
         use serde::{Deserialize, Serialize};
 
@@ -120,7 +120,7 @@ mod guest_tests {
             #[extension]
             pub ecc: EccExtension,
             #[extension]
-            pub sha256: Sha256,
+            pub sha2: Sha2,
         }
 
         impl EcdsaConfig {
@@ -136,7 +136,7 @@ mod guest_tests {
                     io: Default::default(),
                     modular: ModularExtension::new(primes),
                     ecc: EccExtension::new(curves, vec![]),
-                    sha256: Default::default(),
+                    sha2: Default::default(),
                 }
             }
         }
@@ -166,7 +166,7 @@ mod guest_tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
-                .with_extension(Sha256TranspilerExtension),
+                .with_extension(Sha2TranspilerExtension),
         )?;
         air_test(config, openvm_exe);
         Ok(())
