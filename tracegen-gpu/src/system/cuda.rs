@@ -80,6 +80,36 @@ pub mod boundary {
     }
 }
 
+pub mod phantom {
+    use super::*;
+
+    extern "C" {
+        fn _phantom_tracegen(
+            d_trace: *mut std::ffi::c_void,
+            height: usize,
+            width: usize,
+            d_records: *const u8,
+            num_records: usize,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen<T>(
+        d_trace: &DeviceBuffer<T>,
+        height: usize,
+        width: usize,
+        d_records: &DeviceBuffer<u8>,
+        num_records: usize,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_phantom_tracegen(
+            d_trace.as_mut_raw_ptr(),
+            height,
+            width,
+            d_records.as_ptr(),
+            num_records,
+        ))
+    }
+}
+
 pub mod poseidon2 {
     use super::*;
 
