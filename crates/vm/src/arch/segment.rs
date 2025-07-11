@@ -208,6 +208,10 @@ where
         // TODO(ayush): move to vm state?
         *prev_backtrace = trace.cloned();
 
+        // Track instruction start time
+        #[cfg(feature = "bench-metrics")]
+        let start = std::time::Instant::now();
+
         // Execute the instruction using the control implementation
         // TODO(AG): maybe avoid cloning the instruction?
         self.ctrl
@@ -216,7 +220,7 @@ where
         // Update metrics if enabled
         #[cfg(feature = "bench-metrics")]
         {
-            self.update_instruction_metrics(pc, opcode, dsl_instr);
+            self.update_instruction_metrics(pc, opcode, dsl_instr, start.elapsed().as_nanos());
         }
 
         Ok(())
@@ -258,6 +262,7 @@ where
         pc: u32,
         opcode: VmOpcode,
         dsl_instr: Option<String>,
+        execution_time: u128,
     ) {
         self.metrics.cycle_count += 1;
 
@@ -269,6 +274,7 @@ where
                 self.chip_complex.current_trace_cells(),
                 opcode_name,
                 dsl_instr,
+                execution_time,
             );
 
             #[cfg(feature = "function-span")]
