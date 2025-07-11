@@ -8,12 +8,12 @@ edition = "2021"
 openvm = { path = "../../../../crates/toolchain/openvm" }
 openvm-platform = { path = "../../../../crates/toolchain/platform" }
 openvm-sha2 = { path = "../../" }
-
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 serde = { version = "1.0", default-features = false, features = [
     "alloc",
     "derive",
 ] }
+hex-literal = { version = "1.0.0" }
 
 [features]
 default = []

@@ -21,8 +21,8 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
-use openvm_sha256_transpiler::Sha256TranspilerExtension;
+use openvm_sha2_circuit::{Sha2, Sha2Executor, Sha2Periphery};
+use openvm_sha2_transpiler::Sha2TranspilerExtension;
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::{
         default_engine, BabyBearPoseidon2Config, BabyBearPoseidon2Engine,
@@ -66,7 +66,7 @@ pub struct ExecuteConfig {
     #[extension]
     pub keccak: Keccak256,
     #[extension]
-    pub sha256: Sha256,
+    pub sha2: Sha2,
 }
 
 impl Default for ExecuteConfig {
@@ -78,7 +78,7 @@ impl Default for ExecuteConfig {
             io: Rv32Io,
             bigint: Int256::default(),
             keccak: Keccak256,
-            sha256: Sha256,
+            sha2: Sha2,
         }
     }
 }
@@ -110,7 +110,7 @@ fn create_default_transpiler() -> Transpiler<BabyBear> {
         .with_extension(Rv32MTranspilerExtension)
         .with_extension(Int256TranspilerExtension)
         .with_extension(Keccak256TranspilerExtension)
-        .with_extension(Sha256TranspilerExtension)
+        .with_extension(Sha2TranspilerExtension)
 }
 
 fn load_program_executable(program: &str) -> Result<VmExe<BabyBear>> {
