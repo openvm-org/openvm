@@ -34,7 +34,7 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    Sha2Variant, Sha2VmDigestColsRefMut, Sha2VmRoundColsRefMut, Sha2VmStep, Sha2ChipConfig,
+    Sha2ChipConfig, Sha2Variant, Sha2VmDigestColsRefMut, Sha2VmRoundColsRefMut, Sha2VmStep,
 };
 use crate::{
     get_sha2_num_blocks, sha2_chip::PaddingFlags, sha2_solve, Sha2VmControlColsRefMut,
@@ -87,7 +87,9 @@ pub struct Sha2VmRecordMut<'a> {
 /// `C::NUM_READ_ROWS * num_blocks`. Uses `align_to_mut()` to make sure the slice is properly
 /// aligned to `MemoryReadAuxRecord`. Has debug assertions that check the size and alignment of the
 /// slices.
-impl<'a, C: Sha2ChipConfig> CustomBorrow<'a, Sha2VmRecordMut<'a>, Sha2VmRecordLayout<C>> for [u8] {
+impl<'a, C: Sha2ChipConfig> CustomBorrow<'a, Sha2VmRecordMut<'a>, Sha2VmRecordLayout<C>>
+    for [u8]
+{
     fn custom_borrow(&'a mut self, layout: Sha2VmRecordLayout<C>) -> Sha2VmRecordMut<'a> {
         let (header_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<Sha2VmRecordHeader>()) };

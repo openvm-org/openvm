@@ -23,7 +23,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 
-use super::{Sha2VmDigestColsRef, Sha2VmRoundColsRef, Sha2ChipConfig};
+use super::{Sha2ChipConfig, Sha2VmDigestColsRef, Sha2VmRoundColsRef};
 
 /// Sha2VmAir does all constraints related to message padding and
 /// the Sha2Air subair constrains the actual hash
