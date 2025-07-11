@@ -263,7 +263,7 @@ unsafe fn execute_e1_impl<
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
     let pre_compute: &NativeBranchEqualPreCompute = pre_compute.borrow();
-    execute_e12_impl::<_, _, true, true, true>(pre_compute, vm_state);
+    execute_e12_impl::<_, _, A_IS_IMM, B_IS_IMM, IS_NE>(pre_compute, vm_state);
 }
 
 unsafe fn execute_e2_impl<
@@ -280,7 +280,7 @@ unsafe fn execute_e2_impl<
     vm_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, true, true, true>(&pre_compute.data, vm_state);
+    execute_e12_impl::<_, _, A_IS_IMM, B_IS_IMM, IS_NE>(&pre_compute.data, vm_state);
 }
 
 #[inline(always)]
