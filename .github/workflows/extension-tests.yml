@@ -8,6 +8,7 @@ on:
     paths:
       - "crates/circuits/**"
       - "crates/vm/**"
+      - "crates/toolchain/**"
       - "extensions/**"
       - "Cargo.toml"
       - ".github/workflows/extension-tests.yml"
@@ -52,6 +53,7 @@ jobs:
           filters: |
             - "crates/circuits/**"
             - "crates/vm/**"
+            - "crates/toolchain/**"
             - "extensions/${{ matrix.extensions.path }}/**"
             - ".github/workflows/extension-tests.yml"
       - name: Skip if no changes

@@ -22,7 +22,8 @@ openvm_algebra_moduli_macros::moduli_declare! {
     Fp1mod4 { modulus = "0xffffffffffffffffffffffffffffffff000000000000000000000001" },
 }
 
-const CURVE_B_5MOD8: Fp5mod8 = Fp5mod8::from_const_u8(3);
+// const CURVE_B_5MOD8: Fp5mod8 = Fp5mod8::from_const_u8(3);
+const CURVE_B_5MOD8: Fp5mod8 = Fp5mod8::from_const_u8(6);
 
 const CURVE_A_1MOD4: Fp1mod4 = Fp1mod4::from_const_bytes(hex!(
     "FEFFFFFFFFFFFFFFFFFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000"
@@ -61,8 +62,15 @@ pub fn main() {
     let rec_id = y.as_le_bytes()[0] & 1;
 
     test_possible_decompression::<CurvePoint5mod8>(&x, &y, rec_id);
-    // x = 3 is not on the x-coordinate of any point on the CurvePoint5mod8 curve
-    test_impossible_decompression::<CurvePoint5mod8>(&Fp5mod8::from_u8(3), rec_id);
+    // x = 0 is not on the x-coordinate of any point on the CurvePoint5mod8 curve
+    test_impossible_decompression::<CurvePoint5mod8>(&Fp5mod8::ZERO, rec_id);
+    // this x is such that y^2 = x^3 + 6 = 0
+    // we want to test the case where y^2 = 0 and rec_id = 1
+    let x = Fp5mod8::from_le_bytes_unchecked(&hex!(
+        "d634a701c3b9b8cbf7797988be3953b442863b74d2d5c4d5f1a9de3c0c256d90"
+    ));
+    test_possible_decompression::<CurvePoint5mod8>(&x, &Fp5mod8::ZERO, 0);
+    test_impossible_decompression::<CurvePoint5mod8>(&x, 1);
 
     let x = Fp1mod4::from_le_bytes_unchecked(&bytes[128..160]);
     let y = Fp1mod4::from_le_bytes_unchecked(&bytes[160..192]);

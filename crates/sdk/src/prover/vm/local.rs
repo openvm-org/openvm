@@ -27,7 +27,8 @@ use crate::prover::vm::{
 pub struct VmLocalProver<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> {
     pub pk: Arc<VmProvingKey<SC, VC>>,
     pub committed_exe: Arc<VmCommittedExe<SC>>,
-    overridden_heights: Option<VmComplexTraceHeights>,
+    continuation_heights: Option<VmComplexTraceHeights>,
+    single_segment_heights: Option<Vec<u32>>,
     _marker: PhantomData<E>,
 }
 
@@ -36,26 +37,26 @@ impl<SC: StarkGenericConfig, VC, E: StarkFriEngine<SC>> VmLocalProver<SC, VC, E>
         Self {
             pk,
             committed_exe,
-            overridden_heights: None,
+            continuation_heights: None,
+            single_segment_heights: None,
             _marker: PhantomData,
         }
     }
 
-    pub fn new_with_overridden_trace_heights(
-        pk: Arc<VmProvingKey<SC, VC>>,
-        committed_exe: Arc<VmCommittedExe<SC>>,
-        overridden_heights: Option<VmComplexTraceHeights>,
+    pub fn with_overridden_continuation_trace_heights(
+        mut self,
+        overridden_heights: VmComplexTraceHeights,
     ) -> Self {
-        Self {
-            pk,
-            committed_exe,
-            overridden_heights,
-            _marker: PhantomData,
-        }
+        self.continuation_heights = Some(overridden_heights);
+        self
     }
 
-    pub fn set_override_trace_heights(&mut self, overridden_heights: VmComplexTraceHeights) {
-        self.overridden_heights = Some(overridden_heights);
+    pub fn with_overridden_single_segment_trace_heights(
+        mut self,
+        overridden_heights: Vec<u32>,
+    ) -> Self {
+        self.single_segment_heights = Some(overridden_heights);
+        self
     }
 
     pub fn vm_config(&self) -> &VC {
@@ -81,7 +82,7 @@ where
         let mut vm = VirtualMachine::new_with_overridden_trace_heights(
             e,
             self.pk.vm_config.clone(),
-            self.overridden_heights.clone(),
+            self.continuation_heights.clone(),
         );
         vm.set_trace_height_constraints(trace_height_constraints.clone());
         let VmCommittedExe {
@@ -179,16 +180,20 @@ where
 
         let vm_vk = self.pk.vm_pk.get_vk();
         let input = input.into();
-        let max_trace_heights = executor
-            .execute_metered(
-                self.committed_exe.exe.clone(),
-                input.clone(),
-                &vm_vk.total_widths(),
-                &vm_vk.num_interactions(),
-            )
-            .expect("execute_metered failed");
+        let max_trace_heights = if let Some(overridden_heights) = &self.single_segment_heights {
+            overridden_heights
+        } else {
+            &executor
+                .execute_metered(
+                    self.committed_exe.exe.clone(),
+                    input.clone(),
+                    &vm_vk.total_widths(),
+                    &vm_vk.num_interactions(),
+                )
+                .expect("execute_metered failed")
+        };
         let proof_input = executor
-            .execute_and_generate(self.committed_exe.clone(), input, &max_trace_heights)
+            .execute_and_generate(self.committed_exe.clone(), input, max_trace_heights)
             .unwrap();
 
         let vm = VirtualMachine::new(e, executor.config);

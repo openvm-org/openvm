@@ -6,7 +6,7 @@ use openvm_continuations::verifier::{
     leaf::types::LeafVmVerifierInput,
     root::types::RootVmVerifierInput,
 };
-use openvm_native_circuit::NativeConfig;
+use openvm_native_circuit::{NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_native_recursion::hints::Hintable;
 use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::proof::Proof};
@@ -45,14 +45,16 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
         tree_config: AggregationTreeConfig,
     ) -> Self {
         let leaf_prover =
-            VmLocalProver::<SC, NativeConfig, E>::new(agg_stark_pk.leaf_vm_pk, leaf_committed_exe);
+            VmLocalProver::<SC, NativeConfig, E>::new(agg_stark_pk.leaf_vm_pk, leaf_committed_exe)
+                .with_overridden_single_segment_trace_heights(NATIVE_MAX_TRACE_HEIGHTS.to_vec());
         let leaf_controller = LeafProvingController {
             num_children: tree_config.num_children_leaf,
         };
         let internal_prover = VmLocalProver::<SC, NativeConfig, E>::new(
             agg_stark_pk.internal_vm_pk,
             agg_stark_pk.internal_committed_exe,
-        );
+        )
+        .with_overridden_single_segment_trace_heights(NATIVE_MAX_TRACE_HEIGHTS.to_vec());
         let root_prover = RootVerifierLocalProver::new(agg_stark_pk.root_verifier_pk);
         Self {
             leaf_prover,

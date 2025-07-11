@@ -84,8 +84,9 @@ fn main() -> Result<()> {
             // If this is a new benchmark, prev_path will not exist
             if let Ok(prev_db) = MetricDb::new(&prev_path) {
                 let prev_grouped = GroupedMetrics::new(&prev_db, "group")?;
-                prev_aggregated = Some(prev_grouped.aggregate());
-                aggregated.set_diff(prev_aggregated.as_ref().unwrap());
+                let prev_grouped_aggregated = prev_grouped.aggregate();
+                aggregated.set_diff(&prev_grouped_aggregated);
+                prev_aggregated = Some(prev_grouped_aggregated);
             }
         }
         if name.is_empty() {

@@ -8,6 +8,7 @@ on:
     paths:
       - "crates/circuits/primitives/**"
       - "crates/vm/**"
+      - "crates/toolchain/**"
       - "crates/sdk/**"
       - "Cargo.toml"
       - ".github/workflows/sdk.yml"

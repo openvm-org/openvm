@@ -3,16 +3,25 @@ name: OpenVM CLI Tests
 on:
   push:
     branches: ["main"]
+    tags: ["v*"]
   pull_request:
     branches: ["**"]
     paths:
       - "crates/circuits/primitives/**"
       - "crates/vm/**"
+      - "crates/toolchain/**"
       - "crates/sdk/**"
       - "crates/cli/**"
       - "examples/**"
       - "Cargo.toml"
       - ".github/workflows/cli.yml"
+  workflow_dispatch:
+    inputs:
+      use_local_openvm:
+        description: "Test cargo openvm init using local patch"
+        required: true
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -74,6 +83,14 @@ jobs:
         run: |
           export RUST_BACKTRACE=1
           cargo openvm keygen --config ./example/app_config.toml --output-dir .
+
+      - name: Set USE_LOCAL_OPENVM environment variable
+        run: |
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/tags/* ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.use_local_openvm }}" == "false" ]]; then
+            echo "USE_LOCAL_OPENVM=0" >> $GITHUB_ENV
+          else
+            echo "USE_LOCAL_OPENVM=1" >> $GITHUB_ENV
+          fi
 
       - name: Run CLI tests
         working-directory: crates/cli
