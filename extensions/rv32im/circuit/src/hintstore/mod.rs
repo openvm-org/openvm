@@ -46,8 +46,8 @@ use crate::adapters::{
     tracing_write,
 };
 
-//#[cfg(test)]
-//mod tests;
+#[cfg(test)]
+mod tests;
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]

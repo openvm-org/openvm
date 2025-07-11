@@ -38,8 +38,8 @@ use openvm_stark_backend::{
 use static_assertions::const_assert_eq;
 use AS::Native;
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]

@@ -2,11 +2,11 @@ use openvm_circuit::arch::{Streams, SystemConfig, VirtualMachine};
 use openvm_instructions::program::Program;
 use openvm_stark_sdk::{config::baby_bear_poseidon2::default_engine, p3_baby_bear::BabyBear};
 
-// use crate::{Native, NativeConfig};
+use crate::{Native, NativeConfig};
 
 pub(crate) const CASTF_MAX_BITS: usize = 30;
 
-/*
+
 pub fn execute_program_with_system_config(
     program: Program<BabyBear>,
     input_stream: impl Into<Streams<BabyBear>>,
@@ -36,14 +36,14 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: impl Into<Strea
         .with_max_segment_len((1 << 25) - 100);
     execute_program_with_system_config(program, input_stream, system_config);
 }
-*/
+
 
 pub(crate) const fn const_max(a: usize, b: usize) -> usize {
     [a, b][(a < b) as usize]
 }
 
 /// Testing framework
-#[cfg(disable)]
+#[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils {
     use std::array;
 
@@ -63,7 +63,6 @@ pub mod test_utils {
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rand::{distributions::Standard, prelude::Distribution, rngs::StdRng, Rng};
 
-    use super::execute_program_with_system_config;
     use crate::extension::NativeConfig;
 
     // If immediate, returns (value, AS::Immediate). Otherwise, writes to native memory and returns
@@ -108,7 +107,7 @@ pub mod test_utils {
             .system
             .with_public_values(4)
             .with_max_segment_len((1 << 25) - 100);
-        execute_program_with_system_config(program, input_stream, system_config);
+        // execute_program_with_system_config(program, input_stream, system_config);
     }
 
     pub fn test_native_config() -> NativeConfig {

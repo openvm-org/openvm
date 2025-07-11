@@ -4,8 +4,8 @@ use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
-        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmChipWrapper,
-        VmCircuitExtension, VmExecutionExtension, VmProverExtension,
+        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
+        VmExecutionExtension, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
@@ -386,7 +386,7 @@ where
         inventory.add_executor_chip(blt);
 
         inventory.next_air::<Rv32JalLuiAir>()?;
-        let jal_lui = VmChipWrapper::new(
+        let jal_lui = Rv32JalLuiChip::new(
             Rv32JalLuiFiller::new(
                 Rv32CondRdWriteAdapterFiller::new(Rv32RdWriteAdapterFiller),
                 bitwise_lu.clone(),
@@ -396,7 +396,7 @@ where
         inventory.add_executor_chip(jal_lui);
 
         inventory.next_air::<Rv32JalrAir>()?;
-        let jalr = VmChipWrapper::new(
+        let jalr = Rv32JalrChip::new(
             Rv32JalrFiller::new(
                 Rv32JalrAdapterFiller,
                 bitwise_lu.clone(),
@@ -407,7 +407,7 @@ where
         inventory.add_executor_chip(jalr);
 
         inventory.next_air::<Rv32AuipcAir>()?;
-        let auipc = VmChipWrapper::new(
+        let auipc = Rv32AuipcChip::new(
             Rv32AuipcFiller::new(Rv32RdWriteAdapterFiller, bitwise_lu.clone()),
             mem_helper.clone(),
         );
@@ -672,7 +672,7 @@ where
         };
 
         inventory.next_air::<Rv32HintStoreAir>()?;
-        let hint_store = VmChipWrapper::new(
+        let hint_store = Rv32HintStoreChip::new(
             Rv32HintStoreFiller::new(pointer_max_bits, bitwise_lu.clone()),
             mem_helper.clone(),
         );

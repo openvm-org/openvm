@@ -6,8 +6,8 @@ use crate::adapters::{Rv32BranchAdapterAir, Rv32BranchAdapterFiller, Rv32BranchA
 mod core;
 pub use core::*;
 
-//#[cfg(test)]
-//mod tests;
+#[cfg(test)]
+mod tests;
 
 pub type Rv32BranchLessThanAir = VmAirWrapper<
     Rv32BranchAdapterAir,

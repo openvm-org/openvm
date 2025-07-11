@@ -2,8 +2,8 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use crate::adapters::{AluNativeAdapterAir, AluNativeAdapterFiller, AluNativeAdapterStep};
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 mod core;
 pub use core::*;

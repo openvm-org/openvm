@@ -42,7 +42,7 @@ use crate::{
     *,
 };
 
-#[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
+#[derive(Clone, Debug, derive_new::new, VmConfig, Serialize, Deserialize)]
 pub struct NativeConfig {
     #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,

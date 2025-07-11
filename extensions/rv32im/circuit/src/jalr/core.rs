@@ -34,7 +34,9 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 
-use crate::adapters::{Rv32JalrAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use crate::adapters::{
+    Rv32JalrAdapterFiller, Rv32JalrAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
@@ -191,7 +193,7 @@ pub struct Rv32JalrStep<A = Rv32JalrAdapterStep> {
 }
 
 #[derive(Clone)]
-pub struct Rv32JalrFiller<A = Rv32JalrAdapterStep> {
+pub struct Rv32JalrFiller<A = Rv32JalrAdapterFiller> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
