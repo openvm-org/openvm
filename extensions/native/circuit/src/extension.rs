@@ -476,6 +476,6 @@ impl InitFileGenerator for Rv32WithKernelsConfig {}
 // the actual trace heights of kitchen-sink leaf verification (except for
 // VariableRangeChecker, which has a fixed height).
 pub const NATIVE_MAX_TRACE_HEIGHTS: &[u32] = &[
-    4194304, 4, 128, 2097152, 8388608, 4194304, 131072, 524288, 8388608, 2097152, 8388608, 131072,
-    2097152, 524288, 4194304, 32768, 262144,
+    4194304, 4, 128, 2097152, 8388608, 4194304, 262144, 2097152, 16777216, 2097152, 8388608,
+    262144, 2097152, 1048576, 4194304, 65536, 262144,
 ];
