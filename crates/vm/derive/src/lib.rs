@@ -407,12 +407,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     for e in extensions.iter() {
         let (ext_field_name, ext_name_upper) =
             gen_name_with_uppercase_idents(e.ident.as_ref().unwrap());
-        let (executor_name, needs_generics) = parse_executor_name(e)?;
-        let executor_type = if needs_generics {
-            quote! { #executor_name<F> }
-        } else {
-            quote! { #executor_name }
-        };
+        let executor_type = parse_executor_type(e, false)?;
         executor_enum_fields.push(quote! {
             #[any_enum]
             #ext_name_upper(#executor_type),
@@ -440,12 +435,8 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
         });
     }
 
-    let (source_executor_name, source_needs_generics) = parse_executor_name(source_field)?;
-    let source_executor_type = if source_needs_generics {
-        quote! { #source_executor_name<F> }
-    } else {
-        quote! { #source_executor_name }
-    };
+    // The config type always needs <F> due to SystemExecutor
+    let source_executor_type = parse_executor_type(source_field, true)?;
     execution_where_predicates.push(parse_quote! {
         #source_field_ty: ::openvm_circuit::arch::VmExecutionConfig<F, Executor = #source_executor_type>
     });
@@ -538,14 +529,21 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
 // Parse the executor name as either
 // `{type_name}Executor` or whatever the attribute `executor = ` specifies
 // Also determines whether the executor type needs generic parameters
-fn parse_executor_name(f: &Field) -> syn::Result<(Ident, bool)> {
+fn parse_executor_type(
+    f: &Field,
+    default_needs_generics: bool,
+) -> syn::Result<proc_macro2::TokenStream> {
     // TRACKING ISSUE:
     // We cannot just use <e.ty.to_token_stream() as VmExecutionExtension<F>>::Executor because of this: <https://github.com/rust-lang/rust/issues/85576>
-    let mut executor_name = Ident::new(
+    let executor_name = Ident::new(
         &format!("{}Executor", f.ty.to_token_stream()),
         Span::call_site().into(),
     );
-    let mut needs_generics = true; // Default to true for backward compatibility
+    let mut executor_type = if default_needs_generics {
+        quote! { #executor_name<F> }
+    } else {
+        quote! { #executor_name }
+    };
 
     if let Some(attr) = f
         .attrs
@@ -562,21 +560,33 @@ fn parse_executor_name(f: &Field) -> syn::Result<(Ident, bool)> {
             }
             _ => {
                 let nested = attr
-                    .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
-                    .unwrap();
+                    .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)?;
                 for meta in nested {
                     match meta {
                         Meta::NameValue(nv) => {
                             if nv.path.is_ident("executor") {
-                                executor_name = Ident::new(
-                                    &nv.value.to_token_stream().to_string(),
-                                    Span::call_site().into(),
-                                );
-                                Ok(())
+                                executor_type = match nv.value {
+                                    syn::Expr::Lit(syn::ExprLit {
+                                        lit: syn::Lit::Str(lit_str), ..
+                                    }) => {
+                                        let executor_type: syn::Type = syn::parse_str(&lit_str.value())?;
+                                        quote! { #executor_type }
+                                    },
+                                    syn::Expr::Path(path) => {
+                                        // Handle identifier paths like `executor = MyExecutor`
+                                        path.to_token_stream()
+                                    },
+                                    _ => {
+                                        return Err(syn::Error::new(
+                                            nv.value.span(),
+                                            "executor value must be a string literal or identifier"
+                                        ));
+                                    }
+                                };
                             } else if nv.path.is_ident("generics") {
                                 // Parse boolean value for generics
                                 let value_str = nv.value.to_token_stream().to_string();
-                                needs_generics = match value_str.as_str() {
+                                let needs_generics = match value_str.as_str() {
                                     "true" => true,
                                     "false" => false,
                                     _ => return Err(syn::Error::new(
@@ -584,17 +594,22 @@ fn parse_executor_name(f: &Field) -> syn::Result<(Ident, bool)> {
                                         "generics attribute must be either true or false"
                                     ))
                                 };
-                                Ok(())
+                                executor_type = if needs_generics {
+                                    quote! { #executor_name<F> }
+                                } else {
+                                    quote! { #executor_name }
+                                };
                             } else {
-                                Err("only executor and generics keys are supported")
+                                return Err(syn::Error::new(nv.span(), "only executor and generics keys are supported"));
                             }
                         }
-                        _ => Err("only name = value format is supported"),
+                        _ => {
+                            return Err(syn::Error::new(meta.span(), "only name = value format is supported"));
+                        }
                     }
-                    .expect("wrong attributes format");
                 }
             }
         }
-    };
-    Ok((executor_name, needs_generics))
+    }
+    Ok(executor_type)
 }

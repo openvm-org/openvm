@@ -44,9 +44,9 @@ use crate::{
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct NativeConfig {
-    #[config(executor = SystemExecutor)]
+    #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
-    #[extension]
+    #[extension(generics = true)]
     pub native: Native,
 }
 
@@ -532,17 +532,17 @@ where
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Rv32WithKernelsConfig {
-    #[config(executor = SystemExecutor)]
+    #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
-    #[extension(generics = false)]
-    pub rv32i: Rv32I,
-    #[extension(generics = false)]
-    pub rv32m: Rv32M,
-    #[extension(generics = false)]
-    pub io: Rv32Io,
     #[extension]
+    pub rv32i: Rv32I,
+    #[extension]
+    pub rv32m: Rv32M,
+    #[extension]
+    pub io: Rv32Io,
+    #[extension(generics = true)]
     pub native: Native,
-    #[extension(generics = false)]
+    #[extension]
     pub castf: CastFExtension,
 }
 

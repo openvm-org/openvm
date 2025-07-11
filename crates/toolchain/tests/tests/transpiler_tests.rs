@@ -86,19 +86,19 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32ModularFp2Int256Config {
-    #[config(executor = SystemExecutor)]
+    #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
-    #[extension(generics = false)]
+    #[extension]
     pub base: Rv32I,
-    #[extension(generics = false)]
+    #[extension]
     pub mul: Rv32M,
-    #[extension(generics = false)]
+    #[extension]
     pub io: Rv32Io,
-    #[extension(generics = false)]
+    #[extension]
     pub modular: ModularExtension,
-    #[extension(generics = false)]
+    #[extension]
     pub fp2: Fp2Extension,
-    #[extension(generics = false)]
+    #[extension]
     pub int256: Int256,
 }
 

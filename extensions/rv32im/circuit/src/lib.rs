@@ -50,11 +50,11 @@ mod test_utils;
 // Config for a VM with base extension and IO extension
 #[derive(Clone, Debug, derive_new::new, VmConfig, Serialize, Deserialize)]
 pub struct Rv32IConfig {
-    #[config(executor = SystemExecutor)]
+    #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
-    #[extension(generics = false)]
+    #[extension]
     pub base: Rv32I,
-    #[extension(generics = false)]
+    #[extension]
     pub io: Rv32Io,
 }
 
@@ -66,7 +66,7 @@ impl InitFileGenerator for Rv32IConfig {}
 pub struct Rv32ImConfig {
     #[config]
     pub rv32i: Rv32IConfig,
-    #[extension(generics = false)]
+    #[extension]
     pub mul: Rv32M,
 }
 

@@ -21,21 +21,21 @@ use super::*;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32PairingConfig {
-    #[config(executor = SystemExecutor)]
+    #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
-    #[extension(generics = false)]
-    pub base: Rv32I,
-    #[extension(generics = false)]
-    pub mul: Rv32M,
-    #[extension(generics = false)]
-    pub io: Rv32Io,
-    #[extension(generics = false)]
-    pub modular: ModularExtension,
-    #[extension(generics = false)]
-    pub fp2: Fp2Extension,
-    #[extension(generics = false)]
-    pub weierstrass: WeierstrassExtension,
     #[extension]
+    pub base: Rv32I,
+    #[extension]
+    pub mul: Rv32M,
+    #[extension]
+    pub io: Rv32Io,
+    #[extension]
+    pub modular: ModularExtension,
+    #[extension]
+    pub fp2: Fp2Extension,
+    #[extension]
+    pub weierstrass: WeierstrassExtension,
+    #[extension(generics = true)]
     pub pairing: PairingExtension,
 }
 

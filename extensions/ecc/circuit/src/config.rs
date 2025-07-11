@@ -18,17 +18,17 @@ use super::*;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32WeierstrassConfig {
-    #[config(executor = SystemExecutor)]
+    #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
-    #[extension(generics = false)]
+    #[extension]
     pub base: Rv32I,
-    #[extension(generics = false)]
+    #[extension]
     pub mul: Rv32M,
-    #[extension(generics = false)]
+    #[extension]
     pub io: Rv32Io,
-    #[extension(generics = false)]
+    #[extension]
     pub modular: ModularExtension,
-    #[extension(generics = false)]
+    #[extension]
     pub weierstrass: WeierstrassExtension,
 }
 

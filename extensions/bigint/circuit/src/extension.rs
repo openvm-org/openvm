@@ -37,15 +37,15 @@ use crate::*;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Int256Rv32Config {
-    #[config(executor = SystemExecutor)]
+    #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
-    #[extension(generics = false)]
+    #[extension]
     pub rv32i: Rv32I,
-    #[extension(generics = false)]
+    #[extension]
     pub rv32m: Rv32M,
-    #[extension(generics = false)]
+    #[extension]
     pub io: Rv32Io,
-    #[extension(generics = false)]
+    #[extension]
     pub bigint: Int256,
 }
 
