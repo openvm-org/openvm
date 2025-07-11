@@ -5,28 +5,27 @@ use std::{
 
 use eyre::Result;
 use num_bigint::BigUint;
-use openvm_algebra_circuit::{
-    Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
-    ModularExtensionExecutor, ModularExtensionPeriphery,
-};
+use openvm_algebra_circuit::*;
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
+use openvm_bigint_circuit::*;
 use openvm_circuit::{
     arch::{InitFileGenerator, SystemConfig, VmExecutor},
     derive::VmConfig,
+    system::SystemExecutor,
     utils::air_test,
 };
 use openvm_ecc_circuit::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use openvm_instructions::exe::VmExe;
 use openvm_platform::memory::MEM_SIZE;
-use openvm_rv32im_circuit::{
-    Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32ImConfig, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery,
-    Rv32M, Rv32MExecutor, Rv32MPeriphery,
-};
+use openvm_rv32im_circuit::*;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    p3_field::Field,
+    prover::hal::ProverBackend,
+};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
@@ -80,26 +79,26 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension),
     )?;
     let config = Rv32ImConfig::default();
-    let executor = VmExecutor::<F, _>::new(config);
+    let executor = VmExecutor::<F, _>::new(config)?;
     executor.execute_e1(exe, vec![], None)?;
     Ok(())
 }
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32ModularFp2Int256Config {
-    #[system]
+    #[config(executor = SystemExecutor)]
     pub system: SystemConfig,
-    #[extension]
+    #[extension(generics = false)]
     pub base: Rv32I,
-    #[extension]
+    #[extension(generics = false)]
     pub mul: Rv32M,
-    #[extension]
+    #[extension(generics = false)]
     pub io: Rv32Io,
-    #[extension]
+    #[extension(generics = false)]
     pub modular: ModularExtension,
-    #[extension]
+    #[extension(generics = false)]
     pub fp2: Fp2Extension,
-    #[extension]
+    #[extension(generics = false)]
     pub int256: Int256,
 }
 
@@ -143,7 +142,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
             .with_extension(ModularTranspilerExtension)
             .with_extension(Fp2TranspilerExtension),
     )?;
-    let executor = VmExecutor::<F, _>::new(config);
+    let executor = VmExecutor::<F, _>::new(config)?;
     executor.execute_e1(openvm_exe, vec![], None)?;
     Ok(())
 }
