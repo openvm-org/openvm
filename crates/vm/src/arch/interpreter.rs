@@ -111,7 +111,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
         let mut split_pre_compute_buf =
             self.split_pre_compute_buf(&mut pre_compute_buf, pre_compute_max_size);
 
-        let pre_compute_insts = get_pre_compute_instructions::<_, _, _, Ctx>(
+        let pre_compute_insts = get_e2_pre_compute_instructions::<_, _, _, Ctx>(
             program,
             &chip_complex,
             &mut split_pre_compute_buf,
