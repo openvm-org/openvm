@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use itertools::Itertools;
 use openvm_circuit::arch::{SingleSegmentVmExecutor, Streams};
 use openvm_continuations::verifier::root::types::RootVmVerifierInput;
 use openvm_native_circuit::NativeConfig;
@@ -31,11 +32,22 @@ impl RootVerifierLocalProver {
         }
     }
     pub fn execute_for_air_heights(&self, input: RootVmVerifierInput<SC>) -> Vec<usize> {
+        let vm_vk = self.root_verifier_pk.vm_pk.vm_pk.get_vk();
+        let max_trace_heights = self
+            .executor_for_heights
+            .execute_metered(
+                self.root_verifier_pk.root_committed_exe.exe.clone(),
+                input.write(),
+                &vm_vk.total_widths(),
+                &vm_vk.num_interactions(),
+            )
+            .unwrap();
         let result = self
             .executor_for_heights
             .execute_and_compute_heights(
                 self.root_verifier_pk.root_committed_exe.exe.clone(),
                 input.write(),
+                &max_trace_heights,
             )
             .unwrap();
         result.air_heights
@@ -54,8 +66,18 @@ impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
         let input = input.into();
         let mut vm = SingleSegmentVmExecutor::new(self.vm_config().clone());
         vm.set_override_trace_heights(self.root_verifier_pk.vm_heights.clone());
+        let trace_heights = self
+            .root_verifier_pk
+            .air_heights
+            .iter()
+            .map(|&height| height as u32)
+            .collect_vec();
         let mut proof_input = vm
-            .execute_and_generate(self.root_verifier_pk.root_committed_exe.clone(), input)
+            .execute_and_generate(
+                self.root_verifier_pk.root_committed_exe.clone(),
+                input,
+                &trace_heights,
+            )
             .unwrap();
         assert_eq!(
             proof_input.per_air.len(),

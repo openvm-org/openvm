@@ -1,8 +1,15 @@
-use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
-use openvm_rv32im_circuit::{BranchEqualCoreAir, BranchEqualCoreChip};
+use openvm_circuit::arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper};
+use openvm_rv32im_circuit::BranchEqualCoreAir;
 
-use super::adapters::branch_native_adapter::{BranchNativeAdapterAir, BranchNativeAdapterChip};
+mod core;
+pub use core::*;
+
+use crate::adapters::{BranchNativeAdapterAir, BranchNativeAdapterStep};
+
+#[cfg(test)]
+mod tests;
 
 pub type NativeBranchEqAir = VmAirWrapper<BranchNativeAdapterAir, BranchEqualCoreAir<1>>;
+pub type NativeBranchEqStep = NativeBranchEqualStep<BranchNativeAdapterStep>;
 pub type NativeBranchEqChip<F> =
-    VmChipWrapper<F, BranchNativeAdapterChip<F>, BranchEqualCoreChip<1>>;
+    NewVmChipWrapper<F, NativeBranchEqAir, NativeBranchEqStep, MatrixRecordArena<F>>;

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use openvm_instructions::{
-    exe::MemoryImage,
+    exe::SparseMemoryImage,
     instruction::Instruction,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
     utils::isize_to_field,
@@ -165,17 +165,14 @@ pub fn nop<F: PrimeField32>() -> Instruction<F> {
     }
 }
 
-/// Converts our memory image (u32 -> [u8; 4]) into Vm memory image ((as, address) -> word)
-pub fn elf_memory_image_to_openvm_memory_image<F: PrimeField32>(
+/// Converts our memory image (u32 -> [u8; 4]) into Vm memory image ((as=2, address) -> byte)
+pub fn elf_memory_image_to_openvm_memory_image(
     memory_image: BTreeMap<u32, u32>,
-) -> MemoryImage<F> {
-    let mut result = MemoryImage::new();
+) -> SparseMemoryImage {
+    let mut result = SparseMemoryImage::new();
     for (addr, word) in memory_image {
         for (i, byte) in word.to_le_bytes().into_iter().enumerate() {
-            result.insert(
-                (RV32_MEMORY_AS, addr + i as u32),
-                F::from_canonical_u8(byte),
-            );
+            result.insert((RV32_MEMORY_AS, addr + i as u32), byte);
         }
     }
     result

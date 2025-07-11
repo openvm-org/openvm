@@ -1,6 +1,13 @@
 use std::ops::Mul;
 
-use openvm_circuit::system::memory::{MemoryController, RecordId};
+use openvm_circuit::{
+    arch::{execution_mode::E1E2ExecutionCtx, VmStateMut},
+    system::memory::{
+        merkle::public_values::PUBLIC_VALUES_AS,
+        online::{GuestMemory, TracingMemory},
+    },
+};
+use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 
 mod alu;
@@ -46,25 +53,188 @@ pub fn decompose<F: PrimeField32>(value: u32) -> [F; RV32_REGISTER_NUM_LIMBS] {
     })
 }
 
-/// Read register value as [RV32_REGISTER_NUM_LIMBS] limbs from memory.
-/// Returns the read record and the register value as u32.
-/// Does not make any range check calls.
-pub fn read_rv32_register<F: PrimeField32>(
-    memory: &mut MemoryController<F>,
-    address_space: F,
-    pointer: F,
-) -> (RecordId, u32) {
-    debug_assert_eq!(address_space, F::ONE);
-    let record = memory.read::<RV32_REGISTER_NUM_LIMBS>(address_space, pointer);
-    let val = compose(record.1);
-    (record.0, val)
+#[inline(always)]
+pub fn imm_to_bytes(imm: u32) -> [u8; RV32_REGISTER_NUM_LIMBS] {
+    debug_assert_eq!(imm >> 24, 0);
+    let mut imm_le = imm.to_le_bytes();
+    imm_le[3] = imm_le[2];
+    imm_le
 }
 
-/// Peeks at the value of a register without updating the memory state or incrementing the
-/// timestamp.
-pub fn unsafe_read_rv32_register<F: PrimeField32>(memory: &MemoryController<F>, pointer: F) -> u32 {
-    let data = memory.unsafe_read::<RV32_REGISTER_NUM_LIMBS>(F::ONE, pointer);
-    compose(data)
+#[inline(always)]
+pub fn memory_read<const N: usize>(memory: &GuestMemory, address_space: u32, ptr: u32) -> [u8; N] {
+    debug_assert!(
+        address_space == RV32_REGISTER_AS
+            || address_space == RV32_MEMORY_AS
+            || address_space == PUBLIC_VALUES_AS,
+    );
+
+    // TODO(ayush): PUBLIC_VALUES_AS safety?
+    // SAFETY:
+    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
+    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
+    unsafe { memory.read::<u8, N>(address_space, ptr) }
+}
+
+#[inline(always)]
+pub fn memory_write<const N: usize>(
+    memory: &mut GuestMemory,
+    address_space: u32,
+    ptr: u32,
+    data: [u8; N],
+) {
+    debug_assert!(
+        address_space == RV32_REGISTER_AS
+            || address_space == RV32_MEMORY_AS
+            || address_space == PUBLIC_VALUES_AS
+    );
+
+    // TODO(ayush): PUBLIC_VALUES_AS safety?
+    // SAFETY:
+    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
+    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
+    unsafe { memory.write::<u8, N>(address_space, ptr, data) }
+}
+
+/// Atomic read operation which increments the timestamp by 1.
+/// Returns `(t_prev, [ptr:4]_{address_space})` where `t_prev` is the timestamp of the last memory
+/// access.
+#[inline(always)]
+pub fn timed_read<F: PrimeField32, const N: usize>(
+    memory: &mut TracingMemory<F>,
+    address_space: u32,
+    ptr: u32,
+) -> (u32, [u8; N]) {
+    debug_assert!(
+        address_space == RV32_REGISTER_AS
+            || address_space == RV32_MEMORY_AS
+            || address_space == PUBLIC_VALUES_AS
+    );
+
+    // SAFETY:
+    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
+    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
+    unsafe { memory.read::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr) }
+}
+
+#[inline(always)]
+pub fn timed_write<F: PrimeField32, const N: usize>(
+    memory: &mut TracingMemory<F>,
+    address_space: u32,
+    ptr: u32,
+    data: [u8; N],
+) -> (u32, [u8; N]) {
+    // TODO(ayush): should this allow public values address space
+    debug_assert!(
+        address_space == RV32_REGISTER_AS
+            || address_space == RV32_MEMORY_AS
+            || address_space == PUBLIC_VALUES_AS
+    );
+
+    // SAFETY:
+    // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
+    //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
+    unsafe { memory.write::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, data) }
+}
+
+/// Reads register value at `reg_ptr` from memory and records the memory access in mutable buffer.
+/// Trace generation relevant to this memory access can be done fully from the recorded buffer.
+#[inline(always)]
+pub fn tracing_read<F, const N: usize>(
+    memory: &mut TracingMemory<F>,
+    address_space: u32,
+    ptr: u32,
+    prev_timestamp: &mut u32,
+) -> [u8; N]
+where
+    F: PrimeField32,
+{
+    let (t_prev, data) = timed_read(memory, address_space, ptr);
+    *prev_timestamp = t_prev;
+    data
+}
+
+#[inline(always)]
+pub fn tracing_read_imm<F>(
+    memory: &mut TracingMemory<F>,
+    imm: u32,
+    imm_mut: &mut u32,
+) -> [u8; RV32_REGISTER_NUM_LIMBS]
+where
+    F: PrimeField32,
+{
+    *imm_mut = imm;
+    debug_assert_eq!(imm >> 24, 0); // highest byte should be zero to prevent overflow
+
+    memory.increment_timestamp();
+
+    let mut imm_le = imm.to_le_bytes();
+    // Important: we set the highest byte equal to the second highest byte, using the assumption
+    // that imm is at most 24 bits
+    imm_le[3] = imm_le[2];
+    imm_le
+}
+
+/// Writes `reg_ptr, reg_val` into memory and records the memory access in mutable buffer.
+/// Trace generation relevant to this memory access can be done fully from the recorded buffer.
+#[inline(always)]
+pub fn tracing_write<F, const N: usize>(
+    memory: &mut TracingMemory<F>,
+    address_space: u32,
+    ptr: u32,
+    data: [u8; N],
+    prev_timestamp: &mut u32,
+    prev_data: &mut [u8; N],
+) where
+    F: PrimeField32,
+{
+    let (t_prev, data_prev) = timed_write(memory, address_space, ptr, data);
+    *prev_timestamp = t_prev;
+    *prev_data = data_prev;
+}
+
+#[inline(always)]
+pub fn memory_read_from_state<F, Ctx, const N: usize>(
+    state: &mut VmStateMut<F, GuestMemory, Ctx>,
+    address_space: u32,
+    ptr: u32,
+) -> [u8; N]
+where
+    Ctx: E1E2ExecutionCtx,
+{
+    state.ctx.on_memory_operation(address_space, ptr, N as u32);
+
+    memory_read(state.memory, address_space, ptr)
+}
+
+#[inline(always)]
+pub fn memory_write_from_state<F, Ctx, const N: usize>(
+    state: &mut VmStateMut<F, GuestMemory, Ctx>,
+    address_space: u32,
+    ptr: u32,
+    data: [u8; N],
+) where
+    Ctx: E1E2ExecutionCtx,
+{
+    state.ctx.on_memory_operation(address_space, ptr, N as u32);
+
+    memory_write(state.memory, address_space, ptr, data)
+}
+
+#[inline(always)]
+pub fn read_rv32_register_from_state<F, Ctx>(
+    state: &mut VmStateMut<F, GuestMemory, Ctx>,
+    ptr: u32,
+) -> u32
+where
+    Ctx: E1E2ExecutionCtx,
+{
+    u32::from_le_bytes(memory_read_from_state(state, RV32_REGISTER_AS, ptr))
+}
+
+#[inline(always)]
+pub fn read_rv32_register(memory: &GuestMemory, ptr: u32) -> u32 {
+    u32::from_le_bytes(memory_read(memory, RV32_REGISTER_AS, ptr))
 }
 
 pub fn abstract_compose<T: FieldAlgebra, V: Mul<T, Output = T>>(
@@ -75,4 +245,9 @@ pub fn abstract_compose<T: FieldAlgebra, V: Mul<T, Output = T>>(
         .fold(T::ZERO, |acc, (i, limb)| {
             acc + limb * T::from_canonical_u32(1 << (i * RV32_CELL_BITS))
         })
+}
+
+// TEMP[jpw]
+pub fn tmp_convert_to_u8s<F: PrimeField32, const N: usize>(data: [F; N]) -> [u8; N] {
+    data.map(|x| x.as_canonical_u32() as u8)
 }

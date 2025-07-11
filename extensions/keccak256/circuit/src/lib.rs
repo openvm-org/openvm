@@ -1,17 +1,9 @@
 //! Stateful keccak256 hasher. Handles full keccak sponge (padding, absorb, keccak-f) on
 //! variable length inputs read from VM memory.
-use std::{
-    array::from_fn,
-    cmp::min,
-    sync::{Arc, Mutex},
-};
 
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
 use openvm_stark_backend::p3_field::PrimeField32;
-use serde::{Deserialize, Serialize};
-use serde_big_array::BigArray;
-use tiny_keccak::{Hasher, Keccak};
-use utils::num_keccak_f;
+use p3_keccak_air::NUM_ROUNDS;
 
 pub mod air;
 pub mod columns;
@@ -26,17 +18,25 @@ mod tests;
 
 pub use air::KeccakVmAir;
 use openvm_circuit::{
-    arch::{ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor},
-    system::{
-        memory::{offline_checker::MemoryBridge, MemoryController, OfflineMemory, RecordId},
-        program::ProgramBus,
+    arch::{
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        ExecutionBridge, MatrixRecordArena, NewVmChipWrapper, Result, StepExecutorE1, VmStateMut,
     },
+    system::memory::online::GuestMemory,
 };
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode,
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    LocalOpcode,
 };
 use openvm_keccak256_transpiler::Rv32KeccakOpcode;
-use openvm_rv32im_circuit::adapters::read_rv32_register;
+use openvm_rv32im_circuit::adapters::{
+    memory_read_from_state, memory_write, memory_write_from_state, read_rv32_register_from_state,
+};
+use utils::num_keccak_f;
+
+use crate::utils::keccak256;
 
 // ==== Constants for register/memory adapter ====
 /// Register reads to get dst, src, len
@@ -69,75 +69,38 @@ pub const KECCAK_DIGEST_BYTES: usize = 32;
 /// Number of 64-bit digest limbs.
 pub const KECCAK_DIGEST_U64S: usize = KECCAK_DIGEST_BYTES / 8;
 
-pub struct KeccakVmChip<F: PrimeField32> {
-    pub air: KeccakVmAir,
-    /// IO and memory data necessary for each opcode call
-    pub records: Vec<KeccakRecord<F>>,
+pub type KeccakVmChip<F> = NewVmChipWrapper<F, KeccakVmAir, KeccakVmStep, MatrixRecordArena<F>>;
+
+//#[derive(derive_new::new)]
+pub struct KeccakVmStep {
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
-
-    offset: usize,
-
-    offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+    pub offset: usize,
+    pub pointer_max_bits: usize,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct KeccakRecord<F> {
-    pub pc: F,
-    pub dst_read: RecordId,
-    pub src_read: RecordId,
-    pub len_read: RecordId,
-    pub input_blocks: Vec<KeccakInputBlock>,
-    pub digest_writes: [RecordId; KECCAK_DIGEST_WRITES],
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct KeccakInputBlock {
-    /// Memory reads for non-padding bytes in this block. Length is at most [KECCAK_RATE_BYTES /
-    /// KECCAK_WORD_SIZE].
-    pub reads: Vec<RecordId>,
-    /// Index in `reads` of the memory read for < KECCAK_WORD_SIZE bytes, if any.
-    pub partial_read_idx: Option<usize>,
-    /// Bytes with padding. Can be derived from `bytes_read` but we store for convenience.
-    #[serde(with = "BigArray")]
-    pub padded_bytes: [u8; KECCAK_RATE_BYTES],
-    pub remaining_len: usize,
-    pub src: usize,
-    pub is_new_start: bool,
-}
-
-impl<F: PrimeField32> KeccakVmChip<F> {
+impl KeccakVmStep {
     pub fn new(
-        execution_bus: ExecutionBus,
-        program_bus: ProgramBus,
-        memory_bridge: MemoryBridge,
-        address_bits: usize,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
         offset: usize,
-        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+        pointer_max_bits: usize,
     ) -> Self {
         Self {
-            air: KeccakVmAir::new(
-                ExecutionBridge::new(execution_bus, program_bus),
-                memory_bridge,
-                bitwise_lookup_chip.bus(),
-                address_bits,
-                offset,
-            ),
             bitwise_lookup_chip,
-            records: Vec::new(),
             offset,
-            offline_memory,
+            pointer_max_bits,
         }
     }
 }
 
-impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
-    fn execute(
-        &mut self,
-        memory: &mut MemoryController<F>,
+impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
+    fn execute_e1<Ctx>(
+        &self,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>, ExecutionError> {
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
         let &Instruction {
             opcode,
             a,
@@ -147,140 +110,90 @@ impl<F: PrimeField32> InstructionExecutor<F> for KeccakVmChip<F> {
             e,
             ..
         } = instruction;
-        let local_opcode = Rv32KeccakOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        debug_assert_eq!(local_opcode, Rv32KeccakOpcode::KECCAK256);
 
-        let mut timestamp_delta = 3;
-        let (dst_read, dst) = read_rv32_register(memory, d, a);
-        let (src_read, src) = read_rv32_register(memory, d, b);
-        let (len_read, len) = read_rv32_register(memory, d, c);
-        #[cfg(debug_assertions)]
-        {
-            assert!(dst < (1 << self.air.ptr_max_bits));
-            assert!(src < (1 << self.air.ptr_max_bits));
-            assert!(len < (1 << self.air.ptr_max_bits));
-        }
+        debug_assert_eq!(opcode, Rv32KeccakOpcode::KECCAK256.global_opcode());
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
-        let mut remaining_len = len as usize;
-        let num_blocks = num_keccak_f(remaining_len);
-        let mut input_blocks = Vec::with_capacity(num_blocks);
-        let mut hasher = Keccak::v256();
-        let mut src = src as usize;
+        let dst = read_rv32_register_from_state(state, a.as_canonical_u32());
+        let src = read_rv32_register_from_state(state, b.as_canonical_u32());
+        let len = read_rv32_register_from_state(state, c.as_canonical_u32());
 
-        for block_idx in 0..num_blocks {
-            if block_idx != 0 {
-                memory.increment_timestamp_by(KECCAK_REGISTER_READS as u32);
-                timestamp_delta += KECCAK_REGISTER_READS as u32;
-            }
-            let mut reads = Vec::with_capacity(KECCAK_RATE_BYTES);
-
-            let mut partial_read_idx = None;
-            let mut bytes = [0u8; KECCAK_RATE_BYTES];
-            for i in (0..KECCAK_RATE_BYTES).step_by(KECCAK_WORD_SIZE) {
-                if i < remaining_len {
-                    let read =
-                        memory.read::<RV32_REGISTER_NUM_LIMBS>(e, F::from_canonical_usize(src + i));
-
-                    let chunk = read.1.map(|x| {
-                        x.as_canonical_u32()
-                            .try_into()
-                            .expect("Memory cell not a byte")
-                    });
-                    let copy_len = min(KECCAK_WORD_SIZE, remaining_len - i);
-                    if copy_len != KECCAK_WORD_SIZE {
-                        partial_read_idx = Some(reads.len());
-                    }
-                    bytes[i..i + copy_len].copy_from_slice(&chunk[..copy_len]);
-                    reads.push(read.0);
-                } else {
-                    memory.increment_timestamp();
-                }
-                timestamp_delta += 1;
-            }
-
-            let mut block = KeccakInputBlock {
-                reads,
-                partial_read_idx,
-                padded_bytes: bytes,
-                remaining_len,
-                src,
-                is_new_start: block_idx == 0,
-            };
-            if block_idx != num_blocks - 1 {
-                src += KECCAK_RATE_BYTES;
-                remaining_len -= KECCAK_RATE_BYTES;
-                hasher.update(&block.padded_bytes);
-            } else {
-                // handle padding here since it is convenient
-                debug_assert!(remaining_len < KECCAK_RATE_BYTES);
-                hasher.update(&block.padded_bytes[..remaining_len]);
-
-                if remaining_len == KECCAK_RATE_BYTES - 1 {
-                    block.padded_bytes[remaining_len] = 0b1000_0001;
-                } else {
-                    block.padded_bytes[remaining_len] = 0x01;
-                    block.padded_bytes[KECCAK_RATE_BYTES - 1] = 0x80;
-                }
-            }
-            input_blocks.push(block);
-        }
-        let mut output = [0u8; 32];
-        hasher.finalize(&mut output);
-        let dst = dst as usize;
-        let digest_writes: [_; KECCAK_DIGEST_WRITES] = from_fn(|i| {
-            timestamp_delta += 1;
-            memory
-                .write::<KECCAK_WORD_SIZE>(
-                    e,
-                    F::from_canonical_usize(dst + i * KECCAK_WORD_SIZE),
-                    from_fn(|j| F::from_canonical_u8(output[i * KECCAK_WORD_SIZE + j])),
-                )
-                .0
-        });
-        tracing::trace!("[runtime] keccak256 output: {:?}", output);
-
-        let record = KeccakRecord {
-            pc: F::from_canonical_u32(from_state.pc),
-            dst_read,
-            src_read,
-            len_read,
-            input_blocks,
-            digest_writes,
+        // SAFETY: RV32_MEMORY_AS is memory address space of type u8
+        let message = unsafe {
+            state
+                .memory
+                .memory
+                .get_slice((RV32_MEMORY_AS, src), len as usize)
         };
 
-        // Add the events to chip state for later trace generation usage
-        self.records.push(record);
+        let output = keccak256(message);
+        memory_write(state.memory, RV32_MEMORY_AS, dst, output);
 
-        // NOTE: Check this is consistent with KeccakVmAir::timestamp_change (we don't use it to
-        // avoid unnecessary conversions here)
-        let total_timestamp_delta =
-            len + (KECCAK_REGISTER_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES) as u32;
-        memory.increment_timestamp_by(total_timestamp_delta - timestamp_delta);
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
-        Ok(ExecutionState {
-            pc: from_state.pc + DEFAULT_PC_STEP,
-            timestamp: from_state.timestamp + total_timestamp_delta,
-        })
+        Ok(())
     }
 
-    fn get_opcode_name(&self, _: usize) -> String {
-        "KECCAK256".to_string()
-    }
-}
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
+        } = instruction;
+        debug_assert_eq!(*opcode, Rv32KeccakOpcode::KECCAK256.global_opcode());
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
-impl Default for KeccakInputBlock {
-    fn default() -> Self {
-        // Padding for empty byte array so padding constraints still hold
-        let mut padded_bytes = [0u8; KECCAK_RATE_BYTES];
-        padded_bytes[0] = 0x01;
-        *padded_bytes.last_mut().unwrap() = 0x80;
-        Self {
-            padded_bytes,
-            partial_read_idx: None,
-            remaining_len: 0,
-            is_new_start: true,
-            reads: Vec::new(),
-            src: 0,
+        let dst = read_rv32_register_from_state(state, a.as_canonical_u32());
+        let src = read_rv32_register_from_state(state, b.as_canonical_u32());
+        let len = read_rv32_register_from_state(state, c.as_canonical_u32()) as usize;
+
+        let num_blocks = num_keccak_f(len);
+
+        debug_assert!(src as usize + len <= (1 << self.pointer_max_bits));
+        debug_assert!(dst as usize + KECCAK_DIGEST_BYTES <= (1 << self.pointer_max_bits));
+        // We don't support messages longer than 2^[pointer_max_bits] bytes
+        debug_assert!(len < (1 << self.pointer_max_bits));
+
+        let mut input = Vec::with_capacity(len);
+        let num_reads = len.div_ceil(KECCAK_WORD_SIZE);
+        for idx in 0..num_reads {
+            let read: [u8; KECCAK_WORD_SIZE] = memory_read_from_state(
+                state,
+                RV32_MEMORY_AS,
+                src + (idx * KECCAK_WORD_SIZE) as u32,
+            );
+            if idx < num_reads - 1 {
+                input.extend_from_slice(&read);
+            } else {
+                let remaining_bytes = len - idx * KECCAK_WORD_SIZE;
+                input.extend_from_slice(&read[..remaining_bytes]);
+            }
         }
+
+        let output = keccak256(&input);
+        for (i, word) in output.chunks_exact(KECCAK_WORD_SIZE).enumerate() {
+            memory_write_from_state::<F, _, KECCAK_WORD_SIZE>(
+                state,
+                RV32_MEMORY_AS,
+                dst + (i * KECCAK_WORD_SIZE) as u32,
+                word.try_into().unwrap(),
+            );
+        }
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        state.ctx.trace_heights[chip_index] += (num_blocks * NUM_ROUNDS) as u32;
+
+        Ok(())
     }
 }

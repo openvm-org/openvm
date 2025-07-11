@@ -165,11 +165,14 @@ impl AggregateMetrics {
         let mut total_par_proof_time = MdTableCell::new(0.0, Some(0.0));
         for (group_name, metrics) in &self.by_group {
             let stats = metrics.get(PROOF_TIME_LABEL);
-            let execute_stats = metrics.get(EXECUTE_TIME_LABEL);
+            let execute_metered_stats = metrics.get(EXECUTE_METERED_TIME_LABEL);
+            let execute_e1_stats = metrics.get(EXECUTE_E1_TIME_LABEL);
             if stats.is_none() {
                 continue;
             }
-            let stats = stats.unwrap();
+            let stats = stats.unwrap_or_else(|| {
+                panic!("Missing proof time statistics for group '{}'", group_name)
+            });
             let mut sum = stats.sum;
             let mut max = stats.max;
             // convert ms to s
@@ -184,26 +187,61 @@ impl AggregateMetrics {
             if !group_name.contains("keygen") {
                 // Proving time in keygen group is dummy and not part of total.
                 total_proof_time.val += sum.val;
-                *total_proof_time.diff.as_mut().unwrap() += sum.diff.unwrap_or(0.0);
+                *total_proof_time
+                    .diff
+                    .as_mut()
+                    .expect("total_proof_time.diff should be initialized") +=
+                    sum.diff.unwrap_or(0.0);
                 total_par_proof_time.val += max.val;
-                *total_par_proof_time.diff.as_mut().unwrap() += max.diff.unwrap_or(0.0);
+                *total_par_proof_time
+                    .diff
+                    .as_mut()
+                    .expect("total_par_proof_time.diff should be initialized") +=
+                    max.diff.unwrap_or(0.0);
 
-                // Account for the fact that execution is serial
-                // Add total execution time for the app proofs, and subtract the max segment
-                // execution time
+                // Account for the serial execute_metered and execute_e1 for app outside of segments
                 if group_name != "leaf"
                     && group_name != "root"
                     && group_name != "halo2_outer"
                     && group_name != "halo2_wrapper"
                     && !group_name.starts_with("internal")
                 {
-                    let execute_stats = execute_stats.unwrap();
-                    total_par_proof_time.val +=
-                        (execute_stats.sum.val - execute_stats.max.val) / 1000.0;
-                    *total_par_proof_time.diff.as_mut().unwrap() +=
-                        (execute_stats.sum.diff.unwrap_or(0.0)
-                            - execute_stats.max.diff.unwrap_or(0.0))
-                            / 1000.0;
+                    if let Some(execute_metered_stats) = execute_metered_stats {
+                        // For metered metrics without segment labels, we just use the value
+                        // directly Count is 1, so avg = sum = max = min =
+                        // value
+                        total_proof_time.val += execute_metered_stats.avg.val / 1000.0;
+                        total_par_proof_time.val += execute_metered_stats.avg.val / 1000.0;
+                        if let Some(diff) = execute_metered_stats.avg.diff {
+                            *total_proof_time
+                                .diff
+                                .as_mut()
+                                .expect("total_proof_time.diff should be initialized") +=
+                                diff / 1000.0;
+                            *total_par_proof_time
+                                .diff
+                                .as_mut()
+                                .expect("total_par_proof_time.diff should be initialized") +=
+                                diff / 1000.0;
+                        }
+                    }
+
+                    if let Some(execute_e1_stats) = execute_e1_stats {
+                        total_proof_time.val += execute_e1_stats.avg.val / 1000.0;
+                        total_par_proof_time.val += execute_e1_stats.avg.val / 1000.0;
+                        if let Some(diff) = execute_e1_stats.avg.diff {
+                            *total_proof_time
+                                .diff
+                                .as_mut()
+                                .expect("total_proof_time.diff should be initialized") +=
+                                diff / 1000.0;
+                            *total_par_proof_time
+                                .diff
+                                .as_mut()
+                                .expect("total_par_proof_time.diff should be initialized") +=
+                                diff / 1000.0;
+                        }
+                    }
                 }
             }
         }
@@ -239,7 +277,13 @@ impl AggregateMetrics {
             .into_iter()
             .map(|group_name| {
                 let key = group_name.clone();
-                let value = self.by_group.get(group_name).unwrap().clone();
+                let value = self
+                    .by_group
+                    .get(group_name)
+                    .unwrap_or_else(|| {
+                        panic!("Group '{}' should exist in by_group map", group_name)
+                    })
+                    .clone();
                 (key, value)
             })
             .collect()
@@ -252,6 +296,7 @@ impl AggregateMetrics {
             .map(|(group_name, metrics)| {
                 let metrics = metrics
                     .iter()
+                    .filter(|(_, stats)| stats.avg.val.is_finite() && stats.sum.val.is_finite())
                     .flat_map(|(metric_name, stats)| {
                         [
                             (format!("{metric_name}::sum"), stats.sum.into()),
@@ -295,11 +340,37 @@ impl AggregateMetrics {
             for metric_name in names {
                 let summary = summaries.get(metric_name);
                 if let Some(summary) = summary {
-                    writeln!(
-                        writer,
-                        "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
-                        metric_name, summary.avg, summary.sum, summary.max, summary.min,
-                    )?;
+                    // Special handling for execute_metered metrics (not aggregated across segments
+                    // in the app proof case)
+                    if metric_name == EXECUTE_METERED_TIME_LABEL
+                        && group_name != "leaf"
+                        && group_name != "root"
+                        && group_name != "halo2_outer"
+                        && group_name != "halo2_wrapper"
+                        && !group_name.starts_with("internal")
+                    {
+                        writeln!(
+                            writer,
+                            "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
+                            metric_name, summary.avg, "-", "-", "-",
+                        )?;
+                    } else if metric_name == EXECUTE_E1_INSN_MI_S_LABEL
+                        || metric_name == EXECUTE_E3_INSN_MI_S_LABEL
+                        || metric_name == EXECUTE_METERED_INSN_MI_S_LABEL
+                    {
+                        // skip sum because it is misleading
+                        writeln!(
+                            writer,
+                            "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
+                            metric_name, summary.avg, "-", summary.max, summary.min,
+                        )?;
+                    } else {
+                        writeln!(
+                            writer,
+                            "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
+                            metric_name, summary.avg, summary.sum, summary.max, summary.min,
+                        )?;
+                    }
                 }
             }
             writeln!(writer)?;
@@ -317,11 +388,16 @@ impl AggregateMetrics {
         writeln!(writer, "|:---|---:|---:|")?;
         let mut rows = Vec::new();
         for (group_name, summaries) in self.to_vec() {
+            if group_name.contains("keygen") {
+                continue;
+            }
             let stats = summaries.get(PROOF_TIME_LABEL);
             if stats.is_none() {
                 continue;
             }
-            let stats = stats.unwrap();
+            let stats = stats.unwrap_or_else(|| {
+                panic!("Missing proof time statistics for group '{}'", group_name)
+            });
             let mut sum = stats.sum;
             let mut max = stats.max;
             // convert ms to s
@@ -352,7 +428,12 @@ impl AggregateMetrics {
         self.by_group
             .keys()
             .find(|k| group_weight(k) == 0)
-            .unwrap_or_else(|| self.by_group.keys().next().unwrap())
+            .unwrap_or_else(|| {
+                self.by_group
+                    .keys()
+                    .next()
+                    .expect("by_group should contain at least one group")
+            })
             .clone()
     }
 }
@@ -383,16 +464,32 @@ impl BenchmarkOutput {
 pub const PROOF_TIME_LABEL: &str = "total_proof_time_ms";
 pub const CELLS_USED_LABEL: &str = "main_cells_used";
 pub const CYCLES_LABEL: &str = "total_cycles";
-pub const EXECUTE_TIME_LABEL: &str = "execute_time_ms";
+pub const EXECUTE_E1_TIME_LABEL: &str = "execute_e1_time_ms";
+pub const EXECUTE_E1_INSN_MI_S_LABEL: &str = "execute_e1_insn_mi/s";
+pub const EXECUTE_METERED_TIME_LABEL: &str = "execute_metered_time_ms";
+pub const EXECUTE_METERED_INSN_MI_S_LABEL: &str = "execute_metered_insn_mi/s";
+pub const EXECUTE_E3_TIME_LABEL: &str = "execute_e3_time_ms";
+pub const EXECUTE_E3_INSN_MI_S_LABEL: &str = "execute_e3_insn_mi/s";
 pub const TRACE_GEN_TIME_LABEL: &str = "trace_gen_time_ms";
+pub const MEM_FIN_TIME_LABEL: &str = "memory_finalize_time_ms";
+pub const BOUNDARY_FIN_TIME_LABEL: &str = "boundary_finalize_time_ms";
+pub const MERKLE_FIN_TIME_LABEL: &str = "merkle_finalize_time_ms";
 pub const PROVE_EXCL_TRACE_TIME_LABEL: &str = "stark_prove_excluding_trace_time_ms";
 
 pub const VM_METRIC_NAMES: &[&str] = &[
     PROOF_TIME_LABEL,
     CELLS_USED_LABEL,
     CYCLES_LABEL,
-    EXECUTE_TIME_LABEL,
+    EXECUTE_E1_TIME_LABEL,
+    EXECUTE_E1_INSN_MI_S_LABEL,
+    EXECUTE_METERED_TIME_LABEL,
+    EXECUTE_METERED_INSN_MI_S_LABEL,
+    EXECUTE_E3_TIME_LABEL,
+    EXECUTE_E3_INSN_MI_S_LABEL,
     TRACE_GEN_TIME_LABEL,
+    MEM_FIN_TIME_LABEL,
+    BOUNDARY_FIN_TIME_LABEL,
+    MERKLE_FIN_TIME_LABEL,
     PROVE_EXCL_TRACE_TIME_LABEL,
     "main_trace_commit_time_ms",
     "generate_perm_trace_time_ms",

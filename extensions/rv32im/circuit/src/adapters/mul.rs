@@ -1,22 +1,21 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
-        ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
-        VmAdapterInterface,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, BasicAdapterInterface,
+        ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir, VmStateMut,
     },
-    system::{
-        memory::{
-            offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryController, OfflineMemory, RecordId,
+    system::memory::{
+        offline_checker::{
+            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+            MemoryWriteBytesAuxRecord,
         },
-        program::ProgramBus,
+        online::{GuestMemory, TracingMemory},
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS,
@@ -26,49 +25,9 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-use serde::{Deserialize, Serialize};
 
-use super::RV32_REGISTER_NUM_LIMBS;
-
-/// Reads instructions of the form OP a, b, c, d where \[a:4\]_d = \[b:4\]_d op \[c:4\]_d.
-/// Operand d can only be 1, and there is no immediate support.
-#[derive(Debug)]
-pub struct Rv32MultAdapterChip<F: Field> {
-    pub air: Rv32MultAdapterAir,
-    _marker: PhantomData<F>,
-}
-
-impl<F: PrimeField32> Rv32MultAdapterChip<F> {
-    pub fn new(
-        execution_bus: ExecutionBus,
-        program_bus: ProgramBus,
-        memory_bridge: MemoryBridge,
-    ) -> Self {
-        Self {
-            air: Rv32MultAdapterAir {
-                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                memory_bridge,
-            },
-            _marker: PhantomData,
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Rv32MultReadRecord {
-    /// Reads from operand registers
-    pub rs1: RecordId,
-    pub rs2: RecordId,
-}
-
-#[repr(C)]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Rv32MultWriteRecord {
-    pub from_state: ExecutionState<u32>,
-    /// Write to destination register
-    pub rd_id: RecordId,
-}
+use super::{tracing_write, RV32_REGISTER_NUM_LIMBS};
+use crate::adapters::{memory_read_from_state, memory_write_from_state, tracing_read};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -81,6 +40,8 @@ pub struct Rv32MultAdapterCols<T> {
     pub writes_aux: MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>,
 }
 
+/// Reads instructions of the form OP a, b, c, d where \[a:4\]_d = \[b:4\]_d op \[c:4\]_d.
+/// Operand d can only be 1, and there is no immediate support.
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv32MultAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
@@ -167,92 +128,171 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32MultAdapterAir {
     }
 }
 
-impl<F: PrimeField32> VmAdapterChip<F> for Rv32MultAdapterChip<F> {
-    type ReadRecord = Rv32MultReadRecord;
-    type WriteRecord = Rv32MultWriteRecord;
-    type Air = Rv32MultAdapterAir;
-    type Interface = BasicAdapterInterface<
-        F,
-        MinimalInstruction<F>,
-        2,
-        1,
-        RV32_REGISTER_NUM_LIMBS,
-        RV32_REGISTER_NUM_LIMBS,
-    >;
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct Rv32MultAdapterRecord {
+    pub from_pc: u32,
+    pub from_timestamp: u32,
 
-    fn preprocess(
-        &mut self,
-        memory: &mut MemoryController<F>,
+    pub rd_ptr: u32,
+    pub rs1_ptr: u32,
+    pub rs2_ptr: u32,
+
+    pub reads_aux: [MemoryReadAuxRecord; 2],
+    pub writes_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
+}
+
+#[derive(derive_new::new)]
+pub struct Rv32MultAdapterStep;
+
+impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32MultAdapterStep
+where
+    F: PrimeField32,
+{
+    const WIDTH: usize = size_of::<Rv32MultAdapterCols<u8>>();
+    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
+    type WriteData = [[u8; RV32_REGISTER_NUM_LIMBS]; 1];
+    type RecordMut<'a> = &'a mut Rv32MultAdapterRecord;
+
+    #[inline(always)]
+    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+        record.from_pc = pc;
+        record.from_timestamp = memory.timestamp;
+    }
+
+    #[inline(always)]
+    fn read(
+        &self,
+        memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-    ) -> Result<(
-        <Self::Interface as VmAdapterInterface<F>>::Reads,
-        Self::ReadRecord,
-    )> {
-        let Instruction { b, c, d, .. } = *instruction;
+        record: &mut Self::RecordMut<'_>,
+    ) -> Self::ReadData {
+        let &Instruction { b, c, d, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
-        let rs1 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, b);
-        let rs2 = memory.read::<RV32_REGISTER_NUM_LIMBS>(d, c);
-
-        Ok((
-            [rs1.1, rs2.1],
-            Self::ReadRecord {
-                rs1: rs1.0,
-                rs2: rs2.0,
-            },
-        ))
-    }
-
-    fn postprocess(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-        output: AdapterRuntimeContext<F, Self::Interface>,
-        _read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
-        let Instruction { a, d, .. } = *instruction;
-        let (rd_id, _) = memory.write(d, a, output.writes[0]);
-
-        let timestamp_delta = memory.timestamp() - from_state.timestamp;
-        debug_assert!(
-            timestamp_delta == 3,
-            "timestamp delta is {}, expected 3",
-            timestamp_delta
+        record.rs1_ptr = b.as_canonical_u32();
+        let rs1 = tracing_read(
+            memory,
+            RV32_REGISTER_AS,
+            b.as_canonical_u32(),
+            &mut record.reads_aux[0].prev_timestamp,
+        );
+        record.rs2_ptr = c.as_canonical_u32();
+        let rs2 = tracing_read(
+            memory,
+            RV32_REGISTER_AS,
+            c.as_canonical_u32(),
+            &mut record.reads_aux[1].prev_timestamp,
         );
 
-        Ok((
-            ExecutionState {
-                pc: from_state.pc + DEFAULT_PC_STEP,
-                timestamp: memory.timestamp(),
-            },
-            Self::WriteRecord { from_state, rd_id },
-        ))
+        [rs1, rs2]
     }
 
-    fn generate_trace_row(
+    #[inline(always)]
+    fn write(
         &self,
-        row_slice: &mut [F],
-        read_record: Self::ReadRecord,
-        write_record: Self::WriteRecord,
-        memory: &OfflineMemory<F>,
+        memory: &mut TracingMemory<F>,
+        instruction: &Instruction<F>,
+        data: Self::WriteData,
+        record: &mut Self::RecordMut<'_>,
     ) {
-        let aux_cols_factory = memory.aux_cols_factory();
-        let row_slice: &mut Rv32MultAdapterCols<_> = row_slice.borrow_mut();
-        row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-        let rd = memory.record_by_id(write_record.rd_id);
-        row_slice.rd_ptr = rd.pointer;
-        let rs1 = memory.record_by_id(read_record.rs1);
-        let rs2 = memory.record_by_id(read_record.rs2);
-        row_slice.rs1_ptr = rs1.pointer;
-        row_slice.rs2_ptr = rs2.pointer;
-        aux_cols_factory.generate_read_aux(rs1, &mut row_slice.reads_aux[0]);
-        aux_cols_factory.generate_read_aux(rs2, &mut row_slice.reads_aux[1]);
-        aux_cols_factory.generate_write_aux(rd, &mut row_slice.writes_aux);
+        let &Instruction { a, d, .. } = instruction;
+
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+
+        record.rd_ptr = a.as_canonical_u32();
+        tracing_write(
+            memory,
+            RV32_REGISTER_AS,
+            a.as_canonical_u32(),
+            data[0],
+            &mut record.writes_aux.prev_timestamp,
+            &mut record.writes_aux.prev_data,
+        )
+    }
+}
+
+impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32MultAdapterStep {
+    #[inline(always)]
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        let record: &Rv32MultAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };
+        let adapter_row: &mut Rv32MultAdapterCols<F> = adapter_row.borrow_mut();
+
+        let timestamp = record.from_timestamp;
+
+        adapter_row
+            .writes_aux
+            .set_prev_data(record.writes_aux.prev_data.map(F::from_canonical_u8));
+        mem_helper.fill(
+            record.writes_aux.prev_timestamp,
+            timestamp + 2,
+            adapter_row.writes_aux.as_mut(),
+        );
+
+        mem_helper.fill(
+            record.reads_aux[1].prev_timestamp,
+            timestamp + 1,
+            adapter_row.reads_aux[1].as_mut(),
+        );
+
+        mem_helper.fill(
+            record.reads_aux[0].prev_timestamp,
+            timestamp,
+            adapter_row.reads_aux[0].as_mut(),
+        );
+
+        adapter_row.rs2_ptr = F::from_canonical_u32(record.rs2_ptr);
+        adapter_row.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
+        adapter_row.rd_ptr = F::from_canonical_u32(record.rd_ptr);
+
+        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
+        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+    }
+}
+
+impl<F> AdapterExecutorE1<F> for Rv32MultAdapterStep
+where
+    F: PrimeField32,
+{
+    // TODO(ayush): directly use u32
+    type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
+    type WriteData = [[u8; RV32_REGISTER_NUM_LIMBS]; 1];
+
+    #[inline(always)]
+    fn read<Ctx>(
+        &self,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+        let Instruction { b, c, d, .. } = instruction;
+
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+
+        let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
+            memory_read_from_state(state, RV32_REGISTER_AS, b.as_canonical_u32());
+        let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
+            memory_read_from_state(state, RV32_REGISTER_AS, c.as_canonical_u32());
+
+        [rs1, rs2]
     }
 
-    fn air(&self) -> &Self::Air {
-        &self.air
+    #[inline(always)]
+    fn write<Ctx>(
+        &self,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+        rd: Self::WriteData,
+    ) where
+        Ctx: E1E2ExecutionCtx,
+    {
+        let Instruction { a, d, .. } = *instruction;
+
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+
+        memory_write_from_state(state, RV32_REGISTER_AS, a.as_canonical_u32(), rd[0]);
     }
 }

@@ -10,6 +10,7 @@ license.workspace = true
 [dependencies]
 openvm-benchmarks-utils.workspace = true
 openvm-circuit.workspace = true
+openvm-continuations.workspace = true
 openvm-sdk.workspace = true
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true
@@ -37,6 +38,7 @@ tiny-keccak.workspace = true
 derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 num-bigint = { workspace = true, features = ["std", "serde"] }
+rand.workspace = true
 serde.workspace = true
 tracing.workspace = true
 
@@ -55,7 +57,7 @@ jemalloc-prof = ["openvm-sdk/jemalloc-prof"]
 nightly-features = ["openvm-sdk/nightly-features"]
 
 [package.metadata.cargo-shear]
-ignored = ["derive_more"]
+ignored = ["derive_more", "rand"]
 
 [[bin]]
 name = "fib_e2e"

@@ -2,25 +2,27 @@ use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
     iter::{once, zip},
-    marker::PhantomData,
 };
 
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, ExecutionBridge, ExecutionBus, ExecutionState,
-        Result, VecHeapAdapterInterface, VmAdapterAir, VmAdapterChip, VmAdapterInterface,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, ExecutionBridge, ExecutionState,
+        VecHeapAdapterInterface, VmAdapterAir, VmStateMut,
     },
-    system::{
-        memory::{
-            offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryController, OfflineMemory, RecordId,
+    system::memory::{
+        offline_checker::{
+            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+            MemoryWriteBytesAuxRecord,
         },
-        program::ProgramBus,
+        online::{GuestMemory, TracingMemory},
+        MemoryAddress, MemoryAuxColsFactory,
     },
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -29,15 +31,15 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
 use openvm_rv32im_circuit::adapters::{
-    abstract_compose, read_rv32_register, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+    abstract_compose, memory_read_from_state, memory_write_from_state,
+    read_rv32_register_from_state, tracing_read, tracing_write, RV32_CELL_BITS,
+    RV32_REGISTER_NUM_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
 
 /// This adapter reads from R (R <= 2) pointers and writes to 1 pointer.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
@@ -46,89 +48,8 @@ use serde_with::serde_as;
 ///   starting from the addresses in `rs[0]` (and `rs[1]` if `R = 2`).
 /// * Writes take the form of `BLOCKS_PER_WRITE` consecutive writes of size `WRITE_SIZE` to the
 ///   heap, starting from the address in `rd`.
-#[derive(Clone)]
-pub struct Rv32VecHeapAdapterChip<
-    F: Field,
-    const NUM_READS: usize,
-    const BLOCKS_PER_READ: usize,
-    const BLOCKS_PER_WRITE: usize,
-    const READ_SIZE: usize,
-    const WRITE_SIZE: usize,
-> {
-    pub air:
-        Rv32VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-    _marker: PhantomData<F>,
-}
-
-impl<
-        F: PrimeField32,
-        const NUM_READS: usize,
-        const BLOCKS_PER_READ: usize,
-        const BLOCKS_PER_WRITE: usize,
-        const READ_SIZE: usize,
-        const WRITE_SIZE: usize,
-    >
-    Rv32VecHeapAdapterChip<F, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
-{
-    pub fn new(
-        execution_bus: ExecutionBus,
-        program_bus: ProgramBus,
-        memory_bridge: MemoryBridge,
-        address_bits: usize,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-    ) -> Self {
-        assert!(NUM_READS <= 2);
-        assert!(
-            RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits < RV32_CELL_BITS,
-            "address_bits={address_bits} needs to be large enough for high limb range check"
-        );
-        Self {
-            air: Rv32VecHeapAdapterAir {
-                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                memory_bridge,
-                bus: bitwise_lookup_chip.bus(),
-                address_bits,
-            },
-            bitwise_lookup_chip,
-            _marker: PhantomData,
-        }
-    }
-}
-
 #[repr(C)]
-#[serde_as]
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(bound = "F: Field")]
-pub struct Rv32VecHeapReadRecord<
-    F: Field,
-    const NUM_READS: usize,
-    const BLOCKS_PER_READ: usize,
-    const READ_SIZE: usize,
-> {
-    /// Read register value from address space e=1
-    #[serde_as(as = "[_; NUM_READS]")]
-    pub rs: [RecordId; NUM_READS],
-    /// Read register value from address space d=1
-    pub rd: RecordId,
-
-    pub rd_val: F,
-
-    #[serde_as(as = "[[_; BLOCKS_PER_READ]; NUM_READS]")]
-    pub reads: [[RecordId; BLOCKS_PER_READ]; NUM_READS],
-}
-
-#[repr(C)]
-#[serde_as]
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Rv32VecHeapWriteRecord<const BLOCKS_PER_WRITE: usize, const WRITE_SIZE: usize> {
-    pub from_state: ExecutionState<u32>,
-    #[serde_as(as = "[_; BLOCKS_PER_WRITE]")]
-    pub writes: [RecordId; BLOCKS_PER_WRITE],
-}
-
-#[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, Debug)]
 pub struct Rv32VecHeapAdapterCols<
     T,
     const NUM_READS: usize,
@@ -346,29 +267,67 @@ impl<
     }
 }
 
+// Intermediate type that should not be copied or cloned and should be directly written to
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct Rv32VecHeapAdapterRecord<
+    const NUM_READS: usize,
+    const BLOCKS_PER_READ: usize,
+    const BLOCKS_PER_WRITE: usize,
+    const READ_SIZE: usize,
+    const WRITE_SIZE: usize,
+> {
+    pub from_pc: u32,
+    pub from_timestamp: u32,
+
+    pub rs_ptrs: [u32; NUM_READS],
+    pub rd_ptr: u32,
+
+    pub rs_vals: [u32; NUM_READS],
+    pub rd_val: u32,
+
+    pub rs_read_aux: [MemoryReadAuxRecord; NUM_READS],
+    pub rd_read_aux: MemoryReadAuxRecord,
+
+    pub reads_aux: [[MemoryReadAuxRecord; BLOCKS_PER_READ]; NUM_READS],
+    pub writes_aux: [MemoryWriteBytesAuxRecord<WRITE_SIZE>; BLOCKS_PER_WRITE],
+}
+
+#[derive(derive_new::new)]
+pub struct Rv32VecHeapAdapterStep<
+    const NUM_READS: usize,
+    const BLOCKS_PER_READ: usize,
+    const BLOCKS_PER_WRITE: usize,
+    const READ_SIZE: usize,
+    const WRITE_SIZE: usize,
+> {
+    pointer_max_bits: usize,
+    // TODO(arayi): use reference to bitwise lookup chip with lifetimes instead
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+}
+
 impl<
         F: PrimeField32,
+        CTX,
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
-    > VmAdapterChip<F>
-    for Rv32VecHeapAdapterChip<
+    > AdapterTraceStep<F, CTX>
+    for Rv32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+{
+    const WIDTH: usize = Rv32VecHeapAdapterCols::<
         F,
         NUM_READS,
         BLOCKS_PER_READ,
         BLOCKS_PER_WRITE,
         READ_SIZE,
         WRITE_SIZE,
-    >
-{
-    type ReadRecord = Rv32VecHeapReadRecord<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>;
-    type WriteRecord = Rv32VecHeapWriteRecord<BLOCKS_PER_WRITE, WRITE_SIZE>;
-    type Air =
-        Rv32VecHeapAdapterAir<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>;
-    type Interface = VecHeapAdapterInterface<
-        F,
+    >::width();
+    type ReadData = [[[u8; READ_SIZE]; BLOCKS_PER_READ]; NUM_READS];
+    type WriteData = [[u8; WRITE_SIZE]; BLOCKS_PER_WRITE];
+    type RecordMut<'a> = &'a mut Rv32VecHeapAdapterRecord<
         NUM_READS,
         BLOCKS_PER_READ,
         BLOCKS_PER_WRITE,
@@ -376,171 +335,280 @@ impl<
         WRITE_SIZE,
     >;
 
-    fn preprocess(
-        &mut self,
-        memory: &mut MemoryController<F>,
+    #[inline(always)]
+    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+        record.from_pc = pc;
+        record.from_timestamp = memory.timestamp;
+    }
+
+    fn read(
+        &self,
+        memory: &mut TracingMemory<F>,
         instruction: &Instruction<F>,
-    ) -> Result<(
-        <Self::Interface as VmAdapterInterface<F>>::Reads,
-        Self::ReadRecord,
-    )> {
-        let Instruction { a, b, c, d, e, .. } = *instruction;
+        record: &mut &mut Rv32VecHeapAdapterRecord<
+            NUM_READS,
+            BLOCKS_PER_READ,
+            BLOCKS_PER_WRITE,
+            READ_SIZE,
+            WRITE_SIZE,
+        >,
+    ) -> Self::ReadData {
+        let &Instruction { a, b, c, d, e, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
         // Read register values
-        let mut rs_vals = [0; NUM_READS];
-        let rs_records: [_; NUM_READS] = from_fn(|i| {
-            let addr = if i == 0 { b } else { c };
-            let (record, val) = read_rv32_register(memory, d, addr);
-            rs_vals[i] = val;
-            record
+        record.rs_vals = from_fn(|i| {
+            record.rs_ptrs[i] = if i == 0 { b } else { c }.as_canonical_u32();
+            u32::from_le_bytes(tracing_read(
+                memory,
+                RV32_REGISTER_AS,
+                record.rs_ptrs[i],
+                &mut record.rs_read_aux[i].prev_timestamp,
+            ))
         });
-        let (rd_record, rd_val) = read_rv32_register(memory, d, a);
+
+        record.rd_ptr = a.as_canonical_u32();
+        record.rd_val = u32::from_le_bytes(tracing_read(
+            memory,
+            RV32_REGISTER_AS,
+            a.as_canonical_u32(),
+            &mut record.rd_read_aux.prev_timestamp,
+        ));
 
         // Read memory values
-        let read_records = rs_vals.map(|address| {
+        from_fn(|i| {
             assert!(
-                address as usize + READ_SIZE * BLOCKS_PER_READ - 1 < (1 << self.air.address_bits)
+                (record.rs_vals[i] + (READ_SIZE * BLOCKS_PER_READ - 1) as u32)
+                    < (1 << self.pointer_max_bits) as u32
             );
-            from_fn(|i| {
-                memory.read::<READ_SIZE>(e, F::from_canonical_u32(address + (i * READ_SIZE) as u32))
+            from_fn(|j| {
+                tracing_read(
+                    memory,
+                    RV32_MEMORY_AS,
+                    record.rs_vals[i] + (j * READ_SIZE) as u32,
+                    &mut record.reads_aux[i][j].prev_timestamp,
+                )
             })
-        });
-        let read_data = read_records.map(|r| r.map(|x| x.1));
-        assert!(rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1 < (1 << self.air.address_bits));
-
-        let record = Rv32VecHeapReadRecord {
-            rs: rs_records,
-            rd: rd_record,
-            rd_val: F::from_canonical_u32(rd_val),
-            reads: read_records.map(|r| r.map(|x| x.0)),
-        };
-
-        Ok((read_data, record))
+        })
     }
 
-    fn postprocess(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-        output: AdapterRuntimeContext<F, Self::Interface>,
-        read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
-        let e = instruction.e;
-        let mut i = 0;
-        let writes = output.writes.map(|write| {
-            let (record_id, _) = memory.write(
-                e,
-                read_record.rd_val + F::from_canonical_u32((i * WRITE_SIZE) as u32),
-                write,
-            );
-            i += 1;
-            record_id
-        });
-
-        Ok((
-            ExecutionState {
-                pc: from_state.pc + DEFAULT_PC_STEP,
-                timestamp: memory.timestamp(),
-            },
-            Self::WriteRecord { from_state, writes },
-        ))
-    }
-
-    fn generate_trace_row(
+    fn write(
         &self,
-        row_slice: &mut [F],
-        read_record: Self::ReadRecord,
-        write_record: Self::WriteRecord,
-        memory: &OfflineMemory<F>,
+        memory: &mut TracingMemory<F>,
+        instruction: &Instruction<F>,
+        data: Self::WriteData,
+        record: &mut &mut Rv32VecHeapAdapterRecord<
+            NUM_READS,
+            BLOCKS_PER_READ,
+            BLOCKS_PER_WRITE,
+            READ_SIZE,
+            WRITE_SIZE,
+        >,
     ) {
-        vec_heap_generate_trace_row_impl(
-            row_slice,
-            &read_record,
-            &write_record,
-            self.bitwise_lookup_chip.clone(),
-            self.air.address_bits,
-            memory,
-        )
-    }
+        debug_assert_eq!(instruction.e.as_canonical_u32(), RV32_MEMORY_AS);
 
-    fn air(&self) -> &Self::Air {
-        &self.air
+        assert!(
+            record.rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1
+                < (1 << self.pointer_max_bits)
+        );
+
+        #[allow(clippy::needless_range_loop)]
+        for i in 0..BLOCKS_PER_WRITE {
+            tracing_write(
+                memory,
+                RV32_MEMORY_AS,
+                record.rd_val + (i * WRITE_SIZE) as u32,
+                data[i],
+                &mut record.writes_aux[i].prev_timestamp,
+                &mut record.writes_aux[i].prev_data,
+            );
+        }
     }
 }
 
-pub(super) fn vec_heap_generate_trace_row_impl<
-    F: PrimeField32,
-    const NUM_READS: usize,
-    const BLOCKS_PER_READ: usize,
-    const BLOCKS_PER_WRITE: usize,
-    const READ_SIZE: usize,
-    const WRITE_SIZE: usize,
->(
-    row_slice: &mut [F],
-    read_record: &Rv32VecHeapReadRecord<F, NUM_READS, BLOCKS_PER_READ, READ_SIZE>,
-    write_record: &Rv32VecHeapWriteRecord<BLOCKS_PER_WRITE, WRITE_SIZE>,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-    address_bits: usize,
-    memory: &OfflineMemory<F>,
-) {
-    let aux_cols_factory = memory.aux_cols_factory();
-    let row_slice: &mut Rv32VecHeapAdapterCols<
-        F,
-        NUM_READS,
-        BLOCKS_PER_READ,
-        BLOCKS_PER_WRITE,
-        READ_SIZE,
-        WRITE_SIZE,
-    > = row_slice.borrow_mut();
-    row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
+impl<
+        F: PrimeField32,
+        CTX,
+        const NUM_READS: usize,
+        const BLOCKS_PER_READ: usize,
+        const BLOCKS_PER_WRITE: usize,
+        const READ_SIZE: usize,
+        const WRITE_SIZE: usize,
+    > AdapterTraceFiller<F, CTX>
+    for Rv32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        let record: &Rv32VecHeapAdapterRecord<
+            NUM_READS,
+            BLOCKS_PER_READ,
+            BLOCKS_PER_WRITE,
+            READ_SIZE,
+            WRITE_SIZE,
+        > = unsafe { get_record_from_slice(&mut adapter_row, ()) };
 
-    let rd = memory.record_by_id(read_record.rd);
-    let rs = read_record
-        .rs
-        .into_iter()
-        .map(|r| memory.record_by_id(r))
-        .collect::<Vec<_>>();
+        let cols: &mut Rv32VecHeapAdapterCols<
+            F,
+            NUM_READS,
+            BLOCKS_PER_READ,
+            BLOCKS_PER_WRITE,
+            READ_SIZE,
+            WRITE_SIZE,
+        > = adapter_row.borrow_mut();
 
-    row_slice.rd_ptr = rd.pointer;
-    row_slice.rd_val.copy_from_slice(rd.data_slice());
-
-    for (i, r) in rs.iter().enumerate() {
-        row_slice.rs_ptr[i] = r.pointer;
-        row_slice.rs_val[i].copy_from_slice(r.data_slice());
-        aux_cols_factory.generate_read_aux(r, &mut row_slice.rs_read_aux[i]);
-    }
-
-    aux_cols_factory.generate_read_aux(rd, &mut row_slice.rd_read_aux);
-
-    for (i, reads) in read_record.reads.iter().enumerate() {
-        for (j, &x) in reads.iter().enumerate() {
-            let record = memory.record_by_id(x);
-            aux_cols_factory.generate_read_aux(record, &mut row_slice.reads_aux[i][j]);
+        // Range checks:
+        // **NOTE**: Must do the range checks before overwriting the records
+        debug_assert!(self.pointer_max_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
+        let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits;
+        const MSL_SHIFT: usize = RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
+        if NUM_READS > 1 {
+            self.bitwise_lookup_chip.request_range(
+                (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
+                (record.rs_vals[1] >> MSL_SHIFT) << limb_shift_bits,
+            );
+            self.bitwise_lookup_chip.request_range(
+                (record.rd_val >> MSL_SHIFT) << limb_shift_bits,
+                (record.rd_val >> MSL_SHIFT) << limb_shift_bits,
+            );
+        } else {
+            self.bitwise_lookup_chip.request_range(
+                (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
+                (record.rd_val >> MSL_SHIFT) << limb_shift_bits,
+            );
         }
-    }
 
-    for (i, &w) in write_record.writes.iter().enumerate() {
-        let record = memory.record_by_id(w);
-        aux_cols_factory.generate_write_aux(record, &mut row_slice.writes_aux[i]);
-    }
+        let timestamp_delta = NUM_READS + 1 + NUM_READS * BLOCKS_PER_READ + BLOCKS_PER_WRITE;
+        let mut timestamp = record.from_timestamp + timestamp_delta as u32;
+        let mut timestamp_mm = || {
+            timestamp -= 1;
+            timestamp
+        };
 
-    // Range checks:
-    let need_range_check: Vec<u32> = rs
-        .iter()
-        .chain(std::iter::repeat_n(&rd, 2))
-        .map(|record| {
-            record
-                .data_at(RV32_REGISTER_NUM_LIMBS - 1)
-                .as_canonical_u32()
+        // **NOTE**: Must iterate everything in reverse order to avoid overwriting the records
+        record
+            .writes_aux
+            .iter()
+            .rev()
+            .zip(cols.writes_aux.iter_mut().rev())
+            .for_each(|(write, cols_write)| {
+                cols_write.set_prev_data(write.prev_data.map(F::from_canonical_u8));
+                mem_helper.fill(write.prev_timestamp, timestamp_mm(), cols_write.as_mut());
+            });
+
+        record
+            .reads_aux
+            .iter()
+            .zip(cols.reads_aux.iter_mut())
+            .rev()
+            .for_each(|(reads, cols_reads)| {
+                reads
+                    .iter()
+                    .zip(cols_reads.iter_mut())
+                    .rev()
+                    .for_each(|(read, cols_read)| {
+                        mem_helper.fill(read.prev_timestamp, timestamp_mm(), cols_read.as_mut());
+                    });
+            });
+
+        mem_helper.fill(
+            record.rd_read_aux.prev_timestamp,
+            timestamp_mm(),
+            cols.rd_read_aux.as_mut(),
+        );
+
+        record
+            .rs_read_aux
+            .iter()
+            .zip(cols.rs_read_aux.iter_mut())
+            .rev()
+            .for_each(|(aux, cols_aux)| {
+                mem_helper.fill(aux.prev_timestamp, timestamp_mm(), cols_aux.as_mut());
+            });
+
+        cols.rd_val = record.rd_val.to_le_bytes().map(F::from_canonical_u8);
+        cols.rs_val
+            .iter_mut()
+            .rev()
+            .zip(record.rs_vals.iter().rev())
+            .for_each(|(cols_val, val)| {
+                *cols_val = val.to_le_bytes().map(F::from_canonical_u8);
+            });
+        cols.rd_ptr = F::from_canonical_u32(record.rd_ptr);
+        cols.rs_ptr
+            .iter_mut()
+            .rev()
+            .zip(record.rs_ptrs.iter().rev())
+            .for_each(|(cols_ptr, ptr)| {
+                *cols_ptr = F::from_canonical_u32(*ptr);
+            });
+        cols.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
+        cols.from_state.pc = F::from_canonical_u32(record.from_pc);
+    }
+}
+
+impl<
+        F: PrimeField32,
+        const NUM_READS: usize,
+        const BLOCKS_PER_READ: usize,
+        const BLOCKS_PER_WRITE: usize,
+        const READ_SIZE: usize,
+        const WRITE_SIZE: usize,
+    > AdapterExecutorE1<F>
+    for Rv32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+{
+    type ReadData = [[[u8; READ_SIZE]; BLOCKS_PER_READ]; NUM_READS];
+    type WriteData = [[u8; WRITE_SIZE]; BLOCKS_PER_WRITE];
+
+    fn read<Ctx>(
+        &self,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+        let Instruction { b, c, d, e, .. } = *instruction;
+
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
+
+        // Read register values
+        let rs_vals = from_fn(|i| {
+            let addr = if i == 0 { b } else { c };
+            read_rv32_register_from_state(state, addr.as_canonical_u32())
+        });
+
+        // Read memory values
+        rs_vals.map(|address| {
+            assert!(
+                address as usize + READ_SIZE * BLOCKS_PER_READ - 1 < (1 << self.pointer_max_bits)
+            );
+            from_fn(|i| {
+                memory_read_from_state(state, RV32_MEMORY_AS, address + (i * READ_SIZE) as u32)
+            })
         })
-        .collect();
-    debug_assert!(address_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);
-    let limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits;
-    for pair in need_range_check.chunks_exact(2) {
-        bitwise_lookup_chip.request_range(pair[0] << limb_shift_bits, pair[1] << limb_shift_bits);
+    }
+
+    fn write<Ctx>(
+        &self,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+        data: Self::WriteData,
+    ) where
+        Ctx: E1E2ExecutionCtx,
+    {
+        let Instruction { a, .. } = *instruction;
+        let rd_val = read_rv32_register_from_state(state, a.as_canonical_u32());
+        assert!(rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1 < (1 << self.pointer_max_bits));
+
+        for (i, block) in data.into_iter().enumerate() {
+            memory_write_from_state(
+                state,
+                RV32_MEMORY_AS,
+                rd_val + (i * WRITE_SIZE) as u32,
+                block,
+            );
+        }
     }
 }

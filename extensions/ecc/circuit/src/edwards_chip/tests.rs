@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
 use openvm_ecc_transpiler::Rv32EdwardsOpcode;
 use openvm_instructions::{riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_mod_circuit_builder::{test_utils::biguint_to_limbs, ExprBuilderConfig, FieldExpr};
-use openvm_rv32_adapters::{rv32_write_heap_default, Rv32VecHeapAdapterChip};
+use openvm_rv32_adapters::rv32_write_heap_default;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
@@ -111,24 +111,21 @@ fn test_add() {
     };
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let adapter = Rv32VecHeapAdapterChip::<F, 2, 2, 2, BLOCK_SIZE, BLOCK_SIZE>::new(
-        tester.execution_bus(),
-        tester.program_bus(),
+
+    let mut chip = TeAddChip::<F, 2, BLOCK_SIZE>::new(
+        tester.execution_bridge(),
         tester.memory_bridge(),
+        tester.memory_helper(),
         tester.address_bits(),
-        bitwise_chip.clone(),
-    );
-    let mut chip = TeAddChip::new(
-        adapter,
         config,
         Rv32EdwardsOpcode::CLASS_OFFSET,
+        bitwise_chip.clone(),
+        tester.range_checker(),
         Edwards25519_A.clone(),
         Edwards25519_D.clone(),
-        tester.range_checker(),
-        tester.offline_memory_mutex_arc(),
     );
-    //assert_eq!(chip.0.core.expr().builder.num_variables, 12);
-    assert_eq!(chip.0.core.air.expr.builder.num_variables, 12);
+
+    assert_eq!(chip.0.step.expr.builder.num_variables, 12);
 
     let (p1_x, p1_y) = SampleEcPoints[0].clone();
     let (p2_x, p2_y) = SampleEcPoints[1].clone();
@@ -144,17 +141,14 @@ fn test_add() {
 
     let r = chip
         .0
-        .core
-        //.expr()
-        .air
+        .step
         .expr
         .execute(vec![p1_x, p1_y, p2_x, p2_y], vec![true]);
     assert_eq!(r.len(), 12);
 
     let outputs = chip
         .0
-        .core
-        .air
+        .step
         .output_indices()
         .iter()
         .map(|i| &r[*i])
@@ -162,15 +156,14 @@ fn test_add() {
     assert_eq!(outputs[0], &SampleEcPoints[2].0);
     assert_eq!(outputs[1], &SampleEcPoints[2].1);
 
-    //let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(chip.0.core.expr()).try_into().unwrap();
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.core.air.expr).try_into().unwrap();
+    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.step.expr).try_into().unwrap();
     let mut one_limbs = [BabyBear::ONE; NUM_LIMBS];
     one_limbs[0] = BabyBear::ONE;
     let setup_instruction = rv32_write_heap_default(
         &mut tester,
         vec![prime_limbs, *Edwards25519_A_LIMBS],
         vec![*Edwards25519_D_LIMBS],
-        chip.0.core.air.offset + Rv32EdwardsOpcode::SETUP_TE_ADD as usize,
+        chip.0.step.offset + Rv32EdwardsOpcode::SETUP_TE_ADD as usize,
     );
     tester.execute(&mut chip, &setup_instruction);
 
@@ -178,7 +171,7 @@ fn test_add() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![p2_x_limbs, p2_y_limbs],
-        chip.0.core.air.offset + Rv32EdwardsOpcode::TE_ADD as usize,
+        chip.0.step.offset + Rv32EdwardsOpcode::TE_ADD as usize,
     );
 
     tester.execute(&mut chip, &instruction);

@@ -6,8 +6,8 @@ use openvm_circuit::{
             exe::VmExe, instruction::Instruction, program::Program, LocalOpcode,
             SystemOpcode::TERMINATE,
         },
-        ContinuationVmProof, SingleSegmentVmExecutor, VirtualMachine, VmComplexTraceHeights,
-        VmConfig, VmExecutor,
+        ContinuationVmProof, InsExecutorE1, SingleSegmentVmExecutor, VirtualMachine,
+        VmComplexTraceHeights, VmConfig, VmExecutor,
     },
     system::program::trace::VmCommittedExe,
     utils::next_power_of_two_or_zero,
@@ -21,6 +21,7 @@ use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_native_recursion::hints::Hintable;
 use openvm_rv32im_circuit::Rv32ImConfig;
+use openvm_stark_backend::config::Val;
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
@@ -48,6 +49,8 @@ pub(super) fn compute_root_proof_heights(
     root_vm_config: NativeConfig,
     root_exe: VmExe<F>,
     dummy_internal_proof: &Proof<SC>,
+    widths: &[usize],
+    interactions: &[usize],
 ) -> (Vec<usize>, VmComplexTraceHeights) {
     let num_user_public_values = root_vm_config.system.num_public_values - 2 * DIGEST_SIZE;
     let root_input = RootVmVerifierInput {
@@ -55,8 +58,11 @@ pub(super) fn compute_root_proof_heights(
         public_values: vec![F::ZERO; num_user_public_values],
     };
     let vm = SingleSegmentVmExecutor::new(root_vm_config);
+    let max_trace_heights = vm
+        .execute_metered(root_exe.clone(), root_input.write(), widths, interactions)
+        .unwrap();
     let res = vm
-        .execute_and_compute_heights(root_exe, root_input.write())
+        .execute_and_compute_heights(root_exe, root_input.write(), &max_trace_heights)
         .unwrap();
     let air_heights: Vec<_> = res
         .air_heights
@@ -104,7 +110,7 @@ pub fn dummy_leaf_proof<VC: VmConfig<F>>(
     overridden_heights: Option<VmComplexTraceHeights>,
 ) -> Proof<SC>
 where
-    VC::Executor: Chip<SC>,
+    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
     VC::Periphery: Chip<SC>,
 {
     let app_proof = dummy_app_proof_impl(app_vm_pk.clone(), overridden_heights);
@@ -168,7 +174,7 @@ fn dummy_app_proof_impl<VC: VmConfig<F>>(
     overridden_heights: Option<VmComplexTraceHeights>,
 ) -> ContinuationVmProof<SC>
 where
-    VC::Executor: Chip<SC>,
+    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
     VC::Periphery: Chip<SC>,
 {
     let fri_params = app_vm_pk.fri_params;
@@ -179,12 +185,21 @@ where
     } else {
         // We first execute once to get the trace heights from dummy_exe, then pad to powers of 2
         // (forcing trace height 0 to 1)
+        let vm_vk = app_vm_pk.vm_pk.get_vk();
         let executor = VmExecutor::new(app_vm_pk.vm_config.clone());
+        let segments = executor
+            .execute_metered(
+                dummy_exe.exe.clone(),
+                vec![],
+                &vm_vk.total_widths(),
+                &vm_vk.num_interactions(),
+            )
+            .unwrap();
+        assert_eq!(segments.len(), 1, "dummy exe should have only 1 segment");
         let mut results = executor
-            .execute_segments(dummy_exe.exe.clone(), vec![])
+            .execute_segments(dummy_exe.exe.clone(), vec![], &segments)
             .unwrap();
         // ASSUMPTION: the dummy exe has only 1 segment
-        assert_eq!(results.len(), 1, "dummy exe should have only 1 segment");
         let mut result = results.pop().unwrap();
         result.chip_complex.finalize_memory();
         let mut vm_heights = result.chip_complex.get_internal_trace_heights();
@@ -192,12 +207,8 @@ where
         vm_heights
     };
     // For the dummy proof, we must override the trace heights.
-    let app_prover =
-        VmLocalProver::<SC, VC, BabyBearPoseidon2Engine>::new_with_overridden_trace_heights(
-            app_vm_pk,
-            dummy_exe,
-            Some(overridden_heights),
-        );
+    let app_prover = VmLocalProver::<SC, VC, BabyBearPoseidon2Engine>::new(app_vm_pk, dummy_exe)
+        .with_overridden_continuation_trace_heights(overridden_heights);
     ContinuationVmProver::prove(&app_prover, vec![])
 }
 

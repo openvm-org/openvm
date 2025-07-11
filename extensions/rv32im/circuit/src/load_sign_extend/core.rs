@@ -3,15 +3,25 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::{
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
+        AdapterTraceStep, EmptyAdapterCoreLayout, RecordArena, Result, StepExecutorE1, TraceFiller,
+        TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+    },
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::{
     utils::select,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+    AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -19,8 +29,6 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use serde_big_array::BigArray;
 
 use crate::adapters::LoadStoreInstruction;
 
@@ -46,20 +54,7 @@ pub struct LoadSignExtendCoreCols<T, const NUM_CELLS: usize> {
     pub prev_data: [T; NUM_CELLS],
 }
 
-#[repr(C)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound = "F: Serialize + DeserializeOwned")]
-pub struct LoadSignExtendCoreRecord<F, const NUM_CELLS: usize> {
-    #[serde(with = "BigArray")]
-    pub shifted_read_data: [F; NUM_CELLS],
-    #[serde(with = "BigArray")]
-    pub prev_data: [F; NUM_CELLS],
-    pub opcode: Rv32LoadStoreOpcode,
-    pub shift_amount: u32,
-    pub most_sig_bit: bool,
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct LoadSignExtendCoreAir<const NUM_CELLS: usize, const LIMB_BITS: usize> {
     pub range_bus: VariableRangeCheckerBus,
 }
@@ -178,80 +173,38 @@ where
     }
 }
 
-pub struct LoadSignExtendCoreChip<const NUM_CELLS: usize, const LIMB_BITS: usize> {
-    pub air: LoadSignExtendCoreAir<NUM_CELLS, LIMB_BITS>,
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct LoadSignExtendCoreRecord<const NUM_CELLS: usize> {
+    pub is_byte: bool,
+    pub shift_amount: u8,
+    pub read_data: [u8; NUM_CELLS],
+    pub prev_data: [u8; NUM_CELLS],
+}
+
+#[derive(derive_new::new)]
+pub struct LoadSignExtendStep<A, const NUM_CELLS: usize, const LIMB_BITS: usize> {
+    adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<const NUM_CELLS: usize, const LIMB_BITS: usize> LoadSignExtendCoreChip<NUM_CELLS, LIMB_BITS> {
-    pub fn new(range_checker_chip: SharedVariableRangeCheckerChip) -> Self {
-        Self {
-            air: LoadSignExtendCoreAir::<NUM_CELLS, LIMB_BITS> {
-                range_bus: range_checker_chip.bus(),
-            },
-            range_checker_chip,
-        }
-    }
-}
-
-impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_CELLS: usize, const LIMB_BITS: usize>
-    VmCoreChip<F, I> for LoadSignExtendCoreChip<NUM_CELLS, LIMB_BITS>
+impl<F, CTX, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceStep<F, CTX>
+    for LoadSignExtendStep<A, NUM_CELLS, LIMB_BITS>
 where
-    I::Reads: Into<([[F; NUM_CELLS]; 2], F)>,
-    I::Writes: From<[[F; NUM_CELLS]; 1]>,
+    F: PrimeField32,
+    A: 'static
+        + for<'a> AdapterTraceStep<
+            F,
+            CTX,
+            ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
+            WriteData = [u32; NUM_CELLS],
+        >,
 {
-    type Record = LoadSignExtendCoreRecord<F, NUM_CELLS>;
-    type Air = LoadSignExtendCoreAir<NUM_CELLS, LIMB_BITS>;
-
-    #[allow(clippy::type_complexity)]
-    fn execute_instruction(
-        &self,
-        instruction: &Instruction<F>,
-        _from_pc: u32,
-        reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(
-            instruction
-                .opcode
-                .local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
-        );
-
-        let (data, shift_amount) = reads.into();
-        let shift_amount = shift_amount.as_canonical_u32();
-        let write_data: [F; NUM_CELLS] = run_write_data_sign_extend::<_, NUM_CELLS, LIMB_BITS>(
-            local_opcode,
-            data[1],
-            data[0],
-            shift_amount,
-        );
-        let output = AdapterRuntimeContext::without_pc([write_data]);
-
-        let most_sig_limb = match local_opcode {
-            LOADB => write_data[0],
-            LOADH => write_data[NUM_CELLS / 2 - 1],
-            _ => unreachable!(),
-        }
-        .as_canonical_u32();
-
-        let most_sig_bit = most_sig_limb & (1 << (LIMB_BITS - 1));
-        self.range_checker_chip
-            .add_count(most_sig_limb - most_sig_bit, LIMB_BITS - 1);
-
-        let read_shift = shift_amount & 2;
-
-        Ok((
-            output,
-            LoadSignExtendCoreRecord {
-                opcode: local_opcode,
-                most_sig_bit: most_sig_bit != 0,
-                prev_data: data[0],
-                shifted_read_data: array::from_fn(|i| {
-                    data[1][(i + read_shift as usize) % NUM_CELLS]
-                }),
-                shift_amount,
-            },
-        ))
-    }
+    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
+    type RecordMut<'a> = (
+        A::RecordMut<'a>,
+        &'a mut LoadSignExtendCoreRecord<NUM_CELLS>,
+    );
 
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
@@ -260,53 +213,163 @@ where
         )
     }
 
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let core_cols: &mut LoadSignExtendCoreCols<F, NUM_CELLS> = row_slice.borrow_mut();
-        let opcode = record.opcode;
-        let shift = record.shift_amount;
-        core_cols.opcode_loadb_flag0 = F::from_bool(opcode == LOADB && (shift & 1) == 0);
-        core_cols.opcode_loadb_flag1 = F::from_bool(opcode == LOADB && (shift & 1) == 1);
-        core_cols.opcode_loadh_flag = F::from_bool(opcode == LOADH);
-        core_cols.shift_most_sig_bit = F::from_canonical_u32((shift & 2) >> 1);
-        core_cols.data_most_sig_bit = F::from_bool(record.most_sig_bit);
-        core_cols.prev_data = record.prev_data;
-        core_cols.shifted_read_data = record.shifted_read_data;
-    }
+    fn execute<'buf, RA>(
+        &mut self,
+        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        instruction: &Instruction<F>,
+        arena: &'buf mut RA,
+    ) -> Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
+        let Instruction { opcode, .. } = instruction;
 
-    fn air(&self) -> &Self::Air {
-        &self.air
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(
+            opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        );
+
+        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+
+        A::start(*state.pc, state.memory, &mut adapter_record);
+
+        let tmp = self
+            .adapter
+            .read(state.memory, instruction, &mut adapter_record);
+
+        core_record.is_byte = local_opcode == LOADB;
+        core_record.prev_data = tmp.0 .0.map(|x| x as u8);
+        core_record.read_data = tmp.0 .1;
+        core_record.shift_amount = tmp.1;
+
+        let write_data = run_write_data_sign_extend(
+            local_opcode,
+            core_record.read_data,
+            core_record.shift_amount as usize,
+        );
+
+        self.adapter.write(
+            state.memory,
+            instruction,
+            write_data.map(u32::from),
+            &mut adapter_record,
+        );
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 }
 
-pub(super) fn run_write_data_sign_extend<
+impl<F, CTX, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceFiller<F, CTX>
+    for LoadSignExtendStep<A, NUM_CELLS, LIMB_BITS>
+where
     F: PrimeField32,
-    const NUM_CELLS: usize,
-    const LIMB_BITS: usize,
->(
+    A: 'static + AdapterTraceFiller<F, CTX>,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let record: &LoadSignExtendCoreRecord<NUM_CELLS> =
+            unsafe { get_record_from_slice(&mut core_row, ()) };
+
+        let core_row: &mut LoadSignExtendCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
+
+        let shift = record.shift_amount;
+        let most_sig_limb = if record.is_byte {
+            record.read_data[shift as usize]
+        } else {
+            record.read_data[NUM_CELLS / 2 - 1 + shift as usize]
+        };
+
+        let most_sig_bit = most_sig_limb & (1 << 7);
+        self.range_checker_chip
+            .add_count((most_sig_limb - most_sig_bit) as u32, 7);
+
+        core_row.prev_data = record.prev_data.map(F::from_canonical_u8);
+        core_row.shifted_read_data = record.read_data.map(F::from_canonical_u8);
+        core_row.shifted_read_data.rotate_left((shift & 2) as usize);
+
+        core_row.data_most_sig_bit = F::from_bool(most_sig_bit != 0);
+        core_row.shift_most_sig_bit = F::from_bool(shift & 2 == 2);
+        core_row.opcode_loadh_flag = F::from_bool(!record.is_byte);
+        core_row.opcode_loadb_flag1 = F::from_bool(record.is_byte && ((shift & 1) == 1));
+        core_row.opcode_loadb_flag0 = F::from_bool(record.is_byte && ((shift & 1) == 0));
+    }
+}
+impl<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
+    for LoadSignExtendStep<A, NUM_CELLS, LIMB_BITS>
+where
+    F: PrimeField32,
+    A: 'static
+        + AdapterExecutorE1<
+            F,
+            ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
+            WriteData = [u32; NUM_CELLS],
+        >,
+{
+    fn execute_e1<Ctx>(
+        &self,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+        let Instruction { opcode, .. } = instruction;
+
+        let ((_prev_data, read_data), shift_amount) = self.adapter.read(state, instruction);
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(
+            opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        );
+        let write_data = run_write_data_sign_extend(local_opcode, read_data, shift_amount as usize);
+
+        self.adapter
+            .write(state, instruction, write_data.map(u32::from));
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<()> {
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += 1;
+
+        Ok(())
+    }
+}
+
+// Returns write_data
+#[inline(always)]
+pub(super) fn run_write_data_sign_extend<const NUM_CELLS: usize>(
     opcode: Rv32LoadStoreOpcode,
-    read_data: [F; NUM_CELLS],
-    _prev_data: [F; NUM_CELLS],
-    shift: u32,
-) -> [F; NUM_CELLS] {
-    let shift = shift as usize;
-    let mut write_data = read_data;
+    read_data: [u8; NUM_CELLS],
+    shift: usize,
+) -> [u8; NUM_CELLS] {
     match (opcode, shift) {
         (LOADH, 0) | (LOADH, 2) => {
-            let ext = read_data[NUM_CELLS / 2 - 1 + shift].as_canonical_u32();
-            let ext = (ext >> (LIMB_BITS - 1)) * ((1 << LIMB_BITS) - 1);
-            for cell in write_data.iter_mut().take(NUM_CELLS).skip(NUM_CELLS / 2) {
-                *cell = F::from_canonical_u32(ext);
-            }
-            write_data[0..NUM_CELLS / 2]
-                .copy_from_slice(&read_data[shift..(NUM_CELLS / 2 + shift)]);
+            let ext = (read_data[NUM_CELLS / 2 - 1 + shift] >> 7) * u8::MAX;
+            array::from_fn(|i| {
+                if i < NUM_CELLS / 2 {
+                    read_data[i + shift]
+                } else {
+                    ext
+                }
+            })
         }
         (LOADB, 0) | (LOADB, 1) | (LOADB, 2) | (LOADB, 3) => {
-            let ext = read_data[shift].as_canonical_u32();
-            let ext = (ext >> (LIMB_BITS - 1)) * ((1 << LIMB_BITS) - 1);
-            for cell in write_data.iter_mut().take(NUM_CELLS).skip(1) {
-                *cell = F::from_canonical_u32(ext);
-            }
-            write_data[0] = read_data[shift];
+            let ext = (read_data[shift] >> 7) * u8::MAX;
+            array::from_fn(|i| {
+                if i == 0 {
+                    read_data[i + shift]
+                } else {
+                    ext
+                }
+            })
         }
         // Currently the adapter AIR requires `ptr_val` to be aligned to the data size in bytes.
         // The circuit requires that `shift = ptr_val % 4` so that `ptr_val - shift` is a multiple of 4.
@@ -314,6 +377,5 @@ pub(super) fn run_write_data_sign_extend<
         _ => unreachable!(
             "unaligned memory access not supported by this execution environment: {opcode:?}, shift: {shift}"
         ),
-    };
-    write_data
+    }
 }

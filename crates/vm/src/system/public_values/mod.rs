@@ -1,8 +1,10 @@
+use core::PublicValuesCoreStep;
+
 use crate::{
-    arch::{VmAirWrapper, VmChipWrapper},
+    arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper},
     system::{
-        native_adapter::{NativeAdapterAir, NativeAdapterChip},
-        public_values::core::{PublicValuesCoreAir, PublicValuesCoreChip},
+        native_adapter::{NativeAdapterAir, NativeAdapterStep},
+        public_values::core::PublicValuesCoreAir,
     },
 };
 
@@ -14,5 +16,6 @@ pub mod core;
 mod tests;
 
 pub type PublicValuesAir = VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir>;
+pub type PublicValuesStepWithAdapter<F> = PublicValuesCoreStep<NativeAdapterStep<F, 2, 0>, F>;
 pub type PublicValuesChip<F> =
-    VmChipWrapper<F, NativeAdapterChip<F, 2, 0>, PublicValuesCoreChip<F>>;
+    NewVmChipWrapper<F, PublicValuesAir, PublicValuesStepWithAdapter<F>, MatrixRecordArena<F>>;

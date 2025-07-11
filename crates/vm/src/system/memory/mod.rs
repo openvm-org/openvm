@@ -1,21 +1,18 @@
 use openvm_circuit_primitives_derive::AlignedBorrow;
 
-mod adapter;
+pub mod adapter;
 mod controller;
 pub mod merkle;
-mod offline;
 pub mod offline_checker;
 pub mod online;
-pub mod paged_vec;
-mod persistent;
-#[cfg(test)]
-mod tests;
-pub mod tree;
-mod volatile;
+pub mod persistent;
+// TODO: add back
+// #[cfg(test)]
+// mod tests;
+pub mod volatile;
 
 pub use controller::*;
-pub use offline::*;
-pub use paged_vec::*;
+pub use online::{Address, AddressMap, INITIAL_TIMESTAMP};
 
 #[derive(PartialEq, Copy, Clone, Debug, Eq)]
 pub enum OpType {

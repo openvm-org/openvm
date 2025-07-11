@@ -23,8 +23,6 @@ num-traits.workspace = true
 tracing.workspace = true
 
 itertools.workspace = true
-serde = { workspace = true, features = ["derive"] }
-serde_with.workspace = true
 
 [dev-dependencies]
 openvm-circuit-primitives = { workspace = true }
@@ -35,4 +33,8 @@ openvm-circuit = { workspace = true, features = ["test-utils"] }
 [features]
 default = []
 parallel = ["openvm-stark-backend/parallel"]
-test-utils = ["dep:halo2curves-axiom", "dep:openvm-pairing-guest"]
+test-utils = [
+    "dep:halo2curves-axiom",
+    "dep:openvm-pairing-guest",
+    "openvm-circuit/test-utils",
+]

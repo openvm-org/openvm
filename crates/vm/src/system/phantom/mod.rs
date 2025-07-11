@@ -1,6 +1,6 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    sync::{Arc, Mutex, OnceLock},
+    sync::Arc,
 };
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -19,15 +19,17 @@ use openvm_stark_backend::{
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
     AirRef, Chip, ChipUsageGetter,
 };
+use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-use super::memory::MemoryController;
+use super::memory::{online::GuestMemory, MemoryController};
 use crate::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor,
-        PcIncOrSet, PhantomSubExecutor, Streams,
+        execution_mode::{e1::E1Ctx, metered::MeteredCtx, E1E2ExecutionCtx},
+        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutorE1,
+        InstructionExecutor, PcIncOrSet, PhantomSubExecutor, Streams, VmStateMut,
     },
     system::program::ProgramBus,
 };
@@ -91,7 +93,6 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
 pub struct PhantomChip<F> {
     pub air: PhantomAir,
     pub rows: Vec<PhantomCols<F>>,
-    streams: OnceLock<Arc<Mutex<Streams<F>>>>,
     phantom_executors: FxHashMap<PhantomDiscriminant, Box<dyn PhantomSubExecutor<F>>>,
 }
 
@@ -103,14 +104,7 @@ impl<F> PhantomChip<F> {
                 phantom_opcode: VmOpcode::from_usize(offset + SystemOpcode::PHANTOM.local_usize()),
             },
             rows: vec![],
-            streams: OnceLock::new(),
             phantom_executors: FxHashMap::default(),
-        }
-    }
-
-    pub fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
-        if self.streams.set(streams).is_err() {
-            panic!("Streams should only be set once");
         }
     }
 
@@ -124,13 +118,19 @@ impl<F> PhantomChip<F> {
     }
 }
 
-impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
-    fn execute(
-        &mut self,
-        memory: &mut MemoryController<F>,
+impl<F> InsExecutorE1<F> for PhantomChip<F>
+where
+    F: PrimeField32,
+{
+    fn execute_e1<Ctx>(
+        &self,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>, ExecutionError> {
+    ) -> Result<(), ExecutionError>
+    where
+        F: PrimeField32,
+        Ctx: E1E2ExecutionCtx,
+    {
         let &Instruction {
             opcode, a, b, c, ..
         } = instruction;
@@ -141,42 +141,82 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
         // If not a system phantom sub-instruction (which is handled in
         // ExecutionSegment), look for a phantom sub-executor to handle it.
         if SysPhantom::from_repr(discriminant.0).is_none() {
-            let sub_executor = self
-                .phantom_executors
-                .get_mut(&discriminant)
-                .ok_or_else(|| ExecutionError::PhantomNotFound {
-                    pc: from_state.pc,
+            let sub_executor = self.phantom_executors.get(&discriminant).ok_or_else(|| {
+                ExecutionError::PhantomNotFound {
+                    pc: *state.pc,
                     discriminant,
-                })?;
-            let mut streams = self.streams.get().unwrap().lock().unwrap();
+                }
+            })?;
+            // TODO(ayush): implement phantom subexecutor for new traits
             sub_executor
-                .as_mut()
+                .as_ref()
                 .phantom_execute(
-                    memory,
-                    &mut streams,
+                    state.memory,
+                    state.streams,
+                    state.rng,
                     discriminant,
-                    a,
-                    b,
+                    a.as_canonical_u32(),
+                    b.as_canonical_u32(),
                     (c_u32 >> 16) as u16,
                 )
                 .map_err(|e| ExecutionError::Phantom {
-                    pc: from_state.pc,
+                    pc: *state.pc,
                     discriminant,
                     inner: e,
                 })?;
         }
 
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> Result<(), ExecutionError> {
+        self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += 1;
+
+        Ok(())
+    }
+
+    fn set_trace_height(&mut self, _height: usize) {}
+}
+
+impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
+    fn execute(
+        &mut self,
+        memory: &mut MemoryController<F>,
+        streams: &mut Streams<F>,
+        rng: &mut StdRng,
+        instruction: &Instruction<F>,
+        from_state: ExecutionState<u32>,
+    ) -> Result<ExecutionState<u32>, ExecutionError> {
+        let mut pc = from_state.pc;
         self.rows.push(PhantomCols {
-            pc: F::from_canonical_u32(from_state.pc),
-            operands: [a, b, c],
-            timestamp: F::from_canonical_u32(from_state.timestamp),
+            pc: F::from_canonical_u32(pc),
+            operands: [instruction.a, instruction.b, instruction.c],
+            timestamp: F::from_canonical_u32(memory.memory.timestamp),
             is_valid: F::ONE,
         });
+
+        let mut state = VmStateMut {
+            pc: &mut pc,
+            memory: &mut memory.memory.data,
+            streams,
+            rng,
+            ctx: &mut E1Ctx::default(),
+        };
+        self.execute_e1(&mut state, instruction)?;
         memory.increment_timestamp();
-        Ok(ExecutionState::new(
-            from_state.pc + DEFAULT_PC_STEP,
-            from_state.timestamp + 1,
-        ))
+
+        Ok(ExecutionState {
+            pc,
+            timestamp: memory.memory.timestamp,
+        })
     }
 
     fn get_opcode_name(&self, _: usize) -> String {

@@ -4,10 +4,12 @@ use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use once_cell::sync::Lazy;
 use openvm_circuit::{
-    arch::{SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
+    arch::{
+        ExecutionBridge, SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+    },
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
@@ -19,7 +21,6 @@ use openvm_ecc_guest::{
 use openvm_ecc_transpiler::{Rv32EdwardsOpcode, Rv32WeierstrassOpcode};
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
-use openvm_rv32_adapters::Rv32VecHeapAdapterChip;
 use openvm_stark_backend::p3_field::PrimeField32;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
@@ -136,7 +137,7 @@ impl EccExtension {
     }
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, InsExecutorE1)]
 pub enum EccExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
     SwEcAddNeRv32_32(SwAddNeChip<F, 2, 32>),
@@ -171,6 +172,11 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
             program_bus,
             memory_bridge,
         } = builder.system_port();
+
+        let execution_bridge = ExecutionBridge::new(execution_bus, program_bus);
+        let range_checker = builder.system_base().range_checker_chip.clone();
+        let pointer_max_bits = builder.system_config().memory_config.pointer_max_bits;
+
         let bitwise_lu_chip = if let Some(&chip) = builder
             .find_chip::<SharedBitwiseOperationLookupChip<8>>()
             .first()
@@ -182,9 +188,6 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
             inventory.add_periphery_chip(chip.clone());
             chip
         };
-        let offline_memory = builder.system_base().offline_memory();
-        let range_checker = builder.system_base().range_checker_chip.clone();
-        let pointer_bits = builder.system_config().memory_config.pointer_max_bits;
 
         let sw_add_ne_opcodes = (Rv32WeierstrassOpcode::SW_ADD_NE as usize)
             ..=(Rv32WeierstrassOpcode::SETUP_SW_ADD_NE as usize);
@@ -195,6 +198,10 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
             (Rv32EdwardsOpcode::TE_ADD as usize)..=(Rv32EdwardsOpcode::SETUP_TE_ADD as usize);
 
         for (sw_idx, curve) in self.supported_sw_curves.iter().enumerate() {
+            // TODO: Better support for different limb sizes. Currently only 32 or 48 limbs are
+            // supported.
+            let sw_start_offset =
+                Rv32WeierstrassOpcode::CLASS_OFFSET + sw_idx * Rv32WeierstrassOpcode::COUNT;
             let bytes = curve.modulus.bits().div_ceil(8);
             let config32 = ExprBuilderConfig {
                 modulus: curve.modulus.clone(),
@@ -206,23 +213,16 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
                 num_limbs: 48,
                 limb_bits: 8,
             };
-            // TODO: Better support for different limb sizes. Currently only 32 or 48 limbs are
-            // supported.
-            let sw_start_offset =
-                Rv32WeierstrassOpcode::CLASS_OFFSET + sw_idx * Rv32WeierstrassOpcode::COUNT;
             if bytes <= 32 {
                 let sw_add_ne_chip = SwAddNeChip::new(
-                    Rv32VecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
-                        execution_bus,
-                        program_bus,
-                        memory_bridge,
-                        pointer_bits,
-                        bitwise_lu_chip.clone(),
-                    ),
+                    execution_bridge,
+                    memory_bridge,
+                    builder.system_base().memory_controller.helper(),
+                    pointer_max_bits,
                     config32.clone(),
                     sw_start_offset,
+                    bitwise_lu_chip.clone(),
                     range_checker.clone(),
-                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     EccExtensionExecutor::SwEcAddNeRv32_32(sw_add_ne_chip),
@@ -231,18 +231,15 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
                         .map(|x| VmOpcode::from_usize(x + sw_start_offset)),
                 )?;
                 let sw_double_chip = SwDoubleChip::new(
-                    Rv32VecHeapAdapterChip::<F, 1, 2, 2, 32, 32>::new(
-                        execution_bus,
-                        program_bus,
-                        memory_bridge,
-                        pointer_bits,
-                        bitwise_lu_chip.clone(),
-                    ),
-                    range_checker.clone(),
+                    execution_bridge,
+                    memory_bridge,
+                    builder.system_base().memory_controller.helper(),
+                    pointer_max_bits,
                     config32.clone(),
                     sw_start_offset,
+                    bitwise_lu_chip.clone(),
+                    range_checker.clone(),
                     curve.coeffs.a.clone(),
-                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     EccExtensionExecutor::SwEcDoubleRv32_32(sw_double_chip),
@@ -252,17 +249,14 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
                 )?;
             } else if bytes <= 48 {
                 let sw_add_ne_chip = SwAddNeChip::new(
-                    Rv32VecHeapAdapterChip::<F, 2, 6, 6, 16, 16>::new(
-                        execution_bus,
-                        program_bus,
-                        memory_bridge,
-                        pointer_bits,
-                        bitwise_lu_chip.clone(),
-                    ),
+                    execution_bridge,
+                    memory_bridge,
+                    builder.system_base().memory_controller.helper(),
+                    pointer_max_bits,
                     config48.clone(),
                     sw_start_offset,
+                    bitwise_lu_chip.clone(),
                     range_checker.clone(),
-                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     EccExtensionExecutor::SwEcAddNeRv32_48(sw_add_ne_chip),
@@ -271,18 +265,15 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
                         .map(|x| VmOpcode::from_usize(x + sw_start_offset)),
                 )?;
                 let sw_double_chip = SwDoubleChip::new(
-                    Rv32VecHeapAdapterChip::<F, 1, 6, 6, 16, 16>::new(
-                        execution_bus,
-                        program_bus,
-                        memory_bridge,
-                        pointer_bits,
-                        bitwise_lu_chip.clone(),
-                    ),
-                    range_checker.clone(),
+                    execution_bridge,
+                    memory_bridge,
+                    builder.system_base().memory_controller.helper(),
+                    pointer_max_bits,
                     config48.clone(),
                     sw_start_offset,
+                    bitwise_lu_chip.clone(),
+                    range_checker.clone(),
                     curve.coeffs.a.clone(),
-                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     EccExtensionExecutor::SwEcDoubleRv32_48(sw_double_chip),
@@ -311,19 +302,16 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
                 Rv32EdwardsOpcode::CLASS_OFFSET + te_idx * Rv32EdwardsOpcode::COUNT;
             if bytes <= 32 {
                 let te_add_chip = TeAddChip::new(
-                    Rv32VecHeapAdapterChip::<F, 2, 2, 2, 32, 32>::new(
-                        execution_bus,
-                        program_bus,
-                        memory_bridge,
-                        pointer_bits,
-                        bitwise_lu_chip.clone(),
-                    ),
+                    execution_bridge,
+                    memory_bridge,
+                    builder.system_base().memory_controller.helper(),
+                    pointer_max_bits,
                     config32.clone(),
                     te_start_offset,
+                    bitwise_lu_chip.clone(),
+                    range_checker.clone(),
                     curve.coeffs.a.clone(),
                     curve.coeffs.d.clone(),
-                    range_checker.clone(),
-                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     EccExtensionExecutor::TeEcAddRv32_32(te_add_chip),
@@ -333,19 +321,16 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
                 )?;
             } else if bytes <= 48 {
                 let te_add_chip = TeAddChip::new(
-                    Rv32VecHeapAdapterChip::<F, 2, 6, 6, 16, 16>::new(
-                        execution_bus,
-                        program_bus,
-                        memory_bridge,
-                        pointer_bits,
-                        bitwise_lu_chip.clone(),
-                    ),
+                    execution_bridge,
+                    memory_bridge,
+                    builder.system_base().memory_controller.helper(),
+                    pointer_max_bits,
                     config48.clone(),
                     te_start_offset,
+                    bitwise_lu_chip.clone(),
+                    range_checker.clone(),
                     curve.coeffs.a.clone(),
                     curve.coeffs.d.clone(),
-                    range_checker.clone(),
-                    offline_memory.clone(),
                 );
                 inventory.add_executor(
                     EccExtensionExecutor::TeEcAddRv32_48(te_add_chip),

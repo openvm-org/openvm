@@ -156,7 +156,7 @@ where
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use openvm_native_circuit::execute_program;
+    use openvm_native_circuit::test_execute_program;
     use openvm_native_compiler::asm::AsmBuilder;
     use openvm_stark_backend::{
         config::{Domain, StarkGenericConfig, Val},
@@ -276,7 +276,7 @@ pub(crate) mod tests {
         builder.halt();
 
         let program = builder.compile_isa();
-        execute_program(program, vec![]);
+        test_execute_program(program, vec![]);
     }
     #[test]
     fn test_domain_static() {

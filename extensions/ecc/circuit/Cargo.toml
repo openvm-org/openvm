@@ -28,6 +28,7 @@ strum = { workspace = true }
 derive_more = { workspace = true }
 derive-new = { workspace = true }
 once_cell = { workspace = true, features = ["std"] }
+rand = { workspace = true }
 serde = { workspace = true }
 serde_with = { workspace = true }
 lazy_static = { workspace = true }
@@ -39,3 +40,6 @@ openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 lazy_static = { workspace = true }
+
+[package.metadata.cargo-shear]
+ignored = ["rand"]

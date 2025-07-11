@@ -965,7 +965,6 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
     let ModuliDefine { items } = parse_macro_input!(input as ModuliDefine);
 
     let mut externs = Vec::new();
-    let mut openvm_section = Vec::new();
 
     // List of all modular limbs in one (that is, with a compile-time known size) array.
     let mut two_modular_limbs_flattened_list = Vec::<u8>::new();
@@ -976,8 +975,6 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
 
     for (mod_idx, item) in items.into_iter().enumerate() {
         let modulus = item.value();
-        println!("[init] modulus #{} = {}", mod_idx, modulus);
-
         let modulus_bytes = string_to_bytes(&modulus);
         let mut limbs = modulus_bytes.len();
         let mut block_size = 32;
@@ -1012,30 +1009,10 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             .collect::<Vec<_>>()
             .join("");
 
-        let serialized_modulus =
-            core::iter::once(1) // 1 for "modulus"
-                .chain(core::iter::once(mod_idx as u8)) // mod_idx is u8 for now (can make it u32), because we don't know the order of
-                // variables in the elf
-                .chain((modulus_bytes.len() as u32).to_le_bytes().iter().copied())
-                .chain(modulus_bytes.iter().copied())
-                .collect::<Vec<_>>();
-        let serialized_name = syn::Ident::new(
-            &format!("OPENVM_SERIALIZED_MODULUS_{}", mod_idx),
-            span.into(),
-        );
-        let serialized_len = serialized_modulus.len();
         let setup_extern_func = syn::Ident::new(
             &format!("moduli_setup_extern_func_{}", modulus_hex),
             span.into(),
         );
-
-        openvm_section.push(quote::quote_spanned! { span.into() =>
-            #[cfg(target_os = "zkvm")]
-            #[link_section = ".openvm"]
-            #[no_mangle]
-            #[used]
-            static #serialized_name: [u8; #serialized_len] = [#(#serialized_modulus),*];
-        });
 
         for op_type in ["add", "sub", "mul", "div"] {
             let func_name = syn::Ident::new(
@@ -1126,18 +1103,11 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             extern "C" fn #setup_extern_func() {
                 #[cfg(target_os = "zkvm")]
                 {
-                    let mut ptr = 0;
-                    assert_eq!(super::#serialized_name[ptr], 1);
-                    ptr += 1;
-                    assert_eq!(super::#serialized_name[ptr], #mod_idx as u8);
-                    ptr += 1;
-                    assert_eq!(super::#serialized_name[ptr..ptr+4].iter().rev().fold(0, |acc, &x| acc * 256 + x as usize), #limbs);
-                    ptr += 4;
-                    let remaining = &super::#serialized_name[ptr..];
-
                     // To avoid importing #struct_name, we create a placeholder struct with the same size and alignment.
                     #[repr(C, align(#block_size))]
                     struct AlignedPlaceholder([u8; #limbs]);
+
+                    const MODULUS_BYTES: AlignedPlaceholder = AlignedPlaceholder([#(#modulus_bytes),*]);
 
                     // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0`, `x1` or `x2`, into a `SETUP_ADDSUB`, `SETUP_MULDIV` or `SETUP_ISEQ` instruction.
@@ -1149,7 +1119,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
                             + #mod_idx
                                 * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                         rd = In uninit.as_mut_ptr(),
-                        rs1 = In remaining.as_ptr(),
+                        rs1 = In MODULUS_BYTES.0.as_ptr(),
                         rs2 = Const "x0" // will be parsed as 0 and therefore transpiled to SETUP_ADDMOD
                     );
                     openvm::platform::custom_insn_r!(
@@ -1159,7 +1129,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
                             + #mod_idx
                                 * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                         rd = In uninit.as_mut_ptr(),
-                        rs1 = In remaining.as_ptr(),
+                        rs1 = In MODULUS_BYTES.0.as_ptr(),
                         rs2 = Const "x1" // will be parsed as 1 and therefore transpiled to SETUP_MULDIV
                     );
                     unsafe {
@@ -1172,7 +1142,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
                                 + #mod_idx
                                     * (::openvm_algebra_guest::ModArithBaseFunct7::MODULAR_ARITHMETIC_MAX_KINDS as usize),
                             rd = InOut tmp,
-                            rs1 = In remaining.as_ptr(),
+                            rs1 = In MODULUS_BYTES.0.as_ptr(),
                             rs2 = Const "x2" // will be parsed as 2 and therefore transpiled to SETUP_ISEQ
                         );
                         // rd = inout(reg) is necessary because this instruction will write to `rd` register
@@ -1185,7 +1155,6 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
     let total_limbs_cnt = two_modular_limbs_flattened_list.len();
     let cnt_limbs_list_len = limb_list_borders.len();
     TokenStream::from(quote::quote_spanned! { span.into() =>
-        #(#openvm_section)*
         #[allow(non_snake_case)]
         #[cfg(target_os = "zkvm")]
         mod openvm_intrinsics_ffi {

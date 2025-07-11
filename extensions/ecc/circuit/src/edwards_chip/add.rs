@@ -2,10 +2,26 @@ use std::{cell::RefCell, rc::Rc};
 
 use num_bigint::BigUint;
 use num_traits::One;
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
-use openvm_mod_circuit_builder::{ExprBuilder, ExprBuilderConfig, FieldExpr};
+use openvm_circuit::{
+    arch::ExecutionBridge,
+    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
+};
+use openvm_circuit_derive::{InsExecutorE1, InstructionExecutor};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip,
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+    Chip, ChipUsageGetter,
+};
+use openvm_ecc_transpiler::Rv32EdwardsOpcode;
+use openvm_mod_circuit_builder::{
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir,
+};
+use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
+use openvm_stark_backend::p3_field::PrimeField32;
 
-pub fn ec_add_expr(
+use super::{utils::jacobi, EdwardsAir, EdwardsChip, EdwardsStep};
+
+pub fn te_add_expr(
     config: ExprBuilderConfig, // The coordinate field.
     range_bus: VariableRangeCheckerBus,
     a_biguint: BigUint,
@@ -38,4 +54,60 @@ pub fn ec_add_expr(
     let builder = builder.borrow().clone();
 
     FieldExpr::new_with_setup_values(builder, range_bus, true, vec![a_biguint, d_biguint])
+}
+
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1)]
+pub struct TeAddChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    pub EdwardsChip<F, 2, BLOCKS, BLOCK_SIZE>,
+);
+
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
+    TeAddChip<F, BLOCKS, BLOCK_SIZE>
+{
+    pub fn new(
+        execution_bridge: ExecutionBridge,
+        memory_bridge: MemoryBridge,
+        mem_helper: SharedMemoryHelper<F>,
+        pointer_max_bits: usize,
+        config: ExprBuilderConfig,
+        offset: usize,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
+        range_checker: SharedVariableRangeCheckerChip,
+        a: BigUint,
+        d: BigUint,
+    ) -> Self {
+        // Ensure that the addition operation is complete
+        assert!(jacobi(&a.clone().into(), &config.modulus.clone().into()) == 1);
+        assert!(jacobi(&d.clone().into(), &config.modulus.clone().into()) == -1);
+
+        let expr = te_add_expr(config, range_checker.bus(), a, d);
+
+        let local_opcode_idx = vec![
+            Rv32EdwardsOpcode::TE_ADD as usize,
+            Rv32EdwardsOpcode::SETUP_TE_ADD as usize,
+        ];
+
+        let air = EdwardsAir::new(
+            Rv32VecHeapAdapterAir::new(
+                execution_bridge,
+                memory_bridge,
+                bitwise_lookup_chip.bus(),
+                pointer_max_bits,
+            ),
+            FieldExpressionCoreAir::new(expr.clone(), offset, local_opcode_idx.clone(), vec![]),
+        );
+
+        let step = EdwardsStep::new(
+            Rv32VecHeapAdapterStep::new(pointer_max_bits, bitwise_lookup_chip),
+            expr,
+            offset,
+            local_opcode_idx,
+            vec![],
+            range_checker,
+            "TeEcAdd",
+            true,
+        );
+
+        Self(EdwardsChip::new(air, step, mem_helper))
+    }
 }

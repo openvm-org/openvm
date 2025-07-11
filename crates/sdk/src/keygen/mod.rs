@@ -3,7 +3,7 @@ use std::sync::Arc;
 use derivative::Derivative;
 use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
-    arch::{VirtualMachine, VmComplexTraceHeights, VmConfig},
+    arch::{InsExecutorE1, VirtualMachine, VmComplexTraceHeights, VmConfig},
     system::{memory::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
 };
 use openvm_continuations::verifier::{
@@ -99,7 +99,7 @@ pub struct Halo2ProvingKey {
 
 impl<VC: VmConfig<F>> AppProvingKey<VC>
 where
-    VC::Executor: Chip<SC>,
+    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
     VC::Periphery: Chip<SC>,
 {
     pub fn keygen(config: AppConfig<VC>) -> Self {
@@ -342,10 +342,13 @@ impl AggStarkProvingKey {
             let mut vm_pk = vm.keygen();
             assert!(vm_pk.max_constraint_degree <= config.root_fri_params.max_constraint_degree());
 
+            let vm_vk = vm_pk.get_vk();
             let (air_heights, vm_heights) = compute_root_proof_heights(
                 root_vm_config.clone(),
                 root_committed_exe.exe.clone(),
                 &internal_proof,
+                &vm_vk.total_widths(),
+                &vm_vk.num_interactions(),
             );
             let root_air_perm = AirIdPermutation::compute(&air_heights);
             root_air_perm.permute(&mut vm_pk.per_air);
