@@ -2,8 +2,8 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        testing::{memory::gen_pointer, VmChipTestBuilder},
-        MemoryConfig, VmAirWrapper,
+        testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder},
+        MemoryConfig,
     },
     system::memory::merkle::public_values::PUBLIC_VALUES_AS,
 };
@@ -22,49 +22,53 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, seq::SliceRandom, Rng};
 use test_case::test_case;
 
-use super::{run_write_data, LoadStoreCoreAir, LoadStoreStep, Rv32LoadStoreChip};
+use super::{run_write_data, LoadStoreCoreAir, Rv32LoadStoreChip};
 use crate::{
     adapters::{
-        Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterCols, Rv32LoadStoreAdapterStep,
-        RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+        Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterCols, Rv32LoadStoreAdapterFiller,
+        Rv32LoadStoreAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     loadstore::LoadStoreCoreCols,
     test_utils::get_verification_error,
+    LoadStoreFiller, Rv32LoadStoreAir, Rv32LoadStoreStep,
 };
 
 const IMM_BITS: usize = 16;
 const MAX_INS_CAPACITY: usize = 128;
 
 type F = BabyBear;
+type Harness = TestChipHarness<F, Rv32LoadStoreStep, Rv32LoadStoreAir, Rv32LoadStoreChip<F>>;
 
-fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32LoadStoreChip<F> {
+fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Harness {
     let range_checker_chip = tester.range_checker();
 
-    let mut chip = Rv32LoadStoreChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32LoadStoreAdapterAir::new(
-                tester.memory_bridge(),
-                tester.execution_bridge(),
-                range_checker_chip.bus(),
-                tester.address_bits(),
-            ),
-            LoadStoreCoreAir::new(Rv32LoadStoreOpcode::CLASS_OFFSET),
+    let air = Rv32LoadStoreAir::new(
+        Rv32LoadStoreAdapterAir::new(
+            tester.memory_bridge(),
+            tester.execution_bridge(),
+            range_checker_chip.bus(),
+            tester.address_bits(),
         ),
-        LoadStoreStep::new(
-            Rv32LoadStoreAdapterStep::new(tester.address_bits(), range_checker_chip.clone()),
+        LoadStoreCoreAir::new(Rv32LoadStoreOpcode::CLASS_OFFSET),
+    );
+    let executor = Rv32LoadStoreStep::new(
+        Rv32LoadStoreAdapterStep::new(tester.address_bits()),
+        Rv32LoadStoreOpcode::CLASS_OFFSET,
+    );
+    let chip = Rv32LoadStoreChip::<F>::new(
+        LoadStoreFiller::new(
+            Rv32LoadStoreAdapterFiller::new(tester.address_bits(), range_checker_chip.clone()),
             Rv32LoadStoreOpcode::CLASS_OFFSET,
         ),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-
-    chip
+    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
 #[allow(clippy::too_many_arguments)]
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut Rv32LoadStoreChip<F>,
+    harness: &mut Harness,
     rng: &mut StdRng,
     opcode: Rv32LoadStoreOpcode,
     rs1: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
@@ -124,7 +128,7 @@ fn set_and_execute(
     let enabled_write = !(is_load & (a == 0));
 
     tester.execute(
-        chip,
+        harness,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [
@@ -179,12 +183,12 @@ fn rand_loadstore_test(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
         mem_config.addr_space_sizes[PUBLIC_VALUES_AS as usize] = 1 << 29;
     }
     let mut tester = VmChipTestBuilder::volatile(mem_config);
-    let mut chip = create_test_chip(&mut tester);
+    let mut harness = create_test_chip(&mut tester);
 
     for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
-            &mut chip,
+            &mut harness,
             &mut rng,
             opcode,
             None,
@@ -194,7 +198,7 @@ fn rand_loadstore_test(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
         );
     }
 
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -230,11 +234,11 @@ fn run_negative_loadstore_test(
         mem_config.addr_space_sizes[PUBLIC_VALUES_AS as usize] = 1 << 29;
     }
     let mut tester = VmChipTestBuilder::volatile(mem_config);
-    let mut chip = create_test_chip(&mut tester);
+    let mut harness = create_test_chip(&mut tester);
 
     set_and_execute(
         &mut tester,
-        &mut chip,
+        &mut harness,
         &mut rng,
         opcode,
         rs1,
@@ -243,7 +247,7 @@ fn run_negative_loadstore_test(
         None,
     );
 
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
@@ -276,7 +280,7 @@ fn run_negative_loadstore_test(
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_and_prank_trace(harness, modify_trace)
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
 }

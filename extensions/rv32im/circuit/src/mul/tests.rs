@@ -1,10 +1,9 @@
 use std::{array, borrow::BorrowMut};
 
-use openvm_circuit::arch::{
-    testing::{VmChipTestBuilder, RANGE_TUPLE_CHECKER_BUS},
-    InstructionExecutor, VmAirWrapper,
+use openvm_circuit::arch::testing::{TestChipHarness, VmChipTestBuilder, RANGE_TUPLE_CHECKER_BUS};
+use openvm_circuit_primitives::range_tuple::{
+    RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip, SharedRangeTupleCheckerChip,
 };
-use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip};
 use openvm_instructions::LocalOpcode;
 use openvm_rv32im_transpiler::MulOpcode::{self, MUL};
 use openvm_stark_backend::{
@@ -21,47 +20,57 @@ use rand::{rngs::StdRng, Rng};
 
 use super::core::run_mul;
 use crate::{
-    adapters::{Rv32MultAdapterAir, Rv32MultAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-    mul::{MultiplicationCoreCols, MultiplicationStep, Rv32MultiplicationChip},
+    adapters::{
+        Rv32MultAdapterAir, Rv32MultAdapterFiller, Rv32MultAdapterStep, RV32_CELL_BITS,
+        RV32_REGISTER_NUM_LIMBS,
+    },
+    mul::{MultiplicationCoreCols, Rv32MultiplicationChip},
     test_utils::{get_verification_error, rv32_rand_write_register_or_imm},
-    MultiplicationCoreAir,
+    MultiplicationCoreAir, MultiplicationFiller, Rv32MultiplicationAir, Rv32MultiplicationStep,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
 const MAX_NUM_LIMBS: u32 = 32;
 type F = BabyBear;
+type Harness =
+    TestChipHarness<F, Rv32MultiplicationStep, Rv32MultiplicationAir, Rv32MultiplicationChip<F>>;
 
 fn create_test_chip(
     tester: &mut VmChipTestBuilder<F>,
-) -> (Rv32MultiplicationChip<F>, SharedRangeTupleCheckerChip<2>) {
+) -> (
+    Harness,
+    (RangeTupleCheckerAir<2>, SharedRangeTupleCheckerChip<2>),
+) {
     let range_tuple_bus = RangeTupleCheckerBus::new(
         RANGE_TUPLE_CHECKER_BUS,
         [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
     );
-    let range_tuple_checker = SharedRangeTupleCheckerChip::new(range_tuple_bus);
+    let range_tuple_chip =
+        SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
 
-    let mut chip = Rv32MultiplicationChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-            MultiplicationCoreAir::new(range_tuple_bus, MulOpcode::CLASS_OFFSET),
-        ),
-        MultiplicationStep::new(
-            Rv32MultAdapterStep::new(),
-            range_tuple_checker.clone(),
+    let air = Rv32MultiplicationAir::new(
+        Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+        MultiplicationCoreAir::new(range_tuple_bus, MulOpcode::CLASS_OFFSET),
+    );
+    let executor = Rv32MultiplicationStep::new(Rv32MultAdapterStep, MulOpcode::CLASS_OFFSET);
+    let chip = Rv32MultiplicationChip::<F>::new(
+        MultiplicationFiller::new(
+            Rv32MultAdapterFiller,
+            range_tuple_chip.clone(),
             MulOpcode::CLASS_OFFSET,
         ),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
 
-    (chip, range_tuple_checker)
+    (harness, (range_tuple_chip.air, range_tuple_chip))
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: InstructionExecutor<F>>(
+fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut E,
+    harness: &mut Harness,
     rng: &mut StdRng,
     opcode: MulOpcode,
     b: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
@@ -74,7 +83,7 @@ fn set_and_execute<E: InstructionExecutor<F>>(
         rv32_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
 
     instruction.e = F::ZERO;
-    tester.execute(chip, &instruction);
+    tester.execute(harness, &instruction);
 
     let (a, _) = run_mul::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&b, &c);
     assert_eq!(
@@ -95,16 +104,16 @@ fn run_rv32_mul_rand_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let (mut chip, range_tuple_checker) = create_test_chip(&mut tester);
+    let (mut harness, range_tuple) = create_test_chip(&mut tester);
     let num_ops = 100;
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, MUL, None, None);
+        set_and_execute(&mut tester, &mut harness, &mut rng, MUL, None, None);
     }
 
     let tester = tester
         .build()
-        .load(chip)
-        .load(range_tuple_checker)
+        .load(harness)
+        .load_periphery(range_tuple)
         .finalize();
     tester.simple_test().expect("Verification failed");
 }
@@ -127,11 +136,18 @@ fn run_negative_mul_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, range_tuple_chip) = create_test_chip(&mut tester);
+    let (mut harness, range_tuple) = create_test_chip(&mut tester);
 
-    set_and_execute(&mut tester, &mut chip, &mut rng, opcode, Some(b), Some(c));
+    set_and_execute(
+        &mut tester,
+        &mut harness,
+        &mut rng,
+        opcode,
+        Some(b),
+        Some(c),
+    );
 
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
         let cols: &mut MultiplicationCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
@@ -144,8 +160,8 @@ fn run_negative_mul_test(
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
-        .load(range_tuple_chip)
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(range_tuple)
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
 }

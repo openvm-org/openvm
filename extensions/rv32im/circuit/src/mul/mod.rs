@@ -6,8 +6,8 @@ use crate::adapters::{Rv32MultAdapterAir, Rv32MultAdapterFiller, Rv32MultAdapter
 mod core;
 pub use core::*;
 
-//#[cfg(test)]
-//mod tests;
+#[cfg(test)]
+mod tests;
 
 pub type Rv32MultiplicationAir = VmAirWrapper<
     Rv32MultAdapterAir,

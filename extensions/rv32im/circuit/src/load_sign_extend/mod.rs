@@ -6,8 +6,8 @@ use crate::adapters::{Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterStep};
 mod core;
 pub use core::*;
 
-//#[cfg(test)]
-//mod tests;
+#[cfg(test)]
+mod tests;
 
 pub type Rv32LoadSignExtendAir = VmAirWrapper<
     Rv32LoadStoreAdapterAir,

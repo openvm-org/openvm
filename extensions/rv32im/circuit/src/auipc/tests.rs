@@ -2,7 +2,8 @@ use std::{borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::arch::{
     testing::{TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    DenseRecordArena, EmptyAdapterCoreLayout, InstructionExecutor, VmAirWrapper, VmChipWrapper,
+    Arena, DenseRecordArena, EmptyAdapterCoreLayout, InstructionExecutor, VmAirWrapper,
+    VmChipWrapper,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -35,12 +36,12 @@ use crate::{
 const IMM_BITS: usize = 24;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness = TestChipHarness<F, Rv32AuipcStep, Rv32AuipcAir, Rv32AuipcChip<F>>;
+type Harness<RA> = TestChipHarness<F, Rv32AuipcStep, Rv32AuipcAir, Rv32AuipcChip<F>, RA>;
 
-fn create_test_chip(
+fn create_test_chip<RA: Arena>(
     tester: &VmChipTestBuilder<F>,
 ) -> (
-    Harness,
+    Harness<RA>,
     (
         BitwiseOperationLookupAir<RV32_CELL_BITS>,
         SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
@@ -60,20 +61,21 @@ fn create_test_chip(
         Rv32AuipcFiller::new(Rv32RdWriteAdapterFiller::new(), bitwise_chip.clone()),
         tester.memory_helper(),
     );
-    let harness =
-        TestChipHarness::<F, _, _, _>::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let harness = Harness::<RA>::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
 
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
-fn set_and_execute(
+fn set_and_execute<RA: Arena>(
     tester: &mut VmChipTestBuilder<F>,
-    harness: &mut Harness,
+    harness: &mut Harness<RA>,
     rng: &mut StdRng,
     opcode: Rv32AuipcOpcode,
     imm: Option<u32>,
     initial_pc: Option<u32>,
-) {
+) where
+    Rv32AuipcStep: InstructionExecutor<F, RA>,
+{
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS))) as usize;
     let a = rng.gen_range(0..32) << 2;
 
@@ -298,57 +300,37 @@ fn run_auipc_sanity_test() {
 // to a [MatrixRecordArena]. After transferring we generate the trace and make sure that
 // all the constraints pass.
 // ////////////////////////////////////////////////////////////////////////////////////
-// type Rv32AuipcChipDense =
-//     NewVmChipWrapper<F, Rv32AuipcAir, Rv32AuipcStepWithAdapter, DenseRecordArena>;
 
-// fn create_test_chip_dense(tester: &mut VmChipTestBuilder<F>) -> Rv32AuipcChipDense {
-//     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-//     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+#[test]
+fn dense_record_arena_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut sparse_harness, bitwise) = create_test_chip(&tester);
 
-//     let mut chip = Rv32AuipcChipDense::new(
-//         Rv32AuipcAir::new(
-//             Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
-//             Rv32AuipcCoreAir::new(bitwise_bus),
-//         ),
-//         Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new(), bitwise_chip.clone()),
-//         tester.memory_helper(),
-//     );
+    {
+        let mut dense_harness = create_test_chip::<DenseRecordArena>(&mut tester).0;
 
-//     chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-//     chip
-// }
+        let num_ops: usize = 100;
+        for _ in 0..num_ops {
+            set_and_execute(&mut tester, &mut dense_harness, &mut rng, AUIPC, None, None);
+        }
 
-// #[test]
-// fn dense_record_arena_test() {
-//     let mut rng = create_seeded_rng();
-//     let mut tester = VmChipTestBuilder::default();
-//     let (mut sparse_chip, bitwise_chip) = create_test_chip(&tester);
+        type Record<'a> = (
+            &'a mut Rv32RdWriteAdapterRecord,
+            &'a mut Rv32AuipcCoreRecord,
+        );
 
-//     todo!("get dense arena working");
-//     // {
-//     //     let mut dense_chip = create_test_chip_dense(&mut tester);
+        let mut record_interpreter = dense_harness.arena.get_record_seeker::<Record, _>();
+        record_interpreter.transfer_to_matrix_arena(
+            &mut sparse_harness.arena,
+            EmptyAdapterCoreLayout::<F, Rv32RdWriteAdapterStep>::new(),
+        );
+    }
 
-//     //     let num_ops: usize = 100;
-//     //     for _ in 0..num_ops {
-//     //         set_and_execute(&mut tester, &mut dense_chip, &mut rng, AUIPC, None, None);
-//     //     }
-
-//     //     type Record<'a> = (
-//     //         &'a mut Rv32RdWriteAdapterRecord,
-//     //         &'a mut Rv32AuipcCoreRecord,
-//     //     );
-
-//     //     let mut record_interpreter = dense_chip.arena.get_record_seeker::<Record, _>();
-//     //     record_interpreter.transfer_to_matrix_arena(
-//     //         &mut sparse_chip.arena,
-//     //         EmptyAdapterCoreLayout::<F, Rv32RdWriteAdapterStep>::new(),
-//     //     );
-//     // }
-
-//     // let tester = tester
-//     //     .build()
-//     //     .load(sparse_chip)
-//     //     .load(bitwise_chip)
-//     //     .finalize();
-//     // tester.simple_test().expect("Verification failed");
-// }
+    let tester = tester
+        .build()
+        .load(sparse_harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
+}
