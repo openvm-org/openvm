@@ -237,55 +237,6 @@ where
         })
     }
 
-    /// Base metered execution function that operates from a given state
-    pub fn execute_metered_from_state(
-        &self,
-        exe: VmExe<F>,
-        state: VmState<F>,
-        interactions: &[usize],
-    ) -> Result<Vec<Segment>, ExecutionError> {
-        let _span = info_span!("execute_metered").entered();
-
-        let chip_complex =
-            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
-                .unwrap();
-
-        let ctx = MeteredCtx::new(&chip_complex, interactions.to_vec())
-            // TODO(ayush): get rid of segmentation_strategy altogether
-            .with_max_trace_height(
-                self.config
-                    .system()
-                    .segmentation_strategy
-                    .max_trace_height() as u32,
-            )
-            .with_max_cells(self.config.system().segmentation_strategy.max_cells());
-
-        let mut executor = VmSegmentExecutor::<F, VC, _>::new(
-            chip_complex,
-            self.trace_height_constraints.clone(),
-            exe.fn_bounds.clone(),
-            MeteredExecutionControl,
-        );
-        #[cfg(feature = "bench-metrics")]
-        {
-            executor.metrics = state.metrics;
-        }
-
-        let mut exec_state = VmSegmentState::new(
-            state.instret,
-            state.pc,
-            Some(GuestMemory::new(state.memory)),
-            state.input,
-            state.rng,
-            ctx,
-        );
-        execute_spanned!("execute_metered", executor, &mut exec_state)?;
-
-        check_termination(exec_state.exit_code)?;
-
-        Ok(exec_state.ctx.into_segments())
-    }
-
     pub fn execute_metered(
         &self,
         exe: impl Into<VmExe<F>>,
@@ -598,37 +549,21 @@ where
         &self,
         exe: VmExe<F>,
         input: impl Into<Streams<F>>,
-        widths: &[usize],
         interactions: &[usize],
     ) -> Result<Vec<u32>, ExecutionError> {
-        let memory =
-            create_memory_image(&self.config.system().memory_config, exe.init_memory.clone());
-        let rng = StdRng::seed_from_u64(0);
-        let chip_complex =
-            create_and_initialize_chip_complex(&self.config, exe.program.clone(), None, None)
-                .unwrap();
-        let ctx = MeteredCtx::new(&chip_complex, interactions.to_vec())
-            .with_segment_check_insns(u64::MAX);
-        let mut executor = VmSegmentExecutor::<F, VC, _>::new(
-            chip_complex,
-            self.trace_height_constraints.clone(),
-            exe.fn_bounds.clone(),
-            MeteredExecutionControl,
-        );
-        let mut exec_state = VmSegmentState::new(
-            0,
-            exe.pc_start,
-            Some(GuestMemory::new(memory)),
-            input.into(),
-            rng,
-            ctx,
-        );
-        execute_spanned!("execute_metered", executor, &mut exec_state)?;
+        let interpreter = InterpretedInstance::new(self.config.clone(), exe);
 
-        check_termination(exec_state.exit_code)?;
+        let chip_complex = self.config.create_chip_complex().unwrap();
+
+        let ctx: MeteredCtx<DEFAULT_PAGE_BITS> =
+            MeteredCtx::new(&chip_complex, interactions.to_vec())
+                .with_segment_check_insns(u64::MAX);
+
+        let state = interpreter.execute_e2(ctx, input)?;
+        check_termination(state.exit_code)?;
 
         // Check segment count
-        let segments = exec_state.ctx.into_segments();
+        let segments = state.ctx.into_segments();
         assert_eq!(
             segments.len(),
             1,
