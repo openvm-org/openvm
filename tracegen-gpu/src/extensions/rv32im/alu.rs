@@ -1,5 +1,6 @@
 use std::{mem::size_of, sync::Arc};
 
+use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_rv32im_circuit::{
     adapters::{Rv32BaseAluAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
@@ -19,27 +20,12 @@ use crate::{
     DeviceChip,
 };
 
+#[derive(new)]
 pub struct Rv32AluChipGpu<'a> {
     pub air: Rv32BaseAluAir,
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
     pub arena: Option<&'a DenseRecordArena>,
-}
-
-impl<'a> Rv32AluChipGpu<'a> {
-    pub fn new(
-        air: Rv32BaseAluAir,
-        range_checker: Arc<VariableRangeCheckerChipGPU>,
-        bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
-        arena: Option<&'a DenseRecordArena>,
-    ) -> Self {
-        Self {
-            air,
-            range_checker,
-            bitwise_lookup,
-            arena,
-        }
-    }
 }
 
 impl ChipUsageGetter for Rv32AluChipGpu<'_> {

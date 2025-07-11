@@ -23,7 +23,7 @@ __global__ void cukernel_assert_less_than_tracegen(
 
     trace[row_idx] = Fp(x);
     trace[trace_height + row_idx] = Fp(y);
-    trace[2 * trace_height + row_idx] = Fp(1);
+    trace[2 * trace_height + row_idx] = Fp::one();
 
     {
         VariableRangeChecker range_checker(rc_count, rc_num_bins);
