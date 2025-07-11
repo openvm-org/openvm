@@ -23,7 +23,7 @@ __global__ void range_tuple_dummy_tracegen(
     RangeTupleChecker<RANGE_TUPLE_SIZE> range_checker(rc_count, sizes);
 
     if (idx < data_height) {
-        trace[idx] = Fp(1);
+        trace[idx] = Fp::one();
         for (uint32_t i = 0; i < RANGE_TUPLE_SIZE; i++) {
             trace[idx + data_height * (i + 1)] = Fp(data[idx * RANGE_TUPLE_SIZE + i]);
         }

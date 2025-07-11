@@ -1,7 +1,6 @@
 #pragma once
 
 #include "histogram.cuh"
-#include "less_than.cuh"
 #include "offline_checker.cuh"
 #include "trace_access.h"
 

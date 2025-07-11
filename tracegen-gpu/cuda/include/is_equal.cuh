@@ -15,8 +15,8 @@ namespace IsEqual {
  * @param out_ptr Boolean value equal to x == y
  */
 __device__ __forceinline__ void generate_subrow(Fp x, Fp y, Fp *inv_diff, Fp *out) {
-    *inv_diff = (x == y) ? Fp(0) : inv(x - y);
-    *out = (x == y) ? Fp(1) : Fp(0);
+    *inv_diff = (x == y) ? Fp::zero() : inv(x - y);
+    *out = (x == y) ? Fp::one() : Fp::zero();
 }
 } // namespace IsEqual
 
@@ -44,11 +44,11 @@ __device__ __forceinline__ void generate_subrow(
     bool equal = true;
     for (uint32_t i = 0; i < arr_length; ++i) {
         Fp diff = x[i] - y[i];
-        if (diff != Fp(0) && equal) {
+        if (diff != Fp::zero() && equal) {
             diff_inv_marker[i] = inv(diff);
             equal = false;
         } else {
-            diff_inv_marker[i] = Fp(0);
+            diff_inv_marker[i] = Fp::zero();
         }
     }
     *out = Fp(equal);

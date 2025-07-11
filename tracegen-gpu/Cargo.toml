@@ -28,10 +28,12 @@ openvm-rv32im-transpiler = { git = "https://github.com/openvm-org/openvm.git", b
 openvm-rv32im-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
 openvm-algebra-circuit = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
 openvm-algebra-transpiler = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
-
+openvm-keccak256-circuit = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
+# p3
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84085efb609f4f62cb03cf49588388abdb" }
 p3-field = { workspace = true }
 p3-baby-bear = { workspace = true }
+p3-keccak-air = { workspace = true }
 
 openvm-poseidon2-air = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
 
@@ -46,6 +48,7 @@ itertools = { version = "0.14.0", default-features = false, features = ["use_std
 openvm-instructions = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32im-circuit = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", features = ["test-utils"] }
+openvm-keccak256-transpiler = { workspace = true }
 
 [features]
 default = ["test-utils"]

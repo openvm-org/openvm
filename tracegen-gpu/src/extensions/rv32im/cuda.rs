@@ -14,9 +14,9 @@ pub mod auipc {
             width: usize,
             d_records: *const u8,
             record_len: usize,
-            d_range_checker: *const u32,
+            d_range_checker: *mut u32,
             range_checker_max_bins: usize,
-            d_bitwise_lookup: *const u32,
+            d_bitwise_lookup: *mut u32,
             bitwise_num_bits: usize,
         ) -> i32;
     }

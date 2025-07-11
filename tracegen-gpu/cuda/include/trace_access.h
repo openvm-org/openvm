@@ -33,6 +33,15 @@ struct RowSlice {
         }
     }
 
+    template <typename T>
+    __device__ __forceinline__ void write_bits(size_t column_index, const T value)
+        const {
+#pragma unroll
+        for (size_t i = 0; i < sizeof(T) * 8; i++) {
+            ptr[(column_index + i) * stride] = (value >> i) & 1;
+        }
+    }
+
     __device__ __forceinline__ void fill_zero(size_t column_index_from, size_t length) const {
 #pragma unroll
         for (size_t i = 0, c = column_index_from; i < length; i++, c++) {
@@ -50,8 +59,7 @@ struct RowSlice {
 #define COL_INDEX(STRUCT, FIELD) (offsetof(STRUCT<uint8_t>, FIELD))
 
 /// Compute the fixed array length of `FIELD` within `STRUCT<T>`
-#define COL_ARRAY_LEN(STRUCT, FIELD)                                                               \
-    (sizeof(STRUCT<uint8_t>::FIELD) / sizeof(STRUCT<uint8_t>::FIELD[0]))
+#define COL_ARRAY_LEN(STRUCT, FIELD) (sizeof(STRUCT<uint8_t>::FIELD))
 
 /// Write a single value into `FIELD` of struct `STRUCT<T>` at a given row.
 #define COL_WRITE_VALUE(ROW, STRUCT, FIELD, VALUE) (ROW).write(COL_INDEX(STRUCT, FIELD), VALUE)
@@ -59,6 +67,9 @@ struct RowSlice {
 /// Write an array of values into the fixed‐length `FIELD` array of `STRUCT<T>` for one row.
 #define COL_WRITE_ARRAY(ROW, STRUCT, FIELD, VALUES)                                                \
     (ROW).write_array(COL_INDEX(STRUCT, FIELD), COL_ARRAY_LEN(STRUCT, FIELD), VALUES)
+
+/// Write a single value bits into `FIELD` of struct `STRUCT<T>` at a given row.
+#define COL_WRITE_BITS(ROW, STRUCT, FIELD, VALUE) (ROW).write_bits(COL_INDEX(STRUCT, FIELD), VALUE)
 
 /// Fill entire `FIELD` of `STRUCT<T>` with zeros.
 #define COL_FILL_ZERO(ROW, STRUCT, FIELD)                                                          \
