@@ -23,8 +23,8 @@ use tracing::info_span;
 use crate::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        ExecuteFunc, ExecutionError,
-        ExecutionError::InvalidInstruction,
+        ExecuteFunc,
+        ExecutionError::{self, InvalidInstruction},
         InsExecutorE1, InsExecutorE2, PreComputeInstruction, Streams, VmChipComplex, VmConfig,
         VmSegmentState,
     },
@@ -44,6 +44,28 @@ pub struct InterpretedInstance<F: PrimeField32, VC: VmConfig<F>> {
 #[repr(C)]
 struct TerminatePreCompute {
     exit_code: u32,
+}
+
+macro_rules! execute_with_metrics {
+    ($span:literal, $program:expr, $vm_state:expr, $pre_compute_insts:expr) => {{
+        #[cfg(feature = "bench-metrics")]
+        let start = std::time::Instant::now();
+        #[cfg(feature = "bench-metrics")]
+        let start_instret = $vm_state.instret;
+
+        info_span!($span).in_scope(|| unsafe {
+            execute_impl($program, $vm_state, $pre_compute_insts);
+        });
+
+        #[cfg(feature = "bench-metrics")]
+        {
+            let elapsed = start.elapsed();
+            let insns = $vm_state.instret - start_instret;
+            metrics::counter!("insns").absolute(insns);
+            metrics::gauge!(concat!($span, "_insn_mi/s"))
+                .set(insns as f64 / elapsed.as_micros() as f64);
+        }
+    }};
 }
 
 impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
@@ -84,9 +106,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
             &chip_complex,
             &mut split_pre_compute_buf,
         )?;
-        unsafe {
-            execute_impl(program, &mut vm_state, &pre_compute_insts);
-        }
+        execute_with_metrics!("execute_e1", program, &mut vm_state, &pre_compute_insts);
         if vm_state.exit_code.is_err() {
             Err(vm_state.exit_code.err().unwrap())
         } else {
@@ -98,11 +118,12 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
     /// state with the `ExecutionControl` context.
     pub fn execute_e2<Ctx: E2ExecutionCtx>(
         &self,
-        init_state: VmSegmentState<F, Ctx>,
+        ctx: Ctx,
+        inputs: impl Into<Streams<F>>,
     ) -> Result<VmSegmentState<F, Ctx>, ExecutionError> {
         // Initialize the chip complex
         let chip_complex = self.vm_config.create_chip_complex().unwrap();
-        let mut vm_state = init_state;
+        let mut vm_state = self.init_vm_state(ctx, inputs);
 
         // Start execution
         let program = &self.exe.program;
@@ -116,7 +137,12 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
             &chip_complex,
             &mut split_pre_compute_buf,
         )?;
-        execute_with_metrics(program, &mut vm_state, &pre_compute_insts);
+        execute_with_metrics!(
+            "execute_metered",
+            program,
+            &mut vm_state,
+            &pre_compute_insts
+        );
         if vm_state.exit_code.is_err() {
             Err(vm_state.exit_code.err().unwrap())
         } else {
@@ -175,30 +201,6 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
             split_pre_compute_buf.push(first);
         }
         split_pre_compute_buf
-    }
-}
-
-fn execute_with_metrics<F: PrimeField32, Ctx: E1ExecutionCtx>(
-    program: &Program<F>,
-    vm_state: &mut VmSegmentState<F, Ctx>,
-    pre_compute_insts: &[PreComputeInstruction<F, Ctx>],
-) {
-    #[cfg(feature = "bench-metrics")]
-    let start = std::time::Instant::now();
-    #[cfg(feature = "bench-metrics")]
-    let start_instret = vm_state.instret;
-
-    info_span!("execute_e1").in_scope(|| unsafe {
-        execute_impl(program, vm_state, pre_compute_insts);
-    });
-
-    #[cfg(feature = "bench-metrics")]
-    {
-        let elapsed = start.elapsed();
-        let insns = vm_state.instret - start_instret;
-        metrics::counter!("insns").absolute(insns);
-        metrics::gauge!(concat!("execute_e1", "_insn_mi/s"))
-            .set(insns as f64 / elapsed.as_micros() as f64);
     }
 }
 
@@ -433,13 +435,14 @@ fn get_e2_pre_compute_instructions<
     chip_complex: &'a VmChipComplex<F, E, P>,
     pre_compute: &'a mut [&mut [u8]],
 ) -> Result<Vec<PreComputeInstruction<'a, F, Ctx>>, ExecutionError> {
+    let executor_idx_offset = chip_complex.get_executor_offset_in_vkey();
     program
         .instructions_and_debug_infos
         .iter()
         .zip_eq(pre_compute.iter_mut())
         .enumerate()
         .map(|(i, (inst_opt, buf))| {
-            let buf: &mut [u8] = *buf;
+            let buf: &mut [u8] = buf;
             let pre_inst = if let Some((inst, _)) = inst_opt {
                 let pc = program.pc_base + i as u32 * program.step;
                 if let Some(handler) = get_system_opcode_handler(inst, buf) {
@@ -448,13 +451,13 @@ fn get_e2_pre_compute_instructions<
                         pre_compute: buf,
                     }
                 } else if let Some(executor) = chip_complex.inventory.get_executor(inst.opcode) {
+                    let executor_idx = executor_idx_offset
+                        + chip_complex
+                            .inventory
+                            .get_executor_idx_in_vkey(&inst.opcode)
+                            .unwrap();
                     PreComputeInstruction {
-                        handler: executor.pre_compute_e2(
-                            chip_complex.inventory.get_executor_id(inst.opcode).unwrap(),
-                            pc,
-                            inst,
-                            buf,
-                        )?,
+                        handler: executor.pre_compute_e2(executor_idx, pc, inst, buf)?,
                         pre_compute: buf,
                     }
                 } else {

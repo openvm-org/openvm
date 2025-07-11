@@ -178,7 +178,6 @@ where
             .execute_metered(
                 self.committed_exe.exe.clone(),
                 input.clone(),
-                &vm_vk.total_widths(),
                 &vm_vk.num_interactions(),
             )
             .expect("execute_metered failed");

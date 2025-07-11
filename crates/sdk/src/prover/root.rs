@@ -38,7 +38,6 @@ impl RootVerifierLocalProver {
             .execute_metered(
                 self.root_verifier_pk.root_committed_exe.exe.clone(),
                 input.write(),
-                &vm_vk.total_widths(),
                 &vm_vk.num_interactions(),
             )
             .unwrap();

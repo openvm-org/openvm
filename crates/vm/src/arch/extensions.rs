@@ -333,6 +333,17 @@ impl<E, P> VmInventory<E, P> {
         self.executors.get_mut(*id)
     }
 
+    pub fn get_executor_idx_in_vkey(&self, opcode: &VmOpcode) -> Option<usize> {
+        let id = *self.instruction_lookup.get(opcode)?;
+        self.insertion_order
+            .iter()
+            .rev()
+            .position(|chip_id| match chip_id {
+                ChipId::Executor(exec_id) => *exec_id == id,
+                _ => false,
+            })
+    }
+
     pub fn get_mut_executor_with_index(&mut self, opcode: &VmOpcode) -> Option<(&mut E, usize)> {
         let id = *self.instruction_lookup.get(opcode)?;
 
@@ -832,6 +843,15 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
         self.config
             .has_public_values_chip()
             .then(|| &self.inventory.executors[Self::PV_EXECUTOR_IDX])
+    }
+
+    // The index at which the executor chips start in vkey.
+    pub(crate) fn get_executor_offset_in_vkey(&self) -> usize {
+        if self.config.has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1 + self.memory_controller().num_airs()
+        } else {
+            PUBLIC_VALUES_AIR_ID + self.memory_controller().num_airs()
+        }
     }
 
     // All inventory chips except public values chip, in reverse order they were added.

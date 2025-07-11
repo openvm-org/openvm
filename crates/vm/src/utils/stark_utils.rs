@@ -89,8 +89,9 @@ where
         let ctx = MeteredCtx::<6>::new(&chip_complex, vk.num_interactions())
             .with_max_trace_height(config.system().segmentation_strategy.max_trace_height() as u32)
             .with_max_cells(config.system().segmentation_strategy.max_cells());
-        let vm_state = executor.init_vm_state(ctx, input.clone());
-        let final_state = executor.execute_e2(vm_state).expect("Failed to execute");
+        let final_state = executor
+            .execute_e2(ctx, input.clone())
+            .expect("Failed to execute");
         assert!(final_state.ctx.segments().len() >= min_segments);
     }
 
@@ -221,7 +222,7 @@ where
 //     let (widths, interactions) = get_widths_and_interactions_from_vkey(pk.get_vk());
 //     let segments = vm
 //         .executor
-//         .execute_metered(program_exe.clone(), input.clone(), widths, interactions)
+//         .execute_metered(program_exe.clone(), input.clone(), interactions)
 //         .unwrap();
 //
 //     cfg_if::cfg_if! {

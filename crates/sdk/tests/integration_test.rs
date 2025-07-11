@@ -105,7 +105,6 @@ fn run_leaf_verifier(
     let max_trace_heights = executor.execute_metered(
         leaf_committed_exe.exe.clone(),
         verifier_input.write_to_stream(),
-        &leaf_vm_vk.total_widths(),
         &leaf_vm_vk.num_interactions(),
     )?;
 

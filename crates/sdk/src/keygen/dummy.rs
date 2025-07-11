@@ -59,7 +59,7 @@ pub(super) fn compute_root_proof_heights(
     };
     let vm = SingleSegmentVmExecutor::new(root_vm_config);
     let max_trace_heights = vm
-        .execute_metered(root_exe.clone(), root_input.write(), widths, interactions)
+        .execute_metered(root_exe.clone(), root_input.write(), interactions)
         .unwrap();
     let res = vm
         .execute_and_compute_heights(root_exe, root_input.write(), &max_trace_heights)
