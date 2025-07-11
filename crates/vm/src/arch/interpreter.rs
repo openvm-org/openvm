@@ -26,7 +26,7 @@ use crate::{
         ExecuteFunc,
         ExecutionError::{self, InvalidInstruction},
         InsExecutorE1, InsExecutorE2, PreComputeInstruction, Streams, VmChipComplex, VmConfig,
-        VmSegmentState, PUBLIC_VALUES_AIR_ID,
+        VmSegmentState,
     },
     system::memory::{online::GuestMemory, AddressMap},
 };
@@ -435,11 +435,7 @@ fn get_e2_pre_compute_instructions<
     chip_complex: &'a VmChipComplex<F, E, P>,
     pre_compute: &'a mut [&mut [u8]],
 ) -> Result<Vec<PreComputeInstruction<'a, F, Ctx>>, ExecutionError> {
-    let executor_idx_offset = if chip_complex.config().has_public_values_chip() {
-        PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
-    } else {
-        PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
-    };
+    let executor_idx_offset = chip_complex.get_executor_offset_in_vkey();
     program
         .instructions_and_debug_infos
         .iter()

@@ -845,6 +845,15 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .then(|| &self.inventory.executors[Self::PV_EXECUTOR_IDX])
     }
 
+    // The index at which the executor chips start in vkey.
+    pub(crate) fn get_executor_offset_in_vkey(&self) -> usize {
+        if self.config.has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1 + self.memory_controller().num_airs()
+        } else {
+            PUBLIC_VALUES_AIR_ID + self.memory_controller().num_airs()
+        }
+    }
+
     // All inventory chips except public values chip, in reverse order they were added.
     pub(crate) fn chips_excluding_pv_chip(&self) -> impl Iterator<Item = Either<&'_ E, &'_ P>> {
         let public_values_chip_idx = self.public_values_chip_idx();
