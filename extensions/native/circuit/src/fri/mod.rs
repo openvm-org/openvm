@@ -48,8 +48,8 @@ use crate::{
     utils::const_max,
 };
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]

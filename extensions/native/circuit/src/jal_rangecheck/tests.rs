@@ -1,6 +1,6 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_circuit::arch::testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder};
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
@@ -24,32 +24,35 @@ use test_case::test_case;
 
 use super::{JalRangeCheckAir, JalRangeCheckStep};
 use crate::{
-    jal_rangecheck::{JalRangeCheckChip, JalRangeCheckCols},
+    jal_rangecheck::{JalRangeCheckCols, NativeJalRangeCheckChip},
     test_utils::write_native_array,
+    JalRangeCheckFiller,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
+type Harness = TestChipHarness<F, JalRangeCheckStep, JalRangeCheckAir, NativeJalRangeCheckChip<F>>;
 
-fn create_test_chip(tester: &VmChipTestBuilder<F>) -> JalRangeCheckChip<F> {
-    let mut chip = JalRangeCheckChip::<F>::new(
-        JalRangeCheckAir::new(
-            tester.execution_bridge(),
-            tester.memory_bridge(),
-            tester.range_checker().bus(),
-        ),
-        JalRangeCheckStep::new(tester.range_checker().clone()),
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
+    let range_checker = tester.range_checker().clone();
+    let air = JalRangeCheckAir::new(
+        tester.execution_bridge(),
+        tester.memory_bridge(),
+        range_checker.bus(),
+    );
+    let executor = JalRangeCheckStep::new();
+    let chip = NativeJalRangeCheckChip::<F>::new(
+        JalRangeCheckFiller::new(range_checker),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
-    chip
+    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
 // `a_val` and `c` will be disregarded if opcode is JAL
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut JalRangeCheckChip<F>,
+    harness: &mut Harness,
     rng: &mut StdRng,
     opcode: VmOpcode,
     a_val: Option<u32>,
@@ -62,7 +65,7 @@ fn set_and_execute(
         let final_pc = F::from_canonical_u32(rng.gen_range(0..(1 << PC_BITS)));
         let b = b.unwrap_or((final_pc - F::from_canonical_u32(initial_pc)).as_canonical_u32());
         tester.execute_with_pc(
-            chip,
+            harness,
             &Instruction::from_usize(opcode, [a, b as usize, 0, AS::Native as usize, 0, 0, 0]),
             initial_pc,
         );
@@ -84,7 +87,7 @@ fn set_and_execute(
         let b = b.unwrap_or(rng.gen_range(min_b..=16));
         let c = c.unwrap_or(rng.gen_range(min_c..=14));
         tester.execute(
-            chip,
+            harness,
             &Instruction::from_usize(
                 opcode,
                 [a, b as usize, c as usize, AS::Native as usize, 0, 0, 0],
@@ -106,12 +109,20 @@ fn set_and_execute(
 fn rand_jal_range_check_test(opcode: VmOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
-    let mut chip = create_test_chip(&tester);
+    let mut harness = create_test_chip(&tester);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut harness,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+        );
     }
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -119,11 +130,11 @@ fn rand_jal_range_check_test(opcode: VmOpcode, num_ops: usize) {
 fn range_check_edge_cases_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
-    let mut chip = create_test_chip(&tester);
+    let mut harness = create_test_chip(&tester);
 
     set_and_execute(
         &mut tester,
-        &mut chip,
+        &mut harness,
         &mut rng,
         RANGE_CHECK.global_opcode(),
         Some(0),
@@ -132,7 +143,7 @@ fn range_check_edge_cases_test() {
     );
     set_and_execute(
         &mut tester,
-        &mut chip,
+        &mut harness,
         &mut rng,
         RANGE_CHECK.global_opcode(),
         Some((1 << 30) - 1),
@@ -144,7 +155,7 @@ fn range_check_edge_cases_test() {
     let a = rng.gen_range(0..(1 << 14)) << 16;
     set_and_execute(
         &mut tester,
-        &mut chip,
+        &mut harness,
         &mut rng,
         RANGE_CHECK.global_opcode(),
         Some(a),
@@ -156,7 +167,7 @@ fn range_check_edge_cases_test() {
     let a = rng.gen_range(0..(1 << 16));
     set_and_execute(
         &mut tester,
-        &mut chip,
+        &mut harness,
         &mut rng,
         RANGE_CHECK.global_opcode(),
         Some(a),
@@ -164,7 +175,7 @@ fn range_check_edge_cases_test() {
         None,
     );
 
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -194,8 +205,8 @@ fn run_negative_jal_range_check_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
-    let mut chip = create_test_chip(&tester);
-    set_and_execute(&mut tester, &mut chip, &mut rng, opcode, a_val, b, c);
+    let mut harness = create_test_chip(&tester);
+    set_and_execute(&mut tester, &mut harness, &mut rng, opcode, a_val, b, c);
 
     let modify_trace = |trace: &mut DenseMatrix<F>| {
         let mut values = trace.row_slice(0).to_vec();
@@ -226,7 +237,7 @@ fn run_negative_jal_range_check_test(
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_and_prank_trace(harness, modify_trace)
         .finalize();
     tester.simple_test_with_expected_error(error);
 }

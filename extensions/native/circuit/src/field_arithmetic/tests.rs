@@ -1,6 +1,6 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_circuit::arch::testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, FieldArithmeticOpcode};
 use openvm_stark_backend::{
@@ -21,32 +21,34 @@ use super::{
     FieldArithmeticChip, FieldArithmeticCoreAir, FieldArithmeticCoreCols, FieldArithmeticStep,
 };
 use crate::{
-    adapters::{AluNativeAdapterAir, AluNativeAdapterStep},
+    adapters::{AluNativeAdapterAir, AluNativeAdapterFiller, AluNativeAdapterStep},
     field_arithmetic::{run_field_arithmetic, FieldArithmeticAir},
     test_utils::write_native_or_imm,
+    FieldArithmeticCoreFiller,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
+type Harness = TestChipHarness<F, FieldArithmeticStep, FieldArithmeticAir, FieldArithmeticChip<F>>;
 
-fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FieldArithmeticChip<F> {
-    let mut chip = FieldArithmeticChip::<F>::new(
-        FieldArithmeticAir::new(
-            AluNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-            FieldArithmeticCoreAir::new(),
-        ),
-        FieldArithmeticStep::new(AluNativeAdapterStep::new()),
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
+    let air = FieldArithmeticAir::new(
+        AluNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+        FieldArithmeticCoreAir::new(),
+    );
+    let executor = FieldArithmeticStep::new(AluNativeAdapterStep::new());
+    let chip = FieldArithmeticChip::<F>::new(
+        FieldArithmeticCoreFiller::new(AluNativeAdapterFiller),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
-    chip
+    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
 #[allow(clippy::too_many_arguments)]
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut FieldArithmeticChip<F>,
+    harness: &mut Harness,
     rng: &mut StdRng,
     opcode: FieldArithmeticOpcode,
     b: Option<F>,
@@ -65,7 +67,7 @@ fn set_and_execute(
     let a = gen_pointer(rng, 1);
 
     tester.execute(
-        chip,
+        harness,
         &Instruction::new(
             opcode.global_opcode(),
             F::from_canonical_usize(a),
@@ -96,22 +98,22 @@ fn set_and_execute(
 fn new_field_arithmetic_air_test(opcode: FieldArithmeticOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
-    let mut chip = create_test_chip(&tester);
+    let mut harness = create_test_chip(&tester);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
+        set_and_execute(&mut tester, &mut harness, &mut rng, opcode, None, None);
     }
 
     set_and_execute(
         &mut tester,
-        &mut chip,
+        &mut harness,
         &mut rng,
         opcode,
         Some(F::ZERO),
         None,
     );
 
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -140,11 +142,18 @@ fn run_negative_field_arithmetic_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
-    let mut chip = create_test_chip(&tester);
+    let mut harness = create_test_chip(&tester);
 
-    set_and_execute(&mut tester, &mut chip, &mut rng, opcode, Some(b), Some(c));
+    set_and_execute(
+        &mut tester,
+        &mut harness,
+        &mut rng,
+        opcode,
+        Some(b),
+        Some(c),
+    );
 
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<F>| {
         let mut values = trace.row_slice(0).to_vec();
         let cols: &mut FieldArithmeticCoreCols<F> =
@@ -170,7 +179,7 @@ fn run_negative_field_arithmetic_test(
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_and_prank_trace(harness, modify_trace)
         .finalize();
     tester.simple_test_with_expected_error(error);
 }
@@ -234,11 +243,11 @@ fn field_arithmetic_negative_rand() {
 #[test]
 fn new_field_arithmetic_air_test_panic() {
     let mut tester = VmChipTestBuilder::default_native();
-    let mut chip = create_test_chip(&tester);
+    let mut harness = create_test_chip(&tester);
     tester.write(4, 0, [BabyBear::ZERO]);
     // should panic
     tester.execute(
-        &mut chip,
+        &mut harness,
         &Instruction::from_usize(
             FieldArithmeticOpcode::DIV.global_opcode(),
             [0, 0, 0, 4, 4, 4],
