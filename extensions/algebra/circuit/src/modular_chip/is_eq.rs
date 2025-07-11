@@ -587,9 +587,9 @@ where
 
         let is_setup = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
         let fn_ptr = if is_setup {
-            execute_e1_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, true>
+            execute_e2_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, true>
         } else {
-            execute_e1_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, false>
+            execute_e2_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, false>
         };
 
         Ok(fn_ptr)
