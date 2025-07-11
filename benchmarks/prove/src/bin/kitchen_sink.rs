@@ -7,7 +7,7 @@ use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::{instructions::exe::VmExe, SingleSegmentVmExecutor, SystemConfig};
 use openvm_continuations::verifier::leaf::types::LeafVmVerifierInput;
-use openvm_ecc_circuit::{WeierstrassExtension, P256_CONFIG, SECP256K1_CONFIG};
+use openvm_ecc_circuit::{EccExtension, P256_CONFIG, SECP256K1_CONFIG};
 use openvm_native_circuit::{NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_recursion::halo2::utils::{CacheHalo2ParamsReader, DEFAULT_PARAMS_DIR};
 use openvm_pairing_circuit::{PairingCurve, PairingExtension};
@@ -120,12 +120,15 @@ fn main() -> Result<()> {
                 bls_config.modulus.clone(),
             ),
         ]))
-        .ecc(WeierstrassExtension::new(vec![
-            SECP256K1_CONFIG.clone(),
-            P256_CONFIG.clone(),
-            bn_config.clone(),
-            bls_config.clone(),
-        ]))
+        .ecc(EccExtension::new(
+            vec![
+                SECP256K1_CONFIG.clone(),
+                P256_CONFIG.clone(),
+                bn_config.clone(),
+                bls_config.clone(),
+            ],
+            vec![],
+        ))
         .pairing(PairingExtension::new(vec![
             PairingCurve::Bn254,
             PairingCurve::Bls12_381,

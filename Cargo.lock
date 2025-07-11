@@ -4760,6 +4760,7 @@ dependencies = [
  "hex-literal 0.4.1",
  "lazy_static",
  "num-bigint 0.4.6",
+ "num-integer",
  "num-traits",
  "once_cell",
  "openvm-algebra-circuit",
@@ -4767,6 +4768,7 @@ dependencies = [
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
  "openvm-circuit-primitives-derive",
+ "openvm-ecc-guest",
  "openvm-ecc-transpiler",
  "openvm-instructions",
  "openvm-mod-circuit-builder",
@@ -4788,11 +4790,16 @@ dependencies = [
  "elliptic-curve 0.13.8",
  "group 0.13.0",
  "halo2curves-axiom",
+ "hex-literal 0.4.1",
+ "lazy_static",
+ "num-bigint 0.4.6",
  "once_cell",
  "openvm",
  "openvm-algebra-guest",
+ "openvm-algebra-moduli-macros",
  "openvm-custom-insn",
  "openvm-ecc-sw-macros",
+ "openvm-ecc-te-macros",
  "openvm-rv32im-guest",
  "serde",
  "strum_macros",
@@ -4822,6 +4829,15 @@ dependencies = [
 
 [[package]]
 name = "openvm-ecc-sw-macros"
+version = "1.4.0-rc.0"
+dependencies = [
+ "openvm-macros-common",
+ "quote",
+ "syn 2.0.98",
+]
+
+[[package]]
+name = "openvm-ecc-te-macros"
 version = "1.4.0-rc.0"
 dependencies = [
  "openvm-macros-common",
