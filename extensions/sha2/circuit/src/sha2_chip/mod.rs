@@ -115,20 +115,35 @@ impl<F: PrimeField32, C: ShaChipConfig> StepExecutorE1<F> for Sha2VmStep<C> {
                 );
             }
             Rv32Sha2Opcode::SHA512 => {
-                memory_write::<{ Sha512Config::WRITE_SIZE }>(
-                    state.memory,
-                    RV32_MEMORY_AS,
-                    dst,
-                    output.as_slice().try_into().unwrap(),
-                );
+                for i in 0..C::NUM_WRITES {
+                    memory_write::<{ Sha512Config::WRITE_SIZE }>(
+                        state.memory,
+                        RV32_MEMORY_AS,
+                        dst + (i * Sha512Config::WRITE_SIZE) as u32,
+                        output.as_slice()
+                            [i * Sha512Config::WRITE_SIZE..(i + 1) * Sha512Config::WRITE_SIZE]
+                            .try_into()
+                            .unwrap(),
+                    );
+                }
             }
             Rv32Sha2Opcode::SHA384 => {
-                memory_write::<{ Sha384Config::WRITE_SIZE }>(
-                    state.memory,
-                    RV32_MEMORY_AS,
-                    dst,
-                    output.as_slice().try_into().unwrap(),
-                );
+                // Pad the output with zeros to 64 bytes
+                let output = output
+                    .into_iter()
+                    .chain(iter::repeat(0).take(16))
+                    .collect::<Vec<_>>();
+                for i in 0..C::NUM_WRITES {
+                    memory_write::<{ Sha384Config::WRITE_SIZE }>(
+                        state.memory,
+                        RV32_MEMORY_AS,
+                        dst + (i * Sha384Config::WRITE_SIZE) as u32,
+                        output.as_slice()
+                            [i * Sha384Config::WRITE_SIZE..(i + 1) * Sha384Config::WRITE_SIZE]
+                            .try_into()
+                            .unwrap(),
+                    );
+                }
             }
         }
 
