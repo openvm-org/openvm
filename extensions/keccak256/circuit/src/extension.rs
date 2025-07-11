@@ -8,7 +8,7 @@ use openvm_circuit::{
     },
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::*;
@@ -56,7 +56,9 @@ impl InitFileGenerator for Keccak256Rv32Config {}
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Keccak256;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, InsExecutorE1)]
+#[derive(
+    ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, InsExecutorE1, InsExecutorE2,
+)]
 pub enum Keccak256Executor<F: PrimeField32> {
     Keccak256(KeccakVmChip<F>),
 }
