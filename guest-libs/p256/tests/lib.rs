@@ -2,8 +2,11 @@ mod guest_tests {
     use ecdsa_config::EcdsaConfig;
     use eyre::Result;
     use openvm_algebra_transpiler::ModularTranspilerExtension;
-    use openvm_circuit::{arch::instructions::exe::VmExe, utils::air_test};
-    use openvm_ecc_circuit::{Rv32WeierstrassConfig, P256_CONFIG};
+    use openvm_circuit::{
+        arch::instructions::exe::VmExe,
+        utils::{air_test, test_system_config_with_continuations},
+    };
+    use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, P256_CONFIG};
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -15,9 +18,16 @@ mod guest_tests {
 
     type F = BabyBear;
 
+    #[cfg(test)]
+    fn test_rv32weierstrass_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
+        let mut config = Rv32WeierstrassConfig::new(curves);
+        config.system = test_system_config_with_continuations();
+        config
+    }
+
     #[test]
     fn test_add() -> Result<()> {
-        let config = Rv32WeierstrassConfig::new(vec![P256_CONFIG.clone()]);
+        let config = test_rv32weierstrass_config(vec![P256_CONFIG.clone()]);
         let elf =
             build_example_program_at_path(get_programs_dir!("tests/programs"), "add", &config)?;
         let openvm_exe = VmExe::from_elf(
@@ -35,7 +45,7 @@ mod guest_tests {
 
     #[test]
     fn test_mul() -> Result<()> {
-        let config = Rv32WeierstrassConfig::new(vec![P256_CONFIG.clone()]);
+        let config = test_rv32weierstrass_config(vec![P256_CONFIG.clone()]);
         let elf =
             build_example_program_at_path(get_programs_dir!("tests/programs"), "mul", &config)?;
         let openvm_exe = VmExe::from_elf(
@@ -53,7 +63,7 @@ mod guest_tests {
 
     #[test]
     fn test_linear_combination() -> Result<()> {
-        let config = Rv32WeierstrassConfig::new(vec![P256_CONFIG.clone()]);
+        let config = test_rv32weierstrass_config(vec![P256_CONFIG.clone()]);
         let elf = build_example_program_at_path(
             get_programs_dir!("tests/programs"),
             "linear_combination",
@@ -80,6 +90,7 @@ mod guest_tests {
         use openvm_circuit::{
             arch::{InitFileGenerator, SystemConfig},
             derive::VmConfig,
+            utils::test_system_config_with_continuations,
         };
         use openvm_ecc_circuit::{
             CurveConfig, WeierstrassExtension, WeierstrassExtensionExecutor,
@@ -118,7 +129,7 @@ mod guest_tests {
                     .flat_map(|c| [c.modulus.clone(), c.scalar.clone()])
                     .collect();
                 Self {
-                    system: SystemConfig::default().with_continuations(),
+                    system: test_system_config_with_continuations(),
                     base: Default::default(),
                     mul: Default::default(),
                     io: Default::default(),
@@ -162,7 +173,7 @@ mod guest_tests {
 
     #[test]
     fn test_scalar_sqrt() -> Result<()> {
-        let config = Rv32WeierstrassConfig::new(vec![P256_CONFIG.clone()]);
+        let config = test_rv32weierstrass_config(vec![P256_CONFIG.clone()]);
         let elf = build_example_program_at_path(
             get_programs_dir!("tests/programs"),
             "scalar_sqrt",

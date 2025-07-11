@@ -1,10 +1,22 @@
-use std::sync::{Arc, Mutex};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, ExecutionError, ExecutionState, InstructionExecutor, Streams, SystemPort,
+        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        CustomBorrow, MultiRowLayout, MultiRowMetadata, RecordArena, SizedRecord, StepExecutorE1,
+        TraceFiller, TraceStep, VmStateMut,
     },
-    system::memory::{MemoryController, OfflineMemory, RecordId},
+    system::{
+        memory::{
+            offline_checker::MemoryBaseAuxCols,
+            online::{GuestMemory, TracingMemory},
+            MemoryAuxColsFactory,
+        },
+        native_adapter::util::{
+            memory_read_native, memory_read_native_from_state, memory_write_native_from_state,
+            tracing_read_native, tracing_write_native_inplace,
+        },
+    },
 };
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::{
@@ -12,152 +24,34 @@ use openvm_native_compiler::{
     Poseidon2Opcode::{COMP_POS2, PERM_POS2},
     VerifyBatchOpcode::VERIFY_BATCH,
 };
-use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir, Poseidon2SubChip};
+use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::{
+    p3_air::BaseAir,
     p3_field::{Field, PrimeField32},
     p3_maybe_rayon::prelude::{ParallelIterator, ParallelSlice},
 };
-use serde::{Deserialize, Serialize};
 
 use crate::poseidon2::{
-    air::{NativePoseidon2Air, VerifyBatchBus},
+    columns::{
+        InsideRowSpecificCols, NativePoseidon2Cols, SimplePoseidonSpecificCols,
+        TopLevelSpecificCols,
+    },
     CHUNK,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
-pub struct VerifyBatchRecord<F: Field> {
-    pub from_state: ExecutionState<u32>,
-    pub instruction: Instruction<F>,
-
-    pub dim_base_pointer: F,
-    pub opened_base_pointer: F,
-    pub opened_length: usize,
-    pub index_base_pointer: F,
-    pub commit_pointer: F,
-
-    pub dim_base_pointer_read: RecordId,
-    pub opened_base_pointer_read: RecordId,
-    pub opened_length_read: RecordId,
-    pub index_base_pointer_read: RecordId,
-    pub commit_pointer_read: RecordId,
-
-    pub commit_read: RecordId,
-    pub initial_log_height: usize,
-    pub top_level: Vec<TopLevelRecord<F>>,
-}
-
-impl<F: PrimeField32> VerifyBatchRecord<F> {
-    pub fn opened_element_size_inv(&self) -> F {
-        self.instruction.g
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
-pub struct TopLevelRecord<F: Field> {
-    // must be present in first record
-    pub incorporate_row: Option<IncorporateRowRecord<F>>,
-    // must be present in all bust last record
-    pub incorporate_sibling: Option<IncorporateSiblingRecord<F>>,
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
-pub struct IncorporateSiblingRecord<F: Field> {
-    pub read_sibling_is_on_right: RecordId,
-    pub sibling_is_on_right: bool,
-    pub p2_input: [F; 2 * CHUNK],
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
-pub struct IncorporateRowRecord<F: Field> {
-    pub chunks: Vec<InsideRowRecord<F>>,
-    pub initial_opened_index: usize,
-    pub final_opened_index: usize,
-    pub initial_height_read: RecordId,
-    pub final_height_read: RecordId,
-    pub p2_input: [F; 2 * CHUNK],
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
-pub struct InsideRowRecord<F: Field> {
-    pub cells: Vec<CellRecord>,
-    pub p2_input: [F; 2 * CHUNK],
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CellRecord {
-    pub read: RecordId,
-    pub opened_index: usize,
-    pub read_row_pointer_and_length: Option<RecordId>,
-    pub row_pointer: usize,
-    pub row_end: usize,
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound = "F: Field")]
-pub struct SimplePoseidonRecord<F: Field> {
-    pub from_state: ExecutionState<u32>,
-    pub instruction: Instruction<F>,
-
-    pub read_input_pointer_1: RecordId,
-    pub read_input_pointer_2: Option<RecordId>,
-    pub read_output_pointer: RecordId,
-    pub read_data_1: RecordId,
-    pub read_data_2: RecordId,
-    pub write_data_1: RecordId,
-    pub write_data_2: Option<RecordId>,
-
-    pub input_pointer_1: F,
-    pub input_pointer_2: F,
-    pub output_pointer: F,
-    pub p2_input: [F; 2 * CHUNK],
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(bound = "F: Field")]
-pub struct NativePoseidon2RecordSet<F: Field> {
-    pub verify_batch_records: Vec<VerifyBatchRecord<F>>,
-    pub simple_permute_records: Vec<SimplePoseidonRecord<F>>,
-}
-
-pub struct NativePoseidon2Chip<F: Field, const SBOX_REGISTERS: usize> {
-    pub(super) air: NativePoseidon2Air<F, SBOX_REGISTERS>,
-    pub record_set: NativePoseidon2RecordSet<F>,
-    pub height: usize,
-    pub(super) offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+pub struct NativePoseidon2Step<F: Field, const SBOX_REGISTERS: usize> {
+    // pre-computed Poseidon2 sub cols for dummy rows.
+    empty_poseidon2_sub_cols: Vec<F>,
     pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
-    pub(super) streams: Arc<Mutex<Streams<F>>>,
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_REGISTERS> {
-    pub fn new(
-        port: SystemPort,
-        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
-        poseidon2_config: Poseidon2Config<F>,
-        verify_batch_bus: VerifyBatchBus,
-        streams: Arc<Mutex<Streams<F>>>,
-    ) -> Self {
-        let air = NativePoseidon2Air {
-            execution_bridge: ExecutionBridge::new(port.execution_bus, port.program_bus),
-            memory_bridge: port.memory_bridge,
-            internal_bus: verify_batch_bus,
-            subair: Arc::new(Poseidon2SubAir::new(poseidon2_config.constants.into())),
-            address_space: F::from_canonical_u32(AS::Native as u32),
-        };
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_REGISTERS> {
+    pub fn new(poseidon2_config: Poseidon2Config<F>) -> Self {
+        let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
+        let empty_poseidon2_sub_cols = subchip.generate_trace(vec![[F::ZERO; CHUNK * 2]]).values;
         Self {
-            record_set: Default::default(),
-            air,
-            height: 0,
-            offline_memory,
-            subchip: Poseidon2SubChip::new(poseidon2_config.constants),
-            streams,
+            empty_poseidon2_sub_cols,
+            subchip,
         }
     }
 
@@ -172,18 +66,86 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Chip<F, SBOX_R
 pub(super) const NUM_INITIAL_READS: usize = 6;
 pub(super) const NUM_SIMPLE_ACCESSES: u32 = 7;
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
-    for NativePoseidon2Chip<F, SBOX_REGISTERS>
+#[derive(Debug, Clone, Default)]
+pub struct NativePoseidon2Metadata {
+    num_rows: usize,
+}
+
+impl MultiRowMetadata for NativePoseidon2Metadata {
+    #[inline(always)]
+    fn get_num_rows(&self) -> usize {
+        self.num_rows
+    }
+}
+
+type NativePoseidon2RecordLayout = MultiRowLayout<NativePoseidon2Metadata>;
+
+pub struct NativePoseidon2RecordMut<'a, F, const SBOX_REGISTERS: usize>(
+    &'a mut [NativePoseidon2Cols<F, SBOX_REGISTERS>],
+);
+
+impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize>
+    CustomBorrow<'a, NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS>, NativePoseidon2RecordLayout>
+    for [u8]
 {
-    fn execute(
+    fn custom_borrow(
+        &'a mut self,
+        layout: NativePoseidon2RecordLayout,
+    ) -> NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS> {
+        let arr = unsafe {
+            self.align_to_mut::<NativePoseidon2Cols<F, SBOX_REGISTERS>>()
+                .1
+        };
+        NativePoseidon2RecordMut(&mut arr[..layout.metadata.num_rows])
+    }
+
+    unsafe fn extract_layout(&self) -> NativePoseidon2RecordLayout {
+        // Each instruction record consists solely of some number of contiguously
+        // stored NativePoseidon2Cols<...> structs, each of which corresponds to a
+        // single trace row. Trace fillers don't actually need to know how many rows
+        // each instruction uses, and can thus treat each NativePoseidon2Cols<...>
+        // as a single record.
+        NativePoseidon2RecordLayout {
+            metadata: NativePoseidon2Metadata { num_rows: 1 },
+        }
+    }
+}
+
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> SizedRecord<NativePoseidon2RecordLayout>
+    for NativePoseidon2RecordMut<'_, F, SBOX_REGISTERS>
+{
+    fn size(layout: &NativePoseidon2RecordLayout) -> usize {
+        layout.metadata.num_rows * size_of::<NativePoseidon2Cols<F, SBOX_REGISTERS>>()
+    }
+
+    fn alignment(_layout: &NativePoseidon2RecordLayout) -> usize {
+        align_of::<NativePoseidon2Cols<F, SBOX_REGISTERS>>()
+    }
+}
+
+impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
+    for NativePoseidon2Step<F, SBOX_REGISTERS>
+{
+    type RecordLayout = MultiRowLayout<NativePoseidon2Metadata>;
+    type RecordMut<'a> = NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS>;
+    fn execute<'buf, RA>(
         &mut self,
-        memory: &mut MemoryController<F>,
+        state: VmStateMut<F, TracingMemory<F>, CTX>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>, ExecutionError> {
+        arena: &'buf mut RA,
+    ) -> openvm_circuit::arch::Result<()>
+    where
+        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
+    {
+        let init_timestamp_u32 = state.memory.timestamp;
         if instruction.opcode == PERM_POS2.global_opcode()
             || instruction.opcode == COMP_POS2.global_opcode()
         {
+            let cols = &mut arena
+                .alloc(MultiRowLayout::new(NativePoseidon2Metadata { num_rows: 1 }))
+                .0[0];
+            let simple_cols: &mut SimplePoseidonSpecificCols<F> =
+                cols.specific[..SimplePoseidonSpecificCols::<u8>::width()].borrow_mut();
             let &Instruction {
                 a: output_register,
                 b: input_register_1,
@@ -192,22 +154,45 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                 e: data_address_space,
                 ..
             } = instruction;
+            debug_assert_eq!(
+                register_address_space,
+                F::from_canonical_u32(AS::Native as u32)
+            );
+            debug_assert_eq!(data_address_space, F::from_canonical_u32(AS::Native as u32));
+            let [output_pointer]: [F; 1] = tracing_read_native_helper(
+                state.memory,
+                output_register.as_canonical_u32(),
+                simple_cols.read_output_pointer.as_mut(),
+            );
+            let output_pointer_u32 = output_pointer.as_canonical_u32();
+            let [input_pointer_1]: [F; 1] = tracing_read_native_helper(
+                state.memory,
+                input_register_1.as_canonical_u32(),
+                simple_cols.read_input_pointer_1.as_mut(),
+            );
+            let input_pointer_1_u32 = input_pointer_1.as_canonical_u32();
+            let [input_pointer_2]: [F; 1] = if instruction.opcode == PERM_POS2.global_opcode() {
+                state.memory.increment_timestamp();
+                [input_pointer_1 + F::from_canonical_usize(CHUNK)]
+            } else {
+                tracing_read_native_helper(
+                    state.memory,
+                    input_register_2.as_canonical_u32(),
+                    simple_cols.read_input_pointer_2.as_mut(),
+                )
+            };
+            let input_pointer_2_u32 = input_pointer_2.as_canonical_u32();
+            let data_1: [F; CHUNK] = tracing_read_native_helper(
+                state.memory,
+                input_pointer_1_u32,
+                simple_cols.read_data_1.as_mut(),
+            );
+            let data_2: [F; CHUNK] = tracing_read_native_helper(
+                state.memory,
+                input_pointer_2_u32,
+                simple_cols.read_data_2.as_mut(),
+            );
 
-            let (read_output_pointer, output_pointer) =
-                memory.read_cell(register_address_space, output_register);
-            let (read_input_pointer_1, input_pointer_1) =
-                memory.read_cell(register_address_space, input_register_1);
-            let (read_input_pointer_2, input_pointer_2) =
-                if instruction.opcode == PERM_POS2.global_opcode() {
-                    memory.increment_timestamp();
-                    (None, input_pointer_1 + F::from_canonical_usize(CHUNK))
-                } else {
-                    let (read_input_pointer_2, input_pointer_2) =
-                        memory.read_cell(register_address_space, input_register_2);
-                    (Some(read_input_pointer_2), input_pointer_2)
-                };
-            let (read_data_1, data_1) = memory.read::<CHUNK>(data_address_space, input_pointer_1);
-            let (read_data_2, data_2) = memory.read::<CHUNK>(data_address_space, input_pointer_2);
             let p2_input = std::array::from_fn(|i| {
                 if i < CHUNK {
                     data_1[i]
@@ -216,50 +201,52 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                 }
             });
             let output = self.subchip.permute(p2_input);
-            let (write_data_1, _) = memory.write::<CHUNK>(
-                data_address_space,
-                output_pointer,
+            tracing_write_native_inplace(
+                state.memory,
+                output_pointer_u32,
                 std::array::from_fn(|i| output[i]),
+                &mut simple_cols.write_data_1,
             );
-            let write_data_2 = if instruction.opcode == PERM_POS2.global_opcode() {
-                Some(
-                    memory
-                        .write::<CHUNK>(
-                            data_address_space,
-                            output_pointer + F::from_canonical_usize(CHUNK),
-                            std::array::from_fn(|i| output[CHUNK + i]),
-                        )
-                        .0,
-                )
+            if instruction.opcode == PERM_POS2.global_opcode() {
+                tracing_write_native_inplace(
+                    state.memory,
+                    output_pointer_u32 + CHUNK as u32,
+                    std::array::from_fn(|i| output[i + CHUNK]),
+                    &mut simple_cols.write_data_2,
+                );
             } else {
-                memory.increment_timestamp();
-                None
-            };
-
-            assert_eq!(
-                memory.timestamp(),
-                from_state.timestamp + NUM_SIMPLE_ACCESSES
+                state.memory.increment_timestamp();
+            }
+            debug_assert_eq!(
+                state.memory.timestamp,
+                init_timestamp_u32 + NUM_SIMPLE_ACCESSES
             );
+            cols.incorporate_row = F::ZERO;
+            cols.incorporate_sibling = F::ZERO;
+            cols.inside_row = F::ZERO;
+            cols.simple = F::ONE;
+            cols.end_inside_row = F::ZERO;
+            cols.end_top_level = F::ZERO;
+            cols.is_exhausted = [F::ZERO; CHUNK - 1];
+            cols.start_timestamp = F::from_canonical_u32(init_timestamp_u32);
 
-            self.record_set
-                .simple_permute_records
-                .push(SimplePoseidonRecord {
-                    from_state,
-                    instruction: instruction.clone(),
-                    read_input_pointer_1,
-                    read_input_pointer_2,
-                    read_output_pointer,
-                    read_data_1,
-                    read_data_2,
-                    write_data_1,
-                    write_data_2,
-                    input_pointer_1,
-                    input_pointer_2,
-                    output_pointer,
-                    p2_input,
-                });
-            self.height += 1;
+            cols.inner.inputs = p2_input;
+            simple_cols.pc = F::from_canonical_u32(*state.pc);
+            simple_cols.is_compress = F::from_bool(instruction.opcode == COMP_POS2.global_opcode());
+            simple_cols.output_register = output_register;
+            simple_cols.input_register_1 = input_register_1;
+            simple_cols.input_register_2 = input_register_2;
+            simple_cols.output_pointer = output_pointer;
+            simple_cols.input_pointer_1 = input_pointer_1;
+            simple_cols.input_pointer_2 = input_pointer_2;
         } else if instruction.opcode == VERIFY_BATCH.global_opcode() {
+            let init_timestamp = F::from_canonical_u32(init_timestamp_u32);
+            let mut col_buffer =
+                vec![F::ZERO; NativePoseidon2Cols::<F, { SBOX_REGISTERS }>::width()];
+            let last_top_level_cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> =
+                col_buffer.as_mut_slice().borrow_mut();
+            let ltl_specific_cols: &mut TopLevelSpecificCols<F> =
+                last_top_level_cols.specific[..TopLevelSpecificCols::<u8>::width()].borrow_mut();
             let &Instruction {
                 a: dim_register,
                 b: opened_register,
@@ -270,58 +257,123 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                 g: opened_element_size_inv,
                 ..
             } = instruction;
-            let address_space = self.air.address_space;
             // calc inverse fast assuming opened_element_size in {1, 4}
             let mut opened_element_size = F::ONE;
             while opened_element_size * opened_element_size_inv != F::ONE {
                 opened_element_size += F::ONE;
             }
 
-            let proof_id = memory.unsafe_read_cell(address_space, proof_id_ptr);
-            let (dim_base_pointer_read, dim_base_pointer) =
-                memory.read_cell(address_space, dim_register);
-            let (opened_base_pointer_read, opened_base_pointer) =
-                memory.read_cell(address_space, opened_register);
-            let (opened_length_read, opened_length) =
-                memory.read_cell(address_space, opened_length_register);
-            let (index_base_pointer_read, index_base_pointer) =
-                memory.read_cell(address_space, index_register);
-            let (commit_pointer_read, commit_pointer) =
-                memory.read_cell(address_space, commit_register);
-            let (commit_read, commit) = memory.read(address_space, commit_pointer);
+            let [proof_id]: [F; 1] =
+                memory_read_native(state.memory.data(), proof_id_ptr.as_canonical_u32());
+            let [dim_base_pointer]: [F; 1] = tracing_read_native_helper(
+                state.memory,
+                dim_register.as_canonical_u32(),
+                ltl_specific_cols.dim_base_pointer_read.as_mut(),
+            );
+            let dim_base_pointer_u32 = dim_base_pointer.as_canonical_u32();
+            let [opened_base_pointer]: [F; 1] = tracing_read_native_helper(
+                state.memory,
+                opened_register.as_canonical_u32(),
+                ltl_specific_cols.opened_base_pointer_read.as_mut(),
+            );
+            let opened_base_pointer_u32 = opened_base_pointer.as_canonical_u32();
+            let [opened_length]: [F; 1] = tracing_read_native_helper(
+                state.memory,
+                opened_length_register.as_canonical_u32(),
+                ltl_specific_cols.opened_length_read.as_mut(),
+            );
+            let [index_base_pointer]: [F; 1] = tracing_read_native_helper(
+                state.memory,
+                index_register.as_canonical_u32(),
+                ltl_specific_cols.index_base_pointer_read.as_mut(),
+            );
+            let index_base_pointer_u32 = index_base_pointer.as_canonical_u32();
+            let [commit_pointer]: [F; 1] = tracing_read_native_helper(
+                state.memory,
+                commit_register.as_canonical_u32(),
+                ltl_specific_cols.commit_pointer_read.as_mut(),
+            );
+            let commit = tracing_read_native_helper(
+                state.memory,
+                commit_pointer.as_canonical_u32(),
+                ltl_specific_cols.commit_read.as_mut(),
+            );
 
             let opened_length = opened_length.as_canonical_u32() as usize;
+            let [initial_log_height]: [F; 1] =
+                memory_read_native(state.memory.data(), dim_base_pointer_u32);
+            let initial_log_height_u32 = initial_log_height.as_canonical_u32();
+            let mut log_height = initial_log_height_u32 as i32;
 
-            let initial_log_height = memory
-                .unsafe_read_cell(address_space, dim_base_pointer)
-                .as_canonical_u32();
-            let mut log_height = initial_log_height as i32;
-            let mut sibling_index = 0;
+            // Number of non-inside rows, this is used to compute the offset of the inside row
+            // section.
+            let (num_inside_rows, num_non_inside_rows) = {
+                let opened_element_size_u32 = opened_element_size.as_canonical_u32();
+                let mut num_non_inside_rows = initial_log_height_u32 as usize;
+                let mut num_inside_rows = 0;
+                let mut log_height = initial_log_height_u32;
+                let mut opened_index = 0;
+                loop {
+                    let mut total_len = 0;
+                    while opened_index < opened_length {
+                        let [height]: [F; 1] = memory_read_native(
+                            state.memory.data(),
+                            dim_base_pointer_u32 + opened_index as u32,
+                        );
+                        if height.as_canonical_u32() != log_height {
+                            break;
+                        }
+                        let [row_len]: [F; 1] = memory_read_native(
+                            state.memory.data(),
+                            opened_base_pointer_u32 + 2 * opened_index as u32 + 1,
+                        );
+                        total_len += row_len.as_canonical_u32() * opened_element_size_u32;
+                        opened_index += 1;
+                    }
+                    if total_len != 0 {
+                        num_non_inside_rows += 1;
+                        num_inside_rows += (total_len as usize).div_ceil(CHUNK);
+                    }
+                    if log_height == 0 {
+                        break;
+                    }
+                    log_height -= 1;
+                }
+                (num_inside_rows, num_non_inside_rows)
+            };
+            let mut proof_index = 0;
             let mut opened_index = 0;
-            let mut top_level = vec![];
 
             let mut root = [F::ZERO; CHUNK];
             let sibling_proof: Vec<[F; CHUNK]> = {
-                let streams = self.streams.lock().unwrap();
                 let proof_idx = proof_id.as_canonical_u32() as usize;
-                streams.hint_space[proof_idx]
+                state.streams.hint_space[proof_idx]
                     .par_chunks(CHUNK)
                     .map(|c| c.try_into().unwrap())
                     .collect()
             };
 
+            let total_num_row = num_inside_rows + num_non_inside_rows;
+            let allocated_rows = arena
+                .alloc(MultiRowLayout::new(NativePoseidon2Metadata {
+                    num_rows: total_num_row,
+                }))
+                .0;
+            let mut inside_row_idx = num_non_inside_rows;
+            let mut non_inside_row_idx = 0;
+
             while log_height >= 0 {
-                let incorporate_row = if opened_index < opened_length
-                    && memory.unsafe_read_cell(
-                        address_space,
-                        dim_base_pointer + F::from_canonical_usize(opened_index),
-                    ) == F::from_canonical_u32(log_height as u32)
+                if opened_index < opened_length
+                    && memory_read_native::<F, 1>(
+                        state.memory.data(),
+                        dim_base_pointer_u32 + opened_index as u32,
+                    )[0] == F::from_canonical_u32(log_height as u32)
                 {
+                    state
+                        .memory
+                        .increment_timestamp_by(NUM_INITIAL_READS as u32);
+                    let incorporate_start_timestamp = state.memory.timestamp;
                     let initial_opened_index = opened_index;
-                    for _ in 0..NUM_INITIAL_READS {
-                        memory.increment_timestamp();
-                    }
-                    let mut chunks = vec![];
 
                     let mut row_pointer = 0;
                     let mut row_end = 0;
@@ -332,166 +384,248 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
                     let mut is_first_in_segment = true;
 
                     loop {
-                        let mut cells = vec![];
+                        if inside_row_idx == total_num_row {
+                            opened_index += 1;
+                            break;
+                        }
+                        let inside_cols = &mut allocated_rows[inside_row_idx];
+                        let inside_specific_cols: &mut InsideRowSpecificCols<F> = inside_cols
+                            .specific[..InsideRowSpecificCols::<u8>::width()]
+                            .borrow_mut();
+                        let start_timestamp_u32 = state.memory.timestamp;
+
+                        let mut cells_idx = 0;
                         for chunk_elem in rolling_hash.iter_mut().take(CHUNK) {
-                            let read_row_pointer_and_length = if is_first_in_segment
-                                || row_pointer == row_end
-                            {
+                            let cell_cols = &mut inside_specific_cols.cells[cells_idx];
+                            if is_first_in_segment || row_pointer == row_end {
                                 if is_first_in_segment {
                                     is_first_in_segment = false;
                                 } else {
                                     opened_index += 1;
                                     if opened_index == opened_length
-                                        || memory.unsafe_read_cell(
-                                            address_space,
-                                            dim_base_pointer
-                                                + F::from_canonical_usize(opened_index),
-                                        ) != F::from_canonical_u32(log_height as u32)
+                                        || memory_read_native::<F, 1>(
+                                            state.memory.data(),
+                                            dim_base_pointer_u32 + opened_index as u32,
+                                        )[0] != F::from_canonical_u32(log_height as u32)
                                     {
                                         break;
                                     }
                                 }
-                                let (result, [new_row_pointer, row_len]) = memory.read(
-                                    address_space,
-                                    opened_base_pointer + F::from_canonical_usize(2 * opened_index),
+                                let [new_row_pointer, row_len]: [F; 2] = tracing_read_native_helper(
+                                    state.memory,
+                                    opened_base_pointer_u32 + 2 * opened_index as u32,
+                                    cell_cols.read_row_pointer_and_length.as_mut(),
                                 );
                                 row_pointer = new_row_pointer.as_canonical_u32() as usize;
                                 row_end = row_pointer
                                     + (opened_element_size * row_len).as_canonical_u32() as usize;
-                                Some(result)
+                                cell_cols.is_first_in_row = F::ONE;
                             } else {
-                                memory.increment_timestamp();
-                                None
-                            };
-                            let (read, value) = memory
-                                .read_cell(address_space, F::from_canonical_usize(row_pointer));
-                            cells.push(CellRecord {
-                                read,
-                                opened_index,
-                                read_row_pointer_and_length,
-                                row_pointer,
-                                row_end,
-                            });
+                                state.memory.increment_timestamp();
+                            }
+                            let [value]: [F; 1] = tracing_read_native_helper(
+                                state.memory,
+                                row_pointer as u32,
+                                cell_cols.read.as_mut(),
+                            );
+
+                            cell_cols.opened_index = F::from_canonical_usize(opened_index);
+                            cell_cols.row_pointer = F::from_canonical_usize(row_pointer);
+                            cell_cols.row_end = F::from_canonical_usize(row_end);
+
                             *chunk_elem = value;
                             row_pointer += 1;
+                            cells_idx += 1;
                         }
-                        if cells.is_empty() {
+                        if cells_idx == 0 {
                             break;
                         }
-                        let cells_len = cells.len();
-                        chunks.push(InsideRowRecord {
-                            cells,
-                            p2_input: rolling_hash,
-                        });
-                        self.height += 1;
+                        let p2_input = rolling_hash;
                         prev_rolling_hash = Some(rolling_hash);
                         self.subchip.permute_mut(&mut rolling_hash);
-                        if cells_len < CHUNK {
-                            for _ in 0..CHUNK - cells_len {
-                                memory.increment_timestamp();
-                                memory.increment_timestamp();
+                        if cells_idx < CHUNK {
+                            state
+                                .memory
+                                .increment_timestamp_by(2 * (CHUNK - cells_idx) as u32);
+                        }
+
+                        inside_row_idx += 1;
+                        inside_cols.inner.inputs = p2_input;
+                        inside_cols.incorporate_row = F::ZERO;
+                        inside_cols.incorporate_sibling = F::ZERO;
+                        inside_cols.inside_row = F::ONE;
+                        inside_cols.simple = F::ZERO;
+                        // `end_inside_row` of the last row will be set to 1 after this loop.
+                        inside_cols.end_inside_row = F::ZERO;
+                        inside_cols.end_top_level = F::ZERO;
+                        inside_cols.opened_element_size_inv = opened_element_size_inv;
+                        inside_cols.very_first_timestamp =
+                            F::from_canonical_u32(incorporate_start_timestamp);
+                        inside_cols.start_timestamp = F::from_canonical_u32(start_timestamp_u32);
+
+                        inside_cols.initial_opened_index =
+                            F::from_canonical_usize(initial_opened_index);
+                        inside_cols.opened_base_pointer = opened_base_pointer;
+                        if cells_idx < CHUNK {
+                            let exhausted_opened_idx = F::from_canonical_usize(opened_index - 1);
+                            for exhausted_idx in cells_idx..CHUNK {
+                                inside_cols.is_exhausted[exhausted_idx - 1] = F::ONE;
+                                inside_specific_cols.cells[exhausted_idx].opened_index =
+                                    exhausted_opened_idx;
                             }
                             break;
                         }
                     }
+                    {
+                        let inside_cols = &mut allocated_rows[inside_row_idx - 1];
+                        inside_cols.end_inside_row = F::ONE;
+                    }
+
+                    let incorporate_cols = &mut allocated_rows[non_inside_row_idx];
+                    let top_level_specific_cols: &mut TopLevelSpecificCols<F> = incorporate_cols
+                        .specific[..TopLevelSpecificCols::<u8>::width()]
+                        .borrow_mut();
+
                     let final_opened_index = opened_index - 1;
-                    let (initial_height_read, height_check) = memory.read_cell(
-                        address_space,
-                        dim_base_pointer + F::from_canonical_usize(initial_opened_index),
+                    let [height_check]: [F; 1] = tracing_read_native_helper(
+                        state.memory,
+                        dim_base_pointer_u32 + initial_opened_index as u32,
+                        top_level_specific_cols
+                            .read_initial_height_or_sibling_is_on_right
+                            .as_mut(),
                     );
                     assert_eq!(height_check, F::from_canonical_u32(log_height as u32));
-                    let (final_height_read, height_check) = memory.read_cell(
-                        address_space,
-                        dim_base_pointer + F::from_canonical_usize(final_opened_index),
+                    let final_height_read_timestamp = state.memory.timestamp;
+                    let [height_check]: [F; 1] = tracing_read_native_helper(
+                        state.memory,
+                        dim_base_pointer_u32 + final_opened_index as u32,
+                        top_level_specific_cols.read_final_height.as_mut(),
                     );
                     assert_eq!(height_check, F::from_canonical_u32(log_height as u32));
 
                     let hash: [F; CHUNK] = std::array::from_fn(|i| rolling_hash[i]);
-
-                    let (p2_input, new_root) = if log_height as u32 == initial_log_height {
+                    let (p2_input, new_root) = if log_height as u32 == initial_log_height_u32 {
                         (prev_rolling_hash.unwrap(), hash)
                     } else {
                         self.compress(root, hash)
                     };
                     root = new_root;
+                    non_inside_row_idx += 1;
 
-                    self.height += 1;
-                    Some(IncorporateRowRecord {
-                        chunks,
-                        initial_opened_index,
-                        final_opened_index,
-                        initial_height_read,
-                        final_height_read,
-                        p2_input,
-                    })
-                } else {
-                    None
-                };
-
-                let incorporate_sibling = if log_height == 0 {
-                    None
-                } else {
-                    for _ in 0..NUM_INITIAL_READS {
-                        memory.increment_timestamp();
-                    }
-
-                    let (read_sibling_is_on_right, sibling_is_on_right) = memory.read_cell(
-                        address_space,
-                        index_base_pointer + F::from_canonical_usize(sibling_index),
+                    incorporate_cols.incorporate_row = F::ONE;
+                    incorporate_cols.incorporate_sibling = F::ZERO;
+                    incorporate_cols.inside_row = F::ZERO;
+                    incorporate_cols.simple = F::ZERO;
+                    incorporate_cols.end_inside_row = F::ZERO;
+                    incorporate_cols.end_top_level = F::ZERO;
+                    incorporate_cols.start_top_level = F::from_bool(proof_index == 0);
+                    incorporate_cols.opened_element_size_inv = opened_element_size_inv;
+                    incorporate_cols.very_first_timestamp = init_timestamp;
+                    incorporate_cols.start_timestamp = F::from_canonical_u32(
+                        incorporate_start_timestamp - NUM_INITIAL_READS as u32,
                     );
-                    let sibling_is_on_right = sibling_is_on_right == F::ONE;
-                    let sibling = sibling_proof[sibling_index];
-                    let (p2_input, new_root) = if sibling_is_on_right {
+                    top_level_specific_cols.end_timestamp =
+                        F::from_canonical_u32(final_height_read_timestamp + 1);
+
+                    incorporate_cols.inner.inputs = p2_input;
+                    incorporate_cols.initial_opened_index =
+                        F::from_canonical_usize(initial_opened_index);
+                    top_level_specific_cols.final_opened_index =
+                        F::from_canonical_usize(final_opened_index);
+                    top_level_specific_cols.log_height = F::from_canonical_u32(log_height as u32);
+                    top_level_specific_cols.opened_length = F::from_canonical_usize(opened_length);
+                    top_level_specific_cols.dim_base_pointer = dim_base_pointer;
+                    incorporate_cols.opened_base_pointer = opened_base_pointer;
+                    top_level_specific_cols.index_base_pointer = index_base_pointer;
+                    top_level_specific_cols.proof_index = F::from_canonical_usize(proof_index);
+                }
+
+                if log_height != 0 {
+                    let row_start_timestamp = state.memory.timestamp;
+                    state
+                        .memory
+                        .increment_timestamp_by(NUM_INITIAL_READS as u32);
+
+                    let sibling_cols = &mut allocated_rows[non_inside_row_idx];
+                    let top_level_specific_cols: &mut TopLevelSpecificCols<F> =
+                        sibling_cols.specific[..TopLevelSpecificCols::<u8>::width()].borrow_mut();
+
+                    let read_sibling_is_on_right_timestamp = state.memory.timestamp;
+                    let [sibling_is_on_right]: [F; 1] = tracing_read_native_helper(
+                        state.memory,
+                        index_base_pointer_u32 + proof_index as u32,
+                        top_level_specific_cols
+                            .read_initial_height_or_sibling_is_on_right
+                            .as_mut(),
+                    );
+                    let sibling = sibling_proof[proof_index];
+                    let (p2_input, new_root) = if sibling_is_on_right == F::ONE {
                         self.compress(sibling, root)
                     } else {
                         self.compress(root, sibling)
                     };
                     root = new_root;
 
-                    self.height += 1;
-                    Some(IncorporateSiblingRecord {
-                        read_sibling_is_on_right,
-                        sibling_is_on_right,
-                        p2_input,
-                    })
+                    non_inside_row_idx += 1;
+
+                    sibling_cols.inner.inputs = p2_input;
+
+                    sibling_cols.incorporate_row = F::ZERO;
+                    sibling_cols.incorporate_sibling = F::ONE;
+                    sibling_cols.inside_row = F::ZERO;
+                    sibling_cols.simple = F::ZERO;
+                    sibling_cols.end_inside_row = F::ZERO;
+                    sibling_cols.end_top_level = F::ZERO;
+                    sibling_cols.start_top_level = F::ZERO;
+                    sibling_cols.opened_element_size_inv = opened_element_size_inv;
+                    sibling_cols.very_first_timestamp = init_timestamp;
+                    sibling_cols.start_timestamp = F::from_canonical_u32(row_start_timestamp);
+
+                    top_level_specific_cols.end_timestamp =
+                        F::from_canonical_u32(read_sibling_is_on_right_timestamp + 1);
+                    sibling_cols.initial_opened_index = F::from_canonical_usize(opened_index);
+                    top_level_specific_cols.final_opened_index =
+                        F::from_canonical_usize(opened_index - 1);
+                    top_level_specific_cols.log_height = F::from_canonical_u32(log_height as u32);
+                    top_level_specific_cols.opened_length = F::from_canonical_usize(opened_length);
+                    top_level_specific_cols.dim_base_pointer = dim_base_pointer;
+                    sibling_cols.opened_base_pointer = opened_base_pointer;
+                    top_level_specific_cols.index_base_pointer = index_base_pointer;
+
+                    top_level_specific_cols.proof_index = F::from_canonical_usize(proof_index);
+                    top_level_specific_cols.sibling_is_on_right = sibling_is_on_right;
                 };
 
-                top_level.push(TopLevelRecord {
-                    incorporate_row,
-                    incorporate_sibling,
-                });
-
                 log_height -= 1;
-                sibling_index += 1;
+                proof_index += 1;
             }
-
+            let ltl_trace_cols = &mut allocated_rows[non_inside_row_idx - 1];
+            let ltl_trace_specific_cols: &mut TopLevelSpecificCols<F> =
+                ltl_trace_cols.specific[..TopLevelSpecificCols::<u8>::width()].borrow_mut();
+            ltl_trace_cols.end_top_level = F::ONE;
+            ltl_trace_specific_cols.pc = F::from_canonical_u32(*state.pc);
+            ltl_trace_specific_cols.dim_register = dim_register;
+            ltl_trace_specific_cols.opened_register = opened_register;
+            ltl_trace_specific_cols.opened_length_register = opened_length_register;
+            ltl_trace_specific_cols.proof_id = proof_id_ptr;
+            ltl_trace_specific_cols.index_register = index_register;
+            ltl_trace_specific_cols.commit_register = commit_register;
+            ltl_trace_specific_cols.commit_pointer = commit_pointer;
+            ltl_trace_specific_cols.dim_base_pointer_read = ltl_specific_cols.dim_base_pointer_read;
+            ltl_trace_specific_cols.opened_base_pointer_read =
+                ltl_specific_cols.opened_base_pointer_read;
+            ltl_trace_specific_cols.opened_length_read = ltl_specific_cols.opened_length_read;
+            ltl_trace_specific_cols.index_base_pointer_read =
+                ltl_specific_cols.index_base_pointer_read;
+            ltl_trace_specific_cols.commit_pointer_read = ltl_specific_cols.commit_pointer_read;
+            ltl_trace_specific_cols.commit_read = ltl_specific_cols.commit_read;
             assert_eq!(commit, root);
-            self.record_set
-                .verify_batch_records
-                .push(VerifyBatchRecord {
-                    from_state,
-                    instruction: instruction.clone(),
-                    dim_base_pointer,
-                    opened_base_pointer,
-                    opened_length,
-                    index_base_pointer,
-                    commit_pointer,
-                    dim_base_pointer_read,
-                    opened_base_pointer_read,
-                    opened_length_read,
-                    index_base_pointer_read,
-                    commit_pointer_read,
-                    commit_read,
-                    initial_log_height: initial_log_height as usize,
-                    top_level,
-                });
         } else {
             unreachable!()
         }
-        Ok(ExecutionState {
-            pc: from_state.pc + DEFAULT_PC_STEP,
-            timestamp: memory.timestamp(),
-        })
+
+        *state.pc += DEFAULT_PC_STEP;
+        Ok(())
     }
 
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -504,5 +638,435 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InstructionExecutor<F>
         } else {
             unreachable!("unsupported opcode: {}", opcode)
         }
+    }
+}
+
+impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceFiller<F, CTX>
+    for NativePoseidon2Step<F, SBOX_REGISTERS>
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let inner_cols = {
+            let cols: &NativePoseidon2Cols<F, SBOX_REGISTERS> = row_slice.as_ref().borrow();
+            &self.subchip.generate_trace(vec![cols.inner.inputs]).values
+        };
+        let inner_width = self.subchip.air.width();
+        row_slice[..inner_width].copy_from_slice(inner_cols);
+        let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = row_slice.borrow_mut();
+
+        // Simple poseidon2 row
+        if cols.simple.is_one() {
+            let simple_cols: &mut SimplePoseidonSpecificCols<F> =
+                cols.specific[..SimplePoseidonSpecificCols::<u8>::width()].borrow_mut();
+            let start_timestamp_u32 = cols.start_timestamp.as_canonical_u32();
+            mem_fill_helper(
+                mem_helper,
+                start_timestamp_u32,
+                simple_cols.read_output_pointer.as_mut(),
+            );
+            mem_fill_helper(
+                mem_helper,
+                start_timestamp_u32 + 1,
+                simple_cols.read_input_pointer_1.as_mut(),
+            );
+            if simple_cols.is_compress.is_one() {
+                mem_fill_helper(
+                    mem_helper,
+                    start_timestamp_u32 + 2,
+                    simple_cols.read_input_pointer_2.as_mut(),
+                );
+            }
+            mem_fill_helper(
+                mem_helper,
+                start_timestamp_u32 + 3,
+                simple_cols.read_data_1.as_mut(),
+            );
+            mem_fill_helper(
+                mem_helper,
+                start_timestamp_u32 + 4,
+                simple_cols.read_data_2.as_mut(),
+            );
+            mem_fill_helper(
+                mem_helper,
+                start_timestamp_u32 + 5,
+                simple_cols.write_data_1.as_mut(),
+            );
+            if simple_cols.is_compress.is_zero() {
+                mem_fill_helper(
+                    mem_helper,
+                    start_timestamp_u32 + 6,
+                    simple_cols.write_data_2.as_mut(),
+                );
+            }
+        } else if cols.inside_row.is_one() {
+            let inside_row_specific_cols: &mut InsideRowSpecificCols<F> =
+                cols.specific[..InsideRowSpecificCols::<u8>::width()].borrow_mut();
+            let start_timestamp_u32 = cols.start_timestamp.as_canonical_u32();
+            for (i, cell) in inside_row_specific_cols.cells.iter_mut().enumerate() {
+                if i > 0 && cols.is_exhausted[i - 1].is_one() {
+                    break;
+                }
+                if cell.is_first_in_row.is_one() {
+                    mem_fill_helper(
+                        mem_helper,
+                        start_timestamp_u32 + 2 * i as u32,
+                        cell.read_row_pointer_and_length.as_mut(),
+                    );
+                }
+                mem_fill_helper(
+                    mem_helper,
+                    start_timestamp_u32 + 2 * i as u32 + 1,
+                    cell.read.as_mut(),
+                );
+            }
+        } else {
+            let top_level_specific_cols: &mut TopLevelSpecificCols<F> =
+                cols.specific[..TopLevelSpecificCols::<u8>::width()].borrow_mut();
+            let start_timestamp_u32 = cols.start_timestamp.as_canonical_u32();
+            if cols.end_top_level.is_one() {
+                let very_start_timestamp_u32 = cols.very_first_timestamp.as_canonical_u32();
+                mem_fill_helper(
+                    mem_helper,
+                    very_start_timestamp_u32,
+                    top_level_specific_cols.dim_base_pointer_read.as_mut(),
+                );
+                mem_fill_helper(
+                    mem_helper,
+                    very_start_timestamp_u32 + 1,
+                    top_level_specific_cols.opened_base_pointer_read.as_mut(),
+                );
+                mem_fill_helper(
+                    mem_helper,
+                    very_start_timestamp_u32 + 2,
+                    top_level_specific_cols.opened_length_read.as_mut(),
+                );
+                mem_fill_helper(
+                    mem_helper,
+                    very_start_timestamp_u32 + 3,
+                    top_level_specific_cols.index_base_pointer_read.as_mut(),
+                );
+                mem_fill_helper(
+                    mem_helper,
+                    very_start_timestamp_u32 + 4,
+                    top_level_specific_cols.commit_pointer_read.as_mut(),
+                );
+                mem_fill_helper(
+                    mem_helper,
+                    very_start_timestamp_u32 + 5,
+                    top_level_specific_cols.commit_read.as_mut(),
+                );
+            }
+            if cols.incorporate_row.is_one() {
+                let end_timestamp = top_level_specific_cols.end_timestamp.as_canonical_u32();
+                mem_fill_helper(
+                    mem_helper,
+                    end_timestamp - 2,
+                    top_level_specific_cols
+                        .read_initial_height_or_sibling_is_on_right
+                        .as_mut(),
+                );
+                mem_fill_helper(
+                    mem_helper,
+                    end_timestamp - 1,
+                    top_level_specific_cols.read_final_height.as_mut(),
+                );
+            } else if cols.incorporate_sibling.is_one() {
+                mem_fill_helper(
+                    mem_helper,
+                    start_timestamp_u32 + NUM_INITIAL_READS as u32,
+                    top_level_specific_cols
+                        .read_initial_height_or_sibling_is_on_right
+                        .as_mut(),
+                );
+            } else {
+                unreachable!()
+            }
+        }
+    }
+
+    fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let width = self.subchip.air.width();
+        row_slice[..width].copy_from_slice(&self.empty_poseidon2_sub_cols);
+    }
+}
+
+fn tracing_read_native_helper<F: PrimeField32, const BLOCK_SIZE: usize>(
+    memory: &mut TracingMemory<F>,
+    ptr: u32,
+    base_aux: &mut MemoryBaseAuxCols<F>,
+) -> [F; BLOCK_SIZE] {
+    let mut prev_ts = 0;
+    let ret = tracing_read_native(memory, ptr, &mut prev_ts);
+    base_aux.set_prev(F::from_canonical_u32(prev_ts));
+    ret
+}
+
+/// Fill `MemoryBaseAuxCols`, assuming that the `prev_timestamp` is already set in `base_aux`.
+fn mem_fill_helper<F: PrimeField32>(
+    mem_helper: &MemoryAuxColsFactory<F>,
+    timestamp: u32,
+    base_aux: &mut MemoryBaseAuxCols<F>,
+) {
+    let prev_ts = base_aux.prev_timestamp.as_canonical_u32();
+    mem_helper.fill(prev_ts, timestamp, base_aux);
+}
+
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE1<F>
+    for NativePoseidon2Step<F, SBOX_REGISTERS>
+{
+    fn execute_e1<Ctx>(
+        &self,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> openvm_circuit::arch::Result<()>
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+        self.execute_e1_impl(state, instruction);
+        Ok(())
+    }
+
+    fn execute_metered(
+        &self,
+        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
+        instruction: &Instruction<F>,
+        chip_index: usize,
+    ) -> openvm_circuit::arch::Result<()> {
+        let height = self.execute_e1_impl(state, instruction);
+        state.ctx.trace_heights[chip_index] += height as u32;
+
+        Ok(())
+    }
+}
+
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_REGISTERS> {
+    /// Returns the number of used rows.
+    fn execute_e1_impl<Ctx>(
+        &self,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> usize
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+        let mut height = 0;
+        if instruction.opcode == PERM_POS2.global_opcode()
+            || instruction.opcode == COMP_POS2.global_opcode()
+        {
+            let &Instruction {
+                a: output_register,
+                b: input_register_1,
+                c: input_register_2,
+                d: register_address_space,
+                e: data_address_space,
+                ..
+            } = instruction;
+            debug_assert_eq!(
+                register_address_space,
+                F::from_canonical_u32(AS::Native as u32)
+            );
+            debug_assert_eq!(data_address_space, F::from_canonical_u32(AS::Native as u32));
+            let [output_pointer]: [F; 1] =
+                memory_read_native_from_state(state, output_register.as_canonical_u32());
+            let [input_pointer_1]: [F; 1] =
+                memory_read_native_from_state(state, input_register_1.as_canonical_u32());
+            let [input_pointer_2] = if instruction.opcode == PERM_POS2.global_opcode() {
+                [input_pointer_1 + F::from_canonical_usize(CHUNK)]
+            } else {
+                memory_read_native_from_state(state, input_register_2.as_canonical_u32())
+            };
+            let data_1: [F; CHUNK] =
+                memory_read_native_from_state(state, input_pointer_1.as_canonical_u32());
+            let data_2: [F; CHUNK] =
+                memory_read_native_from_state(state, input_pointer_2.as_canonical_u32());
+
+            let p2_input = std::array::from_fn(|i| {
+                if i < CHUNK {
+                    data_1[i]
+                } else {
+                    data_2[i - CHUNK]
+                }
+            });
+            let output = self.subchip.permute(p2_input);
+            let output_pointer_u32 = output_pointer.as_canonical_u32();
+            memory_write_native_from_state::<_, F, CHUNK>(
+                state,
+                output_pointer_u32,
+                std::array::from_fn(|i| output[i]),
+            );
+            if instruction.opcode == PERM_POS2.global_opcode() {
+                memory_write_native_from_state::<_, F, CHUNK>(
+                    state,
+                    output_pointer_u32 + CHUNK as u32,
+                    std::array::from_fn(|i| output[i + CHUNK]),
+                );
+            }
+
+            height += 1;
+        } else if instruction.opcode == VERIFY_BATCH.global_opcode() {
+            // TODO: Add a flag `optimistic_execution`. When the flag is true, we trust all inputs
+            // and skip all input validation computation during E1 execution.
+            let &Instruction {
+                a: dim_register,
+                b: opened_register,
+                c: opened_length_register,
+                d: proof_id_ptr,
+                e: index_register,
+                f: commit_register,
+                g: opened_element_size_inv,
+                ..
+            } = instruction;
+            // calc inverse fast assuming opened_element_size in {1, 4}
+            let mut opened_element_size = F::ONE;
+            while opened_element_size * opened_element_size_inv != F::ONE {
+                opened_element_size += F::ONE;
+            }
+
+            let [proof_id]: [F; 1] =
+                memory_read_native_from_state(state, proof_id_ptr.as_canonical_u32());
+            let [dim_base_pointer]: [F; 1] =
+                memory_read_native_from_state(state, dim_register.as_canonical_u32());
+            let dim_base_pointer_u32 = dim_base_pointer.as_canonical_u32();
+            let [opened_base_pointer]: [F; 1] =
+                memory_read_native_from_state(state, opened_register.as_canonical_u32());
+            let opened_base_pointer_u32 = opened_base_pointer.as_canonical_u32();
+            let [opened_length]: [F; 1] =
+                memory_read_native_from_state(state, opened_length_register.as_canonical_u32());
+            let [index_base_pointer]: [F; 1] =
+                memory_read_native_from_state(state, index_register.as_canonical_u32());
+            let index_base_pointer_u32 = index_base_pointer.as_canonical_u32();
+            let [commit_pointer]: [F; 1] =
+                memory_read_native_from_state(state, commit_register.as_canonical_u32());
+            let commit: [F; CHUNK] =
+                memory_read_native_from_state(state, commit_pointer.as_canonical_u32());
+
+            let opened_length = opened_length.as_canonical_u32() as usize;
+
+            let initial_log_height = {
+                let [height]: [F; 1] = memory_read_native_from_state(state, dim_base_pointer_u32);
+                height.as_canonical_u32()
+            };
+
+            let mut log_height = initial_log_height as i32;
+            let mut sibling_index = 0;
+            let mut opened_index = 0;
+
+            let mut root = [F::ZERO; CHUNK];
+            let sibling_proof: Vec<[F; CHUNK]> = {
+                let proof_idx = proof_id.as_canonical_u32() as usize;
+                state.streams.hint_space[proof_idx]
+                    .par_chunks(CHUNK)
+                    .map(|c| c.try_into().unwrap())
+                    .collect()
+            };
+
+            while log_height >= 0 {
+                if opened_index < opened_length
+                    && memory_read_native_from_state::<_, F, 1>(
+                        state,
+                        dim_base_pointer_u32 + opened_index as u32,
+                    )[0] == F::from_canonical_u32(log_height as u32)
+                {
+                    let initial_opened_index = opened_index;
+
+                    let mut row_pointer = 0;
+                    let mut row_end = 0;
+
+                    let mut rolling_hash = [F::ZERO; 2 * CHUNK];
+
+                    let mut is_first_in_segment = true;
+
+                    loop {
+                        let mut cells_len = 0;
+                        for chunk_elem in rolling_hash.iter_mut().take(CHUNK) {
+                            if is_first_in_segment || row_pointer == row_end {
+                                if is_first_in_segment {
+                                    is_first_in_segment = false;
+                                } else {
+                                    opened_index += 1;
+                                    if opened_index == opened_length
+                                        || memory_read_native_from_state::<_, F, 1>(
+                                            state,
+                                            dim_base_pointer_u32 + opened_index as u32,
+                                        )[0] != F::from_canonical_u32(log_height as u32)
+                                    {
+                                        break;
+                                    }
+                                }
+                                let [new_row_pointer, row_len]: [F; 2] =
+                                    memory_read_native_from_state(
+                                        state,
+                                        opened_base_pointer_u32 + 2 * opened_index as u32,
+                                    );
+                                row_pointer = new_row_pointer.as_canonical_u32() as usize;
+                                row_end = row_pointer
+                                    + (opened_element_size * row_len).as_canonical_u32() as usize;
+                            }
+                            let [value]: [F; 1] =
+                                memory_read_native_from_state(state, row_pointer as u32);
+                            cells_len += 1;
+                            *chunk_elem = value;
+                            row_pointer += 1;
+                        }
+                        if cells_len == 0 {
+                            break;
+                        }
+                        height += 1;
+                        self.subchip.permute_mut(&mut rolling_hash);
+                        if cells_len < CHUNK {
+                            break;
+                        }
+                    }
+                    let final_opened_index = opened_index - 1;
+                    let [height_check]: [F; 1] = memory_read_native_from_state(
+                        state,
+                        dim_base_pointer_u32 + initial_opened_index as u32,
+                    );
+                    assert_eq!(height_check, F::from_canonical_u32(log_height as u32));
+                    let [height_check]: [F; 1] = memory_read_native_from_state(
+                        state,
+                        dim_base_pointer_u32 + final_opened_index as u32,
+                    );
+                    assert_eq!(height_check, F::from_canonical_u32(log_height as u32));
+
+                    let hash: [F; CHUNK] = std::array::from_fn(|i| rolling_hash[i]);
+
+                    let new_root = if log_height as u32 == initial_log_height {
+                        hash
+                    } else {
+                        self.compress(root, hash).1
+                    };
+                    root = new_root;
+
+                    height += 1;
+                }
+
+                if log_height != 0 {
+                    let [sibling_is_on_right]: [F; 1] = memory_read_native_from_state(
+                        state,
+                        index_base_pointer_u32 + sibling_index as u32,
+                    );
+                    let sibling_is_on_right = sibling_is_on_right == F::ONE;
+                    let sibling = sibling_proof[sibling_index];
+                    let new_root = if sibling_is_on_right {
+                        self.compress(sibling, root).1
+                    } else {
+                        self.compress(root, sibling).1
+                    };
+                    root = new_root;
+
+                    height += 1;
+                }
+
+                log_height -= 1;
+                sibling_index += 1;
+            }
+
+            assert_eq!(commit, root);
+        } else {
+            unreachable!()
+        }
+        *state.pc += DEFAULT_PC_STEP;
+
+        height
     }
 }

@@ -55,14 +55,15 @@ fn boundary_air_test() {
         let final_data = Val::from_canonical_u32(rng.gen_range(0..MAX_VAL));
         let final_clk = rng.gen_range(1..MAX_VAL) as u32;
 
-        final_memory.insert(
+        final_memory.push((
             (addr_space, pointer),
             TimestampedValues {
                 values: [final_data],
                 timestamp: final_clk,
             },
-        );
+        ));
     }
+    final_memory.sort_by_key(|(key, _)| *key);
 
     let diff_height = num_addresses.next_power_of_two() - num_addresses;
 
@@ -90,7 +91,10 @@ fn boundary_air_test() {
         distinct_addresses
             .iter()
             .flat_map(|(addr_space, pointer)| {
-                let timestamped_value = final_memory.get(&(*addr_space, *pointer)).unwrap();
+                let timestamped_value = final_memory[final_memory
+                    .binary_search_by(|(key, _)| key.cmp(&(*addr_space, *pointer)))
+                    .unwrap()]
+                .1;
 
                 vec![
                     Val::ONE,

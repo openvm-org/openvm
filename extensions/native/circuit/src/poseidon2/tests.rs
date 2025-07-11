@@ -1,11 +1,8 @@
-use std::{
-    cmp::min,
-    sync::{Arc, Mutex},
-};
+use std::cmp::min;
 
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, VmChipTestBuilder, VmChipTester},
-    verify_single, Streams, VirtualMachine,
+    verify_single, VirtualMachine,
 };
 use openvm_instructions::{instruction::Instruction, program::Program, LocalOpcode, SystemOpcode};
 use openvm_native_compiler::{
@@ -34,11 +31,12 @@ use rand::{rngs::StdRng, Rng};
 
 use super::air::VerifyBatchBus;
 use crate::{
-    poseidon2::{chip::NativePoseidon2Chip, CHUNK},
+    poseidon2::{new_native_poseidon2_chip, CHUNK},
     NativeConfig,
 };
 
 const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus::new(7);
+const MAX_INS_CAPACITY: usize = 1 << 15;
 
 fn compute_commit<F: Field>(
     dim: &[usize],
@@ -153,15 +151,14 @@ fn test<const N: usize>(cases: [Case; N]) {
     // single op
     let address_space = AS::Native as usize;
 
-    let mut tester = VmChipTestBuilder::default();
-    let streams = Arc::new(Mutex::new(Streams::default()));
-    let mut chip = NativePoseidon2Chip::<F, SBOX_REGISTERS>::new(
+    let mut tester = VmChipTestBuilder::default_native();
+    let mut chip = new_native_poseidon2_chip::<F, SBOX_REGISTERS>(
         tester.system_port(),
-        tester.offline_memory_mutex_arc(),
         Poseidon2Config::default(),
         VERIFY_BATCH_BUS,
-        streams.clone(),
+        tester.memory_helper(),
     );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     let mut rng = create_seeded_rng();
     for Case {
@@ -169,12 +166,11 @@ fn test<const N: usize>(cases: [Case; N]) {
         opened_element_size,
     } in cases
     {
-        let mut streams = streams.lock().unwrap();
         let instance =
             random_instance(&mut rng, row_lengths, opened_element_size, |left, right| {
                 let concatenated =
                     std::array::from_fn(|i| if i < CHUNK { left[i] } else { right[i - CHUNK] });
-                let permuted = chip.subchip.permute(concatenated);
+                let permuted = chip.step.subchip.permute(concatenated);
                 (
                     std::array::from_fn(|i| permuted[i]),
                     std::array::from_fn(|i| permuted[i + CHUNK]),
@@ -203,7 +199,7 @@ fn test<const N: usize>(cases: [Case; N]) {
         tester.write_usize(address_space, dim_register, [dim_base_pointer]);
         tester.write_usize(address_space, opened_register, [opened_base_pointer]);
         tester.write_usize(address_space, opened_length_register, [opened.len()]);
-        tester.write_usize(address_space, proof_id, [streams.hint_space.len()]);
+        tester.write_usize(address_space, proof_id, [tester.streams.hint_space.len()]);
         tester.write_usize(address_space, index_register, [index_base_pointer]);
         tester.write_usize(address_space, commit_register, [commit_pointer]);
 
@@ -218,15 +214,15 @@ fn test<const N: usize>(cases: [Case; N]) {
                 [row_pointer, opened_row.len() / opened_element_size],
             );
             for (j, &opened_value) in opened_row.iter().enumerate() {
-                tester.write_cell(address_space, row_pointer + j, opened_value);
+                tester.write(address_space, row_pointer + j, [opened_value]);
             }
         }
-        streams
+        tester
+            .streams
             .hint_space
             .push(proof.iter().flatten().copied().collect());
-        drop(streams);
         for (i, &bit) in sibling_is_on_right.iter().enumerate() {
-            tester.write_cell(address_space, index_base_pointer + i, F::from_bool(bit));
+            tester.write(address_space, index_base_pointer + i, [F::from_bool(bit)]);
         }
         tester.write(address_space, commit_pointer, commit);
 
@@ -383,15 +379,14 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
 fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlake3Config> {
     let elem_range = || 1..=100;
 
-    let mut tester = VmChipTestBuilder::default();
-    let streams = Arc::new(Mutex::new(Streams::default()));
-    let mut chip = NativePoseidon2Chip::<F, SBOX_REGISTERS>::new(
+    let mut tester = VmChipTestBuilder::default_native();
+    let mut chip = new_native_poseidon2_chip::<F, SBOX_REGISTERS>(
         tester.system_port(),
-        tester.offline_memory_mutex_arc(),
         Poseidon2Config::default(),
         VERIFY_BATCH_BUS,
-        streams.clone(),
+        tester.memory_helper(),
     );
+    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     let mut rng = create_seeded_rng();
 
@@ -417,23 +412,24 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
         let data: [_; 2 * CHUNK] =
             std::array::from_fn(|_| BabyBear::from_canonical_usize(rng.gen_range(elem_range())));
 
-        let hash = chip.subchip.permute(data);
+        let hash = chip.step.subchip.permute(data);
 
-        tester.write_cell(d, a, BabyBear::from_canonical_usize(dst));
-        tester.write_cell(d, b, BabyBear::from_canonical_usize(lhs));
+        tester.write(d, a, [BabyBear::from_canonical_usize(dst)]);
+        tester.write(d, b, [BabyBear::from_canonical_usize(lhs)]);
         if opcode == COMP_POS2 {
-            tester.write_cell(d, c, BabyBear::from_canonical_usize(rhs));
+            tester.write(d, c, [BabyBear::from_canonical_usize(rhs)]);
         }
 
+        let data_left: [_; CHUNK] = std::array::from_fn(|i| data[i]);
+        let data_right: [_; CHUNK] = std::array::from_fn(|i| data[CHUNK + i]);
         match opcode {
             COMP_POS2 => {
-                let data_left: [_; CHUNK] = std::array::from_fn(|i| data[i]);
-                let data_right: [_; CHUNK] = std::array::from_fn(|i| data[CHUNK + i]);
                 tester.write(e, lhs, data_left);
                 tester.write(e, rhs, data_right);
             }
             PERM_POS2 => {
-                tester.write(e, lhs, data);
+                tester.write(e, lhs, data_left);
+                tester.write(e, lhs + CHUNK, data_right);
             }
         }
 
@@ -446,8 +442,10 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
                 assert_eq!(expected, actual);
             }
             PERM_POS2 => {
-                let actual = tester.read::<{ 2 * CHUNK }>(e, dst);
-                assert_eq!(hash, actual);
+                let actual_0 = tester.read::<{ CHUNK }>(e, dst);
+                let actual_1 = tester.read::<{ CHUNK }>(e, dst + CHUNK);
+                let actual = [actual_0, actual_1].concat();
+                assert_eq!(&hash, &actual[..]);
             }
         }
     }
@@ -497,7 +495,16 @@ fn air_test_with_compress_poseidon2(
     let vm = VirtualMachine::new(engine, config);
 
     let pk = vm.keygen();
-    let result = vm.execute_and_generate(program, vec![]).unwrap();
+    let vk = pk.get_vk();
+    let segments = vm
+        .execute_metered(
+            program.clone(),
+            vec![],
+            &vk.total_widths(),
+            &vk.num_interactions(),
+        )
+        .unwrap();
+    let result = vm.execute_and_generate(program, vec![], &segments).unwrap();
     let proofs = vm.prove(&pk, result);
     for proof in proofs {
         verify_single(&vm.engine, &pk.get_vk(), &proof).expect("Verification failed");

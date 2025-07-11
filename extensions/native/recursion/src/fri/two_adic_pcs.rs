@@ -745,6 +745,6 @@ pub mod tests {
     #[test]
     fn test_two_adic_fri_pcs_single_batch() {
         let (program, witness) = build_test_fri_with_cols_and_log2_rows(10, 10);
-        openvm_native_circuit::execute_program(program, witness);
+        openvm_native_circuit::test_execute_program(program, witness);
     }
 }

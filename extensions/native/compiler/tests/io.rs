@@ -1,4 +1,4 @@
-use openvm_native_circuit::execute_program;
+use openvm_native_circuit::test_execute_program;
 use openvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler},
     conversion::{convert_program, CompilerOptions},
@@ -61,5 +61,5 @@ fn test_io() {
     println!("{}", asm_code);
 
     let program = convert_program::<F, EF>(asm_code, CompilerOptions::default());
-    execute_program(program, witness_stream);
+    test_execute_program(program, witness_stream);
 }

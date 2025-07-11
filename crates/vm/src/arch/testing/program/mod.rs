@@ -15,7 +15,7 @@ use crate::{
     system::program::{ProgramBus, ProgramExecutionCols},
 };
 
-mod air;
+pub mod air;
 
 #[derive(Debug)]
 pub struct ProgramTester<F: Field> {

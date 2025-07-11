@@ -18,13 +18,14 @@ use openvm_stark_backend::{
     AirRef, Chip, ChipUsageGetter,
 };
 use rustc_hash::FxHashSet;
+use tracing::instrument;
 
-use super::merkle::SerialReceiver;
+use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP, TimestampedValues};
 use crate::{
-    arch::hasher::Hasher,
+    arch::{hasher::Hasher, ADDR_SPACE_OFFSET},
     system::memory::{
         dimensions::MemoryDimensions, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
-        TimestampedEquipartition, INITIAL_TIMESTAMP,
+        TimestampedEquipartition,
     },
 };
 
@@ -92,7 +93,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             // direction = -1 => is_final = 1
             local.expand_direction.into(),
             AB::Expr::ZERO,
-            local.address_space - AB::F::from_canonical_u32(self.memory_dims.as_offset),
+            local.address_space - AB::F::from_canonical_u32(ADDR_SPACE_OFFSET),
             local.leaf_label.into(),
         ];
         expand_fields.extend(local.hash.map(Into::into));
@@ -123,18 +124,18 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
 
 pub struct PersistentBoundaryChip<F, const CHUNK: usize> {
     pub air: PersistentBoundaryAir<CHUNK>,
-    touched_labels: TouchedLabels<F, CHUNK>,
+    pub touched_labels: TouchedLabels<F, CHUNK>,
     overridden_height: Option<usize>,
 }
 
 #[derive(Debug)]
-enum TouchedLabels<F, const CHUNK: usize> {
+pub enum TouchedLabels<F, const CHUNK: usize> {
     Running(FxHashSet<(u32, u32)>),
     Final(Vec<FinalTouchedLabel<F, CHUNK>>),
 }
 
 #[derive(Debug)]
-struct FinalTouchedLabel<F, const CHUNK: usize> {
+pub struct FinalTouchedLabel<F, const CHUNK: usize> {
     address_space: u32,
     label: u32,
     init_values: [F; CHUNK],
@@ -159,7 +160,15 @@ impl<F: PrimeField32, const CHUNK: usize> TouchedLabels<F, CHUNK> {
             _ => panic!("Cannot touch after finalization"),
         }
     }
-    fn len(&self) -> usize {
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            TouchedLabels::Running(touched_labels) => touched_labels.is_empty(),
+            TouchedLabels::Final(touched_labels) => touched_labels.is_empty(),
+        }
+    }
+
+    pub fn len(&self) -> usize {
         match self {
             TouchedLabels::Running(touched_labels) => touched_labels.len(),
             TouchedLabels::Final(touched_labels) => touched_labels.len(),
@@ -198,47 +207,40 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         }
     }
 
+    #[instrument(name = "boundary_finalize", skip_all)]
     pub fn finalize<H>(
         &mut self,
-        initial_memory: &MemoryImage<F>,
+        initial_memory: &MemoryImage,
+        // Only touched stuff
         final_memory: &TimestampedEquipartition<F, CHUNK>,
         hasher: &mut H,
     ) where
         H: Hasher<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
-        match &mut self.touched_labels {
-            TouchedLabels::Running(touched_labels) => {
-                let final_touched_labels: Vec<_> = touched_labels
-                    .par_iter()
-                    .map(|&(address_space, label)| {
-                        let pointer = label * CHUNK as u32;
-                        let init_values = array::from_fn(|i| {
-                            *initial_memory
-                                .get(&(address_space, pointer + i as u32))
-                                .unwrap_or(&F::ZERO)
-                        });
-                        let initial_hash = hasher.hash(&init_values);
-                        let timestamped_values = final_memory.get(&(address_space, label)).unwrap();
-                        let final_hash = hasher.hash(&timestamped_values.values);
-                        FinalTouchedLabel {
-                            address_space,
-                            label,
-                            init_values,
-                            final_values: timestamped_values.values,
-                            init_hash: initial_hash,
-                            final_hash,
-                            final_timestamp: timestamped_values.timestamp,
-                        }
-                    })
-                    .collect();
-                for l in &final_touched_labels {
-                    hasher.receive(&l.init_values);
-                    hasher.receive(&l.final_values);
+        let final_touched_labels: Vec<_> = final_memory
+            .par_iter()
+            .map(|&((addr_space, ptr), ts_values)| {
+                let TimestampedValues { timestamp, values } = ts_values;
+                let init_values =
+                    array::from_fn(|i| initial_memory.get_f::<F>(addr_space, ptr + i as u32));
+                let initial_hash = hasher.hash(&init_values);
+                let final_hash = hasher.hash(&values);
+                FinalTouchedLabel {
+                    address_space: addr_space,
+                    label: ptr / CHUNK as u32,
+                    init_values,
+                    final_values: values,
+                    init_hash: initial_hash,
+                    final_hash,
+                    final_timestamp: timestamp,
                 }
-                self.touched_labels = TouchedLabels::Final(final_touched_labels);
-            }
-            _ => panic!("Cannot finalize after finalization"),
+            })
+            .collect();
+        for l in &final_touched_labels {
+            hasher.receive(&l.init_values);
+            hasher.receive(&l.final_values);
         }
+        self.touched_labels = TouchedLabels::Final(final_touched_labels);
     }
 }
 

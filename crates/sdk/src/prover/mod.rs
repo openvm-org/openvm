@@ -19,8 +19,9 @@ pub use stark::*;
 mod evm {
     use std::sync::Arc;
 
-    use openvm_circuit::arch::VmConfig;
+    use openvm_circuit::arch::{InsExecutorE1, VmConfig};
     use openvm_native_recursion::halo2::utils::Halo2ParamsReader;
+    use openvm_stark_backend::config::Val;
     use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::Chip};
 
     use super::{Halo2Prover, StarkProver};
@@ -68,7 +69,7 @@ mod evm {
         pub fn generate_proof_for_evm(&self, input: StdIn) -> EvmProof
         where
             VC: VmConfig<F>,
-            VC::Executor: Chip<SC>,
+            VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
             VC::Periphery: Chip<SC>,
         {
             let root_proof = self.stark_prover.generate_proof_for_outer_recursion(input);

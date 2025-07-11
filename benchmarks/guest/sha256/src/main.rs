@@ -3,7 +3,7 @@ use openvm as _;
 
 use openvm_sha2::sha256;
 
-const INPUT_LENGTH_BYTES: usize = 100 * 1024; // 100 KB
+const INPUT_LENGTH_BYTES: usize = 384 * 1024;
 
 pub fn main() {
     let mut input = Vec::with_capacity(INPUT_LENGTH_BYTES);

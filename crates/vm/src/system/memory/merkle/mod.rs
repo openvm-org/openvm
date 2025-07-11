@@ -1,27 +1,36 @@
-use openvm_stark_backend::{interaction::PermutationCheckBus, p3_field::PrimeField32};
-use rustc_hash::FxHashSet;
+use std::array;
 
-use super::controller::dimensions::MemoryDimensions;
+use openvm_stark_backend::{
+    interaction::PermutationCheckBus, p3_field::PrimeField32, p3_maybe_rayon::prelude::*,
+};
+
+use super::{controller::dimensions::MemoryDimensions, online::LinearMemory, MemoryImage};
+use crate::system::memory::online::PAGE_SIZE;
+
 mod air;
 mod columns;
+pub mod public_values;
 mod trace;
+mod tree;
 
 pub use air::*;
 pub use columns::*;
 pub(super) use trace::SerialReceiver;
+pub use tree::*;
 
-#[cfg(test)]
-mod tests;
+// TODO: add back
+// #[cfg(test)]
+// mod tests;
 
 pub struct MemoryMerkleChip<const CHUNK: usize, F> {
     pub air: MemoryMerkleAir<CHUNK>,
-    touched_nodes: FxHashSet<(usize, u32, u32)>,
-    num_touched_nonleaves: usize,
     final_state: Option<FinalState<CHUNK, F>>,
+    // TODO(AG): how are these two different? Doesn't one just end up being copied to the other?
+    trace_height: Option<usize>,
     overridden_height: Option<usize>,
 }
 #[derive(Debug)]
-struct FinalState<const CHUNK: usize, F> {
+pub struct FinalState<const CHUNK: usize, F> {
     rows: Vec<MemoryMerkleCols<F, CHUNK>>,
     init_root: [F; CHUNK],
     final_root: [F; CHUNK],
@@ -35,46 +44,92 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
         merkle_bus: PermutationCheckBus,
         compression_bus: PermutationCheckBus,
     ) -> Self {
-        assert!(memory_dimensions.as_height > 0);
+        assert!(memory_dimensions.addr_space_height > 0);
         assert!(memory_dimensions.address_height > 0);
-        let mut touched_nodes = FxHashSet::default();
-        touched_nodes.insert((memory_dimensions.overall_height(), 0, 0));
         Self {
             air: MemoryMerkleAir {
                 memory_dimensions,
                 merkle_bus,
                 compression_bus,
             },
-            touched_nodes,
-            num_touched_nonleaves: 1,
             final_state: None,
+            trace_height: None,
             overridden_height: None,
         }
     }
     pub fn set_overridden_height(&mut self, override_height: usize) {
         self.overridden_height = Some(override_height);
     }
+}
 
-    fn touch_node(&mut self, height: usize, as_label: u32, address_label: u32) {
-        if self.touched_nodes.insert((height, as_label, address_label)) {
-            assert_ne!(height, self.air.memory_dimensions.overall_height());
-            if height != 0 {
-                self.num_touched_nonleaves += 1;
-            }
-            if height >= self.air.memory_dimensions.address_height {
-                self.touch_node(height + 1, as_label / 2, address_label);
+#[tracing::instrument(level = "info", skip_all)]
+fn memory_to_vec_partition<F: PrimeField32, const N: usize>(
+    memory: &MemoryImage,
+    md: &MemoryDimensions,
+) -> Vec<(u64, [F; N])> {
+    (0..memory.mem.len())
+        .into_par_iter()
+        .map(move |as_idx| {
+            let space_mem = memory.mem[as_idx].as_slice();
+            let cell_size = memory.cell_size[as_idx];
+            debug_assert_eq!(PAGE_SIZE % (cell_size * N), 0);
+
+            let num_nonzero_pages = space_mem
+                .par_chunks(PAGE_SIZE)
+                .enumerate()
+                .flat_map(|(idx, page)| {
+                    if page.iter().any(|x| *x != 0) {
+                        Some(idx + 1)
+                    } else {
+                        None
+                    }
+                })
+                .max()
+                .unwrap_or(0);
+
+            let space_mem = &space_mem[..(num_nonzero_pages * PAGE_SIZE).min(space_mem.len())];
+            let mut num_elements = space_mem.len() / (cell_size * N);
+            // virtual memory may be larger than dimensions due to rounding up to page size
+            num_elements = num_elements.min(1 << md.address_height);
+
+            // TODO: handle different cell sizes better
+            if cell_size == 1 {
+                (0..num_elements)
+                    .into_par_iter()
+                    .map(move |idx| {
+                        let byte_index = idx * cell_size * N;
+                        unsafe {
+                            let ptr = space_mem.as_ptr();
+                            let src = ptr.add(byte_index);
+                            (
+                                md.label_to_index((as_idx as u32, idx as u32)),
+                                array::from_fn(|i| {
+                                    F::from_canonical_u8(core::ptr::read(src.add(i)))
+                                }),
+                            )
+                        }
+                    })
+                    .collect::<Vec<_>>()
             } else {
-                self.touch_node(height + 1, as_label, address_label / 2);
+                assert_eq!(cell_size, 4);
+                (0..num_elements)
+                    .into_par_iter()
+                    .map(move |idx| {
+                        let byte_index = idx * cell_size * N;
+                        unsafe {
+                            let ptr = space_mem.as_ptr();
+                            let src = ptr.add(byte_index) as *const F;
+                            (
+                                md.label_to_index((as_idx as u32, idx as u32)),
+                                array::from_fn(|i| core::ptr::read(src.add(i))),
+                            )
+                        }
+                    })
+                    .collect::<Vec<_>>()
             }
-        }
-    }
-
-    pub fn touch_range(&mut self, address_space: u32, address: u32, len: u32) {
-        let as_label = address_space - self.air.memory_dimensions.as_offset;
-        let first_address_label = address / CHUNK as u32;
-        let last_address_label = (address + len - 1) / CHUNK as u32;
-        for address_label in first_address_label..=last_address_label {
-            self.touch_node(0, as_label, address_label);
-        }
-    }
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
 }

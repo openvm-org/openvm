@@ -23,12 +23,10 @@ p3-keccak-air = { workspace = true }
 strum.workspace = true
 tiny-keccak.workspace = true
 itertools.workspace = true
-tracing.workspace = true
 derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
 serde.workspace = true
-serde-big-array.workspace = true
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }

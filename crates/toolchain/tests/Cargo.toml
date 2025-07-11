@@ -8,11 +8,16 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
+openvm-build.workspace = true
+openvm-circuit.workspace = true
+openvm-transpiler.workspace = true
+eyre.workspace = true
+tempfile.workspace = true
+
+[dev-dependencies]
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true
 openvm-circuit = { workspace = true, features = ["test-utils"] }
-openvm-transpiler.workspace = true
-openvm-build.workspace = true
 openvm-algebra-transpiler.workspace = true
 openvm-bigint-circuit.workspace = true
 openvm-rv32im-circuit.workspace = true
@@ -21,10 +26,8 @@ openvm-algebra-circuit.workspace = true
 openvm-ecc-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-platform = { workspace = true }
-
-eyre.workspace = true
 test-case.workspace = true
-tempfile.workspace = true
+rand = { workspace = true }
 serde = { workspace = true, features = ["alloc"] }
 derive_more = { workspace = true, features = ["from"] }
 
@@ -36,4 +39,4 @@ default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
 
 [package.metadata.cargo-shear]
-ignored = ["derive_more", "openvm-stark-backend"]
+ignored = ["derive_more", "openvm-stark-backend", "rand"]

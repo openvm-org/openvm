@@ -1,71 +1,38 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
+    mem::size_of,
 };
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterRuntimeContext, BasicAdapterInterface, ExecutionBridge,
-        ExecutionBus, ExecutionState, MinimalInstruction, Result, VmAdapterAir, VmAdapterChip,
-        VmAdapterInterface,
+        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
+        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, BasicAdapterInterface,
+        ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir, VmStateMut,
     },
     system::{
         memory::{
-            offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, MemoryController, OfflineMemory, RecordId,
+            offline_checker::{
+                MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+                MemoryWriteBytesAuxRecord,
+            },
+            online::{GuestMemory, TracingMemory},
+            MemoryAddress, MemoryAuxColsFactory,
         },
-        program::ProgramBus,
+        native_adapter::util::{memory_read_native_from_state, tracing_read_native},
     },
 };
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_MEMORY_AS,
+};
 use openvm_native_compiler::conversion::AS;
+use openvm_rv32im_circuit::adapters::{memory_write_from_state, tracing_write};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-use serde::{Deserialize, Serialize};
-use serde_big_array::BigArray;
-
-#[repr(C)]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct VectorReadRecord<const NUM_READS: usize, const READ_SIZE: usize> {
-    #[serde(with = "BigArray")]
-    pub reads: [RecordId; NUM_READS],
-}
-
-#[repr(C)]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct VectorWriteRecord<const WRITE_SIZE: usize> {
-    pub from_state: ExecutionState<u32>,
-    pub writes: [RecordId; 1],
-}
-
-#[allow(dead_code)]
-#[derive(Debug)]
-pub struct ConvertAdapterChip<F: Field, const READ_SIZE: usize, const WRITE_SIZE: usize> {
-    pub air: ConvertAdapterAir<READ_SIZE, WRITE_SIZE>,
-    _marker: PhantomData<F>,
-}
-
-impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize>
-    ConvertAdapterChip<F, READ_SIZE, WRITE_SIZE>
-{
-    pub fn new(
-        execution_bus: ExecutionBus,
-        program_bus: ProgramBus,
-        memory_bridge: MemoryBridge,
-    ) -> Self {
-        Self {
-            air: ConvertAdapterAir {
-                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                memory_bridge,
-            },
-            _marker: PhantomData,
-        }
-    }
-}
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -155,74 +122,148 @@ impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> Vm
     }
 }
 
-impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> VmAdapterChip<F>
-    for ConvertAdapterChip<F, READ_SIZE, WRITE_SIZE>
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct ConvertAdapterRecord<F, const READ_SIZE: usize, const WRITE_SIZE: usize> {
+    pub from_pc: u32,
+    pub from_timestamp: u32,
+
+    pub a_ptr: F,
+    pub b_ptr: F,
+
+    pub read_aux: MemoryReadAuxRecord,
+    pub write_aux: MemoryWriteBytesAuxRecord<WRITE_SIZE>,
+}
+
+#[derive(derive_new::new)]
+pub struct ConvertAdapterStep<const READ_SIZE: usize, const WRITE_SIZE: usize>;
+
+impl<F: PrimeField32, CTX, const READ_SIZE: usize, const WRITE_SIZE: usize> AdapterTraceStep<F, CTX>
+    for ConvertAdapterStep<READ_SIZE, WRITE_SIZE>
 {
-    type ReadRecord = VectorReadRecord<1, READ_SIZE>;
-    type WriteRecord = VectorWriteRecord<WRITE_SIZE>;
-    type Air = ConvertAdapterAir<READ_SIZE, WRITE_SIZE>;
-    type Interface = BasicAdapterInterface<F, MinimalInstruction<F>, 1, 1, READ_SIZE, WRITE_SIZE>;
+    const WIDTH: usize = size_of::<ConvertAdapterCols<u8, READ_SIZE, WRITE_SIZE>>();
+    type ReadData = [F; READ_SIZE];
+    type WriteData = [u8; WRITE_SIZE];
+    type RecordMut<'a> = &'a mut ConvertAdapterRecord<F, READ_SIZE, WRITE_SIZE>;
 
-    fn preprocess(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        instruction: &Instruction<F>,
-    ) -> Result<(
-        <Self::Interface as VmAdapterInterface<F>>::Reads,
-        Self::ReadRecord,
-    )> {
-        let Instruction { b, e, .. } = *instruction;
-
-        let y_val = memory.read::<READ_SIZE>(e, b);
-
-        Ok(([y_val.1], Self::ReadRecord { reads: [y_val.0] }))
+    #[inline(always)]
+    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+        record.from_pc = pc;
+        record.from_timestamp = memory.timestamp;
     }
 
-    fn postprocess(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-        output: AdapterRuntimeContext<F, Self::Interface>,
-        _read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)> {
-        let Instruction { a, d, .. } = *instruction;
-        let (write_id, _) = memory.write::<WRITE_SIZE>(d, a, output.writes[0]);
-
-        Ok((
-            ExecutionState {
-                pc: output.to_pc.unwrap_or(from_state.pc + DEFAULT_PC_STEP),
-                timestamp: memory.timestamp(),
-            },
-            Self::WriteRecord {
-                from_state,
-                writes: [write_id],
-            },
-        ))
-    }
-
-    fn generate_trace_row(
+    #[inline(always)]
+    fn read(
         &self,
-        row_slice: &mut [F],
-        read_record: Self::ReadRecord,
-        write_record: Self::WriteRecord,
-        memory: &OfflineMemory<F>,
-    ) {
-        let aux_cols_factory = memory.aux_cols_factory();
-        let row_slice: &mut ConvertAdapterCols<_, READ_SIZE, WRITE_SIZE> = row_slice.borrow_mut();
+        memory: &mut TracingMemory<F>,
+        instruction: &Instruction<F>,
+        record: &mut Self::RecordMut<'_>,
+    ) -> Self::ReadData {
+        let &Instruction { b, e, .. } = instruction;
+        debug_assert_eq!(e.as_canonical_u32(), AS::Native as u32);
 
-        let read = memory.record_by_id(read_record.reads[0]);
-        let write = memory.record_by_id(write_record.writes[0]);
+        record.b_ptr = b;
 
-        row_slice.from_state = write_record.from_state.map(F::from_canonical_u32);
-        row_slice.a_pointer = write.pointer;
-        row_slice.b_pointer = read.pointer;
-
-        aux_cols_factory.generate_read_aux(read, &mut row_slice.reads_aux[0]);
-        aux_cols_factory.generate_write_aux(write, &mut row_slice.writes_aux[0]);
+        tracing_read_native(
+            memory,
+            b.as_canonical_u32(),
+            &mut record.read_aux.prev_timestamp,
+        )
     }
 
-    fn air(&self) -> &Self::Air {
-        &self.air
+    #[inline(always)]
+    fn write(
+        &self,
+        memory: &mut TracingMemory<F>,
+        instruction: &Instruction<F>,
+        data: Self::WriteData,
+        record: &mut Self::RecordMut<'_>,
+    ) {
+        let &Instruction { a, d, .. } = instruction;
+
+        debug_assert_eq!(d.as_canonical_u32(), RV32_MEMORY_AS);
+
+        record.a_ptr = a;
+        tracing_write(
+            memory,
+            RV32_MEMORY_AS,
+            a.as_canonical_u32(),
+            data,
+            &mut record.write_aux.prev_timestamp,
+            &mut record.write_aux.prev_data,
+        );
+    }
+}
+
+impl<F: PrimeField32, CTX, const READ_SIZE: usize, const WRITE_SIZE: usize>
+    AdapterTraceFiller<F, CTX> for ConvertAdapterStep<READ_SIZE, WRITE_SIZE>
+{
+    #[inline(always)]
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut row_slice: &mut [F]) {
+        let record: &ConvertAdapterRecord<F, READ_SIZE, WRITE_SIZE> =
+            unsafe { get_record_from_slice(&mut row_slice, ()) };
+        let adapter_row: &mut ConvertAdapterCols<F, READ_SIZE, WRITE_SIZE> = row_slice.borrow_mut();
+
+        // Writing in reverse order to avoid overwriting the `record`
+        mem_helper.fill(
+            record.read_aux.prev_timestamp,
+            record.from_timestamp,
+            adapter_row.reads_aux[0].as_mut(),
+        );
+
+        adapter_row.writes_aux[0]
+            .set_prev_data(record.write_aux.prev_data.map(F::from_canonical_u8));
+        mem_helper.fill(
+            record.write_aux.prev_timestamp,
+            record.from_timestamp + 1,
+            adapter_row.writes_aux[0].as_mut(),
+        );
+
+        adapter_row.b_pointer = record.b_ptr;
+        adapter_row.a_pointer = record.a_ptr;
+
+        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
+        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+    }
+}
+
+impl<F, const READ_SIZE: usize, const WRITE_SIZE: usize> AdapterExecutorE1<F>
+    for ConvertAdapterStep<READ_SIZE, WRITE_SIZE>
+where
+    F: PrimeField32,
+{
+    type ReadData = [F; READ_SIZE];
+    type WriteData = [u8; WRITE_SIZE];
+
+    #[inline(always)]
+    fn read<Ctx>(
+        &self,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+    ) -> Self::ReadData
+    where
+        Ctx: E1E2ExecutionCtx,
+    {
+        let Instruction { b, e, .. } = instruction;
+
+        debug_assert_eq!(e.as_canonical_u32(), AS::Native as u32);
+
+        memory_read_native_from_state(state, b.as_canonical_u32())
+    }
+
+    #[inline(always)]
+    fn write<Ctx>(
+        &self,
+        state: &mut VmStateMut<F, GuestMemory, Ctx>,
+        instruction: &Instruction<F>,
+        data: Self::WriteData,
+    ) where
+        Ctx: E1E2ExecutionCtx,
+    {
+        let Instruction { a, d, .. } = instruction;
+
+        debug_assert_eq!(d.as_canonical_u32(), RV32_MEMORY_AS);
+
+        memory_write_from_state(state, RV32_MEMORY_AS, a.as_canonical_u32(), data);
     }
 }

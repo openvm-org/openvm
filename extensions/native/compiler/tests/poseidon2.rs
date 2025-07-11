@@ -1,4 +1,4 @@
-use openvm_native_circuit::execute_program;
+use openvm_native_circuit::test_execute_program;
 use openvm_native_compiler::{
     asm::AsmBuilder,
     ir::{Array, Var, PERMUTATION_WIDTH},
@@ -49,7 +49,7 @@ fn test_compiler_poseidon2_permute() {
     builder.halt();
 
     let program = builder.compile_isa();
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }
 
 #[test]
@@ -80,5 +80,5 @@ fn test_compiler_poseidon2_hash_1() {
     builder.halt();
 
     let program = builder.compile_isa();
-    execute_program(program, vec![]);
+    test_execute_program(program, vec![]);
 }
