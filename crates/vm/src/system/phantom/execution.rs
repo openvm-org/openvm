@@ -65,11 +65,10 @@ pub(super) struct PhantomStateMut<'a, F> {
 }
 
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
-    pre_compute: &[u8],
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+    pre_compute: &PhantomPreCompute<F>,
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
-    let pre_compute: &PhantomPreCompute<F> = pre_compute.borrow();
     let sub_executor = &*pre_compute.sub_executor;
     execute_impl(
         PhantomStateMut {
@@ -84,6 +83,27 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     .unwrap();
     vm_state.pc += DEFAULT_PC_STEP;
     vm_state.instret += 1;
+}
+
+#[inline(always)]
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &PhantomPreCompute<F> = pre_compute.borrow();
+    execute_e12_impl(pre_compute, vm_state);
+}
+
+#[inline(always)]
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &E2PreCompute<PhantomPreCompute<F>> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl(&pre_compute.data, vm_state);
 }
 
 #[inline(always)]
@@ -163,12 +183,6 @@ where
         let e2_data: &mut E2PreCompute<PhantomPreCompute<F>> = data.borrow_mut();
         e2_data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(inst, &mut e2_data.data);
-        Ok(|pre_compute, vm_state| {
-            let e2_pre_compute: &E2PreCompute<PhantomPreCompute<F>> = pre_compute.borrow();
-            vm_state
-                .ctx
-                .on_height_change(e2_pre_compute.chip_idx as usize, 1);
-            unsafe { execute_e1_impl(pre_compute, vm_state) };
-        })
+        Ok(execute_e2_impl)
     }
 }
