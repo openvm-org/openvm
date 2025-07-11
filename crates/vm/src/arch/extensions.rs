@@ -333,6 +333,17 @@ impl<E, P> VmInventory<E, P> {
         self.executors.get_mut(*id)
     }
 
+    pub fn get_executor_idx_in_vkey(&self, opcode: &VmOpcode) -> Option<usize> {
+        let id = *self.instruction_lookup.get(opcode)?;
+        self.insertion_order
+            .iter()
+            .rev()
+            .position(|chip_id| match chip_id {
+                ChipId::Executor(exec_id) => *exec_id == id,
+                _ => false,
+            })
+    }
+
     pub fn get_mut_executor_with_index(&mut self, opcode: &VmOpcode) -> Option<(&mut E, usize)> {
         let id = *self.instruction_lookup.get(opcode)?;
 

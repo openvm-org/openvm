@@ -23,10 +23,10 @@ use tracing::info_span;
 use crate::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        ExecuteFunc, ExecutionError,
-        ExecutionError::InvalidInstruction,
+        ExecuteFunc,
+        ExecutionError::{self, InvalidInstruction},
         InsExecutorE1, InsExecutorE2, PreComputeInstruction, Streams, VmChipComplex, VmConfig,
-        VmSegmentState,
+        VmSegmentState, PUBLIC_VALUES_AIR_ID,
     },
     system::memory::{online::GuestMemory, AddressMap},
 };
@@ -435,13 +435,18 @@ fn get_e2_pre_compute_instructions<
     chip_complex: &'a VmChipComplex<F, E, P>,
     pre_compute: &'a mut [&mut [u8]],
 ) -> Result<Vec<PreComputeInstruction<'a, F, Ctx>>, ExecutionError> {
+    let executor_idx_offset = if chip_complex.config().has_public_values_chip() {
+        PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
+    } else {
+        PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
+    };
     program
         .instructions_and_debug_infos
         .iter()
         .zip_eq(pre_compute.iter_mut())
         .enumerate()
         .map(|(i, (inst_opt, buf))| {
-            let buf: &mut [u8] = *buf;
+            let buf: &mut [u8] = buf;
             let pre_inst = if let Some((inst, _)) = inst_opt {
                 let pc = program.pc_base + i as u32 * program.step;
                 if let Some(handler) = get_system_opcode_handler(inst, buf) {
@@ -450,13 +455,13 @@ fn get_e2_pre_compute_instructions<
                         pre_compute: buf,
                     }
                 } else if let Some(executor) = chip_complex.inventory.get_executor(inst.opcode) {
+                    let executor_idx = executor_idx_offset
+                        + chip_complex
+                            .inventory
+                            .get_executor_idx_in_vkey(&inst.opcode)
+                            .unwrap();
                     PreComputeInstruction {
-                        handler: executor.pre_compute_e2(
-                            chip_complex.inventory.get_executor_id(inst.opcode).unwrap(),
-                            pc,
-                            inst,
-                            buf,
-                        )?,
+                        handler: executor.pre_compute_e2(executor_idx, pc, inst, buf)?,
                         pre_compute: buf,
                     }
                 } else {
