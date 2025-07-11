@@ -6,7 +6,6 @@ use crate::{Native, NativeConfig};
 
 pub(crate) const CASTF_MAX_BITS: usize = 30;
 
-
 pub fn execute_program_with_system_config(
     program: Program<BabyBear>,
     input_stream: impl Into<Streams<BabyBear>>,
@@ -36,7 +35,6 @@ pub fn execute_program(program: Program<BabyBear>, input_stream: impl Into<Strea
         .with_max_segment_len((1 << 25) - 100);
     execute_program_with_system_config(program, input_stream, system_config);
 }
-
 
 pub(crate) const fn const_max(a: usize, b: usize) -> usize {
     [a, b][(a < b) as usize]

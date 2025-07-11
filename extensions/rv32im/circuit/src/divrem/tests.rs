@@ -1,4 +1,4 @@
-use std::{array, borrow::BorrowMut};
+use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::testing::{
@@ -76,10 +76,9 @@ fn create_test_chip(
         [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
     );
 
-    let bitwise_chip =
-        SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(BitwiseOperationLookupChip::<
-            RV32_CELL_BITS,
-        >::new(bitwise_bus));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let range_tuple_chip =
         SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
 

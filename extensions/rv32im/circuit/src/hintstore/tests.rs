@@ -1,4 +1,4 @@
-use std::borrow::BorrowMut;
+use std::{borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
@@ -43,10 +43,9 @@ fn create_test_chip<RA: Arena>(
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip =
-        SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(BitwiseOperationLookupChip::<
-            RV32_CELL_BITS,
-        >::new(bitwise_bus));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
 
     let air = Rv32HintStoreAir::new(
         tester.execution_bridge(),

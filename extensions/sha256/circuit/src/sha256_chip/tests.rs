@@ -1,4 +1,4 @@
-use std::array;
+use std::{array, sync::Arc};
 
 use openvm_circuit::{
     arch::{
@@ -38,10 +38,9 @@ fn create_test_chips<RA: Arena>(
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip =
-        SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(BitwiseOperationLookupChip::<
-            RV32_CELL_BITS,
-        >::new(bitwise_bus));
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
 
     let air = Sha256VmAir::new(
         tester.system_port(),

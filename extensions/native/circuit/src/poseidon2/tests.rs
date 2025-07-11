@@ -275,7 +275,12 @@ fn test<const N: usize>(cases: [Case; N]) {
 
     let mut rng = create_seeded_rng();
     for case in cases {
-        set_and_execute(&mut valid_tester, &mut valid_harness, &mut rng, case.clone());
+        set_and_execute(
+            &mut valid_tester,
+            &mut valid_harness,
+            &mut rng,
+            case.clone(),
+        );
         set_and_execute(&mut prank_tester, &mut prank_harness, &mut rng, case);
     }
 

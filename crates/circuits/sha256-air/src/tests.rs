@@ -5,7 +5,9 @@ use openvm_circuit::arch::{
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    bitwise_op_lookup::{
+        BitwiseOperationLookupBus, BitwiseOperationLookupChip, SharedBitwiseOperationLookupChip,
+    },
     SubAir,
 };
 use openvm_stark_backend::{
@@ -94,7 +96,9 @@ type F = BabyBear;
 fn create_chip_with_rand_records() -> (Sha256TestChip, SharedBitwiseOperationLookupChip<8>) {
     let mut rng = create_seeded_rng();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let len = rng.gen_range(1..100);
     let random_records: Vec<_> = (0..len)
         .map(|i| {
