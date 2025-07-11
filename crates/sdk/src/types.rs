@@ -52,7 +52,6 @@ pub struct ProofData {
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EvmProof {
-    #[serde(flatten)]
     /// Bn254Fr public value app commits.
     pub app_commit: AppExecutionCommit,
     #[serde_as(as = "serde_with::hex::Hex")]
@@ -218,7 +217,6 @@ impl TryFrom<EvmProof> for RawEvmProof {
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VmStarkProofBytes {
-    #[serde(flatten)]
     pub app_commit: AppExecutionCommit,
     #[serde_as(as = "serde_with::hex::Hex")]
     pub user_public_values: Vec<u8>,
