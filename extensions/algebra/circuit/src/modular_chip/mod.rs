@@ -10,7 +10,8 @@ use openvm_mod_circuit_builder::{
     FieldExpressionCoreAir, FieldExpressionFiller, FieldExpressionStep,
 };
 use openvm_rv32_adapters::{
-    Rv32IsEqualModAdapterAir, Rv32IsEqualModeAdapterFiller, Rv32IsEqualModeAdapterStep, Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep
+    Rv32IsEqualModAdapterAir, Rv32IsEqualModeAdapterFiller, Rv32IsEqualModeAdapterStep,
+    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
 };
 
 // #[cfg(test)]

@@ -23,11 +23,11 @@ fn test_nops_and_terminate() {
         phantom_opcode,
     };
     let chip = VmChipWrapper::new(PhantomFiller, tester.memory_helper());
-    let mut harness = TestChipHarness::with_capacity(executor, air, chip, 2);
+    let num_nops = 5;
+    let mut harness = TestChipHarness::with_capacity(executor, air, chip, num_nops);
 
     let nop = Instruction::from_isize(phantom_opcode, 0, 0, 0, 0, 0);
     let mut state: ExecutionState<F> = ExecutionState::new(F::ZERO, F::ONE);
-    let num_nops = 5;
     for _ in 0..num_nops {
         tester.execute_with_pc(&mut harness, &nop, state.pc.as_canonical_u32());
         let new_state = tester.execution.records.last().unwrap().final_state;

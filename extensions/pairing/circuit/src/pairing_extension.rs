@@ -10,7 +10,6 @@ use openvm_circuit::{
     system::phantom::PhantomExecutor,
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
-
 use openvm_ecc_circuit::CurveConfig;
 use openvm_instructions::PhantomDiscriminant;
 use openvm_pairing_guest::{

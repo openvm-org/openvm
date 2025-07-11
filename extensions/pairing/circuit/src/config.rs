@@ -1,7 +1,5 @@
 use std::result::Result;
 
-use super::*;
-
 use openvm_algebra_circuit::{
     Fp2Extension, Fp2ExtensionExecutor, ModularExtension, ModularExtensionExecutor,
 };
@@ -18,6 +16,8 @@ use openvm_stark_backend::{
     prover::hal::ProverBackend,
 };
 use serde::{Deserialize, Serialize};
+
+use super::*;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32PairingConfig {

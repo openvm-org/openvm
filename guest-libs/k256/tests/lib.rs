@@ -87,7 +87,8 @@ mod guest_tests {
         use openvm_circuit::{
             arch::{InitFileGenerator, SystemConfig},
             derive::VmConfig,
-            system::SystemExecutor, utils::test_system_config_with_continuations,
+            system::SystemExecutor,
+            utils::test_system_config_with_continuations,
         };
         use openvm_ecc_circuit::{CurveConfig, WeierstrassExtension, WeierstrassExtensionExecutor};
         use openvm_rv32im_circuit::{

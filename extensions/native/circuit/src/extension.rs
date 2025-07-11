@@ -13,9 +13,9 @@ use openvm_circuit::{
         RowMajorMatrixArena, SystemConfig, VmCircuitExtension, VmExecutionExtension,
         VmProverExtension,
     },
-    system::{memory::SharedMemoryHelper, SystemPort},
+    system::{memory::SharedMemoryHelper, SystemExecutor, SystemPort},
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_native_compiler::{
     CastfOpcode, FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
@@ -26,8 +26,8 @@ use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::BranchEqualCoreAir;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_field::PrimeField32,
-    prover::cpu::CpuBackend,
+    p3_field::{Field, PrimeField32},
+    prover::{cpu::CpuBackend, hal::ProverBackend},
 };
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
@@ -39,10 +39,6 @@ use crate::{
     phantom::*,
     *,
 };
-
-use openvm_circuit::system::SystemExecutor;
-use openvm_circuit_derive::VmConfig;
-use openvm_stark_backend::{p3_field::Field, prover::hal::ProverBackend};
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct NativeConfig {
