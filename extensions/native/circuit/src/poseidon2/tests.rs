@@ -1,8 +1,8 @@
 use std::cmp::min;
 
-use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder, VmChipTester},
-    verify_single, VirtualMachine,
+use openvm_circuit::{
+    arch::testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder, VmChipTester},
+    utils::air_test,
 };
 use openvm_instructions::{instruction::Instruction, program::Program, LocalOpcode, SystemOpcode};
 use openvm_native_compiler::{
@@ -23,8 +23,6 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{
     config::{
         baby_bear_blake3::{BabyBearBlake3Config, BabyBearBlake3Engine},
-        baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        fri_params::standard_fri_params_with_100_bits_conjectured_security,
         FriParameters,
     },
     engine::StarkFriEngine,
@@ -503,43 +501,6 @@ fn verify_batch_chip_simple_50() {
     tester.test(get_engine).expect("Verification failed");
 }
 
-// log_blowup = 3 for poseidon2 chip
-fn air_test_with_compress_poseidon2(
-    poseidon2_max_constraint_degree: usize,
-    program: Program<BabyBear>,
-) {
-    let fri_params = if matches!(std::env::var("OPENVM_FAST_TEST"), Ok(x) if &x == "1") {
-        FriParameters {
-            log_blowup: 3,
-            log_final_poly_len: 0,
-            num_queries: 2,
-            proof_of_work_bits: 0,
-        }
-    } else {
-        standard_fri_params_with_100_bits_conjectured_security(3)
-    };
-    let engine = BabyBearPoseidon2Engine::new(fri_params);
-
-    let config = NativeConfig::aggregation(0, poseidon2_max_constraint_degree);
-    // let vm = VirtualMachine::new(engine, config);
-
-    // let pk = vm.keygen();
-    // let vk = pk.get_vk();
-    // let segments = vm
-    //     .execute_metered(
-    //         program.clone(),
-    //         vec![],
-    //         &vk.total_widths(),
-    //         &vk.num_interactions(),
-    //     )
-    //     .unwrap();
-    // let result = vm.execute_and_generate(program, vec![], &segments).unwrap();
-    // let proofs = vm.prove(&pk, result);
-    // for proof in proofs {
-    //     verify_single(&vm.engine, &pk.get_vk(), &proof).expect("Verification failed");
-    // }
-}
-
 #[test]
 fn test_vm_compress_poseidon2_as4() {
     let mut rng = create_seeded_rng();
@@ -630,6 +591,6 @@ fn test_vm_compress_poseidon2_as4() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test_with_compress_poseidon2(3, program.clone());
-    air_test_with_compress_poseidon2(7, program.clone());
+    air_test(NativeConfig::aggregation(0, 3), program.clone());
+    air_test(NativeConfig::aggregation(0, 7), program.clone());
 }

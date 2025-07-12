@@ -682,7 +682,7 @@ where
     pub fn new(
         engine: E,
         config: VC,
-        pk: DeviceMultiStarkProvingKey<E::PB>,
+        d_pk: DeviceMultiStarkProvingKey<E::PB>,
     ) -> Result<Self, VirtualMachineError> {
         let circuit = config.create_airs()?;
         let chip_complex = config.create_chip_complex(circuit)?;
@@ -690,7 +690,7 @@ where
         Ok(Self {
             engine,
             executor,
-            pk,
+            pk: d_pk,
             chip_complex,
         })
     }

@@ -96,10 +96,10 @@ where
         log_blowup += 1;
     }
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(log_blowup));
-    let pk_host = config.keygen(engine.config())?;
-    let vk = pk_host.get_vk();
-    let pk_device = engine.device().transport_pk_to_device(&pk_host);
-    let mut vm = VirtualMachine::<BabyBearPoseidon2Engine, VC>::new(engine, config, pk_device)?;
+    let pk = config.keygen(engine.config())?;
+    let vk = pk.get_vk();
+    let d_pk = engine.device().transport_pk_to_device(&pk);
+    let mut vm = VirtualMachine::<BabyBearPoseidon2Engine, VC>::new(engine, config, d_pk)?;
     let exe = exe.into();
     let input = input.into();
     let metered_ctx = vm.build_metered_ctx();
@@ -156,7 +156,7 @@ where
                     };
                     (
                         global_airs[*air_id].clone(),
-                        pk_host.per_air[*air_id].clone(),
+                        pk.per_air[*air_id].clone(),
                         raw,
                     )
                 }));
