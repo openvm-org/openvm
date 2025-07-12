@@ -50,8 +50,8 @@ use crate::{
             tracegen::{TracegenCtx, TracegenExecutionControl},
         },
         hasher::poseidon2::vm_poseidon2_hasher,
-        AirInventoryError, ChipInventoryError, ExecutionState, ExecutorInventory,
-        ExecutorInventoryError, InstructionExecutor, SystemConfig, VmExecutionConfig,
+        AirInventoryError, AnyEnum, ChipInventoryError, ExecutionState, ExecutorInventory,
+        ExecutorInventoryError, InstructionExecutor, SystemConfig, TraceFiller, VmExecutionConfig,
         VmProverConfig, VmSegmentExecutor, VmSegmentState,
     },
     execute_spanned,
@@ -67,7 +67,8 @@ use crate::{
             AddressMap, CHUNK,
         },
         program::{trace::VmCommittedExe, ProgramHandler},
-        SystemChipComplex, SystemRecords,
+        public_values::PublicValuesStep,
+        SystemChipComplex, SystemRecords, PV_EXECUTOR_IDX,
     },
 };
 
@@ -291,6 +292,7 @@ where
         Ok(state)
     }
 
+    // TODO[jpw]: rename to just execute
     pub fn execute_e1(
         &self,
         exe: impl Into<VmExe<F>>,
@@ -745,6 +747,9 @@ where
     > {
         let handler = ProgramHandler::new(exe.program, &self.executor.inventory)?;
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        debug_assert!(executor_idx_to_air_idx
+            .iter()
+            .all(|&air_idx| air_idx < trace_heights.len()));
         let ctrl = TracegenExecutionControl::new(executor_idx_to_air_idx);
         let mut instance = VmSegmentExecutor::<Val<E::SC>, VC::Executor, _>::new(handler, ctrl);
 
@@ -790,6 +795,16 @@ where
         let touched_memory = memory.finalize::<Val<E::SC>>(system_config.continuation_enabled);
 
         let to_state = ExecutionState::new(exec_state.pc, memory.timestamp());
+        let public_values = system_config
+            .has_public_values_chip()
+            .then(|| {
+                instance.handler.executors[PV_EXECUTOR_IDX]
+                    .as_any_kind()
+                    .downcast_ref::<PublicValuesStep<Val<E::SC>>>()
+                    .unwrap()
+                    .generate_public_values()
+            })
+            .unwrap_or_default();
         let system_records = SystemRecords {
             from_state,
             to_state,
@@ -797,6 +812,7 @@ where
             filtered_exec_frequencies,
             access_adapter_records: memory.access_adapter_records,
             touched_memory,
+            public_values,
         };
         let record_arenas = exec_state.ctx.arenas;
         let new_state = VmState {
@@ -908,17 +924,16 @@ where
     pub fn verify(
         &self,
         vk: &MultiStarkVerifyingKey<E::SC>,
-        proofs: Vec<Proof<E::SC>>,
+        proofs: &[Proof<E::SC>],
     ) -> Result<(), VmVerificationError>
     where
         Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
     {
         if self.config().as_ref().continuation_enabled {
-            verify_segments(&self.engine, vk, &proofs).map(|_| ())
+            verify_segments(&self.engine, vk, proofs).map(|_| ())
         } else {
             assert_eq!(proofs.len(), 1);
-            verify_single(&self.engine, vk, &proofs.into_iter().next().unwrap())
-                .map_err(VmVerificationError::StarkError)
+            verify_single(&self.engine, vk, &proofs[0]).map_err(VmVerificationError::StarkError)
         }
     }
 

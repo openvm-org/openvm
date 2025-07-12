@@ -52,7 +52,7 @@ impl<F: Default> PcEntry<F> {
 // pc_handler, execution_frequencies, debug_infos will all have the same length, which equals
 // `Program::len()`
 pub struct ProgramHandler<F, E> {
-    executors: Vec<E>,
+    pub(crate) executors: Vec<E>,
     /// This is a map from (pc - pc_base) / pc_step -> [PcEntry].
     /// We will map to `u32::MAX` if the program has no instruction at that pc.
     // Perf[jpw/ayush]: We could map directly to the raw pointer(u64) for executor, but storing the

@@ -20,7 +20,7 @@ use crate::{
         get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
         AdapterTraceStep, BasicAdapterInterface, EmptyAdapterCoreLayout, InsExecutorE1,
         InstructionExecutor, MinimalInstruction, RecordArena, Result, TraceFiller, VmCoreAir,
-        VmStateMut,
+        VmStateMut, PUBLIC_VALUES_AIR_ID,
     },
     system::{
         memory::{
@@ -232,12 +232,8 @@ where
     }
 
     fn generate_public_values(&self) -> Vec<F> {
-        self.custom_pvs
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|&x| x.unwrap_or(F::ZERO))
-            .collect()
+        let custom_pvs = self.custom_pvs.lock().unwrap();
+        custom_pvs.iter().map(|&x| x.unwrap_or(F::ZERO)).collect()
     }
 }
 
@@ -278,9 +274,10 @@ where
         &self,
         state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
-        _chip_index: usize,
+        chip_index: usize,
     ) -> Result<()> {
         self.execute_e1(state, instruction)?;
+        state.ctx.trace_heights[chip_index] += 1;
 
         Ok(())
     }

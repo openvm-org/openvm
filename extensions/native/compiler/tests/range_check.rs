@@ -1,4 +1,4 @@
-use openvm_native_circuit::test_execute_program;
+use openvm_native_circuit::execute_program;
 use openvm_native_compiler::{asm::AsmBuilder, prelude::*};
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -24,7 +24,7 @@ fn test_range_check_v() {
     builder.halt();
 
     let program = builder.compile_isa();
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -38,5 +38,5 @@ fn test_range_check_v_neg() {
     builder.halt();
 
     let program = builder.compile_isa();
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 }

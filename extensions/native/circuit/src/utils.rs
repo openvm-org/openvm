@@ -1,59 +1,4 @@
-use openvm_circuit::arch::{
-    execution_mode::metered::Segment, Streams, SystemConfig, VirtualMachine, VmCircuitConfig,
-};
-use openvm_instructions::{exe::VmExe, program::Program};
-use openvm_stark_backend::prover::hal::DeviceDataTransporter;
-use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::default_engine, openvm_stark_backend::engine::StarkEngine,
-    p3_baby_bear::BabyBear,
-};
-
-use crate::{Native, NativeConfig};
-
 pub(crate) const CASTF_MAX_BITS: usize = 30;
-
-pub fn execute_program_with_system_config(
-    program: Program<BabyBear>,
-    input_stream: impl Into<Streams<BabyBear>>,
-    system_config: SystemConfig,
-) {
-    let config = NativeConfig::new(system_config, Native);
-    let input = input_stream.into();
-
-    let engine = default_engine();
-    let pk = config.keygen(engine.config()).unwrap();
-    let d_pk = engine.device().transport_pk_to_device(&pk);
-    let vm = VirtualMachine::new(engine, config, d_pk).unwrap();
-    let ctx = vm.build_metered_ctx();
-    let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
-    let mut segments = vm
-        .executor()
-        .execute_metered(
-            program.clone(),
-            input.clone(),
-            &executor_idx_to_air_idx,
-            ctx,
-        )
-        .unwrap();
-    assert_eq!(segments.len(), 1, "test only supports one segment");
-    let Segment {
-        instret_start,
-        num_insns,
-        trace_heights,
-    } = segments.pop().unwrap();
-    assert_eq!(instret_start, 0);
-    let exe = VmExe::new(program);
-    let state = vm.executor().create_initial_state(&exe, input);
-    vm.execute_preflight(exe, state, num_insns, &trace_heights)
-        .unwrap();
-}
-
-pub fn execute_program(program: Program<BabyBear>, input_stream: impl Into<Streams<BabyBear>>) {
-    let system_config = SystemConfig::default()
-        .with_public_values(4)
-        .with_max_segment_len((1 << 25) - 100);
-    execute_program_with_system_config(program, input_stream, system_config);
-}
 
 pub(crate) const fn const_max(a: usize, b: usize) -> usize {
     [a, b][(a < b) as usize]
@@ -66,21 +11,26 @@ pub mod test_utils {
 
     use openvm_circuit::{
         arch::{
+            execution_mode::metered::Segment,
             testing::{memory::gen_pointer, VmChipTestBuilder},
-            Streams,
+            Streams, SystemConfig, VirtualMachine, VmCircuitConfig, VmState,
         },
         utils::test_system_config,
     };
     use openvm_instructions::{
+        exe::VmExe,
         program::Program,
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     };
     use openvm_native_compiler::conversion::AS;
-    use openvm_stark_backend::p3_field::PrimeField32;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_stark_backend::{p3_field::PrimeField32, prover::hal::DeviceDataTransporter};
+    use openvm_stark_sdk::{
+        config::baby_bear_poseidon2::default_engine, openvm_stark_backend::engine::StarkEngine,
+        p3_baby_bear::BabyBear,
+    };
     use rand::{distributions::Standard, prelude::Distribution, rngs::StdRng, Rng};
 
-    use crate::{execute_program_with_system_config, extension::NativeConfig};
+    use crate::{extension::NativeConfig, Native};
 
     // If immediate, returns (value, AS::Immediate). Otherwise, writes to native memory and returns
     // (ptr, AS::Native). If is_imm is None, randomizes it.
@@ -116,15 +66,49 @@ pub mod test_utils {
         (value, ptr)
     }
 
-    pub fn test_execute_program(
+    pub fn execute_program_with_system_config(
         program: Program<BabyBear>,
         input_stream: impl Into<Streams<BabyBear>>,
-    ) {
+        system_config: SystemConfig,
+    ) -> eyre::Result<VmState<BabyBear>> {
+        let config = NativeConfig::new(system_config, Native);
+        let input = input_stream.into();
+
+        let engine = default_engine();
+        let pk = config.keygen(engine.config())?;
+        let d_pk = engine.device().transport_pk_to_device(&pk);
+        let vm = VirtualMachine::new(engine, config, d_pk)?;
+        let ctx = vm.build_metered_ctx();
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        let mut segments = vm.executor().execute_metered(
+            program.clone(),
+            input.clone(),
+            &executor_idx_to_air_idx,
+            ctx,
+        )?;
+        assert_eq!(segments.len(), 1, "test only supports one segment");
+        let Segment {
+            instret_start,
+            num_insns,
+            trace_heights,
+        } = segments.pop().unwrap();
+        assert_eq!(instret_start, 0);
+        let exe = VmExe::new(program);
+        let state = vm.executor().create_initial_state(&exe, input);
+        let (_, _, state) = vm.execute_preflight(exe, state, num_insns, &trace_heights)?;
+        Ok(state)
+    }
+
+    pub fn execute_program(
+        program: Program<BabyBear>,
+        input_stream: impl Into<Streams<BabyBear>>,
+    ) -> VmState<BabyBear> {
         let system_config = test_native_config()
             .system
             .with_public_values(4)
             .with_max_segment_len((1 << 25) - 100);
-        execute_program_with_system_config(program, input_stream, system_config);
+        // we set max segment len large so it doesn't segment
+        execute_program_with_system_config(program, input_stream, system_config).unwrap()
     }
 
     pub fn test_native_config() -> NativeConfig {

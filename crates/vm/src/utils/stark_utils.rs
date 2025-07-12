@@ -3,6 +3,7 @@ use openvm_instructions::{exe::VmExe, program::Program};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::PrimeField32,
+    proof::Proof,
     prover::{
         cpu::{CpuBackend, CpuDevice},
         hal::DeviceDataTransporter,
@@ -65,7 +66,8 @@ where
     <VC as VmExecutionConfig<BabyBear>>::Executor:
         InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear>,
 {
-    air_test_impl(config, exe, input, min_segments, true).unwrap()
+    let (final_memory, _) = air_test_impl(config, exe, input, min_segments, true).unwrap();
+    final_memory
 }
 
 /// Executes and proves the VM and returns the final memory state.
@@ -76,7 +78,7 @@ pub fn air_test_impl<VC>(
     input: impl Into<Streams<BabyBear>>,
     min_segments: usize,
     debug: bool,
-) -> eyre::Result<Option<MemoryImage>>
+) -> eyre::Result<(Option<MemoryImage>, Vec<Proof<BabyBearPoseidon2Config>>)>
 where
     // NOTE: the compiler cannot figure out Val<SC>=BabyBear without the VmExecutionConfig and
     // VmCircuitConfig bounds even though VmProverConfig already includes them
@@ -166,10 +168,11 @@ where
         proofs.push(proof);
     }
     assert!(proofs.len() >= min_segments);
-    vm.verify(&vk, proofs)
+    vm.verify(&vk, &proofs)
         .expect("segment proofs should verify");
     let state = state.unwrap();
-    Ok((exit_code == Some(ExitCode::Success as u32)).then_some(state.memory.memory))
+    let final_memory = (exit_code == Some(ExitCode::Success as u32)).then_some(state.memory.memory);
+    Ok((final_memory, proofs))
 }
 
 // /// Generates the VM STARK circuit, in the form of AIRs and traces, but does not

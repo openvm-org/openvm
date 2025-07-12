@@ -61,7 +61,7 @@ use crate::{
 /// **If** internal poseidon2 chip exists, then its insertion index is 1.
 const POSEIDON2_INSERTION_IDX: usize = 1;
 /// **If** public values chip exists, then its executor index is 0.
-const PV_EXECUTOR_IDX: usize = 0;
+pub(crate) const PV_EXECUTOR_IDX: usize = 0;
 
 /// Trait for trace generation of all system AIRs. The system chip complex is special because we may
 /// not exactly following the exact matching between `Air` and `Chip`. Moreover we may require more
@@ -100,6 +100,9 @@ pub struct SystemRecords<F> {
     pub access_adapter_records: DenseRecordArena,
     // Perf[jpw]: this should be computed on-device and changed to just touched blocks
     pub touched_memory: TouchedMemory<F>,
+    /// The public values of the [PublicValuesChip]. These should only be non-empty if
+    /// continuations are disabled.
+    pub public_values: Vec<F>,
 }
 
 pub enum TouchedMemory<F> {
@@ -397,8 +400,12 @@ where
             filtered_exec_frequencies,
             access_adapter_records,
             touched_memory,
+            public_values,
         } = system_records;
 
+        if let Some(chip) = &mut self.public_values_chip {
+            chip.inner.set_public_values(&public_values);
+        }
         self.program_chip.filtered_exec_frequencies = filtered_exec_frequencies;
         let program_ctx = self.program_chip.generate_proving_ctx(());
         self.connector_chip.begin(from_state);
@@ -447,8 +454,15 @@ where
                 inventory.executor_idx_to_insertion_idx.len(),
                 PV_EXECUTOR_IDX
             );
-            // This value should **NOT** be used, it is just so the vector has the correct length.
-            inventory.executor_idx_to_insertion_idx.push(usize::MAX);
+            // We set insertion_idx so that air_idx = num_airs - (insertion_idx + 1) =
+            // PUBLIC_VALUES_AIR_ID in `VmChipComplex::executor_idx_to_air_idx`. We need to do this
+            // because this chip is special and not part of the normal inventory.
+            let insertion_idx = inventory
+                .airs()
+                .num_airs()
+                .checked_sub(1 + PUBLIC_VALUES_AIR_ID)
+                .unwrap();
+            inventory.executor_idx_to_insertion_idx.push(insertion_idx);
         }
         inventory.next_air::<VariableRangeCheckerAir>()?;
         inventory.add_periphery_chip(range_checker.clone());
