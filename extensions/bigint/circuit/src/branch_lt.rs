@@ -2,8 +2,11 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_bigint_transpiler::Rv32BranchLessThan256Opcode;
 use openvm_circuit::arch::{
-    execution_mode::E1ExecutionCtx, ExecuteFunc, ExecutionError::InvalidInstruction,
-    MatrixRecordArena, NewVmChipWrapper, StepExecutorE1, VmAirWrapper, VmSegmentState,
+    execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+    E2PreCompute, ExecuteFunc,
+    ExecutionError::InvalidInstruction,
+    MatrixRecordArena, NewVmChipWrapper, StepExecutorE1, StepExecutorE2, VmAirWrapper,
+    VmSegmentState,
 };
 use openvm_circuit_derive::{TraceFiller, TraceStep};
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
@@ -74,6 +77,89 @@ impl<F: PrimeField32> StepExecutorE1<F> for Rv32BranchLessThan256Step {
         Ctx: E1ExecutionCtx,
     {
         let data: &mut BranchLtPreCompute = data.borrow_mut();
+        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
+        let fn_ptr = match local_opcode {
+            BranchLessThanOpcode::BLT => execute_e1_impl::<_, _, BltOp>,
+            BranchLessThanOpcode::BLTU => execute_e1_impl::<_, _, BltuOp>,
+            BranchLessThanOpcode::BGE => execute_e1_impl::<_, _, BgeOp>,
+            BranchLessThanOpcode::BGEU => execute_e1_impl::<_, _, BgeuOp>,
+        };
+        Ok(fn_ptr)
+    }
+}
+
+impl<F: PrimeField32> StepExecutorE2<F> for Rv32BranchLessThan256Step {
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<BranchLtPreCompute>>()
+    }
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> openvm_circuit::arch::Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let data: &mut E2PreCompute<BranchLtPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        let fn_ptr = match local_opcode {
+            BranchLessThanOpcode::BLT => execute_e2_impl::<_, _, BltOp>,
+            BranchLessThanOpcode::BLTU => execute_e2_impl::<_, _, BltuOp>,
+            BranchLessThanOpcode::BGE => execute_e2_impl::<_, _, BgeOp>,
+            BranchLessThanOpcode::BGEU => execute_e2_impl::<_, _, BgeuOp>,
+        };
+        Ok(fn_ptr)
+    }
+}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: BranchLessThanOp>(
+    pre_compute: &BranchLtPreCompute,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let rs1_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
+    let rs2_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs1 = vm_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
+    let rs2 = vm_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
+    let cmp_result = OP::compute(rs1, rs2);
+    if cmp_result {
+        vm_state.pc = (vm_state.pc as isize + pre_compute.imm) as u32;
+    } else {
+        vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    }
+    vm_state.instret += 1;
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: BranchLessThanOp>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &BranchLtPreCompute = pre_compute.borrow();
+    execute_e12_impl::<F, CTX, OP>(pre_compute, vm_state);
+}
+
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, OP: BranchLessThanOp>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &E2PreCompute<BranchLtPreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl::<F, CTX, OP>(&pre_compute.data, vm_state);
+}
+
+impl Rv32BranchLessThan256Step {
+    fn pre_compute_impl<F: PrimeField32>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut BranchLtPreCompute,
+    ) -> openvm_circuit::arch::Result<BranchLessThanOpcode> {
         let Instruction {
             opcode,
             a,
@@ -101,32 +187,8 @@ impl<F: PrimeField32> StepExecutorE1<F> for Rv32BranchLessThan256Step {
         let local_opcode = BranchLessThanOpcode::from_usize(
             opcode.local_opcode_idx(Rv32BranchLessThan256Opcode::CLASS_OFFSET),
         );
-        let fn_ptr = match local_opcode {
-            BranchLessThanOpcode::BLT => execute_e1_impl::<_, _, BltOp>,
-            BranchLessThanOpcode::BLTU => execute_e1_impl::<_, _, BltuOp>,
-            BranchLessThanOpcode::BGE => execute_e1_impl::<_, _, BgeOp>,
-            BranchLessThanOpcode::BGEU => execute_e1_impl::<_, _, BgeuOp>,
-        };
-        Ok(fn_ptr)
+        Ok(local_opcode)
     }
-}
-
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: BranchLessThanOp>(
-    pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
-) {
-    let pre_compute: &BranchLtPreCompute = pre_compute.borrow();
-    let rs1_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
-    let rs2_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
-    let rs1 = vm_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
-    let rs2 = vm_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
-    let cmp_result = OP::compute(rs1, rs2);
-    if cmp_result {
-        vm_state.pc = (vm_state.pc as isize + pre_compute.imm) as u32;
-    } else {
-        vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    }
-    vm_state.instret += 1;
 }
 
 trait BranchLessThanOp {

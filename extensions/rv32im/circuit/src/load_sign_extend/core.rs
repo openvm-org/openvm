@@ -5,10 +5,12 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1ExecutionCtx, get_record_from_slice, AdapterAirContext,
-        AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError,
-        ExecutionError::InvalidInstruction, RecordArena, Result, StepExecutorE1, TraceFiller,
-        TraceStep, VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError,
+        ExecutionError::InvalidInstruction,
+        RecordArena, Result, StepExecutorE1, StepExecutorE2, TraceFiller, TraceStep,
+        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
@@ -325,43 +327,8 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>> {
         let pre_compute: &mut LoadSignExtendPreCompute = data.borrow_mut();
-        let Instruction {
-            opcode,
-            a,
-            b,
-            c,
-            d,
-            e,
-            f,
-            g,
-            ..
-        } = inst;
-
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 == RV32_IMM_AS {
-            return Err(InvalidInstruction(pc));
-        }
-
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(
-            opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
-        );
-        match local_opcode {
-            LOADB | LOADH => {}
-            _ => unreachable!("LoadSignExtendStep should only handle LOADB/LOADH opcodes"),
-        }
-
-        let imm = c.as_canonical_u32();
-        let imm_sign = g.as_canonical_u32();
-        let imm_extended = imm + imm_sign * 0xffff0000;
-
-        *pre_compute = LoadSignExtendPreCompute {
-            imm_extended,
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
-            e: e_u32 as u8,
-        };
-        let enabled = !f.is_zero();
-        let fn_ptr = match (local_opcode == LOADB, enabled) {
+        let (is_loadb, enabled) = self.pre_compute_impl(pc, inst, pre_compute)?;
+        let fn_ptr = match (is_loadb, enabled) {
             (true, true) => execute_e1_impl::<_, _, true, true>,
             (true, false) => execute_e1_impl::<_, _, true, false>,
             (false, true) => execute_e1_impl::<_, _, false, true>,
@@ -371,17 +338,48 @@ where
     }
 }
 
-unsafe fn execute_e1_impl<
+impl<F, A, const LIMB_BITS: usize> StepExecutorE2<F>
+    for LoadSignExtendStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
+{
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<LoadSignExtendPreCompute>>()
+    }
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let pre_compute: &mut E2PreCompute<LoadSignExtendPreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+        let (is_loadb, enabled) = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        let fn_ptr = match (is_loadb, enabled) {
+            (true, true) => execute_e2_impl::<_, _, true, true>,
+            (true, false) => execute_e2_impl::<_, _, true, false>,
+            (false, true) => execute_e2_impl::<_, _, false, true>,
+            (false, false) => execute_e2_impl::<_, _, false, false>,
+        };
+        Ok(fn_ptr)
+    }
+}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<
     F: PrimeField32,
     CTX: E1ExecutionCtx,
     const IS_LOADB: bool,
     const ENABLED: bool,
 >(
-    pre_compute: &[u8],
+    pre_compute: &LoadSignExtendPreCompute,
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
-    let pre_compute: &LoadSignExtendPreCompute = pre_compute.borrow();
-
     let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
         vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs1_val = u32::from_le_bytes(rs1_bytes);
@@ -416,6 +414,83 @@ unsafe fn execute_e1_impl<
 
     vm_state.pc += DEFAULT_PC_STEP;
     vm_state.instret += 1;
+}
+
+unsafe fn execute_e1_impl<
+    F: PrimeField32,
+    CTX: E1ExecutionCtx,
+    const IS_LOADB: bool,
+    const ENABLED: bool,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &LoadSignExtendPreCompute = pre_compute.borrow();
+    execute_e12_impl::<F, CTX, IS_LOADB, ENABLED>(pre_compute, vm_state);
+}
+
+unsafe fn execute_e2_impl<
+    F: PrimeField32,
+    CTX: E2ExecutionCtx,
+    const IS_LOADB: bool,
+    const ENABLED: bool,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &E2PreCompute<LoadSignExtendPreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl::<F, CTX, IS_LOADB, ENABLED>(&pre_compute.data, vm_state);
+}
+
+impl<A, const LIMB_BITS: usize> LoadSignExtendStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+    /// Return (is_loadb, enabled)
+    fn pre_compute_impl<F: PrimeField32>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut LoadSignExtendPreCompute,
+    ) -> Result<(bool, bool)> {
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
+            ..
+        } = inst;
+
+        let e_u32 = e.as_canonical_u32();
+        if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 == RV32_IMM_AS {
+            return Err(InvalidInstruction(pc));
+        }
+
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(
+            opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        );
+        match local_opcode {
+            LOADB | LOADH => {}
+            _ => unreachable!("LoadSignExtendStep should only handle LOADB/LOADH opcodes"),
+        }
+
+        let imm = c.as_canonical_u32();
+        let imm_sign = g.as_canonical_u32();
+        let imm_extended = imm + imm_sign * 0xffff0000;
+
+        *data = LoadSignExtendPreCompute {
+            imm_extended,
+            a: a.as_canonical_u32() as u8,
+            b: b.as_canonical_u32() as u8,
+            e: e_u32 as u8,
+        };
+        let enabled = !f.is_zero();
+        Ok((local_opcode == LOADB, enabled))
+    }
 }
 
 // Returns write_data

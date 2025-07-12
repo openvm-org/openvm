@@ -49,7 +49,6 @@ pub(super) fn compute_root_proof_heights(
     root_vm_config: NativeConfig,
     root_exe: VmExe<F>,
     dummy_internal_proof: &Proof<SC>,
-    widths: &[usize],
     interactions: &[usize],
 ) -> (Vec<usize>, VmComplexTraceHeights) {
     let num_user_public_values = root_vm_config.system.num_public_values - 2 * DIGEST_SIZE;
@@ -59,7 +58,7 @@ pub(super) fn compute_root_proof_heights(
     };
     let vm = SingleSegmentVmExecutor::new(root_vm_config);
     let max_trace_heights = vm
-        .execute_metered(root_exe.clone(), root_input.write(), widths, interactions)
+        .execute_metered(root_exe.clone(), root_input.write(), interactions)
         .unwrap();
     let res = vm
         .execute_and_compute_heights(root_exe, root_input.write(), &max_trace_heights)
@@ -188,12 +187,7 @@ where
         let vm_vk = app_vm_pk.vm_pk.get_vk();
         let executor = VmExecutor::new(app_vm_pk.vm_config.clone());
         let segments = executor
-            .execute_metered(
-                dummy_exe.exe.clone(),
-                vec![],
-                &vm_vk.total_widths(),
-                &vm_vk.num_interactions(),
-            )
+            .execute_metered(dummy_exe.exe.clone(), vec![], &vm_vk.num_interactions())
             .unwrap();
         assert_eq!(segments.len(), 1, "dummy exe should have only 1 segment");
         let mut results = executor

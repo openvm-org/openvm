@@ -398,11 +398,6 @@ fn assert_failed_assertion(
     let vm_pk = vm.keygen();
     let vm_vk = vm_pk.get_vk();
 
-    let result = vm.execute_metered(
-        program,
-        vec![],
-        &vm_vk.total_widths(),
-        &vm_vk.num_interactions(),
-    );
+    let result = vm.execute_metered(program, vec![], &vm_vk.num_interactions());
     assert!(matches!(result, Err(ExecutionError::Fail { .. })));
 }

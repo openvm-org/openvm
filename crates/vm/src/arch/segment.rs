@@ -254,11 +254,13 @@ where
              }| (Some(dsl_instruction.clone()), trace.as_ref()),
         );
 
+        let mut handled_phantom = false;
         // Handle phantom instructions
         if opcode == SystemOpcode::PHANTOM.global_opcode() {
             let discriminant = c.as_canonical_u32() as u16;
             if let Some(phantom) = SysPhantom::from_repr(discriminant) {
                 tracing::trace!("pc: {pc:#x} | system phantom: {phantom:?}");
+                handled_phantom = true;
 
                 if phantom == SysPhantom::DebugPanic {
                     if let Some(mut backtrace) = prev_backtrace.take() {
@@ -287,8 +289,10 @@ where
 
         // Execute the instruction using the control implementation
         // TODO(AG): maybe avoid cloning the instruction?
-        self.ctrl
-            .execute_instruction(state, &instruction.clone(), &mut self.chip_complex)?;
+        if !handled_phantom {
+            self.ctrl
+                .execute_instruction(state, &instruction.clone(), &mut self.chip_complex)?;
+        }
 
         // Update metrics if enabled
         #[cfg(feature = "bench-metrics")]

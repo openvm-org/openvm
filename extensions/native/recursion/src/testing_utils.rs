@@ -109,7 +109,7 @@ where
 
     let interpreter = InterpretedInstance::new(vm_config.clone(), program.clone());
     interpreter
-        .execute(E1Ctx { instret_end: None }, witness_stream.clone())
+        .execute(E1Ctx::new(None), witness_stream.clone())
         .unwrap();
     execute_and_prove_program(program, witness_stream, vm_config, engine)
 }

@@ -2,9 +2,10 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1ExecutionCtx, get_record_from_slice, AdapterAirContext,
-        AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc, ImmInstruction,
-        RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ImmInstruction, RecordArena, Result,
+        StepExecutorE1, StepExecutorE2, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir,
         VmSegmentState, VmStateMut,
     },
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
@@ -259,6 +260,116 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>> {
         let data: &mut JalLuiPreCompute = data.borrow_mut();
+        let (is_jal, enabled) = self.pre_compute_impl(inst, data)?;
+        let fn_ptr = match (is_jal, enabled) {
+            (true, true) => execute_e1_impl::<_, _, true, true>,
+            (true, false) => execute_e1_impl::<_, _, true, false>,
+            (false, true) => execute_e1_impl::<_, _, false, true>,
+            (false, false) => execute_e1_impl::<_, _, false, false>,
+        };
+        Ok(fn_ptr)
+    }
+}
+
+impl<F, A> StepExecutorE2<F> for Rv32JalLuiStep<A>
+where
+    F: PrimeField32,
+{
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<JalLuiPreCompute>>()
+    }
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let data: &mut E2PreCompute<JalLuiPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let (is_jal, enabled) = self.pre_compute_impl(inst, &mut data.data)?;
+        let fn_ptr = match (is_jal, enabled) {
+            (true, true) => execute_e2_impl::<_, _, true, true>,
+            (true, false) => execute_e2_impl::<_, _, true, false>,
+            (false, true) => execute_e2_impl::<_, _, false, true>,
+            (false, false) => execute_e2_impl::<_, _, false, false>,
+        };
+        Ok(fn_ptr)
+    }
+}
+
+unsafe fn execute_e12_impl<
+    F: PrimeField32,
+    CTX: E1ExecutionCtx,
+    const IS_JAL: bool,
+    const ENABLED: bool,
+>(
+    pre_compute: &JalLuiPreCompute,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let JalLuiPreCompute { a, signed_imm } = *pre_compute;
+
+    let rd = if IS_JAL {
+        let rd_data = (vm_state.pc + DEFAULT_PC_STEP).to_le_bytes();
+        let next_pc = vm_state.pc as i32 + signed_imm;
+        debug_assert!(next_pc >= 0);
+        vm_state.pc = next_pc as u32;
+        rd_data
+    } else {
+        let imm = signed_imm as u32;
+        let rd = imm << 12;
+        vm_state.pc += DEFAULT_PC_STEP;
+        rd.to_le_bytes()
+    };
+
+    if ENABLED {
+        vm_state.vm_write(RV32_REGISTER_AS, a as u32, &rd);
+    }
+
+    vm_state.instret += 1;
+}
+
+unsafe fn execute_e1_impl<
+    F: PrimeField32,
+    CTX: E1ExecutionCtx,
+    const IS_JAL: bool,
+    const ENABLED: bool,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &JalLuiPreCompute = pre_compute.borrow();
+    execute_e12_impl::<F, CTX, IS_JAL, ENABLED>(pre_compute, vm_state);
+}
+
+unsafe fn execute_e2_impl<
+    F: PrimeField32,
+    CTX: E2ExecutionCtx,
+    const IS_JAL: bool,
+    const ENABLED: bool,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &E2PreCompute<JalLuiPreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl::<F, CTX, IS_JAL, ENABLED>(&pre_compute.data, vm_state);
+}
+
+impl<A> Rv32JalLuiStep<A> {
+    /// Return (IS_JAL, ENABLED)
+    #[inline(always)]
+    fn pre_compute_impl<F: PrimeField32>(
+        &self,
+        inst: &Instruction<F>,
+        data: &mut JalLuiPreCompute,
+    ) -> Result<(bool, bool)> {
         let local_opcode = Rv32JalLuiOpcode::from_usize(
             inst.opcode.local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET),
         );
@@ -281,46 +392,8 @@ where
             a: inst.a.as_canonical_u32() as u8,
         };
         let enabled = !inst.f.is_zero();
-        let fn_ptr = match (is_jal, enabled) {
-            (true, true) => execute_e1_impl::<_, _, true, true>,
-            (true, false) => execute_e1_impl::<_, _, true, false>,
-            (false, true) => execute_e1_impl::<_, _, false, true>,
-            (false, false) => execute_e1_impl::<_, _, false, false>,
-        };
-        Ok(fn_ptr)
+        Ok((is_jal, enabled))
     }
-}
-
-unsafe fn execute_e1_impl<
-    F: PrimeField32,
-    CTX: E1ExecutionCtx,
-    const IS_JAL: bool,
-    const ENABLED: bool,
->(
-    pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
-) {
-    let pre_compute: &JalLuiPreCompute = pre_compute.borrow();
-    let JalLuiPreCompute { a, signed_imm } = *pre_compute;
-
-    let rd = if IS_JAL {
-        let rd_data = (vm_state.pc + DEFAULT_PC_STEP).to_le_bytes();
-        let next_pc = vm_state.pc as i32 + signed_imm;
-        debug_assert!(next_pc >= 0);
-        vm_state.pc = next_pc as u32;
-        rd_data
-    } else {
-        let imm = signed_imm as u32;
-        let rd = imm << 12;
-        vm_state.pc += DEFAULT_PC_STEP;
-        rd.to_le_bytes()
-    };
-
-    if ENABLED {
-        vm_state.vm_write(RV32_REGISTER_AS, a as u32, &rd);
-    }
-
-    vm_state.instret += 1;
 }
 
 // returns the canonical signed representation of the immediate

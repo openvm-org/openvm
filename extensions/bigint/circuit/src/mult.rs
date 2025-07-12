@@ -2,8 +2,11 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_bigint_transpiler::Rv32Mul256Opcode;
 use openvm_circuit::arch::{
-    execution_mode::E1ExecutionCtx, ExecuteFunc, ExecutionError::InvalidInstruction,
-    MatrixRecordArena, NewVmChipWrapper, StepExecutorE1, VmAirWrapper, VmSegmentState,
+    execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+    E2PreCompute, ExecuteFunc,
+    ExecutionError::InvalidInstruction,
+    MatrixRecordArena, NewVmChipWrapper, StepExecutorE1, StepExecutorE2, VmAirWrapper,
+    VmSegmentState,
 };
 use openvm_circuit_derive::{TraceFiller, TraceStep};
 use openvm_circuit_primitives::range_tuple::SharedRangeTupleCheckerChip;
@@ -67,6 +70,76 @@ impl<F: PrimeField32> StepExecutorE1<F> for Rv32Multiplication256Step {
         Ctx: E1ExecutionCtx,
     {
         let data: &mut MultPreCompute = data.borrow_mut();
+        self.pre_compute_impl(pc, inst, data)?;
+        Ok(execute_e1_impl)
+    }
+}
+
+impl<F: PrimeField32> StepExecutorE2<F> for Rv32Multiplication256Step {
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<MultPreCompute>>()
+    }
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> openvm_circuit::arch::Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let data: &mut E2PreCompute<MultPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(execute_e2_impl)
+    }
+}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+    pre_compute: &MultPreCompute,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let rs1_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs2_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
+    let rd_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
+    let rs1 = vm_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
+    let rs2 = vm_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
+    let rd = u256_mul(rs1, rs2);
+    vm_state.vm_write(RV32_MEMORY_AS, u32::from_le_bytes(rd_ptr), &rd);
+
+    vm_state.pc += DEFAULT_PC_STEP;
+    vm_state.instret += 1;
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &MultPreCompute = pre_compute.borrow();
+    execute_e12_impl(pre_compute, vm_state);
+}
+
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &E2PreCompute<MultPreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl(&pre_compute.data, vm_state);
+}
+
+impl Rv32Multiplication256Step {
+    fn pre_compute_impl<F: PrimeField32>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut MultPreCompute,
+    ) -> openvm_circuit::arch::Result<()> {
         let Instruction {
             opcode,
             a,
@@ -88,25 +161,8 @@ impl<F: PrimeField32> StepExecutorE1<F> for Rv32Multiplication256Step {
             b: b.as_canonical_u32() as u8,
             c: c.as_canonical_u32() as u8,
         };
-        Ok(execute_e1_impl)
+        Ok(())
     }
-}
-
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
-    pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
-) {
-    let pre_compute: &MultPreCompute = pre_compute.borrow();
-    let rs1_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
-    let rs2_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
-    let rd_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
-    let rs1 = vm_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
-    let rs2 = vm_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
-    let rd = u256_mul(rs1, rs2);
-    vm_state.vm_write(RV32_MEMORY_AS, u32::from_le_bytes(rd_ptr), &rd);
-
-    vm_state.pc += DEFAULT_PC_STEP;
-    vm_state.instret += 1;
 }
 
 #[inline(always)]
