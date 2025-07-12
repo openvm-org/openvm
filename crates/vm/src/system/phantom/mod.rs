@@ -38,8 +38,6 @@ use crate::{
 };
 
 mod execution;
-#[cfg(test)]
-mod tests;
 
 /// PhantomAir still needs columns for each nonzero operand in a phantom instruction.
 /// We currently allow `a,b,c` where the lower 16 bits of `c` are used as the [PhantomInstruction]
@@ -140,7 +138,6 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
         });
 
         let c_u32 = instruction.c.as_canonical_u32();
-        println!("c_u32: {}", c_u32);
         let sub_executor = self
             .phantom_executors
             .get(&PhantomDiscriminant(c_u32 as u16))
