@@ -140,6 +140,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
         });
 
         let c_u32 = instruction.c.as_canonical_u32();
+        println!("c_u32: {}", c_u32);
         let sub_executor = self
             .phantom_executors
             .get(&PhantomDiscriminant(c_u32 as u16))
