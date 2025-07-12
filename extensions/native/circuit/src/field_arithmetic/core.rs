@@ -10,6 +10,7 @@ use openvm_circuit::{
         VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    utils::{transmute_field_to_u32, transmute_u32_to_field},
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -26,8 +27,6 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-
-use crate::{transmute_field_to_u32, transmute_u32_to_field};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]

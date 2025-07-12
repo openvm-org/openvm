@@ -8,17 +8,16 @@ use openvm_circuit::{
         TraceFiller, TraceStep, VmSegmentState, VmStateMut,
     },
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    utils::{transmute_field_to_u32, transmute_u32_to_field},
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_IMM_AS, LocalOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_IMM_AS, LocalOpcode, NATIVE_AS,
 };
 use openvm_native_compiler::NativeBranchEqualOpcode;
 use openvm_rv32im_circuit::BranchEqualCoreCols;
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
-
-use crate::{transmute_field_to_u32, transmute_u32_to_field};
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
@@ -120,8 +119,6 @@ struct NativeBranchEqualPreCompute {
     imm: isize,
     a_or_imm: u32,
     b_or_imm: u32,
-    d: u32,
-    e: u32,
 }
 
 impl<A> NativeBranchEqualStep<A> {
@@ -169,8 +166,6 @@ impl<A> NativeBranchEqualStep<A> {
             imm,
             a_or_imm,
             b_or_imm,
-            d,
-            e,
         };
 
         let is_bne = local_opcode == BranchEqualOpcode::BNE;
@@ -297,12 +292,12 @@ unsafe fn execute_e12_impl<
     let rs1 = if A_IS_IMM {
         transmute_u32_to_field(&pre_compute.a_or_imm)
     } else {
-        vm_state.vm_read::<F, 1>(pre_compute.d, pre_compute.a_or_imm)[0]
+        vm_state.vm_read::<F, 1>(NATIVE_AS, pre_compute.a_or_imm)[0]
     };
     let rs2 = if B_IS_IMM {
         transmute_u32_to_field(&pre_compute.b_or_imm)
     } else {
-        vm_state.vm_read::<F, 1>(pre_compute.e, pre_compute.b_or_imm)[0]
+        vm_state.vm_read::<F, 1>(NATIVE_AS, pre_compute.b_or_imm)[0]
     };
     if (rs1 == rs2) ^ IS_NE {
         vm_state.pc = (vm_state.pc as isize + pre_compute.imm) as u32;
