@@ -167,7 +167,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_E1: bo
                 )
             })
             .collect();
-        let output = keccak256(&message);
+        let output = keccak256(&message[..len_u32 as usize]);
         let height = (num_keccak_f(len_u32 as usize) * NUM_ROUNDS) as u32;
         (output, height)
     };

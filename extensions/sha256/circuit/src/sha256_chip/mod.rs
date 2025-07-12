@@ -144,7 +144,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_E1: bo
         (output, 0)
     } else {
         let num_blocks = get_sha256_num_blocks(len_u32);
-        let mut message = Vec::new();
+        let mut message = Vec::with_capacity(len_u32 as usize);
         for block_idx in 0..num_blocks as usize {
             // Reads happen on the first 4 rows of each block
             for row in 0..SHA256_NUM_READ_ROWS {
