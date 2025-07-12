@@ -30,7 +30,7 @@ use util::{tracing_read_or_imm_native, tracing_write_native};
 use super::memory::{online::TracingMemory, MemoryAuxColsFactory};
 use crate::{
     arch::{
-        execution_mode::E1ExecutionCtx, get_record_from_slice, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterTraceFiller, AdapterTraceStep,
     },
     system::memory::offline_checker::{MemoryReadAuxRecord, MemoryWriteAuxRecord},
 };

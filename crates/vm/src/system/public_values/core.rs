@@ -21,13 +21,12 @@ use crate::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        BasicAdapterInterface, E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, InsExecutorE2,
+        BasicAdapterInterface, E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc,
         MinimalInstruction, RecordArena, Result, StepExecutorE1, StepExecutorE2, TraceFiller,
         TraceStep, VmCoreAir, VmSegmentState, VmStateMut,
     },
     system::{
         memory::{online::TracingMemory, MemoryAuxColsFactory},
-        phantom::PhantomChip,
         public_values::columns::PublicValuesCoreColsView,
     },
 };

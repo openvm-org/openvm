@@ -1285,7 +1285,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
     vm_state.instret += 1;
 
-    return length as u32 + 2;
+    length as u32 + 2
 }
 
 pub type FriReducedOpeningChip<F> =

@@ -1,9 +1,6 @@
-use openvm_instructions::instruction::Instruction;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::arch::{
-    execution_control::ExecutionControl, execution_mode::E1ExecutionCtx, ExecutionError,
-    InsExecutorE1, VmChipComplex, VmConfig, VmSegmentState,
+    execution_mode::E1ExecutionCtx, VmSegmentState,
 };
 
 pub struct E1Ctx {

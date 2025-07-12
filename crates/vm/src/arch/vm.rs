@@ -16,8 +16,6 @@ use openvm_stark_backend::{
     keygen::types::{LinearConstraint, MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_commit::PolynomialSpace,
     p3_field::{FieldAlgebra, PrimeField32},
-    p3_matrix::dense::DenseStorage,
-    p3_util::log2_strict_usize,
     proof::Proof,
     prover::types::ProofInput,
     verifier::VerificationError,
@@ -39,7 +37,7 @@ use crate::metrics::VmMetrics;
 use crate::{
     arch::{
         execution_mode::{
-            metered::{MeteredCtx, MeteredExecutionControl, Segment},
+            metered::{MeteredCtx, Segment},
             tracegen::{TracegenCtx, TracegenExecutionControl},
         },
         hasher::poseidon2::vm_poseidon2_hasher,
@@ -54,7 +52,6 @@ use crate::{
                 public_values::{UserPublicValuesProof, UserPublicValuesProofError},
                 MemoryMerklePvs,
             },
-            online::GuestMemory,
             AddressMap, MemoryImage, CHUNK,
         },
         program::trace::VmCommittedExe,

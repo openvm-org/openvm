@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_circuit::{
-    arch::{ExecutionBridge, InsExecutorE1},
+    arch::ExecutionBridge,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
 use openvm_circuit_derive::{InsExecutorE1, InsExecutorE2, InstructionExecutor};

@@ -54,7 +54,7 @@ where
         Ok(execute_e1_impl)
     }
 
-    fn set_trace_height(&mut self, height: usize) {}
+    fn set_trace_height(&mut self, _height: usize) {}
 }
 
 pub(super) struct PhantomStateMut<'a, F> {

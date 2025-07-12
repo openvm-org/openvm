@@ -49,7 +49,6 @@ pub(super) fn compute_root_proof_heights(
     root_vm_config: NativeConfig,
     root_exe: VmExe<F>,
     dummy_internal_proof: &Proof<SC>,
-    widths: &[usize],
     interactions: &[usize],
 ) -> (Vec<usize>, VmComplexTraceHeights) {
     let num_user_public_values = root_vm_config.system.num_public_values - 2 * DIGEST_SIZE;

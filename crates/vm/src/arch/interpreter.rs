@@ -13,10 +13,7 @@ use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SysPhantom, SystemOpcode,
 };
-use openvm_stark_backend::{
-    p3_field::{Field, PrimeField32},
-    p3_maybe_rayon::prelude::ParallelIterator,
-};
+use openvm_stark_backend::p3_field::{Field, PrimeField32};
 use rand::{rngs::StdRng, SeedableRng};
 use tracing::info_span;
 

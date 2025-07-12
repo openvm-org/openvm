@@ -14,7 +14,7 @@ use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use openvm_circuit::{
     arch::{
         execution_mode::e1::E1Ctx, interpreter::InterpretedInstance, InitFileGenerator,
-        SystemConfig, VmExecutor,
+        SystemConfig,
     },
     derive::VmConfig,
     utils::air_test,

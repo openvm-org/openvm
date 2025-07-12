@@ -4,7 +4,6 @@ use eyre::Result;
 use openvm_circuit::{
     arch::{
         execution_mode::e1::E1Ctx, instructions::exe::VmExe, interpreter::InterpretedInstance,
-        VmExecutor,
     },
     utils::air_test,
 };

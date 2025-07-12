@@ -5,24 +5,20 @@ mod tests {
     use eyre::Result;
     use openvm_circuit::{
         arch::{
-            execution_mode::e1::E1Ctx, hasher::poseidon2::vm_poseidon2_hasher,
-            interpreter::InterpretedInstance, ExecutionError, Streams, VirtualMachine, VmExecutor,
+            execution_mode::e1::E1Ctx,
+            interpreter::InterpretedInstance, Streams,
         },
-        system::memory::merkle::public_values::UserPublicValuesProof,
         utils::{air_test, air_test_with_min_segments, test_system_config_with_continuations},
     };
-    use openvm_instructions::{
-        exe::VmExe, instruction::Instruction, program::Program, LocalOpcode, SystemOpcode,
-        SystemOpcode::TERMINATE,
-    };
+    use openvm_instructions::exe::VmExe;
     use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
     use openvm_rv32im_guest::hint_load_by_key_encode;
     use openvm_rv32im_transpiler::{
-        BaseAluOpcode::ADD, Rv32ITranspilerExtension, Rv32IoTranspilerExtension,
+        Rv32ITranspilerExtension, Rv32IoTranspilerExtension,
         Rv32MTranspilerExtension,
     };
     use openvm_stark_sdk::{
-        config::baby_bear_poseidon2::default_engine, openvm_stark_backend::p3_field::FieldAlgebra,
+        openvm_stark_backend::p3_field::FieldAlgebra,
         p3_baby_bear::BabyBear,
     };
     use openvm_toolchain_tests::{

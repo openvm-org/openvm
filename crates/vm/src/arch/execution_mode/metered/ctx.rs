@@ -10,7 +10,7 @@ use super::{
 use crate::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        VmChipComplex, VmConfig, VmSegmentState,
+        VmChipComplex, VmSegmentState,
     },
     system::memory::dimensions::MemoryDimensions,
 };

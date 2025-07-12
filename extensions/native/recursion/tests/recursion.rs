@@ -1,5 +1,5 @@
 use openvm_circuit::arch::{
-    instructions::program::Program, SystemConfig, VirtualMachine, VmConfig, VmExecutor,
+    instructions::program::Program, SystemConfig, VirtualMachine, VmConfig,
 };
 use openvm_native_circuit::{Native, NativeConfig};
 use openvm_native_compiler::{asm::AsmBuilder, ir::Felt};

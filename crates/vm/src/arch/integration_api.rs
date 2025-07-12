@@ -4,7 +4,6 @@ use std::{
     borrow::{Borrow, BorrowMut},
     io::Cursor,
     marker::PhantomData,
-    os::unix::prelude::ExitStatusExt,
     ptr::{copy_nonoverlapping, slice_from_raw_parts_mut},
     sync::Arc,
 };
