@@ -27,8 +27,8 @@ use serde_big_array::BigArray;
 use super::memory::MemoryController;
 use crate::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState,
-        InstructionExecutor, PcIncOrSet, PhantomSubExecutor, Streams,
+        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor,
+        PcIncOrSet, PhantomSubExecutor, Streams,
     },
     system::{
         phantom::execution::{execute_impl, PhantomOperands, PhantomStateMut},

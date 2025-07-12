@@ -29,9 +29,7 @@ use util::{tracing_read_or_imm_native, tracing_write_native};
 
 use super::memory::{online::TracingMemory, MemoryAuxColsFactory};
 use crate::{
-    arch::{
-        get_record_from_slice, AdapterTraceFiller, AdapterTraceStep,
-    },
+    arch::{get_record_from_slice, AdapterTraceFiller, AdapterTraceStep},
     system::memory::offline_checker::{MemoryReadAuxRecord, MemoryWriteAuxRecord},
 };
 

@@ -1,7 +1,4 @@
-
-use crate::arch::{
-    execution_mode::E1ExecutionCtx, VmSegmentState,
-};
+use crate::arch::{execution_mode::E1ExecutionCtx, VmSegmentState};
 
 pub struct E1Ctx {
     instret_end: u64,

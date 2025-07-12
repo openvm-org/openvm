@@ -2,9 +2,7 @@ use std::{fs::read_dir, path::PathBuf};
 
 use eyre::Result;
 use openvm_circuit::{
-    arch::{
-        execution_mode::e1::E1Ctx, instructions::exe::VmExe, interpreter::InterpretedInstance,
-    },
+    arch::{execution_mode::e1::E1Ctx, instructions::exe::VmExe, interpreter::InterpretedInstance},
     utils::air_test,
 };
 use openvm_rv32im_circuit::Rv32ImConfig;

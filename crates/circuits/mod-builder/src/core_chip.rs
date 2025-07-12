@@ -8,11 +8,10 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext,
-        AdapterCoreLayout, AdapterCoreMetadata, AdapterTraceFiller, AdapterTraceStep, CustomBorrow,
-        DynAdapterInterface, DynArray, MinimalInstruction, RecordArena, Result,
-        SizedRecord, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir,
-        VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterCoreMetadata,
+        AdapterTraceFiller, AdapterTraceStep, CustomBorrow, DynAdapterInterface, DynArray,
+        MinimalInstruction, RecordArena, Result, SizedRecord, TraceFiller, TraceStep,
+        VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
