@@ -1,3 +1,4 @@
+use getset::CopyGetters;
 use openvm_circuit_primitives::{
     assert_less_than::{AssertLessThanIo, AssertLtSubAir},
     is_zero::{IsZeroIo, IsZeroSubAir},
@@ -40,6 +41,14 @@ impl MemoryBridge {
         Self {
             offline_checker: MemoryOfflineChecker::new(memory_bus, clk_max_bits, range_bus),
         }
+    }
+
+    pub fn memory_bus(&self) -> MemoryBus {
+        self.offline_checker.memory_bus
+    }
+
+    pub fn range_bus(&self) -> VariableRangeCheckerBus {
+        self.offline_checker.timestamp_lt_air.bus
     }
 
     /// Prepare a logical memory read operation.
@@ -256,9 +265,11 @@ impl<T: FieldAlgebra, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<'_
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, CopyGetters)]
 struct MemoryOfflineChecker {
+    #[get_copy = "pub"]
     memory_bus: MemoryBus,
+    #[get_copy = "pub"]
     timestamp_lt_air: AssertLtSubAir,
 }
 

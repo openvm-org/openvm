@@ -6,7 +6,7 @@ use std::cmp::min;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        MatrixRecordArena, NewVmChipWrapper, Result, StepExecutorE1, VmStateMut,
+        InsExecutorE1, Result, VmChipWrapper, VmStateMut,
     },
     system::memory::online::GuestMemory,
 };
@@ -54,33 +54,36 @@ pub const SHA256_NUM_READ_ROWS: usize = SHA256_BLOCK_CELLS / SHA256_READ_SIZE;
 /// Maximum message length that this chip supports in bytes
 pub const SHA256_MAX_MESSAGE_LEN: usize = 1 << 29;
 
-pub type Sha256VmChip<F> = NewVmChipWrapper<F, Sha256VmAir, Sha256VmStep, MatrixRecordArena<F>>;
+pub type Sha256VmChip<F> = VmChipWrapper<F, Sha256VmFiller>;
 
+#[derive(derive_new::new, Clone)]
 pub struct Sha256VmStep {
-    pub inner: Sha256StepHelper,
-    pub padding_encoder: Encoder,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pub offset: usize,
     pub pointer_max_bits: usize,
 }
 
-impl Sha256VmStep {
+pub struct Sha256VmFiller {
+    pub inner: Sha256StepHelper,
+    pub padding_encoder: Encoder,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    pub pointer_max_bits: usize,
+}
+
+impl Sha256VmFiller {
     pub fn new(
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-        offset: usize,
         pointer_max_bits: usize,
     ) -> Self {
         Self {
             inner: Sha256StepHelper::new(),
             padding_encoder: Encoder::new(PaddingFlags::COUNT, 2, false),
             bitwise_lookup_chip,
-            offset,
             pointer_max_bits,
         }
     }
 }
 
-impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
+impl<F: PrimeField32> InsExecutorE1<F> for Sha256VmStep {
     fn execute_e1<Ctx>(
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,

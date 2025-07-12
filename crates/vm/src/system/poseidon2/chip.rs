@@ -10,7 +10,7 @@ use dashmap::DashMap;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::{
     interaction::{BusIndex, LookupBus},
-    p3_field::PrimeField32,
+    p3_field::{Field, PrimeField32},
 };
 use rustc_hash::FxBuildHasher;
 
@@ -20,7 +20,7 @@ use super::{
 use crate::arch::hasher::{Hasher, HasherChip};
 
 #[derive(Debug)]
-pub struct Poseidon2PeripheryBaseChip<F: PrimeField32, const SBOX_REGISTERS: usize> {
+pub struct Poseidon2PeripheryBaseChip<F: Field, const SBOX_REGISTERS: usize> {
     pub air: Arc<Poseidon2PeripheryAir<F, SBOX_REGISTERS>>,
     pub subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
     pub records: DashMap<[F; PERIPHERY_POSEIDON2_WIDTH], AtomicU32, FxBuildHasher>,

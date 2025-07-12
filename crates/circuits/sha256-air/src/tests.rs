@@ -5,7 +5,9 @@ use openvm_circuit::arch::{
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    bitwise_op_lookup::{
+        BitwiseOperationLookupBus, BitwiseOperationLookupChip, SharedBitwiseOperationLookupChip,
+    },
     SubAir,
 };
 use openvm_stark_backend::{
@@ -14,7 +16,7 @@ use openvm_stark_backend::{
     p3_air::{Air, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProofInput,
+    prover::types::AirProvingContext,
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
     utils::disable_debug_builder,
     verifier::VerificationError,
@@ -64,14 +66,14 @@ where
         Arc::new(self.air.clone())
     }
 
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+    fn generate_air_proof_input(self) -> AirProvingContext<SC> {
         let trace = crate::generate_trace::<Val<SC>>(
             &self.step,
             self.bitwise_lookup_chip.as_ref(),
             <Sha256Air as BaseAir<Val<SC>>>::width(&self.air.sub_air),
             self.records,
         );
-        AirProofInput::simple_no_pis(trace)
+        AirProvingContext::simple_no_pis(trace)
     }
 }
 
@@ -94,7 +96,9 @@ type F = BabyBear;
 fn create_chip_with_rand_records() -> (Sha256TestChip, SharedBitwiseOperationLookupChip<8>) {
     let mut rng = create_seeded_rng();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let len = rng.gen_range(1..100);
     let random_records: Vec<_> = (0..len)
         .map(|i| {

@@ -3,8 +3,8 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        CustomBorrow, MultiRowLayout, MultiRowMetadata, RecordArena, SizedRecord, StepExecutorE1,
-        TraceFiller, TraceStep, VmStateMut,
+        CustomBorrow, InsExecutorE1, InstructionExecutor, MultiRowLayout, MultiRowMetadata,
+        RecordArena, SizedRecord, TraceFiller, VmStateMut,
     },
     system::{
         memory::{
@@ -39,7 +39,12 @@ use crate::poseidon2::{
     CHUNK,
 };
 
+#[derive(Clone)]
 pub struct NativePoseidon2Step<F: Field, const SBOX_REGISTERS: usize> {
+    pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
+}
+
+pub struct NativePoseidon2Filler<F: Field, const SBOX_REGISTERS: usize> {
     // pre-computed Poseidon2 sub cols for dummy rows.
     empty_poseidon2_sub_cols: Vec<F>,
     pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
@@ -48,11 +53,7 @@ pub struct NativePoseidon2Step<F: Field, const SBOX_REGISTERS: usize> {
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_REGISTERS> {
     pub fn new(poseidon2_config: Poseidon2Config<F>) -> Self {
         let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
-        let empty_poseidon2_sub_cols = subchip.generate_trace(vec![[F::ZERO; CHUNK * 2]]).values;
-        Self {
-            empty_poseidon2_sub_cols,
-            subchip,
-        }
+        Self { subchip }
     }
 
     fn compress(&self, left: [F; CHUNK], right: [F; CHUNK]) -> ([F; 2 * CHUNK], [F; CHUNK]) {
@@ -60,6 +61,17 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_R
             std::array::from_fn(|i| if i < CHUNK { left[i] } else { right[i - CHUNK] });
         let permuted = self.subchip.permute(concatenated);
         (concatenated, std::array::from_fn(|i| permuted[i]))
+    }
+}
+
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Filler<F, SBOX_REGISTERS> {
+    pub fn new(poseidon2_config: Poseidon2Config<F>) -> Self {
+        let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
+        let empty_poseidon2_sub_cols = subchip.generate_trace(vec![[F::ZERO; CHUNK * 2]]).values;
+        Self {
+            empty_poseidon2_sub_cols,
+            subchip,
+        }
     }
 }
 
@@ -123,20 +135,21 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> SizedRecord<NativePoseidon2Re
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
+impl<F: PrimeField32, RA, const SBOX_REGISTERS: usize> InstructionExecutor<F, RA>
     for NativePoseidon2Step<F, SBOX_REGISTERS>
+where
+    for<'buf> RA: RecordArena<
+        'buf,
+        MultiRowLayout<NativePoseidon2Metadata>,
+        NativePoseidon2RecordMut<'buf, F, SBOX_REGISTERS>,
+    >,
 {
-    type RecordLayout = MultiRowLayout<NativePoseidon2Metadata>;
-    type RecordMut<'a> = NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS>;
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> openvm_circuit::arch::Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> openvm_circuit::arch::Result<()> {
+        let arena = state.ctx;
         let init_timestamp_u32 = state.memory.timestamp;
         if instruction.opcode == PERM_POS2.global_opcode()
             || instruction.opcode == COMP_POS2.global_opcode()
@@ -641,8 +654,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceFiller<F, CTX>
-    for NativePoseidon2Step<F, SBOX_REGISTERS>
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> TraceFiller<F>
+    for NativePoseidon2Filler<F, SBOX_REGISTERS>
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let inner_cols = {
@@ -783,14 +796,14 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceFiller<F, CTX>
         }
     }
 
-    fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    fn fill_dummy_trace_row(&self, row_slice: &mut [F]) {
         let width = self.subchip.air.width();
         row_slice[..width].copy_from_slice(&self.empty_poseidon2_sub_cols);
     }
 }
 
 fn tracing_read_native_helper<F: PrimeField32, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     ptr: u32,
     base_aux: &mut MemoryBaseAuxCols<F>,
 ) -> [F; BLOCK_SIZE] {
@@ -810,7 +823,7 @@ fn mem_fill_helper<F: PrimeField32>(
     mem_helper.fill(prev_ts, timestamp, base_aux);
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE1<F>
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> InsExecutorE1<F>
     for NativePoseidon2Step<F, SBOX_REGISTERS>
 {
     fn execute_e1<Ctx>(

@@ -15,7 +15,7 @@ use openvm_stark_backend::{
     p3_air::{Air, BaseAir},
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProofInput,
+    prover::types::AirProvingContext,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     Chip,
 };
@@ -228,7 +228,7 @@ fn test_memory_controller() {
     let mut airs = memory_controller.airs();
     let mut air_proof_inputs = memory_controller.generate_air_proof_inputs();
     airs.push(memory_requester_air);
-    air_proof_inputs.push(AirProofInput::simple_no_pis(memory_requester_trace));
+    air_proof_inputs.push(AirProvingContext::simple_no_pis(memory_requester_trace));
     airs.push(range_checker.air());
     air_proof_inputs.push(range_checker.generate_air_proof_input());
 
@@ -278,7 +278,7 @@ fn test_memory_controller_persistent() {
         range_checker.air(),
     ]);
     air_proof_inputs.extend([
-        AirProofInput::simple_no_pis(memory_requester_trace),
+        AirProvingContext::simple_no_pis(memory_requester_trace),
         poseidon_chip.generate_air_proof_input(),
         range_checker.generate_air_proof_input(),
     ]);

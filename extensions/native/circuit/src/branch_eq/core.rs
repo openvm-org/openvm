@@ -4,8 +4,8 @@ use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep,
-        EmptyAdapterCoreLayout, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
-        VmStateMut,
+        EmptyAdapterCoreLayout, InsExecutorE1, InstructionExecutor, RecordArena, Result,
+        TraceFiller, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -28,22 +28,28 @@ pub struct NativeBranchEqualCoreRecord<F> {
     pub is_beq: bool,
 }
 
-#[derive(derive_new::new)]
-
+#[derive(derive_new::new, Clone, Copy)]
 pub struct NativeBranchEqualStep<A> {
     adapter: A,
     pub offset: usize,
     pub pc_step: u32,
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for NativeBranchEqualStep<A>
+#[derive(derive_new::new)]
+pub struct NativeBranchEqualFiller<A> {
+    adapter: A,
+}
+
+impl<F, A, RA> InstructionExecutor<F, RA> for NativeBranchEqualStep<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, CTX, ReadData: Into<[F; 2]>, WriteData = ()>,
+    A: 'static + AdapterTraceStep<F, ReadData: Into<[F; 2]>, WriteData = ()>,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut NativeBranchEqualCoreRecord<F>),
+    >,
 {
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut NativeBranchEqualCoreRecord<F>);
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -51,17 +57,13 @@ where
         )
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let &Instruction { opcode, c: imm, .. } = instruction;
-        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -86,10 +88,10 @@ where
     }
 }
 
-impl<F, CTX, A> TraceFiller<F, CTX> for NativeBranchEqualStep<A>
+impl<F, A> TraceFiller<F> for NativeBranchEqualFiller<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
@@ -113,7 +115,7 @@ where
     }
 }
 
-impl<F, A> StepExecutorE1<F> for NativeBranchEqualStep<A>
+impl<F, A> InsExecutorE1<F> for NativeBranchEqualStep<A>
 where
     F: PrimeField32,
     A: 'static + for<'a> AdapterExecutorE1<F, ReadData: Into<[F; 2]>, WriteData = ()>,

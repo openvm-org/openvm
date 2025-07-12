@@ -321,13 +321,18 @@ pub struct Rv32LoadStoreAdapterRecord {
 /// This chip reads rs1 and gets a intermediate memory pointer address with rs1 + imm.
 /// In case of Loads, reads from the shifted intermediate pointer and writes to rd.
 /// In case of Stores, reads from rs2 and writes to the shifted intermediate pointer.
-#[derive(derive_new::new)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct Rv32LoadStoreAdapterStep {
+    pointer_max_bits: usize,
+}
+
+#[derive(derive_new::new)]
+pub struct Rv32LoadStoreAdapterFiller {
     pointer_max_bits: usize,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32LoadStoreAdapterStep
+impl<F> AdapterTraceStep<F> for Rv32LoadStoreAdapterStep
 where
     F: PrimeField32,
 {
@@ -343,7 +348,7 @@ where
     type RecordMut<'a> = &'a mut Rv32LoadStoreAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
@@ -351,7 +356,7 @@ where
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -434,7 +439,7 @@ where
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
@@ -487,7 +492,9 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32LoadStoreAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32LoadStoreAdapterFiller {
+    const WIDTH: usize = size_of::<Rv32LoadStoreAdapterCols<u8>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // TODO(ayush): should this be here?

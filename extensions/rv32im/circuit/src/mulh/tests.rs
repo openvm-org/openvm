@@ -1,17 +1,21 @@
-use std::borrow::BorrowMut;
+use std::{borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
-    arch::{
-        testing::{
-            memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
-        },
-        InstructionExecutor, VmAirWrapper,
+    arch::testing::{
+        memory::gen_pointer, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+        RANGE_TUPLE_CHECKER_BUS,
     },
     utils::generate_long_number,
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    range_tuple::{
+        RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip,
+        SharedRangeTupleCheckerChip,
+    },
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::MulHOpcode::{self, *};
@@ -30,23 +34,30 @@ use test_case::test_case;
 
 use super::core::run_mulh;
 use crate::{
-    adapters::{Rv32MultAdapterAir, Rv32MultAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-    mulh::{MulHCoreCols, MulHStep, Rv32MulHChip},
+    adapters::{
+        Rv32MultAdapterAir, Rv32MultAdapterFiller, Rv32MultAdapterStep, RV32_CELL_BITS,
+        RV32_REGISTER_NUM_LIMBS,
+    },
+    mulh::{MulHCoreCols, Rv32MulHChip},
     test_utils::get_verification_error,
-    MulHCoreAir,
+    MulHCoreAir, MulHFiller, Rv32MulHAir, Rv32MulHStep,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
 const MAX_NUM_LIMBS: u32 = 32;
 type F = BabyBear;
+type Harness = TestChipHarness<F, Rv32MulHStep, Rv32MulHAir, Rv32MulHChip<F>>;
 
 fn create_test_chip(
     tester: &mut VmChipTestBuilder<F>,
 ) -> (
-    Rv32MulHChip<F>,
-    SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-    SharedRangeTupleCheckerChip<2>,
+    Harness,
+    (
+        BitwiseOperationLookupAir<RV32_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    ),
+    (RangeTupleCheckerAir<2>, SharedRangeTupleCheckerChip<2>),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let range_tuple_bus = RangeTupleCheckerBus::new(
@@ -54,30 +65,38 @@ fn create_test_chip(
         [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
     );
 
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let range_tuple_checker = SharedRangeTupleCheckerChip::new(range_tuple_bus);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+    let range_tuple_chip =
+        SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
 
-    let mut chip = Rv32MulHChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-            MulHCoreAir::new(bitwise_bus, range_tuple_bus),
-        ),
-        MulHStep::new(
-            Rv32MultAdapterStep::new(),
+    let air = Rv32MulHAir::new(
+        Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+        MulHCoreAir::new(bitwise_bus, range_tuple_bus),
+    );
+    let executor = Rv32MulHStep::new(Rv32MultAdapterStep, MulHOpcode::CLASS_OFFSET);
+    let chip = Rv32MulHChip::<F>::new(
+        MulHFiller::new(
+            Rv32MultAdapterFiller,
             bitwise_chip.clone(),
-            range_tuple_checker.clone(),
+            range_tuple_chip.clone(),
         ),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
 
-    (chip, bitwise_chip, range_tuple_checker)
+    (
+        harness,
+        (bitwise_chip.air, bitwise_chip),
+        (range_tuple_chip.air, range_tuple_chip),
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: InstructionExecutor<F>>(
+fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut E,
+    harness: &mut Harness,
     rng: &mut StdRng,
     opcode: MulHOpcode,
     b: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
@@ -100,7 +119,7 @@ fn set_and_execute<E: InstructionExecutor<F>>(
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
 
     tester.execute(
-        chip,
+        harness,
         &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 0]),
     );
 
@@ -124,17 +143,17 @@ fn set_and_execute<E: InstructionExecutor<F>>(
 fn run_rv32_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, bitwise_chip, range_tuple_checker) = create_test_chip(&mut tester);
+    let (mut harness, bitwise, range_tuple) = create_test_chip(&mut tester);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
+        set_and_execute(&mut tester, &mut harness, &mut rng, opcode, None, None);
     }
 
     let tester = tester
         .build()
-        .load(chip)
-        .load(bitwise_chip)
-        .load(range_tuple_checker)
+        .load(harness)
+        .load_periphery(bitwise)
+        .load_periphery(range_tuple)
         .finalize();
     tester.simple_test().expect("Verification failed");
 }
@@ -159,11 +178,18 @@ fn run_negative_mulh_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, bitwise_chip, range_tuple_chip) = create_test_chip(&mut tester);
+    let (mut harness, bitwise, range_tuple) = create_test_chip(&mut tester);
 
-    set_and_execute(&mut tester, &mut chip, &mut rng, opcode, Some(b), Some(c));
+    set_and_execute(
+        &mut tester,
+        &mut harness,
+        &mut rng,
+        opcode,
+        Some(b),
+        Some(c),
+    );
 
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
         let cols: &mut MulHCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
@@ -178,9 +204,9 @@ fn run_negative_mulh_test(
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
-        .load(bitwise_chip)
-        .load(range_tuple_chip)
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .load_periphery(range_tuple)
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
 }

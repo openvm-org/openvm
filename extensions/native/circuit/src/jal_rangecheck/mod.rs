@@ -6,9 +6,9 @@ use std::{
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionState,
-        MatrixRecordArena, NewVmChipWrapper, PcIncOrSet, RecordArena, Result, StepExecutorE1,
-        TraceFiller, TraceStep, VmStateMut,
+        get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionState, InsExecutorE1,
+        InstructionExecutor, PcIncOrSet, RecordArena, Result, TraceFiller, VmChipWrapper,
+        VmStateMut,
     },
     system::{
         memory::{
@@ -153,18 +153,19 @@ pub struct JalRangeCheckRecord<F> {
 
 /// Chip for JAL and RANGE_CHECK. These opcodes are logically irrelevant. Putting these opcodes into
 /// the same chip is just to save columns.
+#[derive(derive_new::new, Clone, Copy)]
+pub struct JalRangeCheckStep;
+
 #[derive(derive_new::new)]
-pub struct JalRangeCheckStep {
+pub struct JalRangeCheckFiller {
     range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F, CTX> TraceStep<F, CTX> for JalRangeCheckStep
+impl<F, RA> InstructionExecutor<F, RA> for JalRangeCheckStep
 where
     F: PrimeField32,
+    for<'buf> RA: RecordArena<'buf, EmptyMultiRowLayout, &'buf mut JalRangeCheckRecord<F>>,
 {
-    type RecordLayout = EmptyMultiRowLayout;
-    type RecordMut<'a> = &'a mut JalRangeCheckRecord<F>;
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         let jal_opcode = NativeJalOpcode::JAL.global_opcode().as_usize();
         let range_check_opcode = NativeRangeCheckOpcode::RANGE_CHECK
@@ -179,15 +180,11 @@ where
         panic!("Unknown opcode {}", opcode);
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let &Instruction {
             opcode, a, b, c, ..
         } = instruction;
@@ -197,7 +194,7 @@ where
                 || opcode == NativeRangeCheckOpcode::RANGE_CHECK.global_opcode()
         );
 
-        let record = arena.alloc(EmptyMultiRowLayout::default());
+        let record = state.ctx.alloc(EmptyMultiRowLayout::default());
 
         record.from_pc = *state.pc;
         record.from_timestamp = state.memory.timestamp;
@@ -239,7 +236,7 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for JalRangeCheckStep {
+impl<F: PrimeField32> TraceFiller<F> for JalRangeCheckFiller {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut row_slice: &mut [F]) {
         let record: &mut JalRangeCheckRecord<F> =
             unsafe { get_record_from_slice(&mut row_slice, ()) };
@@ -296,7 +293,7 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for JalRangeCheckStep {
     }
 }
 
-impl<F> StepExecutorE1<F> for JalRangeCheckStep
+impl<F> InsExecutorE1<F> for JalRangeCheckStep
 where
     F: PrimeField32,
 {
@@ -361,5 +358,4 @@ where
     }
 }
 
-pub type JalRangeCheckChip<F> =
-    NewVmChipWrapper<F, JalRangeCheckAir, JalRangeCheckStep, MatrixRecordArena<F>>;
+pub type NativeJalRangeCheckChip<F> = VmChipWrapper<F, JalRangeCheckFiller>;

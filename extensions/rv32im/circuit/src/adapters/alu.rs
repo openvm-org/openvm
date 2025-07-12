@@ -165,10 +165,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
     }
 }
 
+#[derive(Clone, derive_new::new)]
+pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize>;
+
 #[derive(derive_new::new)]
-pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize> {
-    // TODO(arayi): use reference to bitwise lookup chip with lifetimes instead
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+pub struct Rv32BaseAluAdapterFiller<const LIMB_BITS: usize> {
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 
 // Intermediate type that should not be copied or cloned and should be directly written to
@@ -189,7 +191,7 @@ pub struct Rv32BaseAluAdapterRecord {
     pub writes_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
-impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
+impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceStep<F>
     for Rv32BaseAluAdapterStep<LIMB_BITS>
 {
     const WIDTH: usize = size_of::<Rv32BaseAluAdapterCols<u8>>();
@@ -198,7 +200,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     type RecordMut<'a> = &'a mut Rv32BaseAluAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut &mut Rv32BaseAluAdapterRecord) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut &mut Rv32BaseAluAdapterRecord) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
@@ -207,7 +209,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut &mut Rv32BaseAluAdapterRecord,
     ) -> Self::ReadData {
@@ -248,7 +250,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut &mut Rv32BaseAluAdapterRecord,
@@ -269,9 +271,11 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     }
 }
 
-impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceFiller<F, CTX>
-    for Rv32BaseAluAdapterStep<LIMB_BITS>
+impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
+    for Rv32BaseAluAdapterFiller<LIMB_BITS>
 {
+    const WIDTH: usize = size_of::<Rv32BaseAluAdapterCols<u8>>();
+
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY: the following is highly unsafe. We are going to cast `adapter_row` to a record
         // buffer, and then do an _overlapping_ write to the `adapter_row` as a row of field

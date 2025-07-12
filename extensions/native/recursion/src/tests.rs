@@ -7,7 +7,7 @@ use openvm_stark_backend::{
     interaction::BusIndex,
     p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
-    prover::types::AirProofInput,
+    prover::types::AirProvingContext,
     utils::disable_debug_builder,
     Chip,
 };
@@ -84,8 +84,8 @@ where
         receiver_air.field_width() + 1,
     );
 
-    let sender_air_proof_input = AirProofInput::simple_no_pis(sender_trace);
-    let receiver_air_proof_input = AirProofInput::simple_no_pis(receiver_trace);
+    let sender_air_proof_input = AirProvingContext::simple_no_pis(sender_trace);
+    let receiver_air_proof_input = AirProvingContext::simple_no_pis(receiver_trace);
 
     ProofInputForTest {
         airs: vec![Arc::new(sender_air), Arc::new(receiver_air)],

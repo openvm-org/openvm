@@ -3,49 +3,36 @@ pub mod memory_ctx;
 pub mod segment_ctx;
 
 pub use ctx::MeteredCtx;
-use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::p3_field::PrimeField32;
 pub use segment_ctx::Segment;
 
-use crate::arch::{
-    execution_control::ExecutionControl, ExecutionError, InsExecutorE1, VmChipComplex, VmConfig,
-    VmSegmentState, VmStateMut, PUBLIC_VALUES_AIR_ID,
+use crate::{
+    arch::{execution_control::ExecutionControl, ExecutionError, InsExecutorE1, VmSegmentState},
+    system::{memory::online::GuestMemory, program::PcEntry},
 };
 
-#[derive(Default)]
-pub struct MeteredExecutionControl;
+#[derive(Debug, derive_new::new)]
+pub struct MeteredExecutionControl {
+    executor_idx_to_air_idx: Vec<usize>,
+}
 
-impl<F, VC> ExecutionControl<F, VC> for MeteredExecutionControl
+impl<F, Executor> ExecutionControl<F, Executor> for MeteredExecutionControl
 where
     F: PrimeField32,
-    VC: VmConfig<F>,
-    VC::Executor: InsExecutorE1<F>,
+    Executor: InsExecutorE1<F>,
 {
+    type Memory = GuestMemory;
     type Ctx = MeteredCtx;
 
-    fn initialize_context(&self) -> Self::Ctx {
-        todo!()
-    }
-
-    fn should_suspend(
-        &self,
-        _state: &mut VmSegmentState<F, Self::Ctx>,
-        _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
-    ) -> bool {
+    #[inline(always)]
+    fn should_suspend(&self, _state: &mut VmSegmentState<F, GuestMemory, Self::Ctx>) -> bool {
         false
     }
 
-    fn on_start(
-        &self,
-        _state: &mut VmSegmentState<F, Self::Ctx>,
-        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
-    ) {
-    }
-
+    #[inline(always)]
     fn on_suspend_or_terminate(
         &self,
-        state: &mut VmSegmentState<F, Self::Ctx>,
-        _chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        state: &mut VmSegmentState<F, GuestMemory, Self::Ctx>,
         _exit_code: Option<u32>,
     ) {
         state
@@ -55,39 +42,23 @@ where
     }
 
     /// Execute a single instruction
+    #[inline(always)]
     fn execute_instruction(
         &self,
-        state: &mut VmSegmentState<F, Self::Ctx>,
-        instruction: &Instruction<F>,
-        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
-    ) -> Result<(), ExecutionError>
-    where
-        F: PrimeField32,
-    {
+        state: &mut VmSegmentState<F, GuestMemory, Self::Ctx>,
+        executor: &mut Executor,
+        pc_entry: &PcEntry<F>,
+    ) -> Result<(), ExecutionError> {
         // Check if segmentation needs to happen
         state.ctx.check_and_segment(state.instret);
 
-        let offset = if chip_complex.config().has_public_values_chip() {
-            PUBLIC_VALUES_AIR_ID + 1 + chip_complex.memory_controller().num_airs()
-        } else {
-            PUBLIC_VALUES_AIR_ID + chip_complex.memory_controller().num_airs()
+        // SAFETY: executor idx is guaranteed to be within bounds in construction of ProgramHandler
+        let air_id = unsafe {
+            *self
+                .executor_idx_to_air_idx
+                .get_unchecked(pc_entry.executor_idx as usize)
         };
-        let &Instruction { opcode, .. } = instruction;
-        if let Some((executor, i)) = chip_complex.inventory.get_mut_executor_with_index(&opcode) {
-            let mut vm_state = VmStateMut {
-                pc: &mut state.pc,
-                memory: state.memory.as_mut().unwrap(),
-                streams: &mut state.streams,
-                rng: &mut state.rng,
-                ctx: &mut state.ctx,
-            };
-            executor.execute_metered(&mut vm_state, instruction, offset + i)?;
-        } else {
-            return Err(ExecutionError::DisabledOperation {
-                pc: state.pc,
-                opcode,
-            });
-        };
+        executor.execute_metered(&mut state.state_mut(), &pc_entry.insn, air_id)?;
 
         Ok(())
     }

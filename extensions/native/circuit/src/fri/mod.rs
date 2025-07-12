@@ -8,9 +8,9 @@ use itertools::zip_eq;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionState, MatrixRecordArena,
-        MultiRowLayout, MultiRowMetadata, NewVmChipWrapper, RecordArena, Result, SizedRecord,
-        StepExecutorE1, TraceFiller, TraceStep, VmStateMut,
+        get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionState, InsExecutorE1,
+        InstructionExecutor, MultiRowLayout, MultiRowMetadata, RecordArena, Result, SizedRecord,
+        TraceFiller, VmChipWrapper, VmStateMut,
     },
     system::{
         memory::{
@@ -695,45 +695,33 @@ impl<F> SizedRecord<FriReducedOpeningLayout> for FriReducedOpeningRecordMut<'_, 
     }
 }
 
-pub struct FriReducedOpeningStep<F: Field> {
-    phantom: std::marker::PhantomData<F>,
-}
+#[derive(derive_new::new, Copy, Clone)]
+pub struct FriReducedOpeningStep;
 
-impl<F: PrimeField32> Default for FriReducedOpeningStep<F> {
+#[derive(derive_new::new)]
+pub struct FriReducedOpeningFiller;
+
+impl Default for FriReducedOpeningStep {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<F: PrimeField32> FriReducedOpeningStep<F> {
-    pub fn new() -> Self {
-        Self {
-            phantom: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<F, CTX> TraceStep<F, CTX> for FriReducedOpeningStep<F>
+impl<F, RA> InstructionExecutor<F, RA> for FriReducedOpeningStep
 where
     F: PrimeField32,
+    for<'buf> RA: RecordArena<'buf, FriReducedOpeningLayout, FriReducedOpeningRecordMut<'buf, F>>,
 {
-    type RecordLayout = FriReducedOpeningLayout;
-    type RecordMut<'a> = FriReducedOpeningRecordMut<'a, F>;
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         assert_eq!(opcode, FRI_REDUCED_OPENING.global_opcode().as_usize());
         String::from("FRI_REDUCED_OPENING")
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let &Instruction {
             a,
             b,
@@ -759,7 +747,7 @@ where
             length: length as usize,
             is_init,
         };
-        let record = arena.alloc(MultiRowLayout::new(metadata));
+        let record = state.ctx.alloc(MultiRowLayout::new(metadata));
 
         record.common.from_pc = *state.pc;
         record.common.timestamp = timestamp_start;
@@ -884,10 +872,7 @@ where
     }
 }
 
-impl<F, CTX> TraceFiller<F, CTX> for FriReducedOpeningStep<F>
-where
-    F: PrimeField32,
-{
+impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -1107,10 +1092,7 @@ where
     }
 }
 
-impl<F> StepExecutorE1<F> for FriReducedOpeningStep<F>
-where
-    F: PrimeField32,
-{
+impl<F: PrimeField32> InsExecutorE1<F> for FriReducedOpeningStep {
     fn execute_e1<Ctx>(
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,
@@ -1207,5 +1189,4 @@ where
     }
 }
 
-pub type FriReducedOpeningChip<F> =
-    NewVmChipWrapper<F, FriReducedOpeningAir, FriReducedOpeningStep<F>, MatrixRecordArena<F>>;
+pub type FriReducedOpeningChip<F> = VmChipWrapper<F, FriReducedOpeningFiller>;

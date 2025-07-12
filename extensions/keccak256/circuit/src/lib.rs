@@ -11,16 +11,14 @@ pub mod trace;
 pub mod utils;
 
 mod extension;
-pub use extension::*;
-
 #[cfg(test)]
 mod tests;
-
 pub use air::KeccakVmAir;
+pub use extension::*;
 use openvm_circuit::{
     arch::{
         execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        ExecutionBridge, MatrixRecordArena, NewVmChipWrapper, Result, StepExecutorE1, VmStateMut,
+        ExecutionBridge, InsExecutorE1, Result, VmChipWrapper, VmStateMut,
     },
     system::memory::online::GuestMemory,
 };
@@ -69,30 +67,21 @@ pub const KECCAK_DIGEST_BYTES: usize = 32;
 /// Number of 64-bit digest limbs.
 pub const KECCAK_DIGEST_U64S: usize = KECCAK_DIGEST_BYTES / 8;
 
-pub type KeccakVmChip<F> = NewVmChipWrapper<F, KeccakVmAir, KeccakVmStep, MatrixRecordArena<F>>;
+pub type KeccakVmChip<F> = VmChipWrapper<F, KeccakVmFiller>;
 
-//#[derive(derive_new::new)]
+#[derive(derive_new::new, Clone, Copy)]
 pub struct KeccakVmStep {
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
     pub offset: usize,
     pub pointer_max_bits: usize,
 }
 
-impl KeccakVmStep {
-    pub fn new(
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
-        offset: usize,
-        pointer_max_bits: usize,
-    ) -> Self {
-        Self {
-            bitwise_lookup_chip,
-            offset,
-            pointer_max_bits,
-        }
-    }
+#[derive(derive_new::new)]
+pub struct KeccakVmFiller {
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
+    pub pointer_max_bits: usize,
 }
 
-impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
+impl<F: PrimeField32> InsExecutorE1<F> for KeccakVmStep {
     fn execute_e1<Ctx>(
         &self,
         state: &mut VmStateMut<F, GuestMemory, Ctx>,

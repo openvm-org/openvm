@@ -21,9 +21,9 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::types::AirProofInput,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter,
+    Chip, ChipUsageGetter,
 };
 use static_assertions::const_assert;
 use tracing::instrument;
@@ -225,22 +225,20 @@ impl<F: PrimeField32> VolatileBoundaryChip<F> {
     }
 }
 
-impl<SC: StarkGenericConfig> Chip<SC> for VolatileBoundaryChip<Val<SC>>
+impl<RA, SC: StarkGenericConfig> Chip<RA, CpuBackend<SC>> for VolatileBoundaryChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         // Volatile memory requires the starting and final memory to be in equipartition with block
         // size `1`. When block size is `1`, then the `label` is the same as the address
         // pointer.
         let width = self.trace_width();
-        let air = Arc::new(self.air);
+        let addr_lt_air = &self.air.addr_lt_air;
+        // TEMP[jpw]: clone
         let final_memory = self
             .final_memory
+            .clone()
             .expect("Trace generation should be called after finalize");
         let trace_height = if let Some(height) = self.overridden_height {
             assert!(
@@ -281,7 +279,7 @@ where
                 if i != memory_len - 1 {
                     let (next_addr_space, next_ptr) = sorted_final_memory[i + 1].0;
                     let mut out = Val::<SC>::ZERO;
-                    air.addr_lt_air.0.generate_subrow(
+                    addr_lt_air.0.generate_subrow(
                         (
                             self.range_checker.as_ref(),
                             &[
@@ -302,7 +300,7 @@ where
         if memory_len > 0 {
             let mut out = Val::<SC>::ZERO;
             let row: &mut VolatileBoundaryCols<_> = rows[width * (trace_height - 1)..].borrow_mut();
-            air.addr_lt_air.0.generate_subrow(
+            addr_lt_air.0.generate_subrow(
                 (
                     self.range_checker.as_ref(),
                     &[Val::<SC>::ZERO, Val::<SC>::ZERO],
@@ -312,8 +310,8 @@ where
             );
         }
 
-        let trace = RowMajorMatrix::new(rows, width);
-        AirProofInput::simple_no_pis(trace)
+        let trace = Arc::new(RowMajorMatrix::new(rows, width));
+        AirProvingContext::simple_no_pis(trace)
     }
 }
 

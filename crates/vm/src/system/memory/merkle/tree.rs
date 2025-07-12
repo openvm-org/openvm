@@ -219,7 +219,7 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
 
     pub fn finalize(
         &mut self,
-        hasher: &mut impl HasherChip<CHUNK, F>,
+        hasher: &impl HasherChip<CHUNK, F>,
         touched: &Equipartition<F, CHUNK>,
         md: &MemoryDimensions,
     ) -> FinalState<CHUNK, F> {

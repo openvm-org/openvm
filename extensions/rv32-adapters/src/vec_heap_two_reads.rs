@@ -309,7 +309,19 @@ pub struct Rv32VecHeapTwoReadsAdapterRecord<
     pub writes_aux: [MemoryWriteBytesAuxRecord<WRITE_SIZE>; BLOCKS_PER_WRITE],
 }
 
+#[derive(Clone, Copy)]
 pub struct Rv32VecHeapTwoReadsAdapterStep<
+    const BLOCKS_PER_READ1: usize,
+    const BLOCKS_PER_READ2: usize,
+    const BLOCKS_PER_WRITE: usize,
+    const READ_SIZE: usize,
+    const WRITE_SIZE: usize,
+> {
+    pointer_max_bits: usize,
+}
+
+#[derive(derive_new::new)]
+pub struct Rv32VecHeapTwoReadsAdapterFiller<
     const BLOCKS_PER_READ1: usize,
     const BLOCKS_PER_READ2: usize,
     const BLOCKS_PER_WRITE: usize,
@@ -335,30 +347,23 @@ impl<
         WRITE_SIZE,
     >
 {
-    pub fn new(
-        pointer_max_bits: usize,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-    ) -> Self {
+    pub fn new(pointer_max_bits: usize) -> Self {
         assert!(
             RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - pointer_max_bits < RV32_CELL_BITS,
             "pointer_max_bits={pointer_max_bits} needs to be large enough for high limb range check"
         );
-        Self {
-            pointer_max_bits,
-            bitwise_lookup_chip,
-        }
+        Self { pointer_max_bits }
     }
 }
 
 impl<
         F: PrimeField32,
-        CTX,
         const BLOCKS_PER_READ1: usize,
         const BLOCKS_PER_READ2: usize,
         const BLOCKS_PER_WRITE: usize,
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
-    > AdapterTraceStep<F, CTX>
+    > AdapterTraceStep<F>
     for Rv32VecHeapTwoReadsAdapterStep<
         BLOCKS_PER_READ1,
         BLOCKS_PER_READ2,
@@ -388,14 +393,14 @@ impl<
         WRITE_SIZE,
     >;
 
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
 
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -426,11 +431,11 @@ impl<
             record.rd_ptr,
             &mut record.rd_read_aux.prev_timestamp,
         ));
-        assert!(
+        debug_assert!(
             record.rs1_val as usize + READ_SIZE * BLOCKS_PER_READ1 - 1
                 < (1 << self.pointer_max_bits)
         );
-        assert!(
+        debug_assert!(
             record.rs2_val as usize + READ_SIZE * BLOCKS_PER_READ2 - 1
                 < (1 << self.pointer_max_bits)
         );
@@ -457,12 +462,12 @@ impl<
 
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         _instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
     ) {
-        assert!(
+        debug_assert!(
             record.rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1
                 < (1 << self.pointer_max_bits)
         );
@@ -482,14 +487,13 @@ impl<
 
 impl<
         F: PrimeField32,
-        CTX,
         const BLOCKS_PER_READ1: usize,
         const BLOCKS_PER_READ2: usize,
         const BLOCKS_PER_WRITE: usize,
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
-    > AdapterTraceFiller<F, CTX>
-    for Rv32VecHeapTwoReadsAdapterStep<
+    > AdapterTraceFiller<F>
+    for Rv32VecHeapTwoReadsAdapterFiller<
         BLOCKS_PER_READ1,
         BLOCKS_PER_READ2,
         BLOCKS_PER_WRITE,
@@ -497,6 +501,15 @@ impl<
         WRITE_SIZE,
     >
 {
+    const WIDTH: usize = Rv32VecHeapTwoReadsAdapterCols::<
+        F,
+        BLOCKS_PER_READ1,
+        BLOCKS_PER_READ2,
+        BLOCKS_PER_WRITE,
+        READ_SIZE,
+        WRITE_SIZE,
+    >::width();
+
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &Rv32VecHeapTwoReadsAdapterRecord<
             BLOCKS_PER_READ1,

@@ -11,6 +11,7 @@ use crate::{arch::execution_mode::E1E2ExecutionCtx, system::memory::dimensions::
 #[derive(Debug)]
 pub struct MeteredCtx<const PAGE_BITS: usize = 6> {
     pub trace_heights: Vec<u32>,
+    // TODO[jpw]: should this be in Ctrl?
     pub is_trace_height_constant: Vec<bool>,
 
     pub memory_ctx: MemoryCtx<PAGE_BITS>,
@@ -50,11 +51,23 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         );
 
         // Assert that the indices are correct
-        debug_assert_eq!(&air_names[memory_ctx.boundary_idx], "Boundary");
+        debug_assert!(
+            air_names[memory_ctx.boundary_idx].contains("Boundary"),
+            "air_name={}",
+            air_names[memory_ctx.boundary_idx]
+        );
         if let Some(merkle_tree_index) = memory_ctx.merkle_tree_index {
-            debug_assert_eq!(&air_names[merkle_tree_index], "Merkle");
+            debug_assert!(
+                air_names[merkle_tree_index].contains("Merkle"),
+                "air_name={}",
+                air_names[merkle_tree_index]
+            );
         }
-        debug_assert_eq!(&air_names[memory_ctx.adapter_offset], "AccessAdapter<2>");
+        debug_assert!(
+            air_names[memory_ctx.adapter_offset].contains("AccessAdapterAir<2>"),
+            "air_name={}",
+            air_names[memory_ctx.adapter_offset]
+        );
 
         let segmentation_ctx = SegmentationCtx::new(air_names, widths, interactions);
 

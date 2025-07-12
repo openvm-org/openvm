@@ -1,12 +1,10 @@
-use std::cell::RefCell;
-
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode,
 };
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::FieldAlgebra,
 };
 use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
@@ -16,12 +14,12 @@ use super::{
     execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
     Streams,
 };
-use crate::system::{
-    memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryController,
+use crate::{
+    arch::MatrixRecordArena,
+    system::{
+        memory::online::{GuestMemory, TracingMemory},
+        program::{ProgramBus, StaticProgramError},
     },
-    program::ProgramBus,
 };
 
 pub type Result<T> = std::result::Result<T, ExecutionError>;
@@ -30,13 +28,6 @@ pub type Result<T> = std::result::Result<T, ExecutionError>;
 pub enum ExecutionError {
     #[error("execution failed at pc {pc}")]
     Fail { pc: u32 },
-    #[error("pc {pc} not found for program of length {program_len}, with pc_base {pc_base} and step = {step}")]
-    PcNotFound {
-        pc: u32,
-        step: u32,
-        pc_base: u32,
-        program_len: usize,
-    },
     #[error("pc {pc} out of bounds for program of length {program_len}, with pc_base {pc_base} and step = {step}")]
     PcOutOfBounds {
         pc: u32,
@@ -78,6 +69,8 @@ pub enum ExecutionError {
     FailedWithExitCode(u32),
     #[error("trace buffer out of bounds: requested {requested} but capacity is {capacity}")]
     TraceBufferOutOfBounds { requested: usize, capacity: usize },
+    #[error("static program error: {0}")]
+    Static(#[from] StaticProgramError),
 }
 
 /// Global VM state accessible during instruction execution.
@@ -92,27 +85,15 @@ pub struct VmStateMut<'a, F, MEM, CTX> {
     pub ctx: &'a mut CTX,
 }
 
-impl<F: PrimeField32, CTX> VmStateMut<'_, F, TracingMemory<F>, CTX> {
-    // TODO: store as u32 directly
-    #[inline(always)]
-    pub fn ins_start(&self, from_state: &mut ExecutionState<F>) {
-        from_state.pc = F::from_canonical_u32(*self.pc);
-        from_state.timestamp = F::from_canonical_u32(self.memory.timestamp);
-    }
-}
-
-// TODO: old
-pub trait InstructionExecutor<F> {
+// TODO[jpw]: Can we avoid Clone by making executors stateless?
+pub trait InstructionExecutor<F, RA = MatrixRecordArena<F>>: Clone {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.
     fn execute(
         &mut self,
-        memory: &mut MemoryController<F>,
-        streams: &mut Streams<F>,
-        rng: &mut StdRng,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>>;
+    ) -> Result<()>;
 
     /// For display purposes. From absolute opcode as `usize`, return the string name of the opcode
     /// if it is a supported opcode by the present executor.
@@ -127,7 +108,6 @@ pub trait InsExecutorE1<F> {
         instruction: &Instruction<F>,
     ) -> Result<()>
     where
-        F: PrimeField32,
         Ctx: E1E2ExecutionCtx;
 
     fn execute_metered(
@@ -135,63 +115,7 @@ pub trait InsExecutorE1<F> {
         state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
         instruction: &Instruction<F>,
         chip_index: usize,
-    ) -> Result<()>
-    where
-        F: PrimeField32;
-
-    fn set_trace_height(&mut self, height: usize);
-}
-
-impl<F, C> InsExecutorE1<F> for RefCell<C>
-where
-    C: InsExecutorE1<F>,
-{
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        F: PrimeField32,
-        Ctx: E1E2ExecutionCtx,
-    {
-        self.borrow_mut().execute_e1(state, instruction)
-    }
-
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()>
-    where
-        F: PrimeField32,
-    {
-        self.borrow_mut()
-            .execute_metered(state, instruction, chip_index)
-    }
-
-    fn set_trace_height(&mut self, height: usize) {
-        self.borrow_mut().set_trace_height(height);
-    }
-}
-
-impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
-    fn execute(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        streams: &mut Streams<F>,
-        rng: &mut StdRng,
-        instruction: &Instruction<F>,
-        prev_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>> {
-        self.borrow_mut()
-            .execute(memory, streams, rng, instruction, prev_state)
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        self.borrow().get_opcode_name(opcode)
-    }
+    ) -> Result<()>;
 }
 
 #[repr(C)]
@@ -404,7 +328,7 @@ impl<T: FieldAlgebra> From<(u32, Option<T>)> for PcIncOrSet<T> {
 /// Phantom sub-instructions are only allowed to use operands
 /// `a,b` and `c_upper = c.as_canonical_u32() >> 16`.
 #[allow(clippy::too_many_arguments)]
-pub trait PhantomSubExecutor<F>: Send {
+pub trait PhantomSubExecutor<F>: Send + Sync {
     fn phantom_execute(
         &self,
         memory: &GuestMemory,

@@ -20,6 +20,7 @@ openvm-toolchain-tests = { path = "../../../crates/toolchain/tests" }
 eyre.workspace = true
 test-case.workspace = true
 serde = { workspace = true, features = ["alloc"] }
+strum.workspace = true
 
 [features]
 default = ["parallel"]

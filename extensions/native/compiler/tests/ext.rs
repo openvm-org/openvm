@@ -1,4 +1,4 @@
-use openvm_native_circuit::test_execute_program;
+use openvm_native_circuit::execute_program;
 use openvm_native_compiler::{
     asm::AsmBuilder,
     ir::{Ext, Felt},
@@ -31,7 +31,7 @@ fn test_ext2felt() {
 
     let program = builder.compile_isa();
     println!("{}", program);
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -60,5 +60,5 @@ fn test_ext_from_base_slice() {
 
     let program = builder.compile_isa();
     println!("{}", program);
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 }
