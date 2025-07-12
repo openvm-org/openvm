@@ -289,6 +289,7 @@ unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
     let pre_compute: &TerminatePreCompute = pre_compute.borrow();
+    vm_state.instret += 1;
     vm_state.exit_code = Ok(Some(pre_compute.exit_code));
 }
 
