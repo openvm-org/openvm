@@ -2,6 +2,11 @@ use std::{path::Path, sync::OnceLock};
 
 use divan::Bencher;
 use eyre::Result;
+use openvm_algebra_circuit::{
+    Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
+    ModularExtensionExecutor, ModularExtensionPeriphery,
+};
+use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
 use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
@@ -17,8 +22,17 @@ use openvm_circuit::{
     },
     derive::VmConfig,
 };
+use openvm_ecc_circuit::{
+    WeierstrassExtension, WeierstrassExtensionExecutor, WeierstrassExtensionPeriphery,
+};
+use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
+use openvm_pairing_circuit::{
+    PairingCurve, PairingExtension, PairingExtensionExecutor, PairingExtensionPeriphery,
+};
+use openvm_pairing_guest::bn254::BN254_COMPLEX_STRUCT_NAME;
+use openvm_pairing_transpiler::PairingTranspilerExtension;
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
@@ -50,7 +64,7 @@ static AVAILABLE_PROGRAMS: &[&str] = &[
     "sha256",
     "sha256_iter",
     "revm_transfer",
-    // "pairing",
+    "pairing",
 ];
 
 static SHARED_INTERACTIONS: OnceLock<Vec<usize>> = OnceLock::new();
@@ -71,10 +85,19 @@ pub struct ExecuteConfig {
     pub keccak: Keccak256,
     #[extension]
     pub sha256: Sha256,
+    #[extension]
+    pub modular: ModularExtension,
+    #[extension]
+    pub fp2: Fp2Extension,
+    #[extension]
+    pub weierstrass: WeierstrassExtension,
+    #[extension]
+    pub pairing: PairingExtension,
 }
 
 impl Default for ExecuteConfig {
     fn default() -> Self {
+        let bn_config = PairingCurve::Bn254.curve_config();
         Self {
             system: SystemConfig::default().with_continuations(),
             rv32i: Rv32I,
@@ -83,6 +106,16 @@ impl Default for ExecuteConfig {
             bigint: Int256::default(),
             keccak: Keccak256,
             sha256: Sha256,
+            modular: ModularExtension::new(vec![
+                bn_config.modulus.clone(),
+                bn_config.scalar.clone(),
+            ]),
+            fp2: Fp2Extension::new(vec![(
+                BN254_COMPLEX_STRUCT_NAME.to_string(),
+                bn_config.modulus.clone(),
+            )]),
+            weierstrass: WeierstrassExtension::new(vec![bn_config.clone()]),
+            pairing: PairingExtension::new(vec![PairingCurve::Bn254]),
         }
     }
 }
@@ -115,6 +148,10 @@ fn create_default_transpiler() -> Transpiler<BabyBear> {
         .with_extension(Int256TranspilerExtension)
         .with_extension(Keccak256TranspilerExtension)
         .with_extension(Sha256TranspilerExtension)
+        .with_extension(ModularTranspilerExtension)
+        .with_extension(Fp2TranspilerExtension)
+        .with_extension(EccTranspilerExtension)
+        .with_extension(PairingTranspilerExtension)
 }
 
 fn load_program_executable(program: &str) -> Result<VmExe<BabyBear>> {
