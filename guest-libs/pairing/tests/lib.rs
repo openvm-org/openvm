@@ -14,7 +14,7 @@ mod bn254 {
     use openvm_circuit::utils::{
         air_test, air_test_impl, air_test_with_min_segments, test_system_config_with_continuations,
     };
-    use openvm_ecc_circuit::{CurveConfig, EccExtension, Rv32EccConfig};
+    use openvm_ecc_circuit::{CurveConfig, EccExtension, Rv32EccConfig, SwCurveCoeffs};
     use openvm_ecc_guest::{
         algebra::{field::FieldExtension, IntMod},
         AffinePoint,
@@ -518,8 +518,8 @@ mod bls12_381 {
     }
 
     #[cfg(test)]
-    fn test_rv32weierstrass_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
-        let mut config = Rv32WeierstrassConfig::new(curves);
+    fn test_rv32ecc_config(sw_curves: Vec<CurveConfig<SwCurveCoeffs>>) -> Rv32EccConfig {
+        let mut config = Rv32EccConfig::new(sw_curves, vec![]);
         config.system = test_system_config_with_continuations();
         config
     }

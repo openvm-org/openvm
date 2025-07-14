@@ -61,6 +61,7 @@ pub struct TeAddChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usi
     pub EdwardsChip<F, 2, BLOCKS, BLOCK_SIZE>,
 );
 
+#[allow(clippy::too_many_arguments)]
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
     TeAddChip<F, BLOCKS, BLOCK_SIZE>
 {
