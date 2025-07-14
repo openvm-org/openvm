@@ -3,22 +3,22 @@ use std::{path::Path, sync::OnceLock};
 use divan::Bencher;
 use eyre::Result;
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
-use openvm_circuit::arch::{
-    execution_mode::{
-        e1::E1Ctx,
-        metered::{ctx::DEFAULT_PAGE_BITS, MeteredCtx},
-    },
-    interpreter::InterpretedInstance,
-    VmChipComplex, VmConfig,
-};
-// use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
-// use openvm_bigint_transpiler::Int256TranspilerExtension;
+use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
+use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
-    arch::{instructions::exe::VmExe, InitFileGenerator, SystemConfig, VirtualMachine},
+    arch::{
+        execution_mode::{
+            e1::E1Ctx,
+            metered::{ctx::DEFAULT_PAGE_BITS, MeteredCtx},
+        },
+        instructions::exe::VmExe,
+        interpreter::InterpretedInstance,
+        InitFileGenerator, SystemConfig, VirtualMachine, VmChipComplex, VmConfig,
+    },
     derive::VmConfig,
 };
-// use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
-// use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
+use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
+use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
     Rv32MExecutor, Rv32MPeriphery,
@@ -26,8 +26,8 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-// use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
-// use openvm_sha256_transpiler::Sha256TranspilerExtension;
+use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
+use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::{
         default_engine, BabyBearPoseidon2Config, BabyBearPoseidon2Engine,
@@ -39,17 +39,17 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 
 static AVAILABLE_PROGRAMS: &[&str] = &[
-    // "fibonacci_recursive",
-    // "fibonacci_iterative",
-    // "quicksort",
+    "fibonacci_recursive",
+    "fibonacci_iterative",
+    "quicksort",
     "bubblesort",
-    // "factorial_iterative_u256",
-    // "revm_snailtracer",
-    // "keccak256",
-    // "keccak256_iter",
-    // "sha256",
-    // "sha256_iter",
-    // "revm_transfer",
+    "factorial_iterative_u256",
+    "revm_snailtracer",
+    "keccak256",
+    "keccak256_iter",
+    "sha256",
+    "sha256_iter",
+    "revm_transfer",
     // "pairing",
 ];
 
@@ -65,12 +65,12 @@ pub struct ExecuteConfig {
     pub rv32m: Rv32M,
     #[extension]
     pub io: Rv32Io,
-    // #[extension]
-    // pub bigint: Int256,
-    // #[extension]
-    // pub keccak: Keccak256,
-    // #[extension]
-    // pub sha256: Sha256,
+    #[extension]
+    pub bigint: Int256,
+    #[extension]
+    pub keccak: Keccak256,
+    #[extension]
+    pub sha256: Sha256,
 }
 
 impl Default for ExecuteConfig {
@@ -80,9 +80,9 @@ impl Default for ExecuteConfig {
             rv32i: Rv32I,
             rv32m: Rv32M::default(),
             io: Rv32Io,
-            // bigint: Int256::default(),
-            // keccak: Keccak256,
-            // sha256: Sha256,
+            bigint: Int256::default(),
+            keccak: Keccak256,
+            sha256: Sha256,
         }
     }
 }
@@ -112,9 +112,9 @@ fn create_default_transpiler() -> Transpiler<BabyBear> {
         .with_extension(Rv32ITranspilerExtension)
         .with_extension(Rv32IoTranspilerExtension)
         .with_extension(Rv32MTranspilerExtension)
-    // .with_extension(Int256TranspilerExtension)
-    // .with_extension(Keccak256TranspilerExtension)
-    // .with_extension(Sha256TranspilerExtension)
+        .with_extension(Int256TranspilerExtension)
+        .with_extension(Keccak256TranspilerExtension)
+        .with_extension(Sha256TranspilerExtension)
 }
 
 fn load_program_executable(program: &str) -> Result<VmExe<BabyBear>> {

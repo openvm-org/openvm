@@ -5,9 +5,7 @@ use itertools::{izip, zip_eq};
 use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
 use openvm_instructions::{exe::SparseMemoryImage, NATIVE_AS};
 use openvm_stark_backend::{
-    p3_field::PrimeField32,
-    p3_maybe_rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
-    p3_util::log2_strict_usize,
+    p3_field::PrimeField32, p3_maybe_rayon::prelude::*, p3_util::log2_strict_usize,
 };
 
 use super::{adapter::AccessAdapterInventory, offline_checker::MemoryBus};
@@ -343,6 +341,7 @@ impl GuestMemory {
     }
 
     #[inline(always)]
+    #[allow(clippy::missing_safety_doc)]
     pub unsafe fn get_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
         self.memory.get_slice((addr_space, ptr), len)
     }

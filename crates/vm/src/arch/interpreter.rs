@@ -2,7 +2,6 @@ use std::{
     alloc::{alloc, dealloc, handle_alloc_error, Layout},
     borrow::{Borrow, BorrowMut},
     ptr::NonNull,
-    time::Instant,
 };
 
 use itertools::Itertools;
@@ -207,7 +206,7 @@ unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
     vm_state: &mut VmSegmentState<F, Ctx>,
     fn_ptrs: &[PreComputeInstruction<F, Ctx>],
 ) {
-    let start = Instant::now();
+    // let start = Instant::now();
     while vm_state
         .exit_code
         .as_ref()
@@ -227,7 +226,7 @@ unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
     {
         Ctx::on_terminate(vm_state);
     }
-    println!("execute time: {}ms", start.elapsed().as_millis());
+    // println!("execute time: {}ms", start.elapsed().as_millis());
 }
 
 fn get_pc_index<F: Field>(program: &Program<F>, pc: u32) -> Result<usize, ExecutionError> {

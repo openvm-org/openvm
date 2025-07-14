@@ -5106,13 +5106,21 @@ dependencies = [
 name = "openvm-benchmarks-execute"
 version = "1.4.0-rc.0"
 dependencies = [
+ "cargo-openvm",
  "codspeed-divan-compat",
  "derive_more 1.0.0",
  "eyre",
  "openvm-benchmarks-utils",
+ "openvm-bigint-circuit",
+ "openvm-bigint-transpiler",
  "openvm-circuit",
+ "openvm-keccak256-circuit",
+ "openvm-keccak256-transpiler",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
+ "openvm-sdk",
+ "openvm-sha256-circuit",
+ "openvm-sha256-transpiler",
  "openvm-stark-sdk",
  "openvm-transpiler",
  "rand 0.8.5",

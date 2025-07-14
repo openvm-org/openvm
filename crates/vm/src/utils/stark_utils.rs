@@ -95,7 +95,6 @@ where
         assert!(final_state.ctx.segments().len() >= min_segments);
     }
 
-    return None;
     let segments = vm
         .executor
         .execute_metered(exe.clone(), input.clone(), &vk.num_interactions())

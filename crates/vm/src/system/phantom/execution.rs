@@ -78,7 +78,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
             rng: &mut vm_state.rng,
         },
         &pre_compute.operands,
-        sub_executor,
+        sub_executor.as_ref(),
     )
     .unwrap();
     vm_state.pc += DEFAULT_PC_STEP;
@@ -110,7 +110,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
 pub(super) fn execute_impl<F>(
     state: PhantomStateMut<F>,
     operands: &PhantomOperands,
-    sub_executor: &Box<dyn PhantomSubExecutor<F>>,
+    sub_executor: &dyn PhantomSubExecutor<F>,
 ) -> Result<(), ExecutionError>
 where
     F: PrimeField32,

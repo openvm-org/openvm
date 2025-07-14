@@ -153,7 +153,7 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
                 b: instruction.b.as_canonical_u32(),
                 c: instruction.c.as_canonical_u32(),
             },
-            sub_executor,
+            sub_executor.as_ref(),
         )?;
         pc += DEFAULT_PC_STEP;
         memory.increment_timestamp();

@@ -24,14 +24,6 @@ mod tests {
     type F = BabyBear;
 
     #[cfg(test)]
-    fn test_rv32i_config() -> Rv32IConfig {
-        Rv32IConfig {
-            system: test_system_config_with_continuations(),
-            ..Default::default()
-        }
-    }
-
-    #[cfg(test)]
     fn test_rv32im_config() -> Rv32ImConfig {
         Rv32ImConfig {
             rv32i: Rv32IConfig {
