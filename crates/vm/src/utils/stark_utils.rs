@@ -20,7 +20,10 @@ use openvm_stark_sdk::{
 use crate::arch::vm::VmExecutor;
 use crate::{
     arch::{
-        execution_mode::{e1::E1Ctx, metered::MeteredCtx},
+        execution_mode::{
+            e1::E1Ctx,
+            metered::{ctx::DEFAULT_PAGE_BITS, MeteredCtx},
+        },
         interpreter::InterpretedInstance,
         vm::VirtualMachine,
         InsExecutorE1, Streams, VmConfig,
@@ -86,7 +89,7 @@ where
     let chip_complex = vm.config().create_chip_complex().unwrap();
     {
         let executor = InterpretedInstance::<BabyBear, _>::new(config.clone(), exe.clone());
-        let ctx = MeteredCtx::<6>::new(&chip_complex, vk.num_interactions())
+        let ctx = MeteredCtx::<DEFAULT_PAGE_BITS>::new(&chip_complex, vk.num_interactions())
             .with_max_trace_height(config.system().segmentation_strategy.max_trace_height() as u32)
             .with_max_cells(config.system().segmentation_strategy.max_cells());
         let final_state = executor

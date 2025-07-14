@@ -9,9 +9,7 @@ license.workspace = true
 
 [dependencies]
 openvm-benchmarks-utils.workspace = true
-cargo-openvm.workspace = true
 openvm-circuit.workspace = true
-openvm-sdk.workspace = true
 openvm-stark-sdk.workspace = true
 openvm-transpiler.workspace = true
 openvm-rv32im-circuit.workspace = true
