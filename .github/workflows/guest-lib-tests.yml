@@ -8,6 +8,7 @@ on:
     paths:
       - "crates/circuits/**"
       - "crates/vm/**"
+      - "crates/toolchain/**"
       - "extensions/**"
       - "guest-libs/**"
       - "Cargo.toml"
@@ -33,6 +34,7 @@ jobs:
           - { name: "p256", path: "p256" }
           - { name: "ruint", path: "ruint" }
           - { name: "pairing", path: "pairing" }
+          - { name: "verify_stark", path: "verify_stark" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
@@ -52,6 +54,7 @@ jobs:
           filters: |
             - "crates/circuits/**"
             - "crates/vm/**"
+            - "crates/toolchain/**"
             - "extensions/**"
             - "guest-libs/${{ matrix.crate.path }}/**"
             - ".github/workflows/guest-lib-tests.yml"

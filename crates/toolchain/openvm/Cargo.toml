@@ -16,7 +16,10 @@ serde = { workspace = true, features = ["alloc"] }
 bytemuck = { workspace = true, features = ["extern_crate_alloc"] }
 
 [target.'cfg(target_os = "zkvm")'.dependencies]
-getrandom = { version = "0.3", optional = true }
+getrandom = { version = "0.3", default-features = false, optional = true }
+getrandom-v02 = { version = "0.2", package = "getrandom", default-features = false, features = [
+    "custom",
+], optional = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint.workspace = true
@@ -27,11 +30,11 @@ chrono = { version = "0.4", default-features = false, features = ["serde"] }
 [features]
 default = ["getrandom-unsupported"]
 # Defines a custom getrandom backend that always errors. This feature should be enabled if you are sure getrandom is never used but it is pulled in as a compilation dependency.
-getrandom-unsupported = ["dep:getrandom"]
+getrandom-unsupported = ["dep:getrandom", "dep:getrandom-v02"]
 # The zkVM uses a bump-pointer heap allocator by default which does not free
 # memory. This will use a slower linked-list heap allocator to reclaim memory.
 heap-embedded-alloc = ["openvm-platform/heap-embedded-alloc"]
 std = ["serde/std", "openvm-platform/std"]
 
 [package.metadata.cargo-shear]
-ignored = ["openvm-custom-insn"]
+ignored = ["openvm-custom-insn", "getrandom"]

@@ -37,7 +37,7 @@ impl Default for SegmentationLimits {
 pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
     instret_last_segment_check: u64,
-    air_names: Vec<String>,
+    pub(crate) air_names: Vec<String>,
     widths: Vec<usize>,
     interactions: Vec<usize>,
     segment_check_insns: u64,

@@ -10,6 +10,7 @@ license.workspace = true
 [dependencies]
 openvm-benchmarks-utils.workspace = true
 openvm-circuit.workspace = true
+openvm-continuations.workspace = true
 openvm-sdk.workspace = true
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true

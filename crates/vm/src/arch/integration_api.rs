@@ -686,8 +686,8 @@ where
     C: SizedRecord<AdapterCoreLayout<M>>,
     M: AdapterCoreMetadata + Clone,
 {
-    // A utility function to get the aligned widths of the adapter and core records
-    fn get_aligned_sizes(layout: &AdapterCoreLayout<M>) -> (usize, usize) {
+    // Returns the aligned sizes of the adapter and core records given their layout
+    pub fn get_aligned_sizes(layout: &AdapterCoreLayout<M>) -> (usize, usize) {
         let adapter_alignment = A::alignment(layout);
         let core_alignment = C::alignment(layout);
         let adapter_size = A::size(layout);
@@ -697,6 +697,12 @@ where
             .next_multiple_of(adapter_alignment)
             - aligned_adapter_size;
         (aligned_adapter_size, aligned_core_size)
+    }
+
+    // Returns the aligned size of a single record given its layout
+    pub fn get_aligned_record_size(layout: &AdapterCoreLayout<M>) -> usize {
+        let (adapter_size, core_size) = Self::get_aligned_sizes(layout);
+        adapter_size + core_size
     }
 
     // Returns a record at the given offset in the buffer

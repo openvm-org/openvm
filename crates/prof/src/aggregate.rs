@@ -170,7 +170,9 @@ impl AggregateMetrics {
             if stats.is_none() {
                 continue;
             }
-            let stats = stats.unwrap();
+            let stats = stats.unwrap_or_else(|| {
+                panic!("Missing proof time statistics for group '{}'", group_name)
+            });
             let mut sum = stats.sum;
             let mut max = stats.max;
             // convert ms to s
@@ -185,9 +187,17 @@ impl AggregateMetrics {
             if !group_name.contains("keygen") {
                 // Proving time in keygen group is dummy and not part of total.
                 total_proof_time.val += sum.val;
-                *total_proof_time.diff.as_mut().unwrap() += sum.diff.unwrap_or(0.0);
+                *total_proof_time
+                    .diff
+                    .as_mut()
+                    .expect("total_proof_time.diff should be initialized") +=
+                    sum.diff.unwrap_or(0.0);
                 total_par_proof_time.val += max.val;
-                *total_par_proof_time.diff.as_mut().unwrap() += max.diff.unwrap_or(0.0);
+                *total_par_proof_time
+                    .diff
+                    .as_mut()
+                    .expect("total_par_proof_time.diff should be initialized") +=
+                    max.diff.unwrap_or(0.0);
 
                 // Account for the serial execute_metered and execute_e1 for app outside of segments
                 if group_name != "leaf"
@@ -203,8 +213,16 @@ impl AggregateMetrics {
                         total_proof_time.val += execute_metered_stats.avg.val / 1000.0;
                         total_par_proof_time.val += execute_metered_stats.avg.val / 1000.0;
                         if let Some(diff) = execute_metered_stats.avg.diff {
-                            *total_proof_time.diff.as_mut().unwrap() += diff / 1000.0;
-                            *total_par_proof_time.diff.as_mut().unwrap() += diff / 1000.0;
+                            *total_proof_time
+                                .diff
+                                .as_mut()
+                                .expect("total_proof_time.diff should be initialized") +=
+                                diff / 1000.0;
+                            *total_par_proof_time
+                                .diff
+                                .as_mut()
+                                .expect("total_par_proof_time.diff should be initialized") +=
+                                diff / 1000.0;
                         }
                     }
 
@@ -212,8 +230,16 @@ impl AggregateMetrics {
                         total_proof_time.val += execute_e1_stats.avg.val / 1000.0;
                         total_par_proof_time.val += execute_e1_stats.avg.val / 1000.0;
                         if let Some(diff) = execute_e1_stats.avg.diff {
-                            *total_proof_time.diff.as_mut().unwrap() += diff / 1000.0;
-                            *total_par_proof_time.diff.as_mut().unwrap() += diff / 1000.0;
+                            *total_proof_time
+                                .diff
+                                .as_mut()
+                                .expect("total_proof_time.diff should be initialized") +=
+                                diff / 1000.0;
+                            *total_par_proof_time
+                                .diff
+                                .as_mut()
+                                .expect("total_par_proof_time.diff should be initialized") +=
+                                diff / 1000.0;
                         }
                     }
                 }
@@ -251,7 +277,13 @@ impl AggregateMetrics {
             .into_iter()
             .map(|group_name| {
                 let key = group_name.clone();
-                let value = self.by_group.get(group_name).unwrap().clone();
+                let value = self
+                    .by_group
+                    .get(group_name)
+                    .unwrap_or_else(|| {
+                        panic!("Group '{}' should exist in by_group map", group_name)
+                    })
+                    .clone();
                 (key, value)
             })
             .collect()
@@ -363,7 +395,9 @@ impl AggregateMetrics {
             if stats.is_none() {
                 continue;
             }
-            let stats = stats.unwrap();
+            let stats = stats.unwrap_or_else(|| {
+                panic!("Missing proof time statistics for group '{}'", group_name)
+            });
             let mut sum = stats.sum;
             let mut max = stats.max;
             // convert ms to s
@@ -394,7 +428,12 @@ impl AggregateMetrics {
         self.by_group
             .keys()
             .find(|k| group_weight(k) == 0)
-            .unwrap_or_else(|| self.by_group.keys().next().unwrap())
+            .unwrap_or_else(|| {
+                self.by_group
+                    .keys()
+                    .next()
+                    .expect("by_group should contain at least one group")
+            })
             .clone()
     }
 }

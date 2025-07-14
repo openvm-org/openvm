@@ -39,13 +39,13 @@ use crate::{
 
 mod air;
 mod columns;
-pub(crate) mod records;
+pub mod records;
 #[cfg(test)]
 mod tests;
 
 pub struct AccessAdapterInventory<F> {
     chips: Vec<GenericAccessAdapterChip<F>>,
-    arena: DenseRecordArena,
+    pub arena: DenseRecordArena,
     air_names: Vec<String>,
 }
 
