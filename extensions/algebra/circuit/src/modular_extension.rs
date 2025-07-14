@@ -24,7 +24,7 @@ use openvm_circuit_primitives::{
 use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_rv32_adapters::{
-    Rv32IsEqualModAdapterAir, Rv32IsEqualModeAdapterFiller, Rv32IsEqualModeAdapterStep,
+    Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterFiller, Rv32IsEqualModAdapterStep,
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -38,7 +38,7 @@ use strum::EnumCount;
 
 use crate::modular_chip::{
     get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_step,
-    get_modular_multdiv_air, get_modular_multdiv_chip, get_modular_multdiv_step, ModularAir,
+    get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_step, ModularAir,
     ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir, ModularIsEqualFiller,
     ModularStep, VmModularIsEqualStep,
 };
@@ -112,7 +112,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let muldiv = get_modular_multdiv_step(
+                let muldiv = get_modular_muldiv_step(
                     config,
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -135,7 +135,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 });
 
                 let is_eq = VmModularIsEqualStep::new(
-                    Rv32IsEqualModeAdapterStep::new(pointer_max_bits),
+                    Rv32IsEqualModAdapterStep::new(pointer_max_bits),
                     start_offset,
                     modulus_limbs,
                 );
@@ -166,7 +166,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let muldiv = get_modular_multdiv_step(
+                let muldiv = get_modular_muldiv_step(
                     config,
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -189,7 +189,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                 });
 
                 let is_eq = VmModularIsEqualStep::new(
-                    Rv32IsEqualModeAdapterStep::new(pointer_max_bits),
+                    Rv32IsEqualModAdapterStep::new(pointer_max_bits),
                     start_offset,
                     modulus_limbs,
                 );
@@ -269,7 +269,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for ModularExtension {
                 );
                 inventory.add_air(addsub);
 
-                let muldiv = get_modular_multdiv_air::<1, 32>(
+                let muldiv = get_modular_muldiv_air::<1, 32>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -308,7 +308,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for ModularExtension {
                 );
                 inventory.add_air(addsub);
 
-                let muldiv = get_modular_multdiv_air::<3, 16>(
+                let muldiv = get_modular_muldiv_air::<3, 16>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -393,7 +393,7 @@ where
                 inventory.add_executor_chip(addsub);
 
                 inventory.next_air::<ModularAir<1, 32>>()?;
-                let muldiv = get_modular_multdiv_chip::<Val<SC>, 1, 32>(
+                let muldiv = get_modular_muldiv_chip::<Val<SC>, 1, 32>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -412,7 +412,7 @@ where
                 inventory.next_air::<ModularIsEqualAir<1, 32, 32>>()?;
                 let is_eq = ModularIsEqualChip::<Val<SC>, 1, 32, 32>::new(
                     ModularIsEqualFiller::new(
-                        Rv32IsEqualModeAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
                         modulus_limbs,
                         bitwise_lu.clone(),
@@ -438,7 +438,7 @@ where
                 inventory.add_executor_chip(addsub);
 
                 inventory.next_air::<ModularAir<3, 16>>()?;
-                let muldiv = get_modular_multdiv_chip::<Val<SC>, 3, 16>(
+                let muldiv = get_modular_muldiv_chip::<Val<SC>, 3, 16>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -457,7 +457,7 @@ where
                 inventory.next_air::<ModularIsEqualAir<3, 16, 48>>()?;
                 let is_eq = ModularIsEqualChip::<Val<SC>, 3, 16, 48>::new(
                     ModularIsEqualFiller::new(
-                        Rv32IsEqualModeAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
                         modulus_limbs,
                         bitwise_lu.clone(),

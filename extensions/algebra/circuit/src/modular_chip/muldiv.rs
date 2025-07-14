@@ -77,7 +77,7 @@ fn gen_base_expr(
     (expr, local_opcode_idx, opcode_flag_idx)
 }
 
-pub fn get_modular_multdiv_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_modular_muldiv_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     exec_bridge: ExecutionBridge,
     mem_bridge: MemoryBridge,
     config: ExprBuilderConfig,
@@ -98,7 +98,7 @@ pub fn get_modular_multdiv_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     )
 }
 
-pub fn get_modular_multdiv_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_modular_muldiv_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
@@ -116,7 +116,7 @@ pub fn get_modular_multdiv_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     )
 }
 
-pub fn get_modular_multdiv_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_modular_muldiv_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     config: ExprBuilderConfig,
     mem_helper: SharedMemoryHelper<F>,
     range_checker: SharedVariableRangeCheckerChip,
