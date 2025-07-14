@@ -119,6 +119,7 @@ fn main() {
         b.file("cuda/src/system/boundary.cu")
             .file("cuda/src/system/phantom.cu")
             .file("cuda/src/system/poseidon2.cu")
+            .file("cuda/src/system/program.cu")
             .compile("tracegen_gpu_system");
     }
 
