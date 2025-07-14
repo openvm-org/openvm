@@ -666,7 +666,7 @@ unsafe fn execute_e12_impl<
 
     if !IS_SETUP {
         let (b_cmp, _) = run_unsigned_less_than::<TOTAL_READ_SIZE>(&b, &pre_compute.modulus_limbs);
-        assert!(b_cmp, "{:?} >= {:?}", b, pre_compute.modulus_limbs);
+        debug_assert!(b_cmp, "{:?} >= {:?}", b, pre_compute.modulus_limbs);
     }
 
     let (c_cmp, _) = run_unsigned_less_than::<TOTAL_READ_SIZE>(&c, &pre_compute.modulus_limbs);
