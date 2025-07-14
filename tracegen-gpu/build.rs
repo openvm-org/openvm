@@ -102,15 +102,15 @@ fn main() {
 
     {
         let mut b = common.clone();
-        b.file("cuda/src/dummy/dummy_chip.cu")
-            .file("cuda/src/dummy/range_tuple.cu")
+        b.file("cuda/src/dummy/bitwise_op_lookup.cu")
             .file("cuda/src/dummy/encoder.cu")
             .file("cuda/src/dummy/fibair.cu")
             .file("cuda/src/dummy/less_than.cu")
             .file("cuda/src/dummy/is_zero.cu")
             .file("cuda/src/dummy/is_equal.cu")
             .file("cuda/src/dummy/poseidon2.cu")
-            .file("cuda/src/dummy/utils.cu")
+            .file("cuda/src/dummy/range_tuple.cu")
+            .file("cuda/src/dummy/var_range.cu")
             .compile("tracegen_gpu_dummy");
     }
 
