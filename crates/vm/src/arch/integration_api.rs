@@ -959,40 +959,6 @@ impl<
     type ProcessedInstruction = MinimalInstruction<T>;
 }
 
-pub struct VecHeapTwoReadsAdapterInterface<
-    T,
-    const BLOCKS_PER_READ1: usize,
-    const BLOCKS_PER_READ2: usize,
-    const BLOCKS_PER_WRITE: usize,
-    const READ_SIZE: usize,
-    const WRITE_SIZE: usize,
->(PhantomData<T>);
-
-impl<
-        T,
-        const BLOCKS_PER_READ1: usize,
-        const BLOCKS_PER_READ2: usize,
-        const BLOCKS_PER_WRITE: usize,
-        const READ_SIZE: usize,
-        const WRITE_SIZE: usize,
-    > VmAdapterInterface<T>
-    for VecHeapTwoReadsAdapterInterface<
-        T,
-        BLOCKS_PER_READ1,
-        BLOCKS_PER_READ2,
-        BLOCKS_PER_WRITE,
-        READ_SIZE,
-        WRITE_SIZE,
-    >
-{
-    type Reads = (
-        [[T; READ_SIZE]; BLOCKS_PER_READ1],
-        [[T; READ_SIZE]; BLOCKS_PER_READ2],
-    );
-    type Writes = [[T; WRITE_SIZE]; BLOCKS_PER_WRITE];
-    type ProcessedInstruction = MinimalInstruction<T>;
-}
-
 /// Similar to `BasicAdapterInterface`, but it flattens the reads and writes into a single flat
 /// array for each
 pub struct FlatInterface<T, PI, const READ_CELLS: usize, const WRITE_CELLS: usize>(
@@ -1127,37 +1093,6 @@ mod conversions {
                 T,
                 NUM_READS,
                 BLOCKS_PER_READ,
-                BLOCKS_PER_WRITE,
-                READ_SIZE,
-                WRITE_SIZE,
-            >,
-        >
-    {
-        fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
-            AdapterAirContext {
-                to_pc: ctx.to_pc,
-                reads: ctx.reads.into(),
-                writes: ctx.writes.into(),
-                instruction: ctx.instruction.into(),
-            }
-        }
-    }
-
-    // AdapterAirContext: DynInterface -> VecHeapTwoReadsAdapterInterface
-    impl<
-            T: Clone,
-            const BLOCKS_PER_READ1: usize,
-            const BLOCKS_PER_READ2: usize,
-            const BLOCKS_PER_WRITE: usize,
-            const READ_SIZE: usize,
-            const WRITE_SIZE: usize,
-        > From<AdapterAirContext<T, DynAdapterInterface<T>>>
-        for AdapterAirContext<
-            T,
-            VecHeapTwoReadsAdapterInterface<
-                T,
-                BLOCKS_PER_READ1,
-                BLOCKS_PER_READ2,
                 BLOCKS_PER_WRITE,
                 READ_SIZE,
                 WRITE_SIZE,
