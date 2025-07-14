@@ -19,6 +19,7 @@ use super::TeAddChip;
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
 const BLOCK_SIZE: usize = 32;
+const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
 lazy_static::lazy_static! {
@@ -124,6 +125,7 @@ fn test_add() {
         Edwards25519_A.clone(),
         Edwards25519_D.clone(),
     );
+    chip.0.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     assert_eq!(chip.0.step.expr.builder.num_variables, 12);
 
