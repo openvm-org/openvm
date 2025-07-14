@@ -17,8 +17,8 @@ use openvm_rv32im_circuit::{
 mod extension;
 pub use extension::*;
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 /// BaseAlu256
 pub type Rv32BaseAlu256Air = VmAirWrapper<
