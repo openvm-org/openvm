@@ -99,8 +99,7 @@ lto = "fat"
 codegen-units = 1
 
 [profile.dev]
-opt-level = 0
-debug = 2
+opt-level = 1
 
 # For O1 optimization but still fast(ish) compile times
 [profile.fast]
