@@ -1,5 +1,5 @@
 use openvm_algebra_guest::{IntMod, Reduce};
-use openvm_sha2::sha256;
+use openvm_sha2::sha512;
 
 use crate::{edwards::TwistedEdwardsPoint, CyclicGroup, FromCompressed, IntrinsicCurve};
 
@@ -38,8 +38,7 @@ where
             return false;
         };
 
-        // TODO: replace with sha512
-        let prehash = sha256(message);
+        let prehash = sha512(message);
 
         // h = SHA512(dom2(F, C) || R || A || PH(M))
         // RFC reference: https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.7
@@ -61,8 +60,7 @@ where
         sha_input.extend_from_slice(&encode_point::<C>(&self.point));
         sha_input.extend_from_slice(&prehash);
 
-        // TOOD: replace with sha512
-        let h = sha256(&sha_input);
+        let h = sha512(&sha_input);
 
         let h = C::Scalar::reduce_le_bytes(&h);
 

@@ -26,7 +26,7 @@ mod tests {
         config::{AppConfig, SdkVmConfig},
         StdIn,
     };
-    use openvm_sha256_transpiler::Sha256TranspilerExtension;
+    use openvm_sha2_transpiler::Sha2TranspilerExtension;
     use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::{openvm_stark_backend, p3_baby_bear::BabyBear};
     use openvm_toolchain_tests::{
@@ -336,7 +336,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
-                .with_extension(Sha256TranspilerExtension),
+                .with_extension(Sha2TranspilerExtension),
         )?;
         air_test(config, openvm_exe);
         Ok(())
