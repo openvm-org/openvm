@@ -7,7 +7,7 @@ use openvm_instructions::{exe::VmExe, program::Program, LocalOpcode, SystemOpcod
 use openvm_stark_backend::{
     config::{Com, PcsProverData, StarkGenericConfig, Val},
     p3_commit::Pcs,
-    p3_field::{Field, FieldAlgebra, PrimeField32, PrimeField64},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     p3_util::log2_strict_usize,
@@ -48,10 +48,7 @@ pub struct VmCommittedExe<SC: StarkGenericConfig> {
     pub prover_data: Arc<PcsProverData<SC>>,
 }
 
-impl<SC: StarkGenericConfig> VmCommittedExe<SC>
-where
-    Val<SC>: PrimeField32,
-{
+impl<SC: StarkGenericConfig> VmCommittedExe<SC> {
     /// Creates [VmCommittedExe] from [VmExe] by using `pcs` to commit to the
     /// program code as a _cached trace_ matrix.
     pub fn commit(exe: VmExe<Val<SC>>, pcs: &SC::Pcs) -> Self {
@@ -95,6 +92,7 @@ where
     pub fn compute_exe_commit(&self, memory_config: &MemoryConfig) -> Com<SC>
     where
         Com<SC>: AsRef<[Val<SC>; CHUNK]> + From<[Val<SC>; CHUNK]>,
+        Val<SC>: PrimeField32,
     {
         let hasher = vm_poseidon2_hasher();
         let memory_dimensions = memory_config.memory_dimensions();
@@ -159,7 +157,7 @@ pub fn compute_exe_commit<F: PrimeField32>(
     hasher.compress(&hasher.compress(&program_hash, &memory_hash), &pc_hash)
 }
 
-pub(crate) fn generate_cached_trace<F: PrimeField64>(program: &Program<F>) -> RowMajorMatrix<F> {
+pub(crate) fn generate_cached_trace<F: Field>(program: &Program<F>) -> RowMajorMatrix<F> {
     let width = ProgramExecutionCols::<F>::width();
     let mut instructions = program
         .enumerate_by_pc()

@@ -34,7 +34,7 @@ use openvm_stark_backend::{
 use rand::{rngs::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::info_span;
+use tracing::{info_span, instrument};
 
 use super::{
     execution_mode::e1::E1Ctx, ExecutionError, InsExecutorE1, MemoryConfig, VmChipComplex,
@@ -177,10 +177,7 @@ pub enum ExitCode {
 // space.     pub final_memory: Option<MemoryImage>,
 // }
 
-pub struct VmState<F>
-where
-    F: PrimeField32,
-{
+pub struct VmState<F> {
     pub instret: u64,
     pub pc: u32,
     pub memory: GuestMemory,
@@ -191,7 +188,7 @@ where
     pub metrics: VmMetrics,
 }
 
-impl<F: PrimeField32> VmState<F> {
+impl<F> VmState<F> {
     pub fn new(
         instret: u64,
         pc: u32,
@@ -211,13 +208,10 @@ impl<F: PrimeField32> VmState<F> {
     }
 }
 
-pub struct VmExecutorOneSegmentResult<F, VC, RA>
-where
-    F: PrimeField32,
-    VC: VmExecutionConfig<F>,
-{
-    pub segment: VmSegmentExecutor<F, VC, TracegenExecutionControl<RA>>,
-    pub next_state: Option<VmState<F>>,
+pub struct PreflightExecutionOutput<F, RA> {
+    pub system_records: SystemRecords<F>,
+    pub record_arenas: Vec<RA>,
+    pub to_state: VmState<F>,
 }
 
 impl<F, VC> VmExecutor<F, VC>
@@ -234,6 +228,51 @@ where
             inventory,
             phantom: PhantomData,
         })
+    }
+}
+
+impl<F, VC> VmExecutor<F, VC>
+where
+    VC: VmExecutionConfig<F> + AsRef<SystemConfig>,
+{
+    pub fn build_metered_ctx(
+        &self,
+        constant_trace_heights: &[Option<usize>],
+        air_names: &[String],
+        widths: &[usize],
+        interactions: &[usize],
+    ) -> MeteredCtx {
+        let system_config = self.config.as_ref();
+        let num_addr_sp = 1 + (1 << system_config.memory_config.addr_space_height);
+        let mut min_block_size = vec![1; num_addr_sp];
+        // TMP: hardcoding for now
+        // TODO[jpw]: move to mem_config
+        min_block_size[1] = 4;
+        min_block_size[2] = 4;
+        min_block_size[3] = 4;
+        let as_byte_alignment_bits = min_block_size
+            .iter()
+            .map(|&x| log2_strict_usize(x as usize) as u8)
+            .collect();
+
+        let seg_strategy = &system_config.segmentation_strategy;
+        MeteredCtx::new(
+            constant_trace_heights.to_vec(),
+            system_config.has_public_values_chip(),
+            system_config.continuation_enabled,
+            as_byte_alignment_bits,
+            system_config.memory_config.memory_dimensions(),
+            air_names.to_vec(),
+            widths.to_vec(),
+            interactions.to_vec(),
+        )
+        .with_max_trace_height(seg_strategy.max_trace_height() as u32)
+        .with_max_cells(seg_strategy.max_cells())
+    }
+
+    pub fn create_initial_state(&self, exe: &VmExe<F>, input: impl Into<Streams<F>>) -> VmState<F> {
+        let memory_config = &self.config.as_ref().memory_config;
+        create_initial_state(memory_config, exe, input, 0)
     }
 }
 
@@ -305,41 +344,6 @@ where
         self.execute_e1_from_state(exe, state, num_insns)
     }
 
-    pub fn build_metered_ctx(
-        &self,
-        constant_trace_heights: &[Option<usize>],
-        air_names: &[String],
-        widths: &[usize],
-        interactions: &[usize],
-    ) -> MeteredCtx {
-        let system_config = self.config.as_ref();
-        let num_addr_sp = 1 + (1 << system_config.memory_config.addr_space_height);
-        let mut min_block_size = vec![1; num_addr_sp];
-        // TMP: hardcoding for now
-        // TODO[jpw]: move to mem_config
-        min_block_size[1] = 4;
-        min_block_size[2] = 4;
-        min_block_size[3] = 4;
-        let as_byte_alignment_bits = min_block_size
-            .iter()
-            .map(|&x| log2_strict_usize(x as usize) as u8)
-            .collect();
-
-        let seg_strategy = &system_config.segmentation_strategy;
-        MeteredCtx::new(
-            constant_trace_heights.to_vec(),
-            system_config.has_public_values_chip(),
-            system_config.continuation_enabled,
-            as_byte_alignment_bits,
-            system_config.memory_config.memory_dimensions(),
-            air_names.to_vec(),
-            widths.to_vec(),
-            interactions.to_vec(),
-        )
-        .with_max_trace_height(seg_strategy.max_trace_height() as u32)
-        .with_max_cells(seg_strategy.max_cells())
-    }
-
     /// Base metered execution function that operates from a given state
     pub fn execute_metered_from_state(
         &self,
@@ -394,11 +398,6 @@ where
         let exe = exe.into();
         let state = self.create_initial_state(&exe, input);
         self.execute_metered_from_state(exe, state, executor_idx_to_air_idx, ctx)
-    }
-
-    pub fn create_initial_state(&self, exe: &VmExe<F>, input: impl Into<Streams<F>>) -> VmState<F> {
-        let memory_config = &self.config.as_ref().memory_config;
-        create_initial_state(memory_config, exe, input, 0)
     }
 }
 
@@ -649,6 +648,8 @@ pub enum VirtualMachineError {
     Execution(#[from] ExecutionError),
     #[error("trace generation error: {0}")]
     Generation(#[from] GenerationError),
+    #[error("program committed trade data not loaded")]
+    ProgramIsNotCommitted,
 }
 
 /// The [VirtualMachine] struct contains the API to generate proofs for _arbitrary_ programs for a
@@ -659,8 +660,9 @@ pub enum VirtualMachineError {
 ///
 /// In other words, this struct _is_ the zkVM.
 #[derive(Getters, Setters, WithSetters)]
-pub struct VirtualMachine<E: StarkEngine, VC>
+pub struct VirtualMachine<E, VC>
 where
+    E: StarkEngine,
     VC: VmProverConfig<E::SC, E::PB>,
 {
     /// Proving engine
@@ -676,10 +678,7 @@ where
 impl<E, VC> VirtualMachine<E, VC>
 where
     E: StarkEngine,
-    Val<E::SC>: PrimeField32,
     VC: VmProverConfig<E::SC, E::PB>,
-    VC::Executor:
-        Clone + InsExecutorE1<Val<E::SC>> + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
 {
     pub fn new(
         engine: E,
@@ -737,14 +736,11 @@ where
         state: VmState<Val<E::SC>>,
         num_insns: u64,
         trace_heights: &[u32],
-    ) -> Result<
-        (
-            SystemRecords<Val<E::SC>>,
-            Vec<VC::RecordArena>,
-            VmState<Val<E::SC>>,
-        ),
-        ExecutionError,
-    > {
+    ) -> Result<PreflightExecutionOutput<Val<E::SC>, VC::RecordArena>, ExecutionError>
+    where
+        Val<E::SC>: PrimeField32,
+        VC::Executor: Clone + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+    {
         let handler = ProgramHandler::new(exe.program, &self.executor.inventory)?;
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         debug_assert!(executor_idx_to_air_idx
@@ -815,7 +811,7 @@ where
             public_values,
         };
         let record_arenas = exec_state.ctx.arenas;
-        let new_state = VmState {
+        let to_state = VmState {
             instret: exec_state.instret,
             pc: exec_state.pc,
             memory: memory.data,
@@ -824,7 +820,11 @@ where
             #[cfg(feature = "bench-metrics")]
             metrics: Default::default(),
         };
-        Ok((system_records, record_arenas, new_state))
+        Ok(PreflightExecutionOutput {
+            system_records,
+            record_arenas,
+            to_state,
+        })
     }
 
     // @dev: This function mutates `self` but should only depend on internal state in the sense
@@ -832,6 +832,7 @@ where
     // - program must already be loaded as cached trace
     // - initial memory image was already sent to device
     // - all other state should be given by `system_records` and `record_arenas`
+    #[instrument(name = "tracegen", skip_all)]
     pub fn generate_proving_ctx(
         &mut self,
         system_records: SystemRecords<Val<E::SC>>,
@@ -901,14 +902,21 @@ where
         state: VmState<Val<E::SC>>,
         num_insns: u64,
         trace_heights: &[u32],
-    ) -> Result<(Proof<E::SC>, Option<GuestMemory>), VirtualMachineError> {
+    ) -> Result<(Proof<E::SC>, Option<GuestMemory>), VirtualMachineError>
+    where
+        Val<E::SC>: PrimeField32,
+        VC::Executor: Clone + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+    {
         self.transport_init_memory_to_device(&state.memory);
 
-        let (system_records, record_arenas, final_state) =
-            self.execute_preflight(exe, state, num_insns, trace_heights)?;
+        let PreflightExecutionOutput {
+            system_records,
+            record_arenas,
+            to_state,
+        } = self.execute_preflight(exe, state, num_insns, trace_heights)?;
         // drop final memory unless this is a terminal segment and the exit code is success
-        let final_memory = (system_records.exit_code == Some(ExitCode::Success as u32))
-            .then_some(final_state.memory);
+        let final_memory =
+            (system_records.exit_code == Some(ExitCode::Success as u32)).then_some(to_state.memory);
         self.chip_complex.system.load_program(cached_program_trace);
         let ctx = self.generate_proving_ctx(system_records, record_arenas)?;
 
@@ -928,6 +936,7 @@ where
     ) -> Result<(), VmVerificationError>
     where
         Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
+        Val<E::SC>: PrimeField32,
     {
         if self.config().as_ref().continuation_enabled {
             verify_segments(&self.engine, vk, proofs).map(|_| ())
@@ -1011,6 +1020,115 @@ where
             &widths,
             &interactions,
         )
+    }
+}
+
+/// Prover for a specific exe in a specific continuation VM using a specific Stark config.
+pub trait ContinuationVmProver<SC: StarkGenericConfig> {
+    fn prove(
+        &mut self,
+        input: impl Into<Streams<Val<SC>>>,
+    ) -> Result<ContinuationVmProof<SC>, VirtualMachineError>;
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "Com<SC>: Serialize",
+    deserialize = "Com<SC>: Deserialize<'de>"
+))]
+pub struct ContinuationVmProof<SC: StarkGenericConfig> {
+    pub per_segment: Vec<Proof<SC>>,
+    pub user_public_values: UserPublicValuesProof<{ CHUNK }, Val<SC>>,
+}
+
+/// Virtual machine prover instance for a fixed VM config and a fixed program. For use in proving a
+/// program directly on bare metal.
+pub struct VmLocalProver<E, VC>
+where
+    E: StarkEngine,
+    VC: VmProverConfig<E::SC, E::PB>,
+{
+    vm: VirtualMachine<E, VC>,
+    // TODO: store immutable parts of program handler here
+    exe: VmExe<Val<E::SC>>,
+}
+
+impl<E, VC> VmLocalProver<E, VC>
+where
+    E: StarkEngine,
+    VC: VmProverConfig<E::SC, E::PB>,
+{
+    pub fn new(
+        mut vm: VirtualMachine<E, VC>,
+        exe: VmExe<Val<E::SC>>,
+        cached_program_trace: CommittedTraceData<E::PB>,
+    ) -> Self {
+        vm.load_program(cached_program_trace);
+        Self { vm, exe }
+    }
+}
+
+impl<E, VC> ContinuationVmProver<E::SC> for VmLocalProver<E, VC>
+where
+    E: StarkEngine,
+    Val<E::SC>: PrimeField32,
+    VC: VmProverConfig<E::SC, E::PB>,
+    VC::Executor:
+        Clone + InsExecutorE1<Val<E::SC>> + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+{
+    /// First performs metered execution (E2) to determine segments. Then sequentially proves each
+    /// segment. The proof for each segment uses the specified [ProverBackend], but the proof for
+    /// the next segment does not start before the current proof finishes.
+    fn prove(
+        &mut self,
+        input: impl Into<Streams<Val<E::SC>>>,
+    ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
+        let input = input.into();
+        let vm = &mut self.vm;
+        let exe = &self.exe;
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        let e2_ctx = vm.build_metered_ctx();
+        let segments = vm.executor().execute_metered(
+            self.exe.clone(),
+            input.clone(),
+            &executor_idx_to_air_idx,
+            e2_ctx,
+        )?;
+        let mut proofs = Vec::with_capacity(segments.len());
+        let mut state = Some(vm.executor().create_initial_state(exe, input));
+        for (seg_idx, segment) in segments.into_iter().enumerate() {
+            let _span = info_span!("prove_segment", segment = seg_idx).entered();
+            let Segment {
+                instret_start,
+                num_insns,
+                trace_heights,
+            } = segment;
+            assert_eq!(state.as_ref().unwrap().instret, instret_start);
+            let from_state = Option::take(&mut state).unwrap();
+            vm.transport_init_memory_to_device(&from_state.memory);
+            let PreflightExecutionOutput {
+                system_records,
+                record_arenas,
+                to_state,
+            } = vm.execute_preflight(exe.clone(), from_state, num_insns, &trace_heights)?;
+            state = Some(to_state);
+
+            let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
+            let proof = vm.engine.prove(vm.pk(), ctx);
+            proofs.push(proof);
+        }
+        let to_state = state.unwrap();
+        let final_memory = to_state.memory.memory;
+        let user_public_values = UserPublicValuesProof::compute(
+            vm.config().as_ref().memory_config.memory_dimensions(),
+            vm.config().as_ref().num_public_values,
+            &vm_poseidon2_hasher(),
+            &final_memory,
+        );
+        Ok(ContinuationVmProof {
+            per_segment: proofs,
+            user_public_values,
+        })
     }
 }
 
@@ -1192,16 +1310,6 @@ where
     })
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(bound(
-    serialize = "Com<SC>: Serialize",
-    deserialize = "Com<SC>: Deserialize<'de>"
-))]
-pub struct ContinuationVmProof<SC: StarkGenericConfig> {
-    pub per_segment: Vec<Proof<SC>>,
-    pub user_public_values: UserPublicValuesProof<{ CHUNK }, Val<SC>>,
-}
-
 impl<SC: StarkGenericConfig> Clone for ContinuationVmProof<SC>
 where
     Com<SC>: Clone,
@@ -1229,10 +1337,7 @@ fn create_initial_state<F>(
     exe: &VmExe<F>,
     input: impl Into<Streams<F>>,
     seed: u64,
-) -> VmState<F>
-where
-    F: PrimeField32,
-{
+) -> VmState<F> {
     let memory = create_memory_image(memory_config, exe.init_memory.clone());
     #[cfg(feature = "bench-metrics")]
     let mut state = VmState::new(0, exe.pc_start, memory, input, seed);

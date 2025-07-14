@@ -2,6 +2,7 @@ use itertools::{multiunzip, Itertools};
 use openvm_instructions::{exe::VmExe, program::Program};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
+    engine::VerificationData,
     p3_field::PrimeField32,
     proof::Proof,
     prover::{
@@ -27,8 +28,8 @@ use crate::arch::vm::VmExecutor;
 use crate::{
     arch::{
         execution_mode::metered::Segment, vm::VirtualMachine, ExitCode, InsExecutorE1,
-        InstructionExecutor, MatrixRecordArena, Streams, VmCircuitConfig, VmConfig,
-        VmExecutionConfig, VmProverConfig,
+        InstructionExecutor, MatrixRecordArena, PreflightExecutionOutput, Streams, VmCircuitConfig,
+        VmConfig, VmExecutionConfig, VmProverConfig,
     },
     system::memory::{online::GuestMemory, MemoryImage},
 };
@@ -72,13 +73,18 @@ where
 
 /// Executes and proves the VM and returns the final memory state.
 /// If `debug` is true, runs the debug prover.
+//
+// Same implementation as VmLocalProver, but we need to do something special to run the debug prover
 pub fn air_test_impl<VC>(
     config: VC,
     exe: impl Into<VmExe<BabyBear>>,
     input: impl Into<Streams<BabyBear>>,
     min_segments: usize,
     debug: bool,
-) -> eyre::Result<(Option<MemoryImage>, Vec<Proof<BabyBearPoseidon2Config>>)>
+) -> eyre::Result<(
+    Option<MemoryImage>,
+    Vec<VerificationDataWithFriParams<BabyBearPoseidon2Config>>,
+)>
 where
     // NOTE: the compiler cannot figure out Val<SC>=BabyBear without the VmExecutionConfig and
     // VmCircuitConfig bounds even though VmProverConfig already includes them
@@ -130,8 +136,11 @@ where
         assert_eq!(state.as_ref().unwrap().instret, instret_start);
         let from_state = Option::take(&mut state).unwrap();
         vm.transport_init_memory_to_device(&from_state.memory);
-        let (system_records, record_arenas, to_state) =
-            vm.execute_preflight(exe.clone(), from_state, num_insns, &trace_heights)?;
+        let PreflightExecutionOutput {
+            system_records,
+            record_arenas,
+            to_state,
+        } = vm.execute_preflight(exe.clone(), from_state, num_insns, &trace_heights)?;
         state = Some(to_state);
         exit_code = system_records.exit_code;
 
@@ -172,101 +181,16 @@ where
         .expect("segment proofs should verify");
     let state = state.unwrap();
     let final_memory = (exit_code == Some(ExitCode::Success as u32)).then_some(state.memory.memory);
-    Ok((final_memory, proofs))
+    let vdata = proofs
+        .into_iter()
+        .map(|proof| VerificationDataWithFriParams {
+            data: VerificationData {
+                vk: vk.clone(),
+                proof,
+            },
+            fri_params: vm.engine.fri_params(),
+        })
+        .collect();
+
+    Ok((final_memory, vdata))
 }
-
-// /// Generates the VM STARK circuit, in the form of AIRs and traces, but does not
-// /// do any proving. Output is the payload of everything the prover needs.
-// ///
-// /// The output AIRs and traces are sorted by height in descending order.
-// pub fn gen_vm_program_test_proof_input<VC, E>(
-//     program: Program<Val<E::SC>>,
-//     input_stream: impl Into<Streams<Val<E::SC>>> + Clone,
-//     #[allow(unused_mut)] mut config: VC,
-// ) -> ProofInputForTest<E::SC>
-// where
-//     E: StarkFriEngine,
-//     Val<E::SC>: PrimeField32,
-//     VC: VmProverConfig<E::SC, E::PB>,
-//     VC::Executor: InsExecutorE1<Val<E::SC>>,
-// {
-//     let program_exe = VmExe::new(program);
-//     let input = input_stream.into();
-
-//     let airs = config.create_chip_complex().unwrap().airs();
-//     let engine = E::new(FriParameters::new_for_testing(1));
-//     let vm = VirtualMachine::new(engine, config.clone());
-
-//     let pk = vm.keygen();
-//     let vk = pk.get_vk();
-//     let segments = vm
-//         .executor
-//         .execute_metered(
-//             program_exe.clone(),
-//             input.clone(),
-//             &vk.total_widths(),
-//             &vk.num_interactions(),
-//         )
-//         .unwrap();
-
-//     cfg_if::cfg_if! {
-//         if #[cfg(feature = "bench-metrics")] {
-//             // Run once with metrics collection enabled, which can improve runtime performance
-//             config.as_mut().profiling = true;
-//             {
-//                 let executor = VmExecutor::<Val<E::SC>, VC>::new(config.clone()).unwrap();
-//                 executor.execute(program_exe.clone(), input.clone(), &segments).unwrap();
-//             }
-//             // Run again with metrics collection disabled and measure trace generation time
-//             config.as_mut().profiling = false;
-//             let start = std::time::Instant::now();
-//         }
-//     }
-//     let mut result = vm
-//         .executor
-//         .execute_and_generate(program_exe, input, &segments)
-//         .unwrap();
-
-//     assert_eq!(
-//         result.per_segment.len(),
-//         1,
-//         "only proving one segment for now"
-//     );
-
-//     let result = result.per_segment.pop().unwrap();
-//     #[cfg(feature = "bench-metrics")]
-//     metrics::gauge!("execute_and_trace_gen_time_ms").set(start.elapsed().as_millis() as f64);
-//     // Filter out unused AIRS (where trace is empty)
-//     let (used_airs, per_air) = result
-//         .per_air
-//         .into_iter()
-//         .map(|(air_id, x)| (airs[air_id].clone(), x))
-//         .unzip();
-//     ProofInputForTest {
-//         airs: used_airs,
-//         per_air,
-//     }
-// }
-
-// type ExecuteAndProveResult<SC> = Result<VerificationDataWithFriParams<SC>, VerificationError>;
-
-// /// Executes program and runs simple STARK prover test (keygen, prove, verify).
-// pub fn execute_and_prove_program<SC, E, VC>(
-//     program: Program<Val<SC>>,
-//     input_stream: impl Into<Streams<Val<SC>>> + Clone,
-//     config: VC,
-//     engine: &E,
-// ) -> ExecuteAndProveResult<SC>
-// where
-//     SC: StarkGenericConfig,
-//     E: StarkFriEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-//     Val<E::SC>: PrimeField32,
-//     VC: VmProverConfig<SC, E::PB>,
-//     VC::Executor: InsExecutorE1<Val<SC>>,
-// {
-//     let span = tracing::info_span!("execute_and_prove_program").entered();
-//     let test_proof_input = gen_vm_program_test_proof_input::<_, E>(program, input_stream,
-// config);     let vparams = test_proof_input.run_test(engine)?;
-//     span.exit();
-//     Ok(vparams)
-// }

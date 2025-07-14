@@ -5,7 +5,8 @@ use thiserror::Error;
 use crate::{
     arch::{hasher::Hasher, ADDR_SPACE_OFFSET},
     system::memory::{
-        dimensions::MemoryDimensions, merkle::tree::MerkleTree, online::LinearMemory, MemoryImage,
+        dimensions::MemoryDimensions, merkle::tree::MerkleTree, online::LinearMemory, AddressMap,
+        MemoryImage,
     },
 };
 
@@ -46,8 +47,8 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
     /// Computes the proof of the public values from the final memory state.
     /// Assumption:
     /// - `num_public_values` is a power of two * CHUNK. It cannot be 0.
-    // PERF[jpw]: this currently reconstructs the merkle tree from final memory; we should avoid
-    // this
+    // TODO[jpw]: this currently reconstructs the merkle tree from final memory; we should avoid
+    // this. We should make this a function within SystemChipComplex
     pub fn compute(
         memory_dimensions: MemoryDimensions,
         num_public_values: usize,
