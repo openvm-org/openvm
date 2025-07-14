@@ -4,7 +4,6 @@ use backtrace::Backtrace;
 use openvm_instructions::{
     exe::FnBounds,
     instruction::{DebugInfo, Instruction},
-    program::DEFAULT_PC_STEP,
 };
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
