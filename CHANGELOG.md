@@ -3,58 +3,47 @@
 All notable changes to OpenVM will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+and this project follows a versioning principles documented in [VERSIONING.md](./VERSIONING.md).
 
-## v1.2.1 (TBD)
+## v1.3.0
 
-### Breaking Changes
+No circuit constraints or verifying keys were changed in this release.
 
-#### CLI
+A substantial refactor has been done to the guest libraries to separate the low level Rust bindings for OpenVM intrinsic instructions from the higher level user interface. For each VM extension, the `openvm-$name-guest` crate is now a _primitives library_ containing only the Rust bindings for the intrinsic instructions and essential logic related to the extension (e.g., ECDSA signature verification). We introduce new _guest libraries_ as standalone Rust crates which provide the high-level interfaces guest programs should use to interact with the associated VM extensions.
 
-- **New `init` command**: Added `cargo openvm init` command for creating new OpenVM packages with proper project structure and dependencies. This command initializes a new Rust project with OpenVM configuration.
+Users are advised to switch to using the new guest libraries.
 
-- **New `commit` command**: Added `cargo openvm commit` command for viewing the Bn254 commit of an OpenVM executable. This command generates and displays commitment information for built executables.
+### Added
+- (ISA) Added OpenVM phantom sub-instructions `HintNonQr` and `HintSqrt` to the algebra (modular arithmetic) extension. Added corresponding RISC-V custom instructions `hint_non_qr` and `hint_sqrt`.
+- (Guest Libraries) We introduce the following new guest libraries:
+  - `openvm-keccak256`: guest library for the Keccak256 hash function.
+  - `openvm-sha2`: guest library for the SHA-256 hash function.
+  - `openvm-pairing`: guest library for the elliptic curve pairing check operation.
+  - `ff_derive`: patch of [ff_derive](https://crates.io/crates/ff_derive) using the algebra extension.
+  - `k256`: patch of [k256](https://crates.io/crates/k256) using the algebra and ECC extensions.
+  - `p256`: patch of [p256](https://crates.io/crates/p256) using the algebra and ECC extensions.
+  - `ruint`: patch of [ruint](https://crates.io/crates/ruint) using the big integer extension.
+  - `openvm-verify-stark`: a new guest library providing a `define_verify_stark_proof!` macro which generates a function `verify_stark` that can be used to verify an OpenVM STARK proof from within a Rust program. The `verify_stark` function is accelerated using the native field arithmetic extension.
+- (CLI) New `cargo openvm init` and `cargo openvm commit` commands.
+- (CLI) New `cargo openvm prove stark` and `cargo openvm verify stark` commands to generate a single final STARK proof without Halo2 SNARK wrapper.
+- (SDK) New functions `generate_e2e_stark_proof` and `verify_e2e_stark_proof`
 
-- **Build command output changes**: The `cargo openvm build` command now outputs `AppExecutionCommit` in JSON format and stores ELF and vmexe files in updated locations. The old output (`exe_commit.bytes`) was incorrect.
+### Changed
+- (Primitives Libraries) In the algebra and elliptic curve primitive libraries, the `setup_*` functions have been removed from guest bindings and are now called on-demand within other relevant binding functions. Additionally, custom opcode initialization is now simplified through the inclusion of `openvm_init.rs` files and the `openvm::init!()` macro. Read the book for more details.
+- (CLI) The build command `cargo openvm build` now stores build artifacts in the `target/` to match cargo conventions.
+- (CLI) The `cargo openvm setup` command now supports skipping halo2 proving keys and outputs halo2 PK and STARK PK as separate files.
+- (CLI) The `cargo openvm commit` and `cargo openvm prove stark` commands now consistently output commit values in hexadecimal format.
+- (CLI) The `cargo openvm prove` command now outputs proofs to `${bin_name}.app.proof` instead of `app.proof`.
 
-- **Setup command enhancements**: The `cargo openvm setup` command now supports skipping halo2 proving keys and outputs halo2 PK and STARK PK as separate files.
+### Removed
+- (ISA) Removed OpenVM phantom sub-instructions `HintDecompress` and `HintNonQr` from the elliptic curve extension. Removed corresponding RISC-V custom instructions `hint_decompress` and `hint_non_qr`.
 
-- **Hex output format**: The `cargo openvm commit` and `cargo openvm prove stark` commands now consistently output commit values in hexadecimal format. Previously, some outputs used different formats, which could cause parsing issues in downstream tools.
+## v1.2.0 (2025-06-02)
 
-- **Prove command output paths**: The `cargo openvm prove` command now outputs proofs to `${bin_name}.app.proof` instead of `app.proof`, where `bin_name` is the file stem of the executable. For example, if your binary is `my_program`, the proof will be saved as `my_program.app.proof` instead of the generic `app.proof`. This applies to both `stark` and `evm` proof types.
-
-#### SDK
-
-- No breaking changes to the SDK public API in this release.
-
-#### Library Interfaces
-
-- **Guest bindings refactor**: Major breaking changes to guest library interfaces. The `setup_*` functions have been removed from guest bindings and are now called on-demand within relevant binding functions. Additionally, custom opcode initialization is now simplified through the inclusion of `openvm_init.rs` files and the `openvm::init!()` macro. This affects:
-  - Code that previously called `setup_*` functions explicitly
-  - Projects that need custom opcode initialization (now use `openvm::init!()`)
-  - Benchmarks and examples that depend on the old guest library interface
-
-### Migration Guide
-
-#### CLI Migration
-- **New commands**: Use `cargo openvm init <directory>` to create new OpenVM projects with proper structure
-- **Output format changes**: Update scripts parsing `cargo openvm commit` and `cargo openvm prove stark` output to handle hexadecimal format
-- **Prove command paths**: Update automation expecting proof files at `app.proof` to look for `${binary_name}.app.proof` instead
-
-#### SDK Migration
-- Update import statements:
-  ```rust
-  // Old
-  use openvm_circuit::arch::instructions::program::DEFAULT_MAX_NUM_PUBLIC_VALUES;
-  
-  // New
-  use openvm_circuit::arch::DEFAULT_MAX_NUM_PUBLIC_VALUES;
-  ```
-
-#### Library Migration
-- **Remove explicit setup calls**: Remove any explicit calls to `setup_*` functions in your guest code, as these are now called automatically on-demand
-- **Add initialization macro**: Include `openvm::init!();` in your guest program's main function to initialize custom opcodes
-- **Update build process**: The build process now generates `openvm_init.rs` files automatically based on your `openvm.toml` configuration
+### Security Fixes
+This release makes fixes for security advisories:
+- Plonky3: https://github.com/Plonky3/Plonky3/security/advisories/GHSA-f69f-5fx9-w9r9
+- OpenVM: https://github.com/openvm-org/openvm/security/advisories/GHSA-4w7p-8f9q-f4g2 (recursion circuit fixes corresponding to Plonky3)
 
 ## v1.1.2 (2025-05-08)
 
