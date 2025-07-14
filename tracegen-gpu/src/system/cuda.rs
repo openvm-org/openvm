@@ -24,8 +24,8 @@ pub mod boundary {
             width: usize,
             d_raw_records: *const u32,
             num_records: usize,
-            d_rc_buffer: *mut std::ffi::c_void,
-            rc_num_bins: usize,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: usize,
             as_max_bits: usize,
             ptr_max_bits: usize,
         ) -> i32;
@@ -62,7 +62,7 @@ pub mod boundary {
         width: usize,
         d_records: &DeviceBuffer<u32>,
         num_records: usize,
-        d_rc_buffer: &DeviceBuffer<T>,
+        d_range_checker: &DeviceBuffer<T>,
         as_max_bits: usize,
         ptr_max_bits: usize,
     ) -> Result<(), CudaError> {
@@ -72,8 +72,8 @@ pub mod boundary {
             width,
             d_records.as_ptr(),
             num_records,
-            d_rc_buffer.as_mut_raw_ptr(),
-            d_rc_buffer.len() / 2,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len(),
             as_max_bits,
             ptr_max_bits,
         ))
@@ -196,6 +196,48 @@ pub mod program {
             num_records,
             terminate_pc,
             terminate_opcode,
+        ))
+    }
+}
+
+pub mod public_values {
+    use super::*;
+
+    extern "C" {
+        fn _public_values_tracegen(
+            d_trace: *mut std::ffi::c_void,
+            height: usize,
+            width: usize,
+            d_records: *const u8,
+            num_records: usize,
+            d_range_checker: *mut u32,
+            range_checker_bins: u32,
+            num_custom_pvs: u32,
+            max_degree: u32,
+        ) -> i32;
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn tracegen<T>(
+        d_trace: &DeviceBuffer<T>,
+        height: usize,
+        width: usize,
+        d_records: &DeviceBuffer<u8>,
+        num_records: usize,
+        d_range_checker: &DeviceBuffer<T>,
+        num_custom_pvs: usize,
+        max_degree: u32,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_public_values_tracegen(
+            d_trace.as_mut_raw_ptr(),
+            height,
+            width,
+            d_records.as_ptr(),
+            num_records,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            num_custom_pvs as u32,
+            max_degree,
         ))
     }
 }

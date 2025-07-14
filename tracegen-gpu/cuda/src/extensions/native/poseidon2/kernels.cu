@@ -206,15 +206,15 @@ __global__ void cukernel_inplace_native_poseidon2_tracegen(
     size_t trace_height,
     size_t trace_width,
     size_t num_records,
-    uint32_t *rc_buffer,
-    uint32_t rc_num_bins
+    uint32_t *range_checker,
+    uint32_t range_checker_num_bins
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, trace_height);
     Poseidon2Wrapper<SBOX_REGISTERS>::fill_inner(row);
     if (idx < num_records) {
         Poseidon2Wrapper<SBOX_REGISTERS>::fill_specific(
-            row, VariableRangeChecker(rc_buffer, rc_num_bins)
+            row, VariableRangeChecker(range_checker, range_checker_num_bins)
         );
     }
 }
@@ -226,8 +226,8 @@ __global__ void cukernel_native_poseidon2_tracegen(
     size_t trace_width,
     Fp *records,
     size_t num_records,
-    uint32_t *rc_buffer,
-    uint32_t rc_num_bins
+    uint32_t *range_checker,
+    uint32_t range_checker_num_bins
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, trace_height);
@@ -238,7 +238,7 @@ __global__ void cukernel_native_poseidon2_tracegen(
         }
         Poseidon2Wrapper<SBOX_REGISTERS>::fill_inner(row);
         Poseidon2Wrapper<SBOX_REGISTERS>::fill_specific(
-            row, VariableRangeChecker(rc_buffer, rc_num_bins)
+            row, VariableRangeChecker(range_checker, range_checker_num_bins)
         );
     } else {
         row.fill_zero(0, trace_width);
@@ -251,21 +251,23 @@ extern "C" int _inplace_native_poseidon2_tracegen(
     size_t height,
     size_t width,
     size_t num_records,
-    uint32_t *d_rc_buffer,
-    uint32_t rc_num_bins,
+    uint32_t *d_range_checker,
+    uint32_t range_checker_num_bins,
     size_t sbox_regs
 ) {
     auto [grid, block] = kernel_launch_params(height);
     switch (sbox_regs) {
     case 1:
         assert(width == sizeof(NativePoseidon2Cols<uint8_t, 1>));
-        cukernel_inplace_native_poseidon2_tracegen<1>
-            <<<grid, block>>>(d_trace, height, width, num_records, d_rc_buffer, rc_num_bins);
+        cukernel_inplace_native_poseidon2_tracegen<1><<<grid, block>>>(
+            d_trace, height, width, num_records, d_range_checker, range_checker_num_bins
+        );
         break;
     case 0:
         assert(width == sizeof(NativePoseidon2Cols<uint8_t, 0>));
-        cukernel_inplace_native_poseidon2_tracegen<0>
-            <<<grid, block>>>(d_trace, height, width, num_records, d_rc_buffer, rc_num_bins);
+        cukernel_inplace_native_poseidon2_tracegen<0><<<grid, block>>>(
+            d_trace, height, width, num_records, d_range_checker, range_checker_num_bins
+        );
         break;
     default:
         return cudaErrorInvalidConfiguration;
@@ -279,8 +281,8 @@ extern "C" int _native_poseidon2_tracegen(
     size_t width,
     Fp *d_records,
     size_t num_records,
-    uint32_t *d_rc_buffer,
-    uint32_t rc_num_bins,
+    uint32_t *d_range_checker,
+    uint32_t range_checker_num_bins,
     size_t sbox_regs
 ) {
     auto [grid, block] = kernel_launch_params(height);
@@ -288,13 +290,13 @@ extern "C" int _native_poseidon2_tracegen(
     case 1:
         assert(width == sizeof(NativePoseidon2Cols<uint8_t, 1>));
         cukernel_native_poseidon2_tracegen<1><<<grid, block>>>(
-            d_trace, height, width, d_records, num_records, d_rc_buffer, rc_num_bins
+            d_trace, height, width, d_records, num_records, d_range_checker, range_checker_num_bins
         );
         break;
     case 0:
         assert(width == sizeof(NativePoseidon2Cols<uint8_t, 0>));
         cukernel_native_poseidon2_tracegen<0><<<grid, block>>>(
-            d_trace, height, width, d_records, num_records, d_rc_buffer, rc_num_bins
+            d_trace, height, width, d_records, num_records, d_range_checker, range_checker_num_bins
         );
         break;
     default:

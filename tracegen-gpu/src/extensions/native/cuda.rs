@@ -157,8 +157,8 @@ pub mod poseidon2_cuda {
             height: usize,
             width: usize,
             num_records: usize,
-            d_rc_buffer: *mut u32,
-            rc_num_bins: u32,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
             sbox_regs: usize,
         ) -> i32;
 
@@ -168,8 +168,8 @@ pub mod poseidon2_cuda {
             width: usize,
             d_records: *const std::ffi::c_void,
             num_records: usize,
-            d_rc_buffer: *mut u32,
-            rc_num_bins: u32,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
             sbox_regs: usize,
         ) -> i32;
     }
@@ -177,7 +177,7 @@ pub mod poseidon2_cuda {
     pub unsafe fn inplace_tracegen<T>(
         d_trace: &DeviceMatrix<T>,
         num_records: usize,
-        d_rc_buffer: &DeviceBuffer<T>,
+        d_range_checker: &DeviceBuffer<T>,
         sbox_regs: usize,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_inplace_native_poseidon2_tracegen(
@@ -185,8 +185,8 @@ pub mod poseidon2_cuda {
             d_trace.height(),
             d_trace.width(),
             num_records,
-            d_rc_buffer.as_mut_ptr() as *mut u32,
-            d_rc_buffer.len() as u32,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
             sbox_regs,
         ))
     }
@@ -195,7 +195,7 @@ pub mod poseidon2_cuda {
         d_trace: &DeviceMatrix<T>,
         d_records: &DeviceBuffer<T>,
         num_records: usize,
-        d_rc_buffer: &DeviceBuffer<T>,
+        d_range_checker: &DeviceBuffer<T>,
         sbox_regs: usize,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_native_poseidon2_tracegen(
@@ -204,8 +204,8 @@ pub mod poseidon2_cuda {
             d_trace.width(),
             d_records.as_raw_ptr(),
             num_records,
-            d_rc_buffer.as_mut_ptr() as *mut u32,
-            d_rc_buffer.len() as u32,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
             sbox_regs,
         ))
     }

@@ -6,6 +6,8 @@ namespace riscv {
 static const size_t RV32_REGISTER_NUM_LIMBS = 4;
 static const size_t RV32_CELL_BITS = 8;
 static const size_t RV_J_TYPE_IMM_BITS = 21;
+
+static const size_t RV32_IMM_AS = 0;
 } // namespace riscv
 
 namespace program {
