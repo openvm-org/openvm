@@ -17,13 +17,13 @@ Users are advised to switch to using the new guest libraries.
 - (ISA) Added OpenVM phantom sub-instructions `HintNonQr` and `HintSqrt` to the algebra (modular arithmetic) extension. Added corresponding RISC-V custom instructions `hint_non_qr` and `hint_sqrt`.
 - (Guest Libraries) We introduce the following new guest libraries:
   - `openvm-keccak256`: guest library for the Keccak256 hash function.
-  - `openvm-sha2`: guest library for the SHA-256 hash function.
+  - `openvm-sha2`: guest library providing access to a set of accelerated SHA-2 family hash functions. Currently, the SHA-256 hash function is supported.
   - `openvm-pairing`: guest library for the elliptic curve pairing check operation.
   - `ff_derive`: patch of [ff_derive](https://crates.io/crates/ff_derive) using the algebra extension.
   - `k256`: patch of [k256](https://crates.io/crates/k256) using the algebra and ECC extensions.
   - `p256`: patch of [p256](https://crates.io/crates/p256) using the algebra and ECC extensions.
   - `ruint`: patch of [ruint](https://crates.io/crates/ruint) using the big integer extension.
-  - `openvm-verify-stark`: a new guest library providing a `define_verify_stark_proof!` macro which generates a function `verify_stark` that can be used to verify an OpenVM STARK proof from within a Rust program. The `verify_stark` function is accelerated using the native field arithmetic extension.
+  - `openvm-verify-stark`: a new guest library providing a `define_verify_stark_proof!` macro which generates a user-named function `$verify_stark` that can be used to verify an OpenVM STARK proof from within a Rust program. The `$verify_stark` function is accelerated using the native field arithmetic extension.
 - (CLI) New `cargo openvm init` and `cargo openvm commit` commands.
 - (CLI) New `cargo openvm prove stark` and `cargo openvm verify stark` commands to generate a single final STARK proof without Halo2 SNARK wrapper.
 - (SDK) New functions `generate_e2e_stark_proof` and `verify_e2e_stark_proof`
