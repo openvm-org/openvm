@@ -15,7 +15,7 @@ use openvm_circuit::{
         StepExecutorE1, StepExecutorE2, TraceFiller, TraceStep, VmAdapterInterface, VmAirWrapper,
         VmCoreAir, VmSegmentState, VmStateMut,
     },
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory, POINTER_MAX_BITS},
 };
 use openvm_circuit_derive::{TraceFiller, TraceStep};
 use openvm_circuit_primitives::{
@@ -655,8 +655,7 @@ unsafe fn execute_e12_impl<
 
     // Read memory values
     let [b, c]: [[u8; TOTAL_READ_SIZE]; 2] = rs_vals.map(|address| {
-        // TODO(ayush): add this back
-        // assert!(address as usize + LANE_SIZE * BLOCKS - 1 < (1 << self.0.pointer_max_bits));
+        assert!(address as usize + TOTAL_READ_SIZE - 1 < (1 << POINTER_MAX_BITS));
         from_fn::<_, NUM_LANES, _>(|i| {
             vm_state.vm_read::<_, LANE_SIZE>(RV32_MEMORY_AS, address + (i * LANE_SIZE) as u32)
         })

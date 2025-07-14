@@ -55,7 +55,6 @@ static AVAILABLE_PROGRAMS: &[&str] = &[
 
 static SHARED_INTERACTIONS: OnceLock<Vec<usize>> = OnceLock::new();
 
-// TODO(ayush): remove from here
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct ExecuteConfig {
     #[system]

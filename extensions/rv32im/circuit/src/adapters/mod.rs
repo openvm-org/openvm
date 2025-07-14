@@ -69,7 +69,6 @@ pub fn memory_read<const N: usize>(memory: &GuestMemory, address_space: u32, ptr
             || address_space == PUBLIC_VALUES_AS,
     );
 
-    // TODO(ayush): PUBLIC_VALUES_AS safety?
     // SAFETY:
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
@@ -89,7 +88,6 @@ pub fn memory_write<const N: usize>(
             || address_space == PUBLIC_VALUES_AS
     );
 
-    // TODO(ayush): PUBLIC_VALUES_AS safety?
     // SAFETY:
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
@@ -124,7 +122,6 @@ pub fn timed_write<F: PrimeField32, const N: usize>(
     ptr: u32,
     data: [u8; N],
 ) -> (u32, [u8; N]) {
-    // TODO(ayush): should this allow public values address space
     debug_assert!(
         address_space == RV32_REGISTER_AS
             || address_space == RV32_MEMORY_AS

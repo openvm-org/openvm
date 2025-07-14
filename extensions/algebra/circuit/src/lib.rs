@@ -3,13 +3,16 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use openvm_circuit::arch::{
-    execution::ExecuteFunc,
-    execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-    instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
-    DynArray, E2PreCompute,
-    ExecutionError::InvalidInstruction,
-    Result, StepExecutorE1, StepExecutorE2, VmSegmentState,
+use openvm_circuit::{
+    arch::{
+        execution::ExecuteFunc,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+        DynArray, E2PreCompute,
+        ExecutionError::InvalidInstruction,
+        Result, StepExecutorE1, StepExecutorE2, VmSegmentState,
+    },
+    system::memory::POINTER_MAX_BITS,
 };
 use openvm_circuit_derive::{TraceFiller, TraceStep};
 use openvm_circuit_primitives::{var_range::SharedVariableRangeCheckerChip, AlignedBytesBorrow};
@@ -259,8 +262,7 @@ unsafe fn execute_e12_impl<
 
     // Read memory values
     let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; NUM_READS] = rs_vals.map(|address| {
-        // TODO(ayush): add this back
-        // assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << self.0.pointer_max_bits));
+        assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
         from_fn(|i| vm_state.vm_read(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
     });
     let read_data: DynArray<u8> = read_data.into();
@@ -272,7 +274,7 @@ unsafe fn execute_e12_impl<
     );
 
     let rd_val = u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));
-    // assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << self.0.pointer_max_bits));
+    assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
 
     // Write output data to memory
     let data: [[u8; BLOCK_SIZE]; BLOCKS] = writes.into();

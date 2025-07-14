@@ -158,7 +158,6 @@ pub trait TraceFiller<F, CTX> {
     /// Populates `trace`. This function will always be called after
     /// [`TraceStep::execute`], so the `trace` should already contain the records necessary to fill
     /// in the rest of it.
-    // TODO(ayush): come up with a better abstraction for chips that fill a dynamic number of rows
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -379,7 +378,6 @@ where
 // TEMP[jpw]: buffer should be inside CTX
 pub struct MatrixRecordArena<F> {
     pub trace_buffer: Vec<F>,
-    // TODO(ayush): width should be a constant?
     pub width: usize,
     pub trace_offset: usize,
 }
@@ -757,7 +755,6 @@ where
     }
 }
 
-// TODO(ayush): rename to ChipWithExecutionContext or something
 pub struct NewVmChipWrapper<F, AIR, STEP, RA> {
     pub air: AIR,
     pub step: STEP,

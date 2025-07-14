@@ -496,7 +496,6 @@ impl<F: PrimeField32> VmExtension<F> for Rv32M {
                     ExecutionBridge::new(execution_bus, program_bus),
                     memory_bridge,
                 ),
-                // TODO(ayush): bus should return value not reference
                 MultiplicationCoreAir::new(*range_tuple_checker.bus(), MulOpcode::CLASS_OFFSET),
             ),
             MultiplicationStep::new(

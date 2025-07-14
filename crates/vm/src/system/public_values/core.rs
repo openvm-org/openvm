@@ -123,7 +123,6 @@ pub struct PublicValuesRecord<F> {
 /// the proof but in the perspective of constraints, it could be any value.
 pub struct PublicValuesCoreStep<A, F> {
     adapter: A,
-    // TODO(ayush): put air here and take from air
     encoder: Encoder,
     // Mutex is to make the struct Sync. But it actually won't be accessed by multiple threads.
     pub(crate) custom_pvs: Mutex<Vec<Option<F>>>,

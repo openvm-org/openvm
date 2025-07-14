@@ -897,8 +897,6 @@ where
         }
         debug_assert_eq!(trace.width, OVERALL_WIDTH);
 
-        // TODO(ayush): store chunk indices during alloc calls instead of
-        //              calculating here
         let mut remaining_trace = &mut trace.values[..OVERALL_WIDTH * rows_used];
         let mut chunks = Vec::with_capacity(rows_used);
         while !remaining_trace.is_empty() {

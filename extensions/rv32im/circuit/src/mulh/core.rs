@@ -289,7 +289,6 @@ where
             &core_record.c.map(u32::from),
         );
 
-        // TODO(ayush): avoid this conversion
         let a = a.map(|x| x as u8);
         self.adapter
             .write(state.memory, instruction, [a].into(), &mut adapter_record);
