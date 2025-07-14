@@ -163,3 +163,39 @@ pub mod poseidon2 {
         ))
     }
 }
+
+pub mod program {
+    use super::*;
+
+    extern "C" {
+        fn _program_cached_tracegen(
+            d_trace: *mut std::ffi::c_void,
+            height: usize,
+            width: usize,
+            d_records: *const std::ffi::c_void,
+            num_records: usize,
+            terminate_pc: u32,
+            terminate_opcode: usize,
+        ) -> i32;
+    }
+
+    pub unsafe fn cached_tracegen<T>(
+        d_trace: &DeviceBuffer<T>,
+        height: usize,
+        width: usize,
+        d_records: &DeviceBuffer<T>,
+        num_records: usize,
+        terminate_pc: u32,
+        terminate_opcode: usize,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_program_cached_tracegen(
+            d_trace.as_mut_raw_ptr(),
+            height,
+            width,
+            d_records.as_raw_ptr(),
+            num_records,
+            terminate_pc,
+            terminate_opcode,
+        ))
+    }
+}
