@@ -223,7 +223,6 @@ where
     }
 
     /// Executes a single instruction and updates VM state
-    // TODO(ayush): clean this up, separate to smaller functions
     fn execute_instruction(
         &mut self,
         state: &mut VmSegmentState<F, Ctrl::Ctx>,
@@ -286,7 +285,6 @@ where
             }
         }
 
-        // TODO(ayush): move to vm state?
         *prev_backtrace = trace.cloned();
 
         // Execute the instruction using the control implementation

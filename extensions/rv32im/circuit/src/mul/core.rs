@@ -217,7 +217,6 @@ where
         core_record.b = rs1;
         core_record.c = rs2;
 
-        // TODO(ayush): avoid this conversion
         self.adapter
             .write(state.memory, instruction, [a].into(), &mut adapter_record);
 

@@ -241,7 +241,6 @@ where
         self.adapter
             .write(state.memory, instruction, rd, &mut adapter_record);
 
-        // TODO(ayush): add increment_pc function to vmstate
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
