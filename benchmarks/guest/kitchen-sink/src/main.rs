@@ -1,3 +1,5 @@
+extern crate alloc;
+
 use std::hint::black_box;
 
 use openvm_algebra_guest::IntMod;
@@ -6,20 +8,17 @@ use openvm_ruint::aliases::U256;
 use openvm_sha2::sha256;
 #[allow(unused_imports)]
 use {
-    openvm_ecc_guest::{
-        k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
-        p256::{P256Coord, P256Point, P256Scalar},
-        weierstrass::WeierstrassPoint,
-        CyclicGroup,
-    },
+    openvm_ecc_guest::{weierstrass::WeierstrassPoint, CyclicGroup},
+    openvm_k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
+    openvm_p256::{P256Coord, P256Point, P256Scalar},
     openvm_pairing::{
         bls12_381::{
             Bls12_381Fp, Bls12_381Fp2, Bls12_381G1Affine, Bls12_381Scalar,
             G2Affine as Bls12_381G2Affine,
         },
         bn254::{Bn254, Bn254Fp, Bn254Fp2, Bn254G1Affine, Bn254Scalar, G2Affine as Bn254G2Affine},
+        PairingCheck,
     },
-    openvm_pairing_guest::pairing::PairingCheck,
 };
 
 // Note: these will all currently be represented as bytes32 even though they could be smaller
@@ -98,7 +97,7 @@ pub fn main() {
 
     let mut bytes = [0u8; 32];
     bytes[7] = 1 << 5; // 2^61 = modulus + 1
-    let mut res = Mersenne61::from_le_bytes(&bytes); // No need to start from reduced representation
+    let mut res = Mersenne61::from_le_bytes_unchecked(&bytes); // No need to start from reduced representation
     for _ in 0..61 {
         res += res.clone();
     }

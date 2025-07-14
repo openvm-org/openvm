@@ -535,7 +535,7 @@ Two cases to consider:
 
 The SubAir doesn't explicitly enforce that only the first differing index has a non-zero `diff_inv_marker` value, or that it contains the exact inverse. It only requires that the weighted sum of differences equals 1 when arrays differ. However, the trace generation sets these values correctly for efficiency.
 
-#### 3.2.6 [is_less_than](https://github.com/openvm-org/openvm/blob/main/crates/circuits/primitives/is_less_than.rs)
+#### 3.2.6 [is_less_than](https://github.com/openvm-org/openvm/blob/main/crates/circuits/primitives/src/is_less_than)
 Less than comparison for outputting a boolean indicating `x` < `y`
 
 **Assumptions:**

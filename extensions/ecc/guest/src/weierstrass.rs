@@ -19,7 +19,7 @@ pub trait WeierstrassPoint: Clone + Sized {
     /// coordinates are in little endian.
     ///
     /// **Warning**: The memory layout of `Self` is expected to pack
-    /// `x` and `y` contigously with no unallocated space in between.
+    /// `x` and `y` contiguously with no unallocated space in between.
     fn as_le_bytes(&self) -> &[u8];
 
     /// Raw constructor without asserting point is on the curve.

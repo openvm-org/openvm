@@ -12,7 +12,7 @@ The functional part is provided by the `openvm-algebra-guest` crate, which is a 
   - `Repr` typically is `[u8; NUM_LIMBS]`, representing the number's underlying storage.
   - `MODULUS` is the compile-time known modulus.
   - `ZERO` and `ONE` represent the additive and multiplicative identities, respectively.
-  - Constructors include `from_repr`, `from_le_bytes`, `from_be_bytes`, `from_u8`, `from_u32`, and `from_u64`.
+  - Constructors include `from_repr`, `from_le_bytes`, `from_be_bytes`, `from_le_bytes_unchecked`, `from_be_bytes_unchecked`, `from_u8`, `from_u32`, and `from_u64`.
 
 - `Field` trait:
   Provides constants `ZERO` and `ONE` and methods for basic arithmetic operations within a field.
@@ -22,7 +22,7 @@ The functional part is provided by the `openvm-algebra-guest` crate, which is a 
 
 ## Modular arithmetic
 
-To [leverage](./overview.md) compile-time known moduli for performance, you declare, initialize, and then set up the arithmetic structures:
+To [leverage](./overview.md) compile-time known moduli for performance, you declare and initialize the arithmetic structures:
 
 1. **Declare**: Use the `moduli_declare!` macro to define a modular arithmetic struct. This can be done multiple times in various crates or modules:
 
@@ -37,10 +37,10 @@ This creates `Bls12_381Fp` and `Bn254Fp` structs, each implementing the `IntMod`
 Since both moduli are prime, both structs also implement the `Field` and `Sqrt` traits.
 The modulus parameter must be a string literal in decimal or hexadecimal format.
 
-2. **Init**: Use the `init!` macro exactly once in the final binary:
+2. **Init**: Use the [`openvm::init!` macro](./overview.md#automating-the-init-step) exactly once in the final binary:
 
 ```rust
-init!();
+openvm::init!();
 /* This expands to
 moduli_init! {
     "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
@@ -70,10 +70,10 @@ complex_declare! {
 
 This creates a `Bn254Fp2` struct, representing a complex extension field. The `mod_type` must implement `IntMod`.
 
-2. **Init**: After calling `complex_declare!`, the `init!` macro will now expand to the appropriate call to `complex_init!`.
+2. **Init**: After calling `complex_declare!`, the [`openvm::init!` macro](./overview.md#automating-the-init-step) will now expand to the appropriate call to `complex_init!`.
 
 ```rust
-init!();
+openvm::init!();
 /* This expands to:
 moduli_init! {
     "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
@@ -115,9 +115,7 @@ To have the correct imports for the above example, add the following to the `Car
 ```toml
 [dependencies]
 openvm = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-platform = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-algebra-complex-macros = { git = "https://github.com/openvm-org/openvm.git" }
 serde = { version = "1.0.216", default-features = false }
 ```
 

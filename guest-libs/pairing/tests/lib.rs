@@ -421,8 +421,8 @@ mod bn254 {
         let ps = ps
             .into_iter()
             .map(|pt| {
-                let [x, y] =
-                    [pt.x, pt.y].map(|x| openvm_pairing::bn254::Fp::from_le_bytes(&x.to_bytes()));
+                let [x, y] = [pt.x, pt.y]
+                    .map(|x| openvm_pairing::bn254::Fp::from_le_bytes_unchecked(&x.to_bytes()));
                 AffinePoint::new(x, y)
             })
             .collect::<Vec<_>>();
@@ -883,7 +883,7 @@ mod bls12_381 {
             .into_iter()
             .map(|pt| {
                 let [x, y] = [pt.x, pt.y]
-                    .map(|x| openvm_pairing::bls12_381::Fp::from_le_bytes(&x.to_bytes()));
+                    .map(|x| openvm_pairing::bls12_381::Fp::from_le_bytes_unchecked(&x.to_bytes()));
                 AffinePoint::new(x, y)
             })
             .collect::<Vec<_>>();

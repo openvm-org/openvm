@@ -126,8 +126,14 @@ See the [overview](./overview.md) on how to build and run the program.
 
 ## Using crates that depend on `getrandom`
 
-OpenVM is compatible with [getrandom](https://crates.io/crates/getrandom) `v0.3`. The `cargo openvm` CLI will always compile with the [custom](https://docs.rs/getrandom/latest/getrandom/#opt-in-backends) `getrandom` backend.
+OpenVM is compatible with [getrandom](https://crates.io/crates/getrandom) `v0.2` and `v0.3`. The `cargo openvm` CLI will always compile with the [custom](https://docs.rs/getrandom/0.3.3/getrandom/#opt-in-backends) `getrandom` backend.
 
 By default the `openvm` crate has a default feature `"getrandom-unsupported"` which exports a `__getrandom_v03_custom` function that always returns `Err(Error::UNSUPPORTED)`. This is enabled by default to allow compilation of guest programs that pull in dependencies which require `getrandom` but where the executed code does not actually use `getrandom` functions.
 
-To override the default behavior and provide a custom implementation, turn off the `"getrandom-unsupported"` feature in the `openvm` crate and supply your own `__getrandom_v03_custom` function as specified in the [getrandom docs](https://docs.rs/getrandom/latest/getrandom/#custom-backend).
+To override the default behavior and provide a custom implementation, turn off the `"getrandom-unsupported"` feature in the `openvm` crate and supply your own `__getrandom_v03_custom` function as specified in the [getrandom docs](https://docs.rs/getrandom/0.3.3/getrandom/#custom-backend). Similar customization options are available for `getrandom` `v0.2`.
+
+## Read-only reflection
+
+OpenVM partially supports [reflective programming](https://en.wikipedia.org/wiki/Reflective_programming) by allowing **read-only** access to the program code itself during runtime execution. Program code that is modified during runtime will **not** be executed.
+
+More specifically, data and executable code from the RISC-V ELF are loaded into the initial memory image at the start of runtime execution, and this memory may be freely accessed during execution. However, execution will always run with respect to the initial executable code from the ELF, and all runtime modifications will be ignored.

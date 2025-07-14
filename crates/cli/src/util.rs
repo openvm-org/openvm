@@ -5,19 +5,14 @@ use std::{
 
 use eyre::Result;
 use openvm_build::{get_in_scope_packages, get_workspace_packages};
-use openvm_sdk::{
-    config::{AppConfig, SdkVmConfig},
-    fs::{read_agg_halo2_pk_from_file, read_agg_stark_pk_from_file},
-    keygen::AggProvingKey,
-};
+use openvm_sdk::config::{AppConfig, SdkVmConfig};
+#[cfg(feature = "evm-prove")]
+use openvm_sdk::{fs::read_agg_stark_pk_from_file, keygen::AggProvingKey};
 use serde::de::DeserializeOwned;
 
 use crate::{
     commands::RunCargoArgs,
-    default::{
-        default_agg_halo2_pk_path, default_agg_stark_pk_path, default_app_config,
-        DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME,
-    },
+    default::{default_app_config, DEFAULT_APP_PK_NAME, DEFAULT_APP_VK_NAME},
 };
 
 pub(crate) fn read_to_struct_toml<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T> {
@@ -38,9 +33,11 @@ pub fn read_config_toml_or_default(config: impl AsRef<Path>) -> Result<AppConfig
     }
 }
 
+#[cfg(feature = "evm-prove")]
 pub fn read_default_agg_pk() -> Result<AggProvingKey> {
-    let agg_stark_pk = read_agg_stark_pk_from_file(default_agg_stark_pk_path())?;
-    let halo2_pk = read_agg_halo2_pk_from_file(default_agg_halo2_pk_path())?;
+    let agg_stark_pk = read_agg_stark_pk_from_file(crate::default::default_agg_stark_pk_path())?;
+    let halo2_pk =
+        openvm_sdk::fs::read_agg_halo2_pk_from_file(crate::default::default_agg_halo2_pk_path())?;
     Ok(AggProvingKey {
         agg_stark_pk,
         halo2_pk,

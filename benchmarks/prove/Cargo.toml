@@ -10,7 +10,7 @@ license.workspace = true
 [dependencies]
 openvm-benchmarks-utils.workspace = true
 openvm-circuit.workspace = true
-openvm-sdk = { workspace = true, features = ["evm-verify"] }
+openvm-sdk.workspace = true
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true
 openvm-transpiler.workspace = true
@@ -44,14 +44,27 @@ tracing.workspace = true
 
 [features]
 default = ["parallel", "jemalloc", "bench-metrics"]
-bench-metrics = ["openvm-native-recursion/bench-metrics"]
+bench-metrics = ["openvm-sdk/bench-metrics"]
 profiling = ["openvm-sdk/profiling"]
-aggregation = []
-parallel = ["openvm-native-recursion/parallel"]
-mimalloc = ["openvm-circuit/mimalloc"]
-jemalloc = ["openvm-circuit/jemalloc"]
-jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
-nightly-features = ["openvm-circuit/nightly-features"]
+aggregation = []                                    # runs leaf aggregation benchmarks
+evm = ["openvm-sdk/evm-verify"]
+parallel = ["openvm-sdk/parallel"]
+mimalloc = ["openvm-sdk/mimalloc"]
+jemalloc = ["openvm-sdk/jemalloc"]
+jemalloc-prof = ["openvm-sdk/jemalloc-prof"]
+nightly-features = ["openvm-sdk/nightly-features"]
 
 [package.metadata.cargo-shear]
 ignored = ["derive_more"]
+
+[[bin]]
+name = "fib_e2e"
+path = "src/bin/fib_e2e.rs"
+# TODO: cfg run benchmark with prove stark if no evm feature
+required-features = ["evm"]
+
+[[bin]]
+name = "kitchen_sink"
+path = "src/bin/kitchen_sink.rs"
+# TODO: cfg run benchmark with prove stark if no evm feature
+required-features = ["evm"]

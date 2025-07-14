@@ -1,7 +1,7 @@
 use core::hint::black_box;
 use openvm as _;
 
-use openvm_keccak256_guest::keccak256;
+use openvm_keccak256::keccak256;
 
 const INPUT_LENGTH_BYTES: usize = 100 * 1024; // 100 KB
 

@@ -6,17 +6,11 @@ use openvm_circuit::{
     arch::{VirtualMachine, VmComplexTraceHeights, VmConfig},
     system::{memory::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
 };
-use openvm_continuations::{
-    static_verifier::StaticVerifierPvHandler,
-    verifier::{
-        internal::InternalVmVerifierConfig, leaf::LeafVmVerifierConfig, root::RootVmVerifierConfig,
-    },
+use openvm_continuations::verifier::{
+    internal::InternalVmVerifierConfig, leaf::LeafVmVerifierConfig, root::RootVmVerifierConfig,
 };
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::ir::DIGEST_SIZE;
-use openvm_native_recursion::halo2::{
-    utils::Halo2ParamsReader, verifier::Halo2VerifierProvingKey, wrapper::Halo2WrapperProvingKey,
-};
 use openvm_stark_backend::{
     config::Val,
     p3_field::{FieldExtensionAlgebra, PrimeField32, TwoAdicField},
@@ -37,10 +31,19 @@ use openvm_stark_sdk::{
 };
 use serde::{Deserialize, Serialize};
 use tracing::info_span;
+#[cfg(feature = "evm-prove")]
+use {
+    crate::config::AggConfig,
+    openvm_continuations::static_verifier::StaticVerifierPvHandler,
+    openvm_native_recursion::halo2::{
+        utils::Halo2ParamsReader, verifier::Halo2VerifierProvingKey,
+        wrapper::Halo2WrapperProvingKey,
+    },
+};
 
 use crate::{
     commit::babybear_digest_to_bn254,
-    config::{AggConfig, AggStarkConfig, AppConfig},
+    config::{AggStarkConfig, AppConfig},
     keygen::perm::AirIdPermutation,
     prover::vm::types::VmProvingKey,
     NonRootCommittedExe, RootSC, F, SC,
@@ -49,6 +52,7 @@ use crate::{
 pub mod asm;
 pub(crate) mod dummy;
 pub mod perm;
+#[cfg(feature = "evm-prove")]
 pub mod static_verifier;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -65,6 +69,7 @@ pub struct AppVerifyingKey {
     pub memory_dimensions: MemoryDimensions,
 }
 
+#[cfg(feature = "evm-prove")]
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AggProvingKey {
     pub agg_stark_pk: AggStarkProvingKey,
@@ -80,6 +85,7 @@ pub struct AggStarkProvingKey {
 }
 
 /// Attention: the size of this struct is VERY large, usually >10GB.
+#[cfg(feature = "evm-prove")]
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Halo2ProvingKey {
     /// Static verifier to verify a stark proof of the root verifier.
@@ -406,6 +412,7 @@ impl RootVerifierProvingKey {
     }
 }
 
+#[cfg(feature = "evm-prove")]
 impl AggProvingKey {
     /// Attention:
     /// - This function is very expensive. Usually it requires >64GB memory and takes >10 minutes.

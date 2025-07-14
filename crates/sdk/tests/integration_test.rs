@@ -9,37 +9,21 @@ use openvm_circuit::{
     },
     system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
 };
-use openvm_continuations::{
-    static_verifier::StaticVerifierPvHandler,
-    verifier::{
-        common::types::{SpecialAirIds, VmVerifierPvs},
-        leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
-        root::types::RootVmVerifierPvs,
-        utils::compress_babybear_var_to_bn254,
-    },
+use openvm_continuations::verifier::{
+    common::types::VmVerifierPvs,
+    leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
 };
 use openvm_native_circuit::{Native, NativeConfig};
 use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
-use openvm_native_recursion::{
-    config::outer::OuterConfig,
-    halo2::{
-        utils::{CacheHalo2ParamsReader, Halo2ParamsReader},
-        wrapper::Halo2WrapperProvingKey,
-        RawEvmProof,
-    },
-    types::InnerConfig,
-    vars::StarkProofVariable,
-};
+use openvm_native_recursion::types::InnerConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_sdk::{
     codec::{Decode, Encode},
-    commit::AppExecutionCommit,
-    config::{AggConfig, AggStarkConfig, AppConfig, Halo2Config, SdkSystemConfig, SdkVmConfig},
+    config::{AggStarkConfig, AppConfig, SdkSystemConfig, SdkVmConfig},
     keygen::AppProvingKey,
-    types::{EvmHalo2Verifier, EvmProof},
-    DefaultStaticVerifierPvHandler, Sdk, StdIn,
+    Sdk, StdIn,
 };
 use openvm_stark_backend::{keygen::types::LinearConstraint, p3_matrix::Matrix};
 use openvm_stark_sdk::{
@@ -50,10 +34,35 @@ use openvm_stark_sdk::{
     engine::{StarkEngine, StarkFriEngine},
     openvm_stark_backend::{p3_field::FieldAlgebra, Chip},
     p3_baby_bear::BabyBear,
-    p3_bn254_fr::Bn254Fr,
 };
 use openvm_transpiler::transpiler::Transpiler;
-use snark_verifier_sdk::evm::evm_verify;
+#[cfg(feature = "evm-verify")]
+use {
+    openvm_continuations::{
+        static_verifier::StaticVerifierPvHandler,
+        verifier::{
+            common::types::SpecialAirIds, root::types::RootVmVerifierPvs,
+            utils::compress_babybear_var_to_bn254,
+        },
+    },
+    openvm_native_recursion::{
+        config::outer::OuterConfig,
+        halo2::{
+            utils::{CacheHalo2ParamsReader, Halo2ParamsReader},
+            wrapper::Halo2WrapperProvingKey,
+            RawEvmProof,
+        },
+        vars::StarkProofVariable,
+    },
+    openvm_sdk::{
+        commit::AppExecutionCommit,
+        config::{AggConfig, Halo2Config},
+        types::{EvmHalo2Verifier, EvmProof},
+        DefaultStaticVerifierPvHandler,
+    },
+    openvm_stark_sdk::p3_bn254_fr::Bn254Fr,
+    snark_verifier_sdk::evm::evm_verify,
+};
 
 type SC = BabyBearPoseidon2Config;
 type C = InnerConfig;
@@ -64,9 +73,10 @@ const LEAF_LOG_BLOWUP: usize = 2;
 const INTERNAL_LOG_BLOWUP: usize = 3;
 const ROOT_LOG_BLOWUP: usize = 4;
 
-/// `OpenVmHalo2Verifier` wraps the `snark-verifer` contract, meaning that
+/// `OpenVmHalo2Verifier` wraps the `snark-verifier` contract, meaning that
 /// the default `fallback` interface can still be used. This function uses
 /// the fallback interface as opposed to the `verify(..)` interface.
+#[cfg(feature = "evm-verify")]
 fn verify_evm_halo2_proof_with_fallback(
     openvm_verifier: &EvmHalo2Verifier,
     evm_proof: &EvmProof,
@@ -125,6 +135,7 @@ fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<VmCommittedExe<SC>> 
         .unwrap()
 }
 
+#[cfg(feature = "evm-verify")]
 fn agg_config_for_test() -> AggConfig {
     AggConfig {
         agg_stark_config: agg_stark_config_for_test(),

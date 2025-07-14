@@ -10,11 +10,10 @@ use eyre::{Context, Result};
 pub const RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2025-02-14";
 
 pub const OPENVM_VERSION_MESSAGE: &str = concat!(
-    "openvm",
+    "v",
+    env!("CARGO_PKG_VERSION"),
     " (",
     env!("VERGEN_GIT_SHA"),
-    " ",
-    env!("VERGEN_BUILD_TIMESTAMP"),
     ")"
 );
 
