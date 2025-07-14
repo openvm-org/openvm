@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, path::PathBuf, sync::Arc, thread};
+use std::{borrow::Borrow, path::PathBuf, sync::Arc};
 
 use eyre::Result;
 use openvm_build::GuestOptions;
