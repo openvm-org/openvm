@@ -254,7 +254,6 @@ where
              }| (Some(dsl_instruction.clone()), trace.as_ref()),
         );
 
-        let mut handled_phantom = false;
         // Handle phantom instructions
         if opcode == SystemOpcode::PHANTOM.global_opcode() {
             let discriminant = c.as_canonical_u32() as u16;
@@ -280,8 +279,6 @@ where
                         _ => {}
                     }
                 }
-                handled_phantom = true;
-                state.pc += DEFAULT_PC_STEP;
             }
         }
 
@@ -289,10 +286,8 @@ where
 
         // Execute the instruction using the control implementation
         // TODO(AG): maybe avoid cloning the instruction?
-        if !handled_phantom {
-            self.ctrl
-                .execute_instruction(state, &instruction.clone(), &mut self.chip_complex)?;
-        }
+        self.ctrl
+            .execute_instruction(state, &instruction.clone(), &mut self.chip_complex)?;
 
         // Update metrics if enabled
         #[cfg(feature = "bench-metrics")]
