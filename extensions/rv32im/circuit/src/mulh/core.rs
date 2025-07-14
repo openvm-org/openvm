@@ -5,10 +5,11 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1ExecutionCtx, get_record_from_slice, AdapterAirContext,
-        AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout, ExecuteFunc,
-        MinimalInstruction, RecordArena, Result, StepExecutorE1, TraceFiller, TraceStep,
-        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, MinimalInstruction, RecordArena, Result,
+        StepExecutorE1, StepExecutorE2, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir,
+        VmSegmentState, VmStateMut,
     },
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
@@ -288,7 +289,6 @@ where
             &core_record.c.map(u32::from),
         );
 
-        // TODO(ayush): avoid this conversion
         let a = a.map(|x| x as u8);
         self.adapter
             .write(state.memory, instruction, [a].into(), &mut adapter_record);
@@ -374,27 +374,52 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>> {
         let pre_compute: &mut MulHPreCompute = data.borrow_mut();
-        *pre_compute = MulHPreCompute {
-            a: inst.a.as_canonical_u32() as u8,
-            b: inst.b.as_canonical_u32() as u8,
-            c: inst.c.as_canonical_u32() as u8,
+        let local_opcode = self.pre_compute_e1(inst, pre_compute)?;
+        let fn_ptr = match local_opcode {
+            MulHOpcode::MULH => execute_e1_impl::<_, _, MulHOp>,
+            MulHOpcode::MULHSU => execute_e1_impl::<_, _, MulHSuOp>,
+            MulHOpcode::MULHU => execute_e1_impl::<_, _, MulHUOp>,
         };
-        let fn_ptr =
-            match MulHOpcode::from_usize(inst.opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET)) {
-                MulHOpcode::MULH => execute_e1_impl::<_, _, MulHOp>,
-                MulHOpcode::MULHSU => execute_e1_impl::<_, _, MulHSuOp>,
-                MulHOpcode::MULHU => execute_e1_impl::<_, _, MulHUOp>,
-            };
         Ok(fn_ptr)
     }
 }
 
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: MulHOperation>(
-    pre_compute: &[u8],
+impl<F, A, const LIMB_BITS: usize> StepExecutorE2<F>
+    for MulHStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
+{
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<MulHPreCompute>>()
+    }
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let pre_compute: &mut E2PreCompute<MulHPreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+        let local_opcode = self.pre_compute_e1(inst, &mut pre_compute.data)?;
+        let fn_ptr = match local_opcode {
+            MulHOpcode::MULH => execute_e2_impl::<_, _, MulHOp>,
+            MulHOpcode::MULHSU => execute_e2_impl::<_, _, MulHSuOp>,
+            MulHOpcode::MULHU => execute_e2_impl::<_, _, MulHUOp>,
+        };
+        Ok(fn_ptr)
+    }
+}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: MulHOperation>(
+    pre_compute: &MulHPreCompute,
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
-    let pre_compute: &MulHPreCompute = pre_compute.borrow();
-
     let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
         vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
@@ -404,6 +429,43 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: MulHOperatio
 
     vm_state.pc += DEFAULT_PC_STEP;
     vm_state.instret += 1;
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: MulHOperation>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &MulHPreCompute = pre_compute.borrow();
+    execute_e12_impl::<F, CTX, OP>(pre_compute, vm_state);
+}
+
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, OP: MulHOperation>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &E2PreCompute<MulHPreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl::<F, CTX, OP>(&pre_compute.data, vm_state);
+}
+
+impl<A, const LIMB_BITS: usize> MulHStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+    #[inline(always)]
+    fn pre_compute_e1<F: PrimeField32>(
+        &self,
+        inst: &Instruction<F>,
+        data: &mut MulHPreCompute,
+    ) -> Result<MulHOpcode> {
+        *data = MulHPreCompute {
+            a: inst.a.as_canonical_u32() as u8,
+            b: inst.b.as_canonical_u32() as u8,
+            c: inst.c.as_canonical_u32() as u8,
+        };
+        Ok(MulHOpcode::from_usize(
+            inst.opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET),
+        ))
+    }
 }
 
 trait MulHOperation {

@@ -484,7 +484,6 @@ where
 impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32LoadStoreAdapterStep {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
-        // TODO(ayush): should this be here?
         debug_assert!(self.range_checker_chip.range_max_bits() >= 15);
 
         let record: &Rv32LoadStoreAdapterRecord =

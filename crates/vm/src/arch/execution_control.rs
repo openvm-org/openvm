@@ -58,7 +58,6 @@ where
     }
 
     /// Execute a single instruction
-    // TODO(ayush): change instruction to Instruction<u32> / PInstruction
     fn execute_instruction(
         &self,
         state: &mut VmSegmentState<F, Self::Ctx>,

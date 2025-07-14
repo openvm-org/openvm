@@ -4,29 +4,16 @@ mod tests {
 
     use eyre::Result;
     use openvm_circuit::{
-        arch::{
-            execution_mode::e1::{E1Ctx, E1ExecutionControl},
-            hasher::poseidon2::vm_poseidon2_hasher,
-            interpreter::InterpretedInstance,
-            ExecutionError, Streams, VirtualMachine, VmExecutor,
-        },
-        system::memory::merkle::public_values::UserPublicValuesProof,
+        arch::{execution_mode::e1::E1Ctx, interpreter::InterpretedInstance, Streams},
         utils::{air_test, air_test_with_min_segments, test_system_config_with_continuations},
     };
-    use openvm_instructions::{
-        exe::VmExe, instruction::Instruction, program::Program, LocalOpcode, SystemOpcode,
-        SystemOpcode::TERMINATE,
-    };
+    use openvm_instructions::exe::VmExe;
     use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
     use openvm_rv32im_guest::hint_load_by_key_encode;
     use openvm_rv32im_transpiler::{
-        BaseAluOpcode::ADD, Rv32ITranspilerExtension, Rv32IoTranspilerExtension,
-        Rv32MTranspilerExtension,
+        Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_stark_sdk::{
-        config::baby_bear_poseidon2::default_engine, openvm_stark_backend::p3_field::FieldAlgebra,
-        p3_baby_bear::BabyBear,
-    };
+    use openvm_stark_sdk::{openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear};
     use openvm_toolchain_tests::{
         build_example_program_at_path, build_example_program_at_path_with_features,
         get_programs_dir,
@@ -35,14 +22,6 @@ mod tests {
     use test_case::test_case;
 
     type F = BabyBear;
-
-    #[cfg(test)]
-    fn test_rv32i_config() -> Rv32IConfig {
-        Rv32IConfig {
-            system: test_system_config_with_continuations(),
-            ..Default::default()
-        }
-    }
 
     #[cfg(test)]
     fn test_rv32im_config() -> Rv32ImConfig {
@@ -198,7 +177,6 @@ mod tests {
     //         .execute_metered(
     //             exe.clone(),
     //             vec![],
-    //             &vk.total_widths(),
     //             &vk.num_interactions(),
     //         )
     //         .unwrap();
@@ -320,9 +298,7 @@ mod tests {
         )
         .unwrap();
         let interpreter = InterpretedInstance::new(config, exe);
-        interpreter
-            .execute(E1Ctx { instret_end: None }, vec![])
-            .unwrap();
+        interpreter.execute(E1Ctx::new(None), vec![]).unwrap();
     }
 
     #[test_case(vec!["getrandom", "getrandom-unsupported"])]

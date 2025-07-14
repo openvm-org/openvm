@@ -2,13 +2,13 @@ use std::{
     alloc::{alloc, dealloc, handle_alloc_error, Layout},
     borrow::{Borrow, BorrowMut},
     ptr::NonNull,
-    time::Instant,
 };
 
 use itertools::Itertools;
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     exe::VmExe,
+    instruction::Instruction,
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SysPhantom, SystemOpcode,
 };
@@ -18,8 +18,11 @@ use tracing::info_span;
 
 use crate::{
     arch::{
-        execution_mode::E1ExecutionCtx, ExecutionError, ExecutionError::InvalidInstruction,
-        InsExecutorE1, PreComputeInstruction, Streams, VmChipComplex, VmConfig, VmSegmentState,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        ExecuteFunc,
+        ExecutionError::{self, InvalidInstruction},
+        InsExecutorE1, InsExecutorE2, PreComputeInstruction, Streams, VmChipComplex, VmConfig,
+        VmSegmentState,
     },
     system::memory::{online::GuestMemory, AddressMap},
 };
@@ -29,6 +32,8 @@ use crate::{
 pub struct InterpretedInstance<F: PrimeField32, VC: VmConfig<F>> {
     exe: VmExe<F>,
     vm_config: VC,
+    e1_pre_compute_max_size: usize,
+    e2_pre_compute_max_size: usize,
 }
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -36,16 +41,42 @@ pub struct InterpretedInstance<F: PrimeField32, VC: VmConfig<F>> {
 struct TerminatePreCompute {
     exit_code: u32,
 }
-#[derive(AlignedBytesBorrow, Clone)]
-#[repr(C)]
-struct DebugPanicPreCompute {
-    pc: u32,
+
+macro_rules! execute_with_metrics {
+    ($span:literal, $program:expr, $vm_state:expr, $pre_compute_insts:expr) => {{
+        #[cfg(feature = "bench-metrics")]
+        let start = std::time::Instant::now();
+        #[cfg(feature = "bench-metrics")]
+        let start_instret = $vm_state.instret;
+
+        info_span!($span).in_scope(|| unsafe {
+            execute_impl($program, $vm_state, $pre_compute_insts);
+        });
+
+        #[cfg(feature = "bench-metrics")]
+        {
+            let elapsed = start.elapsed();
+            let insns = $vm_state.instret - start_instret;
+            metrics::counter!("insns").absolute(insns);
+            metrics::gauge!(concat!($span, "_insn_mi/s"))
+                .set(insns as f64 / elapsed.as_micros() as f64);
+        }
+    }};
 }
 
 impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
     pub fn new(vm_config: VC, exe: impl Into<VmExe<F>>) -> Self {
         let exe = exe.into();
-        Self { exe, vm_config }
+        let program = &exe.program;
+        let chip_complex = vm_config.create_chip_complex().unwrap();
+        let e1_pre_compute_max_size = get_pre_compute_max_size(program, &chip_complex);
+        let e2_pre_compute_max_size = get_e2_pre_compute_max_size(program, &chip_complex);
+        Self {
+            exe,
+            vm_config,
+            e1_pre_compute_max_size,
+            e2_pre_compute_max_size,
+        }
     }
 
     /// Execute the VM program with the given execution control and inputs. Returns the final VM
@@ -57,7 +88,69 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
     ) -> Result<VmSegmentState<F, Ctx>, ExecutionError> {
         // Initialize the chip complex
         let chip_complex = self.vm_config.create_chip_complex().unwrap();
-        // Initialize the memory
+        let mut vm_state = self.init_vm_state(ctx, inputs);
+
+        // Start execution
+        let program = &self.exe.program;
+        let pre_compute_max_size = self.e1_pre_compute_max_size;
+        let mut pre_compute_buf = self.alloc_pre_compute_buf(pre_compute_max_size);
+        let mut split_pre_compute_buf =
+            self.split_pre_compute_buf(&mut pre_compute_buf, pre_compute_max_size);
+
+        let pre_compute_insts = get_pre_compute_instructions::<_, _, _, Ctx>(
+            program,
+            &chip_complex,
+            &mut split_pre_compute_buf,
+        )?;
+        execute_with_metrics!("execute_e1", program, &mut vm_state, &pre_compute_insts);
+        if vm_state.exit_code.is_err() {
+            Err(vm_state.exit_code.err().unwrap())
+        } else {
+            Ok(vm_state)
+        }
+    }
+
+    /// Execute the VM program with the given execution control and inputs. Returns the final VM
+    /// state with the `ExecutionControl` context.
+    pub fn execute_e2<Ctx: E2ExecutionCtx>(
+        &self,
+        ctx: Ctx,
+        inputs: impl Into<Streams<F>>,
+    ) -> Result<VmSegmentState<F, Ctx>, ExecutionError> {
+        // Initialize the chip complex
+        let chip_complex = self.vm_config.create_chip_complex().unwrap();
+        let mut vm_state = self.init_vm_state(ctx, inputs);
+
+        // Start execution
+        let program = &self.exe.program;
+        let pre_compute_max_size = self.e2_pre_compute_max_size;
+        let mut pre_compute_buf = self.alloc_pre_compute_buf(pre_compute_max_size);
+        let mut split_pre_compute_buf =
+            self.split_pre_compute_buf(&mut pre_compute_buf, pre_compute_max_size);
+
+        let pre_compute_insts = get_e2_pre_compute_instructions::<_, _, _, Ctx>(
+            program,
+            &chip_complex,
+            &mut split_pre_compute_buf,
+        )?;
+        execute_with_metrics!(
+            "execute_metered",
+            program,
+            &mut vm_state,
+            &pre_compute_insts
+        );
+        if vm_state.exit_code.is_err() {
+            Err(vm_state.exit_code.err().unwrap())
+        } else {
+            Ok(vm_state)
+        }
+    }
+
+    pub fn init_vm_state<Ctx: E1ExecutionCtx>(
+        &self,
+        ctx: Ctx,
+        inputs: impl Into<Streams<F>>,
+    ) -> VmSegmentState<F, Ctx> {
         let memory = if self.vm_config.system().continuation_enabled {
             let mem_config = self.vm_config.system().memory_config.clone();
             Some(GuestMemory::new(AddressMap::from_sparse(
@@ -68,67 +161,42 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
             None
         };
 
-        let mut vm_state = VmSegmentState::new(
+        VmSegmentState::new(
             0,
             self.exe.pc_start,
             memory,
             inputs.into(),
             StdRng::seed_from_u64(0),
             ctx,
-        );
+        )
+    }
 
-        // Start execution
+    #[inline(always)]
+    fn alloc_pre_compute_buf(&self, pre_compute_max_size: usize) -> AlignedBuf {
         let program = &self.exe.program;
-        let pre_compute_max_size = get_pre_compute_max_size(program, &chip_complex);
         let program_len = program.instructions_and_debug_infos.len();
         let buf_len = program_len * pre_compute_max_size;
-        let pre_compute_buf = AlignedBuf::uninit(buf_len, pre_compute_max_size);
-        let mut pre_compute_buf =
+        AlignedBuf::uninit(buf_len, pre_compute_max_size)
+    }
+
+    #[inline(always)]
+    fn split_pre_compute_buf<'a>(
+        &self,
+        pre_compute_buf: &'a mut AlignedBuf,
+        pre_compute_max_size: usize,
+    ) -> Vec<&'a mut [u8]> {
+        let program = &self.exe.program;
+        let program_len = program.instructions_and_debug_infos.len();
+        let buf_len = program_len * pre_compute_max_size;
+        let mut pre_compute_buf_ptr =
             unsafe { std::slice::from_raw_parts_mut(pre_compute_buf.ptr, buf_len) };
         let mut split_pre_compute_buf = Vec::with_capacity(program_len);
         for _ in 0..program_len {
-            let (first, last) = pre_compute_buf.split_at_mut(pre_compute_max_size);
-            pre_compute_buf = last;
+            let (first, last) = pre_compute_buf_ptr.split_at_mut(pre_compute_max_size);
+            pre_compute_buf_ptr = last;
             split_pre_compute_buf.push(first);
         }
-
-        let pre_compute_insts = get_pre_compute_instructions::<_, _, _, Ctx>(
-            program,
-            &chip_complex,
-            &mut split_pre_compute_buf,
-        )?;
-
-        execute_with_metrics(program, &mut vm_state, &pre_compute_insts);
-
-        if vm_state.exit_code.is_err() {
-            Err(vm_state.exit_code.err().unwrap())
-        } else {
-            Ok(vm_state)
-        }
-    }
-}
-
-fn execute_with_metrics<F: PrimeField32, Ctx: E1ExecutionCtx>(
-    program: &Program<F>,
-    vm_state: &mut VmSegmentState<F, Ctx>,
-    pre_compute_insts: &[PreComputeInstruction<F, Ctx>],
-) {
-    #[cfg(feature = "bench-metrics")]
-    let start = std::time::Instant::now();
-    #[cfg(feature = "bench-metrics")]
-    let start_instret = vm_state.instret;
-
-    info_span!("execute_e1").in_scope(|| unsafe {
-        execute_impl(program, vm_state, pre_compute_insts);
-    });
-
-    #[cfg(feature = "bench-metrics")]
-    {
-        let elapsed = start.elapsed();
-        let insns = vm_state.instret - start_instret;
-        metrics::counter!("insns").absolute(insns);
-        metrics::gauge!(concat!("execute_e1", "_insn_mi/s"))
-            .set(insns as f64 / elapsed.as_micros() as f64);
+        split_pre_compute_buf
     }
 }
 
@@ -138,20 +206,27 @@ unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
     vm_state: &mut VmSegmentState<F, Ctx>,
     fn_ptrs: &[PreComputeInstruction<F, Ctx>],
 ) {
-    let start = Instant::now();
+    // let start = Instant::now();
     while vm_state
         .exit_code
         .as_ref()
         .is_ok_and(|exit_code| exit_code.is_none())
     {
-        let pc_index = get_pc_index(program, vm_state.pc).unwrap();
-        let inst = &fn_ptrs[pc_index];
-        unsafe { (inst.handler)(inst.pre_compute, vm_state) };
         if Ctx::should_suspend(vm_state) {
             break;
         }
+        let pc_index = get_pc_index(program, vm_state.pc).unwrap();
+        let inst = &fn_ptrs[pc_index];
+        unsafe { (inst.handler)(inst.pre_compute, vm_state) };
     }
-    println!("execute time: {}ms", start.elapsed().as_millis());
+    if vm_state
+        .exit_code
+        .as_ref()
+        .is_ok_and(|exit_code| exit_code.is_some())
+    {
+        Ctx::on_terminate(vm_state);
+    }
+    // println!("execute time: {}ms", start.elapsed().as_millis());
 }
 
 fn get_pc_index<F: Field>(program: &Program<F>, pc: u32) -> Result<usize, ExecutionError> {
@@ -205,23 +280,23 @@ impl Drop for AlignedBuf {
     }
 }
 
-unsafe fn terminate_execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
     let pre_compute: &TerminatePreCompute = pre_compute.borrow();
+    vm_state.instret += 1;
     vm_state.exit_code = Ok(Some(pre_compute.exit_code));
 }
 
-unsafe fn debug_panic_execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
-    pre_compute: &[u8],
+unsafe fn debug_panic_execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+    _pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
-    let pre_compute: &DebugPanicPreCompute = pre_compute.borrow();
-    vm_state.exit_code = Err(ExecutionError::Fail { pc: pre_compute.pc });
+    vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
 }
 
-unsafe fn nop_execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+unsafe fn nop_execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     _pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
@@ -238,17 +313,8 @@ fn get_pre_compute_max_size<F: PrimeField32, E: InsExecutorE1<F>, P>(
         .iter()
         .map(|inst_opt| {
             if let Some((inst, _)) = inst_opt {
-                let discriminant = SysPhantom::from_repr(inst.c.as_canonical_u32() as u16);
-                if inst.opcode == SystemOpcode::TERMINATE.global_opcode() {
-                    size_of::<TerminatePreCompute>()
-                } else if inst.opcode == SystemOpcode::PHANTOM.global_opcode()
-                    && discriminant.is_some()
-                {
-                    let discriminant = discriminant.unwrap();
-                    match discriminant {
-                        SysPhantom::DebugPanic => size_of::<DebugPanicPreCompute>(),
-                        SysPhantom::Nop | SysPhantom::CtStart | SysPhantom::CtEnd => 0,
-                    }
+                if let Some(size) = system_opcode_pre_compute_size(inst) {
+                    size
                 } else {
                     chip_complex
                         .inventory
@@ -263,6 +329,47 @@ fn get_pre_compute_max_size<F: PrimeField32, E: InsExecutorE1<F>, P>(
         .max()
         .unwrap()
         .next_power_of_two()
+}
+
+fn get_e2_pre_compute_max_size<F: PrimeField32, E: InsExecutorE2<F>, P>(
+    program: &Program<F>,
+    chip_complex: &VmChipComplex<F, E, P>,
+) -> usize {
+    program
+        .instructions_and_debug_infos
+        .iter()
+        .map(|inst_opt| {
+            if let Some((inst, _)) = inst_opt {
+                if let Some(size) = system_opcode_pre_compute_size(inst) {
+                    size
+                } else {
+                    chip_complex
+                        .inventory
+                        .get_executor(inst.opcode)
+                        .map(|executor| executor.e2_pre_compute_size())
+                        .unwrap()
+                }
+            } else {
+                0
+            }
+        })
+        .max()
+        .unwrap()
+        .next_power_of_two()
+}
+
+fn system_opcode_pre_compute_size<F: PrimeField32>(inst: &Instruction<F>) -> Option<usize> {
+    let discriminant = SysPhantom::from_repr(inst.c.as_canonical_u32() as u16);
+    if inst.opcode == SystemOpcode::TERMINATE.global_opcode() {
+        return Some(size_of::<TerminatePreCompute>());
+    } else if inst.opcode == SystemOpcode::PHANTOM.global_opcode() && discriminant.is_some() {
+        let discriminant = discriminant.unwrap();
+        let ret = match discriminant {
+            SysPhantom::DebugPanic | SysPhantom::Nop | SysPhantom::CtStart | SysPhantom::CtEnd => 0,
+        };
+        return Some(ret);
+    }
+    None
 }
 
 fn get_pre_compute_instructions<
@@ -285,27 +392,9 @@ fn get_pre_compute_instructions<
             let buf: &mut [u8] = buf;
             let pre_inst = if let Some((inst, _)) = inst_opt {
                 let pc = program.pc_base + i as u32 * program.step;
-                let discriminant = SysPhantom::from_repr(inst.c.as_canonical_u32() as u16);
-                if inst.opcode == SystemOpcode::PHANTOM.global_opcode() && discriminant.is_some() {
-                    let discriminant = discriminant.unwrap();
-                    if discriminant == SysPhantom::DebugPanic {
-                        let pre_compute: &mut DebugPanicPreCompute = buf.borrow_mut();
-                        pre_compute.pc = pc;
-                    }
+                if let Some(handler) = get_system_opcode_handler(inst, buf) {
                     PreComputeInstruction {
-                        handler: match discriminant {
-                            SysPhantom::Nop => nop_execute_e1_impl,
-                            SysPhantom::DebugPanic => debug_panic_execute_e1_impl,
-                            SysPhantom::CtStart => nop_execute_e1_impl,
-                            SysPhantom::CtEnd => nop_execute_e1_impl,
-                        },
-                        pre_compute: buf,
-                    }
-                } else if inst.opcode == SystemOpcode::TERMINATE.global_opcode() {
-                    let pre_compute: &mut TerminatePreCompute = buf.borrow_mut();
-                    pre_compute.exit_code = inst.c.as_canonical_u32();
-                    PreComputeInstruction {
-                        handler: terminate_execute_e1_impl,
+                        handler,
                         pre_compute: buf,
                     }
                 } else if let Some(executor) = chip_complex.inventory.get_executor(inst.opcode) {
@@ -330,4 +419,80 @@ fn get_pre_compute_instructions<
             Ok(pre_inst)
         })
         .collect::<Result<Vec<_>, _>>()
+}
+
+fn get_e2_pre_compute_instructions<
+    'a,
+    F: PrimeField32,
+    E: InsExecutorE2<F>,
+    P,
+    Ctx: E2ExecutionCtx,
+>(
+    program: &'a Program<F>,
+    chip_complex: &'a VmChipComplex<F, E, P>,
+    pre_compute: &'a mut [&mut [u8]],
+) -> Result<Vec<PreComputeInstruction<'a, F, Ctx>>, ExecutionError> {
+    let executor_idx_offset = chip_complex.get_executor_offset_in_vkey();
+    program
+        .instructions_and_debug_infos
+        .iter()
+        .zip_eq(pre_compute.iter_mut())
+        .enumerate()
+        .map(|(i, (inst_opt, buf))| {
+            let buf: &mut [u8] = buf;
+            let pre_inst = if let Some((inst, _)) = inst_opt {
+                let pc = program.pc_base + i as u32 * program.step;
+                if let Some(handler) = get_system_opcode_handler(inst, buf) {
+                    PreComputeInstruction {
+                        handler,
+                        pre_compute: buf,
+                    }
+                } else if let Some(executor) = chip_complex.inventory.get_executor(inst.opcode) {
+                    let executor_idx = executor_idx_offset
+                        + chip_complex
+                            .inventory
+                            .get_executor_idx_in_vkey(&inst.opcode)
+                            .unwrap();
+                    PreComputeInstruction {
+                        handler: executor.pre_compute_e2(executor_idx, pc, inst, buf)?,
+                        pre_compute: buf,
+                    }
+                } else {
+                    return Err(ExecutionError::DisabledOperation {
+                        pc,
+                        opcode: inst.opcode,
+                    });
+                }
+            } else {
+                PreComputeInstruction {
+                    handler: |_, vm_state| {
+                        vm_state.exit_code = Err(InvalidInstruction(vm_state.pc));
+                    },
+                    pre_compute: buf,
+                }
+            };
+            Ok(pre_inst)
+        })
+        .collect::<Result<Vec<_>, _>>()
+}
+
+fn get_system_opcode_handler<F: PrimeField32, Ctx: E1ExecutionCtx>(
+    inst: &Instruction<F>,
+    buf: &mut [u8],
+) -> Option<ExecuteFunc<F, Ctx>> {
+    let discriminant = SysPhantom::from_repr(inst.c.as_canonical_u32() as u16);
+    if inst.opcode == SystemOpcode::PHANTOM.global_opcode() && discriminant.is_some() {
+        let discriminant = discriminant.unwrap();
+        return Some(match discriminant {
+            SysPhantom::Nop => nop_execute_e12_impl,
+            SysPhantom::DebugPanic => debug_panic_execute_e12_impl,
+            SysPhantom::CtStart => nop_execute_e12_impl,
+            SysPhantom::CtEnd => nop_execute_e12_impl,
+        });
+    } else if inst.opcode == SystemOpcode::TERMINATE.global_opcode() {
+        let pre_compute: &mut TerminatePreCompute = buf.borrow_mut();
+        pre_compute.exit_code = inst.c.as_canonical_u32();
+        return Some(terminate_execute_e12_impl);
+    }
+    None
 }

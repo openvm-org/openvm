@@ -7,8 +7,10 @@ use openvm_circuit_primitives::{encoder::Encoder, AlignedBytesBorrow, SubAir};
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
+    riscv::RV32_IMM_AS,
     LocalOpcode,
     PublishOpcode::{self, PUBLISH},
+    NATIVE_AS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -21,15 +23,15 @@ use crate::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        BasicAdapterInterface, E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, InsExecutorE2,
+        BasicAdapterInterface, E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc,
         MinimalInstruction, RecordArena, Result, StepExecutorE1, StepExecutorE2, TraceFiller,
         TraceStep, VmCoreAir, VmSegmentState, VmStateMut,
     },
     system::{
         memory::{online::TracingMemory, MemoryAuxColsFactory},
-        phantom::PhantomChip,
         public_values::columns::PublicValuesCoreColsView,
     },
+    utils::{transmute_field_to_u32, transmute_u32_to_field},
 };
 
 pub(crate) type AdapterInterface<F> = BasicAdapterInterface<F, MinimalInstruction<F>, 2, 0, 1, 1>;
@@ -121,7 +123,6 @@ pub struct PublicValuesRecord<F> {
 /// the proof but in the perspective of constraints, it could be any value.
 pub struct PublicValuesCoreStep<A, F> {
     adapter: A,
-    // TODO(ayush): put air here and take from air
     encoder: Encoder,
     // Mutex is to make the struct Sync. But it actually won't be accessed by multiple threads.
     pub(crate) custom_pvs: Mutex<Vec<Option<F>>>,
@@ -202,15 +203,6 @@ where
             .collect()
     }
 }
-#[derive(AlignedBytesBorrow)]
-#[repr(C)]
-struct PublicValuesPreCompute<F> {
-    b: u32,
-    c: u32,
-    e: u32,
-    f: u32,
-    pvs: *const Mutex<Vec<Option<F>>>,
-}
 
 impl<F, CTX, A> TraceFiller<F, CTX> for PublicValuesCoreStep<A, F>
 where
@@ -239,6 +231,14 @@ where
     }
 }
 
+#[derive(AlignedBytesBorrow)]
+#[repr(C)]
+struct PublicValuesPreCompute<F> {
+    b_or_imm: u32,
+    c_or_imm: u32,
+    pvs: *const Mutex<Vec<Option<F>>>,
+}
+
 impl<F, A> StepExecutorE1<F> for PublicValuesCoreStep<A, F>
 where
     F: PrimeField32,
@@ -259,37 +259,16 @@ where
         Ctx: E1ExecutionCtx,
     {
         let data: &mut PublicValuesPreCompute<F> = data.borrow_mut();
-        self.pre_compute_impl(inst, data);
-        Ok(execute_e1_impl)
+        let (b_is_imm, c_is_imm) = self.pre_compute_impl(inst, data);
+
+        let fn_ptr = match (b_is_imm, c_is_imm) {
+            (true, true) => execute_e1_impl::<_, _, true, true>,
+            (true, false) => execute_e1_impl::<_, _, true, false>,
+            (false, true) => execute_e1_impl::<_, _, false, true>,
+            (false, false) => execute_e1_impl::<_, _, false, false>,
+        };
+        Ok(fn_ptr)
     }
-}
-
-#[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX>(
-    pre_compute: &[u8],
-    state: &mut VmSegmentState<F, CTX>,
-) where
-    CTX: E1ExecutionCtx,
-{
-    let pre_compute: &PublicValuesPreCompute<F> = pre_compute.borrow();
-    let [value] = state.vm_read::<F, 1>(pre_compute.e, pre_compute.b);
-    let [index] = state.vm_read::<F, 1>(pre_compute.f, pre_compute.c);
-
-    let idx: usize = index.as_canonical_u32() as usize;
-    {
-        let custom_pvs = unsafe { &*pre_compute.pvs };
-        let mut custom_pvs = custom_pvs.lock().unwrap();
-
-        if custom_pvs[idx].is_none() {
-            custom_pvs[idx] = Some(value);
-        } else {
-            // Not a hard constraint violation when publishing the same value twice but the
-            // program should avoid that.
-            panic!("Custom public value {} already set", idx);
-        }
-    }
-    state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-    state.instret += 1;
 }
 
 impl<A, F> StepExecutorE2<F> for PublicValuesCoreStep<A, F>
@@ -312,28 +291,110 @@ where
     {
         let data: &mut E2PreCompute<PublicValuesPreCompute<F>> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        self.pre_compute_impl(inst, &mut data.data);
-        Ok(|pre_compute, vm_state| {
-            let e2_pre_compute: &E2PreCompute<PublicValuesPreCompute<F>> = pre_compute.borrow();
-            vm_state
-                .ctx
-                .on_height_change(e2_pre_compute.chip_idx as usize, 1);
-            unsafe { execute_e1_impl(pre_compute, vm_state) }
-        })
+        let (b_is_imm, c_is_imm) = self.pre_compute_impl(inst, &mut data.data);
+
+        let fn_ptr = match (b_is_imm, c_is_imm) {
+            (true, true) => execute_e2_impl::<_, _, true, true>,
+            (true, false) => execute_e2_impl::<_, _, true, false>,
+            (false, true) => execute_e2_impl::<_, _, false, true>,
+            (false, false) => execute_e2_impl::<_, _, false, false>,
+        };
+        Ok(fn_ptr)
     }
+}
+
+#[inline(always)]
+unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
+    pre_compute: &[u8],
+    state: &mut VmSegmentState<F, CTX>,
+) where
+    CTX: E1ExecutionCtx,
+{
+    let pre_compute: &PublicValuesPreCompute<F> = pre_compute.borrow();
+    execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(pre_compute, state);
+}
+
+#[inline(always)]
+unsafe fn execute_e2_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
+    pre_compute: &[u8],
+    state: &mut VmSegmentState<F, CTX>,
+) where
+    CTX: E2ExecutionCtx,
+{
+    let pre_compute: &E2PreCompute<PublicValuesPreCompute<F>> = pre_compute.borrow();
+    state.ctx.on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(&pre_compute.data, state);
+}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
+    pre_compute: &PublicValuesPreCompute<F>,
+    state: &mut VmSegmentState<F, CTX>,
+) where
+    CTX: E1ExecutionCtx,
+{
+    let value = if B_IS_IMM {
+        transmute_u32_to_field(&pre_compute.b_or_imm)
+    } else {
+        state.vm_read::<F, 1>(NATIVE_AS, pre_compute.b_or_imm)[0]
+    };
+    let index = if C_IS_IMM {
+        transmute_u32_to_field(&pre_compute.c_or_imm)
+    } else {
+        state.vm_read::<F, 1>(NATIVE_AS, pre_compute.c_or_imm)[0]
+    };
+
+    let idx: usize = index.as_canonical_u32() as usize;
+    {
+        let custom_pvs = unsafe { &*pre_compute.pvs };
+        let mut custom_pvs = custom_pvs.lock().unwrap();
+
+        if custom_pvs[idx].is_none() {
+            custom_pvs[idx] = Some(value);
+        } else {
+            // Not a hard constraint violation when publishing the same value twice but the
+            // program should avoid that.
+            panic!("Custom public value {} already set", idx);
+        }
+    }
+    state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+    state.instret += 1;
 }
 
 impl<A, F> PublicValuesCoreStep<A, F>
 where
     F: PrimeField32,
 {
-    fn pre_compute_impl(&self, inst: &Instruction<F>, data: &mut PublicValuesPreCompute<F>) {
+    fn pre_compute_impl(
+        &self,
+        inst: &Instruction<F>,
+        data: &mut PublicValuesPreCompute<F>,
+    ) -> (bool, bool) {
+        let &Instruction { b, c, e, f, .. } = inst;
+
+        let e = e.as_canonical_u32();
+        let f = f.as_canonical_u32();
+
+        let b_is_imm = e == RV32_IMM_AS;
+        let c_is_imm = f == RV32_IMM_AS;
+
+        let b_or_imm = if b_is_imm {
+            transmute_field_to_u32(&b)
+        } else {
+            b.as_canonical_u32()
+        };
+        let c_or_imm = if c_is_imm {
+            transmute_field_to_u32(&c)
+        } else {
+            c.as_canonical_u32()
+        };
+
         *data = PublicValuesPreCompute {
-            b: inst.b.as_canonical_u32(),
-            c: inst.c.as_canonical_u32(),
-            e: inst.e.as_canonical_u32(),
-            f: inst.f.as_canonical_u32(),
+            b_or_imm,
+            c_or_imm,
             pvs: &self.custom_pvs,
         };
+
+        (b_is_imm, c_is_imm)
     }
 }

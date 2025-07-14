@@ -4,7 +4,7 @@ use openvm_circuit::{
     arch::ExecutionBridge,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_derive::{InsExecutorE1, InstructionExecutor};
+use openvm_circuit_derive::{InsExecutorE1, InsExecutorE2, InstructionExecutor};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::SharedBitwiseOperationLookupChip,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
@@ -49,7 +49,7 @@ pub fn ec_add_ne_expr(
 /// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1, InsExecutorE2)]
 pub struct EcAddNeChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     pub WeierstrassChip<F, 2, BLOCKS, BLOCK_SIZE>,
 );

@@ -7,9 +7,10 @@ use std::{
 use itertools::zip_eq;
 use openvm_circuit::{
     arch::{
-        execution_mode::E1ExecutionCtx, get_record_from_slice, CustomBorrow, ExecuteFunc,
-        ExecutionBridge, ExecutionState, MatrixRecordArena, MultiRowLayout, MultiRowMetadata,
-        NewVmChipWrapper, RecordArena, Result, SizedRecord, StepExecutorE1, TraceFiller, TraceStep,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        get_record_from_slice, CustomBorrow, E2PreCompute, ExecuteFunc, ExecutionBridge,
+        ExecutionState, MatrixRecordArena, MultiRowLayout, MultiRowMetadata, NewVmChipWrapper,
+        RecordArena, Result, SizedRecord, StepExecutorE1, StepExecutorE2, TraceFiller, TraceStep,
         VmSegmentState, VmStateMut,
     },
     system::{
@@ -33,9 +34,7 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    p3_maybe_rayon::prelude::{
-        IndexedParallelIterator, IntoParallelIterator, ParallelIterator, ParallelSliceMut,
-    },
+    p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use static_assertions::const_assert_eq;
@@ -896,8 +895,6 @@ where
         }
         debug_assert_eq!(trace.width, OVERALL_WIDTH);
 
-        // TODO(ayush): store chunk indices during alloc calls instead of
-        //              calculating here
         let mut remaining_trace = &mut trace.values[..OVERALL_WIDTH * rows_used];
         let mut chunks = Vec::with_capacity(rows_used);
         while !remaining_trace.is_empty() {
@@ -1116,24 +1113,14 @@ struct FriReducedOpeningPreCompute {
     is_init_ptr: u32,
 }
 
-impl<F> StepExecutorE1<F> for FriReducedOpeningStep<F>
-where
-    F: PrimeField32,
-{
+impl<F: PrimeField32> FriReducedOpeningStep<F> {
     #[inline(always)]
-    fn pre_compute_size(&self) -> usize {
-        size_of::<FriReducedOpeningPreCompute>()
-    }
-
-    #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute_impl(
         &self,
         _pc: u32,
         inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
-        let data: &mut FriReducedOpeningPreCompute = data.borrow_mut();
-
+        data: &mut FriReducedOpeningPreCompute,
+    ) -> Result<()> {
         let &Instruction {
             a,
             b,
@@ -1163,7 +1150,58 @@ where
             is_init_ptr,
         };
 
+        Ok(())
+    }
+}
+
+impl<F> StepExecutorE1<F> for FriReducedOpeningStep<F>
+where
+    F: PrimeField32,
+{
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<FriReducedOpeningPreCompute>()
+    }
+
+    #[inline(always)]
+    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>> {
+        let pre_compute: &mut FriReducedOpeningPreCompute = data.borrow_mut();
+
+        self.pre_compute_impl(pc, inst, pre_compute)?;
+
         let fn_ptr = execute_e1_impl;
+        Ok(fn_ptr)
+    }
+}
+
+impl<F> StepExecutorE2<F> for FriReducedOpeningStep<F>
+where
+    F: PrimeField32,
+{
+    #[inline(always)]
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<FriReducedOpeningPreCompute>>()
+    }
+
+    #[inline(always)]
+    fn pre_compute_e2<Ctx: E2ExecutionCtx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>> {
+        let pre_compute: &mut E2PreCompute<FriReducedOpeningPreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+
+        self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+
+        let fn_ptr = execute_e2_impl;
         Ok(fn_ptr)
     }
 }
@@ -1173,7 +1211,25 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
     let pre_compute: &FriReducedOpeningPreCompute = pre_compute.borrow();
+    execute_e12_impl(pre_compute, vm_state);
+}
 
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &E2PreCompute<FriReducedOpeningPreCompute> = pre_compute.borrow();
+    let height = execute_e12_impl(&pre_compute.data, vm_state);
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, height);
+}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+    pre_compute: &FriReducedOpeningPreCompute,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) -> u32 {
     let alpha = vm_state.vm_read(AS::Native as u32, pre_compute.alpha_ptr);
 
     let [length]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.length_ptr);
@@ -1224,6 +1280,8 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 
     vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
     vm_state.instret += 1;
+
+    length as u32 + 2
 }
 
 pub type FriReducedOpeningChip<F> =

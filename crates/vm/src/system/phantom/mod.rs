@@ -6,7 +6,7 @@ use std::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant,
-    SystemOpcode, VmOpcode,
+    SysPhantom, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -27,9 +27,8 @@ use serde_big_array::BigArray;
 use super::memory::MemoryController;
 use crate::{
     arch::{
-        execution_mode::{e1::E1Ctx, E1ExecutionCtx},
-        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InsExecutorE1,
-        InstructionExecutor, PcIncOrSet, PhantomSubExecutor, Streams, VmStateMut,
+        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor,
+        PcIncOrSet, PhantomSubExecutor, Streams,
     },
     system::{
         phantom::execution::{execute_impl, PhantomOperands, PhantomStateMut},
@@ -139,25 +138,27 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
             is_valid: F::ONE,
         });
 
-        let c_u32 = instruction.c.as_canonical_u32();
-        let sub_executor = self
-            .phantom_executors
-            .get(&PhantomDiscriminant(c_u32 as u16))
-            .unwrap();
-        execute_impl(
-            PhantomStateMut {
-                pc: &mut pc,
-                memory: &mut memory.memory.data,
-                streams,
-                rng,
-            },
-            &PhantomOperands {
-                a: instruction.a.as_canonical_u32(),
-                b: instruction.b.as_canonical_u32(),
-                c: instruction.c.as_canonical_u32(),
-            },
-            sub_executor,
-        )?;
+        let c_u32 = instruction.c.as_canonical_u32() as u16;
+        if SysPhantom::from_repr(c_u32).is_none() {
+            let sub_executor = self
+                .phantom_executors
+                .get(&PhantomDiscriminant(c_u32))
+                .unwrap();
+            execute_impl(
+                PhantomStateMut {
+                    pc: &mut pc,
+                    memory: &mut memory.memory.data,
+                    streams,
+                    rng,
+                },
+                &PhantomOperands {
+                    a: instruction.a.as_canonical_u32(),
+                    b: instruction.b.as_canonical_u32(),
+                    c: instruction.c.as_canonical_u32(),
+                },
+                sub_executor.as_ref(),
+            )?;
+        }
         pc += DEFAULT_PC_STEP;
         memory.increment_timestamp();
 
