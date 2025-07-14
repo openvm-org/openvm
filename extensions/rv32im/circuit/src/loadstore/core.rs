@@ -9,7 +9,7 @@ use openvm_circuit::{
         execution_mode::E1ExecutionCtx, AdapterAirContext, AdapterTraceStep, Result,
         StepExecutorE1, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
     },
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory, POINTER_MAX_BITS},
 };
 use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
 use openvm_instructions::{
@@ -486,7 +486,7 @@ unsafe fn execute_e12_impl<
     let rs1_val = u32::from_le_bytes(rs1_bytes);
     let ptr_val = rs1_val.wrapping_add(pre_compute.imm_extended);
     // sign_extend([r32{c,g}(b):2]_e)`
-    assert!(ptr_val < (1 << 29));
+    debug_assert!(ptr_val < (1 << POINTER_MAX_BITS));
     let shift_amount = ptr_val % 4;
     let ptr_val = ptr_val - shift_amount; // aligned ptr
 

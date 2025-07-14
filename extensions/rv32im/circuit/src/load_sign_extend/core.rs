@@ -7,12 +7,12 @@ use openvm_circuit::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError,
-        ExecutionError::InvalidInstruction,
+        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc,
+        ExecutionError::{self, InvalidInstruction},
         RecordArena, Result, StepExecutorE1, StepExecutorE2, TraceFiller, TraceStep,
         VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory, POINTER_MAX_BITS},
 };
 use openvm_circuit_primitives::{
     utils::select,
@@ -385,11 +385,7 @@ unsafe fn execute_e12_impl<
     let rs1_val = u32::from_le_bytes(rs1_bytes);
     let ptr_val = rs1_val.wrapping_add(pre_compute.imm_extended);
     // sign_extend([r32{c,g}(b):2]_e)`
-    // assert!(
-    //     ptr_val < (1 << self.pointer_max_bits),
-    //     "ptr_val: {ptr_val} = rs1_val: {rs1_val} + imm_extended: {imm_extended} >= 2 ** {}",
-    //     self.pointer_max_bits
-    // );
+    debug_assert!(ptr_val < (1 << POINTER_MAX_BITS));
     let shift_amount = ptr_val % 4;
     let ptr_val = ptr_val - shift_amount; // aligned ptr
 
