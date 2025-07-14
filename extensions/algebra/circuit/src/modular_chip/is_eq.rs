@@ -655,7 +655,7 @@ unsafe fn execute_e12_impl<
 
     // Read memory values
     let [b, c]: [[u8; TOTAL_READ_SIZE]; 2] = rs_vals.map(|address| {
-        assert!(address as usize + TOTAL_READ_SIZE - 1 < (1 << POINTER_MAX_BITS));
+        debug_assert!(address as usize + TOTAL_READ_SIZE - 1 < (1 << POINTER_MAX_BITS));
         from_fn::<_, NUM_LANES, _>(|i| {
             vm_state.vm_read::<_, LANE_SIZE>(RV32_MEMORY_AS, address + (i * LANE_SIZE) as u32)
         })
@@ -664,13 +664,13 @@ unsafe fn execute_e12_impl<
         .unwrap()
     });
 
-    let (b_cmp, _) = run_unsigned_less_than::<TOTAL_READ_SIZE>(&b, &pre_compute.modulus_limbs);
-    let (c_cmp, _) = run_unsigned_less_than::<TOTAL_READ_SIZE>(&c, &pre_compute.modulus_limbs);
-
     if !IS_SETUP {
+        let (b_cmp, _) = run_unsigned_less_than::<TOTAL_READ_SIZE>(&b, &pre_compute.modulus_limbs);
         assert!(b_cmp, "{:?} >= {:?}", b, pre_compute.modulus_limbs);
     }
-    assert!(c_cmp, "{:?} >= {:?}", c, pre_compute.modulus_limbs);
+
+    let (c_cmp, _) = run_unsigned_less_than::<TOTAL_READ_SIZE>(&c, &pre_compute.modulus_limbs);
+    debug_assert!(c_cmp, "{:?} >= {:?}", c, pre_compute.modulus_limbs);
 
     // Compute result
     let mut write_data = [0u8; RV32_REGISTER_NUM_LIMBS];
