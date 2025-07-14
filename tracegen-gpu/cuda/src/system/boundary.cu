@@ -89,14 +89,14 @@ __global__ void cukernel_volatile_boundary_tracegen(
     size_t width,
     BoundaryRecord<VOLATILE_CHUNK> *records,
     size_t num_records,
-    uint32_t *rc_buffer,
-    uint32_t rc_num_bins,
+    uint32_t *range_checker,
+    uint32_t range_checker_num_bins,
     size_t as_max_bits,
     size_t ptr_max_bits
 ) {
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row = RowSlice(trace + idx, height);
-    VariableRangeChecker rc(rc_buffer, rc_num_bins);
+    VariableRangeChecker rc(range_checker, range_checker_num_bins);
 
     if (idx < num_records) {
         BoundaryRecord<VOLATILE_CHUNK> record = records[idx];
@@ -208,8 +208,8 @@ extern "C" int _volatile_boundary_tracegen(
     size_t width,
     uint32_t *d_raw_records,
     size_t num_records,
-    uint32_t *d_rc_buffer,
-    uint32_t rc_num_bins,
+    uint32_t *d_range_checker,
+    uint32_t range_checker_num_bins,
     size_t as_max_bits,
     size_t ptr_max_bits
 ) {
@@ -222,8 +222,8 @@ extern "C" int _volatile_boundary_tracegen(
         width,
         d_records,
         num_records,
-        d_rc_buffer,
-        rc_num_bins,
+        d_range_checker,
+        range_checker_num_bins,
         as_max_bits,
         ptr_max_bits
     );

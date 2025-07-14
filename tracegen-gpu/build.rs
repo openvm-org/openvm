@@ -120,6 +120,7 @@ fn main() {
             .file("cuda/src/system/phantom.cu")
             .file("cuda/src/system/poseidon2.cu")
             .file("cuda/src/system/program.cu")
+            .file("cuda/src/system/public_values.cu")
             .compile("tracegen_gpu_system");
     }
 
