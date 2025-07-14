@@ -4,12 +4,11 @@ mod stark_utils;
 pub mod test_utils;
 
 pub use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
+use openvm_stark_backend::p3_field::PrimeField32;
 #[cfg(any(test, feature = "test-utils"))]
 pub use stark_utils::*;
 #[cfg(any(test, feature = "test-utils"))]
 pub use test_utils::*;
-
-use openvm_stark_backend::p3_field::PrimeField32;
 
 #[inline(always)]
 pub fn transmute_field_to_u32<F: PrimeField32>(field: &F) -> u32 {

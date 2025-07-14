@@ -4,6 +4,7 @@ use backtrace::Backtrace;
 use openvm_instructions::{
     exe::FnBounds,
     instruction::{DebugInfo, Instruction},
+    program::DEFAULT_PC_STEP,
 };
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -260,7 +261,6 @@ where
             let discriminant = c.as_canonical_u32() as u16;
             if let Some(phantom) = SysPhantom::from_repr(discriminant) {
                 tracing::trace!("pc: {pc:#x} | system phantom: {phantom:?}");
-                handled_phantom = true;
 
                 if phantom == SysPhantom::DebugPanic {
                     if let Some(mut backtrace) = prev_backtrace.take() {
@@ -281,6 +281,8 @@ where
                         _ => {}
                     }
                 }
+                handled_phantom = true;
+                state.pc += DEFAULT_PC_STEP;
             }
         }
 
