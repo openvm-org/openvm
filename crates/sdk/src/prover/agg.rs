@@ -108,7 +108,9 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
         let mut internal_node_idx = -1;
         let mut internal_node_height = 0;
         let mut proofs = leaf_proofs;
-        while proofs.len() > 1 {
+        // We will always generate at least one internal proof, even if there is only one leaf
+        // proof, in order to shrink the proof size
+        while proofs.len() > 1 || internal_node_height == 0 {
             let internal_inputs = InternalVmVerifierInput::chunk_leaf_or_internal_proofs(
                 self.internal_prover
                     .committed_exe
