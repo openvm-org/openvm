@@ -4,12 +4,15 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-#[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]
+#[cfg(target_os = "zkvm")]
 pub use openvm_custom_insn::{custom_insn_i, custom_insn_r};
+#[cfg(target_os = "zkvm")]
+pub mod alloc;
 #[cfg(all(feature = "rust-runtime", target_os = "zkvm"))]
 pub mod heap;
 #[cfg(all(feature = "export-libm", target_os = "zkvm"))]
 mod libm_extern;
+
 pub mod memory;
 pub mod print;
 #[cfg(feature = "rust-runtime")]
@@ -18,9 +21,6 @@ pub mod rust_rt;
 /// Size of a zkVM machine word in bytes.
 /// 4 bytes (i.e. 32 bits) as the zkVM is an implementation of the rv32im ISA.
 pub const WORD_SIZE: usize = core::mem::size_of::<u32>();
-
-/// Size of a zkVM memory page.
-pub const PAGE_SIZE: usize = 1024;
 
 /// Standard IO file descriptors for use with sys_read and sys_write.
 pub mod fileno {
