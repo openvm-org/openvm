@@ -247,7 +247,7 @@ pub struct Rv32IsEqualModAdapterRecord<
 }
 
 #[derive(Clone, Copy)]
-pub struct Rv32IsEqualModeAdapterStep<
+pub struct Rv32IsEqualModAdapterStep<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
@@ -257,7 +257,7 @@ pub struct Rv32IsEqualModeAdapterStep<
 }
 
 #[derive(derive_new::new)]
-pub struct Rv32IsEqualModeAdapterFiller<
+pub struct Rv32IsEqualModAdapterFiller<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
@@ -272,7 +272,7 @@ impl<
         const BLOCKS_PER_READ: usize,
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
-    > Rv32IsEqualModeAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    > Rv32IsEqualModAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
     pub fn new(pointer_max_bits: usize) -> Self {
         assert!(NUM_READS <= 2);
@@ -292,7 +292,7 @@ impl<
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
     > AdapterTraceStep<F>
-    for Rv32IsEqualModeAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    for Rv32IsEqualModAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {
@@ -381,7 +381,7 @@ impl<
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
     > AdapterTraceFiller<F>
-    for Rv32IsEqualModeAdapterFiller<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    for Rv32IsEqualModAdapterFiller<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
     const WIDTH: usize =
         Rv32IsEqualModAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width();
@@ -464,7 +464,7 @@ impl<
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
     > AdapterExecutorE1<F>
-    for Rv32IsEqualModeAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    for Rv32IsEqualModAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
     type ReadData = [[u8; TOTAL_READ_SIZE]; NUM_READS];
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];

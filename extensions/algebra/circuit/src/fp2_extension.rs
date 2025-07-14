@@ -31,8 +31,8 @@ use strum::EnumCount;
 
 use crate::{
     fp2_chip::{
-        get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_step, get_fp2_multdiv_air,
-        get_fp2_multdiv_chip, get_fp2_multdiv_step, Fp2Air, Fp2Step,
+        get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_step, get_fp2_muldiv_air,
+        get_fp2_muldiv_chip, get_fp2_muldiv_step, Fp2Air, Fp2Step,
     },
     ModularExtension,
 };
@@ -117,7 +117,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let muldiv = get_fp2_multdiv_step(
+                let muldiv = get_fp2_muldiv_step(
                     config,
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -148,7 +148,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let muldiv = get_fp2_multdiv_step(
+                let muldiv = get_fp2_muldiv_step(
                     config,
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -215,7 +215,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Fp2Extension {
                 );
                 inventory.add_air(addsub);
 
-                let muldiv = get_fp2_multdiv_air::<2, 32>(
+                let muldiv = get_fp2_muldiv_air::<2, 32>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -243,7 +243,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Fp2Extension {
                 );
                 inventory.add_air(addsub);
 
-                let muldiv = get_fp2_multdiv_air::<6, 16>(
+                let muldiv = get_fp2_muldiv_air::<6, 16>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -313,7 +313,7 @@ where
                 inventory.add_executor_chip(addsub);
 
                 inventory.next_air::<Fp2Air<2, 32>>()?;
-                let muldiv = get_fp2_multdiv_chip::<Val<SC>, 2, 32>(
+                let muldiv = get_fp2_muldiv_chip::<Val<SC>, 2, 32>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -339,7 +339,7 @@ where
                 inventory.add_executor_chip(addsub);
 
                 inventory.next_air::<Fp2Air<6, 16>>()?;
-                let muldiv = get_fp2_multdiv_chip::<Val<SC>, 6, 16>(
+                let muldiv = get_fp2_muldiv_chip::<Val<SC>, 6, 16>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),

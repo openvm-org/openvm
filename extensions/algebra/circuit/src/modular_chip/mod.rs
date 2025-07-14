@@ -10,12 +10,12 @@ use openvm_mod_circuit_builder::{
     FieldExpressionCoreAir, FieldExpressionFiller, FieldExpressionStep,
 };
 use openvm_rv32_adapters::{
-    Rv32IsEqualModAdapterAir, Rv32IsEqualModeAdapterFiller, Rv32IsEqualModeAdapterStep,
+    Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterFiller, Rv32IsEqualModAdapterStep,
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
 };
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 pub(crate) type ModularAir<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper<
     Rv32VecHeapAdapterAir<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
@@ -44,7 +44,7 @@ pub type VmModularIsEqualStep<
     const LANE_SIZE: usize,
     const TOTAL_LIMBS: usize,
 > = ModularIsEqualStep<
-    Rv32IsEqualModeAdapterStep<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+    Rv32IsEqualModAdapterStep<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
     TOTAL_LIMBS,
     RV32_REGISTER_NUM_LIMBS,
     RV32_CELL_BITS,
@@ -58,7 +58,7 @@ pub type ModularIsEqualChip<
 > = VmChipWrapper<
     F,
     ModularIsEqualFiller<
-        Rv32IsEqualModeAdapterFiller<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        Rv32IsEqualModAdapterFiller<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         TOTAL_LIMBS,
         RV32_REGISTER_NUM_LIMBS,
         RV32_CELL_BITS,
