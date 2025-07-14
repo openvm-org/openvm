@@ -210,3 +210,41 @@ pub mod poseidon2_cuda {
         ))
     }
 }
+
+pub mod native_loadstore_cuda {
+    use super::*;
+
+    unsafe extern "C" {
+        unsafe fn _native_loadstore_tracegen(
+            d_trace: *mut std::ffi::c_void,
+            height: u32,
+            width: u32,
+            d_records: *const u8,
+            rows_used: u32,
+            d_range_checker: *mut u32,
+            range_checker_max_bins: u32,
+            num_cells: u32,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen<T>(
+        d_trace: &DeviceBuffer<T>,
+        height: u32,
+        width: u32,
+        d_records: &DeviceBuffer<u8>,
+        rows_used: u32,
+        d_range_checker: &DeviceBuffer<T>,
+        num_cells: u32,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_native_loadstore_tracegen(
+            d_trace.as_mut_raw_ptr(),
+            height,
+            width,
+            d_records.as_ptr(),
+            rows_used,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            num_cells,
+        ))
+    }
+}
