@@ -5,7 +5,7 @@ All notable changes to OpenVM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project follows a versioning principles documented in [VERSIONING.md](./VERSIONING.md).
 
-## v1.3.0
+## v1.3.0 (2025-07-14)
 
 No circuit constraints or verifying keys were changed in this release.
 
