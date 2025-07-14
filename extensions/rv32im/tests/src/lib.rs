@@ -23,7 +23,13 @@ mod tests {
 
     type F = BabyBear;
 
-    #[cfg(test)]
+    // fn test_rv32i_config() -> Rv32IConfig {
+    //     Rv32IConfig {
+    //         system: test_system_config_with_continuations(),
+    //         ..Default::default()
+    //     }
+    // }
+
     fn test_rv32im_config() -> Rv32ImConfig {
         Rv32ImConfig {
             rv32i: Rv32IConfig {
@@ -235,9 +241,9 @@ mod tests {
     //             .with_extension(Rv32IoTranspilerExtension),
     //     )?;
     //
-    //     let executor = VmExecutor::new(config);
+    //     let interpreter = InterpretedInstance::new(config, exe);
     //     let input = vec![[0, 0, 0, 1].map(F::from_canonical_u8).to_vec()];
-    //     match executor.execute_e1(exe.clone(), input.clone(), None) {
+    //     match interpreter.execute(E1Ctx::new(None), input) {
     //         Err(ExecutionError::FailedWithExitCode(_)) => Ok(()),
     //         Err(_) => panic!("should fail with `FailedWithExitCode`"),
     //         Ok(_) => panic!("should fail"),
