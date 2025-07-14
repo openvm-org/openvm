@@ -3,6 +3,7 @@ mod castf;
 mod cuda;
 mod field_arithmetic;
 mod fri;
+mod loadstore;
 mod poseidon2;
 
 pub use branch_eq::*;
@@ -10,6 +11,7 @@ pub use castf::*;
 pub use cuda::*;
 pub use field_arithmetic::*;
 pub use fri::*;
+pub use loadstore::*;
 pub use poseidon2::*;
 
 mod utils;
