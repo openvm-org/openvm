@@ -99,7 +99,10 @@ impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
             proof_input.per_air[i].0 = i;
         }
         let e = BabyBearPoseidon2RootEngine::new(*self.fri_params());
-        e.prove(&self.root_verifier_pk.vm_pk.vm_pk, proof_input)
+        let proof = e.prove(&self.root_verifier_pk.vm_pk.vm_pk, proof_input);
+        let encoded = bitcode::serialize(&proof).unwrap();
+        metrics::counter!("proof_size").absolute(encoded.len() as u64);
+        proof
     }
 }
 
