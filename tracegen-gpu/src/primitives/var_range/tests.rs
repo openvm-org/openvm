@@ -1,7 +1,15 @@
 use std::sync::Arc;
 
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use openvm_stark_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
+use p3_air::BaseAir;
+use p3_field::FieldAlgebra;
 use rand::Rng;
+use stark_backend_gpu::{
+    base::DeviceMatrix,
+    cuda::copy::MemCopyH2D,
+    types::{DeviceAirProofRawInput, F},
+};
 
 use crate::{
     dummy::var_range::DummyInteractionChipGPU, primitives::var_range::VariableRangeCheckerChipGPU,
@@ -27,6 +35,62 @@ fn var_range_test() {
     tester
         .build()
         .load(dummy_chip)
+        .load(range_checker)
+        .finalize()
+        .simple_test()
+        .expect("Verification failed");
+}
+
+#[test]
+fn var_range_hybrid_test() {
+    let mut tester = GpuChipTestBuilder::default();
+    let bus = VariableRangeCheckerBus::new(1, RANGE_MAX_BITS);
+    let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(Arc::new(
+        VariableRangeCheckerChip::new(bus),
+    )));
+
+    let gpu_random_values: Vec<u32> = (0..NUM_INPUTS)
+        .map(|_| tester.rng().gen::<u32>() & RANGE_BIT_MASK)
+        .collect();
+    let gpu_dummy_chip = DummyInteractionChipGPU::new(range_checker.clone(), gpu_random_values);
+
+    let cpu_chip = range_checker.cpu_chip.clone().unwrap();
+    let cpu_pairs = (0..NUM_INPUTS)
+        .map(|_| {
+            let bits = tester.rng().gen_range(0..=(RANGE_MAX_BITS as u32));
+            let mask = (1 << bits) - 1;
+            let value = tester.rng().gen::<u32>() & mask;
+            cpu_chip.add_count(value, bits as usize);
+            [value, bits]
+        })
+        .collect::<Vec<_>>();
+    let cpu_dummy_trace = (0..NUM_INPUTS)
+        .map(|_| F::ONE)
+        .chain(
+            cpu_pairs
+                .iter()
+                .map(|pair| F::from_canonical_u32(pair[0]))
+                .chain(cpu_pairs.iter().map(|pair| F::from_canonical_u32(pair[1]))),
+        )
+        .collect::<Vec<_>>()
+        .to_device()
+        .unwrap();
+    let cpu_air = DummyInteractionAir::new(2, true, bus.index());
+
+    let mut tester = tester.build();
+    tester.airs.push(Arc::new(cpu_air));
+    tester.raw_inputs.push(DeviceAirProofRawInput {
+        cached_mains: vec![],
+        common_main: Some(DeviceMatrix::new(
+            Arc::new(cpu_dummy_trace),
+            NUM_INPUTS,
+            BaseAir::<F>::width(&cpu_air),
+        )),
+        public_values: vec![],
+    });
+
+    tester
+        .load(gpu_dummy_chip)
         .load(range_checker)
         .finalize()
         .simple_test()

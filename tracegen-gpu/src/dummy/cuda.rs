@@ -2,11 +2,11 @@
 
 use stark_backend_gpu::cuda::{d_buffer::DeviceBuffer, error::CudaError};
 
-pub mod dummy_chip {
+pub mod var_range {
     use super::*;
 
     extern "C" {
-        fn _dummy_tracegen(
+        fn _var_range_dummy_tracegen(
             d_data: *const u32,
             d_trace: *mut std::ffi::c_void,
             d_rc_count: *mut u32,
@@ -20,7 +20,7 @@ pub mod dummy_chip {
         d_trace: &DeviceBuffer<T>,
         d_rc_count: &DeviceBuffer<T>,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_dummy_tracegen(
+        CudaError::from_result(_var_range_dummy_tracegen(
             d_data.as_ptr(),
             d_trace.as_mut_raw_ptr(),
             d_rc_count.as_mut_ptr() as *mut u32,
@@ -325,28 +325,32 @@ pub mod poseidon2 {
     }
 }
 
-pub mod utils {
+pub mod bitwise_op_lookup {
     use super::*;
 
     extern "C" {
-        fn _send_bitwise_operation_lookups(
-            d_count: *mut u32,
-            num_bits: u32,
-            pairs: *const u32,
-            num_pairs: usize,
+        fn _bitwise_dummy_tracegen(
+            d_trace: *mut std::ffi::c_void,
+            height: usize,
+            records: *const u32,
+            bitwise_count: *mut u32,
+            bitwise_num_bits: u32,
         ) -> i32;
     }
 
-    pub unsafe fn send_bitwise_operation_lookups<T>(
-        d_count: &DeviceBuffer<T>,
-        pairs: &DeviceBuffer<u32>,
-        num_bits: u32,
+    pub unsafe fn tracegen<T>(
+        d_trace: &DeviceBuffer<T>,
+        height: usize,
+        records: &DeviceBuffer<u32>,
+        bitwise_count: &DeviceBuffer<T>,
+        bitwise_num_bits: u32,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_send_bitwise_operation_lookups(
-            d_count.as_ptr() as *mut u32,
-            num_bits,
-            pairs.as_ptr(),
-            pairs.len() / 2,
+        CudaError::from_result(_bitwise_dummy_tracegen(
+            d_trace.as_mut_raw_ptr(),
+            height,
+            records.as_ptr(),
+            bitwise_count.as_mut_ptr() as *mut u32,
+            bitwise_num_bits,
         ))
     }
 }

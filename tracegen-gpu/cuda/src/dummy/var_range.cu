@@ -8,7 +8,7 @@ template <typename T> struct DummyChipCols {
     T bits;
 };
 
-__global__ void dummy_tracegen(
+__global__ void var_range_dummy_tracegen(
     const uint32_t *data,
     Fp *trace,
     uint32_t *rc_count,
@@ -31,7 +31,7 @@ __global__ void dummy_tracegen(
     range_checker.merge(rc_count);
 }
 
-extern "C" int _dummy_tracegen(
+extern "C" int _var_range_dummy_tracegen(
     const uint32_t *d_data,
     Fp *d_trace,
     uint32_t *d_rc_count,
@@ -39,6 +39,6 @@ extern "C" int _dummy_tracegen(
     size_t rc_num_bins
 ) {
     auto [grid, block] = kernel_launch_params(data_len);
-    dummy_tracegen<<<grid, block>>>(d_data, d_trace, d_rc_count, data_len, rc_num_bins);
+    var_range_dummy_tracegen<<<grid, block>>>(d_data, d_trace, d_rc_count, data_len, rc_num_bins);
     return cudaGetLastError();
 }

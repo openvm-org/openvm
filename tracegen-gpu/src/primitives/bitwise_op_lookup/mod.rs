@@ -1,11 +1,15 @@
-use std::sync::Arc;
+use std::sync::{atomic::Ordering, Arc};
 
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, NUM_BITWISE_OP_LOOKUP_COLS,
+    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    NUM_BITWISE_OP_LOOKUP_COLS,
 };
 use openvm_stark_backend::{rap::get_air_name, AirRef, ChipUsageGetter};
 use stark_backend_gpu::{
-    base::DeviceMatrix, cuda::d_buffer::DeviceBuffer, prelude::F, prover_backend::GpuBackend,
+    base::DeviceMatrix,
+    cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer},
+    prelude::F,
+    prover_backend::GpuBackend,
     types::SC,
 };
 
@@ -17,6 +21,7 @@ mod tests;
 pub struct BitwiseOperationLookupChipGPU<const NUM_BITS: usize> {
     pub air: BitwiseOperationLookupAir<NUM_BITS>,
     pub count: Arc<DeviceBuffer<F>>,
+    pub cpu_chip: Option<Arc<BitwiseOperationLookupChip<NUM_BITS>>>,
 }
 
 impl<const NUM_BITS: usize> BitwiseOperationLookupChipGPU<NUM_BITS> {
@@ -33,6 +38,21 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChipGPU<NUM_BITS> {
         Self {
             air: BitwiseOperationLookupAir::new(bus),
             count,
+            cpu_chip: None,
+        }
+    }
+
+    pub fn hybrid(cpu_chip: Arc<BitwiseOperationLookupChip<NUM_BITS>>) -> Self {
+        assert_eq!(cpu_chip.count_range.len(), Self::num_rows());
+        assert_eq!(cpu_chip.count_xor.len(), Self::num_rows());
+        let count = Arc::new(DeviceBuffer::<F>::with_capacity(
+            NUM_BITWISE_OP_LOOKUP_COLS * Self::num_rows(),
+        ));
+        count.fill_zero().unwrap();
+        Self {
+            air: cpu_chip.air,
+            count,
+            cpu_chip: Some(cpu_chip),
         }
     }
 }
@@ -61,13 +81,23 @@ impl<const NUM_BITS: usize> DeviceChip<SC, GpuBackend> for BitwiseOperationLooku
             Self::num_rows() * NUM_BITWISE_OP_LOOKUP_COLS,
             self.count.len()
         );
+        let cpu_count = self.cpu_chip.as_ref().map(|cpu_chip| {
+            cpu_chip
+                .count_range
+                .iter()
+                .chain(cpu_chip.count_xor.iter())
+                .map(|c| c.load(Ordering::Relaxed))
+                .collect::<Vec<_>>()
+                .to_device()
+                .unwrap()
+        });
         let trace = DeviceMatrix::<F>::new(
             self.count.clone(),
             Self::num_rows(),
             NUM_BITWISE_OP_LOOKUP_COLS,
         );
         unsafe {
-            tracegen(&self.count, trace.buffer(), NUM_BITS as u32).unwrap();
+            tracegen(&self.count, &cpu_count, trace.buffer(), NUM_BITS as u32).unwrap();
         }
         trace
     }
