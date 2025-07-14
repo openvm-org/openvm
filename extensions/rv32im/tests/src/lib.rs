@@ -4,7 +4,12 @@ mod tests {
 
     use eyre::Result;
     use openvm_circuit::{
-        arch::{execution_mode::e1::E1Ctx, interpreter::InterpretedInstance, Streams},
+        arch::{
+            execution_mode::e1::E1Ctx, hasher::poseidon2::vm_poseidon2_hasher,
+            interpreter::InterpretedInstance, ExecutionError, Streams, VirtualMachine, VmConfig,
+            VmExecutor,
+        },
+        system::memory::merkle::public_values::UserPublicValuesProof,
         utils::{air_test, air_test_with_min_segments, test_system_config_with_continuations},
     };
     use openvm_instructions::exe::VmExe;
@@ -13,7 +18,10 @@ mod tests {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_stark_sdk::{openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear};
+    use openvm_stark_sdk::{
+        config::baby_bear_poseidon2::default_engine, openvm_stark_backend::p3_field::FieldAlgebra,
+        p3_baby_bear::BabyBear,
+    };
     use openvm_toolchain_tests::{
         build_example_program_at_path, build_example_program_at_path_with_features,
         get_programs_dir,
@@ -23,13 +31,7 @@ mod tests {
 
     type F = BabyBear;
 
-    // fn test_rv32i_config() -> Rv32IConfig {
-    //     Rv32IConfig {
-    //         system: test_system_config_with_continuations(),
-    //         ..Default::default()
-    //     }
-    // }
-
+    #[cfg(test)]
     fn test_rv32im_config() -> Rv32ImConfig {
         Rv32ImConfig {
             rv32i: Rv32IConfig {
@@ -162,57 +164,54 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn test_reveal() -> Result<()> {
-    //     let config = test_rv32i_config();
-    //     let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config)?;
-    //     let exe = VmExe::from_elf(
-    //         elf,
-    //         Transpiler::<F>::default()
-    //             .with_extension(Rv32ITranspilerExtension)
-    //             .with_extension(Rv32MTranspilerExtension)
-    //             .with_extension(Rv32IoTranspilerExtension),
-    //     )?;
-    //     let config = Rv32IConfig::default();
-    //
-    //     let vm = VirtualMachine::new(default_engine(), config.clone());
-    //     let pk = vm.keygen();
-    //     let vk = pk.get_vk();
-    //     let segments = vm
-    //         .executor
-    //         .execute_metered(
-    //             exe.clone(),
-    //             vec![],
-    //             &vk.num_interactions(),
-    //         )
-    //         .unwrap();
-    //
-    //     let final_memory = vm.executor.execute(exe, vec![], &segments)?.unwrap();
-    //     let hasher = vm_poseidon2_hasher::<F>();
-    //     let pv_proof = UserPublicValuesProof::compute(
-    //         config.system.memory_config.memory_dimensions(),
-    //         64,
-    //         &hasher,
-    //         &final_memory,
-    //     );
-    //     let mut bytes = [0u8; 32];
-    //     for (i, byte) in bytes.iter_mut().enumerate() {
-    //         *byte = i as u8;
-    //     }
-    //     assert_eq!(
-    //         pv_proof.public_values,
-    //         bytes
-    //             .into_iter()
-    //             .chain(
-    //                 [123, 0, 456, 0u32, 0u32, 0u32, 0u32, 0u32]
-    //                     .into_iter()
-    //                     .flat_map(|x| x.to_le_bytes())
-    //             )
-    //             .map(F::from_canonical_u8)
-    //             .collect::<Vec<_>>()
-    //     );
-    //     Ok(())
-    // }
+    #[test]
+    fn test_reveal() -> Result<()> {
+        let config = test_rv32im_config();
+        let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config)?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension),
+        )?;
+
+        let vm = VirtualMachine::new(default_engine(), config.clone());
+        let pk = vm.keygen();
+        let vk = pk.get_vk();
+        let segments = vm
+            .executor
+            .execute_metered(exe.clone(), vec![], &vk.num_interactions())
+            .unwrap();
+
+        let final_memory = vm.executor.execute(exe, vec![], &segments)?.unwrap();
+        let hasher = vm_poseidon2_hasher::<F>();
+        let pv_proof = UserPublicValuesProof::compute(
+            VmConfig::<F>::system(&config)
+                .memory_config
+                .memory_dimensions(),
+            64,
+            &hasher,
+            &final_memory,
+        );
+        let mut bytes = [0u8; 32];
+        for (i, byte) in bytes.iter_mut().enumerate() {
+            *byte = i as u8;
+        }
+        assert_eq!(
+            pv_proof.public_values,
+            bytes
+                .into_iter()
+                .chain(
+                    [123, 0, 456, 0u32, 0u32, 0u32, 0u32, 0u32]
+                        .into_iter()
+                        .flat_map(|x| x.to_le_bytes())
+                )
+                .map(F::from_canonical_u8)
+                .collect::<Vec<_>>()
+        );
+        Ok(())
+    }
 
     #[test]
     fn test_print() -> Result<()> {
@@ -229,26 +228,26 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn test_heap_overflow() -> Result<()> {
-    //     let config = test_rv32im_config();
-    //     let elf = build_example_program_at_path(get_programs_dir!(), "heap_overflow", &config)?;
-    //     let exe = VmExe::from_elf(
-    //         elf,
-    //         Transpiler::<F>::default()
-    //             .with_extension(Rv32ITranspilerExtension)
-    //             .with_extension(Rv32MTranspilerExtension)
-    //             .with_extension(Rv32IoTranspilerExtension),
-    //     )?;
-    //
-    //     let interpreter = InterpretedInstance::new(config, exe);
-    //     let input = vec![[0, 0, 0, 1].map(F::from_canonical_u8).to_vec()];
-    //     match interpreter.execute(E1Ctx::new(None), input) {
-    //         Err(ExecutionError::FailedWithExitCode(_)) => Ok(()),
-    //         Err(_) => panic!("should fail with `FailedWithExitCode`"),
-    //         Ok(_) => panic!("should fail"),
-    //     }
-    // }
+    #[test]
+    fn test_heap_overflow() -> Result<()> {
+        let config = test_rv32im_config();
+        let elf = build_example_program_at_path(get_programs_dir!(), "heap_overflow", &config)?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension),
+        )?;
+
+        let executor = VmExecutor::new(config);
+        let input = vec![[0, 0, 0, 1].map(F::from_canonical_u8).to_vec()];
+        match executor.execute_e1(exe.clone(), input.clone(), None) {
+            Err(ExecutionError::FailedWithExitCode(_)) => Ok(()),
+            Err(_) => panic!("should fail with `FailedWithExitCode`"),
+            Ok(_) => panic!("should fail"),
+        }
+    }
 
     #[test]
     fn test_hashmap() -> Result<()> {

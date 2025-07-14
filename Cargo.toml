@@ -83,7 +83,7 @@ panic = "unwind"
 codegen-units = 16
 
 [profile.profiling]
-inherits = "maxperf"
+inherits = "release"
 debug = 2
 debug-assertions = false
 strip = false

@@ -21,8 +21,8 @@ use crate::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         ExecuteFunc,
         ExecutionError::{self, InvalidInstruction},
-        InsExecutorE1, InsExecutorE2, PreComputeInstruction, Streams, VmChipComplex, VmConfig,
-        VmSegmentState,
+        ExitCode, InsExecutorE1, InsExecutorE2, PreComputeInstruction, Streams, VmChipComplex,
+        VmConfig, VmSegmentState,
     },
     system::memory::{online::GuestMemory, AddressMap},
 };
@@ -106,6 +106,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
         if vm_state.exit_code.is_err() {
             Err(vm_state.exit_code.err().unwrap())
         } else {
+            check_exit_code(&vm_state)?;
             Ok(vm_state)
         }
     }
@@ -142,6 +143,7 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
         if vm_state.exit_code.is_err() {
             Err(vm_state.exit_code.err().unwrap())
         } else {
+            check_exit_code(&vm_state)?;
             Ok(vm_state)
         }
     }
@@ -495,4 +497,15 @@ fn get_system_opcode_handler<F: PrimeField32, Ctx: E1ExecutionCtx>(
         return Some(terminate_execute_e12_impl);
     }
     None
+}
+
+fn check_exit_code<F: PrimeField32, Ctx>(
+    vm_state: &VmSegmentState<F, Ctx>,
+) -> Result<(), ExecutionError> {
+    if let Ok(Some(exit_code)) = vm_state.exit_code.as_ref() {
+        if *exit_code != ExitCode::Success as u32 {
+            return Err(ExecutionError::FailedWithExitCode(*exit_code));
+        }
+    }
+    Ok(())
 }
