@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use openvm_circuit::arch::ContinuationVmProof;
+use openvm_circuit::arch::{
+    ContinuationVmProof, SingleSegmentVmProver, VmLocalProver, VmProverConfig,
+};
 use openvm_continuations::verifier::{
     internal::types::{InternalVmVerifierInput, VmStarkProof},
     leaf::types::LeafVmVerifierInput,
@@ -15,18 +17,19 @@ use tracing::info_span;
 use crate::{
     config::AggregationTreeConfig,
     keygen::AggStarkProvingKey,
-    prover::{
-        vm::{local::VmLocalProver, SingleSegmentVmProver},
-        RootVerifierLocalProver,
-    },
+    prover::{vm::new_local_prover, RootVerifierLocalProver},
     NonRootCommittedExe, RootSC, F, SC,
 };
 
-pub struct AggStarkProver<E: StarkFriEngine<SC>> {
-    leaf_prover: VmLocalProver<SC, NativeConfig, E>,
+pub struct AggStarkProver<E>
+where
+    E: StarkFriEngine<SC = SC>,
+    NativeConfig: VmProverConfig<SC, E::PB>,
+{
+    leaf_prover: VmLocalProver<E, NativeConfig>,
     leaf_controller: LeafProvingController,
 
-    internal_prover: VmLocalProver<SC, NativeConfig, E>,
+    internal_prover: VmLocalProver<E, NativeConfig>,
     root_prover: RootVerifierLocalProver,
 
     pub num_children_internal: usize,
@@ -38,23 +41,24 @@ pub struct LeafProvingController {
     pub num_children: usize,
 }
 
-impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
+impl<E> AggStarkProver<E>
+where
+    E: StarkFriEngine<SC = SC>,
+    NativeConfig: VmProverConfig<SC, E::PB>,
+{
     pub fn new(
         agg_stark_pk: AggStarkProvingKey,
         leaf_committed_exe: Arc<NonRootCommittedExe>,
         tree_config: AggregationTreeConfig,
     ) -> Self {
-        let leaf_prover =
-            VmLocalProver::<SC, NativeConfig, E>::new(agg_stark_pk.leaf_vm_pk, leaf_committed_exe)
-                .with_overridden_single_segment_trace_heights(NATIVE_MAX_TRACE_HEIGHTS.to_vec());
+        let leaf_prover = new_local_prover(&agg_stark_pk.leaf_vm_pk, &leaf_committed_exe);
         let leaf_controller = LeafProvingController {
             num_children: tree_config.num_children_leaf,
         };
-        let internal_prover = VmLocalProver::<SC, NativeConfig, E>::new(
-            agg_stark_pk.internal_vm_pk,
-            agg_stark_pk.internal_committed_exe,
-        )
-        .with_overridden_single_segment_trace_heights(NATIVE_MAX_TRACE_HEIGHTS.to_vec());
+        let internal_prover = new_local_prover(
+            &agg_stark_pk.internal_vm_pk,
+            &agg_stark_pk.internal_committed_exe,
+        );
         let root_prover = RootVerifierLocalProver::new(agg_stark_pk.root_verifier_pk);
         Self {
             leaf_prover,
@@ -135,7 +139,11 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
                     .map(|input| {
                         internal_node_idx += 1;
                         info_span!("single_internal_agg", idx = internal_node_idx,).in_scope(|| {
-                            SingleSegmentVmProver::prove(&self.internal_prover, input.write())
+                            SingleSegmentVmProver::prove(
+                                &self.internal_prover,
+                                input.write(),
+                                NATIVE_MAX_TRACE_HEIGHTS,
+                            )
                         })
                     })
                     .collect()
@@ -173,7 +181,7 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
             #[cfg(feature = "bench-metrics")]
             metrics::counter!("fri.log_blowup")
                 .absolute(self.root_prover.fri_params().log_blowup as u64);
-            SingleSegmentVmProver::prove(&self.root_prover, input)
+            SingleSegmentVmProver::prove(&self.root_prover, input, NATIVE_MAX_TRACE_HEIGHTS)
         })
     }
 }
@@ -184,11 +192,15 @@ impl LeafProvingController {
         self
     }
 
-    pub fn generate_proof<E: StarkFriEngine<SC>>(
+    pub fn generate_proof<E>(
         &self,
-        prover: &VmLocalProver<SC, NativeConfig, E>,
+        prover: &VmLocalProver<E, NativeConfig>,
         app_proofs: &ContinuationVmProof<SC>,
-    ) -> Vec<Proof<SC>> {
+    ) -> Vec<Proof<SC>>
+    where
+        E: StarkFriEngine,
+        NativeConfig: VmProverConfig<E::SC, E::PB>,
+    {
         info_span!("agg_layer", group = "leaf").in_scope(|| {
             #[cfg(feature = "bench-metrics")]
             {
@@ -202,8 +214,13 @@ impl LeafProvingController {
                 .into_iter()
                 .enumerate()
                 .map(|(leaf_node_idx, input)| {
-                    info_span!("single_leaf_agg", idx = leaf_node_idx)
-                        .in_scope(|| SingleSegmentVmProver::prove(prover, input.write_to_stream()))
+                    info_span!("single_leaf_agg", idx = leaf_node_idx).in_scope(|| {
+                        SingleSegmentVmProver::prove(
+                            prover,
+                            input.write_to_stream(),
+                            NATIVE_MAX_TRACE_HEIGHTS,
+                        )
+                    })
                 })
                 .collect::<Vec<_>>()
         })
@@ -211,13 +228,17 @@ impl LeafProvingController {
 }
 
 /// Wrap the e2e stark proof until its heights meet the requirements of the root verifier.
-pub fn wrap_e2e_stark_proof<E: StarkFriEngine<SC>>(
-    internal_prover: &VmLocalProver<SC, NativeConfig, E>,
+pub fn wrap_e2e_stark_proof<E>(
+    internal_prover: &VmLocalProver<E, NativeConfig>,
     root_prover: &RootVerifierLocalProver,
     internal_commit: [F; DIGEST_SIZE],
     max_internal_wrapper_layers: usize,
     e2e_stark_proof: VmStarkProof<SC>,
-) -> RootVmVerifierInput<SC> {
+) -> RootVmVerifierInput<SC>
+where
+    E: StarkFriEngine<SC = SC>,
+    NativeConfig: VmProverConfig<SC, E::PB>,
+{
     let VmStarkProof {
         mut proof,
         user_public_values,
@@ -254,7 +275,7 @@ pub fn wrap_e2e_stark_proof<E: StarkFriEngine<SC>>(
                 metrics::counter!("fri.log_blowup")
                     .absolute(internal_prover.fri_params().log_blowup as u64);
             }
-            SingleSegmentVmProver::prove(internal_prover, input.write())
+            SingleSegmentVmProver::prove(internal_prover, input.write(), NATIVE_MAX_TRACE_HEIGHTS)
         });
     }
     RootVmVerifierInput {

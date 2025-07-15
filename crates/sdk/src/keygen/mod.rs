@@ -76,13 +76,13 @@ pub struct AppVerifyingKey {
 //     pub halo2_pk: Halo2ProvingKey,
 // }
 
-// #[derive(Clone, Serialize, Deserialize)]
-// pub struct AggStarkProvingKey {
-//     pub leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
-//     pub internal_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
-//     pub internal_committed_exe: Arc<NonRootCommittedExe>,
-//     pub root_verifier_pk: RootVerifierProvingKey,
-// }
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AggStarkProvingKey {
+    pub leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
+    pub internal_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
+    pub internal_committed_exe: Arc<NonRootCommittedExe>,
+    pub root_verifier_pk: RootVerifierProvingKey,
+}
 
 /// Attention: the size of this struct is VERY large, usually >10GB.
 #[cfg(feature = "evm-prove")]
@@ -384,6 +384,7 @@ impl AggStarkProvingKey {
             - (2 * DIGEST_SIZE)
     }
 }
+*/
 
 /// Proving key for the root verifier.
 /// Properties:
@@ -406,6 +407,7 @@ pub struct RootVerifierProvingKey {
     // pub vm_heights: VmComplexTraceHeights,
 }
 
+/*
 impl RootVerifierProvingKey {
     pub fn air_id_permutation(&self) -> AirIdPermutation {
         AirIdPermutation::compute(&self.air_heights)

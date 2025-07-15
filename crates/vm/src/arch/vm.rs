@@ -52,7 +52,7 @@ use crate::{
         hasher::poseidon2::vm_poseidon2_hasher,
         AirInventoryError, AnyEnum, ChipInventoryError, ExecutionState, ExecutorInventory,
         ExecutorInventoryError, InstructionExecutor, SystemConfig, TraceFiller, VmExecutionConfig,
-        VmProverConfig, VmSegmentExecutor, VmSegmentState,
+        VmProverConfig, VmSegmentExecutor, VmSegmentState, PUBLIC_VALUES_AIR_ID,
     },
     execute_spanned,
     system::{
@@ -1060,7 +1060,7 @@ where
     E: StarkEngine,
     VC: VmProverConfig<E::SC, E::PB>,
 {
-    vm: VirtualMachine<E, VC>,
+    pub vm: VirtualMachine<E, VC>,
     // TODO: store immutable parts of program handler here
     exe: VmExe<Val<E::SC>>,
 }
@@ -1159,8 +1159,10 @@ where
         let vm = &mut self.vm;
         let exe = &self.exe;
         assert!(!vm.config().as_ref().continuation_enabled);
+        let mut trace_heights = trace_heights.to_vec();
+        trace_heights[PUBLIC_VALUES_AIR_ID] = vm.config().as_ref().num_public_values as u32;
         let state = vm.executor().create_initial_state(exe, input);
-        let (proof, _) = vm.prove(exe.clone(), state, None, trace_heights)?;
+        let (proof, _) = vm.prove(exe.clone(), state, None, &trace_heights)?;
         Ok(proof)
     }
 }
