@@ -110,6 +110,41 @@ pub mod field_arithmetic_cuda {
     }
 }
 
+pub mod field_extension_cuda {
+    use super::*;
+
+    unsafe extern "C" {
+        unsafe fn _field_extension_tracegen(
+            d_trace: *mut std::ffi::c_void,
+            height: u32,
+            width: u32,
+            d_records: *const u8,
+            rows_used: u32,
+            d_range_checker: *mut u32,
+            range_checker_max_bins: u32,
+        ) -> i32;
+    }
+
+    pub unsafe fn tracegen<T>(
+        d_trace: &DeviceBuffer<T>,
+        height: u32,
+        width: u32,
+        d_records: &DeviceBuffer<u8>,
+        rows_used: u32,
+        d_range_checker: &DeviceBuffer<T>,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_field_extension_tracegen(
+            d_trace.as_mut_raw_ptr(),
+            height,
+            width,
+            d_records.as_ptr(),
+            rows_used,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+        ))
+    }
+}
+
 pub mod fri_cuda {
     use super::*;
     use crate::extensions::native::RowInfo;

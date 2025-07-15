@@ -1,3 +1,4 @@
+#include "../field_extension/field_ext_operations.cuh"
 #include "column.cuh"
 #include "constants.h"
 #include "execution.h"
@@ -175,28 +176,17 @@ struct FriReducedOpening {
 
         // Reorder the formula: result = prev_result * alpha + (b - a)
         // to get: b = result + a - prev_result * alpha
-        // TODO: should use the field_extension multiplication after field extension cuda is implemented
-        Fp tmp[EXT_DEG];
-        auto x = common_rec.alpha;
-        auto y = prev_result;
         if (local_idx > 0) {
-            tmp[0] = x[0] * y[0] + (x[1] * y[3] + x[2] * y[2] + x[3] * y[1]) * Fp(BETA);
-            tmp[1] = x[0] * y[1] + x[1] * y[0] + (x[2] * y[3] + x[3] * y[2]) * Fp(BETA);
-            tmp[2] = x[0] * y[2] + x[1] * y[1] + x[2] * y[0] + (x[3] * y[3]) * Fp(BETA);
-            tmp[3] = x[0] * y[3] + x[1] * y[2] + x[2] * y[1] + x[3] * y[0];
+            FieldExtElement<Fp> x{common_rec.alpha}, y{prev_result};
+            auto b = FieldExtOperations::subtract(
+                FieldExtOperations::add(wl_rec.result, wl_rec.a), FieldExtOperations::multiply(x, y)
+            );
+            COL_WRITE_ARRAY(row, WorkloadCols, b, b.el);
         } else {
-            tmp[0] = tmp[1] = tmp[2] = tmp[3] = Fp::zero();
+            auto b = FieldExtOperations::add(wl_rec.result, wl_rec.a);
+            COL_WRITE_ARRAY(row, WorkloadCols, b, b.el);
         }
 
-        for (uint32_t i = 0; i < EXT_DEG; i++) {
-            if (i == 0) {
-                tmp[i] = wl_rec.result[i] + wl_rec.a - tmp[i];
-            } else {
-                tmp[i] = wl_rec.result[i] - tmp[i];
-            }
-        }
-
-        COL_WRITE_ARRAY(row, WorkloadCols, b, tmp);
         mem_helper.fill(
             row.slice_from(COL_INDEX(WorkloadCols, b_aux)),
             wl_rec.b_aux.prev_timestamp,
