@@ -24,7 +24,7 @@ use openvm_instructions::{
 };
 use openvm_rv32im_circuit::adapters::{read_rv32_register, tracing_read, tracing_write};
 use openvm_sha256_air::{
-    get_flag_pt_array, get_sha256_num_blocks, Sha256StepHelper, SHA256_BLOCK_BITS, SHA256_H,
+    get_flag_pt_array, get_sha256_num_blocks, Sha256FillerHelper, SHA256_BLOCK_BITS, SHA256_H,
     SHA256_ROWS_PER_BLOCK,
 };
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
@@ -325,7 +325,7 @@ impl<F: PrimeField32> TraceFiller<F> for Sha256VmFiller {
                 let mut prev_hashes = Vec::with_capacity(*num_blocks);
                 prev_hashes.push(SHA256_H);
                 for i in 0..*num_blocks - 1 {
-                    prev_hashes.push(Sha256StepHelper::get_block_hash(
+                    prev_hashes.push(Sha256FillerHelper::get_block_hash(
                         &prev_hashes[i],
                         padded_input[i * SHA256_BLOCK_CELLS..(i + 1) * SHA256_BLOCK_CELLS]
                             .try_into()
