@@ -256,7 +256,7 @@ where
             .collect();
 
         let seg_strategy = &system_config.segmentation_strategy;
-        MeteredCtx::new(
+        let mut ctx = MeteredCtx::new(
             constant_trace_heights.to_vec(),
             system_config.has_public_values_chip(),
             system_config.continuation_enabled,
@@ -267,7 +267,12 @@ where
             interactions.to_vec(),
         )
         .with_max_trace_height(seg_strategy.max_trace_height() as u32)
-        .with_max_cells(seg_strategy.max_cells())
+        .with_max_cells(seg_strategy.max_cells());
+        if !system_config.continuation_enabled {
+            // force single segment
+            ctx.segmentation_ctx.set_segment_check_insns(u64::MAX);
+        }
+        ctx
     }
 
     pub fn create_initial_state(&self, exe: &VmExe<F>, input: impl Into<Streams<F>>) -> VmState<F> {
@@ -713,13 +718,6 @@ where
     //         _marker: PhantomData,
     //     }
     // }
-
-    /// Convenience method to generate the proving key and verifying key for the VM circuit
-    /// corresponding to the given config. This is a passthrough call to [VmCircuitConfig::keygen]
-    /// and depends only on [StarkGenericConfig] and _not_ on the [ProverBackend].
-    pub fn keygen(&self) -> Result<MultiStarkProvingKey<E::SC>, AirInventoryError> {
-        self.config().keygen(self.engine.config())
-    }
 
     // TODO[jpw]: I'd like to make a VmInstance struct that has a loaded program
     //

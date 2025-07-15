@@ -13,7 +13,8 @@ pub mod test_utils {
         arch::{
             execution_mode::metered::Segment,
             testing::{memory::gen_pointer, VmChipTestBuilder},
-            Streams, SystemConfig, VirtualMachine, VmCircuitConfig, VmState,
+            MatrixRecordArena, PreflightExecutionOutput, Streams, VirtualMachine, VmCircuitConfig,
+            VmProverConfig, VmState,
         },
         utils::test_system_config,
     };
@@ -23,14 +24,18 @@ pub mod test_utils {
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     };
     use openvm_native_compiler::conversion::AS;
-    use openvm_stark_backend::{p3_field::PrimeField32, prover::hal::DeviceDataTransporter};
+    use openvm_stark_backend::{
+        config::Domain, p3_commit::PolynomialSpace, p3_field::PrimeField32,
+        prover::hal::DeviceDataTransporter,
+    };
     use openvm_stark_sdk::{
-        config::baby_bear_poseidon2::default_engine, openvm_stark_backend::engine::StarkEngine,
+        config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+        engine::StarkFriEngine,
         p3_baby_bear::BabyBear,
     };
     use rand::{distributions::Standard, prelude::Distribution, rngs::StdRng, Rng};
 
-    use crate::{extension::NativeConfig, Native};
+    use crate::extension::NativeConfig;
 
     // If immediate, returns (value, AS::Immediate). Otherwise, writes to native memory and returns
     // (ptr, AS::Native). If is_imm is None, randomizes it.
@@ -66,15 +71,26 @@ pub mod test_utils {
         (value, ptr)
     }
 
-    pub fn execute_program_with_system_config(
+    // Besides taking in system_config, this also returns Result and the full
+    // (PreflightExecutionOutput, VirtualMachine) for more advanced testing needs.
+    #[allow(clippy::type_complexity)]
+    pub fn execute_program_with_config<E>(
         program: Program<BabyBear>,
         input_stream: impl Into<Streams<BabyBear>>,
-        system_config: SystemConfig,
-    ) -> eyre::Result<VmState<BabyBear>> {
-        let config = NativeConfig::new(system_config, Native);
+        config: NativeConfig,
+    ) -> eyre::Result<(
+        PreflightExecutionOutput<BabyBear, MatrixRecordArena<BabyBear>>,
+        VirtualMachine<E, NativeConfig>,
+    )>
+    where
+        E: StarkFriEngine,
+        Domain<E::SC>: PolynomialSpace<Val = BabyBear>,
+        NativeConfig: VmProverConfig<E::SC, E::PB, RecordArena = MatrixRecordArena<BabyBear>>,
+    {
+        assert!(!config.as_ref().continuation_enabled);
         let input = input_stream.into();
 
-        let engine = default_engine();
+        let engine = E::new(FriParameters::new_for_testing(1));
         let pk = config.keygen(engine.config())?;
         let d_pk = engine.device().transport_pk_to_device(&pk);
         let vm = VirtualMachine::new(engine, config, d_pk)?;
@@ -95,20 +111,21 @@ pub mod test_utils {
         assert_eq!(instret_start, 0);
         let exe = VmExe::new(program);
         let state = vm.executor().create_initial_state(&exe, input);
-        let (_, _, state) = vm.execute_preflight(exe, state, num_insns, &trace_heights)?;
-        Ok(state)
+        let output = vm.execute_preflight(exe, state, num_insns, &trace_heights)?;
+        Ok((output, vm))
     }
 
     pub fn execute_program(
         program: Program<BabyBear>,
         input_stream: impl Into<Streams<BabyBear>>,
     ) -> VmState<BabyBear> {
-        let system_config = test_native_config()
-            .system
-            .with_public_values(4)
-            .with_max_segment_len((1 << 25) - 100);
+        let mut config = test_native_config();
+        config.system.num_public_values = 4;
         // we set max segment len large so it doesn't segment
-        execute_program_with_system_config(program, input_stream, system_config).unwrap()
+        let (output, _) =
+            execute_program_with_config::<BabyBearPoseidon2Engine>(program, input_stream, config)
+                .unwrap();
+        output.to_state
     }
 
     pub fn test_native_config() -> NativeConfig {

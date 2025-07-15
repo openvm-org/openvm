@@ -2,7 +2,7 @@ use openvm_circuit::{arch::PUBLIC_VALUES_AIR_ID, utils::air_test_impl};
 use openvm_native_circuit::{execute_program, test_native_config};
 use openvm_native_compiler::{asm::AsmBuilder, prelude::*};
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::{config::FriParameters, p3_baby_bear::BabyBear};
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
@@ -30,9 +30,12 @@ fn test_compiler_public_values() {
     let program = builder.compile_isa();
     let mut config = test_native_config();
     config.system.num_public_values = 2;
-    let (_, mut proofs) = air_test_impl(config, program, vec![], 1, true).unwrap();
-    assert_eq!(proofs.len(), 1);
-    let proof = proofs.pop().unwrap();
+    // This is to justify using log_blowup=1
+    assert!(config.as_ref().max_constraint_degree <= 3);
+    let fri_params = FriParameters::new_for_testing(1);
+    let (_, mut vdata) = air_test_impl(fri_params, config, program, vec![], 1, true).unwrap();
+    assert_eq!(vdata.len(), 1);
+    let proof = vdata.pop().unwrap().data.proof;
     assert_eq!(
         &proof.get_public_values()[PUBLIC_VALUES_AIR_ID],
         &[public_value_0, public_value_1]

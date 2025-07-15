@@ -148,7 +148,11 @@ impl SegmentationCtx {
         is_trace_height_constant: &[bool],
     ) -> bool {
         // Avoid checking segment too often.
-        if instret < self.instret_last_segment_check + self.segment_check_insns {
+        if instret
+            < self
+                .instret_last_segment_check
+                .saturating_add(self.segment_check_insns)
+        {
             return false;
         }
 

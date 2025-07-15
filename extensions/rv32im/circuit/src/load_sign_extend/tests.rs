@@ -37,12 +37,12 @@ fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Harness {
     let range_checker_chip = tester.range_checker().clone();
     let air = Rv32LoadSignExtendAir::new(
         Rv32LoadStoreAdapterAir::new(
-            tester.memory_bridge().clone(),
-            tester.execution_bridge().clone(),
-            range_checker_chip.bus().clone(),
+            tester.memory_bridge(),
+            tester.execution_bridge(),
+            range_checker_chip.bus(),
             tester.address_bits(),
         ),
-        LoadSignExtendCoreAir::new(range_checker_chip.bus().clone()),
+        LoadSignExtendCoreAir::new(range_checker_chip.bus()),
     );
     let executor =
         Rv32LoadSignExtendStep::new(Rv32LoadStoreAdapterStep::new(tester.address_bits()));

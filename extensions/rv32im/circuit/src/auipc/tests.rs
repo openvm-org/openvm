@@ -308,7 +308,7 @@ fn dense_record_arena_test() {
     let (mut sparse_harness, bitwise) = create_test_chip(&tester);
 
     {
-        let mut dense_harness = create_test_chip::<DenseRecordArena>(&mut tester).0;
+        let mut dense_harness = create_test_chip::<DenseRecordArena>(&tester).0;
 
         let num_ops: usize = 100;
         for _ in 0..num_ops {

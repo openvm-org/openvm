@@ -67,7 +67,13 @@ where
     <VC as VmExecutionConfig<BabyBear>>::Executor:
         InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear>,
 {
-    let (final_memory, _) = air_test_impl(config, exe, input, min_segments, true).unwrap();
+    let mut log_blowup = 1;
+    while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
+        log_blowup += 1;
+    }
+    let fri_params = FriParameters::new_for_testing(log_blowup);
+    let (final_memory, _) =
+        air_test_impl(fri_params, config, exe, input, min_segments, true).unwrap();
     final_memory
 }
 
@@ -76,6 +82,7 @@ where
 //
 // Same implementation as VmLocalProver, but we need to do something special to run the debug prover
 pub fn air_test_impl<VC>(
+    fri_params: FriParameters,
     config: VC,
     exe: impl Into<VmExe<BabyBear>>,
     input: impl Into<Streams<BabyBear>>,
@@ -99,11 +106,7 @@ where
         InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear>,
 {
     setup_tracing();
-    let mut log_blowup = 1;
-    while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
-        log_blowup += 1;
-    }
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(log_blowup));
+    let engine = BabyBearPoseidon2Engine::new(fri_params);
     let pk = config.keygen(engine.config())?;
     let vk = pk.get_vk();
     let d_pk = engine.device().transport_pk_to_device(&pk);
