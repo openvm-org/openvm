@@ -72,7 +72,7 @@ where
             SHA256_WIDTH,
             records,
         );
-        AirProvingContext::simple(Arc::new(trace), vec![])
+        AirProvingContext::simple_no_pis(Arc::new(trace))
     }
 }
 
