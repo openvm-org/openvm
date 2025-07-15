@@ -118,7 +118,7 @@ where
     }
     let mut y_bytes = bytes.to_vec();
     // most significant bit stores the parity of the x-coordinate
-    let rec_id = y_bytes[Coordinate::<C>::NUM_LIMBS - 1] & 0b10000000;
+    let rec_id = (y_bytes[Coordinate::<C>::NUM_LIMBS - 1] & 0b10000000) >> 7;
     y_bytes[Coordinate::<C>::NUM_LIMBS - 1] &= 0b01111111;
     // from_le_bytes checks that y is reduced
     let y = Coordinate::<C>::from_le_bytes(&y_bytes)?;
@@ -136,6 +136,7 @@ where
 {
     let mut y_bytes = p.y().as_le_bytes().to_vec();
     if p.x().as_le_bytes()[0] & 1u8 == 1 {
+        debug_assert!(y_bytes[Coordinate::<C>::NUM_LIMBS - 1] & 0b10000000 == 0);
         y_bytes[Coordinate::<C>::NUM_LIMBS - 1] |= 0b10000000;
     }
     y_bytes
