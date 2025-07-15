@@ -111,7 +111,7 @@ pub mod test_utils {
         assert_eq!(instret_start, 0);
         let exe = VmExe::new(program);
         let state = vm.executor().create_initial_state(&exe, input);
-        let output = vm.execute_preflight(exe, state, num_insns, &trace_heights)?;
+        let output = vm.execute_preflight(exe, state, Some(num_insns), &trace_heights)?;
         Ok((output, vm))
     }
 

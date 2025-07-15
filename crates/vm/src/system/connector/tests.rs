@@ -100,7 +100,7 @@ fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingCo
         .execute_preflight(
             committed_exe.exe.clone(),
             from_state,
-            instructions.len() as u64,
+            None,
             &max_trace_heights,
         )
         .unwrap();
