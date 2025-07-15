@@ -17,7 +17,8 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{
-    program::Program, LocalOpcode, PhantomDiscriminant, PublishOpcode, SystemOpcode, VmOpcode,
+    program::Program, LocalOpcode, PhantomDiscriminant, PublishOpcode, SysPhantom, SysPhantom::Nop,
+    SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -49,7 +50,9 @@ use crate::{
             MemoryController, MemoryImage, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
         },
         native_adapter::{NativeAdapterAir, NativeAdapterStep},
-        phantom::PhantomChip,
+        phantom::{
+            CycleEndPhantomExecutor, CycleStartPhantomExecutor, NopPhantomExecutor, PhantomChip,
+        },
         poseidon2::Poseidon2PeripheryChip,
         program::{ProgramBus, ProgramChip},
         public_values::{
@@ -640,7 +643,22 @@ impl<F: PrimeField32> SystemComplex<F> {
             inventory.add_periphery_chip(chip);
         }
         let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
-        let phantom_chip = PhantomChip::new(execution_bus, program_bus, SystemOpcode::CLASS_OFFSET);
+        let mut phantom_chip =
+            PhantomChip::new(execution_bus, program_bus, SystemOpcode::CLASS_OFFSET);
+        // Use NopPhantomExecutor so the discriminant is set but `DebugPanic` is handled specially.
+        phantom_chip.add_sub_executor(
+            NopPhantomExecutor,
+            PhantomDiscriminant(SysPhantom::DebugPanic as u16),
+        );
+        phantom_chip.add_sub_executor(NopPhantomExecutor, PhantomDiscriminant(Nop as u16));
+        phantom_chip.add_sub_executor(
+            CycleStartPhantomExecutor,
+            PhantomDiscriminant(SysPhantom::CtStart as u16),
+        );
+        phantom_chip.add_sub_executor(
+            CycleEndPhantomExecutor,
+            PhantomDiscriminant(SysPhantom::CtEnd as u16),
+        );
         inventory
             .add_executor(RefCell::new(phantom_chip), [phantom_opcode])
             .unwrap();

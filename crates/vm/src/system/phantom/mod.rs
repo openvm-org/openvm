@@ -31,6 +31,7 @@ use crate::{
         PcIncOrSet, PhantomSubExecutor, Streams,
     },
     system::{
+        memory::online::GuestMemory,
         phantom::execution::{execute_impl, PhantomOperands, PhantomStateMut},
         program::ProgramBus,
     },
@@ -209,5 +210,59 @@ where
         let trace = RowMajorMatrix::new(rows, width);
 
         AirProofInput::simple(trace, vec![])
+    }
+}
+
+pub struct NopPhantomExecutor;
+pub struct CycleStartPhantomExecutor;
+pub struct CycleEndPhantomExecutor;
+
+impl<F> PhantomSubExecutor<F> for NopPhantomExecutor {
+    #[inline(always)]
+    fn phantom_execute(
+        &self,
+        _memory: &GuestMemory,
+        _streams: &mut Streams<F>,
+        _rng: &mut StdRng,
+        _discriminant: PhantomDiscriminant,
+        _a: u32,
+        _b: u32,
+        _c_upper: u16,
+    ) -> eyre::Result<()> {
+        Ok(())
+    }
+}
+
+impl<F> PhantomSubExecutor<F> for CycleStartPhantomExecutor {
+    #[inline(always)]
+    fn phantom_execute(
+        &self,
+        _memory: &GuestMemory,
+        _streams: &mut Streams<F>,
+        _rng: &mut StdRng,
+        _discriminant: PhantomDiscriminant,
+        _a: u32,
+        _b: u32,
+        _c_upper: u16,
+    ) -> eyre::Result<()> {
+        // TODO: implement cycle tracker for E1/E2
+        Ok(())
+    }
+}
+
+impl<F> PhantomSubExecutor<F> for CycleEndPhantomExecutor {
+    #[inline(always)]
+    fn phantom_execute(
+        &self,
+        _memory: &GuestMemory,
+        _streams: &mut Streams<F>,
+        _rng: &mut StdRng,
+        _discriminant: PhantomDiscriminant,
+        _a: u32,
+        _b: u32,
+        _c_upper: u16,
+    ) -> eyre::Result<()> {
+        // TODO: implement cycle tracker for E1/E2
+        Ok(())
     }
 }

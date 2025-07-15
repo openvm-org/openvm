@@ -7,10 +7,7 @@ use std::{
 use itertools::Itertools;
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
-    exe::VmExe,
-    instruction::Instruction,
-    program::{Program, DEFAULT_PC_STEP},
-    LocalOpcode, SysPhantom, SystemOpcode,
+    exe::VmExe, instruction::Instruction, program::Program, LocalOpcode, SystemOpcode,
 };
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
 use rand::{rngs::StdRng, SeedableRng};
@@ -291,21 +288,6 @@ unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     vm_state.exit_code = Ok(Some(pre_compute.exit_code));
 }
 
-unsafe fn debug_panic_execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
-    _pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
-) {
-    vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
-}
-
-unsafe fn nop_execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
-    _pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
-) {
-    vm_state.pc += DEFAULT_PC_STEP;
-    vm_state.instret += 1;
-}
-
 fn get_pre_compute_max_size<F: PrimeField32, E: InsExecutorE1<F>, P>(
     program: &Program<F>,
     chip_complex: &VmChipComplex<F, E, P>,
@@ -361,15 +343,8 @@ fn get_e2_pre_compute_max_size<F: PrimeField32, E: InsExecutorE2<F>, P>(
 }
 
 fn system_opcode_pre_compute_size<F: PrimeField32>(inst: &Instruction<F>) -> Option<usize> {
-    let discriminant = SysPhantom::from_repr(inst.c.as_canonical_u32() as u16);
     if inst.opcode == SystemOpcode::TERMINATE.global_opcode() {
         return Some(size_of::<TerminatePreCompute>());
-    } else if inst.opcode == SystemOpcode::PHANTOM.global_opcode() && discriminant.is_some() {
-        let discriminant = discriminant.unwrap();
-        let ret = match discriminant {
-            SysPhantom::DebugPanic | SysPhantom::Nop | SysPhantom::CtStart | SysPhantom::CtEnd => 0,
-        };
-        return Some(ret);
     }
     None
 }
@@ -482,16 +457,7 @@ fn get_system_opcode_handler<F: PrimeField32, Ctx: E1ExecutionCtx>(
     inst: &Instruction<F>,
     buf: &mut [u8],
 ) -> Option<ExecuteFunc<F, Ctx>> {
-    let discriminant = SysPhantom::from_repr(inst.c.as_canonical_u32() as u16);
-    if inst.opcode == SystemOpcode::PHANTOM.global_opcode() && discriminant.is_some() {
-        let discriminant = discriminant.unwrap();
-        return Some(match discriminant {
-            SysPhantom::Nop => nop_execute_e12_impl,
-            SysPhantom::DebugPanic => debug_panic_execute_e12_impl,
-            SysPhantom::CtStart => nop_execute_e12_impl,
-            SysPhantom::CtEnd => nop_execute_e12_impl,
-        });
-    } else if inst.opcode == SystemOpcode::TERMINATE.global_opcode() {
+    if inst.opcode == SystemOpcode::TERMINATE.global_opcode() {
         let pre_compute: &mut TerminatePreCompute = buf.borrow_mut();
         pre_compute.exit_code = inst.c.as_canonical_u32();
         return Some(terminate_execute_e12_impl);

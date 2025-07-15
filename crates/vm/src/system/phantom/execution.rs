@@ -70,7 +70,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
     let sub_executor = &*pre_compute.sub_executor;
-    execute_impl(
+    if let Err(e) = execute_impl(
         PhantomStateMut {
             pc: &mut vm_state.pc,
             memory: &mut vm_state.memory,
@@ -79,8 +79,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
         },
         &pre_compute.operands,
         sub_executor.as_ref(),
-    )
-    .unwrap();
+    ) {
+        vm_state.exit_code = Err(e);
+        return;
+    }
     vm_state.pc += DEFAULT_PC_STEP;
     vm_state.instret += 1;
 }
@@ -120,23 +122,26 @@ where
     let discriminant = PhantomDiscriminant(c as u16);
     // If not a system phantom sub-instruction (which is handled in
     // ExecutionSegment), look for a phantom sub-executor to handle it.
-    if SysPhantom::from_repr(discriminant.0).is_none() {
-        sub_executor
-            .phantom_execute(
-                state.memory,
-                state.streams,
-                state.rng,
-                discriminant,
-                a,
-                b,
-                (c >> 16) as u16,
-            )
-            .map_err(|e| ExecutionError::Phantom {
-                pc: *state.pc,
-                discriminant,
-                inner: e,
-            })?;
+    if let Some(discr) = SysPhantom::from_repr(discriminant.0) {
+        if discr == SysPhantom::DebugPanic {
+            return Err(ExecutionError::Fail { pc: *state.pc });
+        }
     }
+    sub_executor
+        .phantom_execute(
+            state.memory,
+            state.streams,
+            state.rng,
+            discriminant,
+            a,
+            b,
+            (c >> 16) as u16,
+        )
+        .map_err(|e| ExecutionError::Phantom {
+            pc: *state.pc,
+            discriminant,
+            inner: e,
+        })?;
 
     Ok(())
 }
