@@ -1,8 +1,9 @@
 use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
+    cell::RefCell,
+    rc::Rc,
 };
-use std::{cell::RefCell, rc::Rc};
 
 use crypto_bigint::{Encoding, U256};
 use k256::{
@@ -19,15 +20,12 @@ use openvm_circuit::{
         execution::ExecuteFunc,
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
-        E2PreCompute,
+        E2PreCompute, ExecutionBridge,
         ExecutionError::InvalidInstruction,
-        Result, StepExecutorE1, StepExecutorE2, VmSegmentState,
+        MatrixRecordArena, NewVmChipWrapper, Result, StepExecutorE1, StepExecutorE2,
+        VmSegmentState,
     },
-    system::memory::POINTER_MAX_BITS,
-};
-use openvm_circuit::{
-    arch::{ExecutionBridge, MatrixRecordArena, NewVmChipWrapper},
-    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
+    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper, POINTER_MAX_BITS},
 };
 use openvm_circuit_derive::{
     InsExecutorE1, InsExecutorE2, InstructionExecutor, TraceFiller, TraceStep,
