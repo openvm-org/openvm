@@ -78,6 +78,7 @@ fn main() {
             .file("cuda/src/extensions/native/castf.cu")
             .file("cuda/src/extensions/native/loadstore.cu")
             .file("cuda/src/extensions/native/fri/fri.cu")
+            .file("cuda/src/extensions/native/field_extension/field_extension.cu")
             .file("cuda/src/extensions/native/poseidon2/kernels.cu")
             .compile("tracegen_gpu_native");
     }
