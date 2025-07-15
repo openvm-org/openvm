@@ -1,3 +1,4 @@
+pub mod access_adapters;
 pub mod boundary;
 pub mod connector;
 pub mod cuda;

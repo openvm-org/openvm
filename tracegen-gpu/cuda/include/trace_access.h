@@ -59,7 +59,7 @@ struct RowSlice {
 #define COL_INDEX(STRUCT, FIELD) (offsetof(STRUCT<uint8_t>, FIELD))
 
 /// Compute the fixed array length of `FIELD` within `STRUCT<T>`
-#define COL_ARRAY_LEN(STRUCT, FIELD) (sizeof(STRUCT<uint8_t>::FIELD))
+#define COL_ARRAY_LEN(STRUCT, FIELD) (sizeof(static_cast<STRUCT<uint8_t>*>(nullptr)->FIELD))
 
 /// Write a single value into `FIELD` of struct `STRUCT<T>` at a given row.
 #define COL_WRITE_VALUE(ROW, STRUCT, FIELD, VALUE) (ROW).write(COL_INDEX(STRUCT, FIELD), VALUE)
@@ -73,4 +73,4 @@ struct RowSlice {
 
 /// Fill entire `FIELD` of `STRUCT<T>` with zeros.
 #define COL_FILL_ZERO(ROW, STRUCT, FIELD)                                                          \
-    (ROW).fill_zero(COL_INDEX(STRUCT, FIELD), sizeof(STRUCT<uint8_t>::FIELD))
+    (ROW).fill_zero(COL_INDEX(STRUCT, FIELD), sizeof(static_cast<STRUCT<uint8_t>*>(nullptr)->FIELD))
