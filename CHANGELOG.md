@@ -5,7 +5,7 @@ All notable changes to OpenVM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project follows a versioning principles documented in [VERSIONING.md](./VERSIONING.md).
 
-## v1.3.0 (2025-07-14)
+## v1.3.0 (2025-07-15)
 
 No circuit constraints or verifying keys were changed in this release.
 
@@ -29,6 +29,7 @@ Users are advised to switch to using the new guest libraries.
 - (SDK) New functions `generate_e2e_stark_proof` and `verify_e2e_stark_proof`
 
 ### Changed
+- (Toolchain) The `openvm` crate and `cargo openvm build` command have been updated to support both `getrandom` `v0.2` and `v0.3`.
 - (Primitives Libraries) In the algebra and elliptic curve primitive libraries, the `setup_*` functions have been removed from guest bindings and are now called on-demand within other relevant binding functions. Additionally, custom opcode initialization is now simplified through the inclusion of `openvm_init.rs` files and the `openvm::init!()` macro. Read the book for more details.
 - (CLI) The build command `cargo openvm build` now stores build artifacts in the `target/` to match cargo conventions.
 - (CLI) The `cargo openvm setup` command now supports skipping halo2 proving keys and outputs halo2 PK and STARK PK as separate files.
