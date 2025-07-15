@@ -8,7 +8,6 @@ use std::{
 use itertools::{zip_eq, Itertools};
 use openvm_circuit::{
     arch::{
-        create_and_initialize_chip_complex,
         execution_mode::{
             e1::E1ExecutionControl,
             tracegen::{TracegenCtx, TracegenExecutionControl},

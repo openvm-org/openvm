@@ -23,7 +23,10 @@ use openvm_stark_sdk::{
 
 use super::VmConnectorPvs;
 use crate::{
-    arch::{Streams, SystemConfig, VirtualMachine, VmCircuitConfig, VmState, CONNECTOR_AIR_ID},
+    arch::{
+        PreflightExecutionOutput, Streams, SystemConfig, VirtualMachine, VmCircuitConfig, VmState,
+        CONNECTOR_AIR_ID,
+    },
     system::{
         memory::{online::GuestMemory, AddressMap},
         program::trace::VmCommittedExe,
@@ -89,7 +92,11 @@ fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingCo
     vm.transport_init_memory_to_device(&memory);
     vm.load_program(committed_exe.get_committed_trace());
     let from_state = VmState::new(0, 0, memory, Streams::default(), 0);
-    let (system_records, record_arenas, _) = vm
+    let PreflightExecutionOutput {
+        system_records,
+        record_arenas,
+        ..
+    } = vm
         .execute_preflight(
             committed_exe.exe.clone(),
             from_state,

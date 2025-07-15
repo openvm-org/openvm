@@ -1,45 +1,32 @@
 use bon::Builder;
 use derive_more::derive::From;
 use openvm_algebra_circuit::{
-    Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
-    ModularExtensionExecutor, ModularExtensionPeriphery,
+    Fp2Extension, Fp2ExtensionExecutor, ModularExtension, ModularExtensionExecutor,
 };
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
+use openvm_bigint_circuit::{Int256, Int256Executor};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
-    arch::{
-        instructions::NATIVE_AS, InitFileGenerator, SystemConfig, SystemExecutor, SystemPeriphery,
-        VmChipComplex, VmConfig, VmInventoryError,
-    },
+    arch::{instructions::NATIVE_AS, InitFileGenerator, SystemConfig, VmChipComplex, VmConfig},
     circuit_derive::{Chip, ChipUsageGetter},
-    derive::{AnyEnum, InsExecutorE1, InstructionExecutor},
+    derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig},
+    system::SystemExecutor,
 };
-use openvm_ecc_circuit::{
-    WeierstrassExtension, WeierstrassExtensionExecutor, WeierstrassExtensionPeriphery,
-};
+use openvm_ecc_circuit::{WeierstrassExtension, WeierstrassExtensionExecutor};
 use openvm_ecc_transpiler::EccTranspilerExtension;
-use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
+use openvm_keccak256_circuit::{Keccak256, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
-use openvm_native_circuit::{
-    CastFExtension, CastFExtensionExecutor, CastFExtensionPeriphery, Native, NativeExecutor,
-    NativePeriphery,
-};
+use openvm_native_circuit::{CastFExtension, CastFExtensionExecutor, Native, NativeExecutor};
 use openvm_native_transpiler::LongFormTranspilerExtension;
-use openvm_pairing_circuit::{
-    PairingExtension, PairingExtensionExecutor, PairingExtensionPeriphery,
-};
+use openvm_pairing_circuit::{PairingExtension, PairingExtensionExecutor};
 use openvm_pairing_transpiler::PairingTranspilerExtension;
-use openvm_rv32im_circuit::{
-    Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
-    Rv32MExecutor, Rv32MPeriphery,
-};
+use openvm_rv32im_circuit::{Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
+use openvm_sha256_circuit::{Sha256, Sha256Executor};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::p3_field::Field;
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
 
@@ -49,7 +36,6 @@ use crate::F;
 #[serde(from = "SdkVmConfigWithDefaultDeser")]
 pub struct SdkVmConfig {
     pub system: SdkSystemConfig,
-
     pub rv32i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
@@ -65,64 +51,34 @@ pub struct SdkVmConfig {
     pub ecc: Option<WeierstrassExtension>,
 }
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, InsExecutorE1)]
-pub enum SdkVmConfigExecutor<F: PrimeField32> {
+#[derive(Clone, From, AnyEnum, InsExecutorE1, InstructionExecutor)]
+pub enum SdkVmConfigExecutor<F: Field> {
     #[any_enum]
     System(SystemExecutor<F>),
     #[any_enum]
-    Rv32i(Rv32IExecutor<F>),
+    Rv32i(Rv32IExecutor),
     #[any_enum]
-    Io(Rv32IoExecutor<F>),
+    Io(Rv32IoExecutor),
     #[any_enum]
-    Keccak(Keccak256Executor<F>),
+    Keccak(Keccak256Executor),
     #[any_enum]
-    Sha256(Sha256Executor<F>),
+    Sha256(Sha256Executor),
     #[any_enum]
     Native(NativeExecutor<F>),
     #[any_enum]
-    Rv32m(Rv32MExecutor<F>),
+    Rv32m(Rv32MExecutor),
     #[any_enum]
-    BigInt(Int256Executor<F>),
+    BigInt(Int256Executor),
     #[any_enum]
-    Modular(ModularExtensionExecutor<F>),
+    Modular(ModularExtensionExecutor),
     #[any_enum]
-    Fp2(Fp2ExtensionExecutor<F>),
+    Fp2(Fp2ExtensionExecutor),
     #[any_enum]
     Pairing(PairingExtensionExecutor<F>),
     #[any_enum]
-    Ecc(WeierstrassExtensionExecutor<F>),
+    Ecc(WeierstrassExtensionExecutor),
     #[any_enum]
-    CastF(CastFExtensionExecutor<F>),
-}
-
-#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
-pub enum SdkVmConfigPeriphery<F: PrimeField32> {
-    #[any_enum]
-    System(SystemPeriphery<F>),
-    #[any_enum]
-    Rv32i(Rv32IPeriphery<F>),
-    #[any_enum]
-    Io(Rv32IoPeriphery<F>),
-    #[any_enum]
-    Keccak(Keccak256Periphery<F>),
-    #[any_enum]
-    Sha256(Sha256Periphery<F>),
-    #[any_enum]
-    Native(NativePeriphery<F>),
-    #[any_enum]
-    Rv32m(Rv32MPeriphery<F>),
-    #[any_enum]
-    BigInt(Int256Periphery<F>),
-    #[any_enum]
-    Modular(ModularExtensionPeriphery<F>),
-    #[any_enum]
-    Fp2(Fp2ExtensionPeriphery<F>),
-    #[any_enum]
-    Pairing(PairingExtensionPeriphery<F>),
-    #[any_enum]
-    Ecc(WeierstrassExtensionPeriphery<F>),
-    #[any_enum]
-    CastF(CastFExtensionPeriphery<F>),
+    CastF(CastFExtensionExecutor),
 }
 
 impl SdkVmConfig {
@@ -165,78 +121,78 @@ impl SdkVmConfig {
     }
 }
 
-impl<F: PrimeField32> VmConfig<F> for SdkVmConfig {
-    type Executor = SdkVmConfigExecutor<F>;
-    type Periphery = SdkVmConfigPeriphery<F>;
+// impl<F: PrimeField32> VmConfig<F> for SdkVmConfig {
+//     type Executor = SdkVmConfigExecutor<F>;
+//     type Periphery = SdkVmConfigPeriphery<F>;
 
-    fn system(&self) -> &SystemConfig {
-        &self.system.config
-    }
+//     fn system(&self) -> &SystemConfig {
+//         &self.system.config
+//     }
 
-    fn system_mut(&mut self) -> &mut SystemConfig {
-        &mut self.system.config
-    }
+//     fn system_mut(&mut self) -> &mut SystemConfig {
+//         &mut self.system.config
+//     }
 
-    fn create_chip_complex(
-        &self,
-    ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
-        let mut complex = self.system.config.create_chip_complex()?.transmute();
+//     fn create_chip_complex(
+//         &self,
+//     ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
+//         let mut complex = self.system.config.create_chip_complex()?.transmute();
 
-        if self.rv32i.is_some() {
-            complex = complex.extend(&Rv32I)?;
-        }
-        if self.io.is_some() {
-            complex = complex.extend(&Rv32Io)?;
-        }
-        if self.keccak.is_some() {
-            complex = complex.extend(&Keccak256)?;
-        }
-        if self.sha256.is_some() {
-            complex = complex.extend(&Sha256)?;
-        }
-        if self.native.is_some() {
-            complex = complex.extend(&Native)?;
-        }
-        if self.castf.is_some() {
-            complex = complex.extend(&CastFExtension)?;
-        }
+//         if self.rv32i.is_some() {
+//             complex = complex.extend(&Rv32I)?;
+//         }
+//         if self.io.is_some() {
+//             complex = complex.extend(&Rv32Io)?;
+//         }
+//         if self.keccak.is_some() {
+//             complex = complex.extend(&Keccak256)?;
+//         }
+//         if self.sha256.is_some() {
+//             complex = complex.extend(&Sha256)?;
+//         }
+//         if self.native.is_some() {
+//             complex = complex.extend(&Native)?;
+//         }
+//         if self.castf.is_some() {
+//             complex = complex.extend(&CastFExtension)?;
+//         }
 
-        if let Some(rv32m) = self.rv32m {
-            let mut rv32m = rv32m;
-            if let Some(ref bigint) = self.bigint {
-                rv32m.range_tuple_checker_sizes[0] =
-                    rv32m.range_tuple_checker_sizes[0].max(bigint.range_tuple_checker_sizes[0]);
-                rv32m.range_tuple_checker_sizes[1] =
-                    rv32m.range_tuple_checker_sizes[1].max(bigint.range_tuple_checker_sizes[1]);
-            }
-            complex = complex.extend(&rv32m)?;
-        }
-        if let Some(bigint) = self.bigint {
-            let mut bigint = bigint;
-            if let Some(ref rv32m) = self.rv32m {
-                bigint.range_tuple_checker_sizes[0] =
-                    rv32m.range_tuple_checker_sizes[0].max(bigint.range_tuple_checker_sizes[0]);
-                bigint.range_tuple_checker_sizes[1] =
-                    rv32m.range_tuple_checker_sizes[1].max(bigint.range_tuple_checker_sizes[1]);
-            }
-            complex = complex.extend(&bigint)?;
-        }
-        if let Some(ref modular) = self.modular {
-            complex = complex.extend(modular)?;
-        }
-        if let Some(ref fp2) = self.fp2 {
-            complex = complex.extend(fp2)?;
-        }
-        if let Some(ref pairing) = self.pairing {
-            complex = complex.extend(pairing)?;
-        }
-        if let Some(ref ecc) = self.ecc {
-            complex = complex.extend(ecc)?;
-        }
+//         if let Some(rv32m) = self.rv32m {
+//             let mut rv32m = rv32m;
+//             if let Some(ref bigint) = self.bigint {
+//                 rv32m.range_tuple_checker_sizes[0] =
+//                     rv32m.range_tuple_checker_sizes[0].max(bigint.range_tuple_checker_sizes[0]);
+//                 rv32m.range_tuple_checker_sizes[1] =
+//                     rv32m.range_tuple_checker_sizes[1].max(bigint.range_tuple_checker_sizes[1]);
+//             }
+//             complex = complex.extend(&rv32m)?;
+//         }
+//         if let Some(bigint) = self.bigint {
+//             let mut bigint = bigint;
+//             if let Some(ref rv32m) = self.rv32m {
+//                 bigint.range_tuple_checker_sizes[0] =
+//                     rv32m.range_tuple_checker_sizes[0].max(bigint.range_tuple_checker_sizes[0]);
+//                 bigint.range_tuple_checker_sizes[1] =
+//                     rv32m.range_tuple_checker_sizes[1].max(bigint.range_tuple_checker_sizes[1]);
+//             }
+//             complex = complex.extend(&bigint)?;
+//         }
+//         if let Some(ref modular) = self.modular {
+//             complex = complex.extend(modular)?;
+//         }
+//         if let Some(ref fp2) = self.fp2 {
+//             complex = complex.extend(fp2)?;
+//         }
+//         if let Some(ref pairing) = self.pairing {
+//             complex = complex.extend(pairing)?;
+//         }
+//         if let Some(ref ecc) = self.ecc {
+//             complex = complex.extend(ecc)?;
+//         }
 
-        Ok(complex)
-    }
-}
+//         Ok(complex)
+//     }
+// }
 
 impl InitFileGenerator for SdkVmConfig {
     fn generate_init_file_contents(&self) -> Option<String> {

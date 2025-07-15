@@ -8,7 +8,7 @@ use tracing::info_span;
 
 use super::vm::SingleSegmentVmProver;
 use crate::{
-    prover::vm::{local::VmLocalProver, types::VmProvingKey, ContinuationVmProver},
+    prover::vm::{local::VmLocalProver, types::VmProvingKey,
     NonRootCommittedExe, StdIn, F, SC,
 };
 

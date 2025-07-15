@@ -20,7 +20,7 @@ use openvm_instructions::exe::{SparseMemoryImage, VmExe};
 use openvm_stark_backend::{
     config::{Com, StarkGenericConfig, Val},
     engine::StarkEngine,
-    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
+    keygen::types::MultiStarkVerifyingKey,
     p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField32},
     p3_util::log2_strict_usize,
     proof::Proof,
@@ -732,12 +732,12 @@ where
         &self,
         exe: VmExe<Val<E::SC>>,
         state: VmState<Val<E::SC>>,
-        num_insns: u64,
+        num_insns: Option<u64>,
         trace_heights: &[u32],
     ) -> Result<PreflightExecutionOutput<Val<E::SC>, VC::RecordArena>, ExecutionError>
     where
         Val<E::SC>: PrimeField32,
-        VC::Executor: Clone + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+        VC::Executor: InstructionExecutor<Val<E::SC>, VC::RecordArena>,
     {
         let handler = ProgramHandler::new(exe.program, &self.executor.inventory)?;
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
@@ -753,7 +753,7 @@ where
             instance.set_fn_bounds(exe.fn_bounds.clone());
         }
 
-        let instret_end = state.instret + num_insns;
+        let instret_end = num_insns.map(|ni| state.instret.saturating_add(ni));
         // TODO[jpw]: figure out how to compute RA specific main_widths
         let main_widths = self
             .pk
@@ -764,7 +764,7 @@ where
         let capacities = zip_eq(trace_heights, main_widths)
             .map(|(&h, w)| (h as usize, w))
             .collect::<Vec<_>>();
-        let ctx = TracegenCtx::new_with_capacity(&capacities, Some(instret_end));
+        let ctx = TracegenCtx::new_with_capacity(&capacities, instret_end);
 
         let system_config: &SystemConfig = self.config().as_ref();
         let adapter_offset = system_config.access_adapter_air_id_offset();
@@ -889,6 +889,9 @@ where
     /// Generates proof for zkVM execution for exactly `num_insns` instructions for a given program
     /// and a given starting state.
     ///
+    /// **Note**: The cached program trace must be loaded via [`load_program`](Self::load_program)
+    /// before calling this function.
+    ///
     /// Returns:
     /// - proof for the execution segment
     /// - final memory state only if execution ends in successful termination (exit code 0). This
@@ -896,14 +899,13 @@ where
     pub fn prove(
         &mut self,
         exe: VmExe<Val<E::SC>>,
-        cached_program_trace: CommittedTraceData<E::PB>,
         state: VmState<Val<E::SC>>,
-        num_insns: u64,
+        num_insns: Option<u64>,
         trace_heights: &[u32],
     ) -> Result<(Proof<E::SC>, Option<GuestMemory>), VirtualMachineError>
     where
         Val<E::SC>: PrimeField32,
-        VC::Executor: Clone + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+        VC::Executor: InstructionExecutor<Val<E::SC>, VC::RecordArena>,
     {
         self.transport_init_memory_to_device(&state.memory);
 
@@ -915,7 +917,6 @@ where
         // drop final memory unless this is a terminal segment and the exit code is success
         let final_memory =
             (system_records.exit_code == Some(ExitCode::Success as u32)).then_some(to_state.memory);
-        self.chip_complex.system.load_program(cached_program_trace);
         let ctx = self.generate_proving_ctx(system_records, record_arenas)?;
 
         let proof = self.engine.prove(&self.pk, ctx);
@@ -1021,14 +1022,6 @@ where
     }
 }
 
-/// Prover for a specific exe in a specific continuation VM using a specific Stark config.
-pub trait ContinuationVmProver<SC: StarkGenericConfig> {
-    fn prove(
-        &mut self,
-        input: impl Into<Streams<Val<SC>>>,
-    ) -> Result<ContinuationVmProof<SC>, VirtualMachineError>;
-}
-
 #[derive(Serialize, Deserialize)]
 #[serde(bound(
     serialize = "Com<SC>: Serialize",
@@ -1037,6 +1030,27 @@ pub trait ContinuationVmProver<SC: StarkGenericConfig> {
 pub struct ContinuationVmProof<SC: StarkGenericConfig> {
     pub per_segment: Vec<Proof<SC>>,
     pub user_public_values: UserPublicValuesProof<{ CHUNK }, Val<SC>>,
+}
+
+/// Prover for a specific exe in a specific continuation VM using a specific Stark config.
+pub trait ContinuationVmProver<SC: StarkGenericConfig> {
+    fn prove(
+        &mut self,
+        input: impl Into<Streams<Val<SC>>>,
+    ) -> Result<ContinuationVmProof<SC>, VirtualMachineError>;
+}
+
+/// Prover for a specific exe in a specific single-segment VM using a specific Stark config.
+///
+/// Does not run metered execution and directly runs preflight execution. The `prove` function must
+/// be provided with the expected maximum `trace_heights` to use to allocate record arena
+/// capacities.
+pub trait SingleSegmentVmProver<SC: StarkGenericConfig> {
+    fn prove(
+        &mut self,
+        input: impl Into<Streams<Val<SC>>>,
+        trace_heights: &[u32],
+    ) -> Result<Proof<SC>, VirtualMachineError>;
 }
 
 /// Virtual machine prover instance for a fixed VM config and a fixed program. For use in proving a
@@ -1071,8 +1085,7 @@ where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
     VC: VmProverConfig<E::SC, E::PB>,
-    VC::Executor:
-        Clone + InsExecutorE1<Val<E::SC>> + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+    VC::Executor: InsExecutorE1<Val<E::SC>> + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
 {
     /// First performs metered execution (E2) to determine segments. Then sequentially proves each
     /// segment. The proof for each segment uses the specified [ProverBackend], but the proof for
@@ -1108,7 +1121,7 @@ where
                 system_records,
                 record_arenas,
                 to_state,
-            } = vm.execute_preflight(exe.clone(), from_state, num_insns, &trace_heights)?;
+            } = vm.execute_preflight(exe.clone(), from_state, Some(num_insns), &trace_heights)?;
             state = Some(to_state);
 
             let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
@@ -1127,6 +1140,28 @@ where
             per_segment: proofs,
             user_public_values,
         })
+    }
+}
+
+impl<E, VC> SingleSegmentVmProver<E::SC> for VmLocalProver<E, VC>
+where
+    E: StarkEngine,
+    Val<E::SC>: PrimeField32,
+    VC: VmProverConfig<E::SC, E::PB>,
+    VC::Executor: InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+{
+    fn prove(
+        &mut self,
+        input: impl Into<Streams<Val<E::SC>>>,
+        trace_heights: &[u32],
+    ) -> Result<Proof<E::SC>, VirtualMachineError> {
+        let input = input.into();
+        let vm = &mut self.vm;
+        let exe = &self.exe;
+        assert!(!vm.config().as_ref().continuation_enabled);
+        let state = vm.executor().create_initial_state(exe, input);
+        let (proof, _) = vm.prove(exe.clone(), state, None, trace_heights)?;
+        Ok(proof)
     }
 }
 

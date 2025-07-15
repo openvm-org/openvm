@@ -3,7 +3,7 @@ use std::sync::Arc;
 use derivative::Derivative;
 use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
-    arch::{InsExecutorE1, VirtualMachine, VmComplexTraceHeights, VmConfig},
+    arch::{VirtualMachine, VmCircuitConfig, VmConfig},
     system::{memory::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
 };
 use openvm_continuations::verifier::{
@@ -50,7 +50,7 @@ use crate::{
 };
 
 pub mod asm;
-pub(crate) mod dummy;
+// pub(crate) mod dummy;
 pub mod perm;
 #[cfg(feature = "evm-prove")]
 pub mod static_verifier;
@@ -69,20 +69,20 @@ pub struct AppVerifyingKey {
     pub memory_dimensions: MemoryDimensions,
 }
 
-#[cfg(feature = "evm-prove")]
-#[derive(Clone, Serialize, Deserialize)]
-pub struct AggProvingKey {
-    pub agg_stark_pk: AggStarkProvingKey,
-    pub halo2_pk: Halo2ProvingKey,
-}
+// #[cfg(feature = "evm-prove")]
+// #[derive(Clone, Serialize, Deserialize)]
+// pub struct AggProvingKey {
+//     pub agg_stark_pk: AggStarkProvingKey,
+//     pub halo2_pk: Halo2ProvingKey,
+// }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct AggStarkProvingKey {
-    pub leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
-    pub internal_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
-    pub internal_committed_exe: Arc<NonRootCommittedExe>,
-    pub root_verifier_pk: RootVerifierProvingKey,
-}
+// #[derive(Clone, Serialize, Deserialize)]
+// pub struct AggStarkProvingKey {
+//     pub leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
+//     pub internal_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
+//     pub internal_committed_exe: Arc<NonRootCommittedExe>,
+//     pub root_verifier_pk: RootVerifierProvingKey,
+// }
 
 /// Attention: the size of this struct is VERY large, usually >10GB.
 #[cfg(feature = "evm-prove")]
@@ -97,16 +97,11 @@ pub struct Halo2ProvingKey {
     pub profiling: bool,
 }
 
-impl<VC: VmConfig<F>> AppProvingKey<VC>
-where
-    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
-    VC::Periphery: Chip<SC>,
-{
+impl<VC: VmCircuitConfig<SC>> AppProvingKey<VC> {
     pub fn keygen(config: AppConfig<VC>) -> Self {
         let app_engine = BabyBearPoseidon2Engine::new(config.app_fri_params.fri_params);
         let app_vm_pk = {
-            let vm = VirtualMachine::new(app_engine, config.app_vm_config.clone());
-            let vm_pk = vm.keygen();
+            let vm_pk = config.app_vm_config.keygen(app_engine.config());
             assert!(
                 vm_pk.max_constraint_degree
                     <= config.app_fri_params.fri_params.max_constraint_degree()
@@ -255,6 +250,7 @@ fn check_recursive_verifier_size<SC: StarkGenericConfig>(
     }
 }
 
+/*
 impl AggStarkProvingKey {
     pub fn keygen(config: AggStarkConfig) -> Self {
         tracing::info_span!("agg_stark_keygen", group = "agg_stark_keygen")
@@ -405,8 +401,9 @@ pub struct RootVerifierProvingKey {
     pub root_committed_exe: Arc<VmCommittedExe<RootSC>>,
     /// The constant trace heights, ordered by AIR ID.
     pub air_heights: Vec<usize>,
-    /// The constant trace heights in a semantic way for VM.
-    pub vm_heights: VmComplexTraceHeights,
+    // TODO
+    // The constant trace heights in a semantic way for VM.
+    // pub vm_heights: VmComplexTraceHeights,
 }
 
 impl RootVerifierProvingKey {
@@ -457,6 +454,7 @@ impl AggProvingKey {
         }
     }
 }
+*/
 
 pub fn leaf_keygen(
     fri_params: FriParameters,
@@ -464,7 +462,7 @@ pub fn leaf_keygen(
 ) -> Arc<VmProvingKey<SC, NativeConfig>> {
     let leaf_engine = BabyBearPoseidon2Engine::new(fri_params);
     let leaf_vm_pk = info_span!("keygen", group = "leaf")
-        .in_scope(|| VirtualMachine::new(leaf_engine, leaf_vm_config.clone()).keygen());
+        .in_scope(|| leaf_vm_config.keygen(leaf_engine.config()));
     Arc::new(VmProvingKey {
         fri_params,
         vm_config: leaf_vm_config,

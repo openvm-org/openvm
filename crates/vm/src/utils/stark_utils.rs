@@ -1,17 +1,8 @@
 use itertools::{multiunzip, Itertools};
-use openvm_instructions::{exe::VmExe, program::Program};
+use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     engine::VerificationData,
-    p3_field::PrimeField32,
-    proof::Proof,
-    prover::{
-        cpu::{CpuBackend, CpuDevice},
-        hal::DeviceDataTransporter,
-        types::AirProofRawInput,
-    },
-    verifier::VerificationError,
-    Chip,
+    prover::{cpu::CpuBackend, hal::DeviceDataTransporter, types::AirProofRawInput},
 };
 use openvm_stark_sdk::{
     config::{
@@ -20,18 +11,15 @@ use openvm_stark_sdk::{
     },
     engine::{StarkEngine, StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
-    utils::ProofInputForTest,
 };
 
-#[cfg(feature = "bench-metrics")]
-use crate::arch::vm::VmExecutor;
 use crate::{
     arch::{
         execution_mode::metered::Segment, vm::VirtualMachine, ExitCode, InsExecutorE1,
         InstructionExecutor, MatrixRecordArena, PreflightExecutionOutput, Streams, VmCircuitConfig,
-        VmConfig, VmExecutionConfig, VmProverConfig,
+        VmExecutionConfig, VmProverConfig,
     },
-    system::memory::{online::GuestMemory, MemoryImage},
+    system::memory::MemoryImage,
 };
 
 pub fn air_test<VC>(config: VC, exe: impl Into<VmExe<BabyBear>>)
@@ -143,7 +131,7 @@ where
             system_records,
             record_arenas,
             to_state,
-        } = vm.execute_preflight(exe.clone(), from_state, num_insns, &trace_heights)?;
+        } = vm.execute_preflight(exe.clone(), from_state, Some(num_insns), &trace_heights)?;
         state = Some(to_state);
         exit_code = system_records.exit_code;
 
