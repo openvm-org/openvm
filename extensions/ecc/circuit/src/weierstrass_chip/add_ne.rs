@@ -4,6 +4,14 @@ use std::{
 };
 use std::{cell::RefCell, rc::Rc};
 
+use crypto_bigint::{Encoding, U256};
+use k256::{
+    elliptic_curve::{
+        sec1::{FromEncodedPoint, ToEncodedPoint},
+        PrimeField,
+    },
+    AffinePoint, EncodedPoint, FieldElement, ProjectivePoint,
+};
 use num_bigint::BigUint;
 use openvm_algebra_circuit::FieldExprVecHeapStep;
 use openvm_circuit::{
@@ -39,7 +47,10 @@ use openvm_mod_circuit_builder::{
 use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
 
-use super::WeierstrassAir;
+use super::{
+    utils::{blocks_to_field_element, field_element_to_blocks, CurveType},
+    WeierstrassAir,
+};
 
 // Assumes that (x1, y1), (x2, y2) both lie on the curve and are not the identity point.
 // Further assumes that x1, x2 are not equal in the coordinate field.
@@ -200,13 +211,22 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> StepExecutor
         let pre_compute: &mut EcAddNePreCompute = data.borrow_mut();
 
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
-        let fn_ptr = if is_setup {
-            execute_e1_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>
-        } else {
-            execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE>
-        };
 
-        Ok(fn_ptr)
+        if is_setup {
+            Ok(execute_e1_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
+        } else {
+            // Check if it's k256 in pre-compute
+            let is_k256 = pre_compute.modulus
+                == &BigUint::from_bytes_be(&U256::from_be_hex(FieldElement::MODULUS).to_be_bytes());
+
+            let fn_ptr = if is_k256 {
+                execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>
+            } else {
+                execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::Generic as u8 }>
+            };
+
+            Ok(fn_ptr)
+        }
     }
 }
 
@@ -232,13 +252,22 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> StepExecutor
         pre_compute.chip_idx = chip_idx as u32;
 
         let is_setup = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        let fn_ptr = if is_setup {
-            execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>
-        } else {
-            execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE>
-        };
 
-        Ok(fn_ptr)
+        if is_setup {
+            Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
+        } else {
+            // Check if it's k256 in pre-compute
+            let is_k256 = pre_compute.data.modulus
+                == &BigUint::from_bytes_be(&U256::from_be_hex(FieldElement::MODULUS).to_be_bytes());
+
+            let fn_ptr = if is_k256 {
+                execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>
+            } else {
+                execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::Generic as u8 }>
+            };
+
+            Ok(fn_ptr)
+        }
     }
 }
 
@@ -247,13 +276,13 @@ unsafe fn execute_e1_impl<
     CTX: E1ExecutionCtx,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
+    const CURVE_TYPE: u8,
 >(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
 ) {
     let pre_compute: &EcAddNePreCompute = pre_compute.borrow();
-
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE>(pre_compute, vm_state);
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE>(pre_compute, vm_state);
 }
 
 unsafe fn execute_e1_setup_impl<
@@ -275,6 +304,7 @@ unsafe fn execute_e2_impl<
     CTX: E2ExecutionCtx,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
+    const CURVE_TYPE: u8,
 >(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, CTX>,
@@ -283,7 +313,7 @@ unsafe fn execute_e2_impl<
     vm_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE>(&pre_compute.data, vm_state);
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE>(&pre_compute.data, vm_state);
 }
 
 unsafe fn execute_e2_setup_impl<
@@ -307,6 +337,7 @@ unsafe fn execute_e12_impl<
     CTX: E1ExecutionCtx,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
+    const CURVE_TYPE: u8,
 >(
     pre_compute: &EcAddNePreCompute,
     vm_state: &mut VmSegmentState<F, CTX>,
@@ -322,8 +353,11 @@ unsafe fn execute_e12_impl<
         from_fn(|i| vm_state.vm_read(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
     });
 
-    // Perform elliptic curve addition directly
-    let output_data = ec_add_ne::<BLOCKS, BLOCK_SIZE>(read_data, pre_compute.modulus);
+    let output_data = if CURVE_TYPE == CurveType::K256 as u8 {
+        ec_add_ne_k256::<BLOCKS, BLOCK_SIZE>(read_data)
+    } else {
+        ec_add_ne_generic::<BLOCKS, BLOCK_SIZE>(read_data, pre_compute.modulus)
+    };
 
     let rd_val = u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
@@ -377,7 +411,40 @@ unsafe fn execute_e12_setup_impl<
 }
 
 #[inline(always)]
-fn ec_add_ne<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+fn ec_add_ne_k256<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
+) -> [[u8; BLOCK_SIZE]; BLOCKS] {
+    // Extract coordinates
+    let x1 = blocks_to_field_element::<BLOCKS, BLOCK_SIZE>(&input_data[0][..BLOCKS / 2]);
+    let y1 = blocks_to_field_element::<BLOCKS, BLOCK_SIZE>(&input_data[0][BLOCKS / 2..]);
+    let x2 = blocks_to_field_element::<BLOCKS, BLOCK_SIZE>(&input_data[1][..BLOCKS / 2]);
+    let y2 = blocks_to_field_element::<BLOCKS, BLOCK_SIZE>(&input_data[1][BLOCKS / 2..]);
+
+    let point1 = EncodedPoint::from_affine_coordinates(&x1.to_bytes(), &y1.to_bytes(), false);
+    let point2 = EncodedPoint::from_affine_coordinates(&x2.to_bytes(), &y2.to_bytes(), false);
+
+    let point1 = AffinePoint::from_encoded_point(&point1).unwrap();
+    let point2 = AffinePoint::from_encoded_point(&point2).unwrap();
+
+    let result = (ProjectivePoint::from(point1) + ProjectivePoint::from(point2)).to_affine();
+
+    let encoded = result.to_encoded_point(false);
+
+    let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
+    match encoded.coordinates() {
+        k256::elliptic_curve::sec1::Coordinates::Uncompressed { x, y } => {
+            let x_fe = FieldElement::from_bytes(x).unwrap();
+            let y_fe = FieldElement::from_bytes(y).unwrap();
+
+            field_element_to_blocks(&x_fe, &mut output, 0);
+            field_element_to_blocks(&y_fe, &mut output, BLOCKS / 2);
+        }
+        _ => panic!("Expected uncompressed coordinates"),
+    }
+    output
+}
+
+fn ec_add_ne_generic<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
     field_modulus: &BigUint,
 ) -> [[u8; BLOCK_SIZE]; BLOCKS] {

@@ -31,6 +31,8 @@ serde = { workspace = true }
 serde_with = { workspace = true }
 lazy_static = { workspace = true }
 hex-literal = { workspace = true }
+k256 = { workspace = true, features = ["arithmetic", "expose-field"] }
+crypto-bigint = { workspace = true }
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }

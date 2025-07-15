@@ -1,5 +1,6 @@
 mod add_ne;
 mod double;
+mod utils;
 
 pub use add_ne::*;
 pub use double::*;
