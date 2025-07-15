@@ -39,7 +39,7 @@ use crate::{
 
 mod air;
 mod columns;
-pub(crate) mod records;
+pub mod records;
 #[cfg(test)]
 mod tests;
 
