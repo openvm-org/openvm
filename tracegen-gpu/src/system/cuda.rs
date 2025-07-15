@@ -241,3 +241,45 @@ pub mod public_values {
         ))
     }
 }
+
+pub mod access_adapters {
+    use super::*;
+    use crate::system::access_adapters::{OffsetInfo, NUM_ADAPTERS};
+
+    extern "C" {
+        fn _access_adapters_tracegen(
+            d_traces: *const *mut std::ffi::c_void,
+            num_adapters: usize,
+            d_unpadded_heights: *const usize,
+            d_widths: *const usize,
+            num_records: usize,
+            d_records: *const u8,
+            d_record_offsets: *mut u32,
+            d_range_checker: *mut u32,
+            range_checker_bins: u32,
+        ) -> i32;
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn tracegen<T>(
+        d_trace_ptrs: &DeviceBuffer<*mut std::ffi::c_void>,
+        d_unpadded_heights: &DeviceBuffer<usize>,
+        d_widths: &DeviceBuffer<usize>,
+        num_records: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_record_offsets: &DeviceBuffer<OffsetInfo>,
+        d_range_checker: &DeviceBuffer<T>,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_access_adapters_tracegen(
+            d_trace_ptrs.as_ptr(),
+            NUM_ADAPTERS,
+            d_unpadded_heights.as_ptr(),
+            d_widths.as_ptr(),
+            num_records,
+            d_records.as_ptr(),
+            d_record_offsets.as_mut_ptr() as *mut u32,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+        ))
+    }
+}

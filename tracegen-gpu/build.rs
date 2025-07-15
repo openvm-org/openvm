@@ -117,7 +117,8 @@ fn main() {
 
     {
         let mut b = common.clone();
-        b.file("cuda/src/system/boundary.cu")
+        b.file("cuda/src/system/access_adapters.cu")
+            .file("cuda/src/system/boundary.cu")
             .file("cuda/src/system/phantom.cu")
             .file("cuda/src/system/poseidon2.cu")
             .file("cuda/src/system/program.cu")

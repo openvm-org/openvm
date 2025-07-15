@@ -2,7 +2,7 @@
 
 #include "trace_access.h"
 
-__host__ __device__ uint32_t
+__host__ __device__ static inline uint32_t
 compute_k(uint32_t num_flags, uint32_t max_degree, bool reserve_invalid) {
     if (reserve_invalid) {
         num_flags++;
