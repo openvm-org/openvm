@@ -950,6 +950,7 @@ pub trait AdapterTraceFiller<F, CTX>: AdapterTraceStep<F, CTX> {
 // TODO: Rename core/step to operator
 pub trait StepExecutorE1<F> {
     fn pre_compute_size(&self) -> usize;
+    fn pre_compute_align(&self) -> usize;
     fn pre_compute_e1<Ctx>(
         &self,
         pc: u32,
@@ -962,6 +963,7 @@ pub trait StepExecutorE1<F> {
 
 pub trait StepExecutorE2<F> {
     fn e2_pre_compute_size(&self) -> usize;
+    fn e2_pre_compute_align(&self) -> usize;
     fn pre_compute_e2<Ctx>(
         &self,
         chip_idx: usize,
@@ -982,6 +984,10 @@ where
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         self.step.pre_compute_size()
+    }
+    #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        self.step.pre_compute_align()
     }
     #[inline(always)]
     fn pre_compute_e1<Ctx>(
@@ -1008,6 +1014,10 @@ where
 {
     fn e2_pre_compute_size(&self) -> usize {
         self.step.e2_pre_compute_size()
+    }
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        self.step.e2_pre_compute_align()
     }
 
     fn pre_compute_e2<Ctx>(

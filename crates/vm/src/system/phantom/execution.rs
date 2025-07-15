@@ -40,6 +40,10 @@ where
         size_of::<PhantomPreCompute<F>>()
     }
     #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        align_of::<PhantomPreCompute<F>>()
+    }
+    #[inline(always)]
     fn pre_compute_e1<Ctx>(
         &self,
         _pc: u32,
@@ -174,6 +178,10 @@ where
     fn e2_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<PhantomPreCompute<F>>>()
     }
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        align_of::<E2PreCompute<PhantomPreCompute<F>>>()
+    }
 
     fn pre_compute_e2<Ctx>(
         &self,
@@ -186,7 +194,7 @@ where
         Ctx: E2ExecutionCtx,
     {
         let e2_data: &mut E2PreCompute<PhantomPreCompute<F>> = data.borrow_mut();
-        e2_data.chip_idx = chip_idx as u32;
+        e2_data.chip_idx = chip_idx as u16;
         self.pre_compute_impl(inst, &mut e2_data.data);
         Ok(execute_e2_impl)
     }

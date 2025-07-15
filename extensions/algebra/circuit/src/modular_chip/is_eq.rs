@@ -544,6 +544,10 @@ where
     fn pre_compute_size(&self) -> usize {
         std::mem::size_of::<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>()
     }
+    #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        std::mem::align_of::<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>()
+    }
 
     fn pre_compute_e1<Ctx: E1ExecutionCtx>(
         &self,
@@ -573,6 +577,10 @@ where
     fn e2_pre_compute_size(&self) -> usize {
         std::mem::size_of::<E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>>()
     }
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        std::mem::align_of::<E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>>()
+    }
 
     fn pre_compute_e2<Ctx: E2ExecutionCtx>(
         &self,
@@ -583,7 +591,7 @@ where
     ) -> Result<ExecuteFunc<F, Ctx>> {
         let pre_compute: &mut E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>> =
             data.borrow_mut();
-        pre_compute.chip_idx = chip_idx as u32;
+        pre_compute.chip_idx = chip_idx as u16;
 
         let is_setup = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
         let fn_ptr = if is_setup {

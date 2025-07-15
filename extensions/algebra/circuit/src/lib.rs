@@ -151,6 +151,10 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize, const BLOCK_S
     fn pre_compute_size(&self) -> usize {
         std::mem::size_of::<FieldExpressionPreCompute<NUM_READS>>()
     }
+    #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        std::mem::align_of::<FieldExpressionPreCompute<NUM_READS>>()
+    }
 
     fn pre_compute_e1<Ctx>(
         &self,
@@ -181,6 +185,10 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize, const BLOCK_S
     fn e2_pre_compute_size(&self) -> usize {
         std::mem::size_of::<E2PreCompute<FieldExpressionPreCompute<NUM_READS>>>()
     }
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        std::mem::align_of::<E2PreCompute<FieldExpressionPreCompute<NUM_READS>>>()
+    }
 
     fn pre_compute_e2<Ctx>(
         &self,
@@ -194,7 +202,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize, const BLOCK_S
     {
         let pre_compute: &mut E2PreCompute<FieldExpressionPreCompute<NUM_READS>> =
             data.borrow_mut();
-        pre_compute.chip_idx = chip_idx as u32;
+        pre_compute.chip_idx = chip_idx as u16;
 
         let needs_setup = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
         let fn_ptr = if needs_setup {

@@ -56,8 +56,13 @@ struct MultPreCompute {
 }
 
 impl<F: PrimeField32> StepExecutorE1<F> for Rv32Multiplication256Step {
+    #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<MultPreCompute>()
+    }
+    #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        align_of::<MultPreCompute>()
     }
 
     fn pre_compute_e1<Ctx>(
@@ -76,8 +81,13 @@ impl<F: PrimeField32> StepExecutorE1<F> for Rv32Multiplication256Step {
 }
 
 impl<F: PrimeField32> StepExecutorE2<F> for Rv32Multiplication256Step {
+    #[inline(always)]
     fn e2_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<MultPreCompute>>()
+    }
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        align_of::<E2PreCompute<MultPreCompute>>()
     }
 
     fn pre_compute_e2<Ctx>(
@@ -91,7 +101,7 @@ impl<F: PrimeField32> StepExecutorE2<F> for Rv32Multiplication256Step {
         Ctx: E2ExecutionCtx,
     {
         let data: &mut E2PreCompute<MultPreCompute> = data.borrow_mut();
-        data.chip_idx = chip_idx as u32;
+        data.chip_idx = chip_idx as u16;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
         Ok(execute_e2_impl)
     }

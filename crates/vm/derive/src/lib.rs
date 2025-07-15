@@ -66,7 +66,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                     }
                 }
             }
-            .into()
+                .into()
         }
         Data::Enum(e) => {
             let variants = e
@@ -126,7 +126,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                     }
                 }
             }
-            .into()
+                .into()
         }
         Data::Union(_) => unimplemented!("Unions are not supported"),
     }
@@ -325,6 +325,10 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                         self.0.pre_compute_size()
                     }
                     #[inline(always)]
+                    fn pre_compute_align(&self) -> usize {
+                        self.0.pre_compute_align()
+                    }
+                    #[inline(always)]
                     fn pre_compute_e1<Ctx>(
                         &self,
                         pc: u32,
@@ -341,7 +345,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     }
                 }
             }
-            .into()
+                .into()
         }
         Data::Enum(e) => {
             let variants = e
@@ -373,6 +377,12 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::pre_compute_size(x)
                 }
             }).collect::<Vec<_>>();
+            let pre_compute_align_arms = variants.iter().map(|(variant_name, field)| {
+                let field_ty = &field.ty;
+                quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::pre_compute_align(x)
+                }
+            }).collect::<Vec<_>>();
             let pre_compute_e1_arms = variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 quote! {
@@ -392,6 +402,13 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     fn pre_compute_size(&self) -> usize {
                         match self {
                             #(#pre_compute_size_arms,)*
+                        }
+                    }
+
+                    #[inline(always)]
+                    fn pre_compute_align(&self) -> usize {
+                        match self {
+                            #(#pre_compute_align_arms,)*
                         }
                     }
 
@@ -419,7 +436,7 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                     }
                 }
             }
-            .into()
+                .into()
         }
         Data::Union(_) => unimplemented!("Unions are not supported"),
     }
@@ -457,6 +474,10 @@ pub fn ins_executor_e2_executor_derive(input: TokenStream) -> TokenStream {
                     #[inline(always)]
                     fn e2_pre_compute_size(&self) -> usize {
                         self.0.e2_pre_compute_size()
+                    }
+                    #[inline(always)]
+                    fn e2_pre_compute_align(&self) -> usize {
+                        self.0.e2_pre_compute_align()
                     }
                     #[inline(always)]
                     fn pre_compute_e2<Ctx>(
@@ -504,6 +525,12 @@ pub fn ins_executor_e2_executor_derive(input: TokenStream) -> TokenStream {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>>::e2_pre_compute_size(x)
                 }
             }).collect::<Vec<_>>();
+            let pre_compute_align_arms = variants.iter().map(|(variant_name, field)| {
+                let field_ty = &field.ty;
+                quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>>::e2_pre_compute_align(x)
+                }
+            }).collect::<Vec<_>>();
             let pre_compute_e2_arms = variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 quote! {
@@ -517,6 +544,13 @@ pub fn ins_executor_e2_executor_derive(input: TokenStream) -> TokenStream {
                     fn e2_pre_compute_size(&self) -> usize {
                         match self {
                             #(#pre_compute_size_arms,)*
+                        }
+                    }
+
+                    #[inline(always)]
+                    fn e2_pre_compute_align(&self) -> usize {
+                        match self {
+                            #(#pre_compute_align_arms,)*
                         }
                     }
 
@@ -583,14 +617,14 @@ pub fn any_enum_derive(input: TokenStream) -> TokenStream {
                         (quote! {
                             #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AnyEnum>::as_any_kind(x)
                         },
-                        quote! {
+                         quote! {
                             #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AnyEnum>::as_any_kind_mut(x)
                         })
                     } else {
                         (quote! {
                             #name::#variant_name(x) => x
                         },
-                        quote! {
+                         quote! {
                             #name::#variant_name(x) => x
                         })
                     }

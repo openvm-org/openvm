@@ -440,6 +440,10 @@ where
     fn pre_compute_size(&self) -> usize {
         size_of::<ShiftPreCompute>()
     }
+    #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        align_of::<ShiftPreCompute>()
+    }
 
     #[inline(always)]
     fn pre_compute_e1<Ctx: E1ExecutionCtx>(
@@ -471,6 +475,10 @@ where
     fn e2_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<ShiftPreCompute>>()
     }
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        align_of::<E2PreCompute<ShiftPreCompute>>()
+    }
 
     #[inline(always)]
     fn pre_compute_e2<Ctx: E2ExecutionCtx>(
@@ -481,7 +489,7 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>> {
         let data: &mut E2PreCompute<ShiftPreCompute> = data.borrow_mut();
-        data.chip_idx = chip_idx as u32;
+        data.chip_idx = chip_idx as u16;
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
         // `d` is always expected to be RV32_REGISTER_AS.
         let fn_ptr = match (is_imm, shift_opcode) {

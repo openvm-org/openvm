@@ -253,6 +253,10 @@ where
     fn pre_compute_size(&self) -> usize {
         size_of::<BranchEqualPreCompute>()
     }
+    #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        align_of::<BranchEqualPreCompute>()
+    }
 
     #[inline(always)]
     fn pre_compute_e1<Ctx: E1ExecutionCtx>(
@@ -279,6 +283,10 @@ where
     fn e2_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BranchEqualPreCompute>>()
     }
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        align_of::<E2PreCompute<BranchEqualPreCompute>>()
+    }
 
     fn pre_compute_e2<Ctx>(
         &self,
@@ -291,7 +299,7 @@ where
         Ctx: E2ExecutionCtx,
     {
         let data: &mut E2PreCompute<BranchEqualPreCompute> = data.borrow_mut();
-        data.chip_idx = chip_idx as u32;
+        data.chip_idx = chip_idx as u16;
         let is_bne = self.pre_compute_impl(pc, inst, &mut data.data)?;
         let fn_ptr = if is_bne {
             execute_e2_impl::<_, _, true>

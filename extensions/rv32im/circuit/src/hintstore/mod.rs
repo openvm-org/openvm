@@ -616,6 +616,10 @@ where
     fn pre_compute_size(&self) -> usize {
         size_of::<HintStorePreCompute>()
     }
+    #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        align_of::<HintStorePreCompute>()
+    }
 
     fn pre_compute_e1<Ctx: E1ExecutionCtx>(
         &self,
@@ -640,6 +644,10 @@ where
     fn e2_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<HintStorePreCompute>>()
     }
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        align_of::<E2PreCompute<HintStorePreCompute>>()
+    }
 
     fn pre_compute_e2<Ctx>(
         &self,
@@ -652,7 +660,7 @@ where
         Ctx: E2ExecutionCtx,
     {
         let pre_compute: &mut E2PreCompute<HintStorePreCompute> = data.borrow_mut();
-        pre_compute.chip_idx = chip_idx as u32;
+        pre_compute.chip_idx = chip_idx as u16;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
         let fn_ptr = match local_opcode {
             HINT_STOREW => execute_e2_impl::<_, _, true>,

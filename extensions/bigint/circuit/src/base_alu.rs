@@ -58,8 +58,13 @@ struct BaseAluPreCompute {
 }
 
 impl<F: PrimeField32> StepExecutorE1<F> for Rv32BaseAlu256Step {
+    #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<BaseAluPreCompute>()
+    }
+    #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        align_of::<BaseAluPreCompute>()
     }
 
     fn pre_compute_e1<Ctx>(
@@ -85,8 +90,13 @@ impl<F: PrimeField32> StepExecutorE1<F> for Rv32BaseAlu256Step {
 }
 
 impl<F: PrimeField32> StepExecutorE2<F> for Rv32BaseAlu256Step {
+    #[inline(always)]
     fn e2_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BaseAluPreCompute>>()
+    }
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        align_of::<E2PreCompute<BaseAluPreCompute>>()
     }
 
     fn pre_compute_e2<Ctx>(
@@ -100,7 +110,7 @@ impl<F: PrimeField32> StepExecutorE2<F> for Rv32BaseAlu256Step {
         Ctx: E2ExecutionCtx,
     {
         let data: &mut E2PreCompute<BaseAluPreCompute> = data.borrow_mut();
-        data.chip_idx = chip_idx as u32;
+        data.chip_idx = chip_idx as u16;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
         let fn_ptr = match local_opcode {
             BaseAluOpcode::ADD => execute_e2_impl::<_, _, AddOp>,

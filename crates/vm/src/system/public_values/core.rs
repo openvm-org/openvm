@@ -247,6 +247,10 @@ where
     fn pre_compute_size(&self) -> usize {
         size_of::<PublicValuesPreCompute<F>>()
     }
+    #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        align_of::<PublicValuesPreCompute<F>>()
+    }
 
     #[inline(always)]
     fn pre_compute_e1<Ctx>(
@@ -278,6 +282,10 @@ where
     fn e2_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<PublicValuesPreCompute<F>>>()
     }
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        align_of::<E2PreCompute<PublicValuesPreCompute<F>>>()
+    }
 
     fn pre_compute_e2<Ctx>(
         &self,
@@ -290,7 +298,7 @@ where
         Ctx: E2ExecutionCtx,
     {
         let data: &mut E2PreCompute<PublicValuesPreCompute<F>> = data.borrow_mut();
-        data.chip_idx = chip_idx as u32;
+        data.chip_idx = chip_idx as u16;
         let (b_is_imm, c_is_imm) = self.pre_compute_impl(inst, &mut data.data);
 
         let fn_ptr = match (b_is_imm, c_is_imm) {

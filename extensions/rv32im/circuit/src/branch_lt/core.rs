@@ -374,6 +374,10 @@ where
     fn pre_compute_size(&self) -> usize {
         size_of::<BranchLePreCompute>()
     }
+    #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        align_of::<BranchLePreCompute>()
+    }
 
     #[inline(always)]
     fn pre_compute_e1<Ctx: E1ExecutionCtx>(
@@ -402,6 +406,11 @@ where
         size_of::<E2PreCompute<BranchLePreCompute>>()
     }
 
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        align_of::<E2PreCompute<BranchLePreCompute>>()
+    }
+
     fn pre_compute_e2<Ctx>(
         &self,
         chip_idx: usize,
@@ -413,7 +422,7 @@ where
         Ctx: E2ExecutionCtx,
     {
         let data: &mut E2PreCompute<BranchLePreCompute> = data.borrow_mut();
-        data.chip_idx = chip_idx as u32;
+        data.chip_idx = chip_idx as u16;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
         let fn_ptr = match local_opcode {
             BranchLessThanOpcode::BLT => execute_e2_impl::<_, _, BltOp>,

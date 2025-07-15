@@ -336,6 +336,10 @@ where
         size_of::<JalrPreCompute>()
     }
     #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        align_of::<JalrPreCompute>()
+    }
+    #[inline(always)]
     fn pre_compute_e1<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
@@ -360,6 +364,10 @@ where
     fn e2_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<JalrPreCompute>>()
     }
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        align_of::<E2PreCompute<JalrPreCompute>>()
+    }
 
     fn pre_compute_e2<Ctx>(
         &self,
@@ -372,7 +380,7 @@ where
         Ctx: E2ExecutionCtx,
     {
         let data: &mut E2PreCompute<JalrPreCompute> = data.borrow_mut();
-        data.chip_idx = chip_idx as u32;
+        data.chip_idx = chip_idx as u16;
         let enabled = self.pre_compute_impl(pc, inst, &mut data.data)?;
         let fn_ptr = if enabled {
             execute_e2_impl::<_, _, true>

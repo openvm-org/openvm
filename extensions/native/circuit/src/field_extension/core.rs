@@ -295,6 +295,10 @@ where
     fn pre_compute_size(&self) -> usize {
         size_of::<FieldExtensionPreCompute>()
     }
+    #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        align_of::<FieldExtensionPreCompute>()
+    }
 
     #[inline(always)]
     fn pre_compute_e1<Ctx: E1ExecutionCtx>(
@@ -327,6 +331,10 @@ where
     fn e2_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<FieldExtensionPreCompute>>()
     }
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        align_of::<E2PreCompute<FieldExtensionPreCompute>>()
+    }
 
     #[inline(always)]
     fn pre_compute_e2<Ctx: E2ExecutionCtx>(
@@ -337,7 +345,7 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>> {
         let pre_compute: &mut E2PreCompute<FieldExtensionPreCompute> = data.borrow_mut();
-        pre_compute.chip_idx = chip_idx as u32;
+        pre_compute.chip_idx = chip_idx as u16;
 
         let opcode = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
 
