@@ -24,7 +24,7 @@ use openvm_rv32im_circuit::adapters::{
     read_rv32_register_from_state,
 };
 use openvm_sha256_air::{
-    get_sha256_num_blocks, Sha256StepHelper, SHA256_BLOCK_BITS, SHA256_ROWS_PER_BLOCK,
+    get_sha256_num_blocks, Sha256FillerHelper, SHA256_BLOCK_BITS, SHA256_ROWS_PER_BLOCK,
 };
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -63,7 +63,7 @@ pub struct Sha256VmStep {
 }
 
 pub struct Sha256VmFiller {
-    pub inner: Sha256StepHelper,
+    pub inner: Sha256FillerHelper,
     pub padding_encoder: Encoder,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pub pointer_max_bits: usize,
@@ -75,7 +75,7 @@ impl Sha256VmFiller {
         pointer_max_bits: usize,
     ) -> Self {
         Self {
-            inner: Sha256StepHelper::new(),
+            inner: Sha256FillerHelper::new(),
             padding_encoder: Encoder::new(PaddingFlags::COUNT, 2, false),
             bitwise_lookup_chip,
             pointer_max_bits,
