@@ -6,13 +6,12 @@ use std::{
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
-        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, BasicAdapterInterface,
-        ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord},
-        online::{GuestMemory, TracingMemory},
+        online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
@@ -26,10 +25,7 @@ use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
-use openvm_rv32im_circuit::adapters::{
-    memory_read_from_state, read_rv32_register_from_state, tracing_read, RV32_CELL_BITS,
-    RV32_REGISTER_NUM_LIMBS,
-};
+use openvm_rv32im_circuit::adapters::{tracing_read, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -320,49 +316,5 @@ impl<F: PrimeField32, CTX, const NUM_READS: usize, const READ_SIZE: usize>
 
         cols.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
         cols.from_state.pc = F::from_canonical_u32(record.from_pc);
-    }
-}
-
-impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterExecutorE1<F>
-    for Rv32HeapBranchAdapterStep<NUM_READS, READ_SIZE>
-{
-    type ReadData = [[u8; READ_SIZE]; NUM_READS];
-    type WriteData = ();
-
-    fn read<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Self::ReadData
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let Instruction { a, b, d, e, .. } = *instruction;
-
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
-
-        // Read register values
-        let rs_vals = from_fn(|i| {
-            let addr = if i == 0 { a } else { b };
-            read_rv32_register_from_state(state, addr.as_canonical_u32())
-        });
-
-        // Read memory values
-        rs_vals.map(|address| {
-            assert!(address as usize + READ_SIZE - 1 < (1 << self.pointer_max_bits));
-            memory_read_from_state(state, RV32_MEMORY_AS, address)
-        })
-    }
-
-    fn write<Ctx>(
-        &self,
-        _state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        _instruction: &Instruction<F>,
-        _data: Self::WriteData,
-    ) where
-        Ctx: E1E2ExecutionCtx,
-    {
-        // This function intentionally does nothing
     }
 }

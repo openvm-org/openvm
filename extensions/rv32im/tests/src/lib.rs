@@ -5,7 +5,8 @@ mod tests {
     use eyre::Result;
     use openvm_circuit::{
         arch::{
-            hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, Streams, VirtualMachine,
+            execution_mode::e1::E1Ctx, hasher::poseidon2::vm_poseidon2_hasher,
+            interpreter::InterpretedInstance, ExecutionError, Streams, VirtualMachine, VmConfig,
             VmExecutor,
         },
         system::memory::merkle::public_values::UserPublicValuesProof,
@@ -31,14 +32,6 @@ mod tests {
     type F = BabyBear;
 
     #[cfg(test)]
-    fn test_rv32i_config() -> Rv32IConfig {
-        Rv32IConfig {
-            system: test_system_config_with_continuations(),
-            ..Default::default()
-        }
-    }
-
-    #[cfg(test)]
     fn test_rv32im_config() -> Rv32ImConfig {
         Rv32ImConfig {
             rv32i: Rv32IConfig {
@@ -51,7 +44,7 @@ mod tests {
 
     #[test_case("fibonacci", 1)]
     fn test_rv32i(example_name: &str, min_segments: usize) -> Result<()> {
-        let config = test_rv32i_config();
+        let config = Rv32IConfig::default();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -60,6 +53,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
+        let config = test_rv32im_config();
         air_test_with_min_segments(config, exe, vec![], min_segments);
         Ok(())
     }
@@ -102,7 +96,7 @@ mod tests {
 
     #[test]
     fn test_read_vec() -> Result<()> {
-        let config = test_rv32i_config();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -118,7 +112,7 @@ mod tests {
 
     #[test]
     fn test_hint_load_by_key() -> Result<()> {
-        let config = test_rv32i_config();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "hint_load_by_key", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -141,7 +135,7 @@ mod tests {
 
     #[test]
     fn test_read() -> Result<()> {
-        let config = test_rv32i_config();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "read", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -172,7 +166,7 @@ mod tests {
 
     #[test]
     fn test_reveal() -> Result<()> {
-        let config = test_rv32i_config();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -181,25 +175,21 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        let config = Rv32IConfig::default();
 
         let vm = VirtualMachine::new(default_engine(), config.clone());
         let pk = vm.keygen();
         let vk = pk.get_vk();
         let segments = vm
             .executor
-            .execute_metered(
-                exe.clone(),
-                vec![],
-                &vk.total_widths(),
-                &vk.num_interactions(),
-            )
+            .execute_metered(exe.clone(), vec![], &vk.num_interactions())
             .unwrap();
 
         let final_memory = vm.executor.execute(exe, vec![], &segments)?.unwrap();
         let hasher = vm_poseidon2_hasher::<F>();
         let pv_proof = UserPublicValuesProof::compute(
-            config.system.memory_config.memory_dimensions(),
+            VmConfig::<F>::system(&config)
+                .memory_config
+                .memory_dimensions(),
             64,
             &hasher,
             &final_memory,
@@ -225,7 +215,7 @@ mod tests {
 
     #[test]
     fn test_print() -> Result<()> {
-        let config = test_rv32i_config();
+        let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "print", &config)?;
         let exe = VmExe::from_elf(
             elf,
@@ -312,8 +302,8 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )
         .unwrap();
-        let executor = VmExecutor::<F, _>::new(config.clone());
-        executor.execute_e1(exe, vec![], None).unwrap();
+        let interpreter = InterpretedInstance::new(config, exe);
+        interpreter.execute(E1Ctx::new(None), vec![]).unwrap();
     }
 
     #[test_case("getrandom", vec!["getrandom", "getrandom-unsupported"])]

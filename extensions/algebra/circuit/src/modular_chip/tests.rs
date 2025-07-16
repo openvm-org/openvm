@@ -209,7 +209,7 @@ mod addsubtests {
             let mut record_interpreter = dense_chip.arena.get_record_seeker::<Record, _>();
             record_interpreter.transfer_to_matrix_arena(
                 &mut sparse_chip.0.arena,
-                dense_chip.step.get_record_layout::<F>(),
+                dense_chip.step.0.get_record_layout::<F>(),
             );
         }
 
@@ -290,7 +290,7 @@ mod muldivtests {
         tester.write(data_as, address2 as usize, b_limbs);
 
         let instruction = Instruction::from_isize(
-            VmOpcode::from_usize(chip.0.step.offset + op),
+            VmOpcode::from_usize(chip.0.step.0.offset + op),
             addr_ptr3 as isize,
             addr_ptr1 as isize,
             addr_ptr2 as isize,
@@ -351,7 +351,7 @@ mod is_equal_tests {
     };
 
     use super::*;
-    use crate::modular_chip::{ModularIsEqualAir, ModularIsEqualStep};
+    use crate::modular_chip::{ModularIsEqualAir, VmModularIsEqualStep};
 
     fn create_test_chips<
         const NUM_LANES: usize,
@@ -379,7 +379,7 @@ mod is_equal_tests {
                 ),
                 ModularIsEqualCoreAir::new(modulus.clone(), bitwise_bus, offset),
             ),
-            ModularIsEqualStep::new(
+            VmModularIsEqualStep::new(
                 Rv32IsEqualModeAdapterStep::new(tester.address_bits(), bitwise_chip.clone()),
                 modulus_limbs,
                 offset,

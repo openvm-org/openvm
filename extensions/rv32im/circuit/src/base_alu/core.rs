@@ -6,15 +6,14 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, MinimalInstruction, RecordArena, Result,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc,
+        ExecutionError::InvalidInstruction,
+        MinimalInstruction, RecordArena, Result, StepExecutorE1, StepExecutorE2, TraceFiller,
+        TraceStep, VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
@@ -22,7 +21,12 @@ use openvm_circuit_primitives::{
     AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -31,6 +35,8 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
+
+use crate::adapters::imm_to_bytes;
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
@@ -291,48 +297,210 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
-    for BaseAluStep<A, NUM_LIMBS, LIMB_BITS>
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct BaseAluPreCompute {
+    c: u32,
+    a: u8,
+    b: u8,
+}
+
+impl<F, A, const LIMB_BITS: usize> StepExecutorE1<F>
+    for BaseAluStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<
-            F,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
-        >,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let Instruction { opcode, .. } = instruction;
-
-        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-
-        let [rs1, rs2] = self.adapter.read(state, instruction).into();
-        let rd = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &rs1, &rs2);
-        self.adapter.write(state, instruction, [rd].into());
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<BaseAluPreCompute>()
     }
 
-    fn execute_metered(
+    #[inline(always)]
+    fn pre_compute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E1ExecutionCtx,
+    {
+        let data: &mut BaseAluPreCompute = data.borrow_mut();
+        let is_imm = self.pre_compute_impl(pc, inst, data)?;
+        let opcode = inst.opcode;
 
-        Ok(())
+        let fn_ptr = match (
+            is_imm,
+            BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset)),
+        ) {
+            (true, BaseAluOpcode::ADD) => execute_e1_impl::<_, _, true, AddOp>,
+            (false, BaseAluOpcode::ADD) => execute_e1_impl::<_, _, false, AddOp>,
+            (true, BaseAluOpcode::SUB) => execute_e1_impl::<_, _, true, SubOp>,
+            (false, BaseAluOpcode::SUB) => execute_e1_impl::<_, _, false, SubOp>,
+            (true, BaseAluOpcode::XOR) => execute_e1_impl::<_, _, true, XorOp>,
+            (false, BaseAluOpcode::XOR) => execute_e1_impl::<_, _, false, XorOp>,
+            (true, BaseAluOpcode::OR) => execute_e1_impl::<_, _, true, OrOp>,
+            (false, BaseAluOpcode::OR) => execute_e1_impl::<_, _, false, OrOp>,
+            (true, BaseAluOpcode::AND) => execute_e1_impl::<_, _, true, AndOp>,
+            (false, BaseAluOpcode::AND) => execute_e1_impl::<_, _, false, AndOp>,
+        };
+        Ok(fn_ptr)
+    }
+}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_IMM: bool, OP: AluOp>(
+    pre_compute: &BaseAluPreCompute,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let rs1 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs2 = if IS_IMM {
+        pre_compute.c.to_le_bytes()
+    } else {
+        vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c)
+    };
+    let rs1 = u32::from_le_bytes(rs1);
+    let rs2 = u32::from_le_bytes(rs2);
+    let rd = <OP as AluOp>::compute(rs1, rs2);
+    let rd = rd.to_le_bytes();
+    vm_state.vm_write::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
+}
+
+#[inline(always)]
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_IMM: bool, OP: AluOp>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &BaseAluPreCompute = pre_compute.borrow();
+    execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, vm_state);
+}
+
+#[inline(always)]
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const IS_IMM: bool, OP: AluOp>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &E2PreCompute<BaseAluPreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, vm_state);
+}
+
+impl<F, A, const LIMB_BITS: usize> StepExecutorE2<F>
+    for BaseAluStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
+{
+    #[inline(always)]
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<BaseAluPreCompute>>()
+    }
+
+    #[inline(always)]
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let data: &mut E2PreCompute<BaseAluPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        let opcode = inst.opcode;
+
+        let fn_ptr = match (
+            is_imm,
+            BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset)),
+        ) {
+            (true, BaseAluOpcode::ADD) => execute_e2_impl::<_, _, true, AddOp>,
+            (false, BaseAluOpcode::ADD) => execute_e2_impl::<_, _, false, AddOp>,
+            (true, BaseAluOpcode::SUB) => execute_e2_impl::<_, _, true, SubOp>,
+            (false, BaseAluOpcode::SUB) => execute_e2_impl::<_, _, false, SubOp>,
+            (true, BaseAluOpcode::XOR) => execute_e2_impl::<_, _, true, XorOp>,
+            (false, BaseAluOpcode::XOR) => execute_e2_impl::<_, _, false, XorOp>,
+            (true, BaseAluOpcode::OR) => execute_e2_impl::<_, _, true, OrOp>,
+            (false, BaseAluOpcode::OR) => execute_e2_impl::<_, _, false, OrOp>,
+            (true, BaseAluOpcode::AND) => execute_e2_impl::<_, _, true, AndOp>,
+            (false, BaseAluOpcode::AND) => execute_e2_impl::<_, _, false, AndOp>,
+        };
+        Ok(fn_ptr)
+    }
+}
+
+impl<A, const LIMB_BITS: usize> BaseAluStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+    /// Return `is_imm`, true if `e` is RV32_IMM_AS.
+    #[inline(always)]
+    fn pre_compute_impl<F: PrimeField32>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut BaseAluPreCompute,
+    ) -> Result<bool> {
+        let Instruction { a, b, c, d, e, .. } = inst;
+        let e_u32 = e.as_canonical_u32();
+        if (d.as_canonical_u32() != RV32_REGISTER_AS)
+            || !(e_u32 == RV32_IMM_AS || e_u32 == RV32_REGISTER_AS)
+        {
+            return Err(InvalidInstruction(pc));
+        }
+        let is_imm = e_u32 == RV32_IMM_AS;
+        let c_u32 = c.as_canonical_u32();
+        *data = BaseAluPreCompute {
+            c: if is_imm {
+                u32::from_le_bytes(imm_to_bytes(c_u32))
+            } else {
+                c_u32
+            },
+            a: a.as_canonical_u32() as u8,
+            b: b.as_canonical_u32() as u8,
+        };
+        Ok(is_imm)
+    }
+}
+
+trait AluOp {
+    fn compute(rs1: u32, rs2: u32) -> u32;
+}
+struct AddOp;
+struct SubOp;
+struct XorOp;
+struct OrOp;
+struct AndOp;
+impl AluOp for AddOp {
+    #[inline(always)]
+    fn compute(rs1: u32, rs2: u32) -> u32 {
+        rs1.wrapping_add(rs2)
+    }
+}
+impl AluOp for SubOp {
+    #[inline(always)]
+    fn compute(rs1: u32, rs2: u32) -> u32 {
+        rs1.wrapping_sub(rs2)
+    }
+}
+impl AluOp for XorOp {
+    #[inline(always)]
+    fn compute(rs1: u32, rs2: u32) -> u32 {
+        rs1 ^ rs2
+    }
+}
+impl AluOp for OrOp {
+    #[inline(always)]
+    fn compute(rs1: u32, rs2: u32) -> u32 {
+        rs1 | rs2
+    }
+}
+impl AluOp for AndOp {
+    #[inline(always)]
+    fn compute(rs1: u32, rs2: u32) -> u32 {
+        rs1 & rs2
     }
 }
 

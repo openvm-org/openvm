@@ -5,7 +5,7 @@ use openvm_circuit::{
     arch::ExecutionBridge,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_derive::{InsExecutorE1, InstructionExecutor};
+use openvm_circuit_derive::{InsExecutorE1, InsExecutorE2, InstructionExecutor};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::SharedBitwiseOperationLookupChip,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
@@ -50,7 +50,7 @@ pub fn fp2_addsub_expr(
 
 // Input: Fp2 * 2
 // Output: Fp2
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1)]
+#[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1, InsExecutorE2)]
 pub struct Fp2AddSubChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     pub Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
 );
@@ -104,8 +104,9 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         );
         Self(Fp2Chip::new(air, step, mem_helper))
     }
+
     pub fn expr(&self) -> &FieldExpr {
-        &self.0.step.expr
+        &self.0.step.0.expr
     }
 }
 

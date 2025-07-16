@@ -13,7 +13,7 @@ use openvm_circuit::{
         VmChipComplex, VmConfig, VmInventoryError,
     },
     circuit_derive::{Chip, ChipUsageGetter},
-    derive::{AnyEnum, InsExecutorE1, InstructionExecutor},
+    derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor},
 };
 use openvm_ecc_circuit::{EccExtension, EccExtensionExecutor, EccExtensionPeriphery};
 use openvm_ecc_transpiler::EccTranspilerExtension;
@@ -63,7 +63,9 @@ pub struct SdkVmConfig {
     pub ecc: Option<EccExtension>,
 }
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, InsExecutorE1)]
+#[derive(
+    ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, InsExecutorE1, InsExecutorE2,
+)]
 pub enum SdkVmConfigExecutor<F: PrimeField32> {
     #[any_enum]
     System(SystemExecutor<F>),

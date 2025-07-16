@@ -11,7 +11,7 @@ use openvm_circuit::{
     },
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
@@ -28,7 +28,7 @@ use strum::EnumCount;
 
 use crate::modular_chip::{
     ModularAddSubChip, ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir,
-    ModularIsEqualStep, ModularMulDivChip,
+    ModularMulDivChip, VmModularIsEqualStep,
 };
 
 // TODO: this should be decided after e2 execution
@@ -54,7 +54,9 @@ impl ModularExtension {
     }
 }
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From, InsExecutorE1)]
+#[derive(
+    ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From, InsExecutorE1, InsExecutorE2,
+)]
 pub enum ModularExtensionExecutor<F: PrimeField32> {
     // 32 limbs prime
     ModularAddSubRv32_32(ModularAddSubChip<F, 1, 32>),
@@ -185,7 +187,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                             start_offset,
                         ),
                     ),
-                    ModularIsEqualStep::new(
+                    VmModularIsEqualStep::new(
                         Rv32IsEqualModeAdapterStep::new(pointer_max_bits, bitwise_lu_chip.clone()),
                         modulus_limbs,
                         start_offset,
@@ -253,7 +255,7 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                             start_offset,
                         ),
                     ),
-                    ModularIsEqualStep::new(
+                    VmModularIsEqualStep::new(
                         Rv32IsEqualModeAdapterStep::new(pointer_max_bits, bitwise_lu_chip.clone()),
                         modulus_limbs,
                         start_offset,

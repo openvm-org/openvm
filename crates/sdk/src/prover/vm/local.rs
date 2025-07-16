@@ -94,12 +94,7 @@ where
         let vm_vk = self.pk.vm_pk.get_vk();
         let segments = vm
             .executor
-            .execute_metered(
-                exe.clone(),
-                input.clone(),
-                &vm_vk.total_widths(),
-                &vm_vk.num_interactions(),
-            )
+            .execute_metered(exe.clone(), input.clone(), &vm_vk.num_interactions())
             .expect("execute_metered failed");
 
         let mut final_memory = None;
@@ -187,7 +182,6 @@ where
                 .execute_metered(
                     self.committed_exe.exe.clone(),
                     input.clone(),
-                    &vm_vk.total_widths(),
                     &vm_vk.num_interactions(),
                 )
                 .expect("execute_metered failed")
