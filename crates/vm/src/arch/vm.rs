@@ -1055,12 +1055,15 @@ pub trait SingleSegmentVmProver<SC: StarkGenericConfig> {
 
 /// Virtual machine prover instance for a fixed VM config and a fixed program. For use in proving a
 /// program directly on bare metal.
+#[derive(Getters)]
 pub struct VmLocalProver<E, VC>
 where
     E: StarkEngine,
     VC: VmProverConfig<E::SC, E::PB>,
 {
     pub vm: VirtualMachine<E, VC>,
+    #[getset(get = "pub")]
+    exe_commitment: Com<E::SC>,
     // TODO: store immutable parts of program handler here
     exe: VmExe<Val<E::SC>>,
 }
@@ -1075,8 +1078,13 @@ where
         exe: VmExe<Val<E::SC>>,
         cached_program_trace: CommittedTraceData<E::PB>,
     ) -> Self {
+        let exe_commitment = cached_program_trace.commitment.clone();
         vm.load_program(cached_program_trace);
-        Self { vm, exe }
+        Self {
+            vm,
+            exe,
+            exe_commitment,
+        }
     }
 }
 

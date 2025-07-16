@@ -1,19 +1,19 @@
 mod agg;
 mod app;
-#[cfg(feature = "evm-prove")]
-mod halo2;
-mod root;
-mod stark;
+// #[cfg(feature = "evm-prove")]
+// mod halo2;
+// mod root;
+// mod stark;
 pub mod vm;
 
 pub use agg::*;
 pub use app::*;
-#[cfg(feature = "evm-prove")]
-pub use evm::*;
-#[cfg(feature = "evm-prove")]
-pub use halo2::*;
-pub use root::*;
-pub use stark::*;
+// #[cfg(feature = "evm-prove")]
+// pub use evm::*;
+// #[cfg(feature = "evm-prove")]
+// pub use halo2::*;
+// pub use root::*;
+// pub use stark::*;
 
 #[cfg(feature = "evm-prove")]
 mod evm {

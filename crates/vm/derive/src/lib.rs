@@ -406,7 +406,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
 
     for e in extensions.iter() {
         let (ext_field_name, ext_name_upper) =
-            gen_name_with_uppercase_idents(e.ident.as_ref().unwrap());
+            gen_name_with_uppercase_idents(e.ident.as_ref().expect("field must be named"));
         let executor_type = parse_executor_type(e, false)?;
         executor_enum_fields.push(quote! {
             #[any_enum]
@@ -535,15 +535,9 @@ fn parse_executor_type(
 ) -> syn::Result<proc_macro2::TokenStream> {
     // TRACKING ISSUE:
     // We cannot just use <e.ty.to_token_stream() as VmExecutionExtension<F>>::Executor because of this: <https://github.com/rust-lang/rust/issues/85576>
-    let executor_name = Ident::new(
-        &format!("{}Executor", f.ty.to_token_stream()),
-        Span::call_site().into(),
-    );
-    let mut executor_type = if default_needs_generics {
-        quote! { #executor_name<F> }
-    } else {
-        quote! { #executor_name }
-    };
+    let mut executor_type = None;
+    // Do not unwrap the Result until needed
+    let executor_name = syn::parse_str::<Ident>(&format!("{}Executor", f.ty.to_token_stream()));
 
     if let Some(attr) = f
         .attrs
@@ -570,11 +564,11 @@ fn parse_executor_type(
                                         lit: syn::Lit::Str(lit_str), ..
                                     }) => {
                                         let executor_type: syn::Type = syn::parse_str(&lit_str.value())?;
-                                        quote! { #executor_type }
+                                        Some(quote! { #executor_type })
                                     },
                                     syn::Expr::Path(path) => {
                                         // Handle identifier paths like `executor = MyExecutor`
-                                        path.to_token_stream()
+                                        Some(path.to_token_stream())
                                     },
                                     _ => {
                                         return Err(syn::Error::new(
@@ -594,11 +588,12 @@ fn parse_executor_type(
                                         "generics attribute must be either true or false"
                                     ))
                                 };
-                                executor_type = if needs_generics {
+                                let executor_name = executor_name.clone()?;
+                                executor_type = Some(if needs_generics {
                                     quote! { #executor_name<F> }
                                 } else {
                                     quote! { #executor_name }
-                                };
+                                });
                             } else {
                                 return Err(syn::Error::new(nv.span(), "only executor and generics keys are supported"));
                             }
@@ -611,5 +606,14 @@ fn parse_executor_type(
             }
         }
     }
-    Ok(executor_type)
+    if let Some(executor_type) = executor_type {
+        Ok(executor_type)
+    } else {
+        let executor_name = executor_name?;
+        Ok(if default_needs_generics {
+            quote! { #executor_name<F> }
+        } else {
+            quote! { #executor_name }
+        })
+    }
 }

@@ -8,7 +8,7 @@ use openvm_circuit::{
     },
     system::program::trace::VmCommittedExe,
 };
-use openvm_stark_backend::{config::Val, proof::Proof};
+use openvm_stark_backend::{config::Val, p3_field::PrimeField32, proof::Proof};
 use openvm_stark_sdk::engine::{StarkEngine, StarkFriEngine};
 use tracing::info_span;
 
@@ -31,17 +31,18 @@ where
 impl<VC, E> AppProver<VC, E>
 where
     E: StarkFriEngine,
+    Val<E::SC>: PrimeField32,
     VC: VmProverConfig<E::SC, E::PB>,
 {
     pub fn new(
         app_vm_pk: Arc<VmProvingKey<E::SC, VC>>,
         app_committed_exe: Arc<VmCommittedExe<E::SC>>,
-    ) -> Self {
-        let app_prover = new_local_prover(&app_vm_pk, &app_committed_exe);
-        Self {
+    ) -> Result<Self, VirtualMachineError> {
+        let app_prover = new_local_prover(&app_vm_pk, &app_committed_exe)?;
+        Ok(Self {
             program_name: None,
             app_prover,
-        }
+        })
     }
     pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
         self.program_name = Some(program_name.as_ref().to_string());
@@ -54,8 +55,8 @@ where
 
     /// Generates proof for every continuation segment
     pub fn generate_app_proof(
-        &self,
-        input: StdIn,
+        &mut self,
+        input: StdIn<Val<E::SC>>,
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>
     where
         VC::Executor: InsExecutorE1<Val<E::SC>> + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
@@ -80,8 +81,8 @@ where
     }
 
     pub fn generate_app_proof_without_continuations(
-        &self,
-        input: StdIn,
+        &mut self,
+        input: StdIn<Val<E::SC>>,
         trace_heights: &[u32],
     ) -> Result<Proof<E::SC>, VirtualMachineError>
     where
@@ -108,6 +109,6 @@ where
 
     /// App VM config
     pub fn vm_config(&self) -> &VC {
-        self.app_prover.vm().config()
+        self.app_prover.vm.config()
     }
 }

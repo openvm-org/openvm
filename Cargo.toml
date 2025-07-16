@@ -14,7 +14,7 @@ members = [
     "benchmarks/prove",
     "crates/prof",
     "crates/sdk",
-    "crates/cli",
+    # "crates/cli",
     "crates/circuits/mod-builder",
     "crates/circuits/poseidon2-air",
     "crates/circuits/primitives",
