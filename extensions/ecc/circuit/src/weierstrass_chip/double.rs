@@ -6,13 +6,7 @@ use std::{
 };
 
 use crypto_bigint::{Encoding, U256};
-use k256::{
-    elliptic_curve::{
-        sec1::{FromEncodedPoint, ToEncodedPoint},
-        PrimeField,
-    },
-    AffinePoint, EncodedPoint, FieldElement, ProjectivePoint,
-};
+use k256::{elliptic_curve::PrimeField, FieldElement};
 use num_bigint::BigUint;
 use num_traits::One;
 use openvm_algebra_circuit::FieldExprVecHeapStep;
@@ -436,24 +430,29 @@ fn ec_double_k256<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     let x1 = blocks_to_field_element(input_data[..BLOCKS / 2].as_flattened());
     let y1 = blocks_to_field_element(input_data[BLOCKS / 2..].as_flattened());
 
-    let point = EncodedPoint::from_affine_coordinates(&x1.to_bytes(), &y1.to_bytes(), false);
-    let point = AffinePoint::from_encoded_point(&point).unwrap();
+    // Normalize inputs to ensure they're properly reduced
+    let x1 = x1.normalize();
+    let y1 = y1.normalize();
 
-    let result = (ProjectivePoint::from(point).double()).to_affine();
+    // Calculate lambda = (3 * x1^2) / (2 * y1)
+    let x1_squared = x1.square().normalize();
+    let three_x1_squared = (x1_squared + x1_squared + x1_squared).normalize(); // 3 * x1^2
+    let two_y1 = (y1 + y1).normalize(); // 2 * y1
+    let lambda = three_x1_squared * two_y1.invert().unwrap();
+    let lambda = lambda.normalize();
 
-    let encoded = result.to_encoded_point(false);
+    // Calculate x3 = lambda^2 - 2 * x1
+    let lambda_squared = lambda.square().normalize();
+    let two_x1 = (x1 + x1).normalize(); // 2 * x1
+    let x3 = (lambda_squared - two_x1).normalize();
+
+    // Calculate y3 = lambda * (x1 - x3) - y1
+    let x1_minus_x3 = (x1 - x3).normalize();
+    let y3 = (lambda * x1_minus_x3 - y1).normalize();
 
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
-    match encoded.coordinates() {
-        k256::elliptic_curve::sec1::Coordinates::Uncompressed { x, y } => {
-            let x_fe = FieldElement::from_bytes(x).unwrap();
-            let y_fe = FieldElement::from_bytes(y).unwrap();
-
-            field_element_to_blocks(&x_fe, &mut output, 0);
-            field_element_to_blocks(&y_fe, &mut output, BLOCKS / 2);
-        }
-        _ => panic!("Expected uncompressed coordinates"),
-    }
+    field_element_to_blocks(&x3, &mut output, 0);
+    field_element_to_blocks(&y3, &mut output, BLOCKS / 2);
     output
 }
 
