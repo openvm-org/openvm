@@ -9,7 +9,7 @@ use openvm_circuit::{
     arch::{
         create_and_initialize_chip_complex,
         execution_mode::{
-            e1::E1ExecutionControl,
+            e1::E1Ctx,
             tracegen::{TracegenCtx, TracegenExecutionControl},
         },
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
@@ -33,10 +33,18 @@ use openvm_instructions::{
     SysPhantom,
     SystemOpcode::*,
 };
-use openvm_native_circuit::{test_native_config, test_native_continuations_config, NativeConfig};
+use openvm_native_circuit::{
+    test_native_config, test_native_continuations_config, test_rv32_with_kernels_config,
+    NativeConfig,
+};
 use openvm_native_compiler::{
-    FieldArithmeticOpcode::*, FieldExtensionOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*,
-    NativeLoadStoreOpcode::*, NativePhantom,
+    CastfOpcode,
+    FieldArithmeticOpcode::*,
+    FieldExtensionOpcode::*,
+    FriOpcode, NativeBranchEqualOpcode,
+    NativeJalOpcode::{self, *},
+    NativeLoadStoreOpcode::*,
+    NativePhantom, NativeRangeCheckOpcode, Poseidon2Opcode,
 };
 use openvm_rv32im_transpiler::BranchEqualOpcode::*;
 use openvm_stark_backend::{
@@ -127,12 +135,7 @@ fn test_vm_override_executor_height() {
     let executor = SingleSegmentVmExecutor::new(vm_config.clone());
 
     let max_trace_heights = executor
-        .execute_metered(
-            committed_exe.exe.clone(),
-            vec![],
-            &vk.total_widths(),
-            &vk.num_interactions(),
-        )
+        .execute_metered(committed_exe.exe.clone(), vec![], &vk.num_interactions())
         .unwrap();
 
     let res = executor
@@ -248,12 +251,7 @@ fn test_vm_1_optional_air() {
         let vk = pk.get_vk();
         let segments = vm
             .executor
-            .execute_metered(
-                program.clone(),
-                vec![],
-                &vk.total_widths(),
-                &vk.num_interactions(),
-            )
+            .execute_metered(program.clone(), vec![], &vk.num_interactions())
             .unwrap();
 
         let result = vm
@@ -297,12 +295,7 @@ fn test_vm_public_values() {
         let single_vm = SingleSegmentVmExecutor::new(config);
 
         let max_trace_heights = single_vm
-            .execute_metered(
-                program.clone().into(),
-                vec![],
-                &vk.total_widths(),
-                &vk.num_interactions(),
-            )
+            .execute_metered(program.clone().into(), vec![], &vk.num_interactions())
             .unwrap();
 
         let exe_result = single_vm
@@ -394,12 +387,7 @@ fn test_vm_1_persistent() {
 
     let segments = vm
         .executor
-        .execute_metered(
-            program.clone(),
-            vec![],
-            &vk.total_widths(),
-            &vk.num_interactions(),
-        )
+        .execute_metered(program.clone(), vec![], &vk.num_interactions())
         .unwrap();
 
     let result = vm
@@ -765,12 +753,7 @@ fn test_hint_load_1() {
     let vk = pk.get_vk();
     let mut segments = vm
         .executor
-        .execute_metered(
-            program.clone(),
-            input.clone(),
-            &vk.total_widths(),
-            &vk.num_interactions(),
-        )
+        .execute_metered(program.clone(), input.clone(), &vk.num_interactions())
         .unwrap();
     assert_eq!(segments.len(), 1);
     let segment = segments.pop().unwrap();
@@ -830,12 +813,7 @@ fn test_hint_load_2() {
     let vk = pk.get_vk();
     let mut segments = vm
         .executor
-        .execute_metered(
-            program.clone(),
-            input.clone(),
-            &vk.total_widths(),
-            &vk.num_interactions(),
-        )
+        .execute_metered(program.clone(), input.clone(), &vk.num_interactions())
         .unwrap();
     assert_eq!(segments.len(), 1);
     let segment = segments.pop().unwrap();
@@ -920,7 +898,7 @@ fn test_vm_pure_execution_non_continuation() {
 
     let executor = InterpretedInstance::<F, _>::new(test_native_config(), program);
     executor
-        .execute(E1ExecutionControl, vec![])
+        .execute(E1Ctx::new(None), vec![])
         .expect("Failed to execute");
 }
 
@@ -947,7 +925,116 @@ fn test_vm_pure_execution_continuation() {
     let program = Program::from_instructions(&instructions);
     let executor = InterpretedInstance::<F, _>::new(test_native_continuations_config(), program);
     executor
-        .execute(E1ExecutionControl, vec![])
+        .execute(E1Ctx::new(None), vec![])
+        .expect("Failed to execute");
+}
+
+#[test]
+fn test_vm_e1_native_chips() {
+    type F = BabyBear;
+
+    let instructions = vec![
+        // Field Arithmetic operations (FieldArithmeticChip)
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(SUB.global_opcode(), 1, 10, 2, 4, 0, 0, 0),
+        Instruction::large_from_isize(MUL.global_opcode(), 2, 3, 4, 4, 0, 0, 0),
+        Instruction::large_from_isize(DIV.global_opcode(), 3, 20, 5, 4, 0, 0, 0),
+        // Field Extension operations (FieldExtensionChip)
+        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 4, 4),
+        Instruction::from_isize(FE4SUB.global_opcode(), 12, 8, 4, 4, 4),
+        Instruction::from_isize(BBE4MUL.global_opcode(), 16, 12, 8, 4, 4),
+        Instruction::from_isize(BBE4DIV.global_opcode(), 20, 16, 12, 4, 4),
+        // Branch operations (NativeBranchEqChip)
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BEQ).global_opcode(),
+            0,
+            0,
+            DEFAULT_PC_STEP as isize,
+            4,
+            4,
+        ),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BNE).global_opcode(),
+            1,
+            2,
+            DEFAULT_PC_STEP as isize,
+            4,
+            4,
+        ),
+        // JAL operation (JalRangeCheckChip)
+        Instruction::from_isize(
+            NativeJalOpcode::JAL.global_opcode(),
+            24,
+            DEFAULT_PC_STEP as isize,
+            0,
+            4,
+            0,
+        ),
+        // Range check operation (JalRangeCheckChip)
+        Instruction::from_isize(
+            NativeRangeCheckOpcode::RANGE_CHECK.global_opcode(),
+            0,
+            10,
+            8,
+            4,
+            0,
+        ),
+        // Load/Store operations (NativeLoadStoreChip)
+        Instruction::from_isize(STOREW.global_opcode(), 0, 0, 28, 4, 4),
+        Instruction::from_isize(LOADW.global_opcode(), 32, 0, 28, 4, 4),
+        Instruction::from_isize(
+            PHANTOM.global_opcode(),
+            0,
+            0,
+            NativePhantom::HintInput as isize,
+            0,
+            0,
+        ),
+        Instruction::from_isize(HINT_STOREW.global_opcode(), 32, 0, 0, 4, 4),
+        // Cast to field operation (CastFChip)
+        Instruction::from_usize(CastfOpcode::CASTF.global_opcode(), [36, 40, 0, 2, 4]),
+        // Poseidon2 operations (Poseidon2Chip)
+        Instruction::new(
+            Poseidon2Opcode::PERM_POS2.global_opcode(),
+            F::from_canonical_usize(44),
+            F::from_canonical_usize(48),
+            F::ZERO,
+            F::from_canonical_usize(4),
+            F::from_canonical_usize(4),
+            F::ZERO,
+            F::ZERO,
+        ),
+        Instruction::new(
+            Poseidon2Opcode::COMP_POS2.global_opcode(),
+            F::from_canonical_usize(52),
+            F::from_canonical_usize(44),
+            F::from_canonical_usize(48),
+            F::from_canonical_usize(4),
+            F::from_canonical_usize(4),
+            F::ZERO,
+            F::ZERO,
+        ),
+        // FRI operation (FriReducedOpeningChip)
+        Instruction::large_from_isize(ADD.global_opcode(), 60, 64, 0, 4, 4, 0, 0), /* a_pointer_pointer, */
+        Instruction::large_from_isize(ADD.global_opcode(), 64, 68, 0, 4, 4, 0, 0), /* b_pointer_pointer, */
+        Instruction::large_from_isize(ADD.global_opcode(), 68, 2, 0, 4, 0, 0, 0), /* length_pointer (value 2), */
+        Instruction::large_from_isize(ADD.global_opcode(), 72, 1, 0, 4, 0, 0, 0), //alpha_pointer
+        Instruction::large_from_isize(ADD.global_opcode(), 76, 80, 0, 4, 4, 0, 0), /* result_pointer, */
+        Instruction::large_from_isize(ADD.global_opcode(), 80, 1, 0, 4, 0, 0, 0), /* is_init (value 1) , */
+        Instruction::from_usize(
+            FriOpcode::FRI_REDUCED_OPENING.global_opcode(),
+            [60, 64, 68, 72, 76, 0, 80],
+        ),
+        // Terminate
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let program = Program::from_instructions(&instructions);
+    let input_stream: Vec<Vec<F>> = vec![vec![]];
+
+    let executor = InterpretedInstance::<F, _>::new(test_rv32_with_kernels_config(), program);
+    executor
+        .execute(E1Ctx::new(None), input_stream)
         .expect("Failed to execute");
 }
 
@@ -983,11 +1070,6 @@ fn test_single_segment_executor_no_segmentation() {
     let single_vm = SingleSegmentVmExecutor::<F, _>::new(config);
 
     let _ = single_vm
-        .execute_metered(
-            program.clone().into(),
-            vec![],
-            &vk.total_widths(),
-            &vk.num_interactions(),
-        )
+        .execute_metered(program.clone().into(), vec![], &vk.num_interactions())
         .unwrap();
 }

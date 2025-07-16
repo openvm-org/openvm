@@ -127,7 +127,7 @@ fn test_add() {
     );
     chip.0.set_trace_buffer_height(MAX_INS_CAPACITY);
 
-    assert_eq!(chip.0.step.expr.builder.num_variables, 12);
+    assert_eq!(chip.0.step.0.expr.builder.num_variables, 12);
 
     let (p1_x, p1_y) = SampleEcPoints[0].clone();
     let (p2_x, p2_y) = SampleEcPoints[1].clone();
@@ -144,6 +144,7 @@ fn test_add() {
     let r = chip
         .0
         .step
+        .0
         .expr
         .execute(vec![p1_x, p1_y, p2_x, p2_y], vec![true]);
     assert_eq!(r.len(), 12);
@@ -151,6 +152,7 @@ fn test_add() {
     let outputs = chip
         .0
         .step
+        .0
         .output_indices()
         .iter()
         .map(|i| &r[*i])
@@ -158,14 +160,14 @@ fn test_add() {
     assert_eq!(outputs[0], &SampleEcPoints[2].0);
     assert_eq!(outputs[1], &SampleEcPoints[2].1);
 
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.step.expr).try_into().unwrap();
+    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.step.0.expr).try_into().unwrap();
     let mut one_limbs = [BabyBear::ONE; NUM_LIMBS];
     one_limbs[0] = BabyBear::ONE;
     let setup_instruction = rv32_write_heap_default(
         &mut tester,
         vec![prime_limbs, *Edwards25519_A_LIMBS],
         vec![*Edwards25519_D_LIMBS],
-        chip.0.step.offset + Rv32EdwardsOpcode::SETUP_TE_ADD as usize,
+        chip.0.step.0.offset + Rv32EdwardsOpcode::SETUP_TE_ADD as usize,
     );
     tester.execute(&mut chip, &setup_instruction);
 
@@ -173,7 +175,7 @@ fn test_add() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![p2_x_limbs, p2_y_limbs],
-        chip.0.step.offset + Rv32EdwardsOpcode::TE_ADD as usize,
+        chip.0.step.0.offset + Rv32EdwardsOpcode::TE_ADD as usize,
     );
 
     tester.execute(&mut chip, &instruction);

@@ -1,7 +1,7 @@
 use std::ops::Mul;
 
 use openvm_circuit::{
-    arch::{execution_mode::E1E2ExecutionCtx, VmStateMut},
+    arch::{execution_mode::E1ExecutionCtx, VmStateMut},
     system::memory::{
         merkle::public_values::PUBLIC_VALUES_AS,
         online::{GuestMemory, TracingMemory},
@@ -69,7 +69,6 @@ pub fn memory_read<const N: usize>(memory: &GuestMemory, address_space: u32, ptr
             || address_space == PUBLIC_VALUES_AS,
     );
 
-    // TODO(ayush): PUBLIC_VALUES_AS safety?
     // SAFETY:
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
@@ -89,7 +88,6 @@ pub fn memory_write<const N: usize>(
             || address_space == PUBLIC_VALUES_AS
     );
 
-    // TODO(ayush): PUBLIC_VALUES_AS safety?
     // SAFETY:
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
@@ -124,7 +122,6 @@ pub fn timed_write<F: PrimeField32, const N: usize>(
     ptr: u32,
     data: [u8; N],
 ) -> (u32, [u8; N]) {
-    // TODO(ayush): should this allow public values address space
     debug_assert!(
         address_space == RV32_REGISTER_AS
             || address_space == RV32_MEMORY_AS
@@ -200,7 +197,7 @@ pub fn memory_read_from_state<F, Ctx, const N: usize>(
     ptr: u32,
 ) -> [u8; N]
 where
-    Ctx: E1E2ExecutionCtx,
+    Ctx: E1ExecutionCtx,
 {
     state.ctx.on_memory_operation(address_space, ptr, N as u32);
 
@@ -214,7 +211,7 @@ pub fn memory_write_from_state<F, Ctx, const N: usize>(
     ptr: u32,
     data: [u8; N],
 ) where
-    Ctx: E1E2ExecutionCtx,
+    Ctx: E1ExecutionCtx,
 {
     state.ctx.on_memory_operation(address_space, ptr, N as u32);
 
@@ -227,7 +224,7 @@ pub fn read_rv32_register_from_state<F, Ctx>(
     ptr: u32,
 ) -> u32
 where
-    Ctx: E1E2ExecutionCtx,
+    Ctx: E1ExecutionCtx,
 {
     u32::from_le_bytes(memory_read_from_state(state, RV32_REGISTER_AS, ptr))
 }

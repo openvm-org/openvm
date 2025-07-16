@@ -1,5 +1,10 @@
 use inner::build_verification_program;
-use openvm_circuit::{arch::instructions::program::Program, utils::execute_and_prove_program};
+use openvm_circuit::{
+    arch::{
+        execution_mode::e1::E1Ctx, instructions::program::Program, interpreter::InterpretedInstance,
+    },
+    utils::execute_and_prove_program,
+};
 use openvm_native_circuit::{test_native_config, NativeConfig};
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_stark_backend::{
@@ -102,5 +107,9 @@ where
 {
     let (program, witness_stream) = build_verification_program(vparams, compiler_options);
 
+    let interpreter = InterpretedInstance::new(vm_config.clone(), program.clone());
+    interpreter
+        .execute(E1Ctx::new(None), witness_stream.clone())
+        .unwrap();
     execute_and_prove_program(program, witness_stream, vm_config, engine)
 }

@@ -25,12 +25,14 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-    ExecutionState, InsExecutorE1, InstructionExecutor, Result, Streams, VmStateMut,
+    execution_mode::E1ExecutionCtx, ExecuteFunc, ExecutionState, InsExecutorE1, InsExecutorE2,
+    InstructionExecutor, Result, Streams, VmStateMut,
 };
-use crate::system::memory::{
-    online::{GuestMemory, TracingMemory},
-    MemoryAuxColsFactory, MemoryController, SharedMemoryHelper,
+use crate::{
+    arch::execution_mode::E2ExecutionCtx,
+    system::memory::{
+        online::TracingMemory, MemoryAuxColsFactory, MemoryController, SharedMemoryHelper,
+    },
 };
 
 /// The interface between primitive AIR and machine adapter AIR.
@@ -156,7 +158,6 @@ pub trait TraceFiller<F, CTX> {
     /// Populates `trace`. This function will always be called after
     /// [`TraceStep::execute`], so the `trace` should already contain the records necessary to fill
     /// in the rest of it.
-    // TODO(ayush): come up with a better abstraction for chips that fill a dynamic number of rows
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -377,7 +378,6 @@ where
 // TEMP[jpw]: buffer should be inside CTX
 pub struct MatrixRecordArena<F> {
     pub trace_buffer: Vec<F>,
-    // TODO(ayush): width should be a constant?
     pub width: usize,
     pub trace_offset: usize,
 }
@@ -686,8 +686,8 @@ where
     C: SizedRecord<AdapterCoreLayout<M>>,
     M: AdapterCoreMetadata + Clone,
 {
-    // A utility function to get the aligned widths of the adapter and core records
-    fn get_aligned_sizes(layout: &AdapterCoreLayout<M>) -> (usize, usize) {
+    // Returns the aligned sizes of the adapter and core records given their layout
+    pub fn get_aligned_sizes(layout: &AdapterCoreLayout<M>) -> (usize, usize) {
         let adapter_alignment = A::alignment(layout);
         let core_alignment = C::alignment(layout);
         let adapter_size = A::size(layout);
@@ -697,6 +697,12 @@ where
             .next_multiple_of(adapter_alignment)
             - aligned_adapter_size;
         (aligned_adapter_size, aligned_core_size)
+    }
+
+    // Returns the aligned size of a single record given its layout
+    pub fn get_aligned_record_size(layout: &AdapterCoreLayout<M>) -> usize {
+        let (adapter_size, core_size) = Self::get_aligned_sizes(layout);
+        adapter_size + core_size
     }
 
     // Returns a record at the given offset in the buffer
@@ -755,7 +761,6 @@ where
     }
 }
 
-// TODO(ayush): rename to ChipWithExecutionContext or something
 pub struct NewVmChipWrapper<F, AIR, STEP, RA> {
     pub air: AIR,
     pub step: STEP,
@@ -942,46 +947,30 @@ pub trait AdapterTraceFiller<F, CTX>: AdapterTraceStep<F, CTX> {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]);
 }
 
-pub trait AdapterExecutorE1<F>
-where
-    F: PrimeField32,
-{
-    type ReadData;
-    type WriteData;
-
-    fn read<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Self::ReadData
-    where
-        Ctx: E1E2ExecutionCtx;
-
-    fn write<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-    ) where
-        Ctx: E1E2ExecutionCtx;
-}
-
 // TODO: Rename core/step to operator
 pub trait StepExecutorE1<F> {
-    fn execute_e1<Ctx>(
+    fn pre_compute_size(&self) -> usize;
+    fn pre_compute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
     where
-        Ctx: E1E2ExecutionCtx;
+        Ctx: E1ExecutionCtx;
+}
 
-    fn execute_metered(
+pub trait StepExecutorE2<F> {
+    fn e2_pre_compute_size(&self) -> usize;
+    fn pre_compute_e2<Ctx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()>;
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx;
 }
 
 impl<F, A, S> InsExecutorE1<F> for NewVmChipWrapper<F, A, S, MatrixRecordArena<F>>
@@ -990,31 +979,48 @@ where
     S: StepExecutorE1<F>,
     A: BaseAir<F>,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        self.step.execute_e1(state, instruction)
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        self.step.pre_compute_size()
     }
-
-    fn execute_metered(
+    #[inline(always)]
+    fn pre_compute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()>
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
     where
-        F: PrimeField32,
+        Ctx: E1ExecutionCtx,
     {
-        self.step.execute_metered(state, instruction, chip_index)
+        self.step.pre_compute_e1(pc, inst, data)
     }
 
     fn set_trace_height(&mut self, height: usize) {
         self.set_trace_buffer_height(height);
+    }
+}
+
+impl<F, A, S> InsExecutorE2<F> for NewVmChipWrapper<F, A, S, MatrixRecordArena<F>>
+where
+    F: PrimeField32,
+    S: StepExecutorE2<F>,
+{
+    fn e2_pre_compute_size(&self) -> usize {
+        self.step.e2_pre_compute_size()
+    }
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        self.step.pre_compute_e2(chip_idx, pc, inst, data)
     }
 }
 

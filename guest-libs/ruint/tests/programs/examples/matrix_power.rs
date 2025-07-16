@@ -123,6 +123,11 @@ pub fn main() {
         panic!();
     }
 
+    if U256::from_limbs([u64::MAX; 4]) + one != zero {
+        print("FAIL: U256::MAX == 0 test failed");
+        panic!();
+    }
+
     if two_to_200 != two_to_200 {
         print("FAIL: 2^200 clone test failed");
         panic!();

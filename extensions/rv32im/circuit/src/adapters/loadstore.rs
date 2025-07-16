@@ -5,9 +5,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
-        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, ExecutionBridge, ExecutionState,
-        VmAdapterAir, VmAdapterInterface, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface,
     },
     system::{
         memory::{
@@ -15,12 +14,10 @@ use openvm_circuit::{
                 MemoryBaseAuxCols, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
                 MemoryWriteAuxCols,
             },
-            online::{GuestMemory, TracingMemory},
+            online::TracingMemory,
             MemoryAddress, MemoryAuxColsFactory,
         },
-        native_adapter::util::{
-            memory_read_native, memory_write_native_from_state, timed_write_native,
-        },
+        native_adapter::util::{memory_read_native, timed_write_native},
     },
 };
 use openvm_circuit_primitives::{
@@ -43,10 +40,7 @@ use openvm_stark_backend::{
 };
 
 use super::RV32_REGISTER_NUM_LIMBS;
-use crate::adapters::{
-    memory_read, memory_read_from_state, memory_write_from_state, read_rv32_register,
-    read_rv32_register_from_state, timed_write, tracing_read, RV32_CELL_BITS,
-};
+use crate::adapters::{memory_read, timed_write, tracing_read, RV32_CELL_BITS};
 
 /// LoadStore Adapter handles all memory and register operations, so it must be aware
 /// of the instruction type, specifically whether it is a load or store
@@ -490,7 +484,6 @@ where
 impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32LoadStoreAdapterStep {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
-        // TODO(ayush): should this be here?
         debug_assert!(self.range_checker_chip.range_max_bits() >= 15);
 
         let record: &Rv32LoadStoreAdapterRecord =
@@ -548,133 +541,5 @@ impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32LoadStoreAdapterSt
 
         adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
         adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
-    }
-}
-
-impl<F> AdapterExecutorE1<F> for Rv32LoadStoreAdapterStep
-where
-    F: PrimeField32,
-{
-    // ((prev_data, read_data), shift_amount)
-    type ReadData = (
-        (
-            [u32; RV32_REGISTER_NUM_LIMBS],
-            [u8; RV32_REGISTER_NUM_LIMBS],
-        ),
-        u8,
-    );
-    type WriteData = [u32; RV32_REGISTER_NUM_LIMBS];
-
-    fn read<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Self::ReadData
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let &Instruction {
-            opcode,
-            a,
-            b,
-            c,
-            d,
-            e,
-            g,
-            ..
-        } = instruction;
-
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert!(e.as_canonical_u32() != RV32_IMM_AS);
-
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(
-            opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
-        );
-
-        let rs1 = read_rv32_register_from_state(state, b.as_canonical_u32());
-        let imm_extended = c.as_canonical_u32() + g.as_canonical_u32() * 0xffff0000;
-
-        let ptr_val = rs1.wrapping_add(imm_extended);
-        let shift_amount = ptr_val & 3;
-        let ptr_val = ptr_val - shift_amount;
-
-        debug_assert!(
-            ptr_val < (1 << self.pointer_max_bits),
-            "ptr_val: {ptr_val} = rs1_val: {} + imm_extended: {imm_extended} >= 2 ** {}",
-            rs1,
-            self.pointer_max_bits
-        );
-
-        let read_data = match local_opcode {
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                memory_read_from_state(state, e.as_canonical_u32(), ptr_val)
-            }
-            STOREW | STOREH | STOREB => {
-                read_rv32_register_from_state(state, a.as_canonical_u32()).to_le_bytes()
-            }
-        };
-
-        // We need to keep values of some cells to keep them unchanged when writing to those cells
-        let prev_data = match local_opcode {
-            STOREW | STOREH | STOREB => {
-                if e.as_canonical_u32() == 4 {
-                    memory_read_native(state.memory, ptr_val).map(|x: F| x.as_canonical_u32())
-                } else {
-                    memory_read(state.memory, e.as_canonical_u32(), ptr_val).map(u32::from)
-                }
-            }
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                memory_read(state.memory, d.as_canonical_u32(), a.as_canonical_u32()).map(u32::from)
-            }
-        };
-
-        ((prev_data, read_data), shift_amount as u8)
-    }
-
-    fn write<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-    ) where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let &Instruction {
-            opcode,
-            a,
-            b,
-            c,
-            e,
-            f: enabled,
-            g,
-            ..
-        } = instruction;
-
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(
-            opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
-        );
-
-        if enabled == F::ZERO {
-            return;
-        }
-
-        match local_opcode {
-            STOREW | STOREH | STOREB => {
-                let rs1 = read_rv32_register(state.memory, b.as_canonical_u32());
-                let imm_extended = c.as_canonical_u32() + g.as_canonical_u32() * 0xffff0000;
-                let ptr = rs1.wrapping_add(imm_extended) & !3;
-                if e.as_canonical_u32() == 4 {
-                    memory_write_native_from_state(state, ptr, data.map(F::from_canonical_u32));
-                } else {
-                    memory_write_from_state(state, e.as_canonical_u32(), ptr, data.map(|x| x as u8))
-                }
-            }
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => memory_write_from_state(
-                state,
-                RV32_REGISTER_AS,
-                a.as_canonical_u32(),
-                data.map(|x| x as u8),
-            ),
-        };
     }
 }

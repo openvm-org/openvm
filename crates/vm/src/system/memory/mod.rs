@@ -14,6 +14,8 @@ pub mod volatile;
 pub use controller::*;
 pub use online::{Address, AddressMap, INITIAL_TIMESTAMP};
 
+pub const POINTER_MAX_BITS: usize = 29;
+
 #[derive(PartialEq, Copy, Clone, Debug, Eq)]
 pub enum OpType {
     Read = 0,

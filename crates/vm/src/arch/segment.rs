@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use backtrace::Backtrace;
 use openvm_instructions::{
     exe::FnBounds,
@@ -22,15 +24,18 @@ use super::{
 };
 #[cfg(feature = "bench-metrics")]
 use crate::metrics::VmMetrics;
-use crate::{arch::instructions::*, system::memory::online::GuestMemory};
+use crate::{
+    arch::{execution_mode::E1ExecutionCtx, instructions::*},
+    system::memory::online::GuestMemory,
+};
 
 pub struct VmSegmentState<F, Ctx> {
     pub instret: u64,
     pub pc: u32,
-    pub memory: Option<GuestMemory>,
+    pub memory: GuestMemory,
     pub streams: Streams<F>,
     pub rng: StdRng,
-    pub exit_code: Option<u32>,
+    pub exit_code: Result<Option<u32>, ExecutionError>,
     pub ctx: Ctx,
 }
 
@@ -46,12 +51,84 @@ impl<F, Ctx> VmSegmentState<F, Ctx> {
         Self {
             instret,
             pc,
-            memory,
+            memory: if let Some(mem) = memory {
+                mem
+            } else {
+                GuestMemory::new(Default::default())
+            },
             streams,
             rng,
             ctx,
-            exit_code: None,
+            exit_code: Ok(None),
         }
+    }
+    /// Runtime read operation for a block of memory
+    #[inline(always)]
+    pub fn vm_read<T: Copy + Debug, const BLOCK_SIZE: usize>(
+        &mut self,
+        addr_space: u32,
+        ptr: u32,
+    ) -> [T; BLOCK_SIZE]
+    where
+        Ctx: E1ExecutionCtx,
+    {
+        self.ctx
+            .on_memory_operation(addr_space, ptr, BLOCK_SIZE as u32);
+        self.host_read(addr_space, ptr)
+    }
+
+    /// Runtime write operation for a block of memory
+    #[inline(always)]
+    pub fn vm_write<T: Copy + Debug, const BLOCK_SIZE: usize>(
+        &mut self,
+        addr_space: u32,
+        ptr: u32,
+        data: &[T; BLOCK_SIZE],
+    ) where
+        Ctx: E1ExecutionCtx,
+    {
+        self.ctx
+            .on_memory_operation(addr_space, ptr, BLOCK_SIZE as u32);
+        self.host_write(addr_space, ptr, data)
+    }
+
+    #[inline(always)]
+    pub fn vm_read_slice<T: Copy + Debug>(&mut self, addr_space: u32, ptr: u32, len: usize) -> &[T]
+    where
+        Ctx: E1ExecutionCtx,
+    {
+        self.ctx.on_memory_operation(addr_space, ptr, len as u32);
+        self.host_read_slice(addr_space, ptr, len)
+    }
+
+    #[inline(always)]
+    pub fn host_read<T: Copy + Debug, const BLOCK_SIZE: usize>(
+        &self,
+        addr_space: u32,
+        ptr: u32,
+    ) -> [T; BLOCK_SIZE]
+    where
+        Ctx: E1ExecutionCtx,
+    {
+        unsafe { self.memory.read(addr_space, ptr) }
+    }
+    #[inline(always)]
+    pub fn host_write<T: Copy + Debug, const BLOCK_SIZE: usize>(
+        &mut self,
+        addr_space: u32,
+        ptr: u32,
+        data: &[T; BLOCK_SIZE],
+    ) where
+        Ctx: E1ExecutionCtx,
+    {
+        unsafe { self.memory.write(addr_space, ptr, *data) }
+    }
+    #[inline(always)]
+    pub fn host_read_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T]
+    where
+        Ctx: E1ExecutionCtx,
+    {
+        unsafe { self.memory.get_slice(addr_space, ptr, len) }
     }
 }
 
@@ -127,7 +204,7 @@ where
         self.ctrl.on_start(state, &mut self.chip_complex);
 
         loop {
-            if let Some(exit_code) = state.exit_code {
+            if let Ok(Some(exit_code)) = state.exit_code {
                 self.ctrl
                     .on_terminate(state, &mut self.chip_complex, exit_code);
                 break;
@@ -145,7 +222,6 @@ where
     }
 
     /// Executes a single instruction and updates VM state
-    // TODO(ayush): clean this up, separate to smaller functions
     fn execute_instruction(
         &mut self,
         state: &mut VmSegmentState<F, Ctrl::Ctx>,
@@ -163,7 +239,7 @@ where
 
         // Handle termination instruction
         if opcode == SystemOpcode::TERMINATE.global_opcode() {
-            state.exit_code = Some(c.as_canonical_u32());
+            state.exit_code = Ok(Some(c.as_canonical_u32()));
             return Ok(());
         }
 
@@ -205,7 +281,6 @@ where
             }
         }
 
-        // TODO(ayush): move to vm state?
         *prev_backtrace = trace.cloned();
 
         // Execute the instruction using the control implementation

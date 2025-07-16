@@ -19,12 +19,7 @@ pub fn execute_program_with_system_config(
     let vk = pk.get_vk();
     let segments = vm
         .executor
-        .execute_metered(
-            program.clone(),
-            input.clone(),
-            &vk.total_widths(),
-            &vk.num_interactions(),
-        )
+        .execute_metered(program.clone(), input.clone(), &vk.num_interactions())
         .unwrap();
     vm.execute(program, input, &segments).unwrap();
 }
@@ -62,7 +57,7 @@ pub mod test_utils {
     use rand::{distributions::Standard, prelude::Distribution, rngs::StdRng, Rng};
 
     use super::execute_program_with_system_config;
-    use crate::extension::NativeConfig;
+    use crate::{extension::NativeConfig, Rv32WithKernelsConfig};
 
     // If immediate, returns (value, AS::Immediate). Otherwise, writes to native memory and returns
     // (ptr, AS::Native). If is_imm is None, randomizes it.
@@ -123,6 +118,13 @@ pub mod test_utils {
         NativeConfig {
             system: test_system_config().with_continuations(),
             native: Default::default(),
+        }
+    }
+
+    pub fn test_rv32_with_kernels_config() -> Rv32WithKernelsConfig {
+        Rv32WithKernelsConfig {
+            system: test_system_config().with_continuations(),
+            ..Default::default()
         }
     }
 }

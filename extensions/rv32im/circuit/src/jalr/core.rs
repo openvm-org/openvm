@@ -5,15 +5,14 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, RecordArena, Result, SignedImmInstruction,
-        StepExecutorE1, TraceFiller, TraceStep, VmAdapterInterface, VmCoreAir, VmStateMut,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc,
+        ExecutionError::InvalidInstruction,
+        RecordArena, Result, SignedImmInstruction, StepExecutorE1, StepExecutorE2, TraceFiller,
+        TraceStep, VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
@@ -24,6 +23,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
+    riscv::RV32_REGISTER_AS,
     LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
@@ -319,48 +319,128 @@ where
     }
 }
 
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct JalrPreCompute {
+    imm_extended: u32,
+    a: u8,
+    b: u8,
+}
+
 impl<F, A> StepExecutorE1<F> for Rv32JalrStep<A>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<
-            F,
-            ReadData = [u8; RV32_REGISTER_NUM_LIMBS],
-            WriteData = [u8; RV32_REGISTER_NUM_LIMBS],
-        >,
 {
-    fn execute_e1<Ctx>(
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<JalrPreCompute>()
+    }
+    #[inline(always)]
+    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let Instruction { c, g, .. } = instruction;
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>> {
+        let data: &mut JalrPreCompute = data.borrow_mut();
+        let enabled = self.pre_compute_impl(pc, inst, data)?;
+        let fn_ptr = if enabled {
+            execute_e1_impl::<_, _, true>
+        } else {
+            execute_e1_impl::<_, _, false>
+        };
+        Ok(fn_ptr)
+    }
+}
 
-        let rs1 = u32::from_le_bytes(self.adapter.read(state, instruction));
-
-        let (to_pc, rd) = run_jalr(*state.pc, rs1, c.as_canonical_u32() as u16, g.is_one());
-        let rd = rd.map(|x| x);
-
-        self.adapter.write(state, instruction, rd);
-
-        *state.pc = to_pc & !1;
-
-        Ok(())
+impl<F, A> StepExecutorE2<F> for Rv32JalrStep<A>
+where
+    F: PrimeField32,
+{
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<JalrPreCompute>>()
     }
 
-    fn execute_metered(
+    fn pre_compute_e2<Ctx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let data: &mut E2PreCompute<JalrPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let enabled = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        let fn_ptr = if enabled {
+            execute_e2_impl::<_, _, true>
+        } else {
+            execute_e2_impl::<_, _, false>
+        };
+        Ok(fn_ptr)
+    }
+}
 
-        Ok(())
+#[inline(always)]
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const ENABLED: bool>(
+    pre_compute: &JalrPreCompute,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let rs1 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs1 = u32::from_le_bytes(rs1);
+    let to_pc = rs1.wrapping_add(pre_compute.imm_extended);
+    let to_pc = to_pc - (to_pc & 1);
+    debug_assert!(to_pc < (1 << PC_BITS));
+    let rd = (vm_state.pc + DEFAULT_PC_STEP).to_le_bytes();
+
+    if ENABLED {
+        vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
+    }
+
+    vm_state.pc = to_pc;
+    vm_state.instret += 1;
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const ENABLED: bool>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &JalrPreCompute = pre_compute.borrow();
+    execute_e12_impl::<F, CTX, ENABLED>(pre_compute, vm_state);
+}
+
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const ENABLED: bool>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &E2PreCompute<JalrPreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl::<F, CTX, ENABLED>(&pre_compute.data, vm_state);
+}
+
+impl<A> Rv32JalrStep<A> {
+    /// Return true if enabled.
+    fn pre_compute_impl<F: PrimeField32>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut JalrPreCompute,
+    ) -> Result<bool> {
+        let imm_extended = inst.c.as_canonical_u32() + inst.g.as_canonical_u32() * 0xffff0000;
+        if inst.d.as_canonical_u32() != RV32_REGISTER_AS {
+            return Err(InvalidInstruction(pc));
+        }
+        *data = JalrPreCompute {
+            imm_extended,
+            a: inst.a.as_canonical_u32() as u8,
+            b: inst.b.as_canonical_u32() as u8,
+        };
+        let enabled = !inst.f.is_zero();
+        Ok(enabled)
     }
 }
 

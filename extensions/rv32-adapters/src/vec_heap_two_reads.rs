@@ -7,16 +7,15 @@ use std::{
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
-        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, ExecutionBridge, ExecutionState,
-        VecHeapTwoReadsAdapterInterface, VmAdapterAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        ExecutionBridge, ExecutionState, VecHeapTwoReadsAdapterInterface, VmAdapterAir,
     },
     system::memory::{
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
             MemoryWriteBytesAuxRecord,
         },
-        online::{GuestMemory, TracingMemory},
+        online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
@@ -31,9 +30,7 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
 use openvm_rv32im_circuit::adapters::{
-    abstract_compose, memory_read_from_state, memory_write_from_state,
-    read_rv32_register_from_state, tracing_read, tracing_write, RV32_CELL_BITS,
-    RV32_REGISTER_NUM_LIMBS,
+    abstract_compose, tracing_read, tracing_write, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -586,89 +583,5 @@ impl<
 
         cols.from_state.timestamp = F::from_canonical_u32(timestamp);
         cols.from_state.pc = F::from_canonical_u32(record.from_pc);
-    }
-}
-
-impl<
-        F: PrimeField32,
-        const BLOCKS_PER_READ1: usize,
-        const BLOCKS_PER_READ2: usize,
-        const BLOCKS_PER_WRITE: usize,
-        const READ_SIZE: usize,
-        const WRITE_SIZE: usize,
-    > AdapterExecutorE1<F>
-    for Rv32VecHeapTwoReadsAdapterStep<
-        BLOCKS_PER_READ1,
-        BLOCKS_PER_READ2,
-        BLOCKS_PER_WRITE,
-        READ_SIZE,
-        WRITE_SIZE,
-    >
-{
-    type ReadData = (
-        [[u8; READ_SIZE]; BLOCKS_PER_READ1],
-        [[u8; READ_SIZE]; BLOCKS_PER_READ2],
-    );
-    type WriteData = [[u8; WRITE_SIZE]; BLOCKS_PER_WRITE];
-
-    fn read<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Self::ReadData
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let Instruction { b, c, d, e, .. } = *instruction;
-
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
-
-        // Read register values
-        let rs1_val = read_rv32_register_from_state(state, b.as_canonical_u32());
-        let rs2_val = read_rv32_register_from_state(state, c.as_canonical_u32());
-
-        assert!(rs1_val as usize + READ_SIZE * BLOCKS_PER_READ1 - 1 < (1 << self.pointer_max_bits));
-        assert!(rs2_val as usize + READ_SIZE * BLOCKS_PER_READ2 - 1 < (1 << self.pointer_max_bits));
-        // Read memory values
-        let read_data1 = from_fn(|i| {
-            memory_read_from_state(
-                state,
-                e.as_canonical_u32(),
-                rs1_val + (i * READ_SIZE) as u32,
-            )
-        });
-        let read_data2 = from_fn(|i| {
-            memory_read_from_state(
-                state,
-                e.as_canonical_u32(),
-                rs2_val + (i * READ_SIZE) as u32,
-            )
-        });
-
-        (read_data1, read_data2)
-    }
-
-    fn write<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-    ) where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let Instruction { a, .. } = *instruction;
-
-        let rd_val = read_rv32_register_from_state(state, a.as_canonical_u32());
-        assert!(rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1 < (1 << self.pointer_max_bits));
-
-        for (i, block) in data.into_iter().enumerate() {
-            memory_write_from_state(
-                state,
-                RV32_MEMORY_AS,
-                rd_val + (i * WRITE_SIZE) as u32,
-                block,
-            );
-        }
     }
 }
