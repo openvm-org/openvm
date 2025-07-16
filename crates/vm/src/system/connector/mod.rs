@@ -237,7 +237,7 @@ impl<F> VmConnectorChip<F> {
         }
     }
 
-    pub(crate) fn begin(&mut self, state: ExecutionState<u32>) {
+    pub fn begin(&mut self, state: ExecutionState<u32>) {
         self.boundary_states[0] = Some(ConnectorCols {
             pc: state.pc,
             // TODO(ayush): should this be hardcoded to INITIAL_TIMESTAMP?
@@ -248,7 +248,7 @@ impl<F> VmConnectorChip<F> {
         });
     }
 
-    pub(crate) fn end(&mut self, state: ExecutionState<u32>, exit_code: Option<u32>) {
+    pub fn end(&mut self, state: ExecutionState<u32>, exit_code: Option<u32>) {
         self.boundary_states[1] = Some(ConnectorCols {
             pc: state.pc,
             timestamp: state.timestamp,
