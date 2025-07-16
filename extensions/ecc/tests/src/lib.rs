@@ -320,11 +320,11 @@ mod tests {
     }
 
     #[test]
-    fn test_eddsa() -> Result<()> {
+    fn test_ed25519() -> Result<()> {
         let config = Rv32EccConfig::new(vec![], vec![ED25519_CONFIG.clone()]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
-            "eddsa",
+            "ed25519",
             ["ed25519"],
             &config,
         )?;

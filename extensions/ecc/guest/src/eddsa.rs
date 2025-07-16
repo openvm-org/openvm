@@ -1,10 +1,19 @@
-use openvm_algebra_guest::{IntMod, Reduce};
-use openvm_sha2::sha512;
-
-use crate::{edwards::TwistedEdwardsPoint, CyclicGroup, FromCompressed, IntrinsicCurve};
+// Implementation of the EdDSA signature verification algorithm.
+// The code is generic over the twisted Edwards curve, but currently only instantiated with Ed25519.
+// The implementation is based on the RFC: https://datatracker.ietf.org/doc/html/rfc8032
+// We support both the prehash variant (Ed25519ph) and the non-prehash variant (Ed25519).
+// Note: our implementation is not intended to be safe against timing attacks.
 
 extern crate alloc;
 use alloc::vec::Vec;
+
+use openvm_sha2::sha512;
+
+use crate::{
+    algebra::{IntMod, Reduce},
+    edwards::TwistedEdwardsPoint,
+    CyclicGroup, FromCompressed, IntrinsicCurve,
+};
 
 type Coordinate<C> = <<C as IntrinsicCurve>::Point as TwistedEdwardsPoint>::Coordinate;
 type Scalar<C> = <C as IntrinsicCurve>::Scalar;
@@ -15,6 +24,13 @@ type Point<C> = <C as IntrinsicCurve>::Point;
 pub struct VerifyingKey<C: IntrinsicCurve> {
     /// Affine point
     point: Point<C>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerificationError {
+    InvalidSignature,
+    InvalidContext,
+    FailedToVerify,
 }
 
 impl<C: IntrinsicCurve> VerifyingKey<C>
@@ -33,32 +49,70 @@ where
         })
     }
 
-    pub fn verify(&self, message: &[u8], sig: &[u8]) -> bool {
-        let Some(sig) = Signature::<C>::from_bytes(sig) else {
-            return false;
-        };
+    pub fn verify(&self, message: &[u8], sig: &[u8]) -> Result<(), VerificationError> {
+        self.verify_prehashed(message, sig, &[])
+    }
 
+    /// The verify function for the prehash variant of Ed25519.
+    /// message should be the message to be verified, before the prehash is applied.
+    /// context is the optional context bytes that are shared between a signer and verifier, as per
+    /// the Ed25519ph specification. If no context is provided, the empty slice will be used.
+    /// The context can be up to 255 bytes.
+    pub fn verify_ph(
+        &self,
+        message: &[u8],
+        context: Option<&[u8]>,
+        sig: &[u8],
+    ) -> Result<(), VerificationError> {
         let prehash = sha512(message);
-
-        // h = SHA512(dom2(F, C) || R || A || PH(M))
-        // RFC reference: https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.7
-        let mut sha_input = Vec::new();
 
         // dom2(F, C) domain separator
         // RFC reference: https://datatracker.ietf.org/doc/html/rfc8032#section-2
         // See definition of dom2 in the RFC. Note that the RFC refers to the prehash
         // version of Ed25519 as Ed25519ph, and the non-prehash version as Ed25519.
-        sha_input.extend_from_slice(b"SigEd25519 no Ed25519 collisions");
-        sha_input.extend_from_slice(&[1]); // phflag = 1
+        let mut dom2 = Vec::new();
+        dom2.extend_from_slice(b"SigEd25519 no Ed25519 collisions");
+        dom2.push(1); // phflag = 1
 
         // The RFC specifies optional "context" bytes that are shared between a signer and verifier.
-        // We don't use any context bytes.
         // See: https://datatracker.ietf.org/doc/html/rfc8032#section-5.1
-        sha_input.extend_from_slice(&[0]); // context len = 0
+        if let Some(context) = context {
+            if context.len() > 255 {
+                return Err(VerificationError::InvalidContext);
+            }
+            dom2.push(context.len() as u8);
+            dom2.extend_from_slice(context);
+        } else {
+            dom2.push(0); // context len = 0
+        }
+
+        self.verify_prehashed(&prehash, sig, &dom2)
+    }
+
+    // Shared verify function for both the prehash and non-prehash variants of Ed25519.
+    // prehash is either SHA512(message) or message, for Ed25519ph and Ed25519 respectively.
+    // dom2 is the domain separator for the Ed25519ph and Ed25519 variants. It should be empty for
+    // Ed25519.
+    // See RFC reference: https://datatracker.ietf.org/doc/html/rfc8032#section-2
+    fn verify_prehashed(
+        &self,
+        prehash: &[u8],
+        sig: &[u8],
+        dom2: &[u8],
+    ) -> Result<(), VerificationError> {
+        let Some(sig) = Signature::<C>::from_bytes(sig) else {
+            return Err(VerificationError::InvalidSignature);
+        };
+
+        // h = SHA512(dom2(F, C) || R || A || PH(M))
+        // RFC reference: https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.7
+        let mut sha_input = Vec::new();
+
+        sha_input.extend_from_slice(dom2);
 
         sha_input.extend_from_slice(&encode_point::<C>(&sig.r));
         sha_input.extend_from_slice(&encode_point::<C>(&self.point));
-        sha_input.extend_from_slice(&prehash);
+        sha_input.extend_from_slice(prehash);
 
         let h = sha512(&sha_input);
 
@@ -75,7 +129,11 @@ where
                 <Point<C> as CyclicGroup>::NEG_GENERATOR,
             ],
         );
-        res == <Point<C> as TwistedEdwardsPoint>::IDENTITY
+        if res == <Point<C> as TwistedEdwardsPoint>::IDENTITY {
+            Ok(())
+        } else {
+            Err(VerificationError::FailedToVerify)
+        }
     }
 }
 
