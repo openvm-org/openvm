@@ -414,25 +414,20 @@ fn ec_add_ne_k256<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     let x2 = blocks_to_field_element(input_data[1][..BLOCKS / 2].as_flattened());
     let y2 = blocks_to_field_element(input_data[1][BLOCKS / 2..].as_flattened());
 
-    // Normalize inputs to ensure they're properly reduced
-    let x1 = x1.normalize();
-    let y1 = y1.normalize();
-    let x2 = x2.normalize();
-    let y2 = y2.normalize();
-
     // Calculate lambda = (y2 - y1) / (x2 - x1)
-    let lambda = (y2 - y1).normalize() * (x2 - x1).normalize().invert().unwrap();
-    let lambda = lambda.normalize();
+    let y2_minus_y1 = (y2 - y1).normalize();
+    let x2_minus_x1 = (x2 - x1).normalize();
+    let lambda = y2_minus_y1 * x2_minus_x1.invert().unwrap();
 
     // Calculate x3 = lambda^2 - x1 - x2
-    let lambda_squared = lambda.square().normalize();
+    let lambda_squared = lambda.square();
     let x3 = (lambda_squared - x1 - x2).normalize();
 
     // Calculate y3 = lambda * (x1 - x3) - y1
-    let x1_minus_x3 = (x1 - x3).normalize();
+    let x1_minus_x3 = x1 - x3;
     let y3 = (lambda * x1_minus_x3 - y1).normalize();
 
-    // Use the library result (keeping original behavior)
+    // Final output
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
     field_element_to_blocks(&x3, &mut output, 0);
     field_element_to_blocks(&y3, &mut output, BLOCKS / 2);
