@@ -80,7 +80,7 @@ pub trait VmCircuitConfig<SC: StarkGenericConfig> {
     }
 }
 
-pub trait VmProverConfig<SC, PB>: VmConfig<SC>
+pub trait VmProverConfig<SC, PB>: VmCircuitConfig<SC>
 where
     SC: StarkGenericConfig,
     PB: ProverBackend<Val = Val<SC>, Challenge = SC::Challenge, Challenger = SC::Challenger>,

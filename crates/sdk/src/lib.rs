@@ -63,8 +63,8 @@ use snark_verifier_sdk::{evm::gen_evm_verifier_sol_code, halo2::aggregation::Agg
 use crate::{config::AggConfig, prover::EvmHalo2Prover, types::EvmProof};
 use crate::{
     config::{AggStarkConfig, SdkVmConfig},
-    keygen::asm::program_to_asm,
-    prover::{AppProver, StarkProver},
+    keygen::{asm::program_to_asm, AggStarkProvingKey},
+    prover::AppProver,
 };
 
 pub mod codec;
@@ -184,20 +184,16 @@ where
         VmExe::from_elf(elf, transpiler)
     }
 
-    pub fn execute<VC>(
-        &self,
-        exe: VmExe<F>,
-        vm_config: VC,
-        inputs: StdIn,
-    ) -> Result<Vec<F>, ExecutionError>
+    /// Returns the user public values as field elements.
+    pub fn execute<VC>(&self, exe: VmExe<F>, vm_config: VC, inputs: StdIn) -> Result<Vec<F>>
     where
         VC: VmExecutionConfig<F> + AsRef<SystemConfig>,
-        VC::Executor: InsExecutorE1<F>,
+        VC::Executor: Clone + InsExecutorE1<F>,
     {
-        let vm = VmExecutor::new(vm_config);
+        let vm = VmExecutor::new(vm_config)?;
         let final_memory = vm.execute_e1(exe, inputs, None)?.memory;
         let public_values =
-            extract_public_values(vm.config.system().num_public_values, &final_memory);
+            extract_public_values(vm.config.as_ref().num_public_values, &final_memory);
         Ok(public_values)
     }
 
@@ -212,9 +208,9 @@ where
 
     pub fn app_keygen<VC>(&self, config: AppConfig<VC>) -> Result<AppProvingKey<VC>>
     where
-        VC: VmCircuitConfig<SC>,
+        VC: Clone + VmCircuitConfig<SC> + AsRef<SystemConfig>,
     {
-        let app_pk = AppProvingKey::keygen(config);
+        let app_pk = AppProvingKey::keygen(config)?;
         Ok(app_pk)
     }
 
@@ -229,7 +225,7 @@ where
         <VC as VmExecutionConfig<F>>::Executor:
             InsExecutorE1<F> + InstructionExecutor<F, VC::RecordArena>,
     {
-        let app_prover = AppProver::<VC, E>::new(app_pk.app_vm_pk.clone(), app_committed_exe);
+        let app_prover = AppProver::<VC, E>::new(app_pk.app_vm_pk.clone(), app_committed_exe)?;
         let proof = app_prover.generate_app_proof(inputs);
         Ok(proof)
     }
@@ -290,23 +286,23 @@ where
     //     Ok(agg_pk)
     // }
 
-    pub fn generate_root_verifier_asm(&self, agg_stark_pk: &AggStarkProvingKey) -> String {
-        let kernel_asm = RootVmVerifierConfig {
-            leaf_fri_params: agg_stark_pk.leaf_vm_pk.fri_params,
-            internal_fri_params: agg_stark_pk.internal_vm_pk.fri_params,
-            num_user_public_values: agg_stark_pk.num_user_public_values(),
-            internal_vm_verifier_commit: agg_stark_pk
-                .internal_committed_exe
-                .get_program_commit()
-                .into(),
-            compiler_options: Default::default(),
-        }
-        .build_kernel_asm(
-            &agg_stark_pk.leaf_vm_pk.vm_pk.get_vk(),
-            &agg_stark_pk.internal_vm_pk.vm_pk.get_vk(),
-        );
-        program_to_asm(kernel_asm)
-    }
+    // pub fn generate_root_verifier_asm(&self, agg_stark_pk: &AggStarkProvingKey) -> String {
+    //     let kernel_asm = RootVmVerifierConfig {
+    //         leaf_fri_params: agg_stark_pk.leaf_vm_pk.fri_params,
+    //         internal_fri_params: agg_stark_pk.internal_vm_pk.fri_params,
+    //         num_user_public_values: agg_stark_pk.num_user_public_values(),
+    //         internal_vm_verifier_commit: agg_stark_pk
+    //             .internal_committed_exe
+    //             .get_program_commit()
+    //             .into(),
+    //         compiler_options: Default::default(),
+    //     }
+    //     .build_kernel_asm(
+    //         &agg_stark_pk.leaf_vm_pk.vm_pk.get_vk(),
+    //         &agg_stark_pk.internal_vm_pk.vm_pk.get_vk(),
+    //     );
+    //     program_to_asm(kernel_asm)
+    // }
 
     // pub fn generate_root_verifier_input<VC: VmConfig<F>>(
     //     &self,
@@ -325,118 +321,118 @@ where
     //     Ok(proof)
     // }
 
-    pub fn generate_e2e_stark_proof<VC>(
-        &self,
-        app_pk: Arc<AppProvingKey<VC>>,
-        app_exe: Arc<NonRootCommittedExe>,
-        agg_stark_pk: AggStarkProvingKey,
-        inputs: StdIn,
-    ) -> Result<VmStarkProof<SC>> {
-        let stark_prover =
-            StarkProver::<VC, E>::new(app_pk, app_exe, agg_stark_pk, self.agg_tree_config);
-        let proof = stark_prover.generate_e2e_stark_proof(inputs);
-        Ok(proof)
-    }
+    // pub fn generate_e2e_stark_proof<VC>(
+    //     &self,
+    //     app_pk: Arc<AppProvingKey<VC>>,
+    //     app_exe: Arc<NonRootCommittedExe>,
+    //     agg_stark_pk: AggStarkProvingKey,
+    //     inputs: StdIn,
+    // ) -> Result<VmStarkProof<SC>> {
+    //     let stark_prover =
+    //         StarkProver::<VC, E>::new(app_pk, app_exe, agg_stark_pk, self.agg_tree_config);
+    //     let proof = stark_prover.generate_e2e_stark_proof(inputs);
+    //     Ok(proof)
+    // }
 
-    pub fn verify_e2e_stark_proof(
-        &self,
-        agg_stark_pk: &AggStarkProvingKey,
-        proof: &VmStarkProof<SC>,
-        expected_exe_commit: &Bn254Fr,
-        expected_vm_commit: &Bn254Fr,
-    ) -> Result<AppExecutionCommit> {
-        if proof.proof.per_air.len() < 3 {
-            return Err(eyre::eyre!(
-                "Invalid number of AIRs: expected at least 3, got {}",
-                proof.proof.per_air.len()
-            ));
-        } else if proof.proof.per_air[0].air_id != PROGRAM_AIR_ID {
-            return Err(eyre::eyre!("Missing program AIR"));
-        } else if proof.proof.per_air[1].air_id != CONNECTOR_AIR_ID {
-            return Err(eyre::eyre!("Missing connector AIR"));
-        } else if proof.proof.per_air[2].air_id != PUBLIC_VALUES_AIR_ID {
-            return Err(eyre::eyre!("Missing public values AIR"));
-        }
-        let public_values_air_proof_data = &proof.proof.per_air[2];
+    // pub fn verify_e2e_stark_proof(
+    //     &self,
+    //     agg_stark_pk: &AggStarkProvingKey,
+    //     proof: &VmStarkProof<SC>,
+    //     expected_exe_commit: &Bn254Fr,
+    //     expected_vm_commit: &Bn254Fr,
+    // ) -> Result<AppExecutionCommit> {
+    //     if proof.proof.per_air.len() < 3 {
+    //         return Err(eyre::eyre!(
+    //             "Invalid number of AIRs: expected at least 3, got {}",
+    //             proof.proof.per_air.len()
+    //         ));
+    //     } else if proof.proof.per_air[0].air_id != PROGRAM_AIR_ID {
+    //         return Err(eyre::eyre!("Missing program AIR"));
+    //     } else if proof.proof.per_air[1].air_id != CONNECTOR_AIR_ID {
+    //         return Err(eyre::eyre!("Missing connector AIR"));
+    //     } else if proof.proof.per_air[2].air_id != PUBLIC_VALUES_AIR_ID {
+    //         return Err(eyre::eyre!("Missing public values AIR"));
+    //     }
+    //     let public_values_air_proof_data = &proof.proof.per_air[2];
 
-        let program_commit =
-            proof.proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref();
-        let internal_commit: &[_; CHUNK] = &agg_stark_pk
-            .internal_committed_exe
-            .get_program_commit()
-            .into();
+    //     let program_commit =
+    //         proof.proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref();
+    //     let internal_commit: &[_; CHUNK] = &agg_stark_pk
+    //         .internal_committed_exe
+    //         .get_program_commit()
+    //         .into();
 
-        let (vm_pk, vm_commit) = if program_commit == internal_commit {
-            let internal_pvs: &InternalVmVerifierPvs<_> = public_values_air_proof_data
-                .public_values
-                .as_slice()
-                .borrow();
-            if internal_commit != &internal_pvs.extra_pvs.internal_program_commit {
-                return Err(eyre::eyre!(
-                    "Invalid internal program commit: expected {:?}, got {:?}",
-                    internal_commit,
-                    internal_pvs.extra_pvs.internal_program_commit
-                ));
-            }
-            (
-                &agg_stark_pk.internal_vm_pk,
-                internal_pvs.extra_pvs.leaf_verifier_commit,
-            )
-        } else {
-            (&agg_stark_pk.leaf_vm_pk, *program_commit)
-        };
-        let e = E::new(vm_pk.fri_params);
-        e.verify(&vm_pk.vm_pk.get_vk(), &proof.proof)?;
+    //     let (vm_pk, vm_commit) = if program_commit == internal_commit {
+    //         let internal_pvs: &InternalVmVerifierPvs<_> = public_values_air_proof_data
+    //             .public_values
+    //             .as_slice()
+    //             .borrow();
+    //         if internal_commit != &internal_pvs.extra_pvs.internal_program_commit {
+    //             return Err(eyre::eyre!(
+    //                 "Invalid internal program commit: expected {:?}, got {:?}",
+    //                 internal_commit,
+    //                 internal_pvs.extra_pvs.internal_program_commit
+    //             ));
+    //         }
+    //         (
+    //             &agg_stark_pk.internal_vm_pk,
+    //             internal_pvs.extra_pvs.leaf_verifier_commit,
+    //         )
+    //     } else {
+    //         (&agg_stark_pk.leaf_vm_pk, *program_commit)
+    //     };
+    //     let e = E::new(vm_pk.fri_params);
+    //     e.verify(&vm_pk.vm_pk.get_vk(), &proof.proof)?;
 
-        let pvs: &VmVerifierPvs<_> =
-            public_values_air_proof_data.public_values[..VmVerifierPvs::<u8>::width()].borrow();
+    //     let pvs: &VmVerifierPvs<_> =
+    //         public_values_air_proof_data.public_values[..VmVerifierPvs::<u8>::width()].borrow();
 
-        if let Some(exit_code) = pvs.connector.exit_code() {
-            if exit_code != 0 {
-                return Err(eyre::eyre!(
-                    "Invalid exit code: expected 0, got {}",
-                    exit_code
-                ));
-            }
-        } else {
-            return Err(eyre::eyre!("Program did not terminate"));
-        }
+    //     if let Some(exit_code) = pvs.connector.exit_code() {
+    //         if exit_code != 0 {
+    //             return Err(eyre::eyre!(
+    //                 "Invalid exit code: expected 0, got {}",
+    //                 exit_code
+    //             ));
+    //         }
+    //     } else {
+    //         return Err(eyre::eyre!("Program did not terminate"));
+    //     }
 
-        let hasher = vm_poseidon2_hasher();
-        let public_values_root = hasher.merkle_root(&proof.user_public_values);
-        if public_values_root != pvs.public_values_commit {
-            return Err(eyre::eyre!(
-                "Invalid public values root: expected {:?}, got {:?}",
-                pvs.public_values_commit,
-                public_values_root
-            ));
-        }
+    //     let hasher = vm_poseidon2_hasher();
+    //     let public_values_root = hasher.merkle_root(&proof.user_public_values);
+    //     if public_values_root != pvs.public_values_commit {
+    //         return Err(eyre::eyre!(
+    //             "Invalid public values root: expected {:?}, got {:?}",
+    //             pvs.public_values_commit,
+    //             public_values_root
+    //         ));
+    //     }
 
-        let exe_commit = compute_exe_commit(
-            &hasher,
-            &pvs.app_commit,
-            &pvs.memory.initial_root,
-            pvs.connector.initial_pc,
-        );
-        let app_commit = AppExecutionCommit::from_field_commit(exe_commit, vm_commit);
-        let exe_commit_bn254 = app_commit.app_exe_commit.to_bn254();
-        let vm_commit_bn254 = app_commit.app_vm_commit.to_bn254();
+    //     let exe_commit = compute_exe_commit(
+    //         &hasher,
+    //         &pvs.app_commit,
+    //         &pvs.memory.initial_root,
+    //         pvs.connector.initial_pc,
+    //     );
+    //     let app_commit = AppExecutionCommit::from_field_commit(exe_commit, vm_commit);
+    //     let exe_commit_bn254 = app_commit.app_exe_commit.to_bn254();
+    //     let vm_commit_bn254 = app_commit.app_vm_commit.to_bn254();
 
-        if exe_commit_bn254 != *expected_exe_commit {
-            return Err(eyre::eyre!(
-                "Invalid app exe commit: expected {:?}, got {:?}",
-                expected_exe_commit,
-                exe_commit_bn254
-            ));
-        } else if vm_commit_bn254 != *expected_vm_commit {
-            return Err(eyre::eyre!(
-                "Invalid app vm commit: expected {:?}, got {:?}",
-                expected_vm_commit,
-                vm_commit_bn254
-            ));
-        }
-        Ok(app_commit)
-    }
+    //     if exe_commit_bn254 != *expected_exe_commit {
+    //         return Err(eyre::eyre!(
+    //             "Invalid app exe commit: expected {:?}, got {:?}",
+    //             expected_exe_commit,
+    //             exe_commit_bn254
+    //         ));
+    //     } else if vm_commit_bn254 != *expected_vm_commit {
+    //         return Err(eyre::eyre!(
+    //             "Invalid app vm commit: expected {:?}, got {:?}",
+    //             expected_vm_commit,
+    //             vm_commit_bn254
+    //         ));
+    //     }
+    //     Ok(app_commit)
+    // }
 
     /*
     #[cfg(feature = "evm-prove")]

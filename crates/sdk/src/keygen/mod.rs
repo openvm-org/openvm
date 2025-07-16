@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use derivative::Derivative;
-use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
+// use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
-    arch::{VirtualMachine, VmCircuitConfig, VmConfig},
+    arch::{AirInventoryError, SystemConfig, VirtualMachine, VmCircuitConfig, VmConfig},
     system::{memory::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
 };
 use openvm_continuations::verifier::{
@@ -13,6 +13,7 @@ use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_stark_backend::{
     config::Val,
+    engine::StarkEngine,
     p3_field::{FieldExtensionAlgebra, PrimeField32, TwoAdicField},
 };
 use openvm_stark_sdk::{
@@ -97,11 +98,14 @@ pub struct Halo2ProvingKey {
     pub profiling: bool,
 }
 
-impl<VC: VmCircuitConfig<SC>> AppProvingKey<VC> {
-    pub fn keygen(config: AppConfig<VC>) -> Self {
+impl<VC> AppProvingKey<VC>
+where
+    VC: Clone + VmCircuitConfig<SC> + AsRef<SystemConfig>,
+{
+    pub fn keygen(config: AppConfig<VC>) -> Result<Self, AirInventoryError> {
         let app_engine = BabyBearPoseidon2Engine::new(config.app_fri_params.fri_params);
         let app_vm_pk = {
-            let vm_pk = config.app_vm_config.keygen(app_engine.config());
+            let vm_pk = config.app_vm_config.keygen(app_engine.config())?;
             assert!(
                 vm_pk.max_constraint_degree
                     <= config.app_fri_params.fri_params.max_constraint_degree()
@@ -121,24 +125,24 @@ impl<VC: VmCircuitConfig<SC>> AppProvingKey<VC> {
             let leaf_engine = BabyBearPoseidon2Engine::new(config.leaf_fri_params.fri_params);
             let leaf_program = LeafVmVerifierConfig {
                 app_fri_params: config.app_fri_params.fri_params,
-                app_system_config: config.app_vm_config.system().clone(),
+                app_system_config: config.app_vm_config.as_ref().clone(),
                 compiler_options: config.compiler_options,
             }
             .build_program(&app_vm_pk.vm_pk.get_vk());
             Arc::new(VmCommittedExe::commit(
                 leaf_program.into(),
-                leaf_engine.config.pcs(),
+                leaf_engine.config().pcs(),
             ))
         };
-        Self {
+        Ok(Self {
             leaf_committed_exe,
             leaf_fri_params: config.leaf_fri_params.fri_params,
             app_vm_pk: Arc::new(app_vm_pk),
-        }
+        })
     }
 
     pub fn num_public_values(&self) -> usize {
-        self.app_vm_pk.vm_config.system().num_public_values
+        self.app_vm_pk.vm_config.as_ref().num_public_values
     }
 
     pub fn get_app_vk(&self) -> AppVerifyingKey {
@@ -148,7 +152,7 @@ impl<VC: VmCircuitConfig<SC>> AppProvingKey<VC> {
             memory_dimensions: self
                 .app_vm_pk
                 .vm_config
-                .system()
+                .as_ref()
                 .memory_config
                 .memory_dimensions(),
         }
@@ -461,13 +465,13 @@ impl AggProvingKey {
 pub fn leaf_keygen(
     fri_params: FriParameters,
     leaf_vm_config: NativeConfig,
-) -> Arc<VmProvingKey<SC, NativeConfig>> {
+) -> Result<Arc<VmProvingKey<SC, NativeConfig>>, AirInventoryError> {
     let leaf_engine = BabyBearPoseidon2Engine::new(fri_params);
     let leaf_vm_pk = info_span!("keygen", group = "leaf")
-        .in_scope(|| leaf_vm_config.keygen(leaf_engine.config()));
-    Arc::new(VmProvingKey {
+        .in_scope(|| leaf_vm_config.keygen(leaf_engine.config()))?;
+    Ok(Arc::new(VmProvingKey {
         fri_params,
         vm_config: leaf_vm_config,
         vm_pk: leaf_vm_pk,
-    })
+    }))
 }
