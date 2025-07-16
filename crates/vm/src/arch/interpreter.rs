@@ -26,6 +26,7 @@ use crate::{
 
 /// VM pure executor(E1/E2 executor) which doesn't consider trace generation.
 /// Note: This executor doesn't hold any VM state and can be used for multiple execution.
+#[derive(Clone)]
 pub struct InterpretedInstance<F: PrimeField32, VC: VmConfig<F>> {
     exe: VmExe<F>,
     vm_config: VC,
@@ -205,7 +206,7 @@ unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
     vm_state: &mut VmSegmentState<F, Ctx>,
     fn_ptrs: &[PreComputeInstruction<F, Ctx>],
 ) {
-    // let start = Instant::now();
+    // let start = std::time::Instant::now();
     while vm_state
         .exit_code
         .as_ref()
@@ -214,8 +215,8 @@ unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
         if Ctx::should_suspend(vm_state) {
             break;
         }
-        let pc_index = get_pc_index(program, vm_state.pc).unwrap();
-        let inst = &fn_ptrs[pc_index];
+        let pc_index = get_pc_index_unchecked(program, vm_state.pc);
+        let inst = fn_ptrs.get_unchecked(pc_index);
         unsafe { (inst.handler)(inst.pre_compute, vm_state) };
     }
     if vm_state
@@ -228,19 +229,11 @@ unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
     // println!("execute time: {}ms", start.elapsed().as_millis());
 }
 
-fn get_pc_index<F: Field>(program: &Program<F>, pc: u32) -> Result<usize, ExecutionError> {
+#[inline(always)]
+fn get_pc_index_unchecked<F: Field>(program: &Program<F>, pc: u32) -> usize {
     let step = program.step;
     let pc_base = program.pc_base;
-    let pc_index = ((pc - pc_base) / step) as usize;
-    if !(0..program.len()).contains(&pc_index) {
-        return Err(ExecutionError::PcOutOfBounds {
-            pc,
-            step,
-            pc_base,
-            program_len: program.len(),
-        });
-    }
-    Ok(pc_index)
+    ((pc - pc_base) / step) as usize
 }
 
 /// Bytes allocated according to the given Layout
@@ -342,6 +335,7 @@ fn get_e2_pre_compute_max_size<F: PrimeField32, E: InsExecutorE2<F>, P>(
         .next_power_of_two()
 }
 
+#[inline(always)]
 fn system_opcode_pre_compute_size<F: PrimeField32>(inst: &Instruction<F>) -> Option<usize> {
     if inst.opcode == SystemOpcode::TERMINATE.global_opcode() {
         return Some(size_of::<TerminatePreCompute>());
