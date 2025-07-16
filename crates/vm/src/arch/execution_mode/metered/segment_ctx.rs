@@ -3,9 +3,9 @@ use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
 
 /// Check segment every 100 instructions.
-const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 100;
+const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
-const DEFAULT_MAX_TRACE_HEIGHT: u32 = (1 << 23) - 100;
+const DEFAULT_MAX_TRACE_HEIGHT: u32 = (1 << 23) - 10000;
 const DEFAULT_MAX_CELLS: usize = 2_000_000_000; // 2B
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 
@@ -16,7 +16,7 @@ pub struct Segment {
     pub trace_heights: Vec<u32>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SegmentationLimits {
     pub max_trace_height: u32,
     pub max_cells: usize,
@@ -33,7 +33,7 @@ impl Default for SegmentationLimits {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
     instret_last_segment_check: u64,
