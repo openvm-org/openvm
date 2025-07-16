@@ -194,6 +194,9 @@ where
 {
     let mut y_bytes = p.y().as_le_bytes().to_vec();
     if p.x().as_le_bytes()[0] & 1u8 == 1 {
+        // We pack the parity of the x-coordinate in the most significant bit of the last byte, as
+        // per the Ed25519 spec, so the Coordinate<C> type must have enough limbs so that the most
+        // significant bit of the last byte is always 0.
         debug_assert!(y_bytes[Coordinate::<C>::NUM_LIMBS - 1] & 0b10000000 == 0);
         y_bytes[Coordinate::<C>::NUM_LIMBS - 1] |= 0b10000000;
     }
