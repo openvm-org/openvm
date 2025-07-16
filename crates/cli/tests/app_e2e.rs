@@ -87,7 +87,7 @@ fn test_cli_app_e2e() -> Result<()> {
 
 #[test]
 fn test_cli_app_e2e_simplified() -> Result<()> {
-    run_cmd("cargo", &["install", "--path", ".", "--force"])?;
+    run_cmd("cargo", &["install", "--path", ".", "--force", "--locked"])?;
     run_cmd(
         "cargo",
         &[
