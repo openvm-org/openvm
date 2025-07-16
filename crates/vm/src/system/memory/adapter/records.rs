@@ -9,7 +9,7 @@ use crate::arch::{CustomBorrow, DenseRecordArena, RecordArena, SizedRecord};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, AlignedBytesBorrow, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct AccessRecordHeader {
+pub struct AccessRecordHeader {
     /// Iff we need to merge before, this has the `MERGE_AND_NOT_SPLIT_FLAG` bit set
     pub timestamp_and_mask: u32,
     pub address_space: u32,
