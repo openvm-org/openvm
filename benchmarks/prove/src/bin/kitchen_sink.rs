@@ -50,7 +50,6 @@ fn verify_native_max_trace_heights(
             .execute_metered(
                 app_pk.leaf_committed_exe.exe.clone(),
                 leaf_input.write_to_stream(),
-                &vm_vk.total_widths(),
                 &vm_vk.num_interactions(),
             )
             .expect("execute_metered failed");

@@ -17,6 +17,13 @@ use openvm_rv32im_circuit::{
 mod extension;
 pub use extension::*;
 
+mod base_alu;
+mod branch_eq;
+mod branch_lt;
+pub(crate) mod common;
+mod less_than;
+mod mult;
+mod shift;
 #[cfg(test)]
 mod tests;
 

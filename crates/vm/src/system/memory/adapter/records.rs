@@ -9,7 +9,7 @@ use crate::arch::{CustomBorrow, DenseRecordArena, RecordArena, SizedRecord};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, AlignedBytesBorrow, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct AccessRecordHeader {
+pub struct AccessRecordHeader {
     /// Iff we need to merge before, this has the `MERGE_AND_NOT_SPLIT_FLAG` bit set
     pub timestamp_and_mask: u32,
     pub address_space: u32,
@@ -22,7 +22,7 @@ pub(crate) struct AccessRecordHeader {
 
 #[repr(C)]
 #[derive(Debug)]
-pub(crate) struct AccessRecordMut<'a> {
+pub struct AccessRecordMut<'a> {
     pub header: &'a mut AccessRecordHeader,
     // TODO(AG): optimize with some `Option` serialization stuff
     pub timestamps: &'a mut [u32], // len is block_size / lowest_block_size
@@ -30,7 +30,7 @@ pub(crate) struct AccessRecordMut<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct AccessLayout {
+pub struct AccessLayout {
     /// The size of the block in elements.
     pub block_size: usize,
     /// The size of the minimal block we may split into/merge from (usually 1 or 4)

@@ -6,21 +6,29 @@ use super::{
     memory_ctx::MemoryCtx,
     segment_ctx::{Segment, SegmentationCtx},
 };
-use crate::{arch::execution_mode::E1E2ExecutionCtx, system::memory::dimensions::MemoryDimensions};
+use crate::{
+    arch::{
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        VmSegmentState,
+    },
+    system::memory::{dimensions::MemoryDimensions, online::GuestMemory},
+};
+
+pub const DEFAULT_PAGE_BITS: usize = 6;
 
 #[derive(Debug)]
-pub struct MeteredCtx<const PAGE_BITS: usize = 6> {
+pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub trace_heights: Vec<u32>,
     // TODO[jpw]: should this be in Ctrl?
     pub is_trace_height_constant: Vec<bool>,
 
     pub memory_ctx: MemoryCtx<PAGE_BITS>,
     pub segmentation_ctx: SegmentationCtx,
+    pub instret_end: u64,
     pub continuations_enabled: bool,
 }
 
 impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         constant_trace_heights: Vec<Option<usize>>,
         has_public_values_chip: bool,
@@ -76,6 +84,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             is_trace_height_constant,
             memory_ctx,
             segmentation_ctx,
+            instret_end: u64::MAX,
             continuations_enabled,
         };
 
@@ -114,6 +123,11 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     pub fn with_segment_check_insns(mut self, segment_check_insns: u64) -> Self {
         self.segmentation_ctx
             .set_segment_check_insns(segment_check_insns);
+        self
+    }
+
+    pub fn with_instret_end(mut self, target_instret: u64) -> Self {
+        self.instret_end = target_instret;
         self
     }
 
@@ -165,7 +179,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     }
 }
 
-impl<const PAGE_BITS: usize> E1E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
+impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
     #[inline(always)]
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32) {
         debug_assert!(
@@ -192,5 +206,26 @@ impl<const PAGE_BITS: usize> E1E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
                 size,
             );
         }
+    }
+
+    #[inline(always)]
+    fn should_suspend<F>(vm_state: &mut VmSegmentState<F, GuestMemory, Self>) -> bool {
+        vm_state.ctx.check_and_segment(vm_state.instret);
+        vm_state.instret == vm_state.ctx.instret_end
+    }
+
+    #[inline(always)]
+    fn on_terminate<F>(vm_state: &mut VmSegmentState<F, GuestMemory, Self>) {
+        vm_state
+            .ctx
+            .segmentation_ctx
+            .segment(vm_state.instret, &vm_state.ctx.trace_heights);
+    }
+}
+
+impl<const PAGE_BITS: usize> E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
+    #[inline(always)]
+    fn on_height_change(&mut self, chip_idx: usize, height_delta: u32) {
+        self.trace_heights[chip_idx] += height_delta;
     }
 }

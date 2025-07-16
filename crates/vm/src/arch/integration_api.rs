@@ -22,11 +22,7 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::{execution_mode::E1E2ExecutionCtx, VmStateMut};
-use crate::system::memory::{
-    online::{GuestMemory, TracingMemory},
-    MemoryAuxColsFactory, SharedMemoryHelper,
-};
+use crate::system::memory::{online::TracingMemory, MemoryAuxColsFactory, SharedMemoryHelper};
 
 /// The interface between primitive AIR and machine adapter AIR.
 pub trait VmAdapterInterface<T> {
@@ -124,13 +120,11 @@ pub trait RowMajorMatrixArena<F>: Arena {
     fn into_matrix(self) -> RowMajorMatrix<F>;
 }
 
-// TODO[jpw]: revisit if this trait makes sense
 /// Helper trait for CPU tracegen.
 pub trait TraceFiller<F>: Send + Sync {
     /// Populates `trace`. This function will always be called after
     /// [`TraceStep::execute`], so the `trace` should already contain the records necessary to fill
     /// in the rest of it.
-    // TODO(ayush): come up with a better abstraction for chips that fill a dynamic number of rows
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -679,8 +673,8 @@ where
     C: SizedRecord<AdapterCoreLayout<M>>,
     M: AdapterCoreMetadata + Clone,
 {
-    // A utility function to get the aligned widths of the adapter and core records
-    fn get_aligned_sizes(layout: &AdapterCoreLayout<M>) -> (usize, usize) {
+    // Returns the aligned sizes of the adapter and core records given their layout
+    pub fn get_aligned_sizes(layout: &AdapterCoreLayout<M>) -> (usize, usize) {
         let adapter_alignment = A::alignment(layout);
         let core_alignment = C::alignment(layout);
         let adapter_size = A::size(layout);
@@ -690,6 +684,12 @@ where
             .next_multiple_of(adapter_alignment)
             - aligned_adapter_size;
         (aligned_adapter_size, aligned_core_size)
+    }
+
+    // Returns the aligned size of a single record given its layout
+    pub fn get_aligned_record_size(layout: &AdapterCoreLayout<M>) -> usize {
+        let (adapter_size, core_size) = Self::get_aligned_sizes(layout);
+        adapter_size + core_size
     }
 
     // Returns a record at the given offset in the buffer
@@ -818,30 +818,6 @@ pub trait AdapterTraceFiller<F>: Send + Sync {
     const WIDTH: usize;
     /// Post-execution filling of rest of adapter row.
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]);
-}
-
-pub trait AdapterExecutorE1<F>
-where
-    F: PrimeField32,
-{
-    type ReadData;
-    type WriteData;
-
-    fn read<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Self::ReadData
-    where
-        Ctx: E1E2ExecutionCtx;
-
-    fn write<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-    ) where
-        Ctx: E1E2ExecutionCtx;
 }
 
 #[derive(Clone, Copy, derive_new::new)]

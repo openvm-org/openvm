@@ -27,7 +27,7 @@ pub(crate) type WeierstrassStep<
     const NUM_READS: usize,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
-> = FieldExpressionStep<Rv32VecHeapAdapterStep<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>;
+> = FieldExprVecHeapStep<NUM_READS, BLOCKS, BLOCK_SIZE>;
 
 pub(crate) type WeierstrassChip<
     F,

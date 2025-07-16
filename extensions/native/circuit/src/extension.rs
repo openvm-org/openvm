@@ -15,7 +15,7 @@ use openvm_circuit::{
     },
     system::{memory::SharedMemoryHelper, SystemExecutor, SystemPort},
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor, VmConfig};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_native_compiler::{
     CastfOpcode, FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
@@ -71,7 +71,7 @@ impl InitFileGenerator for NativeConfig {}
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Native;
 
-#[derive(Clone, From, AnyEnum, InsExecutorE1, InstructionExecutor)]
+#[derive(Clone, From, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
 pub enum NativeExecutor<F: Field> {
     LoadStore(NativeLoadStoreStep<1>),
     BlockLoadStore(NativeLoadStoreStep<BLOCK_LOAD_STORE_SIZE>),
@@ -409,7 +409,7 @@ pub(crate) mod phantom {
             c_upper: u16,
         ) -> eyre::Result<()> {
             let [value] = unsafe { memory.read::<F, 1>(c_upper as u32, a) };
-            println!("{}", value);
+            println!("{value}");
             Ok(())
         }
     }
@@ -469,7 +469,7 @@ pub(crate) mod phantom {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct CastFExtension;
 
-#[derive(Clone, From, AnyEnum, InsExecutorE1, InstructionExecutor)]
+#[derive(Clone, From, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
 pub enum CastFExtensionExecutor {
     CastF(CastFStep),
 }

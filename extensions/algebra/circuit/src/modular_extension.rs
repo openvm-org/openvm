@@ -12,7 +12,7 @@ use openvm_circuit::{
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
     bitwise_op_lookup::{

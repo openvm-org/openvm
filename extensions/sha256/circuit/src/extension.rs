@@ -9,7 +9,7 @@ use openvm_circuit::{
     },
     system::{memory::SharedMemoryHelper, SystemExecutor},
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
@@ -60,7 +60,7 @@ impl InitFileGenerator for Sha256Rv32Config {}
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Sha256;
 
-#[derive(Clone, From, AnyEnum, InsExecutorE1, InstructionExecutor)]
+#[derive(Clone, From, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
 pub enum Sha256Executor {
     Sha256(Sha256VmStep),
 }

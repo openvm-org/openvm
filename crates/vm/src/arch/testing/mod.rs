@@ -1,6 +1,5 @@
-use std::{borrow::Borrow, iter::zip, marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 
-use dashmap::DashMap;
 use itertools::zip_eq;
 use openvm_circuit_primitives::{
     utils::next_power_of_two_or_zero,
@@ -9,17 +8,13 @@ use openvm_circuit_primitives::{
     },
 };
 use openvm_instructions::{instruction::Instruction, NATIVE_AS};
-use openvm_poseidon2_air::{Permutation, Poseidon2Config};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::VerificationData,
     interaction::{BusIndex, PermutationCheckBus},
     p3_air::BaseAir,
     p3_field::{Field, PrimeField32},
-    p3_matrix::{
-        dense::{DenseMatrix, RowMajorMatrix},
-        Matrix,
-    },
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_util::log2_strict_usize,
     prover::{
         cpu::{CpuBackend, CpuDevice},
@@ -27,7 +22,7 @@ use openvm_stark_backend::{
     },
     rap::AnyRap,
     verifier::VerificationError,
-    AirRef, Chip, ChipUsageGetter,
+    AirRef, Chip,
 };
 use openvm_stark_sdk::{
     config::{
@@ -45,7 +40,6 @@ use tracing::Level;
 use super::{ExecutionBridge, ExecutionBus, InstructionExecutor};
 use crate::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher,
         testing::{execution::air::ExecutionDummyAir, program::air::ProgramDummyAir},
         vm_poseidon2_config, Arena, ExecutionState, MatrixRecordArena, MemoryConfig,
         RowMajorMatrixArena, Streams, VmStateMut,
@@ -53,7 +47,6 @@ use crate::{
     system::{
         memory::{
             adapter::records::arena_size_bound,
-            interface::MemoryInterface,
             offline_checker::{MemoryBridge, MemoryBus},
             online::TracingMemory,
             MemoryAirInventory, MemoryController, SharedMemoryHelper, CHUNK,

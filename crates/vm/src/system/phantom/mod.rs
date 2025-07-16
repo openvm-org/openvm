@@ -20,6 +20,7 @@ use openvm_stark_backend::{
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
+use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
@@ -27,14 +28,17 @@ use serde_big_array::BigArray;
 use super::memory::online::{GuestMemory, TracingMemory};
 use crate::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionError,
-        ExecutionState, InsExecutorE1, InstructionExecutor, PcIncOrSet, PhantomSubExecutor,
-        RecordArena, TraceFiller, VmChipWrapper, VmStateMut,
+        ExecutionState, InstructionExecutor, PcIncOrSet, PhantomSubExecutor, RecordArena, Streams,
+        TraceFiller, VmChipWrapper, VmStateMut,
     },
-    system::memory::MemoryAuxColsFactory,
+    system::{
+        memory::MemoryAuxColsFactory,
+        phantom::execution::{PhantomOperands, PhantomStateMut},
+    },
 };
 
+mod execution;
 #[cfg(test)]
 mod tests;
 
@@ -110,75 +114,6 @@ pub struct PhantomExecutor<F> {
 pub struct PhantomFiller;
 pub type PhantomChip<F> = VmChipWrapper<F, PhantomFiller>;
 
-impl<F> InsExecutorE1<F> for PhantomExecutor<F>
-where
-    F: PrimeField32,
-{
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError>
-    where
-        F: PrimeField32,
-        Ctx: E1E2ExecutionCtx,
-    {
-        let pc = *state.pc;
-        let &Instruction {
-            opcode, a, b, c, ..
-        } = instruction;
-        assert_eq!(opcode, self.phantom_opcode);
-
-        let c_u32 = c.as_canonical_u32();
-        let discriminant = PhantomDiscriminant(c_u32 as u16);
-        // If not a system phantom sub-instruction (which is handled in
-        // ExecutionSegment), look for a phantom sub-executor to handle it.
-        if let Some(sys_phantom) = SysPhantom::from_repr(discriminant.0) {
-            if sys_phantom == SysPhantom::DebugPanic {
-                return Err(ExecutionError::Fail { pc });
-            }
-        } else {
-            let sub_executor = self
-                .phantom_executors
-                .get(&discriminant)
-                .ok_or_else(|| ExecutionError::PhantomNotFound { pc, discriminant })?;
-            // TODO(ayush): implement phantom subexecutor for new traits
-            sub_executor
-                .as_ref()
-                .phantom_execute(
-                    state.memory,
-                    state.streams,
-                    state.rng,
-                    discriminant,
-                    a.as_canonical_u32(),
-                    b.as_canonical_u32(),
-                    (c_u32 >> 16) as u16,
-                )
-                .map_err(|e| ExecutionError::Phantom {
-                    pc,
-                    discriminant,
-                    inner: e,
-                })?;
-        }
-
-        *state.pc = pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
-    }
-
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<(), ExecutionError> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
-
-        Ok(())
-    }
-}
-
 impl<F, RA> InstructionExecutor<F, RA> for PhantomExecutor<F>
 where
     F: PrimeField32,
@@ -189,48 +124,35 @@ where
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
-        let pc = *state.pc;
         let record: &mut PhantomRecord = state.ctx.alloc(EmptyMultiRowLayout::default());
-        record.pc = pc;
+        record.pc = *state.pc;
         record.timestamp = state.memory.timestamp;
         let [a, b, c] = [instruction.a, instruction.b, instruction.c].map(|x| x.as_canonical_u32());
         record.operands = [a, b, c];
 
-        let opcode = instruction.opcode;
-        assert_eq!(opcode, self.phantom_opcode);
-
-        let discriminant = PhantomDiscriminant(c as u16);
-        // If not a system phantom sub-instruction (which is handled in
-        // ExecutionSegment), look for a phantom sub-executor to handle it.
-        if let Some(sys_phantom) = SysPhantom::from_repr(discriminant.0) {
-            if sys_phantom == SysPhantom::DebugPanic {
-                return Err(ExecutionError::Fail { pc });
-            }
-        } else {
+        debug_assert_eq!(instruction.opcode, self.phantom_opcode);
+        let c_u32 = instruction.c.as_canonical_u32() as u16;
+        if SysPhantom::from_repr(c_u32).is_none() {
             let sub_executor = self
                 .phantom_executors
-                .get(&discriminant)
-                .ok_or_else(|| ExecutionError::PhantomNotFound { pc, discriminant })?;
-            // TODO(ayush): implement phantom subexecutor for new traits
-            sub_executor
-                .as_ref()
-                .phantom_execute(
-                    &state.memory.data,
-                    state.streams,
-                    state.rng,
-                    discriminant,
-                    a,
-                    b,
-                    (c >> 16) as u16,
-                )
-                .map_err(|e| ExecutionError::Phantom {
-                    pc,
-                    discriminant,
-                    inner: e,
-                })?;
+                .get(&PhantomDiscriminant(c_u32))
+                .unwrap();
+            execution::execute_impl(
+                PhantomStateMut {
+                    pc: state.pc,
+                    memory: &mut state.memory.data,
+                    streams: state.streams,
+                    rng: state.rng,
+                },
+                &PhantomOperands {
+                    a: instruction.a.as_canonical_u32(),
+                    b: instruction.b.as_canonical_u32(),
+                    c: instruction.c.as_canonical_u32(),
+                },
+                sub_executor.as_ref(),
+            )?;
         }
-
-        *state.pc = pc.wrapping_add(DEFAULT_PC_STEP);
+        *state.pc += DEFAULT_PC_STEP;
         state.memory.increment_timestamp();
 
         Ok(())
@@ -254,5 +176,59 @@ impl<F: Field> TraceFiller<F> for PhantomFiller {
         row.operands[1] = F::from_canonical_u32(record.operands[1]);
         row.operands[0] = F::from_canonical_u32(record.operands[0]);
         row.pc = F::from_canonical_u32(record.pc)
+    }
+}
+
+pub struct NopPhantomExecutor;
+pub struct CycleStartPhantomExecutor;
+pub struct CycleEndPhantomExecutor;
+
+impl<F> PhantomSubExecutor<F> for NopPhantomExecutor {
+    #[inline(always)]
+    fn phantom_execute(
+        &self,
+        _memory: &GuestMemory,
+        _streams: &mut Streams<F>,
+        _rng: &mut StdRng,
+        _discriminant: PhantomDiscriminant,
+        _a: u32,
+        _b: u32,
+        _c_upper: u16,
+    ) -> eyre::Result<()> {
+        Ok(())
+    }
+}
+
+impl<F> PhantomSubExecutor<F> for CycleStartPhantomExecutor {
+    #[inline(always)]
+    fn phantom_execute(
+        &self,
+        _memory: &GuestMemory,
+        _streams: &mut Streams<F>,
+        _rng: &mut StdRng,
+        _discriminant: PhantomDiscriminant,
+        _a: u32,
+        _b: u32,
+        _c_upper: u16,
+    ) -> eyre::Result<()> {
+        // TODO: implement cycle tracker for E1/E2
+        Ok(())
+    }
+}
+
+impl<F> PhantomSubExecutor<F> for CycleEndPhantomExecutor {
+    #[inline(always)]
+    fn phantom_execute(
+        &self,
+        _memory: &GuestMemory,
+        _streams: &mut Streams<F>,
+        _rng: &mut StdRng,
+        _discriminant: PhantomDiscriminant,
+        _a: u32,
+        _b: u32,
+        _c_upper: u16,
+    ) -> eyre::Result<()> {
+        // TODO: implement cycle tracker for E1/E2
+        Ok(())
     }
 }

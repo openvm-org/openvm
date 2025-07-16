@@ -5,7 +5,8 @@ use itertools::{izip, zip_eq};
 use openvm_instructions::{exe::SparseMemoryImage, NATIVE_AS};
 use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
-    p3_maybe_rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
+    p3_maybe_rayon::prelude::*,
+    p3_util::log2_strict_usize,
 };
 use tracing::instrument;
 
@@ -266,12 +267,15 @@ impl<M: LinearMemory> AddressMap<M> {
 /// API for guest memory conforming to OpenVM ISA
 // @dev Note we don't make this a trait because phantom executors currently need a concrete type for
 // guest memory
-#[derive(Debug, Clone, derive_new::new)]
+#[derive(Debug, Clone)]
 pub struct GuestMemory {
     pub memory: AddressMap,
 }
 
 impl GuestMemory {
+    pub fn new(addr: AddressMap) -> Self {
+        Self { memory: addr }
+    }
     /// Returns `[pointer:BLOCK_SIZE]_{address_space}`
     ///
     /// # Safety
@@ -338,6 +342,12 @@ impl GuestMemory {
             .get_memory_mut()
             .get_unchecked_mut(addr_space as usize)
             .swap((ptr as usize) * size_of::<T>(), values);
+    }
+
+    #[inline(always)]
+    #[allow(clippy::missing_safety_doc)]
+    pub unsafe fn get_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
+        self.memory.get_slice((addr_space, ptr), len)
     }
 }
 
@@ -911,6 +921,13 @@ impl TracingMemory {
             }
         }
         assert_eq!(current_cnt, 0, "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`");
+    }
+
+    pub fn address_space_alignment(&self) -> Vec<u8> {
+        self.min_block_size
+            .iter()
+            .map(|&x| log2_strict_usize(x as usize) as u8)
+            .collect()
     }
 }
 

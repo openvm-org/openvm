@@ -16,8 +16,8 @@ use openvm_stark_sdk::{
 use crate::{
     arch::{
         execution_mode::metered::Segment, vm::VirtualMachine, ExitCode, InsExecutorE1,
-        InstructionExecutor, MatrixRecordArena, PreflightExecutionOutput, Streams, VmCircuitConfig,
-        VmExecutionConfig, VmProverConfig,
+        InsExecutorE2, InstructionExecutor, MatrixRecordArena, PreflightExecutionOutput, Streams,
+        VmCircuitConfig, VmExecutionConfig, VmProverConfig,
     },
     system::memory::MemoryImage,
 };
@@ -28,7 +28,7 @@ where
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmProverConfig<BabyBearPoseidon2Engine, RecordArena = MatrixRecordArena<BabyBear>>,
     <VC as VmExecutionConfig<BabyBear>>::Executor:
-        InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear>,
+        InsExecutorE1<BabyBear> + InsExecutorE2<BabyBear> + InstructionExecutor<BabyBear>,
 {
     air_test_with_min_segments(config, exe, Streams::default(), 1);
 }
@@ -45,7 +45,7 @@ where
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmProverConfig<BabyBearPoseidon2Engine, RecordArena = MatrixRecordArena<BabyBear>>,
     <VC as VmExecutionConfig<BabyBear>>::Executor:
-        InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear>,
+        InsExecutorE1<BabyBear> + InsExecutorE2<BabyBear> + InstructionExecutor<BabyBear>,
 {
     let mut log_blowup = 1;
     while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
@@ -79,7 +79,7 @@ where
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmProverConfig<BabyBearPoseidon2Engine, RecordArena = MatrixRecordArena<BabyBear>>,
     <VC as VmExecutionConfig<BabyBear>>::Executor:
-        InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear>,
+        InsExecutorE1<BabyBear> + InsExecutorE2<BabyBear> + InstructionExecutor<BabyBear>,
 {
     setup_tracing();
     let engine = BabyBearPoseidon2Engine::new(fri_params);

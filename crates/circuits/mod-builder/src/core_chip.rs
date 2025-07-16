@@ -1,20 +1,20 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::{
+    marker::PhantomData,
+    mem::{align_of, size_of},
+    sync::Arc,
+};
 
 use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterCoreMetadata,
-        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, CustomBorrow, DynAdapterInterface,
-        DynArray, InsExecutorE1, InstructionExecutor, MinimalInstruction, RecordArena, Result,
-        SizedRecord, TraceFiller, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterTraceFiller, AdapterTraceStep, CustomBorrow, DynAdapterInterface, DynArray,
+        InstructionExecutor, MinimalInstruction, RecordArena, Result, SizedRecord, TraceFiller,
+        VmAdapterInterface, VmCoreAir, VmStateMut,
     },
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory,
-    },
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerChip},
@@ -33,6 +33,7 @@ use crate::{
     builder::{FieldExpr, FieldExprCols},
     utils::biguint_to_limbs_vec,
 };
+
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {
     pub expr: FieldExpr,
@@ -413,7 +414,7 @@ where
             &self.expr,
             &self.local_opcode_idx,
             &self.opcode_flag_idx,
-            &core_record.input_limbs,
+            core_record.input_limbs,
             *core_record.opcode as usize,
         );
 
@@ -451,7 +452,7 @@ where
             &self.expr,
             &self.local_opcode_idx,
             &self.opcode_flag_idx,
-            &record.input_limbs,
+            record.input_limbs,
             *record.opcode as usize,
         );
 
@@ -474,47 +475,6 @@ where
         self.expr
             .generate_subrow((&tmp_range_checker, inputs, flags), core_row);
         core_row[0] = F::ZERO; // is_valid = 0
-    }
-}
-
-impl<F, A> InsExecutorE1<F> for FieldExpressionStep<A>
-where
-    F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
-{
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let data: &[u8] = &self.adapter.read(state, instruction).into().0;
-        let (writes, _, _) = run_field_expression(
-            &self.expr,
-            &self.local_opcode_idx,
-            &self.opcode_flag_idx,
-            data,
-            instruction.opcode.local_opcode_idx(self.offset),
-        );
-
-        self.adapter.write(state, instruction, writes.into());
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        Ok(())
-    }
-
-    fn execute_metered(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()> {
-        self.execute_e1(state, instruction)?;
-        state.ctx.trace_heights[chip_index] += 1;
-
-        Ok(())
     }
 }
 
@@ -574,4 +534,50 @@ fn run_field_expression(
         .into();
 
     (writes, inputs, flags)
+}
+
+#[inline(always)]
+pub fn run_field_expression_precomputed<const NEEDS_SETUP: bool>(
+    expr: &FieldExpr,
+    flag_idx: usize,
+    data: &[u8],
+) -> DynArray<u8> {
+    let field_element_limbs = expr.canonical_num_limbs();
+    assert_eq!(data.len(), expr.num_inputs() * field_element_limbs);
+
+    let mut inputs = Vec::with_capacity(expr.num_inputs());
+    for i in 0..expr.num_inputs() {
+        let start = i * expr.canonical_num_limbs();
+        let end = start + expr.canonical_num_limbs();
+        let limb_slice = &data[start..end];
+        let input = BigUint::from_bytes_le(limb_slice);
+        inputs.push(input);
+    }
+
+    let flags = if NEEDS_SETUP {
+        let mut flags = vec![false; expr.num_flags()];
+        if flag_idx < expr.num_flags() {
+            flags[flag_idx] = true;
+        }
+        flags
+    } else {
+        vec![]
+    };
+
+    let vars = expr.execute(inputs, flags);
+    assert_eq!(vars.len(), expr.num_vars());
+
+    let outputs: Vec<BigUint> = expr
+        .output_indices()
+        .iter()
+        .map(|&i| vars[i].clone())
+        .collect();
+
+    outputs
+        .iter()
+        .map(|x| biguint_to_limbs_vec(x, field_element_limbs))
+        .concat()
+        .into_iter()
+        .collect::<Vec<_>>()
+        .into()
 }

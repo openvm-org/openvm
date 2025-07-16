@@ -1,3 +1,4 @@
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode,
@@ -10,12 +11,9 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{
-    execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-    Streams,
-};
+use super::{execution_mode::E1ExecutionCtx, Streams, VmSegmentState};
 use crate::{
-    arch::MatrixRecordArena,
+    arch::{execution_mode::E2ExecutionCtx, ExecutorInventoryError, MatrixRecordArena},
     system::{
         memory::online::{GuestMemory, TracingMemory},
         program::{ProgramBus, StaticProgramError},
@@ -69,8 +67,13 @@ pub enum ExecutionError {
     FailedWithExitCode(u32),
     #[error("trace buffer out of bounds: requested {requested} but capacity is {capacity}")]
     TraceBufferOutOfBounds { requested: usize, capacity: usize },
+    #[error("inventory error: {0}")]
+    Inventory(#[from] ExecutorInventoryError),
     #[error("static program error: {0}")]
     Static(#[from] StaticProgramError),
+    // TODO[jpw]: this should be in StaticProgramError
+    #[error("invalid instruction at pc {0}")]
+    InvalidInstruction(u32),
 }
 
 /// Global VM state accessible during instruction execution.
@@ -100,22 +103,48 @@ pub trait InstructionExecutor<F, RA = MatrixRecordArena<F>>: Clone {
     fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
-/// New trait for instruction execution
-pub trait InsExecutorE1<F> {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        Ctx: E1E2ExecutionCtx;
+pub type ExecuteFunc<F, CTX> = unsafe fn(&[u8], &mut VmSegmentState<F, GuestMemory, CTX>);
 
-    fn execute_metered(
+pub struct PreComputeInstruction<'a, F, CTX> {
+    pub handler: ExecuteFunc<F, CTX>,
+    pub pre_compute: &'a [u8],
+}
+
+#[derive(Clone, AlignedBytesBorrow)]
+#[repr(C)]
+pub struct E2PreCompute<DATA> {
+    pub chip_idx: u32,
+    pub data: DATA,
+}
+
+/// Trait for E1 execution
+pub trait InsExecutorE1<F> {
+    fn pre_compute_size(&self) -> usize;
+
+    fn pre_compute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()>;
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E1ExecutionCtx;
+}
+
+pub trait InsExecutorE2<F> {
+    fn e2_pre_compute_size(&self) -> usize;
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx;
+
+    // fn set_trace_height(&mut self, height: usize);
 }
 
 #[repr(C)]

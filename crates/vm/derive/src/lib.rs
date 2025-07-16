@@ -131,7 +131,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_derive(InsExecutorE1)]
-pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
+pub fn ins_executor_e1_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
 
     let name = &ast.ident;
@@ -159,24 +159,20 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                 .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InsExecutorE1<F> });
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<F> for #name #ty_generics #where_clause {
-                    fn execute_e1<Ctx>(
-                        &self,
-                        state: &mut ::openvm_circuit::arch::VmStateMut<F, ::openvm_circuit::system::memory::online::GuestMemory, Ctx>,
-                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
-                    ) -> ::openvm_circuit::arch::Result<()>
-                    where
-                        Ctx: ::openvm_circuit::arch::execution_mode::E1E2ExecutionCtx,
-                    {
-                        self.0.execute_e1(state, instruction)
+                    #[inline(always)]
+                    fn pre_compute_size(&self) -> usize {
+                        self.0.pre_compute_size()
                     }
-
-                    fn execute_metered(
+                    #[inline(always)]
+                    fn pre_compute_e1<Ctx>(
                         &self,
-                        state: &mut ::openvm_circuit::arch::VmStateMut<F, ::openvm_circuit::system::memory::online::GuestMemory, ::openvm_circuit::arch::execution_mode::metered::MeteredCtx>,
-                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
-                        chip_index: usize,
-                    ) -> ::openvm_circuit::arch::Result<()> {
-                        self.0.execute_metered(state, instruction, chip_index)
+                        pc: u32,
+                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        data: &mut [u8],
+                    ) -> ::openvm_circuit::arch::execution::Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>>
+                    where
+                        Ctx: ::openvm_circuit::arch::execution_mode::E1ExecutionCtx, {
+                        self.0.pre_compute_e1(pc, inst, data)
                     }
                 }
             }
@@ -211,18 +207,18 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
                 });
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
             // crate. Assume F is already generic of the field.
-            let (execute_e1_arms, execute_metered_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
+            let (pre_compute_size_arms, pre_compute_e1_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
-                let execute_e1_arm= quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_e1(x, state, instruction)
+                let pre_compute_size_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::pre_compute_size(x)
                 };
-                let execute_metered_arm =quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::execute_metered(x, state, instruction, chip_index)
+                let pre_compute_e1_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::pre_compute_e1(x, pc, instruction, data)
                 };
                 let where_predicate = syn::parse_quote! {
                     #field_ty: ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>
                 };
-                (execute_e1_arm, execute_metered_arm, where_predicate)
+                (pre_compute_size_arm, pre_compute_e1_arm, where_predicate)
             }));
             let where_clause = new_generics.make_where_clause();
             for predicate in where_predicates {
@@ -233,32 +229,170 @@ pub fn ins_executor_e1_executor_derive(input: TokenStream) -> TokenStream {
 
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic> for #name #ty_generics #where_clause {
-                    fn execute_e1<Ctx>(
-                        &self,
-                        state: &mut ::openvm_circuit::arch::VmStateMut<F,::openvm_circuit::system::memory::online::GuestMemory, Ctx>,
-                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
-                    ) -> ::openvm_circuit::arch::Result<()>
-                    where
-                        Ctx: ::openvm_circuit::arch::execution_mode::E1E2ExecutionCtx,
-                    {
+                    #[inline(always)]
+                    fn pre_compute_size(&self) -> usize {
                         match self {
-                            #(#execute_e1_arms,)*
+                            #(#pre_compute_size_arms,)*
                         }
                     }
 
-                    fn execute_metered(
+                    #[inline(always)]
+                    fn pre_compute_e1<Ctx>(
                         &self,
-                        state: &mut ::openvm_circuit::arch::VmStateMut<F, ::openvm_circuit::system::memory::online::GuestMemory, ::openvm_circuit::arch::execution_mode::metered::MeteredCtx>,
-                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
-                        chip_index: usize,
-                    ) -> ::openvm_circuit::arch::Result<()> {
+                        pc: u32,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        data: &mut [u8],
+                    ) -> ::openvm_circuit::arch::execution::Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>>
+                    where
+                        Ctx: ::openvm_circuit::arch::execution_mode::E1ExecutionCtx, {
                         match self {
-                            #(#execute_metered_arms,)*
+                            #(#pre_compute_e1_arms,)*
                         }
                     }
                 }
             }
             .into()
+        }
+        Data::Union(_) => unimplemented!("Unions are not supported"),
+    }
+}
+
+#[proc_macro_derive(InsExecutorE2)]
+pub fn ins_executor_e2_derive(input: TokenStream) -> TokenStream {
+    let ast: syn::DeriveInput = syn::parse(input).unwrap();
+
+    let name = &ast.ident;
+    let generics = &ast.generics;
+    let (impl_generics, ty_generics, _) = generics.split_for_impl();
+
+    match &ast.data {
+        Data::Struct(inner) => {
+            // Check if the struct has only one unnamed field
+            let inner_ty = match &inner.fields {
+                Fields::Unnamed(fields) => {
+                    if fields.unnamed.len() != 1 {
+                        panic!("Only one unnamed field is supported");
+                    }
+                    fields.unnamed.first().unwrap().ty.clone()
+                }
+                _ => panic!("Only unnamed fields are supported"),
+            };
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+            // crate. Assume F is already generic of the field.
+            let mut new_generics = generics.clone();
+            let where_clause = new_generics.make_where_clause();
+            where_clause
+                .predicates
+                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InsExecutorE2<F> });
+            quote! {
+                impl #impl_generics ::openvm_circuit::arch::InsExecutorE2<F> for #name #ty_generics #where_clause {
+                    #[inline(always)]
+                    fn e2_pre_compute_size(&self) -> usize {
+                        self.0.e2_pre_compute_size()
+                    }
+                    #[inline(always)]
+                    fn pre_compute_e2<Ctx>(
+                        &self,
+                        chip_idx: usize,
+                        pc: u32,
+                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        data: &mut [u8],
+                    ) -> ::openvm_circuit::arch::execution::Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>>
+                    where
+                        Ctx: ::openvm_circuit::arch::execution_mode::E2ExecutionCtx, {
+                        self.0.pre_compute_e2(chip_idx, pc, inst, data)
+                    }
+                }
+            }
+                .into()
+        }
+        Data::Enum(e) => {
+            let variants = e
+                .variants
+                .iter()
+                .map(|variant| {
+                    let variant_name = &variant.ident;
+
+                    let mut fields = variant.fields.iter();
+                    let field = fields.next().unwrap();
+                    assert!(fields.next().is_none(), "Only one field is supported");
+                    (variant_name, field)
+                })
+                .collect::<Vec<_>>();
+            let default_ty_generic = Ident::new("F", proc_macro2::Span::call_site());
+            let mut new_generics = generics.clone();
+            let first_ty_generic = ast
+                .generics
+                .params
+                .first()
+                .and_then(|param| match param {
+                    GenericParam::Type(type_param) => Some(&type_param.ident),
+                    _ => None,
+                })
+                .unwrap_or_else(|| {
+                    new_generics.params.push(syn::parse_quote! { F });
+                    &default_ty_generic
+                });
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+            // crate. Assume F is already generic of the field.
+            let (pre_compute_size_arms, pre_compute_e2_arms, set_trace_height_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
+                let field_ty = &field.ty;
+                let pre_compute_size_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>>::e2_pre_compute_size(x)
+                };
+                let pre_compute_e2_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>>::pre_compute_e2(x, chip_idx, pc, instruction, data)
+                };
+                let set_trace_height_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>>::set_trace_height(x, height)
+                };
+                let where_predicate = syn::parse_quote! {
+                    #field_ty: ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>
+                };
+                (pre_compute_size_arm, pre_compute_e2_arm, set_trace_height_arm, where_predicate)
+            }));
+            let where_clause = new_generics.make_where_clause();
+            for predicate in where_predicates {
+                where_clause.predicates.push(predicate);
+            }
+            // Don't use these ty_generics because it might have extra "F"
+            let (impl_generics, _, where_clause) = new_generics.split_for_impl();
+
+            quote! {
+                impl #impl_generics ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic> for #name #ty_generics #where_clause {
+                    #[inline(always)]
+                    fn e2_pre_compute_size(&self) -> usize {
+                        match self {
+                            #(#pre_compute_size_arms,)*
+                        }
+                    }
+
+                    #[inline(always)]
+                    fn pre_compute_e2<Ctx>(
+                        &self,
+                        chip_idx: usize,
+                        pc: u32,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        data: &mut [u8],
+                    ) -> ::openvm_circuit::arch::execution::Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>>
+                    where
+                        Ctx: ::openvm_circuit::arch::execution_mode::E2ExecutionCtx, {
+                        match self {
+                            #(#pre_compute_e2_arms,)*
+                        }
+                    }
+
+                    // fn set_trace_height(
+                    //     &mut self,
+                    //     height: usize,
+                    // ) {
+                    //     match self {
+                    //         #(#set_trace_height_arms,)*
+                    //     }
+                    // }
+                }
+            }
+                .into()
         }
         Data::Union(_) => unimplemented!("Unions are not supported"),
     }

@@ -1,7 +1,7 @@
 mod config;
 /// Instruction execution traits and types.
 /// Execution bus and interface.
-mod execution;
+pub mod execution;
 /// Module for controlling VM execution flow, including segmentation and instruction execution
 pub mod execution_control;
 pub mod execution_mode;
@@ -18,7 +18,8 @@ pub mod segmentation_strategy;
 pub mod vm;
 
 pub mod hasher;
-// pub mod interpreter;
+/// Interpreter for VM execution
+pub mod interpreter;
 /// Testing framework
 #[cfg(any(test, feature = "test-utils"))]
 pub mod testing;

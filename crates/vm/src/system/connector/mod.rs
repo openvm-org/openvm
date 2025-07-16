@@ -240,7 +240,6 @@ impl<F> VmConnectorChip<F> {
     pub(crate) fn begin(&mut self, state: ExecutionState<u32>) {
         self.boundary_states[0] = Some(ConnectorCols {
             pc: state.pc,
-            // TODO(ayush): should this be hardcoded to INITIAL_TIMESTAMP?
             timestamp: state.timestamp,
             is_terminate: 0,
             exit_code: 0,

@@ -33,6 +33,15 @@ use crate::{
     },
 };
 
+#[cfg(debug_assertions)]
+pub const POINTER_MAX_BITS: usize = 29;
+
+#[derive(PartialEq, Copy, Clone, Debug, Eq)]
+pub enum OpType {
+    Read = 0,
+    Write = 1,
+}
+
 /// The full pointer to a location in memory consists of an address space and a pointer within
 /// the address space.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, AlignedBorrow)]
