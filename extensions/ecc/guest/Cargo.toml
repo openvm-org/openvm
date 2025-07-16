@@ -22,7 +22,6 @@ openvm-ecc-te-macros = { workspace = true }
 once_cell = { workspace = true, features = ["race", "alloc"] }
 num-bigint = { workspace = true }
 hex-literal = { workspace = true }
-signature = { workspace = true }
 openvm-sha2 = { workspace = true }
 
 # Used for `halo2curves` feature
