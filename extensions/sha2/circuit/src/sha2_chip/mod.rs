@@ -1,29 +1,27 @@
 //! Sha256 hasher. Handles full sha256 hashing with padding.
 //! variable length inputs read from VM memory.
-use std::{cmp::min, iter};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    iter,
+};
 
-use openvm_circuit::{
-    arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        MatrixRecordArena, NewVmChipWrapper, Result, StepExecutorE1, VmStateMut,
-    },
-    system::memory::online::GuestMemory,
+use openvm_circuit::arch::{
+    execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+    E2PreCompute, ExecuteFunc,
+    ExecutionError::InvalidInstruction,
+    MatrixRecordArena, NewVmChipWrapper, Result, StepExecutorE1, StepExecutorE2, VmSegmentState,
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::SharedBitwiseOperationLookupChip, encoder::Encoder,
 };
+use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32im_circuit::adapters::{
-    memory_read_from_state, memory_write, memory_write_from_state, read_rv32_register,
-    read_rv32_register_from_state,
-};
 use openvm_sha2_air::{Sha256Config, Sha2StepHelper, Sha2Variant, Sha384Config, Sha512Config};
-use openvm_sha2_transpiler::Rv32Sha2Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use sha2::{Digest, Sha256, Sha384, Sha512};
 
@@ -67,96 +65,174 @@ impl<C: Sha2ChipConfig> Sha2VmStep<C> {
     }
 }
 
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct Sha2PreCompute {
+    a: u8,
+    b: u8,
+    c: u8,
+}
+
 impl<F: PrimeField32, C: Sha2ChipConfig> StepExecutorE1<F> for Sha2VmStep<C> {
-    fn execute_e1<Ctx>(
+    fn pre_compute_size(&self) -> usize {
+        size_of::<Sha2PreCompute>()
+    }
+
+    fn pre_compute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
     where
-        Ctx: E1E2ExecutionCtx,
+        Ctx: E1ExecutionCtx,
     {
-        let &Instruction {
-            opcode,
-            a,
-            b,
-            c,
-            d,
-            e,
-            ..
-        } = instruction;
-        let local_opcode = opcode.local_opcode_idx(self.offset);
-        debug_assert_eq!(local_opcode, C::OPCODE.local_usize());
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
-        let dst = read_rv32_register(state.memory, a.as_canonical_u32());
-        let src = read_rv32_register(state.memory, b.as_canonical_u32());
-        let len = read_rv32_register(state.memory, c.as_canonical_u32());
+        let data: &mut Sha2PreCompute = data.borrow_mut();
+        self.pre_compute_impl(pc, inst, data)?;
+        Ok(execute_e1_impl::<_, _, C>)
+    }
+}
+impl<F: PrimeField32, C: Sha2ChipConfig> StepExecutorE2<F> for Sha2VmStep<C> {
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<Sha2PreCompute>>()
+    }
 
-        debug_assert!(src + len <= (1 << self.pointer_max_bits));
-        debug_assert!(dst < (1 << self.pointer_max_bits));
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let data: &mut E2PreCompute<Sha2PreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(execute_e2_impl::<_, _, C>)
+    }
+}
 
-        // SAFETY: RV32_MEMORY_AS is valid address space with type u8
-        let message = unsafe {
-            state
-                .memory
-                .memory
-                .get_slice::<u8>((RV32_MEMORY_AS, src), len as usize)
-        };
+unsafe fn execute_e12_impl<
+    F: PrimeField32,
+    CTX: E1ExecutionCtx,
+    C: Sha2ChipConfig,
+    const IS_E1: bool,
+>(
+    pre_compute: &Sha2PreCompute,
+    vm_state: &mut VmSegmentState<F, CTX>,
+) -> u32 {
+    let dst = vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32);
+    let src = vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
+    let len = vm_state.vm_read(RV32_REGISTER_AS, pre_compute.c as u32);
+    let dst_u32 = u32::from_le_bytes(dst);
+    let src_u32 = u32::from_le_bytes(src);
+    let len_u32 = u32::from_le_bytes(len);
 
+    let (output, height) = if IS_E1 {
+        // SAFETY: RV32_MEMORY_AS is memory address space of type u8
+        let message = vm_state.vm_read_slice(RV32_MEMORY_AS, src_u32, len_u32 as usize);
         let output = sha2_solve::<C>(message);
-        match C::OPCODE {
-            Rv32Sha2Opcode::SHA256 => {
-                memory_write::<{ Sha256Config::WRITE_SIZE }>(
-                    state.memory,
-                    RV32_MEMORY_AS,
-                    dst,
-                    output.as_slice().try_into().unwrap(),
-                );
-            }
-            Rv32Sha2Opcode::SHA512 => {
-                for i in 0..C::NUM_WRITES {
-                    memory_write::<{ Sha512Config::WRITE_SIZE }>(
-                        state.memory,
-                        RV32_MEMORY_AS,
-                        dst + (i * Sha512Config::WRITE_SIZE) as u32,
-                        output.as_slice()
-                            [i * Sha512Config::WRITE_SIZE..(i + 1) * Sha512Config::WRITE_SIZE]
-                            .try_into()
-                            .unwrap(),
-                    );
-                }
-            }
-            Rv32Sha2Opcode::SHA384 => {
-                // Pad the output with zeros to 64 bytes
-                let output = output
-                    .into_iter()
-                    .chain(iter::repeat(0).take(16))
-                    .collect::<Vec<_>>();
-                for i in 0..C::NUM_WRITES {
-                    memory_write::<{ Sha384Config::WRITE_SIZE }>(
-                        state.memory,
-                        RV32_MEMORY_AS,
-                        dst + (i * Sha384Config::WRITE_SIZE) as u32,
-                        output.as_slice()
-                            [i * Sha384Config::WRITE_SIZE..(i + 1) * Sha384Config::WRITE_SIZE]
-                            .try_into()
-                            .unwrap(),
-                    );
+        (output, 0)
+    } else {
+        let num_blocks = get_sha2_num_blocks::<C>(len_u32);
+        let mut message = Vec::with_capacity(len_u32 as usize);
+        for block_idx in 0..num_blocks as usize {
+            // Reads happen on the first 4 rows of each block
+            for row in 0..C::NUM_READ_ROWS {
+                let read_idx = block_idx * C::NUM_READ_ROWS + row;
+                match C::VARIANT {
+                    Sha2Variant::Sha256 => {
+                        let row_input: [u8; Sha256Config::READ_SIZE] = vm_state
+                            .vm_read(RV32_MEMORY_AS, src_u32 + (read_idx * C::READ_SIZE) as u32);
+                        message.extend_from_slice(&row_input);
+                    }
+                    Sha2Variant::Sha512 => {
+                        let row_input: [u8; Sha512Config::READ_SIZE] = vm_state
+                            .vm_read(RV32_MEMORY_AS, src_u32 + (read_idx * C::READ_SIZE) as u32);
+                        message.extend_from_slice(&row_input);
+                    }
+                    Sha2Variant::Sha384 => {
+                        let row_input: [u8; Sha384Config::READ_SIZE] = vm_state
+                            .vm_read(RV32_MEMORY_AS, src_u32 + (read_idx * C::READ_SIZE) as u32);
+                        message.extend_from_slice(&row_input);
+                    }
                 }
             }
         }
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        Ok(())
+        let output = sha2_solve::<C>(&message[..len_u32 as usize]);
+        let height = num_blocks * C::ROWS_PER_BLOCK as u32;
+        (output, height)
+    };
+    match C::VARIANT {
+        Sha2Variant::Sha256 => {
+            let output: [u8; Sha256Config::WRITE_SIZE] = output.try_into().unwrap();
+            vm_state.vm_write(RV32_MEMORY_AS, dst_u32, &output);
+        }
+        Sha2Variant::Sha512 => {
+            for i in 0..C::NUM_WRITES {
+                let output: [u8; Sha512Config::WRITE_SIZE] = output
+                    [i * Sha512Config::WRITE_SIZE..(i + 1) * Sha512Config::WRITE_SIZE]
+                    .try_into()
+                    .unwrap();
+                vm_state.vm_write(
+                    RV32_MEMORY_AS,
+                    dst_u32 + (i * Sha512Config::WRITE_SIZE) as u32,
+                    &output,
+                );
+            }
+        }
+        Sha2Variant::Sha384 => {
+            // Pad the output with zeros to 64 bytes
+            let output = output
+                .into_iter()
+                .chain(iter::repeat(0).take(16))
+                .collect::<Vec<_>>();
+            for i in 0..C::NUM_WRITES {
+                let output: [u8; Sha384Config::WRITE_SIZE] = output
+                    [i * Sha384Config::WRITE_SIZE..(i + 1) * Sha384Config::WRITE_SIZE]
+                    .try_into()
+                    .unwrap();
+                vm_state.vm_write(
+                    RV32_MEMORY_AS,
+                    dst_u32 + (i * Sha384Config::WRITE_SIZE) as u32,
+                    &output,
+                );
+            }
+        }
     }
 
-    fn execute_metered(
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
+
+    height
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, C: Sha2ChipConfig>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &Sha2PreCompute = pre_compute.borrow();
+    execute_e12_impl::<F, CTX, C, true>(pre_compute, vm_state);
+}
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, C: Sha2ChipConfig>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, CTX>,
+) {
+    let pre_compute: &E2PreCompute<Sha2PreCompute> = pre_compute.borrow();
+    let height = execute_e12_impl::<F, CTX, C, false>(&pre_compute.data, vm_state);
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, height);
+}
+
+impl<C: Sha2ChipConfig> Sha2VmStep<C> {
+    fn pre_compute_impl<F: PrimeField32>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut Sha2PreCompute,
     ) -> Result<()> {
         let Instruction {
             opcode,
@@ -166,102 +242,17 @@ impl<F: PrimeField32, C: Sha2ChipConfig> StepExecutorE1<F> for Sha2VmStep<C> {
             d,
             e,
             ..
-        } = instruction;
-        debug_assert_eq!(*opcode, C::OPCODE.global_opcode());
-        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
-
-        let dst = read_rv32_register_from_state(state, a.as_canonical_u32());
-        let src = read_rv32_register_from_state(state, b.as_canonical_u32());
-        let len = read_rv32_register_from_state(state, c.as_canonical_u32());
-
-        let num_blocks = get_sha2_num_blocks::<C>(len) as usize;
-
-        // we will read [num_blocks] * [C::BLOCK_CELLS] cells but only [len] cells will be used
-        debug_assert!(src as usize + num_blocks * C::BLOCK_CELLS <= (1 << self.pointer_max_bits));
-        debug_assert!(dst as usize + C::WRITE_SIZE <= (1 << self.pointer_max_bits));
-        // We don't support messages longer than 2^29 bytes
-        debug_assert!(len < SHA_MAX_MESSAGE_LEN as u32);
-
-        let mut input = Vec::with_capacity(len as usize);
-        for idx in 0..num_blocks * C::NUM_READ_ROWS {
-            let read = match C::VARIANT {
-                Sha2Variant::Sha256 => {
-                    memory_read_from_state::<F, MeteredCtx, { Sha256Config::READ_SIZE }>(
-                        state,
-                        RV32_MEMORY_AS,
-                        src + (idx * C::READ_SIZE) as u32,
-                    )
-                    .to_vec()
-                }
-                Sha2Variant::Sha512 => {
-                    memory_read_from_state::<F, MeteredCtx, { Sha512Config::READ_SIZE }>(
-                        state,
-                        RV32_MEMORY_AS,
-                        src + (idx * C::READ_SIZE) as u32,
-                    )
-                    .to_vec()
-                }
-                Sha2Variant::Sha384 => {
-                    memory_read_from_state::<F, MeteredCtx, { Sha384Config::READ_SIZE }>(
-                        state,
-                        RV32_MEMORY_AS,
-                        src + (idx * C::READ_SIZE) as u32,
-                    )
-                    .to_vec()
-                }
-            };
-            let offset = idx * C::READ_SIZE;
-            if offset < len as usize {
-                let copy_len = min(len as usize - offset, C::READ_SIZE);
-                input.extend_from_slice(&read[..copy_len]);
-            }
+        } = inst;
+        let e_u32 = e.as_canonical_u32();
+        if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
+            return Err(InvalidInstruction(pc));
         }
-
-        let mut output = sha2_solve::<C>(&input);
-        match C::OPCODE {
-            Rv32Sha2Opcode::SHA256 => {
-                debug_assert!(output.len() == Sha256Config::WRITE_SIZE);
-                memory_write_from_state::<F, MeteredCtx, { Sha256Config::WRITE_SIZE }>(
-                    state,
-                    RV32_MEMORY_AS,
-                    dst,
-                    output.as_slice().try_into().unwrap(),
-                );
-            }
-            Rv32Sha2Opcode::SHA512 => {
-                debug_assert!(output.len() % Sha512Config::WRITE_SIZE == 0);
-                output
-                    .chunks_exact(Sha512Config::WRITE_SIZE)
-                    .enumerate()
-                    .for_each(|(i, chunk)| {
-                        memory_write_from_state::<F, MeteredCtx, { Sha512Config::WRITE_SIZE }>(
-                            state,
-                            RV32_MEMORY_AS,
-                            dst + (i * Sha512Config::WRITE_SIZE) as u32,
-                            chunk.try_into().unwrap(),
-                        );
-                    });
-            }
-            Rv32Sha2Opcode::SHA384 => {
-                output.extend(iter::repeat(0).take(16));
-                debug_assert!(output.len() % Sha384Config::WRITE_SIZE == 0);
-                output
-                    .chunks_exact(Sha384Config::WRITE_SIZE)
-                    .enumerate()
-                    .for_each(|(i, chunk)| {
-                        memory_write_from_state::<F, MeteredCtx, { Sha384Config::WRITE_SIZE }>(
-                            state,
-                            RV32_MEMORY_AS,
-                            dst + (i * Sha384Config::WRITE_SIZE) as u32,
-                            chunk.try_into().unwrap(),
-                        );
-                    });
-            }
-        }
-
-        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        state.ctx.trace_heights[chip_index] += (num_blocks * C::ROWS_PER_BLOCK) as u32;
+        *data = Sha2PreCompute {
+            a: a.as_canonical_u32() as u8,
+            b: b.as_canonical_u32() as u8,
+            c: c.as_canonical_u32() as u8,
+        };
+        assert_eq!(&C::OPCODE.global_opcode(), opcode);
         Ok(())
     }
 }

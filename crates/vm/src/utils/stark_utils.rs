@@ -19,7 +19,15 @@ use openvm_stark_sdk::{
 #[cfg(feature = "bench-metrics")]
 use crate::arch::vm::VmExecutor;
 use crate::{
-    arch::{vm::VirtualMachine, InsExecutorE1, Streams, VmConfig},
+    arch::{
+        execution_mode::{
+            e1::E1Ctx,
+            metered::{ctx::DEFAULT_PAGE_BITS, MeteredCtx},
+        },
+        interpreter::InterpretedInstance,
+        vm::VirtualMachine,
+        InsExecutorE1, Streams, VmConfig,
+    },
     system::memory::MemoryImage,
 };
 
@@ -62,28 +70,41 @@ where
     VC::Periphery: Chip<BabyBearPoseidon2Config>,
 {
     setup_tracing();
+    let exe = exe.into();
+    let input = input.into();
+    {
+        let executor = InterpretedInstance::<BabyBear, _>::new(config.clone(), exe.clone());
+        executor
+            .execute(E1Ctx::new(None), input.clone())
+            .expect("Failed to execute");
+    }
     let mut log_blowup = 1;
     while config.system().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
     }
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(log_blowup));
-    let vm = VirtualMachine::new(engine, config);
+    let vm = VirtualMachine::new(engine, config.clone());
     let pk = vm.keygen();
     let vk = pk.get_vk();
-    let exe = exe.into();
-    let input = input.into();
+    let chip_complex = vm.config().create_chip_complex().unwrap();
+    {
+        let executor = InterpretedInstance::<BabyBear, _>::new(config.clone(), exe.clone());
+        let ctx = MeteredCtx::<DEFAULT_PAGE_BITS>::new(&chip_complex, vk.num_interactions())
+            .with_max_trace_height(config.system().segmentation_strategy.max_trace_height() as u32)
+            .with_max_cells(config.system().segmentation_strategy.max_cells());
+        let final_state = executor
+            .execute_e2(ctx, input.clone())
+            .expect("Failed to execute");
+        assert!(final_state.ctx.segments().len() >= min_segments);
+    }
+
     let segments = vm
         .executor
-        .execute_metered(
-            exe.clone(),
-            input.clone(),
-            &vk.total_widths(),
-            &vk.num_interactions(),
-        )
+        .execute_metered(exe.clone(), input.clone(), &vk.num_interactions())
         .unwrap();
     let mut result = vm.execute_and_generate(exe, input, &segments).unwrap();
     let final_memory = Option::take(&mut result.final_memory);
-    let global_airs = vm.config().create_chip_complex().unwrap().airs();
+    let global_airs = chip_complex.airs();
     if debug {
         for proof_input in &result.per_segment {
             let (airs, pks, air_proof_inputs): (Vec<_>, Vec<_>, Vec<_>) =
@@ -133,12 +154,7 @@ where
     let vk = pk.get_vk();
     let segments = vm
         .executor
-        .execute_metered(
-            program_exe.clone(),
-            input.clone(),
-            &vk.total_widths(),
-            &vk.num_interactions(),
-        )
+        .execute_metered(program_exe.clone(), input.clone(), &vk.num_interactions())
         .unwrap();
 
     cfg_if::cfg_if! {

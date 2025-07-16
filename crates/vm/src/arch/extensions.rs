@@ -10,14 +10,15 @@ use getset::Getters;
 use itertools::{zip_eq, Itertools};
 #[cfg(feature = "bench-metrics")]
 use metrics::counter;
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
 use openvm_circuit_primitives::{
     utils::next_power_of_two_or_zero,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{
-    program::Program, LocalOpcode, PhantomDiscriminant, PublishOpcode, SystemOpcode, VmOpcode,
+    program::Program, LocalOpcode, PhantomDiscriminant, PublishOpcode, SysPhantom, SysPhantom::Nop,
+    SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
@@ -49,7 +50,9 @@ use crate::{
             MemoryController, MemoryImage, BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET,
         },
         native_adapter::{NativeAdapterAir, NativeAdapterStep},
-        phantom::PhantomChip,
+        phantom::{
+            CycleEndPhantomExecutor, CycleStartPhantomExecutor, NopPhantomExecutor, PhantomChip,
+        },
         poseidon2::Poseidon2PeripheryChip,
         program::{ProgramBus, ProgramChip},
         public_values::{
@@ -324,16 +327,30 @@ impl<E, P> VmInventory<E, P> {
         self.executors.get(*id)
     }
 
+    pub fn get_executor_id(&self, opcode: VmOpcode) -> Option<ExecutorId> {
+        self.instruction_lookup.get(&opcode).cloned()
+    }
+
     pub fn get_mut_executor(&mut self, opcode: &VmOpcode) -> Option<&mut E> {
         let id = self.instruction_lookup.get(opcode)?;
         self.executors.get_mut(*id)
+    }
+
+    pub fn get_executor_idx_in_vkey(&self, opcode: &VmOpcode) -> Option<usize> {
+        let id = *self.instruction_lookup.get(opcode)?;
+        self.insertion_order
+            .iter()
+            .rev()
+            .position(|chip_id| match chip_id {
+                ChipId::Executor(exec_id) => *exec_id == id,
+                _ => false,
+            })
     }
 
     pub fn get_mut_executor_with_index(&mut self, opcode: &VmOpcode) -> Option<(&mut E, usize)> {
         let id = *self.instruction_lookup.get(opcode)?;
 
         self.executors.get_mut(id).map(|executor| {
-            // TODO(ayush): cache this somewhere
             let insertion_id = self
                 .insertion_order
                 .iter()
@@ -531,7 +548,9 @@ impl<F: PrimeField32> SystemBase<F> {
     }
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor, InsExecutorE1)]
+#[derive(
+    ChipUsageGetter, Chip, AnyEnum, From, InstructionExecutor, InsExecutorE1, InsExecutorE2,
+)]
 pub enum SystemExecutor<F: PrimeField32> {
     PublicValues(PublicValuesChip<F>),
     Phantom(RefCell<PhantomChip<F>>),
@@ -624,7 +643,22 @@ impl<F: PrimeField32> SystemComplex<F> {
             inventory.add_periphery_chip(chip);
         }
         let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
-        let phantom_chip = PhantomChip::new(execution_bus, program_bus, SystemOpcode::CLASS_OFFSET);
+        let mut phantom_chip =
+            PhantomChip::new(execution_bus, program_bus, SystemOpcode::CLASS_OFFSET);
+        // Use NopPhantomExecutor so the discriminant is set but `DebugPanic` is handled specially.
+        phantom_chip.add_sub_executor(
+            NopPhantomExecutor,
+            PhantomDiscriminant(SysPhantom::DebugPanic as u16),
+        );
+        phantom_chip.add_sub_executor(NopPhantomExecutor, PhantomDiscriminant(Nop as u16));
+        phantom_chip.add_sub_executor(
+            CycleStartPhantomExecutor,
+            PhantomDiscriminant(SysPhantom::CtStart as u16),
+        );
+        phantom_chip.add_sub_executor(
+            CycleEndPhantomExecutor,
+            PhantomDiscriminant(SysPhantom::CtEnd as u16),
+        );
         inventory
             .add_executor(RefCell::new(phantom_chip), [phantom_opcode])
             .unwrap();
@@ -828,6 +862,15 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
             .then(|| &self.inventory.executors[Self::PV_EXECUTOR_IDX])
     }
 
+    // The index at which the executor chips start in vkey.
+    pub(crate) fn get_executor_offset_in_vkey(&self) -> usize {
+        if self.config.has_public_values_chip() {
+            PUBLIC_VALUES_AIR_ID + 1 + self.memory_controller().num_airs()
+        } else {
+            PUBLIC_VALUES_AIR_ID + self.memory_controller().num_airs()
+        }
+    }
+
     // All inventory chips except public values chip, in reverse order they were added.
     pub(crate) fn chips_excluding_pv_chip(&self) -> impl Iterator<Item = Either<&'_ E, &'_ P>> {
         let public_values_chip_idx = self.public_values_chip_idx();
@@ -1006,6 +1049,20 @@ impl<F: PrimeField32, E, P> VmChipComplex<F, E, P> {
                 Either::Periphery(chip) => chip.air(),
             }))
             .chain(once(self.range_checker_chip().air()))
+            .collect()
+    }
+
+    pub fn get_air_widths(&self) -> Vec<usize>
+    where
+        E: ChipUsageGetter,
+        P: ChipUsageGetter,
+    {
+        once(self.program_chip().trace_width())
+            .chain([self.connector_chip().trace_width()])
+            .chain(self._public_values_chip().map(|c| c.trace_width()))
+            .chain(self.memory_controller().get_memory_trace_widths())
+            .chain(self.chips_excluding_pv_chip().map(|c| c.trace_width()))
+            .chain([self.range_checker_chip().trace_width()])
             .collect()
     }
 

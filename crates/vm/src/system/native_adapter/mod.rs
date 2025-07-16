@@ -1,7 +1,6 @@
 pub mod util;
 
 use std::{
-    array,
     borrow::{Borrow, BorrowMut},
     marker::PhantomData,
 };
@@ -26,21 +25,12 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
-use util::{
-    memory_read_or_imm_native_from_state, memory_write_native_from_state,
-    tracing_read_or_imm_native, tracing_write_native,
-};
+use util::{tracing_read_or_imm_native, tracing_write_native};
 
 use super::memory::{online::TracingMemory, MemoryAuxColsFactory};
 use crate::{
-    arch::{
-        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterExecutorE1,
-        AdapterTraceFiller, AdapterTraceStep, VmStateMut,
-    },
-    system::memory::{
-        offline_checker::{MemoryReadAuxRecord, MemoryWriteAuxRecord},
-        online::GuestMemory,
-    },
+    arch::{get_record_from_slice, AdapterTraceFiller, AdapterTraceStep},
+    system::memory::offline_checker::{MemoryReadAuxRecord, MemoryWriteAuxRecord},
 };
 
 #[repr(C)]
@@ -307,50 +297,5 @@ impl<F: PrimeField32, CTX, const R: usize, const W: usize> AdapterTraceFiller<F,
 
         adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
         adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
-    }
-}
-
-impl<F, const R: usize, const W: usize> AdapterExecutorE1<F> for NativeAdapterStep<F, R, W>
-where
-    F: PrimeField32,
-{
-    type ReadData = [F; R];
-    type WriteData = [F; W];
-
-    #[inline(always)]
-    fn read<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Self::ReadData
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        debug_assert!(R <= 2);
-        let &Instruction { b, c, e, f, .. } = instruction;
-
-        array::from_fn(|i| {
-            let ptr_or_imm = if i == 0 { b } else { c };
-            let addr_space = if i == 0 { e } else { f };
-            memory_read_or_imm_native_from_state(state, addr_space.as_canonical_u32(), ptr_or_imm)
-        })
-    }
-
-    #[inline(always)]
-    fn write<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-    ) where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let &Instruction { a, d, .. } = instruction;
-        debug_assert!(W <= 1);
-        debug_assert_eq!(d.as_canonical_u32(), NATIVE_AS);
-
-        if W >= 1 {
-            memory_write_native_from_state(state, a.as_canonical_u32(), data);
-        }
     }
 }

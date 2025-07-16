@@ -13,7 +13,7 @@ use openvm_circuit::{
     },
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_native_compiler::{
@@ -60,7 +60,9 @@ impl InitFileGenerator for NativeConfig {}
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Native;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutorE1, From, AnyEnum)]
+#[derive(
+    ChipUsageGetter, Chip, InstructionExecutor, InsExecutorE1, InsExecutorE2, From, AnyEnum,
+)]
 pub enum NativeExecutor<F: PrimeField32> {
     LoadStore(NativeLoadStoreChip<F, 1>),
     BlockLoadStore(NativeLoadStoreChip<F, 4>),
@@ -337,7 +339,7 @@ pub(crate) mod phantom {
             c_upper: u16,
         ) -> eyre::Result<()> {
             let [value] = unsafe { memory.read::<F, 1>(c_upper as u32, a) };
-            println!("{}", value);
+            println!("{value}");
             Ok(())
         }
     }
@@ -397,7 +399,9 @@ pub(crate) mod phantom {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct CastFExtension;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, InsExecutorE1, From, AnyEnum)]
+#[derive(
+    ChipUsageGetter, Chip, InstructionExecutor, InsExecutorE1, InsExecutorE2, From, AnyEnum,
+)]
 pub enum CastFExtensionExecutor<F: PrimeField32> {
     CastF(CastFChip<F>),
 }
@@ -471,3 +475,11 @@ impl Default for Rv32WithKernelsConfig {
 
 // Default implementation uses no init file
 impl InitFileGenerator for Rv32WithKernelsConfig {}
+
+// Pre-computed maximum trace heights for NativeConfig. Found by doubling
+// the actual trace heights of kitchen-sink leaf verification (except for
+// VariableRangeChecker, which has a fixed height).
+pub const NATIVE_MAX_TRACE_HEIGHTS: &[u32] = &[
+    4194304, 4, 128, 2097152, 8388608, 4194304, 262144, 2097152, 16777216, 2097152, 8388608,
+    262144, 2097152, 1048576, 4194304, 65536, 262144,
+];

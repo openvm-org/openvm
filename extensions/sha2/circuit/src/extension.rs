@@ -6,7 +6,7 @@ use openvm_circuit::{
     },
     system::phantom::PhantomChip,
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
@@ -57,7 +57,9 @@ impl InitFileGenerator for Sha2Rv32Config {}
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Sha2;
 
-#[derive(ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, InsExecutorE1)]
+#[derive(
+    ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, InsExecutorE1, InsExecutorE2,
+)]
 pub enum Sha2Executor<F: PrimeField32> {
     Sha256(Sha2VmChip<F, Sha256Config>),
     Sha512(Sha2VmChip<F, Sha512Config>),

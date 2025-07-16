@@ -643,6 +643,23 @@ impl<F: PrimeField32> MemoryController<F> {
         }
     }
 
+    pub fn get_memory_trace_widths(&self) -> Vec<usize> {
+        let access_adapter_widths = self.memory.access_adapter_inventory.get_widths();
+        match &self.interface_chip {
+            MemoryInterface::Volatile { boundary_chip } => {
+                vec![boundary_chip.trace_width()]
+            }
+            MemoryInterface::Persistent {
+                boundary_chip,
+                merkle_chip,
+                ..
+            } => [boundary_chip.trace_width(), merkle_chip.trace_width()]
+                .into_iter()
+                .chain(access_adapter_widths)
+                .collect(),
+        }
+    }
+
     pub fn current_trace_cells(&self) -> Vec<usize> {
         let mut ret = Vec::new();
         match &self.interface_chip {

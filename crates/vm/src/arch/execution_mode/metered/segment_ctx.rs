@@ -98,6 +98,15 @@ impl SegmentationCtx {
         trace_heights: &[u32],
         is_trace_height_constant: &[bool],
     ) -> bool {
+        let instret_start = self
+            .segments
+            .last()
+            .map_or(0, |s| s.instret_start + s.num_insns);
+        let num_insns = instret - instret_start;
+        // Segment should contain at least one cycle
+        if num_insns == 0 {
+            return false;
+        }
         for (i, &height) in trace_heights.iter().enumerate() {
             // Only segment if the height is not constant and exceeds the maximum height
             if !is_trace_height_constant[i] && height > self.segmentation_limits.max_trace_height {
@@ -152,26 +161,26 @@ impl SegmentationCtx {
             return false;
         }
 
+        let ret = self.should_segment(instret, trace_heights, is_trace_height_constant);
+        if ret {
+            self.segment(instret, trace_heights);
+        }
+        self.instret_last_segment_check = instret;
+        ret
+    }
+
+    /// Try segment if there is at least one cycle
+    pub fn segment(&mut self, instret: u64, trace_heights: &[u32]) {
         let instret_start = self
             .segments
             .last()
             .map_or(0, |s| s.instret_start + s.num_insns);
         let num_insns = instret - instret_start;
-
-        // Segment should contain at least one cycle
-        if num_insns > 0 && self.should_segment(instret, trace_heights, is_trace_height_constant) {
-            let segment = Segment {
-                instret_start,
-                num_insns,
-                trace_heights: trace_heights.to_vec(),
-            };
-            self.segments.push(segment);
-            self.instret_last_segment_check = instret;
-            return true;
-        }
-
-        self.instret_last_segment_check = instret;
-        false
+        self.segments.push(Segment {
+            instret_start,
+            num_insns,
+            trace_heights: trace_heights.to_vec(),
+        });
     }
 
     pub fn add_final_segment(&mut self, instret: u64, trace_heights: &[u32]) {

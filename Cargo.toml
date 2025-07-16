@@ -85,6 +85,7 @@ codegen-units = 16
 [profile.profiling]
 inherits = "release"
 debug = 2
+debug-assertions = false
 strip = false
 
 # Make sure debug symbols are in the bench profile for flamegraphs
@@ -99,6 +100,7 @@ codegen-units = 1
 
 [profile.dev]
 opt-level = 1
+debug = 2
 
 # For O1 optimization but still fast(ish) compile times
 [profile.fast]

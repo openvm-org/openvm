@@ -9,8 +9,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{
     segmentation_strategy::{DefaultSegmentationStrategy, SegmentationStrategy},
-    AnyEnum, InstructionExecutor, SystemComplex, SystemExecutor, SystemPeriphery, VmChipComplex,
-    VmInventoryError, PUBLIC_VALUES_AIR_ID,
+    AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor, SystemComplex, SystemExecutor,
+    SystemPeriphery, VmChipComplex, VmInventoryError, PUBLIC_VALUES_AIR_ID,
 };
 use crate::system::memory::{merkle::public_values::PUBLIC_VALUES_AS, BOUNDARY_AIR_OFFSET};
 
@@ -30,7 +30,11 @@ pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<F> {
 pub trait VmConfig<F: PrimeField32>:
     Clone + Serialize + DeserializeOwned + InitFileGenerator
 {
-    type Executor: InstructionExecutor<F> + AnyEnum + ChipUsageGetter;
+    type Executor: InstructionExecutor<F>
+        + AnyEnum
+        + ChipUsageGetter
+        + InsExecutorE1<F>
+        + InsExecutorE2<F>;
     type Periphery: AnyEnum + ChipUsageGetter;
 
     /// Must contain system config

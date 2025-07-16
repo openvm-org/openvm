@@ -5,17 +5,16 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::E1E2ExecutionCtx, get_record_from_slice, AdapterAirContext,
-        AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep, BasicAdapterInterface,
-        ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir, VmStateMut,
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
     },
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryReadAuxRecord, MemoryReadOrImmediateAuxCols},
-            online::{GuestMemory, TracingMemory},
+            online::TracingMemory,
             MemoryAddress, MemoryAuxColsFactory,
         },
-        native_adapter::util::{memory_read_or_imm_native_from_state, tracing_read_or_imm_native},
+        native_adapter::util::tracing_read_or_imm_native,
     },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -234,39 +233,5 @@ impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for BranchNativeAdapterSte
 
         adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
         adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
-    }
-}
-
-impl<F> AdapterExecutorE1<F> for BranchNativeAdapterStep
-where
-    F: PrimeField32,
-{
-    type ReadData = [F; 2];
-    type WriteData = ();
-
-    #[inline(always)]
-    fn read<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Self::ReadData
-    where
-        Ctx: E1E2ExecutionCtx,
-    {
-        let &Instruction { a, b, d, e, .. } = instruction;
-
-        let rs1 = memory_read_or_imm_native_from_state(state, d.as_canonical_u32(), a);
-        let rs2 = memory_read_or_imm_native_from_state(state, e.as_canonical_u32(), b);
-
-        [rs1, rs2]
-    }
-
-    #[inline(always)]
-    fn write<Ctx>(
-        &self,
-        _state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        _instruction: &Instruction<F>,
-        _data: Self::WriteData,
-    ) {
     }
 }

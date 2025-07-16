@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode,
 };
@@ -12,16 +12,16 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{
-    execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-    Streams,
-};
-use crate::system::{
-    memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryController,
+use super::{execution_mode::E1ExecutionCtx, Streams, VmSegmentState};
+use crate::{
+    arch::execution_mode::E2ExecutionCtx,
+    system::{
+        memory::{
+            online::{GuestMemory, TracingMemory},
+            MemoryController,
+        },
+        program::ProgramBus,
     },
-    program::ProgramBus,
 };
 
 pub type Result<T> = std::result::Result<T, ExecutionError>;
@@ -78,6 +78,8 @@ pub enum ExecutionError {
     FailedWithExitCode(u32),
     #[error("trace buffer out of bounds: requested {requested} but capacity is {capacity}")]
     TraceBufferOutOfBounds { requested: usize, capacity: usize },
+    #[error("invalid instruction at pc {0}")]
+    InvalidInstruction(u32),
 }
 
 /// Global VM state accessible during instruction execution.
@@ -119,60 +121,96 @@ pub trait InstructionExecutor<F> {
     fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
-/// New trait for instruction execution
-pub trait InsExecutorE1<F> {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        F: PrimeField32,
-        Ctx: E1E2ExecutionCtx;
+pub type ExecuteFunc<F, CTX> = unsafe fn(&[u8], &mut VmSegmentState<F, CTX>);
 
-    fn execute_metered(
+pub struct PreComputeInstruction<'a, F, CTX> {
+    pub handler: ExecuteFunc<F, CTX>,
+    pub pre_compute: &'a [u8],
+}
+
+#[derive(Clone, AlignedBytesBorrow)]
+#[repr(C)]
+pub struct E2PreCompute<DATA> {
+    pub chip_idx: u32,
+    pub data: DATA,
+}
+
+/// Trait for E1 execution
+pub trait InsExecutorE1<F> {
+    fn pre_compute_size(&self) -> usize;
+
+    fn pre_compute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()>
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
     where
-        F: PrimeField32;
+        Ctx: E1ExecutionCtx;
 
     fn set_trace_height(&mut self, height: usize);
+}
+
+pub trait InsExecutorE2<F> {
+    fn e2_pre_compute_size(&self) -> usize;
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx;
 }
 
 impl<F, C> InsExecutorE1<F> for RefCell<C>
 where
     C: InsExecutorE1<F>,
 {
-    fn execute_e1<Ctx>(
-        &self,
-        state: &mut VmStateMut<F, GuestMemory, Ctx>,
-        instruction: &Instruction<F>,
-    ) -> Result<()>
-    where
-        F: PrimeField32,
-        Ctx: E1E2ExecutionCtx,
-    {
-        self.borrow_mut().execute_e1(state, instruction)
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        self.borrow().pre_compute_size()
     }
-
-    fn execute_metered(
+    #[inline(always)]
+    fn pre_compute_e1<Ctx>(
         &self,
-        state: &mut VmStateMut<F, GuestMemory, MeteredCtx>,
-        instruction: &Instruction<F>,
-        chip_index: usize,
-    ) -> Result<()>
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
     where
-        F: PrimeField32,
+        Ctx: E1ExecutionCtx,
     {
-        self.borrow_mut()
-            .execute_metered(state, instruction, chip_index)
+        self.borrow().pre_compute_e1(pc, inst, data)
     }
-
+    #[inline(always)]
     fn set_trace_height(&mut self, height: usize) {
         self.borrow_mut().set_trace_height(height);
+    }
+}
+
+impl<F, C> InsExecutorE2<F> for RefCell<C>
+where
+    C: InsExecutorE2<F>,
+{
+    #[inline(always)]
+    fn e2_pre_compute_size(&self) -> usize {
+        self.borrow().e2_pre_compute_size()
+    }
+    #[inline(always)]
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        self.borrow().pre_compute_e2(chip_idx, pc, inst, data)
     }
 }
 

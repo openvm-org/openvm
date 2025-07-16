@@ -58,12 +58,7 @@ where
     let vk = pk.get_vk();
     let segments = vm
         .executor
-        .execute_metered(
-            fib_program.clone(),
-            vec![],
-            &vk.total_widths(),
-            &vk.num_interactions(),
-        )
+        .execute_metered(fib_program.clone(), vec![], &vk.num_interactions())
         .unwrap();
 
     let mut result = vm
