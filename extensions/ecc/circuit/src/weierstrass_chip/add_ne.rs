@@ -408,15 +408,17 @@ unsafe fn execute_e12_setup_impl<
     vm_state.instret += 1;
 }
 
+// Assumes that (x1, y1), (x2, y2) both lie on the curve and are not the identity point.
+// Further assumes that x1, x2 are not equal in the coordinate field.
 #[inline(always)]
 fn ec_add_ne_k256<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
 ) -> [[u8; BLOCK_SIZE]; BLOCKS] {
     // Extract coordinates
-    let x1 = blocks_to_field_element::<BLOCKS, BLOCK_SIZE>(&input_data[0][..BLOCKS / 2]);
-    let y1 = blocks_to_field_element::<BLOCKS, BLOCK_SIZE>(&input_data[0][BLOCKS / 2..]);
-    let x2 = blocks_to_field_element::<BLOCKS, BLOCK_SIZE>(&input_data[1][..BLOCKS / 2]);
-    let y2 = blocks_to_field_element::<BLOCKS, BLOCK_SIZE>(&input_data[1][BLOCKS / 2..]);
+    let x1 = blocks_to_field_element(input_data[0][..BLOCKS / 2].as_flattened());
+    let y1 = blocks_to_field_element(input_data[0][BLOCKS / 2..].as_flattened());
+    let x2 = blocks_to_field_element(input_data[1][..BLOCKS / 2].as_flattened());
+    let y2 = blocks_to_field_element(input_data[1][BLOCKS / 2..].as_flattened());
 
     let point1 = EncodedPoint::from_affine_coordinates(&x1.to_bytes(), &y1.to_bytes(), false);
     let point2 = EncodedPoint::from_affine_coordinates(&x2.to_bytes(), &y2.to_bytes(), false);

@@ -433,8 +433,8 @@ fn ec_double_k256<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     input_data: [[u8; BLOCK_SIZE]; BLOCKS],
 ) -> [[u8; BLOCK_SIZE]; BLOCKS] {
     // Extract coordinates
-    let x1 = blocks_to_field_element::<BLOCKS, BLOCK_SIZE>(&input_data[..BLOCKS / 2]);
-    let y1 = blocks_to_field_element::<BLOCKS, BLOCK_SIZE>(&input_data[BLOCKS / 2..]);
+    let x1 = blocks_to_field_element(input_data[..BLOCKS / 2].as_flattened());
+    let y1 = blocks_to_field_element(input_data[BLOCKS / 2..].as_flattened());
 
     let point = EncodedPoint::from_affine_coordinates(&x1.to_bytes(), &y1.to_bytes(), false);
     let point = AffinePoint::from_encoded_point(&point).unwrap();
