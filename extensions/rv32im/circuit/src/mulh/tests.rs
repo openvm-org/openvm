@@ -424,20 +424,3 @@ fn run_mulhsu_neg_sanity_test() {
     assert_eq!(x_ext, 255);
     assert_eq!(y_ext, 0);
 }
-
-#[test]
-fn test_abc() {
-    use openvm_circuit_primitives_derive::AlignedBytesBorrow;
-    #[derive(AlignedBytesBorrow, Clone)]
-    #[repr(C)]
-    struct MultiPreCompute {
-        a: u8,
-        b: u8,
-        c: u8,
-    }
-    println!("MultiPreCompute: {}", align_of::<MultiPreCompute>());
-    println!(
-        "E2MultiPreCompute: {}",
-        align_of::<E2PreCompute<MultiPreCompute>>()
-    );
-}
