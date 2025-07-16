@@ -217,8 +217,7 @@ mod addsubtests {
 
         {
             // doing 1xNUM_LIMBS reads and writes
-            let mut dense_harness =
-                create_test_chip::<DenseRecordArena>(&mut tester, config, offset).0;
+            let mut dense_harness = create_test_chip::<DenseRecordArena>(&tester, config, offset).0;
 
             for i in 0..num_ops {
                 set_and_execute_addsub(&mut tester, &mut dense_harness, &modulus, i == 0, offset);

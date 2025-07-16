@@ -127,14 +127,11 @@ impl<E> Default for Sdk<E> {
     }
 }
 
+// The SDK is only functional for SC = BabyBearPoseidon2Config because that is what recursive
+// aggregation supports.
 impl<E> Sdk<E>
 where
     E: StarkFriEngine<SC = SC>,
-    E::PB: ProverBackend<
-        Val = F,
-        Challenge = <SC as StarkGenericConfig>::Challenge,
-        Challenger = <SC as StarkGenericConfig>::Challenger,
-    >,
 {
     pub fn new() -> Self {
         Self::default()
@@ -193,7 +190,7 @@ where
         let vm = VmExecutor::new(vm_config)?;
         let final_memory = vm.execute_e1(exe, inputs, None)?.memory;
         let public_values =
-            extract_public_values(vm.config.as_ref().num_public_values, &final_memory);
+            extract_public_values(vm.config.as_ref().num_public_values, &final_memory.memory);
         Ok(public_values)
     }
 
@@ -221,12 +218,12 @@ where
         inputs: StdIn,
     ) -> Result<ContinuationVmProof<SC>>
     where
-        VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmProverConfig<SC, E::PB>,
+        VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmProverConfig<E>,
         <VC as VmExecutionConfig<F>>::Executor:
             InsExecutorE1<F> + InstructionExecutor<F, VC::RecordArena>,
     {
-        let app_prover = AppProver::<VC, E>::new(app_pk.app_vm_pk.clone(), app_committed_exe)?;
-        let proof = app_prover.generate_app_proof(inputs);
+        let mut app_prover = AppProver::<VC, E>::new(app_pk.app_vm_pk.clone(), app_committed_exe)?;
+        let proof = app_prover.generate_app_proof(inputs)?;
         Ok(proof)
     }
 

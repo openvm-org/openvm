@@ -668,7 +668,7 @@ pub enum VirtualMachineError {
 pub struct VirtualMachine<E, VC>
 where
     E: StarkEngine,
-    VC: VmProverConfig<E::SC, E::PB>,
+    VC: VmProverConfig<E>,
 {
     /// Proving engine
     pub engine: E,
@@ -683,7 +683,7 @@ where
 impl<E, VC> VirtualMachine<E, VC>
 where
     E: StarkEngine,
-    VC: VmProverConfig<E::SC, E::PB>,
+    VC: VmProverConfig<E>,
 {
     pub fn new(
         engine: E,
@@ -1059,7 +1059,7 @@ pub trait SingleSegmentVmProver<SC: StarkGenericConfig> {
 pub struct VmLocalProver<E, VC>
 where
     E: StarkEngine,
-    VC: VmProverConfig<E::SC, E::PB>,
+    VC: VmProverConfig<E>,
 {
     pub vm: VirtualMachine<E, VC>,
     #[getset(get = "pub")]
@@ -1071,7 +1071,7 @@ where
 impl<E, VC> VmLocalProver<E, VC>
 where
     E: StarkEngine,
-    VC: VmProverConfig<E::SC, E::PB>,
+    VC: VmProverConfig<E>,
 {
     pub fn new(
         mut vm: VirtualMachine<E, VC>,
@@ -1092,7 +1092,7 @@ impl<E, VC> ContinuationVmProver<E::SC> for VmLocalProver<E, VC>
 where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
-    VC: VmProverConfig<E::SC, E::PB>,
+    VC: VmProverConfig<E>,
     VC::Executor: InsExecutorE1<Val<E::SC>> + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
 {
     /// First performs metered execution (E2) to determine segments. Then sequentially proves each
@@ -1155,7 +1155,7 @@ impl<E, VC> SingleSegmentVmProver<E::SC> for VmLocalProver<E, VC>
 where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
-    VC: VmProverConfig<E::SC, E::PB>,
+    VC: VmProverConfig<E>,
     VC::Executor: InstructionExecutor<Val<E::SC>, VC::RecordArena>,
 {
     fn prove(

@@ -2,7 +2,7 @@ use itertools::{multiunzip, Itertools};
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
     engine::VerificationData,
-    prover::{cpu::CpuBackend, hal::DeviceDataTransporter, types::AirProofRawInput},
+    prover::{hal::DeviceDataTransporter, types::AirProofRawInput},
 };
 use openvm_stark_sdk::{
     config::{
@@ -26,11 +26,7 @@ pub fn air_test<VC>(config: VC, exe: impl Into<VmExe<BabyBear>>)
 where
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
-        + VmProverConfig<
-            BabyBearPoseidon2Config,
-            CpuBackend<BabyBearPoseidon2Config>,
-            RecordArena = MatrixRecordArena<BabyBear>,
-        >,
+        + VmProverConfig<BabyBearPoseidon2Engine, RecordArena = MatrixRecordArena<BabyBear>>,
     <VC as VmExecutionConfig<BabyBear>>::Executor:
         InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear>,
 {
@@ -47,11 +43,7 @@ pub fn air_test_with_min_segments<VC>(
 where
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
-        + VmProverConfig<
-            BabyBearPoseidon2Config,
-            CpuBackend<BabyBearPoseidon2Config>,
-            RecordArena = MatrixRecordArena<BabyBear>,
-        >,
+        + VmProverConfig<BabyBearPoseidon2Engine, RecordArena = MatrixRecordArena<BabyBear>>,
     <VC as VmExecutionConfig<BabyBear>>::Executor:
         InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear>,
 {
@@ -85,11 +77,7 @@ where
     // VmCircuitConfig bounds even though VmProverConfig already includes them
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
-        + VmProverConfig<
-            BabyBearPoseidon2Config,
-            CpuBackend<BabyBearPoseidon2Config>,
-            RecordArena = MatrixRecordArena<BabyBear>,
-        >,
+        + VmProverConfig<BabyBearPoseidon2Engine, RecordArena = MatrixRecordArena<BabyBear>>,
     <VC as VmExecutionConfig<BabyBear>>::Executor:
         InsExecutorE1<BabyBear> + InstructionExecutor<BabyBear>,
 {

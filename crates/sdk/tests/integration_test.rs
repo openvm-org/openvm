@@ -4,8 +4,7 @@ use eyre::Result;
 use openvm_build::GuestOptions;
 use openvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, ContinuationVmProof, ExecutionError,
-        SingleSegmentVmExecutor, VirtualMachine,
+        hasher::poseidon2::vm_poseidon2_hasher, ContinuationVmProof, ExecutionError, VirtualMachine,
     },
     system::{
         memory::merkle::public_values::UserPublicValuesProof, program::trace::VmCommittedExe,

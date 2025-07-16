@@ -3,11 +3,7 @@ use openvm_circuit::{
     system::SystemExecutor,
 };
 use openvm_circuit_derive::{InsExecutorE1, InstructionExecutor, VmConfig};
-use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    p3_field::Field,
-    prover::hal::ProverBackend,
-};
+use openvm_stark_backend::{config::StarkGenericConfig, engine::StarkEngine, p3_field::Field};
 use serde::{Deserialize, Serialize};
 
 pub mod adapters;

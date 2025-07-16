@@ -402,7 +402,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
 
     let source_field_ty = source_field.ty.clone();
     let record_arena =
-        quote! {<#source_field_ty as ::openvm_circuit::arch::VmProverConfig<SC, PB>>::RecordArena };
+        quote! {<#source_field_ty as ::openvm_circuit::arch::VmProverConfig<E>>::RecordArena };
 
     for e in extensions.iter() {
         let (ext_field_name, ext_name_upper) =
@@ -431,7 +431,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
             ::openvm_circuit::arch::VmProverExtension::extend_prover(&self.#ext_field_name, &mut inventory)?;
         });
         prover_where_predicates.push(parse_quote! {
-            #extension_ty: ::openvm_circuit::arch::VmProverExtension<SC, #record_arena, PB>
+            #extension_ty: ::openvm_circuit::arch::VmProverExtension<E::SC, #record_arena, E::PB>
         });
     }
 
@@ -444,14 +444,13 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
         #source_field_ty: ::openvm_circuit::arch::VmCircuitConfig<SC>
     });
     prover_where_predicates.push(parse_quote! {
-        #source_field_ty: ::openvm_circuit::arch::VmProverConfig<SC, PB>
+        #source_field_ty: ::openvm_circuit::arch::VmProverConfig<E>
     });
     let execution_where_clause = quote! { where #(#execution_where_predicates),* };
     let circuit_where_clause = quote! { where #(#circuit_where_predicates),* };
     let prover_where_clause = quote! { where
-        SC: StarkGenericConfig,
-        PB: ProverBackend<Val = Val<SC>, Challenge = SC::Challenge, Challenger = SC::Challenger>,
-        Self: ::openvm_circuit::arch::VmConfig<SC>,
+        E: StarkEngine,
+        Self: ::openvm_circuit::arch::VmConfig<E::SC>,
         #(#prover_where_predicates),*
     };
 
@@ -493,15 +492,15 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
             }
         }
 
-        impl<SC, PB> ::openvm_circuit::arch::VmProverConfig<SC, PB> for #name #prover_where_clause {
+        impl<E> ::openvm_circuit::arch::VmProverConfig<E> for #name #prover_where_clause {
             type RecordArena = #record_arena;
-            type SystemChipInventory = <#source_field_ty as ::openvm_circuit::arch::VmProverConfig<SC, PB>>::SystemChipInventory;
+            type SystemChipInventory = <#source_field_ty as ::openvm_circuit::arch::VmProverConfig<E>>::SystemChipInventory;
 
             fn create_chip_complex(
                 &self,
-                circuit: ::openvm_circuit::arch::AirInventory<SC>,
+                circuit: ::openvm_circuit::arch::AirInventory<E::SC>,
             ) -> Result<
-                ::openvm_circuit::arch::VmChipComplex<SC, Self::RecordArena, PB, Self::SystemChipInventory>,
+                ::openvm_circuit::arch::VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
                 ::openvm_circuit::arch::ChipInventoryError,
             > {
                 let mut chip_complex = self.#source_name.create_chip_complex(circuit)?;

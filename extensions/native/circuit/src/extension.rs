@@ -28,8 +28,9 @@ use openvm_rv32im_circuit::{
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
+    engine::StarkEngine,
     p3_field::{Field, PrimeField32},
-    prover::{cpu::CpuBackend, hal::ProverBackend},
+    prover::cpu::CpuBackend,
 };
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;

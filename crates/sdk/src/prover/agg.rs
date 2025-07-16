@@ -9,7 +9,7 @@ use openvm_continuations::verifier::{
     leaf::types::LeafVmVerifierInput,
     root::types::RootVmVerifierInput,
 };
-use openvm_native_circuit::{Native, NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
+use openvm_native_circuit::{NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_native_recursion::hints::Hintable;
 use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::proof::Proof};
@@ -23,7 +23,7 @@ use crate::{
 pub struct AggStarkProver<E>
 where
     E: StarkFriEngine<SC = SC>,
-    NativeConfig: VmProverConfig<SC, E::PB>,
+    NativeConfig: VmProverConfig<E>,
 {
     leaf_prover: VmLocalProver<E, NativeConfig>,
     leaf_controller: LeafProvingController,
@@ -42,9 +42,9 @@ pub struct LeafProvingController {
 impl<E> AggStarkProver<E>
 where
     E: StarkFriEngine<SC = SC>,
-    NativeConfig: VmProverConfig<SC, E::PB>,
+    NativeConfig: VmProverConfig<E>,
     <NativeConfig as VmExecutionConfig<F>>::Executor:
-        InstructionExecutor<F, <NativeConfig as VmProverConfig<SC, E::PB>>::RecordArena>,
+        InstructionExecutor<F, <NativeConfig as VmProverConfig<E>>::RecordArena>,
 {
     pub fn new(
         agg_stark_pk: AggStarkProvingKey,
@@ -202,7 +202,9 @@ impl LeafProvingController {
     ) -> Result<Vec<Proof<SC>>, VirtualMachineError>
     where
         E: StarkFriEngine<SC = SC>,
-        NativeConfig: VmProverConfig<SC, E::PB>,
+        NativeConfig: VmProverConfig<E>,
+        <NativeConfig as VmExecutionConfig<F>>::Executor:
+            InstructionExecutor<F, <NativeConfig as VmProverConfig<E>>::RecordArena>,
     {
         info_span!("agg_layer", group = "leaf").in_scope(|| {
             #[cfg(feature = "bench-metrics")]
@@ -231,6 +233,7 @@ impl LeafProvingController {
     }
 }
 
+/*
 /// Wrap the e2e stark proof until its heights meet the requirements of the root verifier.
 pub fn wrap_e2e_stark_proof<E>(
     internal_prover: &VmLocalProver<E, NativeConfig>,
@@ -241,7 +244,7 @@ pub fn wrap_e2e_stark_proof<E>(
 ) -> RootVmVerifierInput<SC>
 where
     E: StarkFriEngine<SC = SC>,
-    NativeConfig: VmProverConfig<SC, E::PB>,
+    NativeConfig: VmProverConfig<E>,
 {
     let VmStarkProof {
         mut proof,
@@ -292,3 +295,4 @@ fn heights_le(a: &[usize], b: &[usize]) -> bool {
     assert_eq!(a.len(), b.len());
     a.iter().zip(b.iter()).all(|(a, b)| a <= b)
 }
+*/

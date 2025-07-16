@@ -85,7 +85,7 @@ pub mod test_utils {
     where
         E: StarkFriEngine,
         Domain<E::SC>: PolynomialSpace<Val = BabyBear>,
-        NativeConfig: VmProverConfig<E::SC, E::PB, RecordArena = MatrixRecordArena<BabyBear>>,
+        NativeConfig: VmProverConfig<E, RecordArena = MatrixRecordArena<BabyBear>>,
     {
         assert!(!config.as_ref().continuation_enabled);
         let input = input_stream.into();

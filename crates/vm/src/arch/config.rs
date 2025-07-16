@@ -10,6 +10,7 @@ use openvm_stark_backend::{
     p3_field::Field,
     prover::hal::ProverBackend,
 };
+use openvm_stark_sdk::engine::StarkEngine;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{
@@ -80,21 +81,20 @@ pub trait VmCircuitConfig<SC: StarkGenericConfig> {
     }
 }
 
-pub trait VmProverConfig<SC, PB>: VmCircuitConfig<SC>
+pub trait VmProverConfig<E>: VmConfig<E::SC>
 where
-    SC: StarkGenericConfig,
-    PB: ProverBackend<Val = Val<SC>, Challenge = SC::Challenge, Challenger = SC::Challenger>,
+    E: StarkEngine,
 {
     type RecordArena: Arena;
-    type SystemChipInventory: SystemChipComplex<Self::RecordArena, PB>;
+    type SystemChipInventory: SystemChipComplex<Self::RecordArena, E::PB>;
 
     /// Create a [VmChipComplex] from the full [AirInventory], which should be the output of
     /// [VmCircuitConfig::create_airs].
     fn create_chip_complex(
         &self,
-        circuit: AirInventory<SC>,
+        circuit: AirInventory<E::SC>,
     ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, PB, Self::SystemChipInventory>,
+        VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     >;
 }

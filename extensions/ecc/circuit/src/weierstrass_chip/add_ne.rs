@@ -47,7 +47,6 @@ pub fn ec_add_ne_expr(
 /// BLOCKS: how many blocks do we need to represent one input or output
 /// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
-
 fn gen_base_expr(
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,

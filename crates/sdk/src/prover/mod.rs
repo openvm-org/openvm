@@ -1,4 +1,4 @@
-// mod agg;
+mod agg;
 mod app;
 // #[cfg(feature = "evm-prove")]
 // mod halo2;
@@ -6,7 +6,7 @@ mod app;
 // mod stark;
 pub mod vm;
 
-// pub use agg::*;
+pub use agg::*;
 pub use app::*;
 // #[cfg(feature = "evm-prove")]
 // pub use evm::*;

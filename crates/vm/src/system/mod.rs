@@ -12,7 +12,7 @@ use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_field::{Field, PrimeField32},
     prover::{
-        cpu::CpuBackend,
+        cpu::{CpuBackend, CpuDevice},
         hal::ProverBackend,
         types::{AirProvingContext, CommittedTraceData},
     },
@@ -29,6 +29,7 @@ pub mod program;
 pub mod public_values;
 
 use connector::VmConnectorAir;
+use openvm_stark_sdk::engine::StarkEngine;
 use program::ProgramAir;
 use public_values::PublicValuesAir;
 
@@ -429,9 +430,10 @@ where
     }
 }
 
-impl<SC> VmProverConfig<SC, CpuBackend<SC>> for SystemConfig
+impl<SC, E> VmProverConfig<E> for SystemConfig
 where
     SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: PrimeField32,
 {
     type RecordArena = MatrixRecordArena<Val<SC>>;

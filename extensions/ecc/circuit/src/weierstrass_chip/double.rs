@@ -71,6 +71,7 @@ fn gen_base_expr(
     (expr, local_opcode_idx)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn get_ec_double_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     exec_bridge: ExecutionBridge,
     mem_bridge: MemoryBridge,

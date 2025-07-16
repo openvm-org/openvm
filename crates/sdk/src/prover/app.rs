@@ -21,7 +21,7 @@ use crate::{
 pub struct AppProver<VC, E>
 where
     E: StarkEngine,
-    VC: VmProverConfig<E::SC, E::PB>,
+    VC: VmProverConfig<E>,
 {
     pub program_name: Option<String>,
     #[getset(get = "pub")]
@@ -32,7 +32,7 @@ impl<VC, E> AppProver<VC, E>
 where
     E: StarkFriEngine,
     Val<E::SC>: PrimeField32,
-    VC: VmProverConfig<E::SC, E::PB>,
+    VC: VmProverConfig<E>,
 {
     pub fn new(
         app_vm_pk: Arc<VmProvingKey<E::SC, VC>>,

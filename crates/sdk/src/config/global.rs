@@ -28,11 +28,7 @@ use openvm_rv32im_transpiler::{
 };
 use openvm_sha256_circuit::{Sha256, Sha256Executor};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
-use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    p3_field::Field,
-    prover::hal::ProverBackend,
-};
+use openvm_stark_backend::{config::StarkGenericConfig, engine::StarkEngine, p3_field::Field};
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
 
@@ -57,9 +53,10 @@ pub struct SdkVmConfig {
     pub ecc: Option<WeierstrassExtension>,
 }
 
-// Private struct to use the VmConfig derive macro
+/// Internal struct to use for the VmConfig derive macro.
+/// Can be obtained via [`SdkVmConfig::to_inner`].
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
-struct SdkVmConfigInner {
+pub struct SdkVmConfigInner {
     #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension(executor = "Rv32IExecutor")]
@@ -209,20 +206,19 @@ where
     }
 }
 
-impl<SC, PB> VmProverConfig<SC, PB> for SdkVmConfig
+impl<E> VmProverConfig<E> for SdkVmConfig
 where
-    SC: StarkGenericConfig,
-    PB: ProverBackend<Val = Val<SC>, Challenge = SC::Challenge, Challenger = SC::Challenger>,
-    SdkVmConfigInner: VmProverConfig<SC, PB>,
+    E: StarkEngine,
+    SdkVmConfigInner: VmProverConfig<E>,
 {
-    type RecordArena = <SdkVmConfigInner as VmProverConfig<SC, PB>>::RecordArena;
-    type SystemChipInventory = <SdkVmConfigInner as VmProverConfig<SC, PB>>::SystemChipInventory;
+    type RecordArena = <SdkVmConfigInner as VmProverConfig<E>>::RecordArena;
+    type SystemChipInventory = <SdkVmConfigInner as VmProverConfig<E>>::SystemChipInventory;
 
     fn create_chip_complex(
         &self,
-        circuit: AirInventory<SC>,
+        circuit: AirInventory<E::SC>,
     ) -> Result<
-        VmChipComplex<SC, Self::RecordArena, PB, Self::SystemChipInventory>,
+        VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
         self.to_inner().create_chip_complex(circuit)

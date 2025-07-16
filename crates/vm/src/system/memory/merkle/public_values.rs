@@ -5,8 +5,7 @@ use thiserror::Error;
 use crate::{
     arch::{hasher::Hasher, ADDR_SPACE_OFFSET},
     system::memory::{
-        dimensions::MemoryDimensions, merkle::tree::MerkleTree, online::LinearMemory, AddressMap,
-        MemoryImage,
+        dimensions::MemoryDimensions, merkle::tree::MerkleTree, online::LinearMemory, MemoryImage,
     },
 };
 

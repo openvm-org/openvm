@@ -28,8 +28,9 @@ use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_circuit::{Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
+    engine::StarkEngine,
     p3_field::{Field, PrimeField32},
-    prover::{cpu::CpuBackend, hal::ProverBackend},
+    prover::cpu::CpuBackend,
 };
 use serde::{Deserialize, Serialize};
 

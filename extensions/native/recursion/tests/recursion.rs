@@ -58,7 +58,7 @@ where
     SC: StarkGenericConfig,
     E: StarkFriEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Domain<SC>: PolynomialSpace<Val = BabyBear>,
-    NativeConfig: VmProverConfig<E::SC, E::PB, RecordArena = MatrixRecordArena<BabyBear>>,
+    NativeConfig: VmProverConfig<E, RecordArena = MatrixRecordArena<BabyBear>>,
 {
     let fib_program = fibonacci_program(a, b, n);
     let mut config = test_native_config();
