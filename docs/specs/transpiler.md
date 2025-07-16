@@ -151,11 +151,13 @@ Each VM extension's behavior is specified below.
 | ----------- | -------------------------------------------------- |
 | keccak256   | KECCAK256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2` |
 
-### SHA2-256 Extension
+### SHA-2 Extension
 
 | RISC-V Inst | OpenVM Instruction                              |
 | ----------- | ----------------------------------------------- |
 | sha256      | SHA256_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2` |
+| sha512      | SHA512_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2` |
+| sha384      | SHA384_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 2` |
 
 ### BigInt Extension
 
@@ -205,7 +207,9 @@ Each VM extension's behavior is specified below.
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | sw_add_ne\<C\>  | EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`                                                                                                           |
 | sw_double\<C\>  | EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`                                                                                                                  |
-| setup\<C\>      | SETUP_EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `ind(rs2) != 0`, SETUP_EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `ind(rs2) = 0` |
+| sw_setup\<C\>      | SETUP_EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `ind(rs2) != 0`, SETUP_EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `ind(rs2) = 0` |
+| te_add\<C\> | TE_ADD_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`          |
+| te_setup\<C\>     | SETUP_TE_ADD_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` |
 
 ### Pairing Extension
 

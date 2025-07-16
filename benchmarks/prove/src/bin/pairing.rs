@@ -3,7 +3,7 @@ use eyre::Result;
 use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::SystemConfig;
-use openvm_ecc_circuit::WeierstrassExtension;
+use openvm_ecc_circuit::EccExtension;
 use openvm_pairing_circuit::{PairingCurve, PairingExtension};
 use openvm_pairing_guest::bn254::{BN254_COMPLEX_STRUCT_NAME, BN254_MODULUS, BN254_ORDER};
 use openvm_sdk::{config::SdkVmConfig, Sdk, StdIn};
@@ -26,9 +26,10 @@ fn main() -> Result<()> {
             BN254_COMPLEX_STRUCT_NAME.to_string(),
             BN254_MODULUS.clone(),
         )]))
-        .ecc(WeierstrassExtension::new(vec![
-            PairingCurve::Bn254.curve_config()
-        ]))
+        .ecc(EccExtension::new(
+            vec![PairingCurve::Bn254.curve_config()],
+            vec![],
+        ))
         .pairing(PairingExtension::new(vec![PairingCurve::Bn254]))
         .build();
     let elf = args.build_bench_program("pairing", &vm_config, None)?;

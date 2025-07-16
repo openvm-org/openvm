@@ -4,6 +4,7 @@ use core::ops::Mul;
 use openvm_algebra_guest::{Field, IntMod};
 
 use super::group::Group;
+use crate::IntrinsicCurve;
 
 /// Short Weierstrass curve affine point.
 pub trait WeierstrassPoint: Clone + Sized {
@@ -111,32 +112,6 @@ pub trait WeierstrassPoint: Clone + Sized {
         }
         Some(Self::from_xy_unchecked(x, y))
     }
-}
-
-pub trait FromCompressed<Coordinate> {
-    /// Given `x`-coordinate,
-    ///
-    /// Decompresses a point from its x-coordinate and a recovery identifier which indicates
-    /// the parity of the y-coordinate. Given the x-coordinate, this function attempts to find the
-    /// corresponding y-coordinate that satisfies the elliptic curve equation. If successful, it
-    /// returns the point as an instance of Self. If the point cannot be decompressed, it returns
-    /// None.
-    fn decompress(x: Coordinate, rec_id: &u8) -> Option<Self>
-    where
-        Self: core::marker::Sized;
-}
-
-/// A trait for elliptic curves that bridges the openvm types and external types with
-/// CurveArithmetic etc. Implement this for external curves with corresponding openvm point and
-/// scalar types.
-pub trait IntrinsicCurve {
-    type Scalar: Clone;
-    type Point: Clone;
-
-    /// Multi-scalar multiplication.
-    /// The implementation may be specialized to use properties of the curve
-    /// (e.g., if the curve order is prime).
-    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point;
 }
 
 // MSM using preprocessed table (windowed method)
@@ -476,11 +451,11 @@ macro_rules! impl_sw_group_ops {
                 self.double_assign_impl::<true>();
             }
 
-            // This implementation is the same as the default implementation in the `Group` trait,
-            // but it was found that overriding the default implementation reduced the cycle count
-            // by 50% on the ecrecover benchmark.
-            // We hypothesize that this is due to compiler optimizations that are not possible when
-            // the `is_identity` function is defined in a different source file.
+            // Note: It was found that implementing `is_identity` in group.rs as a default
+            // implementation increases the cycle count by 50% on the ecrecover benchmark. For
+            // this reason, we implement it here instead. We hypothesize that this is due to
+            // compiler optimizations that are not possible when the `is_identity` function is
+            // defined in a different source file.
             #[inline(always)]
             fn is_identity(&self) -> bool {
                 self == &<Self as Group>::IDENTITY

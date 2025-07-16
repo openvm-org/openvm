@@ -4277,8 +4277,8 @@ dependencies = [
  "openvm-ecc-transpiler",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
- "openvm-sha256-circuit",
- "openvm-sha256-transpiler",
+ "openvm-sha2-circuit",
+ "openvm-sha2-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
@@ -4553,6 +4553,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "matrixmultiply"
+version = "0.3.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a06de3016e9fae57a36fd14dba131fccf49f74b40b7fbdb472f96e361ec71a08"
+dependencies = [
+ "autocfg",
+ "rawpointer",
+]
+
+[[package]]
 name = "maybe-rayon"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4687,6 +4697,21 @@ dependencies = [
  "libc",
  "wasi 0.11.1+wasi-snapshot-preview1",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "ndarray"
+version = "0.16.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "882ed72dce9365842bf196bdeedf5055305f11fc8c03dee7bb0194a6cad34841"
+dependencies = [
+ "matrixmultiply",
+ "num-complex",
+ "num-integer",
+ "num-traits",
+ "portable-atomic",
+ "portable-atomic-util",
+ "rawpointer",
 ]
 
 [[package]]
@@ -5125,8 +5150,8 @@ dependencies = [
  "openvm-pairing-transpiler",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
- "openvm-sha256-circuit",
- "openvm-sha256-transpiler",
+ "openvm-sha2-circuit",
+ "openvm-sha2-transpiler",
  "openvm-stark-sdk",
  "openvm-transpiler",
  "rand 0.8.5",
@@ -5309,6 +5334,8 @@ name = "openvm-circuit-primitives-derive"
 version = "1.4.0-rc.0"
 dependencies = [
  "itertools 0.14.0",
+ "ndarray",
+ "proc-macro2",
  "quote",
  "syn 2.0.104",
 ]
@@ -5345,6 +5372,7 @@ dependencies = [
  "hex-literal 0.4.1",
  "lazy_static",
  "num-bigint 0.4.6",
+ "num-integer",
  "num-traits",
  "once_cell",
  "openvm-algebra-circuit",
@@ -5352,11 +5380,13 @@ dependencies = [
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
  "openvm-circuit-primitives-derive",
+ "openvm-ecc-guest",
  "openvm-ecc-transpiler",
  "openvm-instructions",
  "openvm-mod-circuit-builder",
  "openvm-rv32-adapters",
  "openvm-rv32im-circuit",
+ "openvm-sha2-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.8.5",
@@ -5373,12 +5403,18 @@ dependencies = [
  "elliptic-curve 0.13.8",
  "group 0.13.0",
  "halo2curves-axiom",
+ "hex-literal 0.4.1",
+ "lazy_static",
+ "num-bigint 0.4.6",
  "once_cell",
  "openvm",
  "openvm-algebra-guest",
+ "openvm-algebra-moduli-macros",
  "openvm-custom-insn",
  "openvm-ecc-sw-macros",
+ "openvm-ecc-te-macros",
  "openvm-rv32im-guest",
+ "openvm-sha2",
  "serde",
  "strum_macros",
 ]
@@ -5397,6 +5433,7 @@ dependencies = [
  "openvm-ecc-transpiler",
  "openvm-rv32im-transpiler",
  "openvm-sdk",
+ "openvm-sha2-transpiler",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
@@ -5407,6 +5444,15 @@ dependencies = [
 
 [[package]]
 name = "openvm-ecc-sw-macros"
+version = "1.4.0-rc.0"
+dependencies = [
+ "openvm-macros-common",
+ "quote",
+ "syn 2.0.104",
+]
+
+[[package]]
+name = "openvm-ecc-te-macros"
 version = "1.4.0-rc.0"
 dependencies = [
  "openvm-macros-common",
@@ -5924,8 +5970,8 @@ dependencies = [
  "openvm-pairing-transpiler",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
- "openvm-sha256-circuit",
- "openvm-sha256-transpiler",
+ "openvm-sha2-circuit",
+ "openvm-sha2-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
@@ -5950,9 +5996,9 @@ dependencies = [
  "openvm-circuit",
  "openvm-instructions",
  "openvm-rv32im-transpiler",
- "openvm-sha256-circuit",
- "openvm-sha256-guest",
- "openvm-sha256-transpiler",
+ "openvm-sha2-circuit",
+ "openvm-sha2-guest",
+ "openvm-sha2-transpiler",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
@@ -5960,11 +6006,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-sha256-air"
+name = "openvm-sha2-air"
 version = "1.4.0-rc.0"
 dependencies = [
+ "ndarray",
+ "num_enum",
  "openvm-circuit",
  "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.8.5",
@@ -5972,41 +6021,41 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-sha256-circuit"
+name = "openvm-sha2-circuit"
 version = "1.4.0-rc.0"
 dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
+ "ndarray",
  "openvm-circuit",
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
  "openvm-circuit-primitives-derive",
  "openvm-instructions",
  "openvm-rv32im-circuit",
- "openvm-sha256-air",
- "openvm-sha256-transpiler",
+ "openvm-sha2-air",
+ "openvm-sha2-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.8.5",
  "serde",
  "sha2 0.10.9",
- "strum",
 ]
 
 [[package]]
-name = "openvm-sha256-guest"
+name = "openvm-sha2-guest"
 version = "1.4.0-rc.0"
 dependencies = [
  "openvm-platform",
 ]
 
 [[package]]
-name = "openvm-sha256-transpiler"
+name = "openvm-sha2-transpiler"
 version = "1.4.0-rc.0"
 dependencies = [
  "openvm-instructions",
  "openvm-instructions-derive",
- "openvm-sha256-guest",
+ "openvm-sha2-guest",
  "openvm-stark-backend",
  "openvm-transpiler",
  "rrs-lib",
@@ -6193,8 +6242,8 @@ dependencies = [
  "openvm-ecc-transpiler",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
- "openvm-sha256-circuit",
- "openvm-sha256-transpiler",
+ "openvm-sha2-circuit",
+ "openvm-sha2-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
@@ -6870,6 +6919,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
 
 [[package]]
+name = "portable-atomic-util"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d8a2f0d8d040d7848a709caf78912debcc3f33ee4b3cac47d73d1e1069e83507"
+dependencies = [
+ "portable-atomic",
+]
+
+[[package]]
 name = "poseidon-primitives"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7246,6 +7304,12 @@ checksum = "c6df7ab838ed27997ba19a4664507e6f82b41fe6e20be42929332156e5e85146"
 dependencies = [
  "bitflags 2.9.1",
 ]
+
+[[package]]
+name = "rawpointer"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "60a357793950651c4ed0f3f52338f53b2f809f32d83a07f72909fa13e4c6c1e3"
 
 [[package]]
 name = "rayon"

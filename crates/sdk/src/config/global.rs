@@ -15,9 +15,7 @@ use openvm_circuit::{
     circuit_derive::{Chip, ChipUsageGetter},
     derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor},
 };
-use openvm_ecc_circuit::{
-    WeierstrassExtension, WeierstrassExtensionExecutor, WeierstrassExtensionPeriphery,
-};
+use openvm_ecc_circuit::{EccExtension, EccExtensionExecutor, EccExtensionPeriphery};
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
@@ -37,8 +35,8 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
-use openvm_sha256_transpiler::Sha256TranspilerExtension;
+use openvm_sha2_circuit::{Sha2, Sha2Executor, Sha2Periphery};
+use openvm_sha2_transpiler::Sha2TranspilerExtension;
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
@@ -53,7 +51,7 @@ pub struct SdkVmConfig {
     pub rv32i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
-    pub sha256: Option<UnitStruct>,
+    pub sha2: Option<UnitStruct>,
     pub native: Option<UnitStruct>,
     pub castf: Option<UnitStruct>,
 
@@ -62,7 +60,7 @@ pub struct SdkVmConfig {
     pub modular: Option<ModularExtension>,
     pub fp2: Option<Fp2Extension>,
     pub pairing: Option<PairingExtension>,
-    pub ecc: Option<WeierstrassExtension>,
+    pub ecc: Option<EccExtension>,
 }
 
 #[derive(
@@ -78,7 +76,7 @@ pub enum SdkVmConfigExecutor<F: PrimeField32> {
     #[any_enum]
     Keccak(Keccak256Executor<F>),
     #[any_enum]
-    Sha256(Sha256Executor<F>),
+    Sha2(Sha2Executor<F>),
     #[any_enum]
     Native(NativeExecutor<F>),
     #[any_enum]
@@ -92,7 +90,7 @@ pub enum SdkVmConfigExecutor<F: PrimeField32> {
     #[any_enum]
     Pairing(PairingExtensionExecutor<F>),
     #[any_enum]
-    Ecc(WeierstrassExtensionExecutor<F>),
+    Ecc(EccExtensionExecutor<F>),
     #[any_enum]
     CastF(CastFExtensionExecutor<F>),
 }
@@ -108,7 +106,7 @@ pub enum SdkVmConfigPeriphery<F: PrimeField32> {
     #[any_enum]
     Keccak(Keccak256Periphery<F>),
     #[any_enum]
-    Sha256(Sha256Periphery<F>),
+    Sha2(Sha2Periphery<F>),
     #[any_enum]
     Native(NativePeriphery<F>),
     #[any_enum]
@@ -122,7 +120,7 @@ pub enum SdkVmConfigPeriphery<F: PrimeField32> {
     #[any_enum]
     Pairing(PairingExtensionPeriphery<F>),
     #[any_enum]
-    Ecc(WeierstrassExtensionPeriphery<F>),
+    Ecc(EccExtensionPeriphery<F>),
     #[any_enum]
     CastF(CastFExtensionPeriphery<F>),
 }
@@ -139,8 +137,8 @@ impl SdkVmConfig {
         if self.keccak.is_some() {
             transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
         }
-        if self.sha256.is_some() {
-            transpiler = transpiler.with_extension(Sha256TranspilerExtension);
+        if self.sha2.is_some() {
+            transpiler = transpiler.with_extension(Sha2TranspilerExtension);
         }
         if self.native.is_some() {
             transpiler = transpiler.with_extension(LongFormTranspilerExtension);
@@ -193,8 +191,8 @@ impl<F: PrimeField32> VmConfig<F> for SdkVmConfig {
         if self.keccak.is_some() {
             complex = complex.extend(&Keccak256)?;
         }
-        if self.sha256.is_some() {
-            complex = complex.extend(&Sha256)?;
+        if self.sha2.is_some() {
+            complex = complex.extend(&Sha2)?;
         }
         if self.native.is_some() {
             complex = complex.extend(&Native)?;
@@ -264,7 +262,7 @@ impl InitFileGenerator for SdkVmConfig {
             }
 
             if let Some(ecc_config) = &self.ecc {
-                contents.push_str(&ecc_config.generate_sw_init());
+                contents.push_str(&ecc_config.generate_ecc_init());
                 contents.push('\n');
             }
 
@@ -320,8 +318,8 @@ impl From<Keccak256> for UnitStruct {
     }
 }
 
-impl From<Sha256> for UnitStruct {
-    fn from(_: Sha256) -> Self {
+impl From<Sha2> for UnitStruct {
+    fn from(_: Sha2) -> Self {
         UnitStruct {}
     }
 }
@@ -346,7 +344,7 @@ struct SdkVmConfigWithDefaultDeser {
     pub rv32i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
-    pub sha256: Option<UnitStruct>,
+    pub sha2: Option<UnitStruct>,
     pub native: Option<UnitStruct>,
     pub castf: Option<UnitStruct>,
 
@@ -355,7 +353,7 @@ struct SdkVmConfigWithDefaultDeser {
     pub modular: Option<ModularExtension>,
     pub fp2: Option<Fp2Extension>,
     pub pairing: Option<PairingExtension>,
-    pub ecc: Option<WeierstrassExtension>,
+    pub ecc: Option<EccExtension>,
 }
 
 impl From<SdkVmConfigWithDefaultDeser> for SdkVmConfig {
@@ -371,7 +369,7 @@ impl From<SdkVmConfigWithDefaultDeser> for SdkVmConfig {
             rv32i: config.rv32i,
             io: config.io,
             keccak: config.keccak,
-            sha256: config.sha256,
+            sha2: config.sha2,
             native: config.native,
             castf: config.castf,
             rv32m: config.rv32m,

@@ -19,7 +19,7 @@ use openvm_circuit::{
     derive::VmConfig,
     utils::air_test,
 };
-use openvm_ecc_circuit::{SECP256K1_MODULUS, SECP256K1_ORDER};
+use openvm_ecc_circuit::SECP256K1_CONFIG;
 use openvm_instructions::exe::VmExe;
 use openvm_platform::memory::MEM_SIZE;
 use openvm_rv32im_circuit::{
@@ -133,8 +133,14 @@ impl InitFileGenerator for Rv32ModularFp2Int256Config {
 #[test_case("tests/data/rv32im-intrin-from-as")]
 fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     let config = Rv32ModularFp2Int256Config::new(
-        vec![SECP256K1_MODULUS.clone(), SECP256K1_ORDER.clone()],
-        vec![("Secp256k1Coord".to_string(), SECP256K1_MODULUS.clone())],
+        vec![
+            SECP256K1_CONFIG.modulus.clone(),
+            SECP256K1_CONFIG.scalar.clone(),
+        ],
+        vec![(
+            SECP256K1_CONFIG.struct_name.clone(),
+            SECP256K1_CONFIG.modulus.clone(),
+        )],
     );
     let elf = get_elf(elf_path)?;
     let openvm_exe = VmExe::from_elf(

@@ -22,7 +22,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{WeierstrassAir, WeierstrassChip, WeierstrassStep};
 
-pub fn ec_double_ne_expr(
+pub fn sw_double_ne_expr(
     config: ExprBuilderConfig, // The coordinate field.
     range_bus: VariableRangeCheckerBus,
     a_biguint: BigUint,
@@ -58,12 +58,12 @@ pub fn ec_double_ne_expr(
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
 
 #[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1, InsExecutorE2)]
-pub struct EcDoubleChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub struct SwDoubleChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     pub WeierstrassChip<F, 1, BLOCKS, BLOCK_SIZE>,
 );
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
-    EcDoubleChip<F, BLOCKS, BLOCK_SIZE>
+    SwDoubleChip<F, BLOCKS, BLOCK_SIZE>
 {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -77,11 +77,11 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         range_checker: SharedVariableRangeCheckerChip,
         a_biguint: BigUint,
     ) -> Self {
-        let expr = ec_double_ne_expr(config, range_checker.bus(), a_biguint);
+        let expr = sw_double_ne_expr(config, range_checker.bus(), a_biguint);
 
         let local_opcode_idx = vec![
-            Rv32WeierstrassOpcode::EC_DOUBLE as usize,
-            Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+            Rv32WeierstrassOpcode::SW_DOUBLE as usize,
+            Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize,
         ];
 
         let air = WeierstrassAir::new(

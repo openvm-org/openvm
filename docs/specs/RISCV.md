@@ -5,7 +5,7 @@ The default VM extensions that support transpilation are:
 
 - [RV32IM](#rv32im-extension): An extension supporting the 32-bit RISC-V ISA with multiplication.
 - [Keccak-256](#keccak-extension): An extension implementing the Keccak-256 hash function compatibly with RISC-V memory.
-- [SHA2-256](#sha2-256-extension): An extension implementing the SHA2-256 hash function compatibly with RISC-V memory.
+- [SHA2](#sha-2-extension): An extension implementing the SHA-256, SHA-512, and SHA-384 hash functions compatibly with RISC-V memory.
 - [BigInt](#bigint-extension): An extension supporting 256-bit signed and unsigned integer arithmetic, including multiplication. This extension respects the RISC-V memory format.
 - [Algebra](#algebra-extension): An extension supporting modular arithmetic over arbitrary fields and their complex field extensions. This extension respects the RISC-V memory format.
 - [Elliptic curve](#elliptic-curve-extension): An extension for elliptic curve operations over Weierstrass curves, including addition and doubling. This can be used to implement multi-scalar multiplication and ECDSA scalar multiplication. This extension respects the RISC-V memory format.
@@ -85,11 +85,13 @@ implementation is here. But we use `funct3 = 111` because the native extension h
 | ----------- | --- | ----------- | ------ | ------ | ------------------------------------------- |
 | keccak256   | R   | 0001011     | 100    | 0x0    | `[rd:32]_2 = keccak256([rs1..rs1 + rs2]_2)` |
 
-## SHA2-256 Extension
+## SHA-2 Extension
 
 | RISC-V Inst | FMT | opcode[6:0] | funct3 | funct7 | RISC-V description and notes             |
 | ----------- | --- | ----------- | ------ | ------ | ---------------------------------------- |
 | sha256      | R   | 0001011     | 100    | 0x1    | `[rd:32]_2 = sha256([rs1..rs1 + rs2]_2)` |
+| sha512      | R   | 0001011     | 100    | 0x2    | `[rd:64]_2 = sha512([rs1..rs1 + rs2]_2)` |
+| sha384      | R   | 0001011     | 100    | 0x3    | `[rd:64]_2 = sha384([rs1..rs1 + rs2]_2)`. Last 16 bytes will be set to zeros. |
 
 ## BigInt Extension
 
@@ -176,13 +178,16 @@ Complex extension field arithmetic over `Fp2` depends on `Fp` where `-1` is not 
 
 ## Elliptic Curve Extension
 
-The elliptic curve extension supports arithmetic over short Weierstrass curves, which requires specification of the elliptic curve `C`. The extension must be configured to support a fixed ordered list of supported curves. We use `config.curve_idx(C)` to denote the index of `C` in this list. In the list below, `idx` denotes `config.curve_idx(C)`.
+The elliptic curve extension supports arithmetic over short Weierstrass curves and twisted Edwards curves, which requires specification of the elliptic curve `C`. The extension must be configured to support two fixed ordered lists of supported curves: one list of short Weierstrass curves and one list of twisted Edwards curves. Instructions prefixed with `sw_` are for short Weierstrass curves and instructions prefixed with `te_` are for twisted Edwards curves. We use `config.curve_idx(C)` to denote the index of `C` in the appropriate list. In the list below, `idx` denotes `config.curve_idx(C)`.
 
 | RISC-V Inst     | FMT | opcode[6:0] | funct3 | funct7    | RISC-V description and notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | --------------- | --- | ----------- | ------ | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | sw_add_ne\<C\>  | R   | 0101011     | 001    | `idx*8`   | `EcPoint([rd:2*C::COORD_SIZE]_2) = EcPoint([rs1:2*C::COORD_SIZE]_2) + EcPoint([rs2:2*C::COORD_SIZE]_2)`. Assumes that input affine points are not identity and do not have same x-coordinate.                                                                                                                                                                                                                                                                                                                                                                  |
 | sw_double\<C\>  | R   | 0101011     | 001    | `idx*8+1` | `EcPoint([rd:2*C::COORD_SIZE]_2) = 2 * EcPoint([rs1:2*C::COORD_SIZE]_2)`. Assumes that input affine point is not identity. `rs2` is unused and must be set to `x0`.                                                                                                                                                                                                                                                                                                                                                                                            |
-| setup\<C\>      | R   | 0101011     | 001    | `idx*8+2` | `assert([rs1: C::COORD_SIZE]_2 == C::MODULUS)` in the chip defined by the register index of `rs2`. For the sake of implementation convenience it also writes an unconstrained value into `[rd: 2*C::COORD_SIZE]_2`. If `ind(rs2) != 0`, then this instruction is setup for `sw_add_ne`. Otherwise it is setup for `sw_double`. When `ind(rs2) != 0` (add_ne), it is required for proper functionality that `[rs2: C::COORD_SIZE]_2 != [rs1: C::COORD_SIZE]_2`; otherwise (double), it is required that `[rs1 + C::COORD_SIZE: C::COORD_SIZE]_2 != C::Fp::ZERO` |
+| sw_setup\<C\>      | R   | 0101011     | 001    | `idx*8+2` | `assert([rs1: 2*C::COORD_SIZE]_2 == [C::MODULUS, CURVE_A])` in the chip defined by the register index of `rs2`. For the sake of implementation convenience it also writes an unconstrained value into `[rd: 2*C::COORD_SIZE]_2`. If `ind(rs2) != 0`, then this instruction is setup for `sw_add_ne`. Otherwise it is setup for `sw_double`. When `ind(rs2) != 0` (add_ne), it is required for proper functionality that `[rs2: C::COORD_SIZE]_2 != [rs1: C::COORD_SIZE]_2`; otherwise (double), it is required that `[rs1 + C::COORD_SIZE: C::COORD_SIZE]_2 != C::Fp::ZERO` |
+| te_add\<C\>  | R   | 0101011     | 100    | `idx*8`   | `EcPoint([rd:2*C::COORD_SIZE]_2) = EcPoint([rs1:2*C::COORD_SIZE]_2) + EcPoint([rs2:2*C::COORD_SIZE]_2)`.                                                                                                                                                                                                                                                                                                                                                                       |
+| te_setup\<C\>      | R   | 0101011     | 100    | `idx*8+1` | `assert([rs1: 2*C::COORD_SIZE]_2 == [C::MODULUS, C::CURVE_A] && [rs2: C::COORD_SIZE]_2 == C::CURVE_D])`. For the sake of implementation convenience it also writes an unconstrained value into `[rd: 2*C::COORD_SIZE]_2`. |
+
 
 Since `funct7` is 7-bits, up to 16 curves can be supported simultaneously. We use `idx*8` to leave some room for future expansion.
 
