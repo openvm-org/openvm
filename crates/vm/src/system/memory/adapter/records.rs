@@ -22,7 +22,7 @@ pub(crate) struct AccessRecordHeader {
 
 #[repr(C)]
 #[derive(Debug)]
-pub(crate) struct AccessRecordMut<'a> {
+pub struct AccessRecordMut<'a> {
     pub header: &'a mut AccessRecordHeader,
     // TODO(AG): optimize with some `Option` serialization stuff
     pub timestamps: &'a mut [u32], // len is block_size / lowest_block_size
@@ -30,7 +30,7 @@ pub(crate) struct AccessRecordMut<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct AccessLayout {
+pub struct AccessLayout {
     /// The size of the block in elements.
     pub block_size: usize,
     /// The size of the minimal block we may split into/merge from (usually 1 or 4)
