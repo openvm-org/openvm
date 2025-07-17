@@ -1,8 +1,6 @@
 use std::sync::{atomic::Ordering, Arc};
 
-use openvm_circuit_primitives::range_tuple::{
-    RangeTupleCheckerBus, RangeTupleCheckerChip, NUM_RANGE_TUPLE_COLS,
-};
+use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerChip, NUM_RANGE_TUPLE_COLS};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use stark_backend_gpu::{
     base::DeviceMatrix,
@@ -23,14 +21,14 @@ pub struct RangeTupleCheckerChipGPU<const N: usize> {
 }
 
 impl<const N: usize> RangeTupleCheckerChipGPU<N> {
-    pub fn new(bus: RangeTupleCheckerBus<N>) -> Self {
-        let range_max = bus.sizes.iter().product::<u32>() as usize;
+    pub fn new(sizes: [u32; N]) -> Self {
+        let range_max = sizes.iter().product::<u32>() as usize;
         let count = Arc::new(DeviceBuffer::<F>::with_capacity(range_max));
         count.fill_zero().unwrap();
         Self {
             count,
             cpu_chip: None,
-            sizes: bus.sizes,
+            sizes,
         }
     }
 

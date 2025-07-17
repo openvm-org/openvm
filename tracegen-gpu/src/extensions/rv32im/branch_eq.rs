@@ -3,35 +3,29 @@ use std::{mem::size_of, sync::Arc};
 use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_rv32im_circuit::{
-    adapters::{
-        Rv32BranchAdapterCols, Rv32BranchAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
-    },
-    BranchLessThanCoreCols, BranchLessThanCoreRecord,
+    adapters::{Rv32BranchAdapterCols, Rv32BranchAdapterRecord, RV32_REGISTER_NUM_LIMBS},
+    BranchEqualCoreCols, BranchEqualCoreRecord,
 };
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use stark_backend_gpu::{
     base::DeviceMatrix, cuda::copy::MemCopyH2D, prelude::F, prover_backend::GpuBackend,
 };
 
-use super::cuda::branch_lt::tracegen;
+use super::cuda::beq::tracegen;
 use crate::{
-    primitives::{
-        bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
-    },
-    testing::get_empty_air_proving_ctx,
+    primitives::var_range::VariableRangeCheckerChipGPU, testing::get_empty_air_proving_ctx,
 };
 
 #[derive(new)]
-pub struct Rv32BranchLessThanChipGpu {
+pub struct Rv32BranchEqualChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv32BranchLessThanChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for Rv32BranchEqualChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
             Rv32BranchAdapterRecord,
-            BranchLessThanCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+            BranchEqualCoreRecord<RV32_REGISTER_NUM_LIMBS>,
         )>();
         let records = arena.allocated();
         if records.is_empty() {
@@ -39,9 +33,8 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32BranchLessThanChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width =
-            BranchLessThanCoreCols::<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::width()
-                + Rv32BranchAdapterCols::<F>::width();
+        let trace_width = BranchEqualCoreCols::<F, RV32_REGISTER_NUM_LIMBS>::width()
+            + Rv32BranchAdapterCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
 
         let d_records = records.to_device().unwrap();
@@ -53,8 +46,6 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32BranchLessThanChipGpu {
                 trace_height,
                 &d_records,
                 &self.range_checker.count,
-                &self.bitwise_lookup.count,
-                RV32_CELL_BITS,
             )
             .unwrap();
         }
@@ -67,17 +58,20 @@ mod tests {
     use std::array;
 
     use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout};
-    use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
-    use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
+    use openvm_instructions::{
+        instruction::Instruction,
+        program::{DEFAULT_PC_STEP, PC_BITS},
+        LocalOpcode,
+    };
     use openvm_rv32im_circuit::{
         adapters::{
             Rv32BranchAdapterAir, Rv32BranchAdapterFiller, Rv32BranchAdapterRecord,
-            Rv32BranchAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+            Rv32BranchAdapterStep, RV32_REGISTER_NUM_LIMBS,
         },
-        BranchLessThanCoreAir, BranchLessThanCoreRecord, BranchLessThanFiller,
-        Rv32BranchLessThanAir, Rv32BranchLessThanChip, Rv32BranchLessThanStep,
+        BranchEqualCoreAir, BranchEqualCoreRecord, BranchEqualFiller, Rv32BranchEqualAir,
+        Rv32BranchEqualChip, Rv32BranchEqualStep,
     };
-    use openvm_rv32im_transpiler::BranchLessThanOpcode;
+    use openvm_rv32im_transpiler::BranchEqualOpcode;
     use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::{rngs::StdRng, Rng};
@@ -96,39 +90,32 @@ mod tests {
 
     type Harness = GpuTestChipHarness<
         F,
-        Rv32BranchLessThanStep,
-        Rv32BranchLessThanAir,
-        Rv32BranchLessThanChipGpu,
-        Rv32BranchLessThanChip<F>,
+        Rv32BranchEqualStep,
+        Rv32BranchEqualAir,
+        Rv32BranchEqualChipGpu,
+        Rv32BranchEqualChip<F>,
     >;
 
     fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
-        // getting bus from tester since `gpu_chip` and `air` must use the same bus
-        let bitwise_bus = default_bitwise_lookup_bus();
-        // creating a dummy chip for Cpu so we only count `add_count`s from GPU
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-            bitwise_bus,
-        ));
-
-        let air = Rv32BranchLessThanAir::new(
+        let air = Rv32BranchEqualAir::new(
             Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-            BranchLessThanCoreAir::new(bitwise_bus, BranchLessThanOpcode::CLASS_OFFSET),
+            BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
         );
-        let executor = Rv32BranchLessThanStep::new(
-            Rv32BranchAdapterStep::new(),
-            BranchLessThanOpcode::CLASS_OFFSET,
+        let executor = Rv32BranchEqualStep::new(
+            Rv32BranchAdapterStep,
+            BranchEqualOpcode::CLASS_OFFSET,
+            DEFAULT_PC_STEP,
         );
-        let cpu_chip = Rv32BranchLessThanChip::new(
-            BranchLessThanFiller::new(
+        let cpu_chip = Rv32BranchEqualChip::new(
+            BranchEqualFiller::new(
                 Rv32BranchAdapterFiller,
-                dummy_bitwise_chip,
-                BranchLessThanOpcode::CLASS_OFFSET,
+                BranchEqualOpcode::CLASS_OFFSET,
+                DEFAULT_PC_STEP,
             ),
             tester.cpu_memory_helper(),
         );
 
-        let gpu_chip =
-            Rv32BranchLessThanChipGpu::new(tester.range_checker(), tester.bitwise_op_lookup());
+        let gpu_chip = Rv32BranchEqualChipGpu::new(tester.range_checker());
 
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
@@ -137,7 +124,7 @@ mod tests {
         tester: &mut GpuChipTestBuilder,
         harness: &mut Harness,
         rng: &mut StdRng,
-        opcode: BranchLessThanOpcode,
+        opcode: BranchEqualOpcode,
     ) {
         let a: [u8; RV32_REGISTER_NUM_LIMBS] = array::from_fn(|_| rng.gen_range(0..=u8::MAX));
         let b: [u8; RV32_REGISTER_NUM_LIMBS] = if rng.gen_bool(0.5) {
@@ -153,7 +140,7 @@ mod tests {
         tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_canonical_u8));
         tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_canonical_u8));
 
-        // Use the same pattern as the original test
+        let initial_pc = rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1)));
         tester.execute_with_pc(
             &mut harness.executor,
             &mut harness.dense_arena,
@@ -165,19 +152,17 @@ mod tests {
                 1,
                 1,
             ),
-            rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1))),
+            initial_pc,
         );
     }
-
-    #[test_case(BranchLessThanOpcode::BLT, 100)]
-    #[test_case(BranchLessThanOpcode::BLTU, 100)]
-    #[test_case(BranchLessThanOpcode::BGE, 100)]
-    #[test_case(BranchLessThanOpcode::BGEU, 100)]
-    fn test_branch_opcode(opcode: BranchLessThanOpcode, num_ops: usize) {
+    #[test_case(BranchEqualOpcode::BEQ, 100)]
+    #[test_case(BranchEqualOpcode::BNE, 100)]
+    fn test_beq_opcode(opcode: BranchEqualOpcode, num_ops: usize) {
         let mut tester = GpuChipTestBuilder::default()
             .with_variable_range_checker(default_var_range_checker_bus())
             .with_bitwise_op_lookup(default_bitwise_lookup_bus());
         let mut rng = create_seeded_rng();
+
         let mut harness = create_test_harness(&tester);
 
         for _ in 0..num_ops {
@@ -187,7 +172,7 @@ mod tests {
         // Transfer records from dense to sparse chip
         type Record<'a> = (
             &'a mut Rv32BranchAdapterRecord,
-            &'a mut BranchLessThanCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+            &'a mut BranchEqualCoreRecord<RV32_REGISTER_NUM_LIMBS>,
         );
         harness
             .dense_arena

@@ -55,9 +55,9 @@ pub mod hintstore {
             rows_used: u32,
             d_record_offsets: *const OffsetInfo,
             pointer_max_bins: u32,
-            d_range_checker: *const u32,
+            d_range_checker: *mut u32,
             range_checker_num_bins: u32,
-            d_bitwise_lookup: *const u32,
+            d_bitwise_lookup: *mut u32,
             bitwise_num_bits: u32,
         ) -> i32;
     }
@@ -100,9 +100,9 @@ pub mod jalr {
             width: usize,
             d_records: *const u8,
             record_len: usize,
-            d_range_checker: *const u32,
+            d_range_checker: *mut u32,
             range_checker_max_bins: usize,
-            d_bitwise_lookup: *const u32,
+            d_bitwise_lookup: *mut u32,
             bitwise_num_bits: usize,
         ) -> i32;
     }
@@ -140,9 +140,9 @@ pub mod less_than {
             width: usize,
             d_records: *const u8,
             record_len: usize,
-            d_range_checker: *const u32,
+            d_range_checker: *mut u32,
             range_checker_num_bins: usize,
-            d_bitwise_lookup: *const u32,
+            d_bitwise_lookup: *mut u32,
             bitwise_num_bits: usize,
         ) -> i32;
     }
@@ -179,7 +179,7 @@ pub mod mul {
             width: usize,
             d_records: *const u8,
             record_len: usize,
-            d_range: *const u32,
+            d_range: *mut u32,
             range_bins: usize,
             d_range_tuple: *mut u32,
             range_tuple_sizes: UInt2,
@@ -202,7 +202,7 @@ pub mod mul {
             width,
             d_records.as_ptr(),
             d_records.len(),
-            d_range.as_ptr() as *const u32,
+            d_range.as_mut_ptr() as *mut u32,
             range_bins,
             d_range_tuple.as_ptr() as *mut u32,
             range_tuple_sizes,
@@ -268,9 +268,9 @@ pub mod shift {
             width: usize,
             d_records: *const u8,
             record_len: usize,
-            d_range_checker: *const u32,
+            d_range_checker: *mut u32,
             range_checker_num_bins: usize,
-            d_bitwise_lookup: *const u32,
+            d_bitwise_lookup: *mut u32,
             bitwise_num_bits: usize,
         ) -> i32;
     }
@@ -306,9 +306,9 @@ pub mod alu {
             width: usize,
             d_records: *const u8,
             record_len: usize,
-            d_range_checker: *const u32,
+            d_range_checker: *mut u32,
             range_checker_bins: usize,
-            d_bitwise_lookup: *const u32,
+            d_bitwise_lookup: *mut u32,
             bitwise_num_bits: usize,
         ) -> i32;
     }
@@ -329,9 +329,9 @@ pub mod alu {
             width,
             d_records.as_ptr(),
             d_records.len(),
-            d_range_checker.as_ptr() as *const u32,
+            d_range_checker.as_mut_ptr() as *mut u32,
             range_bins,
-            d_bitwise_lookup.as_ptr() as *const u32,
+            d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
         ))
     }
@@ -348,7 +348,7 @@ pub mod loadstore_cuda {
             d_records: *const u8,
             rows_used: usize,
             pointer_max_bits: usize,
-            d_range_checker: *const u32,
+            d_range_checker: *mut u32,
             range_checker_num_bins: u32,
         ) -> i32;
     }
@@ -386,7 +386,7 @@ pub mod load_sign_extend_cuda {
             d_records: *const u8,
             rows_used: usize,
             pointer_max_bits: usize,
-            d_range_checker: *const u32,
+            d_range_checker: *mut u32,
             range_checker_num_bins: u32,
         ) -> i32;
     }
@@ -423,9 +423,9 @@ pub mod jal_lui {
             width: usize,
             d_records: *const u8,
             record_len: usize,
-            d_range_checker: *const u32,
+            d_range_checker: *mut u32,
             range_checker_max_bins: usize,
-            d_bitwise_lookup: *const u32,
+            d_bitwise_lookup: *mut u32,
             bitwise_num_bits: usize,
         ) -> i32;
     }
@@ -463,10 +463,8 @@ pub mod beq {
             width: usize,
             d_records: *const u8,
             record_len: usize,
-            d_range_checker: *const u32,
+            d_range_checker: *mut u32,
             range_checker_max_bits: usize,
-            d_bitwise_lookup: *const u32,
-            bitwise_num_bits: usize,
         ) -> i32;
     }
 
@@ -475,8 +473,6 @@ pub mod beq {
         height: usize,
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<T>,
-        d_bitwise_lookup: &DeviceBuffer<T>,
-        bitwise_num_bits: usize,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_beq_tracegen(
@@ -487,8 +483,6 @@ pub mod beq {
             d_records.len(),
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len(),
-            d_bitwise_lookup.as_mut_ptr() as *mut u32,
-            bitwise_num_bits,
         ))
     }
 }
@@ -503,9 +497,9 @@ pub mod branch_lt {
             width: usize,
             d_records: *const u8,
             record_len: usize,
-            d_range_checker: *const u32,
+            d_range_checker: *mut u32,
             range_checker_max_bits: usize,
-            d_bitwise_lookup: *const u32,
+            d_bitwise_lookup: *mut u32,
             bitwise_num_bits: usize,
         ) -> i32;
     }
@@ -543,12 +537,12 @@ pub mod mulh {
             width: usize,
             d_records: *const u8,
             record_len: usize,
-            d_range_checker: *const u32,
+            d_range_checker: *mut u32,
             range_checker_bins: usize,
-            d_bitwise_lookup: *const u32,
+            d_bitwise_lookup: *mut u32,
             bitwise_num_bits: usize,
-            range_tuple_size0: u32,
-            range_tuple_size1: u32,
+            d_range_tuple_checker: *mut u32,
+            range_tuple_checker_sizes: UInt2,
         ) -> i32;
     }
 
@@ -560,8 +554,8 @@ pub mod mulh {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
-        range_tuple_size0: u32,
-        range_tuple_size1: u32,
+        d_range_tuple_checker: &DeviceBuffer<T>,
+        range_tuple_checker_sizes: UInt2,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_mulh_tracegen(
@@ -574,8 +568,8 @@ pub mod mulh {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
-            range_tuple_size0,
-            range_tuple_size1,
+            d_range_tuple_checker.as_mut_ptr() as *mut u32,
+            range_tuple_checker_sizes,
         ))
     }
 }

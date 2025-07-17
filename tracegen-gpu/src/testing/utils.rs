@@ -2,13 +2,22 @@ use core::fmt::Debug;
 use std::sync::Arc;
 
 use openvm_circuit::{
-    arch::MemoryConfig,
+    arch::{
+        testing::{BITWISE_OP_LOOKUP_BUS, RANGE_CHECKER_BUS},
+        MemoryConfig,
+    },
     system::memory::{adapter::records::arena_size_bound, online::TracingMemory},
+};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupBus, var_range::VariableRangeCheckerBus,
 };
 use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_util::log2_strict_usize,
-    prover::hal::MatrixDimensions,
+    prover::{
+        hal::{MatrixDimensions, ProverBackend},
+        types::AirProvingContext,
+    },
 };
 use stark_backend_gpu::{base::DeviceMatrix, data_transporter::transport_device_matrix_to_host};
 
@@ -72,4 +81,21 @@ pub(crate) fn default_tracing_memory(
     let max_access_adapter_n = log2_strict_usize(mem_config.max_access_adapter_n);
     let arena_size_bound = arena_size_bound(&vec![1 << 16; max_access_adapter_n]);
     TracingMemory::new(mem_config, init_block_size, arena_size_bound)
+}
+
+pub fn default_var_range_checker_bus() -> VariableRangeCheckerBus {
+    // setting default range_max_bits to 17 because that's the default decomp value in MemoryConfig
+    VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, 17)
+}
+
+pub fn default_bitwise_lookup_bus() -> BitwiseOperationLookupBus {
+    BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS)
+}
+
+pub fn get_empty_air_proving_ctx<PB: ProverBackend>() -> AirProvingContext<PB> {
+    AirProvingContext {
+        cached_mains: vec![],
+        common_main: None,
+        public_values: vec![],
+    }
 }

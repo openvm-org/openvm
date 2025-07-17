@@ -4,65 +4,50 @@ use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use openvm_rv32im_circuit::{
-    adapters::Rv32LoadStoreAdapterRecord, LoadSignExtendCoreRecord, Rv32LoadSignExtendAir,
+    adapters::{Rv32LoadStoreAdapterCols, Rv32LoadStoreAdapterRecord},
+    LoadSignExtendCoreCols, LoadSignExtendCoreRecord,
 };
-use openvm_stark_backend::{rap::get_air_name, AirRef, ChipUsageGetter};
-use p3_air::BaseAir;
+use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::copy::MemCopyH2D,
-    prover_backend::GpuBackend,
-    types::{F, SC},
+    base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
 
 use crate::{
     extensions::rv32im::cuda::load_sign_extend_cuda,
-    primitives::var_range::VariableRangeCheckerChipGPU, DeviceChip,
+    primitives::var_range::VariableRangeCheckerChipGPU, testing::get_empty_air_proving_ctx,
 };
 
 #[derive(new)]
 pub struct Rv32LoadSignExtendChipGpu {
-    pub air: Rv32LoadSignExtendAir,
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub pointer_max_bits: usize,
-    pub arena: DenseRecordArena,
 }
 
-impl ChipUsageGetter for Rv32LoadSignExtendChipGpu {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
+impl Chip<DenseRecordArena, GpuBackend> for Rv32LoadSignExtendChipGpu {
+    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
             Rv32LoadStoreAdapterRecord,
             LoadSignExtendCoreRecord<RV32_REGISTER_NUM_LIMBS>,
         )>();
-        let records_len = self.arena.allocated().len();
-        assert_eq!(records_len % RECORD_SIZE, 0);
-        records_len / RECORD_SIZE
-    }
+        let records = arena.allocated();
+        if records.is_empty() {
+            return get_empty_air_proving_ctx::<GpuBackend>();
+        }
+        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-    fn trace_width(&self) -> usize {
-        BaseAir::<F>::width(&self.air)
-    }
-}
-
-impl DeviceChip<SC, GpuBackend> for Rv32LoadSignExtendChipGpu {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
-    }
-
-    fn generate_trace(&self) -> DeviceMatrix<F> {
-        let d_records = self.arena.allocated().to_device().unwrap();
-        let height = self.current_trace_height();
+        let trace_width = Rv32LoadStoreAdapterCols::<F>::width()
+            + LoadSignExtendCoreCols::<F, RV32_REGISTER_NUM_LIMBS>::width();
+        let height = records.len() / RECORD_SIZE;
         let padded_height = next_power_of_two_or_zero(height);
-        let trace = DeviceMatrix::<F>::with_capacity(padded_height, self.trace_width());
+
+        let d_records = records.to_device().unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity(padded_height, trace_width);
+
         unsafe {
             load_sign_extend_cuda::tracegen(
-                trace.buffer(),
+                d_trace.buffer(),
                 padded_height,
-                self.trace_width(),
+                trace_width,
                 &d_records,
                 height,
                 self.pointer_max_bits,
@@ -70,27 +55,23 @@ impl DeviceChip<SC, GpuBackend> for Rv32LoadSignExtendChipGpu {
             )
             .unwrap();
         }
-        trace
+
+        AirProvingContext::simple_no_pis(d_trace)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use std::array;
 
-    use openvm_circuit::arch::{
-        testing::{memory::gen_pointer, BITWISE_OP_LOOKUP_BUS},
-        EmptyAdapterCoreLayout, MemoryConfig, NewVmChipWrapper,
-    };
-    use openvm_circuit_primitives::{
-        bitwise_op_lookup::BitwiseOperationLookupBus, var_range::VariableRangeCheckerBus,
-    };
+    use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout};
+    use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
     use openvm_instructions::{
         instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode,
     };
     use openvm_rv32im_circuit::{
-        adapters::{Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterStep},
-        LoadSignExtendCoreAir, LoadSignExtendStep, Rv32LoadSignExtendChip, Rv32LoadSignExtendStep,
+        adapters::{Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterFiller, Rv32LoadStoreAdapterStep},
+        LoadSignExtendCoreAir, LoadSignExtendFiller, Rv32LoadSignExtendAir, Rv32LoadSignExtendChip,
+        Rv32LoadSignExtendStep,
     };
     use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
     use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
@@ -99,97 +80,60 @@ mod test {
     use test_case::test_case;
 
     use super::*;
-    use crate::testing::GpuChipTestBuilder;
+    use crate::testing::{
+        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
+        GpuTestChipHarness,
+    };
 
     const IMM_BITS: usize = 16;
     const MAX_INS_CAPACITY: usize = 128;
-    type Rv32LoadSignExtendDenseChip<F> =
-        NewVmChipWrapper<F, Rv32LoadSignExtendAir, Rv32LoadSignExtendStep, DenseRecordArena>;
 
-    // Returns write_data
-    #[inline(always)]
-    fn run_write_data_sign_extend<const NUM_CELLS: usize>(
-        opcode: Rv32LoadStoreOpcode,
-        read_data: [u8; NUM_CELLS],
-        shift: usize,
-    ) -> [u8; NUM_CELLS] {
-        match (opcode, shift) {
-        (LOADH, 0) | (LOADH, 2) => {
-            let ext = (read_data[NUM_CELLS / 2 - 1 + shift] >> 7) * u8::MAX;
-            array::from_fn(|i| {
-                if i < NUM_CELLS / 2 {
-                    read_data[i + shift]
-                } else {
-                    ext
-                }
-            })
-        }
-        (LOADB, 0) | (LOADB, 1) | (LOADB, 2) | (LOADB, 3) => {
-            let ext = (read_data[shift] >> 7) * u8::MAX;
-            array::from_fn(|i| {
-                if i == 0 {
-                    read_data[i + shift]
-                } else {
-                    ext
-                }
-            })
-        }
-        _ => unreachable!(
-            "unaligned memory access not supported by this execution environment: {opcode:?}, shift: {shift}"
-        ),
-    }
-    }
+    type Harness = GpuTestChipHarness<
+        F,
+        Rv32LoadSignExtendStep,
+        Rv32LoadSignExtendAir,
+        Rv32LoadSignExtendChipGpu,
+        Rv32LoadSignExtendChip<F>,
+    >;
 
-    fn create_test_dense_chip(tester: &GpuChipTestBuilder) -> Rv32LoadSignExtendDenseChip<F> {
-        let range_checker_chip = tester.memory_controller().range_checker.clone();
-        let mut chip = Rv32LoadSignExtendDenseChip::new(
-            Rv32LoadSignExtendAir::new(
-                Rv32LoadStoreAdapterAir::new(
-                    tester.memory_bridge(),
-                    tester.execution_bridge(),
-                    range_checker_chip.bus(),
-                    tester.address_bits(),
-                ),
-                LoadSignExtendCoreAir::new(range_checker_chip.bus()),
+    fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
+        // getting bus from tester since `gpu_chip` and `air` must use the same bus
+        let range_bus = default_var_range_checker_bus();
+        // creating a dummy chip for Cpu so we only count `add_count`s from GPU
+        let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
+
+        let air = Rv32LoadSignExtendAir::new(
+            Rv32LoadStoreAdapterAir::new(
+                tester.memory_bridge(),
+                tester.execution_bridge(),
+                range_bus,
+                tester.address_bits(),
             ),
-            LoadSignExtendStep::new(
-                Rv32LoadStoreAdapterStep::new(tester.address_bits(), range_checker_chip.clone()),
-                range_checker_chip.clone(),
+            LoadSignExtendCoreAir::new(range_bus),
+        );
+        let executor =
+            Rv32LoadSignExtendStep::new(Rv32LoadStoreAdapterStep::new(tester.address_bits()));
+        let cpu_chip = Rv32LoadSignExtendChip::<F>::new(
+            LoadSignExtendFiller::new(
+                Rv32LoadStoreAdapterFiller::new(
+                    tester.address_bits(),
+                    dummy_range_checker_chip.clone(),
+                ),
+                dummy_range_checker_chip,
             ),
             tester.cpu_memory_helper(),
         );
 
-        chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-        chip
-    }
+        let gpu_chip =
+            Rv32LoadSignExtendChipGpu::new(tester.range_checker(), tester.address_bits());
 
-    fn create_test_sparse_chip(tester: &mut GpuChipTestBuilder) -> Rv32LoadSignExtendChip<F> {
-        let range_checker_chip = tester.memory_controller().range_checker.clone();
-        let mut chip = Rv32LoadSignExtendChip::new(
-            Rv32LoadSignExtendAir::new(
-                Rv32LoadStoreAdapterAir::new(
-                    tester.memory_bridge(),
-                    tester.execution_bridge(),
-                    range_checker_chip.bus(),
-                    tester.address_bits(),
-                ),
-                LoadSignExtendCoreAir::new(range_checker_chip.bus()),
-            ),
-            LoadSignExtendStep::new(
-                Rv32LoadStoreAdapterStep::new(tester.address_bits(), range_checker_chip.clone()),
-                range_checker_chip.clone(),
-            ),
-            tester.cpu_memory_helper(),
-        );
-
-        chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-        chip
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     #[allow(clippy::too_many_arguments)]
     fn set_and_execute(
         tester: &mut GpuChipTestBuilder,
-        chip: &mut Rv32LoadSignExtendDenseChip<F>,
+        harness: &mut Harness,
         rng: &mut StdRng,
         opcode: Rv32LoadStoreOpcode,
     ) {
@@ -206,8 +150,8 @@ mod test {
         let ptr_val: u32 =
             rng.gen_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
         let rs1 = ptr_val.wrapping_sub(imm_ext).to_le_bytes();
-        let a = gen_pointer(rng, 4);
-        let b = gen_pointer(rng, 4);
+        let a = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
+        let b = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
 
         let shift_amount = ptr_val % 4;
         tester.write(1, b, rs1.map(F::from_canonical_u8));
@@ -230,7 +174,8 @@ mod test {
         );
 
         tester.execute(
-            chip,
+            &mut harness.executor,
+            &mut harness.dense_arena,
             &Instruction::from_usize(
                 opcode.global_opcode(),
                 [
@@ -244,59 +189,37 @@ mod test {
                 ],
             ),
         );
-
-        let write_data = run_write_data_sign_extend(opcode, read_data, shift_amount as usize);
-        if a != 0 {
-            assert_eq!(write_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
-        } else {
-            assert_eq!([F::ZERO; 4], tester.read::<4>(1, a));
-        }
     }
 
     #[test_case(LOADB, 100)]
     #[test_case(LOADH, 100)]
     fn test_load_sign_extend_tracegen(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
-        let mut rng = create_seeded_rng();
         let mut tester = GpuChipTestBuilder::default()
-            .with_variable_range_checker()
-            .with_bitwise_op_lookup(BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS));
-        // CPU execution
-        let mut dense_chip = create_test_dense_chip(&tester);
-        for _ in 0..num_ops {
-            set_and_execute(&mut tester, &mut dense_chip, &mut rng, opcode);
-        }
+            .with_variable_range_checker(default_var_range_checker_bus())
+            .with_bitwise_op_lookup(default_bitwise_lookup_bus());
+        let mut rng = create_seeded_rng();
 
-        let mut sparse_chip = create_test_sparse_chip(&mut tester);
+        let mut harness = create_test_harness(&tester);
+        for _ in 0..num_ops {
+            set_and_execute(&mut tester, &mut harness, &mut rng, opcode);
+        }
 
         type Record<'a> = (
             &'a mut Rv32LoadStoreAdapterRecord,
             &'a mut LoadSignExtendCoreRecord<RV32_REGISTER_NUM_LIMBS>,
         );
 
-        dense_chip
-            .arena
+        harness
+            .dense_arena
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
-                &mut sparse_chip.arena,
+                &mut harness.matrix_arena,
                 EmptyAdapterCoreLayout::<F, Rv32LoadStoreAdapterStep>::new(),
             );
 
-        // GPU tracegen
-        let mem_config = MemoryConfig::default();
-        let var_range_gpu_chip = Arc::new(VariableRangeCheckerChipGPU::new(
-            VariableRangeCheckerBus::new(4, mem_config.decomp),
-        ));
-        let gpu_chip = Rv32LoadSignExtendChipGpu::new(
-            sparse_chip.air.clone(),
-            var_range_gpu_chip,
-            tester.address_bits(),
-            dense_chip.arena,
-        );
-
-        // `gpu_chip` does GPU tracegen, `sparse_chip` does CPU tracegen. Must check that they are the same
         tester
             .build()
-            .load_and_compare(gpu_chip, sparse_chip)
+            .load_gpu_harness(harness)
             .finalize()
             .simple_test_with_expected_error(VerificationError::ChallengePhaseError);
     }
