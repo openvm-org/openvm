@@ -3,8 +3,9 @@ use std::sync::Arc;
 use getset::Getters;
 use openvm_circuit::{
     arch::{
-        ContinuationVmProof, ContinuationVmProver, InsExecutorE1, InstructionExecutor,
-        SingleSegmentVmProver, VirtualMachineError, VmLocalProver, VmProverConfig,
+        ContinuationVmProof, ContinuationVmProver, InsExecutorE1, InsExecutorE2,
+        InstructionExecutor, SingleSegmentVmProver, VirtualMachineError, VmLocalProver,
+        VmProverConfig,
     },
     system::program::trace::VmCommittedExe,
 };
@@ -59,7 +60,9 @@ where
         input: StdIn<Val<E::SC>>,
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>
     where
-        VC::Executor: InsExecutorE1<Val<E::SC>> + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+        VC::Executor: InsExecutorE1<Val<E::SC>>
+            + InsExecutorE2<Val<E::SC>>
+            + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
     {
         assert!(
             self.vm_config().as_ref().continuation_enabled,

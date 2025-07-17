@@ -14,9 +14,9 @@ use openvm_circuit::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         instructions::exe::VmExe,
         verify_segments, ContinuationVmProof, ExecutionError, InitFileGenerator, InsExecutorE1,
-        InstructionExecutor, SystemConfig, VerifiedExecutionPayload, VmCircuitConfig, VmConfig,
-        VmExecutionConfig, VmExecutor, VmProverConfig, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
-        PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
+        InsExecutorE2, InstructionExecutor, SystemConfig, VerifiedExecutionPayload,
+        VmCircuitConfig, VmConfig, VmExecutionConfig, VmExecutor, VmProverConfig, CONNECTOR_AIR_ID,
+        PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
     },
     system::{
         memory::{merkle::public_values::extract_public_values, CHUNK},
@@ -184,8 +184,8 @@ where
     /// Returns the user public values as field elements.
     pub fn execute<VC>(&self, exe: VmExe<F>, vm_config: VC, inputs: StdIn) -> Result<Vec<F>>
     where
-        VC: VmExecutionConfig<F> + AsRef<SystemConfig>,
-        VC::Executor: Clone + InsExecutorE1<F>,
+        VC: VmExecutionConfig<F> + AsRef<SystemConfig> + Clone,
+        VC::Executor: Clone + InsExecutorE1<F> + InsExecutorE2<F>,
     {
         let vm = VmExecutor::new(vm_config)?;
         let final_memory = vm.execute_e1(exe, inputs, None)?.memory;
@@ -220,7 +220,7 @@ where
     where
         VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmProverConfig<E>,
         <VC as VmExecutionConfig<F>>::Executor:
-            InsExecutorE1<F> + InstructionExecutor<F, VC::RecordArena>,
+            InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F, VC::RecordArena>,
     {
         let mut app_prover = AppProver::<VC, E>::new(app_pk.app_vm_pk.clone(), app_committed_exe)?;
         let proof = app_prover.generate_app_proof(inputs)?;
