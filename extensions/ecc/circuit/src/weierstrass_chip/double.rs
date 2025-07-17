@@ -38,9 +38,8 @@ use openvm_mod_circuit_builder::{
 use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
 
-use crate::weierstrass_chip::curves::{ec_double, CurveType};
-
 use super::{curves::get_curve_type, WeierstrassAir};
+use crate::weierstrass_chip::curves::{ec_double, CurveType};
 
 pub fn ec_double_ne_expr(
     config: ExprBuilderConfig, // The coordinate field.

@@ -11,7 +11,6 @@ pub enum CurveType {
     Generic = 4,
 }
 
-// Curve coefficient constants
 const K256_A: i64 = 0;
 const P256_A: i64 = -3;
 const BN254_A: i64 = 0;

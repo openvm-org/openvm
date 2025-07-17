@@ -5340,12 +5340,10 @@ dependencies = [
 name = "openvm-ecc-circuit"
 version = "1.4.0-rc.0"
 dependencies = [
- "crypto-bigint 0.5.5",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "halo2curves-axiom",
  "hex-literal 0.4.1",
- "k256 0.13.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static",
  "num-bigint 0.4.6",
  "num-traits",
@@ -5362,7 +5360,6 @@ dependencies = [
  "openvm-rv32im-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",
- "p256 0.13.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.8.5",
  "serde",
  "serde_with",
