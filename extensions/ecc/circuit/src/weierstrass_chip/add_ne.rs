@@ -14,7 +14,7 @@ use openvm_circuit::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
         E2PreCompute, ExecutionBridge,
-        ExecutionError::InvalidInstruction,
+        ExecutionError::{self, InvalidInstruction},
         InsExecutorE1, InsExecutorE2, Result, VmSegmentState,
     },
     system::memory::{
@@ -418,13 +418,11 @@ unsafe fn execute_e12_setup_impl<
         .collect();
     let input_prime = BigUint::from_bytes_le(&prime_bytes);
 
-    // Assert that the input prime matches the expected modulus
-    assert_eq!(
-        input_prime, *pre_compute.modulus,
-        "Setup: input prime must match field modulus"
-    );
+    if input_prime != *pre_compute.modulus {
+        vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+        return;
+    }
 
-    // Setup operation - just advance PC and return
     vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
     vm_state.instret += 1;
 }
