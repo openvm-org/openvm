@@ -2,12 +2,17 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1ExecutionCtx, E2ExecutionCtx},
-        CustomBorrow, InsExecutorE1, InstructionExecutor, MultiRowLayout, MultiRowMetadata,
-        RecordArena, SizedRecord, TraceFiller, VmStateMut,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        CustomBorrow, E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2,
+        InstructionExecutor, MultiRowLayout, MultiRowMetadata, RecordArena, SizedRecord,
+        TraceFiller, VmSegmentState, VmStateMut,
     },
     system::{
-        memory::{offline_checker::MemoryBaseAuxCols, online::TracingMemory, MemoryAuxColsFactory},
+        memory::{
+            offline_checker::MemoryBaseAuxCols,
+            online::{GuestMemory, TracingMemory},
+            MemoryAuxColsFactory,
+        },
         native_adapter::util::{
             memory_read_native, tracing_read_native, tracing_write_native_inplace,
         },
@@ -850,7 +855,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SB
         pc: u32,
         inst: &Instruction<F>,
         pos2_data: &mut Pos2PreCompute<'a, F, SBOX_REGISTERS>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let &Instruction {
             opcode,
             a,
@@ -894,7 +899,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SB
         pc: u32,
         inst: &Instruction<F>,
         verify_batch_data: &mut VerifyBatchPreCompute<'a, F, SBOX_REGISTERS>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let &Instruction {
             opcode,
             a,
@@ -957,7 +962,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InsExecutorE1<F>
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let &Instruction { opcode, .. } = inst;
 
         let is_pos2 = opcode == PERM_POS2.global_opcode() || opcode == COMP_POS2.global_opcode();
@@ -997,7 +1002,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InsExecutorE2<F>
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let &Instruction { opcode, .. } = inst;
 
         let is_pos2 = opcode == PERM_POS2.global_opcode() || opcode == COMP_POS2.global_opcode();

@@ -6,12 +6,13 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        E2PreCompute, ExecutionError, InsExecutorE1, InsExecutorE2, Result, VmChipWrapper,
+        E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2, VmChipWrapper,
+        VmSegmentState,
     },
     system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip, encoder::Encoder,
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip, encoder::Encoder, AlignedBytesBorrow,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -97,7 +98,7 @@ impl<F: PrimeField32> InsExecutorE1<F> for Sha256VmStep {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E1ExecutionCtx,
     {
@@ -117,7 +118,7 @@ impl<F: PrimeField32> InsExecutorE2<F> for Sha256VmStep {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -194,7 +195,7 @@ impl Sha256VmStep {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut ShaPreCompute,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let Instruction {
             opcode,
             a,

@@ -96,9 +96,7 @@ mod guest_tests {
         };
         use openvm_sha256_circuit::{Sha256, Sha256Executor};
         use openvm_stark_backend::{
-            config::{StarkGenericConfig, Val},
-            p3_field::Field,
-            prover::hal::ProverBackend,
+            config::StarkGenericConfig, engine::StarkEngine, p3_field::Field,
         };
         use serde::{Deserialize, Serialize};
 

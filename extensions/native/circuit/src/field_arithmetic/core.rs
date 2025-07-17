@@ -3,10 +3,11 @@ use std::borrow::{Borrow, BorrowMut};
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1ExecutionCtx, E2ExecutionCtx},
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        EmptyAdapterCoreLayout, InsExecutorE1, InstructionExecutor, MinimalInstruction,
-        RecordArena, Result, TraceFiller, VmAdapterInterface, VmCoreAir, VmStateMut,
+        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, InsExecutorE1,
+        InsExecutorE2, InstructionExecutor, MinimalInstruction, RecordArena, TraceFiller,
+        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -158,7 +159,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let &Instruction { opcode, .. } = instruction;
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
@@ -232,7 +233,7 @@ impl<A> FieldArithmeticCoreStep<A> {
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut FieldArithmeticPreCompute,
-    ) -> Result<(bool, bool, FieldArithmeticOpcode)> {
+    ) -> Result<(bool, bool, FieldArithmeticOpcode), ExecutionError> {
         let &Instruction {
             opcode,
             a,
@@ -292,7 +293,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let pre_compute: &mut FieldArithmeticPreCompute = data.borrow_mut();
 
         let (a_is_imm, b_is_imm, local_opcode) = self.pre_compute_impl(pc, inst, pre_compute)?;
@@ -368,7 +369,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let pre_compute: &mut E2PreCompute<FieldArithmeticPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 

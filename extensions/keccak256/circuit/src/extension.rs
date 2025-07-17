@@ -9,7 +9,7 @@ use openvm_circuit::{
     },
     system::{memory::SharedMemoryHelper, SystemExecutor, SystemPort},
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
@@ -58,7 +58,7 @@ impl InitFileGenerator for Keccak256Rv32Config {}
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Keccak256;
 
-#[derive(Clone, Copy, From, AnyEnum, InsExecutorE1, InstructionExecutor)]
+#[derive(Clone, Copy, From, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
 pub enum Keccak256Executor {
     Keccak256(KeccakVmStep),
 }

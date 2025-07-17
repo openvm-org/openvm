@@ -7,10 +7,11 @@ use std::{
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1ExecutionCtx, E2ExecutionCtx},
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        EmptyAdapterCoreLayout, InsExecutorE1, InstructionExecutor, MinimalInstruction,
-        RecordArena, Result, TraceFiller, VmAdapterInterface, VmCoreAir, VmStateMut,
+        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, InsExecutorE1,
+        InsExecutorE2, InstructionExecutor, MinimalInstruction, RecordArena, TraceFiller,
+        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -182,7 +183,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let &Instruction { opcode, .. } = instruction;
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
@@ -257,7 +258,7 @@ impl<A> FieldExtensionCoreStep<A> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut FieldExtensionPreCompute,
-    ) -> Result<u8> {
+    ) -> Result<u8, ExecutionError> {
         let &Instruction {
             opcode,
             a,
@@ -306,7 +307,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let pre_compute: &mut FieldExtensionPreCompute = data.borrow_mut();
 
         let opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
@@ -339,7 +340,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let pre_compute: &mut E2PreCompute<FieldExtensionPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 

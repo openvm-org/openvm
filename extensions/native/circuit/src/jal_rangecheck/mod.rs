@@ -5,15 +5,15 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionState, InsExecutorE1,
-        InstructionExecutor, PcIncOrSet, RecordArena, Result, TraceFiller, VmChipWrapper,
-        VmStateMut,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        get_record_from_slice, E2PreCompute, EmptyMultiRowLayout, ExecuteFunc, ExecutionBridge,
+        ExecutionError, ExecutionState, InsExecutorE1, InsExecutorE2, InstructionExecutor,
+        PcIncOrSet, RecordArena, TraceFiller, VmChipWrapper, VmSegmentState, VmStateMut,
     },
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryWriteAuxCols, MemoryWriteAuxRecord},
-            online::TracingMemory,
+            online::{GuestMemory, TracingMemory},
             MemoryAddress, MemoryAuxColsFactory,
         },
         native_adapter::util::{memory_read_native, tracing_write_native},
@@ -183,7 +183,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let &Instruction {
             opcode, a, b, c, ..
         } = instruction;
@@ -315,7 +315,7 @@ impl JalRangeCheckStep {
         pc: u32,
         inst: &Instruction<F>,
         jal_data: &mut JalPreCompute<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let &Instruction { opcode, a, b, .. } = inst;
 
         if opcode != NativeJalOpcode::JAL.global_opcode() {
@@ -335,7 +335,7 @@ impl JalRangeCheckStep {
         pc: u32,
         inst: &Instruction<F>,
         range_check_data: &mut RangeCheckPreCompute,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let &Instruction {
             opcode, a, b, c, ..
         } = inst;
@@ -378,7 +378,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let &Instruction { opcode, .. } = inst;
 
         let is_jal = opcode == NativeJalOpcode::JAL.global_opcode();
@@ -414,7 +414,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let &Instruction { opcode, .. } = inst;
 
         let is_jal = opcode == NativeJalOpcode::JAL.global_opcode();
@@ -507,6 +507,3 @@ unsafe fn execute_range_check_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
     vm_state.instret += 1;
 }
-
-pub type JalRangeCheckChip<F> =
-    NewVmChipWrapper<F, JalRangeCheckAir, JalRangeCheckStep, MatrixRecordArena<F>>;

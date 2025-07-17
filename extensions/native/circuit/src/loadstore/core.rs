@@ -8,9 +8,10 @@ use openvm_circuit::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         get_record_from_slice,
         instructions::LocalOpcode,
-        AdapterAirContext, AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout,
-        ExecutionError, InsExecutorE1, InstructionExecutor, RecordArena, Result, TraceFiller,
-        VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterAirContext, AdapterTraceFiller, AdapterTraceStep, E2PreCompute,
+        EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2,
+        InstructionExecutor, RecordArena, TraceFiller, VmAdapterInterface, VmCoreAir,
+        VmSegmentState, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -155,7 +156,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let &Instruction { opcode, .. } = instruction;
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
@@ -229,7 +230,7 @@ impl<A, const NUM_CELLS: usize> NativeLoadStoreCoreStep<A, NUM_CELLS> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut NativeLoadStorePreCompute<F>,
-    ) -> Result<NativeLoadStoreOpcode> {
+    ) -> Result<NativeLoadStoreOpcode, ExecutionError> {
         let &Instruction {
             opcode,
             a,
@@ -272,7 +273,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let pre_compute: &mut NativeLoadStorePreCompute<F> = data.borrow_mut();
 
         let local_opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
@@ -303,7 +304,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let pre_compute: &mut E2PreCompute<NativeLoadStorePreCompute<F>> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 

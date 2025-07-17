@@ -2,9 +2,10 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout,
-        InsExecutorE1, InstructionExecutor, RecordArena, Result, TraceFiller, VmStateMut,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        get_record_from_slice, AdapterTraceFiller, AdapterTraceStep, E2PreCompute,
+        EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2,
+        InstructionExecutor, RecordArena, TraceFiller, VmSegmentState, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
@@ -63,7 +64,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let &Instruction { opcode, c: imm, .. } = instruction;
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
@@ -132,7 +133,7 @@ impl<A> NativeBranchEqualStep<A> {
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut NativeBranchEqualPreCompute,
-    ) -> Result<(bool, bool, bool)> {
+    ) -> Result<(bool, bool, bool), ExecutionError> {
         let &Instruction {
             opcode,
             a,
@@ -193,7 +194,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let pre_compute: &mut NativeBranchEqualPreCompute = data.borrow_mut();
 
         let (a_is_imm, b_is_imm, is_bne) = self.pre_compute_impl(pc, inst, pre_compute)?;
@@ -229,7 +230,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let pre_compute: &mut E2PreCompute<NativeBranchEqualPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 

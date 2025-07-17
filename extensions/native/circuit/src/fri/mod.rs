@@ -7,10 +7,11 @@ use std::{
 use itertools::zip_eq;
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionState, InsExecutorE1,
-        InstructionExecutor, MultiRowLayout, MultiRowMetadata, RecordArena, Result, SizedRecord,
-        TraceFiller, VmChipWrapper, VmStateMut,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        get_record_from_slice, CustomBorrow, E2PreCompute, ExecuteFunc, ExecutionBridge,
+        ExecutionError, ExecutionState, InsExecutorE1, InsExecutorE2, InstructionExecutor,
+        MultiRowLayout, MultiRowMetadata, RecordArena, SizedRecord, TraceFiller, VmChipWrapper,
+        VmSegmentState, VmStateMut,
     },
     system::{
         memory::{
@@ -18,7 +19,7 @@ use openvm_circuit::{
                 MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
                 MemoryWriteAuxRecord,
             },
-            online::TracingMemory,
+            online::{GuestMemory, TracingMemory},
             MemoryAddress, MemoryAuxColsFactory,
         },
         native_adapter::util::{memory_read_native, tracing_read_native, tracing_write_native},
@@ -718,7 +719,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let &Instruction {
             a,
             b,
@@ -1099,14 +1100,14 @@ struct FriReducedOpeningPreCompute {
     is_init_ptr: u32,
 }
 
-impl<F: PrimeField32> FriReducedOpeningStep<F> {
+impl FriReducedOpeningStep {
     #[inline(always)]
-    fn pre_compute_impl(
+    fn pre_compute_impl<F: PrimeField32>(
         &self,
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut FriReducedOpeningPreCompute,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let &Instruction {
             a,
             b,
@@ -1140,7 +1141,7 @@ impl<F: PrimeField32> FriReducedOpeningStep<F> {
     }
 }
 
-impl<F> InsExecutorE1<F> for FriReducedOpeningStep<F>
+impl<F> InsExecutorE1<F> for FriReducedOpeningStep
 where
     F: PrimeField32,
 {
@@ -1155,7 +1156,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let pre_compute: &mut FriReducedOpeningPreCompute = data.borrow_mut();
 
         self.pre_compute_impl(pc, inst, pre_compute)?;
@@ -1165,7 +1166,7 @@ where
     }
 }
 
-impl<F> InsExecutorE2<F> for FriReducedOpeningStep<F>
+impl<F> InsExecutorE2<F> for FriReducedOpeningStep
 where
     F: PrimeField32,
 {
@@ -1181,7 +1182,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let pre_compute: &mut E2PreCompute<FriReducedOpeningPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 
@@ -1269,6 +1270,3 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 
     length as u32 + 2
 }
-
-pub type FriReducedOpeningChip<F> =
-    NewVmChipWrapper<F, FriReducedOpeningAir, FriReducedOpeningStep<F>, MatrixRecordArena<F>>;
