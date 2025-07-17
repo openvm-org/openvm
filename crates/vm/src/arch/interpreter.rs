@@ -53,15 +53,14 @@ macro_rules! execute_with_metrics {
             execute_impl($program, $vm_state, $pre_compute_insts);
         });
 
-        // TODO[jpw]: metrics
-        // #[cfg(feature = "bench-metrics")]
-        // {
-        //     let elapsed = start.elapsed();
-        //     let insns = $vm_state.instret - start_instret;
-        //     metrics::counter!("insns").absolute(insns);
-        //     metrics::gauge!(concat!($span, "_insn_mi/s"))
-        //         .set(insns as f64 / elapsed.as_micros() as f64);
-        // }
+        #[cfg(feature = "bench-metrics")]
+        {
+            let elapsed = start.elapsed();
+            let insns = $vm_state.instret - start_instret;
+            metrics::counter!("insns").absolute(insns);
+            metrics::gauge!(concat!($span, "_insn_mi/s"))
+                .set(insns as f64 / elapsed.as_micros() as f64);
+        }
     }};
 }
 
