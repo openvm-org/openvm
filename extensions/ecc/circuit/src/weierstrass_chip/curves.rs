@@ -211,7 +211,7 @@ pub fn ec_double_impl<F: PrimeField, const NEG_A: u64>(x1: F, y1: F) -> (F, F) {
         // For a = 0: lambda = (3 * x1^2) / (2 * y1)
         three_x1_squared * two_y1.invert().unwrap()
     } else {
-        // lambda = (3 * x1^2 - a) / (2 * y1)
+        // lambda = (3 * x1^2 + a) / (2 * y1)
         (three_x1_squared - F::from(NEG_A)) * two_y1.invert().unwrap()
     };
 
