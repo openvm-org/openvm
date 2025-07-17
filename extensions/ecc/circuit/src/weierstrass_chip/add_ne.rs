@@ -5,6 +5,7 @@ use std::{
     rc::Rc,
 };
 
+use derive_more::derive::{Deref, DerefMut};
 use num_bigint::BigUint;
 use openvm_algebra_circuit::FieldExprVecHeapStep;
 use openvm_circuit::{
@@ -69,7 +70,7 @@ pub fn ec_add_ne_expr(
 /// BLOCKS: how many blocks do we need to represent one input or output
 /// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
-#[derive(Clone, InstructionExecutor)]
+#[derive(Clone, InstructionExecutor, Deref, DerefMut)]
 pub struct EcAddNeStep<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     pub FieldExprVecHeapStep<2, BLOCKS, BLOCK_SIZE>,
 );
@@ -186,10 +187,10 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeStep<BLOCKS, BLOCK
         *data = EcAddNePreCompute {
             a: a as u8,
             rs_addrs,
-            modulus: &self.0 .0.expr.builder.prime,
+            modulus: &self.expr.builder.prime,
         };
 
-        let local_opcode = opcode.local_opcode_idx(self.0 .0.offset);
+        let local_opcode = opcode.local_opcode_idx(self.offset);
         let is_setup = local_opcode == Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize;
 
         Ok(is_setup)

@@ -179,7 +179,7 @@ fn test_add_ne() {
 
     let mut harness = TestChipHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
 
-    assert_eq!(harness.executor.0.expr.builder.num_variables, 3); // lambda, x3, y3
+    assert_eq!(harness.executor.expr.builder.num_variables, 3); // lambda, x3, y3
 
     let (p1_x, p1_y) = SampleEcPoints[0].clone();
     let (p2_x, p2_y) = SampleEcPoints[1].clone();
@@ -195,7 +195,6 @@ fn test_add_ne() {
 
     let r = harness
         .executor
-        .0
         .expr
         .execute(vec![p1_x, p1_y, p2_x, p2_y], vec![true]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
@@ -203,14 +202,14 @@ fn test_add_ne() {
     assert_eq!(r[2], SampleEcPoints[2].1);
 
     let prime_limbs: [BabyBear; NUM_LIMBS] =
-        prime_limbs(&harness.executor.0.expr).try_into().unwrap();
+        prime_limbs(&harness.executor.expr).try_into().unwrap();
     let mut one_limbs = [BabyBear::ONE; NUM_LIMBS];
     one_limbs[0] = BabyBear::ONE;
     let setup_instruction = rv32_write_heap_default(
         &mut tester,
         vec![prime_limbs, one_limbs], // inputs[0] = prime, others doesn't matter
         vec![one_limbs, one_limbs],
-        harness.executor.0.offset + Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+        harness.executor.offset + Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
     );
     tester.execute(&mut harness, &setup_instruction);
 
@@ -218,7 +217,7 @@ fn test_add_ne() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![p2_x_limbs, p2_y_limbs],
-        harness.executor.0.offset + Rv32WeierstrassOpcode::EC_ADD_NE as usize,
+        harness.executor.offset + Rv32WeierstrassOpcode::EC_ADD_NE as usize,
     );
 
     tester.execute(&mut harness, &instruction);
@@ -254,26 +253,22 @@ fn test_double() {
     let p1_y_limbs =
         biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
 
-    assert_eq!(harness.executor.0.expr.builder.num_variables, 3); // lambda, x3, y3
+    assert_eq!(harness.executor.expr.builder.num_variables, 3); // lambda, x3, y3
 
-    let r = harness
-        .executor
-        .0
-        .expr
-        .execute(vec![p1_x, p1_y], vec![true]);
+    let r = harness.executor.expr.execute(vec![p1_x, p1_y], vec![true]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     assert_eq!(r[1], SampleEcPoints[3].0);
     assert_eq!(r[2], SampleEcPoints[3].1);
 
     let prime_limbs: [BabyBear; NUM_LIMBS] =
-        prime_limbs(&harness.executor.0.expr).try_into().unwrap();
+        prime_limbs(&harness.executor.expr).try_into().unwrap();
     let a_limbs = [BabyBear::ZERO; NUM_LIMBS];
     let setup_instruction = rv32_write_heap_default(
         &mut tester,
         vec![prime_limbs, a_limbs], /* inputs[0] = prime, inputs[1] = a coeff of weierstrass
                                      * equation */
         vec![],
-        harness.executor.0.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+        harness.executor.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
     );
     tester.execute(&mut harness, &setup_instruction);
 
@@ -281,7 +276,7 @@ fn test_double() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![],
-        harness.executor.0.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
+        harness.executor.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
     );
 
     tester.execute(&mut harness, &instruction);
@@ -331,13 +326,9 @@ fn test_p256_double() {
     let p1_y_limbs =
         biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
 
-    assert_eq!(harness.executor.0.expr.builder.num_variables, 3); // lambda, x3, y3
+    assert_eq!(harness.executor.expr.builder.num_variables, 3); // lambda, x3, y3
 
-    let r = harness
-        .executor
-        .0
-        .expr
-        .execute(vec![p1_x, p1_y], vec![true]);
+    let r = harness.executor.expr.execute(vec![p1_x, p1_y], vec![true]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     let expected_double_x = BigUint::from_str_radix(
         "7CF27B188D034F7E8A52380304B51AC3C08969E277F21B35A60B48FC47669978",
@@ -353,7 +344,7 @@ fn test_p256_double() {
     assert_eq!(r[2], expected_double_y);
 
     let prime_limbs: [BabyBear; NUM_LIMBS] =
-        prime_limbs(&harness.executor.0.expr).try_into().unwrap();
+        prime_limbs(&harness.executor.expr).try_into().unwrap();
     let a_limbs =
         biguint_to_limbs::<NUM_LIMBS>(a.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
     let setup_instruction = rv32_write_heap_default(
@@ -361,7 +352,7 @@ fn test_p256_double() {
         vec![prime_limbs, a_limbs], /* inputs[0] = prime, inputs[1] = a coeff of weierstrass
                                      * equation */
         vec![],
-        harness.executor.0.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+        harness.executor.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
     );
     tester.execute(&mut harness, &setup_instruction);
 
@@ -369,7 +360,7 @@ fn test_p256_double() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![],
-        harness.executor.0.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
+        harness.executor.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
     );
 
     tester.execute(&mut harness, &instruction);
