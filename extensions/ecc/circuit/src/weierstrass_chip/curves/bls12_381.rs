@@ -87,7 +87,7 @@ fn field_element_to_blocks<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     start_block: usize,
 ) {
     let bytes: [u8; 48] = field_element.to_bytes();
-    let mut byte_iter = bytes.iter().rev();
+    let mut byte_iter = bytes.iter();
     for block in output.iter_mut().skip(start_block) {
         for byte in block.iter_mut() {
             *byte = byte_iter.next().copied().unwrap_or(0);

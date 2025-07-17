@@ -1,11 +1,7 @@
-use crypto_bigint::Encoding;
+use halo2curves_axiom::ff::PrimeField;
 use halo2curves_axiom::secp256r1::Fq;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Num};
-use p256::{
-    elliptic_curve::{FieldBytesEncoding, PrimeField},
-    FieldElement, NistP256, U256,
-};
 
 pub fn modulus() -> BigUint {
     BigUint::from_str_radix(Fq::MODULUS.trim_start_matches("0x"), 16).unwrap()
@@ -56,7 +52,7 @@ pub fn ec_double_p256<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     // Calculate lambda = (3 * x1^2 - 3) / (2 * y1)
     let x1_squared = x1.square();
     let three_x1_squared = x1_squared + x1_squared.double(); // 3 * x1^2
-    let three = FieldElement::from(3u64);
+    let three = Fq::from(3u64);
     let numerator = three_x1_squared - three; // 3 * x1^2 - 3
     let two_y1 = y1.double(); // 2 * y1
     let lambda = numerator * two_y1.invert().unwrap();
@@ -78,26 +74,22 @@ pub fn ec_double_p256<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 }
 
 #[inline(always)]
-fn blocks_to_field_element(blocks: &[u8]) -> FieldElement {
+fn blocks_to_field_element(blocks: &[u8]) -> Fq {
     let mut bytes = [0u8; 32];
     let len = blocks.len().min(32);
     bytes[..len].copy_from_slice(&blocks[..len]);
 
-    let num = U256::from_le_bytes(bytes);
-    FieldElement::from_repr_vartime(<U256 as FieldBytesEncoding<NistP256>>::encode_field_bytes(
-        &num,
-    ))
-    .unwrap()
+    Fq::from_repr_vartime(bytes).unwrap()
 }
 
 #[inline(always)]
 fn field_element_to_blocks<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    field_element: &FieldElement,
+    field_element: &Fq,
     output: &mut [[u8; BLOCK_SIZE]; BLOCKS],
     start_block: usize,
 ) {
-    let bytes = field_element.to_bytes();
-    let mut byte_iter = bytes.iter().rev();
+    let bytes = field_element.to_repr();
+    let mut byte_iter = bytes.iter();
     for block in output.iter_mut().skip(start_block) {
         for byte in block.iter_mut() {
             *byte = byte_iter.next().copied().unwrap_or(0);
