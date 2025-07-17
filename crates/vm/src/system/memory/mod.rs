@@ -33,7 +33,8 @@ use crate::{
     },
 };
 
-#[cfg(debug_assertions)]
+// @dev Currently this is only used for debug assertions, but we may switch to making it constant
+// and removing from MemoryConfig
 pub const POINTER_MAX_BITS: usize = 29;
 
 #[derive(PartialEq, Copy, Clone, Debug, Eq)]
