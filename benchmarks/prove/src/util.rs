@@ -4,9 +4,9 @@ use clap::{command, Parser};
 use eyre::Result;
 use openvm_benchmarks_utils::{build_elf, get_programs_dir};
 use openvm_circuit::arch::{
-    instructions::exe::VmExe, DefaultSegmentationStrategy, InsExecutorE1, InsExecutorE2,
-    InstructionExecutor, MatrixRecordArena, SystemConfig, VmCircuitConfig, VmConfig,
-    VmExecutionConfig, VmLocalProver, VmProverConfig,
+    instructions::exe::VmExe, verify_segments, DefaultSegmentationStrategy, InsExecutorE1,
+    InsExecutorE2, InstructionExecutor, MatrixRecordArena, SystemConfig, VmCircuitConfig, VmConfig,
+    VmExecutionConfig, VmProverConfig,
 };
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::conversion::CompilerOptions;
@@ -18,17 +18,15 @@ use openvm_sdk::{
         DEFAULT_ROOT_LOG_BLOWUP,
     },
     keygen::{leaf_keygen, AppProvingKey},
-    prover::{AppProver, LeafProvingController},
+    prover::{vm::new_local_prover, AppProver, LeafProvingController},
     Sdk, StdIn,
 };
-use openvm_stark_backend::config::Val;
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         FriParameters,
     },
     engine::StarkFriEngine,
-    openvm_stark_backend::Chip,
     p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::elf::Elf;
@@ -231,15 +229,15 @@ where
     let sdk = Sdk::<E>::new();
     sdk.verify_app_proof(&app_vk, &app_proof)
         .expect("Verification failed");
-    // TODO[jpw]
-    // if let Some(leaf_vm_config) = leaf_vm_config {
-    //     let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params, leaf_vm_config);
-    //     let leaf_prover =
-    //         VmLocalProver::<E, NativeConfig>::new(leaf_vm_pk, app_pk.leaf_committed_exe);
-    //     let leaf_controller = LeafProvingController {
-    //         num_children: AggregationTreeConfig::default().num_children_leaf,
-    //     };
-    //     leaf_controller.generate_proof(&leaf_prover, &app_proof);
-    // }
+    if let Some(leaf_vm_config) = leaf_vm_config {
+        let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params, leaf_vm_config)?;
+        let vk = leaf_vm_pk.vm_pk.get_vk();
+        let mut leaf_prover = new_local_prover(&leaf_vm_pk, &app_pk.leaf_committed_exe)?;
+        let leaf_controller = LeafProvingController {
+            num_children: AggregationTreeConfig::default().num_children_leaf,
+        };
+        let leaf_proofs = leaf_controller.generate_proof(&mut leaf_prover, &app_proof)?;
+        verify_segments(&leaf_prover.vm.engine, &vk, &leaf_proofs)?;
+    }
     Ok(())
 }
