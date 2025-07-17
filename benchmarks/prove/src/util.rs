@@ -4,7 +4,7 @@ use clap::{command, Parser};
 use eyre::Result;
 use openvm_benchmarks_utils::{build_elf, get_programs_dir};
 use openvm_circuit::arch::{
-    instructions::exe::VmExe, verify_segments, DefaultSegmentationStrategy, InsExecutorE1,
+    instructions::exe::VmExe, verify_single, DefaultSegmentationStrategy, InsExecutorE1,
     InsExecutorE2, InstructionExecutor, MatrixRecordArena, SystemConfig, VmCircuitConfig, VmConfig,
     VmExecutionConfig, VmProverConfig,
 };
@@ -227,8 +227,7 @@ where
     let app_proof = prover.generate_app_proof(input_stream)?;
     // 6. Verify STARK proofs, including boundary conditions.
     let sdk = Sdk::<E>::new();
-    sdk.verify_app_proof(&app_vk, &app_proof)
-        .expect("Verification failed");
+    sdk.verify_app_proof(&app_vk, &app_proof)?;
     if let Some(leaf_vm_config) = leaf_vm_config {
         let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params, leaf_vm_config)?;
         let vk = leaf_vm_pk.vm_pk.get_vk();
@@ -237,7 +236,9 @@ where
             num_children: AggregationTreeConfig::default().num_children_leaf,
         };
         let leaf_proofs = leaf_controller.generate_proof(&mut leaf_prover, &app_proof)?;
-        verify_segments(&leaf_prover.vm.engine, &vk, &leaf_proofs)?;
+        for proof in leaf_proofs {
+            verify_single(&leaf_prover.vm.engine, &vk, &proof)?;
+        }
     }
     Ok(())
 }

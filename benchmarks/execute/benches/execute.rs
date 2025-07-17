@@ -34,11 +34,8 @@ use openvm_sha256_circuit::{Sha256, Sha256Executor};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
-    engine::StarkFriEngine,
-    openvm_stark_backend::{
-        config::StarkGenericConfig, engine::StarkEngine, p3_field::Field,
-        prover::hal::DeviceDataTransporter,
-    },
+    engine::{StarkEngine, StarkFriEngine},
+    openvm_stark_backend::{self, prover::hal::DeviceDataTransporter},
     p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
