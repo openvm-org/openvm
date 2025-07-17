@@ -80,7 +80,7 @@ pub fn ec_double_ne_expr(
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
 #[derive(Clone, InstructionExecutor, Deref, DerefMut)]
 pub struct EcDoubleStep<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    pub FieldExprVecHeapStep<1, BLOCKS, BLOCK_SIZE>,
+    FieldExprVecHeapStep<1, BLOCKS, BLOCK_SIZE>,
 );
 
 fn gen_base_expr(
@@ -424,12 +424,8 @@ unsafe fn execute_e12_setup_impl<
     };
 
     // Extract first field element as the prime
-    let prime_bytes: Vec<u8> = setup_input_data[..BLOCKS / 2]
-        .iter()
-        .flatten()
-        .copied()
-        .collect();
-    let input_prime = BigUint::from_bytes_le(&prime_bytes);
+    let prime_bytes = setup_input_data[..BLOCKS / 2].as_flattened();
+    let input_prime = BigUint::from_bytes_le(prime_bytes);
 
     if input_prime != *pre_compute.modulus {
         vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
@@ -437,11 +433,7 @@ unsafe fn execute_e12_setup_impl<
     }
 
     // Extract second field element as the a coefficient
-    let a_bytes: Vec<u8> = setup_input_data[BLOCKS / 2..]
-        .iter()
-        .flatten()
-        .copied()
-        .collect();
+    let a_bytes = setup_input_data[BLOCKS / 2..].as_flattened();
     let input_a = BigUint::from_bytes_le(&a_bytes);
 
     if input_a != *pre_compute.a_coeff {
