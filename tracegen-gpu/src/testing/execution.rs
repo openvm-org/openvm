@@ -14,7 +14,7 @@ use stark_backend_gpu::{
 
 use crate::testing::cuda::execution_testing;
 
-pub struct DeviceExecutionTester(ExecutionTester<F>);
+pub struct DeviceExecutionTester(pub(crate) ExecutionTester<F>);
 
 impl DeviceExecutionTester {
     pub fn new(bus: ExecutionBus) -> Self {

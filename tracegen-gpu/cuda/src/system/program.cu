@@ -10,7 +10,8 @@ __global__ void program_cached_tracegen(
     size_t width,
     Fp *records,
     size_t num_records,
-    uint32_t terminate_pc,
+    uint32_t pc_base,
+    uint32_t pc_step,
     size_t terminate_opcode
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -27,7 +28,7 @@ __global__ void program_cached_tracegen(
         COL_WRITE_VALUE(row, ProgramExecutionCols, f, rec.f);
         COL_WRITE_VALUE(row, ProgramExecutionCols, g, rec.g);
     } else {
-        COL_WRITE_VALUE(row, ProgramExecutionCols, pc, terminate_pc);
+        COL_WRITE_VALUE(row, ProgramExecutionCols, pc, pc_base + (idx * pc_step));
         COL_WRITE_VALUE(row, ProgramExecutionCols, opcode, terminate_opcode);
         COL_WRITE_VALUE(row, ProgramExecutionCols, a, Fp::zero());
         COL_WRITE_VALUE(row, ProgramExecutionCols, b, Fp::zero());
@@ -45,14 +46,15 @@ extern "C" int _program_cached_tracegen(
     size_t width,
     Fp *d_records,
     size_t num_records,
-    uint32_t terminate_pc,
+    uint32_t pc_base,
+    uint32_t pc_step,
     size_t terminate_opcode
 ) {
     assert((height & (height - 1)) == 0);
-    assert(width == sizeof(ProgramExecutionCols<Fp>));
+    assert(width == sizeof(ProgramExecutionCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
     program_cached_tracegen<<<grid, block>>>(
-        d_trace, height, width, d_records, num_records, terminate_pc, terminate_opcode
+        d_trace, height, width, d_records, num_records, pc_base, pc_step, terminate_opcode
     );
     return cudaGetLastError();
 }

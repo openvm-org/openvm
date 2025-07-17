@@ -1,85 +1,125 @@
-use std::{mem::size_of, sync::Arc};
+use std::mem::size_of;
 
 use derive_new::new;
 use openvm_circuit::{
-    arch::DenseRecordArena, system::phantom::PhantomAir, utils::next_power_of_two_or_zero,
+    arch::DenseRecordArena,
+    system::phantom::{PhantomCols, PhantomRecord},
+    utils::next_power_of_two_or_zero,
 };
 use openvm_stark_backend::{
-    prover::hal::MatrixDimensions, rap::get_air_name, AirRef, ChipUsageGetter,
+    prover::{hal::MatrixDimensions, types::AirProvingContext},
+    Chip,
 };
-use p3_air::BaseAir;
 use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::copy::MemCopyH2D,
-    prover_backend::GpuBackend,
-    types::{F, SC},
+    base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
 
-use crate::{system::cuda, DeviceChip};
-
-// TODO[stephen]: remove these definitions, already defined in feat/new-exec-device
-const NUM_PHANTOM_OPERANDS: usize = 3;
-
-#[repr(C)]
-#[derive(Debug, Clone)]
-pub struct PhantomRecord {
-    pub pc: u32,
-    pub operands: [u32; NUM_PHANTOM_OPERANDS],
-    pub timestamp: u32,
-}
+use crate::system::cuda;
 
 #[derive(new)]
-pub struct PhantomChipGpu {
-    pub air: PhantomAir,
-    pub arena: DenseRecordArena,
-}
+pub struct PhantomChipGPU;
 
-impl ChipUsageGetter for PhantomChipGpu {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
+impl PhantomChipGPU {
+    pub fn trace_height(arena: &DenseRecordArena) -> usize {
         let record_size = size_of::<PhantomRecord>();
-        let records_len = self.arena.allocated().len();
+        let records_len = arena.allocated().len();
         assert_eq!(records_len % record_size, 0);
         records_len / record_size
     }
 
-    fn trace_width(&self) -> usize {
-        BaseAir::<F>::width(&self.air)
+    pub fn trace_width() -> usize {
+        PhantomCols::<F>::width()
     }
 }
 
-impl DeviceChip<SC, GpuBackend> for PhantomChipGpu {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
-    }
-
-    fn generate_trace(&self) -> DeviceMatrix<F> {
-        let num_records = self.current_trace_height();
+impl Chip<DenseRecordArena, GpuBackend> for PhantomChipGPU {
+    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        let num_records = Self::trace_height(&arena);
         let trace_height = next_power_of_two_or_zero(num_records);
-        let trace = DeviceMatrix::<F>::with_capacity(trace_height, self.trace_width());
+        let trace = DeviceMatrix::<F>::with_capacity(trace_height, Self::trace_width());
         unsafe {
             cuda::phantom::tracegen(
                 trace.buffer(),
                 trace.height(),
                 trace.width(),
-                &self.arena.allocated().to_device().unwrap(),
+                &arena.allocated().to_device().unwrap(),
                 num_records,
             )
             .expect("Failed to generate trace");
         }
-        trace
+        AirProvingContext::simple_no_pis(trace)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use openvm_circuit::{
+        arch::{
+            testing::TestChipHarness, Arena, DenseRecordArena, EmptyMultiRowLayout, ExecutionState,
+            MatrixRecordArena, VmChipWrapper,
+        },
+        system::phantom::{PhantomAir, PhantomExecutor, PhantomFiller, PhantomRecord},
+        utils::next_power_of_two_or_zero,
+    };
+    use openvm_instructions::{instruction::Instruction, LocalOpcode, SystemOpcode};
+    use p3_air::BaseAir;
+    use p3_field::{FieldAlgebra, PrimeField32};
+    use stark_backend_gpu::types::F;
+
+    use crate::{system::phantom::PhantomChipGPU, testing::GpuChipTestBuilder};
 
     #[test]
     fn test_phantom_tracegen() {
-        // TODO[stephen]: test PhantomChipGpu tracegen after feat/new-exec-device
-        println!("Skipping test_phantom_tracegen...");
+        const NUM_NOPS: usize = 100;
+        let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
+        let mut tester = GpuChipTestBuilder::default();
+
+        let executor = PhantomExecutor::<F>::new(Default::default(), phantom_opcode);
+        let air = PhantomAir {
+            execution_bridge: tester.execution_bridge(),
+            phantom_opcode,
+        };
+        let gpu_chip = PhantomChipGPU::new();
+        let mut harness = TestChipHarness::<F, _, _, _, DenseRecordArena>::with_capacity(
+            executor, air, gpu_chip, NUM_NOPS,
+        );
+
+        let nop = Instruction::from_isize(phantom_opcode, 0, 0, 0, 0, 0);
+        let mut state: ExecutionState<F> = ExecutionState::new(F::ZERO, F::ONE);
+        for _ in 0..NUM_NOPS {
+            tester.execute_with_pc(
+                &mut harness.executor,
+                &mut harness.arena,
+                &nop,
+                state.pc.as_canonical_u32(),
+            );
+            let new_state = tester.execution.0.records.last().unwrap().final_state;
+            assert_eq!(state.pc + F::from_canonical_usize(4), new_state.pc);
+            assert_eq!(state.timestamp + F::ONE, new_state.timestamp);
+            state = new_state;
+        }
+
+        type Record<'a> = &'a mut PhantomRecord;
+        let cpu_chip = VmChipWrapper::new(PhantomFiller, tester.cpu_memory_helper());
+        let mut cpu_arena = MatrixRecordArena::<F>::with_capacity(
+            next_power_of_two_or_zero(NUM_NOPS),
+            <PhantomAir as BaseAir<F>>::width(&harness.air),
+        );
+        harness
+            .arena
+            .get_record_seeker::<Record, EmptyMultiRowLayout>()
+            .transfer_to_matrix_arena(&mut cpu_arena);
+
+        tester
+            .build()
+            .load_and_compare(
+                harness.air,
+                harness.chip,
+                harness.arena,
+                cpu_chip,
+                cpu_arena,
+            )
+            .simple_test()
+            .expect("Verification failed");
     }
 }

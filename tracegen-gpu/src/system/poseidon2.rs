@@ -1,19 +1,17 @@
 use std::sync::Arc;
 
 use openvm_circuit::{
-    system::poseidon2::air::Poseidon2PeripheryAir, utils::next_power_of_two_or_zero,
+    system::poseidon2::columns::Poseidon2PeripheryCols, utils::next_power_of_two_or_zero,
 };
-use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
-    interaction::LookupBus, p3_air::BaseAir, prover::hal::MatrixDimensions, rap::get_air_name,
-    AirRef, ChipUsageGetter,
+    prover::{hal::MatrixDimensions, types::AirProvingContext},
+    Chip,
 };
 use stark_backend_gpu::{
     base::DeviceMatrix, cuda::d_buffer::DeviceBuffer, prelude::F, prover_backend::GpuBackend,
-    types::SC,
 };
 
-use crate::{system::cuda::poseidon2, DeviceChip};
+use crate::system::cuda::poseidon2;
 
 pub struct SharedBuffer<T> {
     pub buffer: Arc<DeviceBuffer<T>>,
@@ -21,18 +19,15 @@ pub struct SharedBuffer<T> {
 }
 
 pub struct Poseidon2ChipGPU<const SBOX_REGISTERS: usize> {
-    pub air: Arc<Poseidon2PeripheryAir<F, SBOX_REGISTERS>>,
     pub records: Arc<DeviceBuffer<F>>,
     pub idx: Arc<DeviceBuffer<u32>>,
 }
 
 impl<const SBOX_REGISTERS: usize> Poseidon2ChipGPU<SBOX_REGISTERS> {
-    pub fn new(config: Poseidon2Config<F>, bus: LookupBus, max_buffer_size: usize) -> Self {
-        let subair = Arc::new(Poseidon2SubAir::new(config.constants.into()));
+    pub fn new(max_buffer_size: usize) -> Self {
         let idx = DeviceBuffer::<u32>::with_capacity(1);
         idx.fill_zero().unwrap();
         Self {
-            air: Arc::new(Poseidon2PeripheryAir::new(subair, bus)),
             records: Arc::new(DeviceBuffer::<F>::with_capacity(max_buffer_size)),
             idx: Arc::new(idx),
         }
@@ -44,28 +39,14 @@ impl<const SBOX_REGISTERS: usize> Poseidon2ChipGPU<SBOX_REGISTERS> {
             idx: self.idx.clone(),
         }
     }
-}
 
-impl<const SBOX_REGISTERS: usize> ChipUsageGetter for Poseidon2ChipGPU<SBOX_REGISTERS> {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
-        0
-    }
-
-    fn trace_width(&self) -> usize {
-        self.air.width()
+    pub fn trace_width() -> usize {
+        Poseidon2PeripheryCols::<F, SBOX_REGISTERS>::width()
     }
 }
 
-impl<const SBOX_REGISTERS: usize> DeviceChip<SC, GpuBackend> for Poseidon2ChipGPU<SBOX_REGISTERS> {
-    fn air(&self) -> AirRef<SC> {
-        self.air.clone()
-    }
-
-    fn generate_trace(&self) -> DeviceMatrix<F> {
+impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<SBOX_REGISTERS> {
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
         let mut num_records = self.records.len();
         let counts = DeviceBuffer::<u32>::with_capacity(num_records);
         unsafe {
@@ -73,7 +54,7 @@ impl<const SBOX_REGISTERS: usize> DeviceChip<SC, GpuBackend> for Poseidon2ChipGP
                 .expect("Failed to deduplicate records");
         }
         let trace_height = next_power_of_two_or_zero(num_records);
-        let trace = DeviceMatrix::<F>::with_capacity(trace_height, self.trace_width());
+        let trace = DeviceMatrix::<F>::with_capacity(trace_height, Self::trace_width());
         unsafe {
             poseidon2::tracegen(
                 trace.buffer(),
@@ -86,6 +67,37 @@ impl<const SBOX_REGISTERS: usize> DeviceChip<SC, GpuBackend> for Poseidon2ChipGP
             )
             .expect("Failed to generate trace");
         }
-        trace
+        AirProvingContext::simple_no_pis(trace)
+    }
+}
+
+pub enum Poseidon2PeripheryChipGPU {
+    Register0(Poseidon2ChipGPU<0>),
+    Register1(Poseidon2ChipGPU<1>),
+}
+
+impl Poseidon2PeripheryChipGPU {
+    pub fn new(max_buffer_size: usize, sbox_registers: usize) -> Self {
+        match sbox_registers {
+            0 => Self::Register0(Poseidon2ChipGPU::new(max_buffer_size)),
+            1 => Self::Register1(Poseidon2ChipGPU::new(max_buffer_size)),
+            _ => panic!("Invalid number of sbox registers: {}", sbox_registers),
+        }
+    }
+
+    pub fn shared_buffer(&self) -> SharedBuffer<F> {
+        match self {
+            Self::Register0(chip) => chip.shared_buffer(),
+            Self::Register1(chip) => chip.shared_buffer(),
+        }
+    }
+}
+
+impl<RA> Chip<RA, GpuBackend> for Poseidon2PeripheryChipGPU {
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
+        match self {
+            Self::Register0(chip) => chip.generate_proving_ctx(()),
+            Self::Register1(chip) => chip.generate_proving_ctx(()),
+        }
     }
 }
