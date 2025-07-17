@@ -5,8 +5,6 @@ use std::{
     rc::Rc,
 };
 
-use crypto_bigint::{Encoding, U256};
-use k256::{elliptic_curve::PrimeField, FieldElement};
 use num_bigint::BigUint;
 use num_traits::One;
 use openvm_algebra_circuit::FieldExprVecHeapStep;
@@ -40,8 +38,13 @@ use openvm_mod_circuit_builder::{
 use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
 
+use crate::weierstrass_chip::curves::{
+    bls12_381::ec_double_bls12_381, bn254::ec_double_bn254, k256::ec_double_k256,
+    p256::ec_double_p256,
+};
+
 use super::{
-    utils::{blocks_to_field_element, field_element_to_blocks, CurveType},
+    curves::{get_curve_type, CurveType},
     WeierstrassAir,
 };
 
@@ -210,15 +213,24 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> StepExecutor
         if is_setup {
             Ok(execute_e1_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
         } else {
-            // Check if it's k256 in pre-compute
-            let is_k256 = pre_compute.modulus
-                == &BigUint::from_bytes_be(&U256::from_be_hex(FieldElement::MODULUS).to_be_bytes())
-                && pre_compute.a_coeff == &BigUint::from(0u32);
+            let curve_type = get_curve_type(pre_compute.modulus, pre_compute.a_coeff);
 
-            let fn_ptr = if is_k256 {
-                execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>
-            } else {
-                execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::Generic as u8 }>
+            let fn_ptr = match curve_type {
+                CurveType::K256 => {
+                    execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>
+                }
+                CurveType::P256 => {
+                    execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }>
+                }
+                CurveType::BN254 => {
+                    execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BN254 as u8 }>
+                }
+                CurveType::BLS12_381 => {
+                    execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BLS12_381 as u8 }>
+                }
+                CurveType::Generic => {
+                    execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::Generic as u8 }>
+                }
             };
 
             Ok(fn_ptr)
@@ -252,15 +264,24 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> StepExecutor
         if is_setup {
             Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
         } else {
-            // Check if it's k256 in pre-compute
-            let is_k256 = pre_compute.data.modulus
-                == &BigUint::from_bytes_be(&U256::from_be_hex(FieldElement::MODULUS).to_be_bytes())
-                && pre_compute.data.a_coeff == &BigUint::from(0u32);
+            let curve_type = get_curve_type(pre_compute.data.modulus, pre_compute.data.a_coeff);
 
-            let fn_ptr = if is_k256 {
-                execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>
-            } else {
-                execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::Generic as u8 }>
+            let fn_ptr = match curve_type {
+                CurveType::K256 => {
+                    execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>
+                }
+                CurveType::P256 => {
+                    execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }>
+                }
+                CurveType::BN254 => {
+                    execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BN254 as u8 }>
+                }
+                CurveType::BLS12_381 => {
+                    execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BLS12_381 as u8 }>
+                }
+                CurveType::Generic => {
+                    execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::Generic as u8 }>
+                }
             };
 
             Ok(fn_ptr)
@@ -351,14 +372,18 @@ unsafe fn execute_e12_impl<
         from_fn(|i| vm_state.vm_read(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
     };
 
-    let output_data = if CURVE_TYPE == CurveType::K256 as u8 {
-        ec_double_k256::<BLOCKS, BLOCK_SIZE>(read_data)
-    } else {
-        ec_double_generic::<BLOCKS, BLOCK_SIZE>(
+    let output_data = match CURVE_TYPE {
+        x if x == CurveType::K256 as u8 => ec_double_k256::<BLOCKS, BLOCK_SIZE>(read_data),
+        x if x == CurveType::P256 as u8 => ec_double_p256::<BLOCKS, BLOCK_SIZE>(read_data),
+        x if x == CurveType::BN254 as u8 => ec_double_bn254::<BLOCKS, BLOCK_SIZE>(read_data),
+        x if x == CurveType::BLS12_381 as u8 => {
+            ec_double_bls12_381::<BLOCKS, BLOCK_SIZE>(read_data)
+        }
+        _ => ec_double_generic::<BLOCKS, BLOCK_SIZE>(
             read_data,
             pre_compute.modulus.clone(),
             pre_compute.a_coeff.clone(),
-        )
+        ),
     };
 
     let rd_val = u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));
@@ -420,36 +445,6 @@ unsafe fn execute_e12_setup_impl<
 
     vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
     vm_state.instret += 1;
-}
-
-#[inline(always)]
-fn ec_double_k256<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    input_data: [[u8; BLOCK_SIZE]; BLOCKS],
-) -> [[u8; BLOCK_SIZE]; BLOCKS] {
-    // Extract coordinates
-    let x1 = blocks_to_field_element(input_data[..BLOCKS / 2].as_flattened());
-    let y1 = blocks_to_field_element(input_data[BLOCKS / 2..].as_flattened());
-
-    // Calculate lambda = (3 * x1^2) / (2 * y1)
-    let x1_squared = x1.square();
-    let three_x1_squared = (x1_squared + x1_squared.double()).normalize(); // 3 * x1^2
-    let two_y1 = y1.double().normalize(); // 2 * y1
-    let lambda = three_x1_squared * two_y1.invert().unwrap();
-
-    // Calculate x3 = lambda^2 - 2 * x1
-    let lambda_squared = lambda.square();
-    let two_x1 = x1.double();
-    let x3 = (lambda_squared - two_x1).normalize();
-
-    // Calculate y3 = lambda * (x1 - x3) - y1
-    let x1_minus_x3 = x1 - x3;
-    let y3 = (lambda * x1_minus_x3 - y1).normalize();
-
-    // Final output
-    let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
-    field_element_to_blocks(&x3, &mut output, 0);
-    field_element_to_blocks(&y3, &mut output, BLOCKS / 2);
-    output
 }
 
 #[inline(always)]

@@ -1,6 +1,6 @@
 mod add_ne;
+mod curves;
 mod double;
-mod utils;
 
 pub use add_ne::*;
 pub use double::*;
