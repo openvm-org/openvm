@@ -593,10 +593,11 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     let token_stream = TokenStream::from(quote! {
         #[derive(
             Clone,
-            ::openvm_circuit::derive::InstructionExecutor,
-            ::openvm_circuit::derive::InsExecutorE1,
             ::derive_more::derive::From,
-            ::openvm_circuit::derive::AnyEnum
+            ::openvm_circuit::derive::AnyEnum,
+            ::openvm_circuit::derive::InsExecutorE1,
+            ::openvm_circuit::derive::InsExecutorE2,
+            ::openvm_circuit::derive::InstructionExecutor,
         )]
         pub enum #executor_type<F: Field> {
             #[any_enum]

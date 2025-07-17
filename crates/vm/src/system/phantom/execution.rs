@@ -160,7 +160,7 @@ where
             sub_executor: self
                 .phantom_executors
                 .get(&PhantomDiscriminant(c as u16))
-                .unwrap()
+                .unwrap_or_else(|| panic!("Phantom executor not found for insn {inst:?}"))
                 .as_ref(),
         };
     }

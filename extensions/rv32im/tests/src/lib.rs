@@ -39,7 +39,7 @@ mod tests {
 
     #[test_case("fibonacci", 1)]
     fn test_rv32i(example_name: &str, min_segments: usize) -> Result<()> {
-        let config = test_rv32im_config();
+        let config = Rv32IConfig::default();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
         let mut exe = VmExe::from_elf(
             elf,

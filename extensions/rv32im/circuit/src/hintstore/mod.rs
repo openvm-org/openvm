@@ -2,17 +2,18 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, CustomBorrow, ExecutionBridge, ExecutionError, ExecutionState,
-        InsExecutorE1, InstructionExecutor, MultiRowLayout, MultiRowMetadata, RecordArena, Result,
-        SizedRecord, TraceFiller, VmChipWrapper, VmStateMut,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        get_record_from_slice, CustomBorrow, E2PreCompute, ExecuteFunc, ExecutionBridge,
+        ExecutionError, ExecutionState, InsExecutorE1, InsExecutorE2, InstructionExecutor,
+        MultiRowLayout, MultiRowMetadata, RecordArena, Result, SizedRecord, TraceFiller,
+        VmChipWrapper, VmSegmentState, VmStateMut,
     },
     system::memory::{
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
             MemoryWriteBytesAuxRecord,
         },
-        online::TracingMemory,
+        online::{GuestMemory, TracingMemory},
         MemoryAddress, MemoryAuxColsFactory,
     },
 };

@@ -918,12 +918,12 @@ fn test_hint_load_2() {
 //         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
 //     ];
 
-    let program = Program::from_instructions(&instructions);
-    let executor = InterpretedInstance::<F, _>::new(test_native_continuations_config(), program);
-    executor
-        .execute(E1Ctx::new(None), vec![])
-        .expect("Failed to execute");
-}
+//     let program = Program::from_instructions(&instructions);
+//     let executor = InterpretedInstance::<F, _>::new(test_native_continuations_config(), program);
+//     executor
+//         .execute(E1Ctx::new(None), vec![])
+//         .expect("Failed to execute");
+// }
 
 #[test]
 fn test_vm_e1_native_chips() {

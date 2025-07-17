@@ -2,11 +2,11 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, ImmInstruction, InsExecutorE1,
-        InstructionExecutor, RecordArena, Result, TraceFiller, VmAdapterInterface, VmCoreAir,
-        VmStateMut,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ImmInstruction, InsExecutorE1,
+        InsExecutorE2, InstructionExecutor, RecordArena, Result, TraceFiller, VmAdapterInterface,
+        VmCoreAir, VmSegmentState, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},

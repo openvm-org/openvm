@@ -6,7 +6,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1ExecutionCtx, E2ExecutionCtx},
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
         E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, InsExecutorE1,
         InsExecutorE2, InstructionExecutor, MinimalInstruction, RecordArena, Result, TraceFiller,

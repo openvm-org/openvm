@@ -17,10 +17,9 @@ use crate::{
     arch::{
         create_memory_image,
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        ExecuteFunc,
-        ExecutionError::{self, InvalidInstruction},
-        ExecutorInventory, ExecutorInventoryError, ExitCode, InsExecutorE1, InsExecutorE2,
-        PreComputeInstruction, Streams, SystemConfig, VmExecutionConfig, VmSegmentState,
+        ExecuteFunc, ExecutionError, ExecutorInventory, ExecutorInventoryError, ExitCode,
+        InsExecutorE1, InsExecutorE2, PreComputeInstruction, Streams, SystemConfig,
+        VmExecutionConfig, VmSegmentState,
     },
     system::memory::online::GuestMemory,
 };
@@ -366,6 +365,7 @@ fn get_pre_compute_instructions<'a, F: PrimeField32, E: InsExecutorE1<F>, Ctx: E
         .map(|(i, (inst_opt, buf))| {
             let buf: &mut [u8] = buf;
             let pre_inst = if let Some((inst, _)) = inst_opt {
+                tracing::trace!("get_e2_pre_compute_instruction {inst:?}");
                 let pc = program.pc_base + i as u32 * program.step;
                 if let Some(handler) = get_system_opcode_handler(inst, buf) {
                     PreComputeInstruction {
@@ -415,6 +415,7 @@ fn get_e2_pre_compute_instructions<
         .map(|(i, (inst_opt, buf))| {
             let buf: &mut [u8] = buf;
             let pre_inst = if let Some((inst, _)) = inst_opt {
+                tracing::trace!("get_e2_pre_compute_instruction {inst:?}");
                 let pc = program.pc_base + i as u32 * program.step;
                 if let Some(handler) = get_system_opcode_handler(inst, buf) {
                     PreComputeInstruction {

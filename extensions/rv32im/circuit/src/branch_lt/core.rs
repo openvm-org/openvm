@@ -4,9 +4,9 @@ use openvm_circuit::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ImmInstruction, InsExecutorE1,
-        InsExecutorE2, InstructionExecutor, RecordArena, Result, TraceFiller, VmAdapterInterface,
-        VmCoreAir, VmSegmentState, VmStateMut,
+        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, ImmInstruction,
+        InsExecutorE1, InsExecutorE2, InstructionExecutor, RecordArena, Result, TraceFiller,
+        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
