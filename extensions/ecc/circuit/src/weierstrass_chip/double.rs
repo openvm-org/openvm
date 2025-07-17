@@ -227,28 +227,23 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE
 
         if is_setup {
             Ok(execute_e1_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
-        } else {
-            let curve_type = get_curve_type(pre_compute.modulus, pre_compute.a_coeff);
-
-            let fn_ptr = match curve_type {
+        } else if let Some(curve_type) = get_curve_type(pre_compute.modulus, pre_compute.a_coeff) {
+            match curve_type {
                 CurveType::K256 => {
-                    execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>
+                    Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>)
                 }
                 CurveType::P256 => {
-                    execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }>
+                    Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }>)
                 }
                 CurveType::BN254 => {
-                    execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BN254 as u8 }>
+                    Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BN254 as u8 }>)
                 }
                 CurveType::BLS12_381 => {
-                    execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BLS12_381 as u8 }>
+                    Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BLS12_381 as u8 }>)
                 }
-                CurveType::Generic => {
-                    execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::Generic as u8 }>
-                }
-            };
-
-            Ok(fn_ptr)
+            }
+        } else {
+            Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }>)
         }
     }
 }
@@ -278,28 +273,25 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE
 
         if is_setup {
             Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
-        } else {
-            let curve_type = get_curve_type(pre_compute.data.modulus, pre_compute.data.a_coeff);
-
-            let fn_ptr = match curve_type {
+        } else if let Some(curve_type) =
+            get_curve_type(pre_compute.data.modulus, pre_compute.data.a_coeff)
+        {
+            match curve_type {
                 CurveType::K256 => {
-                    execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>
+                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>)
                 }
                 CurveType::P256 => {
-                    execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }>
+                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }>)
                 }
                 CurveType::BN254 => {
-                    execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BN254 as u8 }>
+                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BN254 as u8 }>)
                 }
                 CurveType::BLS12_381 => {
-                    execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BLS12_381 as u8 }>
+                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BLS12_381 as u8 }>)
                 }
-                CurveType::Generic => {
-                    execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::Generic as u8 }>
-                }
-            };
-
-            Ok(fn_ptr)
+            }
+        } else {
+            Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }>)
         }
     }
 }

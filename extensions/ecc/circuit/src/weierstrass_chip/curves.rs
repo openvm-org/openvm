@@ -8,7 +8,6 @@ pub enum CurveType {
     P256 = 1,
     BN254 = 2,
     BLS12_381 = 3,
-    Generic = 4,
 }
 
 const K256_A: i64 = 0;
@@ -20,52 +19,52 @@ fn get_modulus_as_bigint<F: PrimeField>() -> BigUint {
     BigUint::from_str_radix(F::MODULUS.trim_start_matches("0x"), 16).unwrap()
 }
 
-pub fn get_curve_type_from_modulus(modulus: &BigUint) -> CurveType {
+pub fn get_curve_type_from_modulus(modulus: &BigUint) -> Option<CurveType> {
     if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secq256k1::Fq>() {
-        return CurveType::K256;
+        return Some(CurveType::K256);
     }
 
     if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secp256r1::Fq>() {
-        return CurveType::P256;
+        return Some(CurveType::P256);
     }
 
     if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bn256::Fq>() {
-        return CurveType::BN254;
+        return Some(CurveType::BN254);
     }
 
     if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bls12_381::Fq>() {
-        return CurveType::BLS12_381;
+        return Some(CurveType::BLS12_381);
     }
 
-    CurveType::Generic
+    None
 }
 
-pub fn get_curve_type(modulus: &BigUint, a_coeff: &BigUint) -> CurveType {
+pub fn get_curve_type(modulus: &BigUint, a_coeff: &BigUint) -> Option<CurveType> {
     if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secq256k1::Fq>()
         && a_coeff == &BigUint::from_i64(K256_A).unwrap()
     {
-        return CurveType::K256;
+        return Some(CurveType::K256);
     }
 
     if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secp256r1::Fq>()
         && a_coeff == &BigUint::from_i64(P256_A).unwrap()
     {
-        return CurveType::P256;
+        return Some(CurveType::P256);
     }
 
     if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bn256::Fq>()
         && a_coeff == &BigUint::from_i64(BN254_A).unwrap()
     {
-        return CurveType::BN254;
+        return Some(CurveType::BN254);
     }
 
     if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bls12_381::Fq>()
         && a_coeff == &BigUint::from_i64(BLS12_381_A).unwrap()
     {
-        return CurveType::BLS12_381;
+        return Some(CurveType::BLS12_381);
     }
 
-    CurveType::Generic
+    None
 }
 
 #[inline(always)]
