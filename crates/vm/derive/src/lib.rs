@@ -17,6 +17,21 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
     let generics = &ast.generics;
     let (_, ty_generics, _) = generics.split_for_impl();
 
+    let default_ty_generic = Ident::new("F", proc_macro2::Span::call_site());
+    let mut new_generics = generics.clone();
+    new_generics.params.push(syn::parse_quote! { RA });
+    let field_ty_generic = generics
+        .params
+        .first()
+        .and_then(|param| match param {
+            GenericParam::Type(type_param) => Some(&type_param.ident),
+            _ => None,
+        })
+        .unwrap_or_else(|| {
+            new_generics.params.push(syn::parse_quote! { F });
+            &default_ty_generic
+        });
+
     match &ast.data {
         Data::Struct(inner) => {
             // Check if the struct has only one unnamed field
@@ -30,20 +45,18 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 _ => panic!("Only unnamed fields are supported"),
             };
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
-            // crate. Assume F is already generic of the field.
-            let mut new_generics = generics.clone();
-            new_generics.params.push(syn::parse_quote! { RA });
+            // crate.
             let where_clause = new_generics.make_where_clause();
             where_clause.predicates.push(
-                syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InstructionExecutor<F, RA> },
+                syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic, RA> },
             );
             let (impl_generics, _, where_clause) = new_generics.split_for_impl();
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<F, RA> for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic, RA> for #name #ty_generics #where_clause {
                     fn execute(
                         &mut self,
-                        state: ::openvm_circuit::arch::VmStateMut<F, ::openvm_circuit::system::memory::online::TracingMemory, RA>,
-                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        state: ::openvm_circuit::arch::VmStateMut<#field_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory, RA>,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#field_ty_generic>,
                     ) -> ::openvm_circuit::arch::Result<()> {
                         self.0.execute(state, instruction)
                     }
@@ -68,21 +81,6 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                     (variant_name, field)
                 })
                 .collect::<Vec<_>>();
-            let default_ty_generic = Ident::new("F", proc_macro2::Span::call_site());
-            let mut new_generics = generics.clone();
-            new_generics.params.push(syn::parse_quote! { RA });
-            let field_ty_generic = ast
-                .generics
-                .params
-                .first()
-                .and_then(|param| match param {
-                    GenericParam::Type(type_param) => Some(&type_param.ident),
-                    _ => None,
-                })
-                .unwrap_or_else(|| {
-                    new_generics.params.push(syn::parse_quote! { F });
-                    &default_ty_generic
-                });
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
             // crate. Assume F is already generic of the field.
             let (execute_arms, get_opcode_name_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>) =

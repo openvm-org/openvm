@@ -1,16 +1,12 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_bigint_transpiler::Rv32Shift256Opcode;
-use openvm_circuit::arch::{
-    execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-    E2PreCompute, ExecuteFunc,
-    ExecutionError::InvalidInstruction,
-    InsExecutorE1, InsExecutorE2, MatrixRecordArena, NewVmChipWrapper, VmAirWrapper,
-    VmSegmentState,
-};
-use openvm_circuit_derive::{TraceFiller, TraceStep};
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip, var_range::SharedVariableRangeCheckerChip,
+use openvm_circuit::{
+    arch::{
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2, VmSegmentState,
+    },
+    system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
@@ -19,39 +15,18 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::{Rv32HeapAdapterAir, Rv32HeapAdapterStep};
-use openvm_rv32im_circuit::{ShiftCoreAir, ShiftStep};
+use openvm_rv32_adapters::Rv32HeapAdapterStep;
+use openvm_rv32im_circuit::ShiftStep;
 use openvm_rv32im_transpiler::ShiftOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{INT256_NUM_LIMBS, RV32_CELL_BITS};
+use crate::{Rv32Shift256Step, INT256_NUM_LIMBS};
 
-/// Shift256
-pub type Rv32Shift256Air = VmAirWrapper<
-    Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-    ShiftCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
->;
-#[derive(TraceStep, TraceFiller)]
-pub struct Rv32Shift256Step(BaseStep);
-pub type Rv32Shift256Chip<F> =
-    NewVmChipWrapper<F, Rv32Shift256Air, Rv32Shift256Step, MatrixRecordArena<F>>;
-
-type BaseStep = ShiftStep<AdapterStep, INT256_NUM_LIMBS, RV32_CELL_BITS>;
 type AdapterStep = Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
 
 impl Rv32Shift256Step {
-    pub fn new(
-        adapter: AdapterStep,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-        range_checker_chip: SharedVariableRangeCheckerChip,
-        offset: usize,
-    ) -> Self {
-        Self(BaseStep::new(
-            adapter,
-            bitwise_lookup_chip,
-            range_checker_chip,
-            offset,
-        ))
+    pub fn new(adapter: AdapterStep, offset: usize) -> Self {
+        Self(ShiftStep::new(adapter, offset))
     }
 }
 

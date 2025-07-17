@@ -1,14 +1,13 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_bigint_transpiler::Rv32BranchEqual256Opcode;
-use openvm_circuit::arch::{
-    execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-    E2PreCompute, ExecuteFunc,
-    ExecutionError::InvalidInstruction,
-    InsExecutorE1, InsExecutorE2, MatrixRecordArena, NewVmChipWrapper, VmAirWrapper,
-    VmSegmentState,
+use openvm_circuit::{
+    arch::{
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2, VmSegmentState,
+    },
+    system::memory::online::GuestMemory,
 };
-use openvm_circuit_derive::{TraceFiller, TraceStep};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -16,29 +15,18 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::{Rv32HeapBranchAdapterAir, Rv32HeapBranchAdapterStep};
-use openvm_rv32im_circuit::{BranchEqualCoreAir, BranchEqualStep};
+use openvm_rv32_adapters::Rv32HeapBranchAdapterStep;
+use openvm_rv32im_circuit::BranchEqualStep;
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::INT256_NUM_LIMBS;
+use crate::{Rv32BranchEqual256Step, INT256_NUM_LIMBS};
 
-/// BranchEqual256
-pub type Rv32BranchEqual256Air = VmAirWrapper<
-    Rv32HeapBranchAdapterAir<2, INT256_NUM_LIMBS>,
-    BranchEqualCoreAir<INT256_NUM_LIMBS>,
->;
-#[derive(TraceStep, TraceFiller)]
-pub struct Rv32BranchEqual256Step(BaseStep);
-pub type Rv32BranchEqual256Chip<F> =
-    NewVmChipWrapper<F, Rv32BranchEqual256Air, Rv32BranchEqual256Step, MatrixRecordArena<F>>;
-
-type BaseStep = BranchEqualStep<Rv32HeapBranchAdapterStep<2, INT256_NUM_LIMBS>, INT256_NUM_LIMBS>;
 type AdapterStep = Rv32HeapBranchAdapterStep<2, INT256_NUM_LIMBS>;
 
 impl Rv32BranchEqual256Step {
     pub fn new(adapter_step: AdapterStep, offset: usize, pc_step: u32) -> Self {
-        Self(BaseStep::new(adapter_step, offset, pc_step))
+        Self(BranchEqualStep::new(adapter_step, offset, pc_step))
     }
 }
 

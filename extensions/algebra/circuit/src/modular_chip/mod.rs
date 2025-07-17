@@ -1,6 +1,11 @@
-use openvm_circuit::arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper};
-use openvm_mod_circuit_builder::FieldExpressionCoreAir;
-use openvm_rv32_adapters::Rv32VecHeapAdapterAir;
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
+use openvm_circuit_derive::InstructionExecutor;
+use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionFiller};
+use openvm_rv32_adapters::{
+    Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterFiller, Rv32IsEqualModAdapterStep,
+    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller,
+};
 
 use crate::FieldExprVecHeapStep;
 
@@ -10,15 +15,6 @@ mod addsub;
 pub use addsub::*;
 mod muldiv;
 pub use muldiv::*;
-use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
-use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-use openvm_mod_circuit_builder::{
-    FieldExpressionCoreAir, FieldExpressionFiller, FieldExpressionStep,
-};
-use openvm_rv32_adapters::{
-    Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterFiller, Rv32IsEqualModAdapterStep,
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
-};
 
 #[cfg(test)]
 mod tests;
@@ -45,16 +41,19 @@ pub type ModularIsEqualAir<
     ModularIsEqualCoreAir<TOTAL_LIMBS, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
 >;
 
-pub type VmModularIsEqualStep<
+#[derive(Clone, InstructionExecutor)]
+pub struct VmModularIsEqualStep<
     const NUM_LANES: usize,
     const LANE_SIZE: usize,
     const TOTAL_LIMBS: usize,
-> = ModularIsEqualStep<
-    Rv32IsEqualModAdapterStep<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-    TOTAL_LIMBS,
-    RV32_REGISTER_NUM_LIMBS,
-    RV32_CELL_BITS,
->;
+>(
+    ModularIsEqualStep<
+        Rv32IsEqualModAdapterStep<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        TOTAL_LIMBS,
+        RV32_REGISTER_NUM_LIMBS,
+        RV32_CELL_BITS,
+    >,
+);
 
 pub type ModularIsEqualChip<
     F,

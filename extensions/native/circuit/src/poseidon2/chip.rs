@@ -2,7 +2,7 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
+        execution_mode::{metered::MeteredCtx, E1ExecutionCtx, E2ExecutionCtx},
         CustomBorrow, InsExecutorE1, InstructionExecutor, MultiRowLayout, MultiRowMetadata,
         RecordArena, SizedRecord, TraceFiller, VmStateMut,
     },

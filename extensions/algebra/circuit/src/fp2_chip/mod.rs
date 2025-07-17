@@ -1,6 +1,6 @@
-use openvm_circuit::arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper};
-use openvm_mod_circuit_builder::FieldExpressionCoreAir;
-use openvm_rv32_adapters::Rv32VecHeapAdapterAir;
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
+use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionFiller};
+use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller};
 
 use crate::FieldExprVecHeapStep;
 
@@ -9,13 +9,6 @@ pub use addsub::*;
 
 mod muldiv;
 pub use muldiv::*;
-use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
-use openvm_mod_circuit_builder::{
-    FieldExpressionCoreAir, FieldExpressionFiller, FieldExpressionStep,
-};
-use openvm_rv32_adapters::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
-};
 
 pub(crate) type Fp2Air<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper<
     Rv32VecHeapAdapterAir<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,

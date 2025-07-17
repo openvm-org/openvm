@@ -64,7 +64,7 @@ impl ModularExtension {
     }
 }
 
-#[derive(Clone, AnyEnum, InsExecutorE1, InstructionExecutor)]
+#[derive(Clone, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
 pub enum ModularExtensionExecutor {
     // 32 limbs prime
     ModularAddSubRv32_32(ModularStep<1, 32>), // ModularAddSub

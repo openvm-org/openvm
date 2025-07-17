@@ -1,6 +1,8 @@
 //! Stateful keccak256 hasher. Handles full keccak sponge (padding, absorb, keccak-f) on
 //! variable length inputs read from VM memory.
 
+use std::borrow::{Borrow, BorrowMut};
+
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
 use openvm_stark_backend::p3_field::PrimeField32;
 use p3_keccak_air::NUM_ROUNDS;
@@ -17,8 +19,9 @@ pub use air::KeccakVmAir;
 pub use extension::*;
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        ExecutionBridge, InsExecutorE1, Result, VmChipWrapper, VmStateMut,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        E2PreCompute, ExecuteFunc, ExecutionBridge, ExecutionError, InsExecutorE1, InsExecutorE2,
+        Result, VmChipWrapper, VmSegmentState,
     },
     system::memory::online::GuestMemory,
 };

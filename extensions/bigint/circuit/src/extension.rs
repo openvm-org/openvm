@@ -83,7 +83,7 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
     [1 << 8, 32 * (1 << 8)]
 }
 
-#[derive(Clone, From, AnyEnum, InsExecutorE1, InstructionExecutor)]
+#[derive(Clone, From, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
 pub enum Int256Executor {
     BaseAlu256(Rv32BaseAlu256Step),
     LessThan256(Rv32LessThan256Step),
@@ -139,7 +139,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
         );
         inventory.add_executor(mult, Rv32Mul256Opcode::iter().map(|x| x.global_opcode()))?;
 
-        let shift = ShiftStep::new(
+        let shift = Rv32Shift256Step::new(
             Rv32HeapAdapterStep::new(pointer_max_bits),
             Rv32Shift256Opcode::CLASS_OFFSET,
         );

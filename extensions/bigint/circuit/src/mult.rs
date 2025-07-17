@@ -1,15 +1,13 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_bigint_transpiler::Rv32Mul256Opcode;
-use openvm_circuit::arch::{
-    execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-    E2PreCompute, ExecuteFunc,
-    ExecutionError::InvalidInstruction,
-    InsExecutorE1, InsExecutorE2, MatrixRecordArena, NewVmChipWrapper, VmAirWrapper,
-    VmSegmentState,
+use openvm_circuit::{
+    arch::{
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2, VmSegmentState,
+    },
+    system::memory::online::GuestMemory,
 };
-use openvm_circuit_derive::{TraceFiller, TraceStep};
-use openvm_circuit_primitives::range_tuple::SharedRangeTupleCheckerChip;
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -17,33 +15,18 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::{Rv32HeapAdapterAir, Rv32HeapAdapterStep};
-use openvm_rv32im_circuit::{MultiplicationCoreAir, MultiplicationStep};
+use openvm_rv32_adapters::Rv32HeapAdapterStep;
+use openvm_rv32im_circuit::MultiplicationStep;
 use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{INT256_NUM_LIMBS, RV32_CELL_BITS};
+use crate::{Rv32Multiplication256Step, INT256_NUM_LIMBS};
 
-/// Multiplication256
-pub type Rv32Multiplication256Air = VmAirWrapper<
-    Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-    MultiplicationCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
->;
-#[derive(TraceStep, TraceFiller)]
-pub struct Rv32Multiplication256Step(BaseStep);
-pub type Rv32Multiplication256Chip<F> =
-    NewVmChipWrapper<F, Rv32Multiplication256Air, Rv32Multiplication256Step, MatrixRecordArena<F>>;
-
-type BaseStep = MultiplicationStep<AdapterStep, INT256_NUM_LIMBS, RV32_CELL_BITS>;
 type AdapterStep = Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
 
 impl Rv32Multiplication256Step {
-    pub fn new(
-        adapter: AdapterStep,
-        range_tuple_chip: SharedRangeTupleCheckerChip<2>,
-        offset: usize,
-    ) -> Self {
-        Self(BaseStep::new(adapter, range_tuple_chip, offset))
+    pub fn new(adapter: AdapterStep, offset: usize) -> Self {
+        Self(MultiplicationStep::new(adapter, offset))
     }
 }
 

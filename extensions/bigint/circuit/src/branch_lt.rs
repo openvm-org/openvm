@@ -1,15 +1,13 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_bigint_transpiler::Rv32BranchLessThan256Opcode;
-use openvm_circuit::arch::{
-    execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-    E2PreCompute, ExecuteFunc,
-    ExecutionError::InvalidInstruction,
-    InsExecutorE1, InsExecutorE2, MatrixRecordArena, NewVmChipWrapper, VmAirWrapper,
-    VmSegmentState,
+use openvm_circuit::{
+    arch::{
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2, VmSegmentState,
+    },
+    system::memory::online::GuestMemory,
 };
-use openvm_circuit_derive::{TraceFiller, TraceStep};
-use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -17,40 +15,21 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::{Rv32HeapBranchAdapterAir, Rv32HeapBranchAdapterStep};
-use openvm_rv32im_circuit::{BranchLessThanCoreAir, BranchLessThanStep};
+use openvm_rv32_adapters::Rv32HeapBranchAdapterStep;
+use openvm_rv32im_circuit::BranchLessThanStep;
 use openvm_rv32im_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{i256_lt, u256_lt},
-    INT256_NUM_LIMBS, RV32_CELL_BITS,
+    Rv32BranchLessThan256Step, INT256_NUM_LIMBS,
 };
 
-/// BranchLessThan256
-pub type Rv32BranchLessThan256Air = VmAirWrapper<
-    Rv32HeapBranchAdapterAir<2, INT256_NUM_LIMBS>,
-    BranchLessThanCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
->;
-#[derive(TraceStep, TraceFiller)]
-pub struct Rv32BranchLessThan256Step(BaseStep);
-pub type Rv32BranchLessThan256Chip<F> =
-    NewVmChipWrapper<F, Rv32BranchLessThan256Air, Rv32BranchLessThan256Step, MatrixRecordArena<F>>;
-
-type BaseStep = BranchLessThanStep<
-    Rv32HeapBranchAdapterStep<2, INT256_NUM_LIMBS>,
-    INT256_NUM_LIMBS,
-    RV32_CELL_BITS,
->;
 type AdapterStep = Rv32HeapBranchAdapterStep<2, INT256_NUM_LIMBS>;
 
 impl Rv32BranchLessThan256Step {
-    pub fn new(
-        adapter: AdapterStep,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-        offset: usize,
-    ) -> Self {
-        Self(BaseStep::new(adapter, bitwise_lookup_chip, offset))
+    pub fn new(adapter: AdapterStep, offset: usize) -> Self {
+        Self(BranchLessThanStep::new(adapter, offset))
     }
 }
 

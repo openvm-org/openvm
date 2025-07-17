@@ -6,13 +6,10 @@ pub use double::*;
 #[cfg(test)]
 mod tests;
 
+use openvm_algebra_circuit::FieldExprVecHeapStep;
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
-use openvm_mod_circuit_builder::{
-    FieldExpressionCoreAir, FieldExpressionFiller, FieldExpressionStep,
-};
-use openvm_rv32_adapters::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
-};
+use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionFiller};
+use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller};
 
 pub(crate) type WeierstrassAir<
     const NUM_READS: usize,

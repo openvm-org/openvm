@@ -73,7 +73,7 @@ impl Fp2Extension {
     }
 }
 
-#[derive(Clone, AnyEnum, InsExecutorE1, InstructionExecutor)]
+#[derive(Clone, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
 pub enum Fp2ExtensionExecutor {
     // 32 limbs prime
     Fp2AddSubRv32_32(Fp2Step<2, 32>), // Fp2AddSub

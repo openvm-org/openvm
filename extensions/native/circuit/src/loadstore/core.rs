@@ -8,9 +8,9 @@ use openvm_circuit::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         get_record_from_slice,
         instructions::LocalOpcode,
-        AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller, AdapterTraceStep,
-        EmptyAdapterCoreLayout, ExecutionError, InsExecutorE1, InstructionExecutor, RecordArena,
-        Result, TraceFiller, VmAdapterInterface, VmCoreAir, VmStateMut,
+        AdapterAirContext, AdapterTraceFiller, AdapterTraceStep, EmptyAdapterCoreLayout,
+        ExecutionError, InsExecutorE1, InstructionExecutor, RecordArena, Result, TraceFiller,
+        VmAdapterInterface, VmCoreAir, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},

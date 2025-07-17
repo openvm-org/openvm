@@ -4,15 +4,13 @@ use std::{
 };
 
 use openvm_bigint_transpiler::Rv32BaseAlu256Opcode;
-use openvm_circuit::arch::{
-    execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-    E2PreCompute, ExecuteFunc,
-    ExecutionError::InvalidInstruction,
-    InsExecutorE1, InsExecutorE2, MatrixRecordArena, NewVmChipWrapper, VmAirWrapper,
-    VmSegmentState,
+use openvm_circuit::{
+    arch::{
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2, VmSegmentState,
+    },
+    system::memory::online::GuestMemory,
 };
-use openvm_circuit_derive::{TraceFiller, TraceStep};
-use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -20,31 +18,18 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::{Rv32HeapAdapterAir, Rv32HeapAdapterStep};
-use openvm_rv32im_circuit::{BaseAluCoreAir, BaseAluStep};
+use openvm_rv32_adapters::Rv32HeapAdapterStep;
+use openvm_rv32im_circuit::BaseAluStep;
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{INT256_NUM_LIMBS, RV32_CELL_BITS};
+use crate::{Rv32BaseAlu256Step, INT256_NUM_LIMBS};
 
-pub type Rv32BaseAlu256Air = VmAirWrapper<
-    Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-    BaseAluCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
->;
-
-#[derive(TraceStep, TraceFiller)]
-pub struct Rv32BaseAlu256Step(BaseStep);
-
-type BaseStep = BaseAluStep<AdapterStep, INT256_NUM_LIMBS, RV32_CELL_BITS>;
 type AdapterStep = Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
 
 impl Rv32BaseAlu256Step {
-    pub fn new(
-        adapter: AdapterStep,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-        offset: usize,
-    ) -> Self {
-        Self(BaseAluStep::new(adapter, bitwise_lookup_chip, offset))
+    pub fn new(adapter: AdapterStep, offset: usize) -> Self {
+        Self(BaseAluStep::new(adapter, offset))
     }
 }
 

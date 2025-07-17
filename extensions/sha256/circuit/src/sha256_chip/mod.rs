@@ -5,8 +5,8 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        InsExecutorE1, Result, VmChipWrapper, VmStateMut,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        E2PreCompute, ExecutionError, InsExecutorE1, InsExecutorE2, Result, VmChipWrapper,
     },
     system::memory::online::GuestMemory,
 };
@@ -32,10 +32,6 @@ mod trace;
 
 pub use air::*;
 pub use columns::*;
-use openvm_circuit::arch::{
-    execution_mode::E2ExecutionCtx, ExecuteFunc, ExecutionError::InvalidInstruction, VmSegmentState,
-};
-use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 
 #[cfg(test)]
 mod tests;

@@ -7,18 +7,17 @@ use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::{
-        execution_mode::{metered::MeteredCtx, E1E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterExecutorE1, AdapterTraceFiller,
-        AdapterTraceStep, EmptyAdapterCoreLayout, InsExecutorE1, InstructionExecutor,
-        MinimalInstruction, RecordArena, Result, TraceFiller, VmAdapterInterface, VmCoreAir,
-        VmStateMut,
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, InsExecutorE1,
+        InsExecutorE2, InstructionExecutor, MinimalInstruction, RecordArena, Result, TraceFiller,
+        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory, POINTER_MAX_BITS,
     },
 };
-use openvm_circuit_derive::{TraceFiller, TraceStep};
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
@@ -29,16 +28,18 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::{Rv32IsEqualModAdapterAir, Rv32IsEqualModeAdapterStep};
+use openvm_rv32_adapters::Rv32IsEqualModAdapterStep;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+
+use crate::modular_chip::VmModularIsEqualStep;
 // Given two numbers b and c, we want to prove that a) b == c or b != c, depending on
 // result of cmp_result and b) b, c < N for some modulus N that is passed into the AIR
 // at runtime (i.e. when chip is instantiated).
@@ -456,29 +457,15 @@ where
     }
 }
 
-impl<F, A, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
-    InsExecutorE1<F> for ModularIsEqualStep<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterExecutorE1<
-            F,
-            ReadData: Into<[[u8; READ_LIMBS]; 2]>,
-            WriteData: From<[u8; WRITE_LIMBS]>,
-        >,
+impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
+    VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>
 {
     pub fn new(
-        adapter: Rv32IsEqualModeAdapterStep<2, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>,
-        modulus_limbs: [u8; TOTAL_READ_SIZE],
+        adapter: Rv32IsEqualModAdapterStep<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         offset: usize,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        modulus_limbs: [u8; TOTAL_LIMBS],
     ) -> Self {
-        Self(ModularIsEqualStep::new(
-            adapter,
-            modulus_limbs,
-            offset,
-            bitwise_lookup_chip,
-        ))
+        Self(ModularIsEqualStep::new(adapter, offset, modulus_limbs))
     }
 }
 
@@ -703,25 +690,3 @@ pub(super) fn run_unsigned_less_than<const NUM_LIMBS: usize>(
     }
     (false, NUM_LIMBS)
 }
-
-// Must have TOTAL_LIMBS = NUM_LANES * LANE_SIZE
-pub type ModularIsEqualAir<
-    const NUM_LANES: usize,
-    const LANE_SIZE: usize,
-    const TOTAL_LIMBS: usize,
-> = VmAirWrapper<
-    Rv32IsEqualModAdapterAir<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-    ModularIsEqualCoreAir<TOTAL_LIMBS, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
->;
-
-pub type ModularIsEqualChip<
-    F,
-    const NUM_LANES: usize,
-    const LANE_SIZE: usize,
-    const TOTAL_LIMBS: usize,
-> = NewVmChipWrapper<
-    F,
-    ModularIsEqualAir<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-    VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-    MatrixRecordArena<F>,
->;
