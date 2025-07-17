@@ -1,8 +1,6 @@
-#![allow(hidden_glob_reexports)]
-
-mod alu;
 mod auipc;
-mod beq;
+mod base_alu;
+mod branch_eq;
 mod branch_lt;
 mod cuda;
 mod divrem;
@@ -16,9 +14,9 @@ mod mul;
 mod mulh;
 mod shift;
 
-pub use alu::*;
 pub use auipc::*;
-pub use beq::*;
+pub use base_alu::*;
+pub use branch_eq::*;
 pub use branch_lt::*;
 pub use cuda::*;
 pub use divrem::*;
@@ -31,3 +29,5 @@ pub use loadstore::*;
 pub use mul::*;
 pub use mulh::*;
 pub use shift::*;
+
+mod extension;

@@ -34,7 +34,7 @@ fn range_tuple_test() {
         })
         .collect::<Vec<_>>();
 
-    let range_tuple_checker = Arc::new(RangeTupleCheckerChipGPU::new(bus));
+    let range_tuple_checker = Arc::new(RangeTupleCheckerChipGPU::new(bus.sizes));
     let dummy_chip = DummyInteractionChipGPU::new(range_tuple_checker.clone(), random_values);
 
     tester

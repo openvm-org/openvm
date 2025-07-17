@@ -7,8 +7,8 @@ use openvm_circuit::{
             execution::air::ExecutionDummyAir, program::air::ProgramDummyAir, TestChipHarness,
             EXECUTION_BUS, MEMORY_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS,
         },
-        ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor, MemoryConfig, Streams,
-        VmStateMut,
+        Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
+        InstructionExecutor, MatrixRecordArena, MemoryConfig, Streams, VmStateMut,
     },
     system::{
         memory::{
@@ -18,6 +18,7 @@ use openvm_circuit::{
         program::ProgramBus,
         SystemPort,
     },
+    utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
@@ -34,9 +35,11 @@ use openvm_circuit_primitives::{
     },
 };
 use openvm_stark_backend::{
+    config::Val,
     p3_field::{Field, FieldAlgebra},
     prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::AnyRap,
+    utils::disable_debug_builder,
     verifier::VerificationError,
     AirRef, Chip,
 };
@@ -44,6 +47,8 @@ use openvm_stark_sdk::{
     config::{setup_tracing_with_log_level, FriParameters},
     engine::{StarkFriEngine, VerificationDataWithFriParams},
 };
+use p3_air::BaseAir;
+use p3_field::PrimeField32;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use stark_backend_gpu::{
     engine::GpuBabyBearPoseidon2Engine,
@@ -68,6 +73,42 @@ pub mod memory;
 pub mod program;
 mod utils;
 pub use utils::*;
+
+pub struct GpuTestChipHarness<F, Executor, AIR, GpuChip, CpuChip> {
+    pub executor: Executor,
+    pub air: AIR,
+    pub gpu_chip: GpuChip,
+    pub cpu_chip: CpuChip,
+    pub dense_arena: DenseRecordArena,
+    pub matrix_arena: MatrixRecordArena<F>,
+}
+
+impl<F, Executor, AIR, GpuChip, CpuChip> GpuTestChipHarness<F, Executor, AIR, GpuChip, CpuChip>
+where
+    F: PrimeField32,
+    AIR: BaseAir<F>,
+{
+    pub fn with_capacity(
+        executor: Executor,
+        air: AIR,
+        gpu_chip: GpuChip,
+        cpu_chip: CpuChip,
+        height: usize,
+    ) -> Self {
+        let width = air.width();
+        let height = next_power_of_two_or_zero(height);
+        let dense_arena = DenseRecordArena::with_capacity(height, width);
+        let matrix_arena = MatrixRecordArena::with_capacity(height, width);
+        Self {
+            executor,
+            air,
+            gpu_chip,
+            cpu_chip,
+            dense_arena,
+            matrix_arena,
+        }
+    }
+}
 
 pub struct GpuChipTestBuilder {
     pub memory: DeviceMemoryTester,
@@ -482,6 +523,24 @@ impl GpuChipTester {
         self
     }
 
+    pub fn load_gpu_harness<E, A, GpuChip, CpuChip>(
+        self,
+        harness: GpuTestChipHarness<Val<SC>, E, A, GpuChip, CpuChip>,
+    ) -> Self
+    where
+        A: AnyRap<SC> + 'static,
+        CpuChip: Chip<MatrixRecordArena<Val<SC>>, CpuBackend<SC>>,
+        GpuChip: Chip<DenseRecordArena, GpuBackend>,
+    {
+        self.load_and_compare(
+            harness.air,
+            harness.gpu_chip,
+            harness.dense_arena,
+            harness.cpu_chip,
+            harness.matrix_arena,
+        )
+    }
+
     pub fn finalize(mut self) -> Self {
         // TODO[stephen]: memory chips tracegen
         if let Some(var_range_checker) = self.var_range_checker.clone() {
@@ -524,6 +583,7 @@ impl GpuChipTester {
     }
 
     pub fn simple_test_with_expected_error(self, expected_error: VerificationError) {
+        disable_debug_builder();
         let msg = format!(
             "Expected verification to fail with {:?}, but it didn't",
             &expected_error

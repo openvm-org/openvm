@@ -71,13 +71,14 @@ struct FieldExtension {
             COL_FILL_ZERO(row, FieldExtensionCoreCols, divisor_inv);
             COL_WRITE_ARRAY(row, FieldExtensionCoreCols, x, FieldExtOperations::multiply(y, z).el);
             break;
-        case FieldExtensionOpcode::BBE4DIV:
+        case FieldExtensionOpcode::BBE4DIV: {
             auto inv_z = FieldExtOperations::invert(z);
             COL_WRITE_ARRAY(row, FieldExtensionCoreCols, divisor_inv, inv_z.el);
             COL_WRITE_ARRAY(
                 row, FieldExtensionCoreCols, x, FieldExtOperations::multiply(y, inv_z).el
             );
             break;
+        }
         default:
             assert(false);
         }

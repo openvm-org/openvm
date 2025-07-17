@@ -31,9 +31,7 @@ __global__ void beq_tracegen(
     uint8_t *records,
     size_t num_records,
     uint32_t *rc_ptr,
-    uint32_t rc_bins,
-    uint32_t *bw_ptr,
-    uint32_t bw_bits
+    uint32_t rc_bins
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
@@ -58,9 +56,7 @@ extern "C" int _beq_tracegen(
     uint8_t *d_records,
     size_t record_len,
     uint32_t *d_rc,
-    uint32_t rc_bins,
-    uint32_t *d_bw,
-    uint32_t bw_bits
+    uint32_t rc_bins
 ) {
     assert((height & (height - 1)) == 0);
     assert(height * sizeof(BranchEqualRecord) >= record_len);
@@ -68,14 +64,7 @@ extern "C" int _beq_tracegen(
 
     auto [grid, block] = kernel_launch_params(height);
     beq_tracegen<<<grid, block>>>(
-        d_trace,
-        height,
-        d_records,
-        record_len / sizeof(BranchEqualRecord),
-        d_rc,
-        rc_bins,
-        d_bw,
-        bw_bits
+        d_trace, height, d_records, record_len / sizeof(BranchEqualRecord), d_rc, rc_bins
     );
     return cudaGetLastError();
 }

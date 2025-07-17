@@ -161,8 +161,8 @@ __global__ void mulh_tracegen(
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
     uint32_t bitwise_num_bits,
-    uint32_t range_tuple_size0,
-    uint32_t range_tuple_size1
+    uint32_t *d_range_tuple_checker_ptr,
+    uint2 range_tuple_checker_sizes
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
@@ -173,10 +173,9 @@ __global__ void mulh_tracegen(
         Rv32MultAdapter adapter(VariableRangeChecker(d_range_checker_ptr, range_checker_bins));
         adapter.fill_trace_row(row, rec.adapter);
 
-        uint32_t range_tuple_sizes[2] = {range_tuple_size0, range_tuple_size1};
         MulHCore core(
-            d_range_checker_ptr,
-            range_tuple_sizes,
+            d_range_tuple_checker_ptr,
+            (uint32_t[2]){range_tuple_checker_sizes.x, range_tuple_checker_sizes.y},
             BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits)
         );
         core.fill_trace_row(row.slice_from(COL_INDEX(MulHCols, core)), rec.core);
@@ -195,8 +194,8 @@ extern "C" int _mulh_tracegen(
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
     uint32_t bitwise_num_bits,
-    uint32_t range_tuple_size0,
-    uint32_t range_tuple_size1
+    uint32_t *d_range_tuple_checker_ptr,
+    uint2 range_tuple_checker_sizes
 ) {
     assert((height & (height - 1)) == 0);
     assert(height * sizeof(MulHRecord) >= record_len);
@@ -214,8 +213,8 @@ extern "C" int _mulh_tracegen(
         range_checker_bins,
         d_bitwise_lookup_ptr,
         bitwise_num_bits,
-        range_tuple_size0,
-        range_tuple_size1
+        d_range_tuple_checker_ptr,
+        range_tuple_checker_sizes
     );
 
     return cudaGetLastError();
