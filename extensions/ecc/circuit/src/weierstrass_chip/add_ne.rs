@@ -14,30 +14,31 @@ use openvm_circuit::{
         instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
         E2PreCompute, ExecutionBridge,
         ExecutionError::InvalidInstruction,
-        MatrixRecordArena, NewVmChipWrapper, Result, StepExecutorE1, StepExecutorE2,
-        VmSegmentState,
+        InsExecutorE1, InsExecutorE2, Result, VmSegmentState,
     },
-    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper, POINTER_MAX_BITS},
+    system::memory::{
+        offline_checker::MemoryBridge, online::GuestMemory, SharedMemoryHelper, POINTER_MAX_BITS,
+    },
 };
-use openvm_circuit_derive::{
-    InsExecutorE1, InsExecutorE2, InstructionExecutor, TraceFiller, TraceStep,
-};
+use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip,
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, Chip, ChipUsageGetter,
+    AlignedBytesBorrow,
 };
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_CELL_BITS,
 };
 use openvm_mod_circuit_builder::{
-    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir,
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionFiller,
 };
-use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
-use openvm_stark_backend::p3_field::{Field, PrimeField32};
+use openvm_rv32_adapters::{
+    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
+};
+use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{curves::get_curve_type_from_modulus, WeierstrassAir};
+use super::{curves::get_curve_type_from_modulus, WeierstrassAir, WeierstrassChip};
 use crate::weierstrass_chip::curves::{ec_add_ne, CurveType};
 
 // Assumes that (x1, y1), (x2, y2) both lie on the curve and are not the identity point.
@@ -68,66 +69,82 @@ pub fn ec_add_ne_expr(
 /// BLOCKS: how many blocks do we need to represent one input or output
 /// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
-#[derive(TraceStep, TraceFiller)]
+#[derive(Clone, InstructionExecutor)]
 pub struct EcAddNeStep<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     pub FieldExprVecHeapStep<2, BLOCKS, BLOCK_SIZE>,
 );
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1, InsExecutorE2)]
-pub struct EcAddNeChip<F: Field, const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    pub  NewVmChipWrapper<
-        F,
-        WeierstrassAir<2, BLOCKS, BLOCK_SIZE>,
-        EcAddNeStep<BLOCKS, BLOCK_SIZE>,
-        MatrixRecordArena<F>,
-    >,
-);
+fn gen_base_expr(
+    config: ExprBuilderConfig,
+    range_checker_bus: VariableRangeCheckerBus,
+) -> (FieldExpr, Vec<usize>) {
+    let expr = ec_add_ne_expr(config, range_checker_bus);
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
-    EcAddNeChip<F, BLOCKS, BLOCK_SIZE>
-{
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        execution_bridge: ExecutionBridge,
-        memory_bridge: MemoryBridge,
-        mem_helper: SharedMemoryHelper<F>,
-        pointer_max_bits: usize,
-        config: ExprBuilderConfig,
-        offset: usize,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-        range_checker: SharedVariableRangeCheckerChip,
-    ) -> Self {
-        let expr = ec_add_ne_expr(config, range_checker.bus());
+    let local_opcode_idx = vec![
+        Rv32WeierstrassOpcode::EC_ADD_NE as usize,
+        Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+    ];
 
-        let local_opcode_idx = vec![
-            Rv32WeierstrassOpcode::EC_ADD_NE as usize,
-            Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
-        ];
+    (expr, local_opcode_idx)
+}
 
-        let air = WeierstrassAir::new(
-            Rv32VecHeapAdapterAir::new(
-                execution_bridge,
-                memory_bridge,
-                bitwise_lookup_chip.bus(),
-                pointer_max_bits,
-            ),
-            FieldExpressionCoreAir::new(expr.clone(), offset, local_opcode_idx.clone(), vec![]),
-        );
+pub fn get_ec_addne_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    exec_bridge: ExecutionBridge,
+    mem_bridge: MemoryBridge,
+    config: ExprBuilderConfig,
+    range_checker_bus: VariableRangeCheckerBus,
+    bitwise_lookup_bus: BitwiseOperationLookupBus,
+    pointer_max_bits: usize,
+    offset: usize,
+) -> WeierstrassAir<2, BLOCKS, BLOCK_SIZE> {
+    let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus);
+    WeierstrassAir::new(
+        Rv32VecHeapAdapterAir::new(
+            exec_bridge,
+            mem_bridge,
+            bitwise_lookup_bus,
+            pointer_max_bits,
+        ),
+        FieldExpressionCoreAir::new(expr.clone(), offset, local_opcode_idx.clone(), vec![]),
+    )
+}
 
-        let step = EcAddNeStep(FieldExprVecHeapStep::new(
-            Rv32VecHeapAdapterStep::new(pointer_max_bits, bitwise_lookup_chip),
+pub fn get_ec_addne_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    config: ExprBuilderConfig,
+    range_checker_bus: VariableRangeCheckerBus,
+    pointer_max_bits: usize,
+    offset: usize,
+) -> EcAddNeStep<BLOCKS, BLOCK_SIZE> {
+    let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus);
+    EcAddNeStep(FieldExprVecHeapStep::new(
+        Rv32VecHeapAdapterStep::new(pointer_max_bits),
+        expr,
+        offset,
+        local_opcode_idx,
+        vec![],
+        "EcAddNe",
+    ))
+}
+
+pub fn get_ec_addne_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    config: ExprBuilderConfig,
+    mem_helper: SharedMemoryHelper<F>,
+    range_checker: SharedVariableRangeCheckerChip,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    pointer_max_bits: usize,
+) -> WeierstrassChip<F, 2, BLOCKS, BLOCK_SIZE> {
+    let (expr, local_opcode_idx) = gen_base_expr(config, range_checker.bus());
+    WeierstrassChip::new(
+        FieldExpressionFiller::new(
+            Rv32VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
             expr,
-            offset,
             local_opcode_idx,
             vec![],
             range_checker,
-            "EcAddNe",
             false,
-        ));
-        Self(NewVmChipWrapper::<_, _, _, MatrixRecordArena<_>>::new(
-            air, step, mem_helper,
-        ))
-    }
+        ),
+        mem_helper,
+    )
 }
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -179,7 +196,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeStep<BLOCKS, BLOCK
     }
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> StepExecutorE1<F>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE1<F>
     for EcAddNeStep<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
@@ -228,7 +245,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> StepExecutor
     }
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> StepExecutorE2<F>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE2<F>
     for EcAddNeStep<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
@@ -288,7 +305,7 @@ unsafe fn execute_e1_impl<
     const CURVE_TYPE: u8,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &EcAddNePreCompute = pre_compute.borrow();
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE>(pre_compute, vm_state);
@@ -301,7 +318,7 @@ unsafe fn execute_e1_setup_impl<
     const BLOCK_SIZE: usize,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &EcAddNePreCompute = pre_compute.borrow();
 
@@ -316,7 +333,7 @@ unsafe fn execute_e2_impl<
     const CURVE_TYPE: u8,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<EcAddNePreCompute> = pre_compute.borrow();
     vm_state
@@ -332,7 +349,7 @@ unsafe fn execute_e2_setup_impl<
     const BLOCK_SIZE: usize,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<EcAddNePreCompute> = pre_compute.borrow();
     vm_state
@@ -349,7 +366,7 @@ unsafe fn execute_e12_impl<
     const CURVE_TYPE: u8,
 >(
     pre_compute: &EcAddNePreCompute,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     // Read register values
     let rs_vals = pre_compute
@@ -390,7 +407,7 @@ unsafe fn execute_e12_setup_impl<
     const BLOCK_SIZE: usize,
 >(
     pre_compute: &EcAddNePreCompute,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     // Read the first input (which should be the prime)
     let rs_vals = pre_compute

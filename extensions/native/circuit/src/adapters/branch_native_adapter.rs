@@ -134,10 +134,13 @@ pub struct BranchNativeAdapterRecord<F> {
     pub reads_aux: [MemoryReadAuxRecord; 2],
 }
 
-#[derive(derive_new::new)]
+#[derive(derive_new::new, Clone, Copy)]
 pub struct BranchNativeAdapterStep;
 
-impl<F, CTX> AdapterTraceStep<F, CTX> for BranchNativeAdapterStep
+#[derive(derive_new::new)]
+pub struct BranchNativeAdapterFiller;
+
+impl<F> AdapterTraceStep<F> for BranchNativeAdapterStep
 where
     F: PrimeField32,
 {
@@ -147,7 +150,7 @@ where
     type RecordMut<'a> = &'a mut BranchNativeAdapterRecord<F>;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
@@ -155,7 +158,7 @@ where
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -181,7 +184,7 @@ where
     #[inline(always)]
     fn write(
         &self,
-        _memory: &mut TracingMemory<F>,
+        _memory: &mut TracingMemory,
         _instruction: &Instruction<F>,
         _data: Self::WriteData,
         _record: &mut Self::RecordMut<'_>,
@@ -190,7 +193,9 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for BranchNativeAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for BranchNativeAdapterFiller {
+    const WIDTH: usize = size_of::<BranchNativeAdapterCols<u8>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &BranchNativeAdapterRecord<F> =

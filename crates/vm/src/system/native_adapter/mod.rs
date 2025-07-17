@@ -169,12 +169,20 @@ pub struct NativeAdapterRecord<F, const R: usize, const W: usize> {
 /// R reads(R<=2), W writes(W<=1).
 /// Operands: b for the first read, c for the second read, a for the first write.
 /// If an operand is not used, its address space and pointer should be all 0.
-#[derive(Debug, derive_new::new)]
+#[derive(Clone, Debug)]
 pub struct NativeAdapterStep<F, const R: usize, const W: usize> {
     _phantom: PhantomData<F>,
 }
 
-impl<F, CTX, const R: usize, const W: usize> AdapterTraceStep<F, CTX> for NativeAdapterStep<F, R, W>
+impl<F, const R: usize, const W: usize> Default for NativeAdapterStep<F, R, W> {
+    fn default() -> Self {
+        Self {
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<F, const R: usize, const W: usize> AdapterTraceStep<F> for NativeAdapterStep<F, R, W>
 where
     F: PrimeField32,
 {
@@ -184,7 +192,7 @@ where
     type RecordMut<'a> = &'a mut NativeAdapterRecord<F, R, W>;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
@@ -192,7 +200,7 @@ where
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -221,7 +229,7 @@ where
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
@@ -243,9 +251,11 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX, const R: usize, const W: usize> AdapterTraceFiller<F, CTX>
+impl<F: PrimeField32, const R: usize, const W: usize> AdapterTraceFiller<F>
     for NativeAdapterStep<F, R, W>
 {
+    const WIDTH: usize = size_of::<NativeAdapterCols<u8, R, W>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &NativeAdapterRecord<F, R, W> =

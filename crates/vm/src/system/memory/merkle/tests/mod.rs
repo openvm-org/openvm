@@ -9,7 +9,7 @@ use openvm_stark_backend::{
     interaction::{PermutationCheckBus, PermutationInteractionType},
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
-    prover::types::AirProofInput,
+    prover::types::AirProvingContext,
     Chip, ChipUsageGetter,
 };
 use openvm_stark_sdk::{
@@ -22,17 +22,16 @@ use rand::RngCore;
 use super::memory_to_partition;
 use crate::{
     arch::{
-        ADDR_SPACE_OFFSET,
         testing::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
+        ADDR_SPACE_OFFSET,
     },
     system::memory::{
         merkle::{
             columns::MemoryMerkleCols, tests::util::HashTestChip, MemoryDimensions,
             MemoryMerkleChip,
         },
-        AddressMap,
         tree::MemoryNode,
-        Equipartition, MemoryImage,
+        AddressMap, Equipartition, MemoryImage,
     },
 };
 
@@ -166,7 +165,7 @@ fn test<const CHUNK: usize>(
         dummy_interaction_trace_rows,
         dummy_interaction_air.field_width() + 1,
     );
-    let dummy_interaction_api = AirProofInput::simple_no_pis(dummy_interaction_trace);
+    let dummy_interaction_api = AirProvingContext::simple_no_pis(dummy_interaction_trace);
 
     BabyBearPoseidon2Engine::run_test_fast(
         vec![
@@ -266,9 +265,10 @@ fn expand_test_no_accesses() {
     };
     let mut hash_test_chip = HashTestChip::new();
 
-    let memory = AddressMap::new(
-        vec![1 << memory_dimensions.address_height; 1 + (1 << memory_dimensions.addr_space_height)],
-    );
+    let memory = AddressMap::new(vec![
+        1 << memory_dimensions.address_height;
+        1 + (1 << memory_dimensions.addr_space_height)
+    ]);
     let tree = MemoryNode::<DEFAULT_CHUNK, _>::tree_from_memory(
         memory_dimensions,
         &memory,
@@ -303,9 +303,10 @@ fn expand_test_negative() {
 
     let mut hash_test_chip = HashTestChip::new();
 
-    let memory = AddressMap::new(
-        vec![1 << memory_dimensions.address_height; 1 + (1 << memory_dimensions.addr_space_height)],
-    );
+    let memory = AddressMap::new(vec![
+        1 << memory_dimensions.address_height;
+        1 + (1 << memory_dimensions.addr_space_height)
+    ]);
     let tree = MemoryNode::<DEFAULT_CHUNK, _>::tree_from_memory(
         memory_dimensions,
         &memory,

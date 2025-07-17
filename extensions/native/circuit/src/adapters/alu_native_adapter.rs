@@ -142,17 +142,20 @@ pub struct AluNativeAdapterRecord<F> {
     pub write_aux: MemoryWriteAuxRecord<F, 1>,
 }
 
-#[derive(derive_new::new)]
+#[derive(derive_new::new, Clone, Copy)]
 pub struct AluNativeAdapterStep;
 
-impl<F: PrimeField32, CTX> AdapterTraceStep<F, CTX> for AluNativeAdapterStep {
+#[derive(derive_new::new)]
+pub struct AluNativeAdapterFiller;
+
+impl<F: PrimeField32> AdapterTraceStep<F> for AluNativeAdapterStep {
     const WIDTH: usize = size_of::<AluNativeAdapterCols<u8>>();
     type ReadData = [F; 2];
     type WriteData = [F; 1];
     type RecordMut<'a> = &'a mut AluNativeAdapterRecord<F>;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
@@ -160,7 +163,7 @@ impl<F: PrimeField32, CTX> AdapterTraceStep<F, CTX> for AluNativeAdapterStep {
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -186,7 +189,7 @@ impl<F: PrimeField32, CTX> AdapterTraceStep<F, CTX> for AluNativeAdapterStep {
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
@@ -204,7 +207,9 @@ impl<F: PrimeField32, CTX> AdapterTraceStep<F, CTX> for AluNativeAdapterStep {
     }
 }
 
-impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for AluNativeAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for AluNativeAdapterFiller {
+    const WIDTH: usize = size_of::<AluNativeAdapterCols<u8>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &AluNativeAdapterRecord<F> =

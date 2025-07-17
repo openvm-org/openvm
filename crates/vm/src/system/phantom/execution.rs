@@ -13,7 +13,7 @@ use crate::{
         E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2,
         PhantomSubExecutor, Streams, VmSegmentState,
     },
-    system::{memory::online::GuestMemory, phantom::PhantomChip},
+    system::{memory::online::GuestMemory, phantom::PhantomExecutor},
 };
 
 #[derive(Clone, AlignedBytesBorrow)]
@@ -28,10 +28,10 @@ pub(super) struct PhantomOperands {
 #[repr(C)]
 struct PhantomPreCompute<F> {
     operands: PhantomOperands,
-    sub_executor: *const Box<dyn PhantomSubExecutor<F>>,
+    sub_executor: *const dyn PhantomSubExecutor<F>,
 }
 
-impl<F> InsExecutorE1<F> for PhantomChip<F>
+impl<F> InsExecutorE1<F> for PhantomExecutor<F>
 where
     F: PrimeField32,
 {
@@ -45,7 +45,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> crate::arch::Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E1ExecutionCtx,
     {
@@ -53,8 +53,6 @@ where
         self.pre_compute_impl(inst, data);
         Ok(execute_e1_impl)
     }
-
-    fn set_trace_height(&mut self, _height: usize) {}
 }
 
 pub(super) struct PhantomStateMut<'a, F> {
@@ -67,7 +65,7 @@ pub(super) struct PhantomStateMut<'a, F> {
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &PhantomPreCompute<F>,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let sub_executor = &*pre_compute.sub_executor;
     if let Err(e) = execute_impl(
@@ -78,7 +76,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
             rng: &mut vm_state.rng,
         },
         &pre_compute.operands,
-        sub_executor.as_ref(),
+        sub_executor,
     ) {
         vm_state.exit_code = Err(e);
         return;
@@ -90,7 +88,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &PhantomPreCompute<F> = pre_compute.borrow();
     execute_e12_impl(pre_compute, vm_state);
@@ -99,7 +97,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<PhantomPreCompute<F>> = pre_compute.borrow();
     vm_state
@@ -146,7 +144,7 @@ where
     Ok(())
 }
 
-impl<F> PhantomChip<F>
+impl<F> PhantomExecutor<F>
 where
     F: PrimeField32,
 {
@@ -162,12 +160,13 @@ where
             sub_executor: self
                 .phantom_executors
                 .get(&PhantomDiscriminant(c as u16))
-                .unwrap(),
+                .unwrap_or_else(|| panic!("Phantom executor not found for insn {inst:?}"))
+                .as_ref(),
         };
     }
 }
 
-impl<F> InsExecutorE2<F> for PhantomChip<F>
+impl<F> InsExecutorE2<F> for PhantomExecutor<F>
 where
     F: PrimeField32,
 {
@@ -181,7 +180,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> crate::arch::Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx,
     {

@@ -1,15 +1,13 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_bigint_transpiler::Rv32BranchLessThan256Opcode;
-use openvm_circuit::arch::{
-    execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-    E2PreCompute, ExecuteFunc,
-    ExecutionError::InvalidInstruction,
-    MatrixRecordArena, NewVmChipWrapper, StepExecutorE1, StepExecutorE2, VmAirWrapper,
-    VmSegmentState,
+use openvm_circuit::{
+    arch::{
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2, VmSegmentState,
+    },
+    system::memory::online::GuestMemory,
 };
-use openvm_circuit_derive::{TraceFiller, TraceStep};
-use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -17,40 +15,21 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::{Rv32HeapBranchAdapterAir, Rv32HeapBranchAdapterStep};
-use openvm_rv32im_circuit::{BranchLessThanCoreAir, BranchLessThanStep};
+use openvm_rv32_adapters::Rv32HeapBranchAdapterStep;
+use openvm_rv32im_circuit::BranchLessThanStep;
 use openvm_rv32im_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{i256_lt, u256_lt},
-    INT256_NUM_LIMBS, RV32_CELL_BITS,
+    Rv32BranchLessThan256Step, INT256_NUM_LIMBS,
 };
 
-/// BranchLessThan256
-pub type Rv32BranchLessThan256Air = VmAirWrapper<
-    Rv32HeapBranchAdapterAir<2, INT256_NUM_LIMBS>,
-    BranchLessThanCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
->;
-#[derive(TraceStep, TraceFiller)]
-pub struct Rv32BranchLessThan256Step(BaseStep);
-pub type Rv32BranchLessThan256Chip<F> =
-    NewVmChipWrapper<F, Rv32BranchLessThan256Air, Rv32BranchLessThan256Step, MatrixRecordArena<F>>;
-
-type BaseStep = BranchLessThanStep<
-    Rv32HeapBranchAdapterStep<2, INT256_NUM_LIMBS>,
-    INT256_NUM_LIMBS,
-    RV32_CELL_BITS,
->;
 type AdapterStep = Rv32HeapBranchAdapterStep<2, INT256_NUM_LIMBS>;
 
 impl Rv32BranchLessThan256Step {
-    pub fn new(
-        adapter: AdapterStep,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-        offset: usize,
-    ) -> Self {
-        Self(BaseStep::new(adapter, bitwise_lookup_chip, offset))
+    pub fn new(adapter: AdapterStep, offset: usize) -> Self {
+        Self(BranchLessThanStep::new(adapter, offset))
     }
 }
 
@@ -62,7 +41,7 @@ struct BranchLtPreCompute {
     b: u8,
 }
 
-impl<F: PrimeField32> StepExecutorE1<F> for Rv32BranchLessThan256Step {
+impl<F: PrimeField32> InsExecutorE1<F> for Rv32BranchLessThan256Step {
     fn pre_compute_size(&self) -> usize {
         size_of::<BranchLtPreCompute>()
     }
@@ -88,7 +67,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Rv32BranchLessThan256Step {
     }
 }
 
-impl<F: PrimeField32> StepExecutorE2<F> for Rv32BranchLessThan256Step {
+impl<F: PrimeField32> InsExecutorE2<F> for Rv32BranchLessThan256Step {
     fn e2_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BranchLtPreCompute>>()
     }
@@ -119,7 +98,7 @@ impl<F: PrimeField32> StepExecutorE2<F> for Rv32BranchLessThan256Step {
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: BranchLessThanOp>(
     pre_compute: &BranchLtPreCompute,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let rs1_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
     let rs2_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
@@ -136,7 +115,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: BranchLessT
 
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: BranchLessThanOp>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &BranchLtPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, OP>(pre_compute, vm_state);
@@ -144,7 +123,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: BranchLessTh
 
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, OP: BranchLessThanOp>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<BranchLtPreCompute> = pre_compute.borrow();
     vm_state
@@ -177,7 +156,7 @@ impl Rv32BranchLessThan256Step {
         };
         let e_u32 = e.as_canonical_u32();
         if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
-            return Err(InvalidInstruction(pc));
+            return Err(ExecutionError::InvalidInstruction(pc));
         }
         *data = BranchLtPreCompute {
             imm,

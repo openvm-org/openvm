@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use derivative::Derivative;
-use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
+// use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
-    arch::{InsExecutorE1, VirtualMachine, VmComplexTraceHeights, VmConfig},
+    arch::{AirInventoryError, SystemConfig, VirtualMachine, VmCircuitConfig, VmConfig},
     system::{memory::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
 };
 use openvm_continuations::verifier::{
@@ -13,6 +13,7 @@ use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_stark_backend::{
     config::Val,
+    engine::StarkEngine,
     p3_field::{FieldExtensionAlgebra, PrimeField32, TwoAdicField},
 };
 use openvm_stark_sdk::{
@@ -50,7 +51,7 @@ use crate::{
 };
 
 pub mod asm;
-pub(crate) mod dummy;
+// pub(crate) mod dummy;
 pub mod perm;
 #[cfg(feature = "evm-prove")]
 pub mod static_verifier;
@@ -69,12 +70,12 @@ pub struct AppVerifyingKey {
     pub memory_dimensions: MemoryDimensions,
 }
 
-#[cfg(feature = "evm-prove")]
-#[derive(Clone, Serialize, Deserialize)]
-pub struct AggProvingKey {
-    pub agg_stark_pk: AggStarkProvingKey,
-    pub halo2_pk: Halo2ProvingKey,
-}
+// #[cfg(feature = "evm-prove")]
+// #[derive(Clone, Serialize, Deserialize)]
+// pub struct AggProvingKey {
+//     pub agg_stark_pk: AggStarkProvingKey,
+//     pub halo2_pk: Halo2ProvingKey,
+// }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AggStarkProvingKey {
@@ -97,16 +98,14 @@ pub struct Halo2ProvingKey {
     pub profiling: bool,
 }
 
-impl<VC: VmConfig<F>> AppProvingKey<VC>
+impl<VC> AppProvingKey<VC>
 where
-    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
-    VC::Periphery: Chip<SC>,
+    VC: Clone + VmCircuitConfig<SC> + AsRef<SystemConfig>,
 {
-    pub fn keygen(config: AppConfig<VC>) -> Self {
+    pub fn keygen(config: AppConfig<VC>) -> Result<Self, AirInventoryError> {
         let app_engine = BabyBearPoseidon2Engine::new(config.app_fri_params.fri_params);
         let app_vm_pk = {
-            let vm = VirtualMachine::new(app_engine, config.app_vm_config.clone());
-            let vm_pk = vm.keygen();
+            let vm_pk = config.app_vm_config.keygen(app_engine.config())?;
             assert!(
                 vm_pk.max_constraint_degree
                     <= config.app_fri_params.fri_params.max_constraint_degree()
@@ -126,24 +125,24 @@ where
             let leaf_engine = BabyBearPoseidon2Engine::new(config.leaf_fri_params.fri_params);
             let leaf_program = LeafVmVerifierConfig {
                 app_fri_params: config.app_fri_params.fri_params,
-                app_system_config: config.app_vm_config.system().clone(),
+                app_system_config: config.app_vm_config.as_ref().clone(),
                 compiler_options: config.compiler_options,
             }
             .build_program(&app_vm_pk.vm_pk.get_vk());
             Arc::new(VmCommittedExe::commit(
                 leaf_program.into(),
-                leaf_engine.config.pcs(),
+                leaf_engine.config().pcs(),
             ))
         };
-        Self {
+        Ok(Self {
             leaf_committed_exe,
             leaf_fri_params: config.leaf_fri_params.fri_params,
             app_vm_pk: Arc::new(app_vm_pk),
-        }
+        })
     }
 
     pub fn num_public_values(&self) -> usize {
-        self.app_vm_pk.vm_config.system().num_public_values
+        self.app_vm_pk.vm_config.as_ref().num_public_values
     }
 
     pub fn get_app_vk(&self) -> AppVerifyingKey {
@@ -153,7 +152,7 @@ where
             memory_dimensions: self
                 .app_vm_pk
                 .vm_config
-                .system()
+                .as_ref()
                 .memory_config
                 .memory_dimensions(),
         }
@@ -255,6 +254,7 @@ fn check_recursive_verifier_size<SC: StarkGenericConfig>(
     }
 }
 
+/*
 impl AggStarkProvingKey {
     pub fn keygen(config: AggStarkConfig) -> Self {
         tracing::info_span!("agg_stark_keygen", group = "agg_stark_keygen")
@@ -387,6 +387,7 @@ impl AggStarkProvingKey {
             - (2 * DIGEST_SIZE)
     }
 }
+*/
 
 /// Proving key for the root verifier.
 /// Properties:
@@ -404,10 +405,12 @@ pub struct RootVerifierProvingKey {
     pub root_committed_exe: Arc<VmCommittedExe<RootSC>>,
     /// The constant trace heights, ordered by AIR ID.
     pub air_heights: Vec<usize>,
-    /// The constant trace heights in a semantic way for VM.
-    pub vm_heights: VmComplexTraceHeights,
+    // TODO
+    // The constant trace heights in a semantic way for VM.
+    // pub vm_heights: VmComplexTraceHeights,
 }
 
+/*
 impl RootVerifierProvingKey {
     pub fn air_id_permutation(&self) -> AirIdPermutation {
         AirIdPermutation::compute(&self.air_heights)
@@ -456,17 +459,18 @@ impl AggProvingKey {
         }
     }
 }
+*/
 
 pub fn leaf_keygen(
     fri_params: FriParameters,
     leaf_vm_config: NativeConfig,
-) -> Arc<VmProvingKey<SC, NativeConfig>> {
+) -> Result<Arc<VmProvingKey<SC, NativeConfig>>, AirInventoryError> {
     let leaf_engine = BabyBearPoseidon2Engine::new(fri_params);
     let leaf_vm_pk = info_span!("keygen", group = "leaf")
-        .in_scope(|| VirtualMachine::new(leaf_engine, leaf_vm_config.clone()).keygen());
-    Arc::new(VmProvingKey {
+        .in_scope(|| leaf_vm_config.keygen(leaf_engine.config()))?;
+    Ok(Arc::new(VmProvingKey {
         fri_params,
         vm_config: leaf_vm_config,
         vm_pk: leaf_vm_pk,
-    })
+    }))
 }

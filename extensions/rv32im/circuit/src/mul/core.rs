@@ -7,12 +7,14 @@ use openvm_circuit::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc,
-        ExecutionError::InvalidInstruction,
-        MinimalInstruction, RecordArena, Result, StepExecutorE1, StepExecutorE2, TraceFiller,
-        TraceStep, VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
+        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, InsExecutorE1,
+        InsExecutorE2, InstructionExecutor, MinimalInstruction, RecordArena, Result, TraceFiller,
+        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::{
     range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
@@ -129,15 +131,21 @@ pub struct MultiplicationCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usi
     pub c: [u8; NUM_LIMBS],
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct MultiplicationStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
+    pub offset: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct MultiplicationFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
     pub range_tuple_chip: SharedRangeTupleCheckerChip<2>,
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    MultiplicationStep<A, NUM_LIMBS, LIMB_BITS>
+    MultiplicationFiller<A, NUM_LIMBS, LIMB_BITS>
 {
     pub fn new(
         adapter: A,
@@ -166,44 +174,41 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F, CTX>
+impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> InstructionExecutor<F, RA>
     for MultiplicationStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
+        + AdapterTraceStep<
             F,
-            CTX,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
         >,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (
+            A::RecordMut<'buf>,
+            &'buf mut MultiplicationCoreRecord<NUM_LIMBS, LIMB_BITS>,
+        ),
+    >,
 {
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (
-        A::RecordMut<'a>,
-        &'a mut MultiplicationCoreRecord<NUM_LIMBS, LIMB_BITS>,
-    );
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", MulOpcode::from_usize(opcode - self.offset))
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let Instruction { opcode, .. } = instruction;
 
         debug_assert_eq!(
             MulOpcode::from_usize(opcode.local_opcode_idx(self.offset)),
             MulOpcode::MUL
         );
-        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -224,11 +229,11 @@ where
         Ok(())
     }
 }
-impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F, CTX>
-    for MultiplicationStep<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
+    for MultiplicationFiller<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
@@ -261,7 +266,7 @@ struct MultiPreCompute {
     c: u8,
 }
 
-impl<F, A, const LIMB_BITS: usize> StepExecutorE1<F>
+impl<F, A, const LIMB_BITS: usize> InsExecutorE1<F>
     for MultiplicationStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
@@ -284,7 +289,7 @@ where
     }
 }
 
-impl<F, A, const LIMB_BITS: usize> StepExecutorE2<F>
+impl<F, A, const LIMB_BITS: usize> InsExecutorE2<F>
     for MultiplicationStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
@@ -313,7 +318,7 @@ where
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &MultiPreCompute,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
         vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
@@ -330,7 +335,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &MultiPreCompute = pre_compute.borrow();
     execute_e12_impl(pre_compute, vm_state);
@@ -338,7 +343,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<MultiPreCompute> = pre_compute.borrow();
     vm_state
@@ -359,7 +364,7 @@ impl<A, const LIMB_BITS: usize> MultiplicationStep<A, { RV32_REGISTER_NUM_LIMBS 
             MulOpcode::MUL
         );
         if inst.d.as_canonical_u32() != RV32_REGISTER_AS {
-            return Err(InvalidInstruction(pc));
+            return Err(ExecutionError::InvalidInstruction(pc));
         }
 
         *data = MultiPreCompute {

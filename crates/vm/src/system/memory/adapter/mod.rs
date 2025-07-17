@@ -8,28 +8,28 @@ use std::{
 pub use air::*;
 pub use columns::*;
 use enum_dispatch::enum_dispatch;
+use getset::Setters;
 use openvm_circuit_primitives::{
     is_less_than::IsLtSubAir, utils::next_power_of_two_or_zero,
-    var_range::SharedVariableRangeCheckerChip, TraceSubRowGenerator,
+    var_range::SharedVariableRangeCheckerChip, ChipUsageGetter, TraceSubRowGenerator,
 };
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::NATIVE_AS;
 use openvm_stark_backend::{
-    config::{Domain, StarkGenericConfig, Val},
+    config::{Domain, StarkGenericConfig},
     p3_air::BaseAir,
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
-    prover::types::AirProofInput,
-    AirRef, Chip, ChipUsageGetter,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
+    ChipUsageGetter,
 };
 
 use crate::{
-    arch::{CustomBorrow, DenseRecordArena, RecordArena, SizedRecord},
+    arch::{CustomBorrow, DenseRecordArena, SizedRecord},
     system::memory::{
         adapter::records::{
-            size_by_layout, AccessLayout, AccessRecordHeader, AccessRecordMut,
+            arena_size_bound, AccessLayout, AccessRecordHeader, AccessRecordMut,
             MERGE_AND_NOT_SPLIT_FLAG,
         },
         offline_checker::MemoryBus,
@@ -43,9 +43,11 @@ pub mod records;
 #[cfg(test)]
 mod tests;
 
+#[derive(Setters)]
 pub struct AccessAdapterInventory<F> {
     chips: Vec<GenericAccessAdapterChip<F>>,
-    pub arena: DenseRecordArena,
+    #[getset(set = "pub")]
+    arena: DenseRecordArena,
     air_names: Vec<String>,
 }
 
@@ -74,7 +76,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         let air_names = (0..chips.len()).map(|i| air_name(1 << (i + 1))).collect();
         Self {
             chips,
-            arena: DenseRecordArena::with_capacity(0),
+            arena: DenseRecordArena::with_byte_capacity(0),
             air_names,
         }
     }
@@ -83,7 +85,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         self.chips.len()
     }
 
-    pub fn set_override_trace_heights(&mut self, overridden_heights: Vec<usize>) {
+    pub(super) fn set_override_trace_heights(&mut self, overridden_heights: Vec<usize>) {
         self.set_arena_from_trace_heights(
             &overridden_heights
                 .iter()
@@ -95,59 +97,34 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         }
     }
 
-    pub fn set_arena_from_trace_heights(&mut self, trace_heights: &[u32]) {
+    pub(super) fn set_arena_from_trace_heights(&mut self, trace_heights: &[u32]) {
         assert_eq!(trace_heights.len(), self.chips.len());
-        // At the very worst, each row in `Adapter<N>`
-        // corresponds to a unique record of `block_size` being `2 * N`,
-        // and its `lowest_block_size` is at least 1 and `type_size` is at most 4.
-        let size_bound = trace_heights
-            .iter()
-            .enumerate()
-            .map(|(i, &h)| {
-                size_by_layout(&AccessLayout {
-                    block_size: 1 << (i + 1),
-                    lowest_block_size: 1,
-                    type_size: 4,
-                }) * h as usize
-            })
-            .sum::<usize>();
-        assert!(self
-            .chips
-            .iter()
-            .all(|chip| chip.overridden_trace_height().is_none()));
+        let size_bound = arena_size_bound(trace_heights);
         tracing::debug!(
             "Allocating {} bytes for memory adapters arena from heights {:?}",
             size_bound,
             trace_heights
         );
-        self.arena.set_capacity(size_bound);
+        self.arena.set_byte_capacity(size_bound);
     }
 
-    pub fn get_heights(&self) -> Vec<usize> {
+    fn get_heights(&self) -> Vec<usize> {
         self.chips
             .iter()
             .map(|chip| chip.current_trace_height())
             .collect()
     }
-    #[allow(dead_code)]
     pub fn get_widths(&self) -> Vec<usize> {
         self.chips
             .iter()
             .map(|chip: &GenericAccessAdapterChip<F>| chip.trace_width())
             .collect()
     }
-    pub fn get_cells(&self) -> Vec<usize> {
+    pub(crate) fn get_cells(&self) -> Vec<usize> {
         self.chips
             .iter()
             .map(|chip| chip.current_trace_cells())
             .collect()
-    }
-    pub fn airs<SC: StarkGenericConfig>(&self) -> Vec<AirRef<SC>>
-    where
-        F: PrimeField32,
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
-        self.chips.iter().map(|chip| chip.air()).collect()
     }
     pub fn air_names(&self) -> Vec<String> {
         self.air_names.clone()
@@ -202,7 +179,9 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         }
     }
 
-    pub fn generate_air_proof_inputs<SC: StarkGenericConfig>(mut self) -> Vec<AirProofInput<SC>>
+    pub fn generate_proving_ctx<SC: StarkGenericConfig>(
+        &mut self,
+    ) -> Vec<AirProvingContext<CpuBackend<SC>>>
     where
         F: PrimeField32,
         Domain<SC>: PolynomialSpace<Val = F>,
@@ -288,7 +267,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         }
         traces
             .into_iter()
-            .map(|trace| AirProofInput::simple_no_pis(trace))
+            .map(|trace| AirProvingContext::simple_no_pis(Arc::new(trace)))
             .collect()
     }
 
@@ -311,10 +290,6 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
             None
         }
     }
-
-    pub(crate) fn alloc_record(&mut self, layout: AccessLayout) -> AccessRecordMut {
-        self.arena.alloc(layout)
-    }
 }
 
 #[enum_dispatch]
@@ -335,9 +310,8 @@ pub(crate) trait GenericAccessAdapterChipTrait<F> {
         F: PrimeField32;
 }
 
-#[derive(Chip, ChipUsageGetter)]
+#[derive(ChipUsageGetter)]
 #[enum_dispatch(GenericAccessAdapterChipTrait<F>)]
-#[chip(where = "F: PrimeField32")]
 enum GenericAccessAdapterChip<F> {
     N2(AccessAdapterChip<F, 2>),
     N4(AccessAdapterChip<F, 4>),
@@ -441,19 +415,6 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
             (self.range_checker.as_ref(), left_timestamp, right_timestamp),
             (&mut row.lt_aux, &mut row.is_right_larger),
         );
-    }
-}
-
-impl<SC: StarkGenericConfig, const N: usize> Chip<SC> for AccessAdapterChip<Val<SC>, N>
-where
-    Val<SC>: PrimeField32,
-{
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        unreachable!("AccessAdapterInventory should take care of adapters' trace generation")
     }
 }
 

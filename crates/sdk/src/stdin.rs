@@ -4,18 +4,16 @@ use std::{
 };
 
 use openvm_circuit::arch::Streams;
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::p3_field::Field;
 use serde::{Deserialize, Serialize};
 
-use crate::F;
-
 #[derive(Clone, Default, Serialize, Deserialize)]
-pub struct StdIn {
+pub struct StdIn<F = crate::F> {
     pub buffer: VecDeque<Vec<F>>,
     pub kv_store: HashMap<Vec<u8>, Vec<u8>>,
 }
 
-impl StdIn {
+impl<F: Field> StdIn<F> {
     pub fn from_bytes(data: &[u8]) -> Self {
         let mut ret = Self::default();
         ret.write_bytes(data);
@@ -45,8 +43,8 @@ impl StdIn {
     }
 }
 
-impl From<StdIn> for Streams<F> {
-    fn from(mut std_in: StdIn) -> Self {
+impl<F: Field> From<StdIn<F>> for Streams<F> {
+    fn from(mut std_in: StdIn<F>) -> Self {
         let mut data = Vec::<Vec<F>>::new();
         while let Some(input) = std_in.read() {
             data.push(input);
@@ -57,9 +55,9 @@ impl From<StdIn> for Streams<F> {
     }
 }
 
-impl From<Vec<Vec<F>>> for StdIn {
+impl<F: Field> From<Vec<Vec<F>>> for StdIn<F> {
     fn from(inputs: Vec<Vec<F>>) -> Self {
-        let mut ret = StdIn::default();
+        let mut ret = StdIn::<F>::default();
         for input in inputs {
             ret.write_field(&input);
         }

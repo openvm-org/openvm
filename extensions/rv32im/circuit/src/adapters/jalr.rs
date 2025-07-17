@@ -156,10 +156,13 @@ pub struct Rv32JalrAdapterRecord {
 }
 
 // This adapter reads from [b:4]_d (rs1) and writes to [a:4]_d (rd)
-#[derive(derive_new::new)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct Rv32JalrAdapterStep;
 
-impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32JalrAdapterStep
+#[derive(Clone, Copy, derive_new::new)]
+pub struct Rv32JalrAdapterFiller;
+
+impl<F> AdapterTraceStep<F> for Rv32JalrAdapterStep
 where
     F: PrimeField32,
 {
@@ -169,7 +172,7 @@ where
     type RecordMut<'a> = &'a mut Rv32JalrAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
@@ -177,7 +180,7 @@ where
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -197,7 +200,7 @@ where
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
@@ -225,7 +228,10 @@ where
         }
     }
 }
-impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32JalrAdapterStep {
+
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32JalrAdapterFiller {
+    const WIDTH: usize = size_of::<Rv32JalrAdapterCols<u8>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &Rv32JalrAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };

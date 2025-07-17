@@ -4,15 +4,29 @@ use derive_new::new;
 use openvm_circuit::system::memory::MemoryTraceHeights;
 use openvm_instructions::NATIVE_AS;
 use openvm_poseidon2_air::Poseidon2Config;
-use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    engine::StarkEngine,
+    keygen::types::MultiStarkProvingKey,
+    p3_field::Field,
+    prover::hal::ProverBackend,
+};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{
     segmentation_strategy::{DefaultSegmentationStrategy, SegmentationStrategy},
-    AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor, SystemComplex, SystemExecutor,
-    SystemPeriphery, VmChipComplex, VmInventoryError, PUBLIC_VALUES_AIR_ID,
+    AnyEnum, VmChipComplex, PUBLIC_VALUES_AIR_ID,
 };
-use crate::system::memory::{merkle::public_values::PUBLIC_VALUES_AS, BOUNDARY_AIR_OFFSET};
+use crate::{
+    arch::{
+        AirInventory, AirInventoryError, Arena, ChipInventoryError, ExecutorInventory,
+        ExecutorInventoryError,
+    },
+    system::{
+        memory::{merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, CHUNK},
+        SystemChipComplex,
+    },
+};
 
 // sbox is decomposed to have this max degree for Poseidon2. We set to 3 so quotient_degree = 2
 // allows log_blowup = 1
@@ -23,27 +37,80 @@ pub const POSEIDON2_WIDTH: usize = 16;
 /// Offset for address space indices. This is used to distinguish between different memory spaces.
 pub const ADDR_SPACE_OFFSET: u32 = 1;
 /// Returns a Poseidon2 config for the VM.
-pub fn vm_poseidon2_config<F: PrimeField32>() -> Poseidon2Config<F> {
+pub fn vm_poseidon2_config<F: Field>() -> Poseidon2Config<F> {
     Poseidon2Config::default()
 }
 
-pub trait VmConfig<F: PrimeField32>:
-    Clone + Serialize + DeserializeOwned + InitFileGenerator
+/// A VM configuration is the minimum serializable format to be able to create the execution
+/// environment and circuit for a zkVM supporting a fixed set of instructions.
+///
+/// For users who only need to create an execution environment, use the sub-trait
+/// [VmExecutionConfig] to avoid the `SC` generic.
+///
+/// This trait does not contain the [VmProverConfig] trait, because a single VM configuration may
+/// implement multiple [VmProverConfig]s for different prover backends.
+pub trait VmConfig<SC>:
+    Clone
+    + Serialize
+    + DeserializeOwned
+    + InitFileGenerator
+    + VmExecutionConfig<Val<SC>>
+    + VmCircuitConfig<SC>
+    + AsRef<SystemConfig>
+    + AsMut<SystemConfig>
+where
+    SC: StarkGenericConfig,
 {
-    type Executor: InstructionExecutor<F>
-        + AnyEnum
-        + ChipUsageGetter
-        + InsExecutorE1<F>
-        + InsExecutorE2<F>;
-    type Periphery: AnyEnum + ChipUsageGetter;
+}
 
-    /// Must contain system config
-    fn system(&self) -> &SystemConfig;
-    fn system_mut(&mut self) -> &mut SystemConfig;
+pub trait VmExecutionConfig<F> {
+    type Executor: AnyEnum + Send + Sync;
 
+    fn create_executors(&self)
+        -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
+}
+
+pub trait VmCircuitConfig<SC: StarkGenericConfig> {
+    fn create_airs(&self) -> Result<AirInventory<SC>, AirInventoryError>;
+
+    /// Generate the proving key and verifying key for the circuit defined by this config.
+    fn keygen(&self, stark_config: &SC) -> Result<MultiStarkProvingKey<SC>, AirInventoryError> {
+        let circuit = self.create_airs()?;
+        let pk = circuit.keygen(stark_config);
+        Ok(pk)
+    }
+}
+
+pub trait VmProverConfig<E>: VmConfig<E::SC>
+where
+    E: StarkEngine,
+{
+    type RecordArena: Arena;
+    type SystemChipInventory: SystemChipComplex<Self::RecordArena, E::PB>;
+
+    /// Create a [VmChipComplex] from the full [AirInventory], which should be the output of
+    /// [VmCircuitConfig::create_airs].
     fn create_chip_complex(
         &self,
-    ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError>;
+        circuit: AirInventory<E::SC>,
+    ) -> Result<
+        VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
+        ChipInventoryError,
+    >;
+}
+
+impl<SC, VC> VmConfig<SC> for VC
+where
+    SC: StarkGenericConfig,
+    VC: Clone
+        + Serialize
+        + DeserializeOwned
+        + InitFileGenerator
+        + VmExecutionConfig<Val<SC>>
+        + VmCircuitConfig<SC>
+        + AsRef<SystemConfig>
+        + AsMut<SystemConfig>,
+{
 }
 
 pub const OPENVM_DEFAULT_INIT_FILE_BASENAME: &str = "openvm_init";
@@ -231,18 +298,49 @@ impl SystemConfig {
 
     /// Returns the AIR ID of the memory boundary AIR. Panic if the boundary AIR is not enabled.
     pub fn memory_boundary_air_id(&self) -> usize {
-        let mut ret = PUBLIC_VALUES_AIR_ID;
-        if self.has_public_values_chip() {
-            ret += 1;
+        PUBLIC_VALUES_AIR_ID + usize::from(self.has_public_values_chip())
+    }
+
+    /// AIR ID for the first memory access adapter AIR.
+    pub fn access_adapter_air_id_offset(&self) -> usize {
+        let boundary_idx = self.memory_boundary_air_id();
+        // boundary, (if persistent memory) merkle AIRs
+        boundary_idx + 1 + usize::from(self.continuation_enabled)
+    }
+
+    /// This is O(1) and returns the length of
+    /// [`SystemAirInventory::into_airs`](crate::system::SystemAirInventory::into_airs).
+    pub fn num_airs(&self) -> usize {
+        self.memory_boundary_air_id()
+            + num_memory_airs(
+                self.continuation_enabled,
+                self.memory_config.max_access_adapter_n,
+            )
+    }
+
+    pub fn initial_block_size(&self) -> usize {
+        match self.continuation_enabled {
+            true => CHUNK,
+            false => 1,
         }
-        ret += BOUNDARY_AIR_OFFSET;
-        ret
     }
 }
 
 impl Default for SystemConfig {
     fn default() -> Self {
         Self::default_from_memory(MemoryConfig::default())
+    }
+}
+
+impl AsRef<SystemConfig> for SystemConfig {
+    fn as_ref(&self) -> &SystemConfig {
+        self
+    }
+}
+
+impl AsMut<SystemConfig> for SystemConfig {
+    fn as_mut(&mut self) -> &mut SystemConfig {
+        self
     }
 }
 
@@ -255,25 +353,6 @@ impl SystemTraceHeights {
     /// Round all trace heights to the next power of two, except 0 stays 0.
     pub fn round_to_next_power_of_two_or_zero(&mut self) {
         self.memory.round_to_next_power_of_two_or_zero();
-    }
-}
-
-impl<F: PrimeField32> VmConfig<F> for SystemConfig {
-    type Executor = SystemExecutor<F>;
-    type Periphery = SystemPeriphery<F>;
-
-    fn system(&self) -> &SystemConfig {
-        self
-    }
-    fn system_mut(&mut self) -> &mut SystemConfig {
-        self
-    }
-
-    fn create_chip_complex(
-        &self,
-    ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError> {
-        let complex = SystemComplex::new(self.clone());
-        Ok(complex)
     }
 }
 

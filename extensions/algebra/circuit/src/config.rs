@@ -1,18 +1,20 @@
+use std::result::Result;
+
 use num_bigint::BigUint;
-use openvm_circuit::arch::{InitFileGenerator, SystemConfig};
+use openvm_circuit::{
+    arch::{InitFileGenerator, SystemConfig},
+    system::SystemExecutor,
+};
 use openvm_circuit_derive::VmConfig;
-use openvm_rv32im_circuit::*;
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_rv32im_circuit::{Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor};
+use openvm_stark_backend::{config::StarkGenericConfig, engine::StarkEngine, p3_field::Field};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
-    ModularExtensionExecutor, ModularExtensionPeriphery,
-};
+use crate::{Fp2Extension, Fp2ExtensionExecutor, ModularExtension, ModularExtensionExecutor};
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32ModularConfig {
-    #[system]
+    #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
     pub base: Rv32I,
@@ -47,7 +49,7 @@ impl Rv32ModularConfig {
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32ModularWithFp2Config {
-    #[system]
+    #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
     pub base: Rv32I,

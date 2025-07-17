@@ -1,16 +1,12 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_bigint_transpiler::Rv32Shift256Opcode;
-use openvm_circuit::arch::{
-    execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-    E2PreCompute, ExecuteFunc,
-    ExecutionError::InvalidInstruction,
-    MatrixRecordArena, NewVmChipWrapper, StepExecutorE1, StepExecutorE2, VmAirWrapper,
-    VmSegmentState,
-};
-use openvm_circuit_derive::{TraceFiller, TraceStep};
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip, var_range::SharedVariableRangeCheckerChip,
+use openvm_circuit::{
+    arch::{
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2, VmSegmentState,
+    },
+    system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
@@ -19,39 +15,18 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::{Rv32HeapAdapterAir, Rv32HeapAdapterStep};
-use openvm_rv32im_circuit::{ShiftCoreAir, ShiftStep};
+use openvm_rv32_adapters::Rv32HeapAdapterStep;
+use openvm_rv32im_circuit::ShiftStep;
 use openvm_rv32im_transpiler::ShiftOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{INT256_NUM_LIMBS, RV32_CELL_BITS};
+use crate::{Rv32Shift256Step, INT256_NUM_LIMBS};
 
-/// Shift256
-pub type Rv32Shift256Air = VmAirWrapper<
-    Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-    ShiftCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
->;
-#[derive(TraceStep, TraceFiller)]
-pub struct Rv32Shift256Step(BaseStep);
-pub type Rv32Shift256Chip<F> =
-    NewVmChipWrapper<F, Rv32Shift256Air, Rv32Shift256Step, MatrixRecordArena<F>>;
-
-type BaseStep = ShiftStep<AdapterStep, INT256_NUM_LIMBS, RV32_CELL_BITS>;
 type AdapterStep = Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
 
 impl Rv32Shift256Step {
-    pub fn new(
-        adapter: AdapterStep,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-        range_checker_chip: SharedVariableRangeCheckerChip,
-        offset: usize,
-    ) -> Self {
-        Self(BaseStep::new(
-            adapter,
-            bitwise_lookup_chip,
-            range_checker_chip,
-            offset,
-        ))
+    pub fn new(adapter: AdapterStep, offset: usize) -> Self {
+        Self(ShiftStep::new(adapter, offset))
     }
 }
 
@@ -63,7 +38,7 @@ struct ShiftPreCompute {
     c: u8,
 }
 
-impl<F: PrimeField32> StepExecutorE1<F> for Rv32Shift256Step {
+impl<F: PrimeField32> InsExecutorE1<F> for Rv32Shift256Step {
     fn pre_compute_size(&self) -> usize {
         size_of::<ShiftPreCompute>()
     }
@@ -88,7 +63,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Rv32Shift256Step {
     }
 }
 
-impl<F: PrimeField32> StepExecutorE2<F> for Rv32Shift256Step {
+impl<F: PrimeField32> InsExecutorE2<F> for Rv32Shift256Step {
     fn e2_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<ShiftPreCompute>>()
     }
@@ -118,7 +93,7 @@ impl<F: PrimeField32> StepExecutorE2<F> for Rv32Shift256Step {
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: ShiftOp>(
     pre_compute: &ShiftPreCompute,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let rs1_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs2_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
@@ -133,14 +108,14 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: ShiftOp>(
 
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: ShiftOp>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &ShiftPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, OP>(pre_compute, vm_state);
 }
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, OP: ShiftOp>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<ShiftPreCompute> = pre_compute.borrow();
     vm_state
@@ -167,7 +142,7 @@ impl Rv32Shift256Step {
         } = inst;
         let e_u32 = e.as_canonical_u32();
         if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
-            return Err(InvalidInstruction(pc));
+            return Err(ExecutionError::InvalidInstruction(pc));
         }
         *data = ShiftPreCompute {
             a: a.as_canonical_u32() as u8,

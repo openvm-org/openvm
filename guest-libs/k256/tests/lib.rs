@@ -83,30 +83,26 @@ mod guest_tests {
     }
 
     mod ecdsa_config {
-        use eyre::Result;
-        use openvm_algebra_circuit::{
-            ModularExtension, ModularExtensionExecutor, ModularExtensionPeriphery,
-        };
+        use openvm_algebra_circuit::{ModularExtension, ModularExtensionExecutor};
         use openvm_circuit::{
             arch::{InitFileGenerator, SystemConfig},
             derive::VmConfig,
+            system::SystemExecutor,
             utils::test_system_config_with_continuations,
         };
-        use openvm_ecc_circuit::{
-            CurveConfig, WeierstrassExtension, WeierstrassExtensionExecutor,
-            WeierstrassExtensionPeriphery,
-        };
+        use openvm_ecc_circuit::{CurveConfig, WeierstrassExtension, WeierstrassExtensionExecutor};
         use openvm_rv32im_circuit::{
-            Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
-            Rv32MExecutor, Rv32MPeriphery,
+            Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
         };
-        use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
-        use openvm_stark_backend::p3_field::PrimeField32;
+        use openvm_sha256_circuit::{Sha256, Sha256Executor};
+        use openvm_stark_backend::{
+            config::StarkGenericConfig, engine::StarkEngine, p3_field::Field,
+        };
         use serde::{Deserialize, Serialize};
 
         #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
         pub struct EcdsaConfig {
-            #[system]
+            #[config(executor = "SystemExecutor<F>")]
             pub system: SystemConfig,
             #[extension]
             pub base: Rv32I,

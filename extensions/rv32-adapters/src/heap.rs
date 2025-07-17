@@ -21,7 +21,8 @@ use openvm_stark_backend::{
 };
 
 use crate::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterCols, Rv32VecHeapAdapterRecord, Rv32VecHeapAdapterStep,
+    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterCols, Rv32VecHeapAdapterFiller,
+    Rv32VecHeapAdapterRecord, Rv32VecHeapAdapterStep,
 };
 
 /// This adapter reads from NUM_READS <= 2 pointers and writes to 1 pointer.
@@ -90,6 +91,7 @@ impl<
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct Rv32HeapAdapterStep<
     const NUM_READS: usize,
     const READ_SIZE: usize,
@@ -98,6 +100,25 @@ pub struct Rv32HeapAdapterStep<
 
 impl<const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
     Rv32HeapAdapterStep<NUM_READS, READ_SIZE, WRITE_SIZE>
+{
+    pub fn new(pointer_max_bits: usize) -> Self {
+        assert!(NUM_READS <= 2);
+        assert!(
+            RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - pointer_max_bits < RV32_CELL_BITS,
+            "pointer_max_bits={pointer_max_bits} needs to be large enough for high limb range check"
+        );
+        Rv32HeapAdapterStep(Rv32VecHeapAdapterStep::new(pointer_max_bits))
+    }
+}
+
+pub struct Rv32HeapAdapterFiller<
+    const NUM_READS: usize,
+    const READ_SIZE: usize,
+    const WRITE_SIZE: usize,
+>(Rv32VecHeapAdapterFiller<NUM_READS, 1, 1, READ_SIZE, WRITE_SIZE>);
+
+impl<const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
+    Rv32HeapAdapterFiller<NUM_READS, READ_SIZE, WRITE_SIZE>
 {
     pub fn new(
         pointer_max_bits: usize,
@@ -108,20 +129,15 @@ impl<const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
             RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - pointer_max_bits < RV32_CELL_BITS,
             "pointer_max_bits={pointer_max_bits} needs to be large enough for high limb range check"
         );
-        Rv32HeapAdapterStep(Rv32VecHeapAdapterStep::new(
+        Rv32HeapAdapterFiller(Rv32VecHeapAdapterFiller::new(
             pointer_max_bits,
             bitwise_lookup_chip,
         ))
     }
 }
 
-impl<
-        F: PrimeField32,
-        CTX,
-        const NUM_READS: usize,
-        const READ_SIZE: usize,
-        const WRITE_SIZE: usize,
-    > AdapterTraceStep<F, CTX> for Rv32HeapAdapterStep<NUM_READS, READ_SIZE, WRITE_SIZE>
+impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
+    AdapterTraceStep<F> for Rv32HeapAdapterStep<NUM_READS, READ_SIZE, WRITE_SIZE>
 where
     F: PrimeField32,
 {
@@ -131,41 +147,39 @@ where
     type WriteData = [[u8; WRITE_SIZE]; 1];
     type RecordMut<'a> = &'a mut Rv32VecHeapAdapterRecord<NUM_READS, 1, 1, READ_SIZE, WRITE_SIZE>;
 
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
 
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
-        let read_data = AdapterTraceStep::<F, CTX>::read(&self.0, memory, instruction, record);
+        let read_data = AdapterTraceStep::<F>::read(&self.0, memory, instruction, record);
         read_data.map(|r| r[0])
     }
 
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
     ) {
-        AdapterTraceStep::<F, CTX>::write(&self.0, memory, instruction, data, record);
+        AdapterTraceStep::<F>::write(&self.0, memory, instruction, data, record);
     }
 }
 
-impl<
-        F: PrimeField32,
-        CTX,
-        const NUM_READS: usize,
-        const READ_SIZE: usize,
-        const WRITE_SIZE: usize,
-    > AdapterTraceFiller<F, CTX> for Rv32HeapAdapterStep<NUM_READS, READ_SIZE, WRITE_SIZE>
+impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
+    AdapterTraceFiller<F> for Rv32HeapAdapterFiller<NUM_READS, READ_SIZE, WRITE_SIZE>
 {
+    const WIDTH: usize =
+        Rv32VecHeapAdapterCols::<F, NUM_READS, 1, 1, READ_SIZE, WRITE_SIZE>::width();
+
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]) {
-        AdapterTraceFiller::<F, CTX>::fill_trace_row(&self.0, mem_helper, adapter_row);
+        AdapterTraceFiller::<F>::fill_trace_row(&self.0, mem_helper, adapter_row);
     }
 }

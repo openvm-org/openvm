@@ -7,12 +7,14 @@ use openvm_circuit::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc,
-        ExecutionError::InvalidInstruction,
-        ImmInstruction, RecordArena, Result, StepExecutorE1, StepExecutorE2, TraceFiller,
-        TraceStep, VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
+        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, ImmInstruction,
+        InsExecutorE1, InsExecutorE2, InstructionExecutor, RecordArena, Result, TraceFiller,
+        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
@@ -33,7 +35,9 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 
-use crate::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
+use crate::adapters::{
+    Rv32RdWriteAdapterFiller, Rv32RdWriteAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
@@ -202,34 +206,37 @@ pub struct Rv32AuipcCoreRecord {
     pub imm: u32,
 }
 
-#[derive(derive_new::new)]
-pub struct Rv32AuipcStep<A> {
+#[derive(Clone, Copy, derive_new::new)]
+pub struct Rv32AuipcStep<A = Rv32RdWriteAdapterStep> {
+    adapter: A,
+}
+
+#[derive(Clone, derive_new::new)]
+pub struct Rv32AuipcFiller<A = Rv32RdWriteAdapterFiller> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for Rv32AuipcStep<A>
+impl<F, A, RA> InstructionExecutor<F, RA> for Rv32AuipcStep<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, CTX, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
+    A: 'static + AdapterTraceStep<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut Rv32AuipcCoreRecord),
+    >,
 {
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut Rv32AuipcCoreRecord);
-
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{:?}", AUIPC)
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
-        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+    ) -> Result<()> {
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -247,10 +254,10 @@ where
     }
 }
 
-impl<F, CTX, A> TraceFiller<F, CTX> for Rv32AuipcStep<A>
+impl<F, A> TraceFiller<F> for Rv32AuipcFiller<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
@@ -296,7 +303,7 @@ struct AuiPcPreCompute {
     a: u8,
 }
 
-impl<F, A> StepExecutorE1<F> for Rv32AuipcStep<A>
+impl<F, A> InsExecutorE1<F> for Rv32AuipcStep<A>
 where
     F: PrimeField32,
 {
@@ -326,7 +333,7 @@ where
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &AuiPcPreCompute,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let rd = run_auipc(vm_state.pc, pre_compute.imm);
     vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
@@ -335,7 +342,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     vm_state.instret += 1;
 }
 
-impl<F, A> StepExecutorE2<F> for Rv32AuipcStep<A>
+impl<F, A> InsExecutorE2<F> for Rv32AuipcStep<A>
 where
     F: PrimeField32,
 {
@@ -377,7 +384,7 @@ impl<A> Rv32AuipcStep<A> {
     ) -> Result<()> {
         let Instruction { a, c: imm, d, .. } = inst;
         if d.as_canonical_u32() != RV32_REGISTER_AS {
-            return Err(InvalidInstruction(pc));
+            return Err(ExecutionError::InvalidInstruction(pc));
         }
         let imm = imm.as_canonical_u32();
         let data: &mut AuiPcPreCompute = data.borrow_mut();

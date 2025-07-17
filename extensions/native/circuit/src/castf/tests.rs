@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, VmChipTestBuilder},
+    testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder},
     MemoryConfig,
 };
 use openvm_instructions::{
@@ -25,37 +25,35 @@ use rand::{rngs::StdRng, Rng};
 
 use super::{CastFChip, CastFCoreAir, CastFCoreCols, CastFStep, LIMB_BITS};
 use crate::{
-    adapters::{ConvertAdapterAir, ConvertAdapterCols, ConvertAdapterStep},
+    adapters::{ConvertAdapterAir, ConvertAdapterCols, ConvertAdapterFiller, ConvertAdapterStep},
     castf::run_castf,
     test_utils::write_native_array,
-    CastFAir, CASTF_MAX_BITS,
+    CastFAir, CastFCoreFiller, CASTF_MAX_BITS,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 const READ_SIZE: usize = 1;
 const WRITE_SIZE: usize = 4;
 type F = BabyBear;
+type Harness = TestChipHarness<F, CastFStep, CastFAir, CastFChip<F>>;
 
-fn create_test_chip(tester: &VmChipTestBuilder<F>) -> CastFChip<F> {
-    let mut chip = CastFChip::<F>::new(
-        CastFAir::new(
-            ConvertAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-            CastFCoreAir::new(tester.range_checker().bus()),
-        ),
-        CastFStep::new(
-            ConvertAdapterStep::<READ_SIZE, WRITE_SIZE>::new(),
-            tester.range_checker().clone(),
-        ),
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
+    let range_checker = tester.range_checker().clone();
+    let air = CastFAir::new(
+        ConvertAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+        CastFCoreAir::new(range_checker.bus()),
+    );
+    let executor = CastFStep::new(ConvertAdapterStep::<READ_SIZE, WRITE_SIZE>::new());
+    let chip = CastFChip::<F>::new(
+        CastFCoreFiller::new(ConvertAdapterFiller, range_checker),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-
-    chip
+    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut CastFChip<F>,
+    harness: &mut Harness,
     rng: &mut StdRng,
     b: Option<F>,
 ) {
@@ -64,7 +62,7 @@ fn set_and_execute(
 
     let a = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
     tester.execute(
-        chip,
+        harness,
         &Instruction::from_usize(
             CastfOpcode::CASTF.global_opcode(),
             [a, b_ptr, 0, RV32_MEMORY_AS as usize, AS::Native as usize],
@@ -86,16 +84,16 @@ fn set_and_execute(
 fn castf_rand_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::volatile(MemoryConfig::default());
-    let mut chip = create_test_chip(&tester);
+    let mut harness = create_test_chip(&tester);
     let num_ops = 100;
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, None);
+        set_and_execute(&mut tester, &mut harness, &mut rng, None);
     }
 
-    set_and_execute(&mut tester, &mut chip, &mut rng, Some(F::ZERO));
+    set_and_execute(&mut tester, &mut harness, &mut rng, Some(F::ZERO));
 
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -118,10 +116,10 @@ fn run_negative_castf_test(prank_vals: CastFPrankValues, b: Option<F>, error: Ve
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::volatile(MemoryConfig::default());
 
-    let mut chip = create_test_chip(&tester);
-    set_and_execute(&mut tester, &mut chip, &mut rng, b);
+    let mut harness = create_test_chip(&tester);
+    set_and_execute(&mut tester, &mut harness, &mut rng, b);
 
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
 
     let modify_trace = |trace: &mut DenseMatrix<F>| {
         let mut values = trace.row_slice(0).to_vec();
@@ -149,7 +147,7 @@ fn run_negative_castf_test(prank_vals: CastFPrankValues, b: Option<F>, error: Ve
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_and_prank_trace(harness, modify_trace)
         .finalize();
     tester.simple_test_with_expected_error(error);
 }
@@ -204,8 +202,8 @@ fn negative_convert_adapter_test() {
 fn castf_overflow_in_val_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::volatile(MemoryConfig::default());
-    let mut chip = create_test_chip(&tester);
-    set_and_execute(&mut tester, &mut chip, &mut rng, Some(F::NEG_ONE));
+    let mut harness = create_test_chip(&tester);
+    set_and_execute(&mut tester, &mut harness, &mut rng, Some(F::NEG_ONE));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////

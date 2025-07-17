@@ -1,6 +1,8 @@
 //! Stateful keccak256 hasher. Handles full keccak sponge (padding, absorb, keccak-f) on
 //! variable length inputs read from VM memory.
 
+use std::borrow::{Borrow, BorrowMut};
+
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
 use openvm_stark_backend::p3_field::PrimeField32;
 use p3_keccak_air::NUM_ROUNDS;
@@ -11,19 +13,17 @@ pub mod trace;
 pub mod utils;
 
 mod extension;
-pub use extension::*;
-
 #[cfg(test)]
 mod tests;
-
-use std::borrow::{Borrow, BorrowMut};
-
 pub use air::KeccakVmAir;
-use openvm_circuit::arch::{
-    execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-    E2PreCompute, ExecuteFunc, ExecutionBridge,
-    ExecutionError::InvalidInstruction,
-    MatrixRecordArena, NewVmChipWrapper, Result, StepExecutorE1, StepExecutorE2, VmSegmentState,
+pub use extension::*;
+use openvm_circuit::{
+    arch::{
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        E2PreCompute, ExecuteFunc, ExecutionBridge, ExecutionError, InsExecutorE1, InsExecutorE2,
+        Result, VmChipWrapper, VmSegmentState,
+    },
+    system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
@@ -67,27 +67,18 @@ pub const KECCAK_DIGEST_BYTES: usize = 32;
 /// Number of 64-bit digest limbs.
 pub const KECCAK_DIGEST_U64S: usize = KECCAK_DIGEST_BYTES / 8;
 
-pub type KeccakVmChip<F> = NewVmChipWrapper<F, KeccakVmAir, KeccakVmStep, MatrixRecordArena<F>>;
+pub type KeccakVmChip<F> = VmChipWrapper<F, KeccakVmFiller>;
 
-//#[derive(derive_new::new)]
+#[derive(derive_new::new, Clone, Copy)]
 pub struct KeccakVmStep {
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
     pub offset: usize,
     pub pointer_max_bits: usize,
 }
 
-impl KeccakVmStep {
-    pub fn new(
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
-        offset: usize,
-        pointer_max_bits: usize,
-    ) -> Self {
-        Self {
-            bitwise_lookup_chip,
-            offset,
-            pointer_max_bits,
-        }
-    }
+#[derive(derive_new::new)]
+pub struct KeccakVmFiller {
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
+    pub pointer_max_bits: usize,
 }
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -98,7 +89,7 @@ struct KeccakPreCompute {
     c: u8,
 }
 
-impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
+impl<F: PrimeField32> InsExecutorE1<F> for KeccakVmStep {
     fn pre_compute_size(&self) -> usize {
         size_of::<KeccakPreCompute>()
     }
@@ -118,7 +109,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for KeccakVmStep {
     }
 }
 
-impl<F: PrimeField32> StepExecutorE2<F> for KeccakVmStep {
+impl<F: PrimeField32> InsExecutorE2<F> for KeccakVmStep {
     fn e2_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<KeccakPreCompute>>()
     }
@@ -143,7 +134,7 @@ impl<F: PrimeField32> StepExecutorE2<F> for KeccakVmStep {
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_E1: bool>(
     pre_compute: &KeccakPreCompute,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) -> u32 {
     let dst = vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32);
     let src = vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
@@ -181,7 +172,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_E1: bo
 
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &KeccakPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, true>(pre_compute, vm_state);
@@ -189,7 +180,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<KeccakPreCompute> = pre_compute.borrow();
     let height = execute_e12_impl::<F, CTX, false>(&pre_compute.data, vm_state);
@@ -216,7 +207,7 @@ impl KeccakVmStep {
         } = inst;
         let e_u32 = e.as_canonical_u32();
         if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
-            return Err(InvalidInstruction(pc));
+            return Err(ExecutionError::InvalidInstruction(pc));
         }
         *data = KeccakPreCompute {
             a: a.as_canonical_u32() as u8,

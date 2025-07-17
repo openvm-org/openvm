@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use openvm_circuit::arch::ContinuationVmProof;
+use openvm_circuit::arch::{
+    ContinuationVmProof, InstructionExecutor, SingleSegmentVmProver, VirtualMachineError,
+    VmExecutionConfig, VmLocalProver, VmProverConfig,
+};
 use openvm_continuations::verifier::{
     internal::types::{InternalVmVerifierInput, VmStarkProof},
     leaf::types::LeafVmVerifierInput,
@@ -13,22 +16,20 @@ use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::proof::Proo
 use tracing::info_span;
 
 use crate::{
-    config::AggregationTreeConfig,
-    keygen::AggStarkProvingKey,
-    prover::{
-        vm::{local::VmLocalProver, SingleSegmentVmProver},
-        RootVerifierLocalProver,
-    },
+    config::AggregationTreeConfig, keygen::AggStarkProvingKey, prover::vm::new_local_prover,
     NonRootCommittedExe, RootSC, F, SC,
 };
 
-pub struct AggStarkProver<E: StarkFriEngine<SC>> {
-    leaf_prover: VmLocalProver<SC, NativeConfig, E>,
+pub struct AggStarkProver<E>
+where
+    E: StarkFriEngine<SC = SC>,
+    NativeConfig: VmProverConfig<E>,
+{
+    leaf_prover: VmLocalProver<E, NativeConfig>,
     leaf_controller: LeafProvingController,
 
-    internal_prover: VmLocalProver<SC, NativeConfig, E>,
-    root_prover: RootVerifierLocalProver,
-
+    internal_prover: VmLocalProver<E, NativeConfig>,
+    // root_prover: RootVerifierLocalProver,
     pub num_children_internal: usize,
     pub max_internal_wrapper_layers: usize,
 }
@@ -38,32 +39,35 @@ pub struct LeafProvingController {
     pub num_children: usize,
 }
 
-impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
+impl<E> AggStarkProver<E>
+where
+    E: StarkFriEngine<SC = SC>,
+    NativeConfig: VmProverConfig<E>,
+    <NativeConfig as VmExecutionConfig<F>>::Executor:
+        InstructionExecutor<F, <NativeConfig as VmProverConfig<E>>::RecordArena>,
+{
     pub fn new(
         agg_stark_pk: AggStarkProvingKey,
         leaf_committed_exe: Arc<NonRootCommittedExe>,
         tree_config: AggregationTreeConfig,
-    ) -> Self {
-        let leaf_prover =
-            VmLocalProver::<SC, NativeConfig, E>::new(agg_stark_pk.leaf_vm_pk, leaf_committed_exe)
-                .with_overridden_single_segment_trace_heights(NATIVE_MAX_TRACE_HEIGHTS.to_vec());
+    ) -> Result<Self, VirtualMachineError> {
+        let leaf_prover = new_local_prover(&agg_stark_pk.leaf_vm_pk, &leaf_committed_exe)?;
         let leaf_controller = LeafProvingController {
             num_children: tree_config.num_children_leaf,
         };
-        let internal_prover = VmLocalProver::<SC, NativeConfig, E>::new(
-            agg_stark_pk.internal_vm_pk,
-            agg_stark_pk.internal_committed_exe,
-        )
-        .with_overridden_single_segment_trace_heights(NATIVE_MAX_TRACE_HEIGHTS.to_vec());
-        let root_prover = RootVerifierLocalProver::new(agg_stark_pk.root_verifier_pk);
-        Self {
+        let internal_prover = new_local_prover(
+            &agg_stark_pk.internal_vm_pk,
+            &agg_stark_pk.internal_committed_exe,
+        )?;
+        // let root_prover = RootVerifierLocalProver::new(agg_stark_pk.root_verifier_pk);
+        Ok(Self {
             leaf_prover,
             leaf_controller,
             internal_prover,
-            root_prover,
+            // root_prover,
             num_children_internal: tree_config.num_children_internal,
             max_internal_wrapper_layers: tree_config.max_internal_wrapper_layers,
-        }
+        })
     }
 
     pub fn with_num_children_leaf(mut self, num_children_leaf: usize) -> Self {
@@ -81,41 +85,43 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
         self
     }
 
-    /// Generate the root proof for outer recursion.
-    pub fn generate_root_proof(&self, app_proofs: ContinuationVmProof<SC>) -> Proof<RootSC> {
-        let root_verifier_input = self.generate_root_verifier_input(app_proofs);
-        self.generate_root_proof_impl(root_verifier_input)
-    }
+    // /// Generate the root proof for outer recursion.
+    // pub fn generate_root_proof(&self, app_proofs: ContinuationVmProof<SC>) -> Proof<RootSC> {
+    //     let root_verifier_input = self.generate_root_verifier_input(app_proofs);
+    //     self.generate_root_proof_impl(root_verifier_input)
+    // }
 
-    pub fn generate_leaf_proofs(&self, app_proofs: &ContinuationVmProof<SC>) -> Vec<Proof<SC>> {
+    pub fn generate_leaf_proofs(
+        &mut self,
+        app_proofs: &ContinuationVmProof<SC>,
+    ) -> Result<Vec<Proof<SC>>, VirtualMachineError> {
         self.leaf_controller
-            .generate_proof(&self.leaf_prover, app_proofs)
+            .generate_proof(&mut self.leaf_prover, app_proofs)
     }
 
-    pub fn generate_root_verifier_input(
-        &self,
-        app_proofs: ContinuationVmProof<SC>,
-    ) -> RootVmVerifierInput<SC> {
-        let leaf_proofs = self.generate_leaf_proofs(&app_proofs);
-        let public_values = app_proofs.user_public_values.public_values;
-        let e2e_stark_proof = self.aggregate_leaf_proofs(leaf_proofs, public_values);
-        self.wrap_e2e_stark_proof(e2e_stark_proof)
-    }
+    // /// This is typically only used for the halo2 verifier
+    // pub fn generate_root_verifier_input(
+    //     &mut self,
+    //     app_proofs: ContinuationVmProof<SC>,
+    // ) -> Result<RootVmVerifierInput<SC>, VirtualMachineError> {
+    //     let leaf_proofs = self.generate_leaf_proofs(&app_proofs)?;
+    //     let public_values = app_proofs.user_public_values.public_values;
+    //     let e2e_stark_proof = self.aggregate_leaf_proofs(leaf_proofs, public_values);
+    //     let wrapped_stark_proof = self.wrap_e2e_stark_proof(e2e_stark_proof);
+    //     Ok(wrapped_stark_proof)
+    // }
 
     pub fn aggregate_leaf_proofs(
-        &self,
+        &mut self,
         leaf_proofs: Vec<Proof<SC>>,
         public_values: Vec<F>,
-    ) -> VmStarkProof<SC> {
+    ) -> Result<VmStarkProof<SC>, VirtualMachineError> {
         let mut internal_node_idx = -1;
         let mut internal_node_height = 0;
         let mut proofs = leaf_proofs;
         while proofs.len() > 1 {
             let internal_inputs = InternalVmVerifierInput::chunk_leaf_or_internal_proofs(
-                self.internal_prover
-                    .committed_exe
-                    .get_program_commit()
-                    .into(),
+                self.internal_prover.exe_commitment().clone().into(),
                 &proofs,
                 self.num_children_internal,
             );
@@ -127,7 +133,7 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
                 #[cfg(feature = "bench-metrics")]
                 {
                     metrics::counter!("fri.log_blowup")
-                        .absolute(self.internal_prover.fri_params().log_blowup as u64);
+                        .absolute(self.internal_prover.vm.engine.fri_params().log_blowup as u64);
                     metrics::counter!("num_children").absolute(self.num_children_internal as u64);
                 }
                 internal_inputs
@@ -135,47 +141,52 @@ impl<E: StarkFriEngine<SC>> AggStarkProver<E> {
                     .map(|input| {
                         internal_node_idx += 1;
                         info_span!("single_internal_agg", idx = internal_node_idx,).in_scope(|| {
-                            SingleSegmentVmProver::prove(&self.internal_prover, input.write())
+                            SingleSegmentVmProver::prove(
+                                &mut self.internal_prover,
+                                input.write(),
+                                NATIVE_MAX_TRACE_HEIGHTS,
+                            )
                         })
                     })
-                    .collect()
-            });
+                    .collect::<Result<Vec<_>, _>>()
+            })?;
             internal_node_height += 1;
         }
-        VmStarkProof {
-            proof: proofs.pop().unwrap(),
+        let proof = proofs.pop().unwrap();
+        Ok(VmStarkProof {
+            proof,
             user_public_values: public_values,
-        }
-    }
-
-    /// Wrap the e2e stark proof until its heights meet the requirements of the root verifier.
-    pub fn wrap_e2e_stark_proof(
-        &self,
-        e2e_stark_proof: VmStarkProof<SC>,
-    ) -> RootVmVerifierInput<SC> {
-        let internal_commit = self
-            .internal_prover
-            .committed_exe
-            .get_program_commit()
-            .into();
-        wrap_e2e_stark_proof(
-            &self.internal_prover,
-            &self.root_prover,
-            internal_commit,
-            self.max_internal_wrapper_layers,
-            e2e_stark_proof,
-        )
-    }
-
-    fn generate_root_proof_impl(&self, root_input: RootVmVerifierInput<SC>) -> Proof<RootSC> {
-        info_span!("agg_layer", group = "root", idx = 0).in_scope(|| {
-            let input = root_input.write();
-            #[cfg(feature = "bench-metrics")]
-            metrics::counter!("fri.log_blowup")
-                .absolute(self.root_prover.fri_params().log_blowup as u64);
-            SingleSegmentVmProver::prove(&self.root_prover, input)
         })
     }
+
+    // /// Wrap the e2e stark proof until its heights meet the requirements of the root verifier.
+    // pub fn wrap_e2e_stark_proof(
+    //     &self,
+    //     e2e_stark_proof: VmStarkProof<SC>,
+    // ) -> RootVmVerifierInput<SC> {
+    //     let internal_commit = self
+    //         .internal_prover
+    //         .committed_exe
+    //         .get_program_commit()
+    //         .into();
+    //     wrap_e2e_stark_proof(
+    //         &self.internal_prover,
+    //         &self.root_prover,
+    //         internal_commit,
+    //         self.max_internal_wrapper_layers,
+    //         e2e_stark_proof,
+    //     )
+    // }
+
+    // fn generate_root_proof_impl(&self, root_input: RootVmVerifierInput<SC>) -> Proof<RootSC> {
+    //     info_span!("agg_layer", group = "root", idx = 0).in_scope(|| {
+    //         let input = root_input.write();
+    //         #[cfg(feature = "bench-metrics")]
+    //         metrics::counter!("fri.log_blowup")
+    //             .absolute(self.root_prover.fri_params().log_blowup as u64);
+    //         SingleSegmentVmProver::prove(&self.root_prover, input, NATIVE_MAX_TRACE_HEIGHTS)
+    //     })
+    // }
 }
 
 impl LeafProvingController {
@@ -184,15 +195,22 @@ impl LeafProvingController {
         self
     }
 
-    pub fn generate_proof<E: StarkFriEngine<SC>>(
+    pub fn generate_proof<E>(
         &self,
-        prover: &VmLocalProver<SC, NativeConfig, E>,
+        prover: &mut VmLocalProver<E, NativeConfig>,
         app_proofs: &ContinuationVmProof<SC>,
-    ) -> Vec<Proof<SC>> {
+    ) -> Result<Vec<Proof<SC>>, VirtualMachineError>
+    where
+        E: StarkFriEngine<SC = SC>,
+        NativeConfig: VmProverConfig<E>,
+        <NativeConfig as VmExecutionConfig<F>>::Executor:
+            InstructionExecutor<F, <NativeConfig as VmProverConfig<E>>::RecordArena>,
+    {
         info_span!("agg_layer", group = "leaf").in_scope(|| {
             #[cfg(feature = "bench-metrics")]
             {
-                metrics::counter!("fri.log_blowup").absolute(prover.fri_params().log_blowup as u64);
+                metrics::counter!("fri.log_blowup")
+                    .absolute(prover.vm.engine.fri_params().log_blowup as u64);
                 metrics::counter!("num_children").absolute(self.num_children as u64);
             }
             let leaf_inputs =
@@ -202,22 +220,32 @@ impl LeafProvingController {
                 .into_iter()
                 .enumerate()
                 .map(|(leaf_node_idx, input)| {
-                    info_span!("single_leaf_agg", idx = leaf_node_idx)
-                        .in_scope(|| SingleSegmentVmProver::prove(prover, input.write_to_stream()))
+                    info_span!("single_leaf_agg", idx = leaf_node_idx).in_scope(|| {
+                        SingleSegmentVmProver::prove(
+                            prover,
+                            input.write_to_stream(),
+                            NATIVE_MAX_TRACE_HEIGHTS,
+                        )
+                    })
                 })
-                .collect::<Vec<_>>()
+                .collect()
         })
     }
 }
 
+/*
 /// Wrap the e2e stark proof until its heights meet the requirements of the root verifier.
-pub fn wrap_e2e_stark_proof<E: StarkFriEngine<SC>>(
-    internal_prover: &VmLocalProver<SC, NativeConfig, E>,
+pub fn wrap_e2e_stark_proof<E>(
+    internal_prover: &VmLocalProver<E, NativeConfig>,
     root_prover: &RootVerifierLocalProver,
     internal_commit: [F; DIGEST_SIZE],
     max_internal_wrapper_layers: usize,
     e2e_stark_proof: VmStarkProof<SC>,
-) -> RootVmVerifierInput<SC> {
+) -> RootVmVerifierInput<SC>
+where
+    E: StarkFriEngine<SC = SC>,
+    NativeConfig: VmProverConfig<E>,
+{
     let VmStarkProof {
         mut proof,
         user_public_values,
@@ -254,7 +282,7 @@ pub fn wrap_e2e_stark_proof<E: StarkFriEngine<SC>>(
                 metrics::counter!("fri.log_blowup")
                     .absolute(internal_prover.fri_params().log_blowup as u64);
             }
-            SingleSegmentVmProver::prove(internal_prover, input.write())
+            SingleSegmentVmProver::prove(internal_prover, input.write(), NATIVE_MAX_TRACE_HEIGHTS)
         });
     }
     RootVmVerifierInput {
@@ -267,3 +295,4 @@ fn heights_le(a: &[usize], b: &[usize]) -> bool {
     assert_eq!(a.len(), b.len());
     a.iter().zip(b.iter()).all(|(a, b)| a <= b)
 }
+*/

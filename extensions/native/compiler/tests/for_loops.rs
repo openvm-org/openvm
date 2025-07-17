@@ -1,4 +1,4 @@
-use openvm_native_circuit::test_execute_program;
+use openvm_native_circuit::execute_program;
 use openvm_native_compiler::{
     asm::{AsmBuilder, AsmConfig},
     ir::{Array, Var},
@@ -46,7 +46,7 @@ fn test_compiler_for_loops() {
     builder.halt();
 
     let program = builder.compile_isa();
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -83,7 +83,7 @@ fn test_compiler_zip_fixed() {
     builder.halt();
 
     let program = builder.compile_isa();
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -125,7 +125,7 @@ fn test_compiler_zip_dyn() {
     builder.halt();
 
     let program = builder.compile_isa();
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -162,7 +162,7 @@ fn test_compiler_nested_array_loop() {
     builder.halt();
 
     let program = builder.compile_isa();
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -182,5 +182,5 @@ fn test_compiler_bneinc() {
     builder.halt();
 
     let program = builder.compile_isa();
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 }

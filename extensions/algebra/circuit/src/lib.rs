@@ -1,6 +1,7 @@
 use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
+    ops::{Deref, DerefMut},
 };
 
 use openvm_circuit::{
@@ -8,14 +9,13 @@ use openvm_circuit::{
         execution::ExecuteFunc,
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
-        DynArray, E2PreCompute,
-        ExecutionError::InvalidInstruction,
-        Result, StepExecutorE1, StepExecutorE2, VmSegmentState,
+        DynArray, E2PreCompute, ExecutionError, InsExecutorE1, InsExecutorE2, Result,
+        VmSegmentState,
     },
-    system::memory::POINTER_MAX_BITS,
+    system::memory::{online::GuestMemory, POINTER_MAX_BITS},
 };
-use openvm_circuit_derive::{TraceFiller, TraceStep};
-use openvm_circuit_primitives::{var_range::SharedVariableRangeCheckerChip, AlignedBytesBorrow};
+use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_mod_circuit_builder::{
     run_field_expression_precomputed, FieldExpr, FieldExpressionStep,
@@ -35,7 +35,7 @@ pub use fp2_extension::*;
 mod config;
 pub use config::*;
 
-#[derive(TraceStep, TraceFiller)]
+#[derive(Clone, InstructionExecutor)]
 pub struct FieldExprVecHeapStep<
     const NUM_READS: usize,
     const BLOCKS: usize,
@@ -49,16 +49,13 @@ pub struct FieldExprVecHeapStep<
 impl<const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>
     FieldExprVecHeapStep<NUM_READS, BLOCKS, BLOCK_SIZE>
 {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         adapter: Rv32VecHeapAdapterStep<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         expr: FieldExpr,
         offset: usize,
         local_opcode_idx: Vec<usize>,
         opcode_flag_idx: Vec<usize>,
-        range_checker: SharedVariableRangeCheckerChip,
         name: &str,
-        should_finalize: bool,
     ) -> Self {
         Self(FieldExpressionStep::new(
             adapter,
@@ -66,9 +63,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>
             offset,
             local_opcode_idx,
             opcode_flag_idx,
-            range_checker,
             name,
-            should_finalize,
         ))
     }
 }
@@ -109,7 +104,7 @@ impl<'a, const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>
         let d = d.as_canonical_u32();
         let e = e.as_canonical_u32();
         if d != RV32_REGISTER_AS || e != RV32_MEMORY_AS {
-            return Err(InvalidInstruction(pc));
+            return Err(ExecutionError::InvalidInstruction(pc));
         }
 
         let local_opcode = opcode.local_opcode_idx(self.0.offset);
@@ -145,7 +140,7 @@ impl<'a, const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>
 }
 
 impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>
-    StepExecutorE1<F> for FieldExprVecHeapStep<NUM_READS, BLOCKS, BLOCK_SIZE>
+    InsExecutorE1<F> for FieldExprVecHeapStep<NUM_READS, BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
@@ -175,7 +170,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize, const BLOCK_S
 }
 
 impl<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>
-    StepExecutorE2<F> for FieldExprVecHeapStep<NUM_READS, BLOCKS, BLOCK_SIZE>
+    InsExecutorE2<F> for FieldExprVecHeapStep<NUM_READS, BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
     fn e2_pre_compute_size(&self) -> usize {
@@ -216,7 +211,7 @@ unsafe fn execute_e1_impl<
     const NEEDS_SETUP: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FieldExpressionPreCompute<NUM_READS> = pre_compute.borrow();
 
@@ -232,7 +227,7 @@ unsafe fn execute_e2_impl<
     const NEEDS_SETUP: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FieldExpressionPreCompute<NUM_READS>> = pre_compute.borrow();
     vm_state
@@ -253,7 +248,7 @@ unsafe fn execute_e12_impl<
     const NEEDS_SETUP: bool,
 >(
     pre_compute: &FieldExpressionPreCompute<NUM_READS>,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     // Read register values
     let rs_vals = pre_compute
@@ -284,4 +279,24 @@ unsafe fn execute_e12_impl<
 
     vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
     vm_state.instret += 1;
+}
+
+impl<const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize> Deref
+    for FieldExprVecHeapStep<NUM_READS, BLOCKS, BLOCK_SIZE>
+{
+    type Target = FieldExpressionStep<
+        Rv32VecHeapAdapterStep<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+    >;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize> DerefMut
+    for FieldExprVecHeapStep<NUM_READS, BLOCKS, BLOCK_SIZE>
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
 }
