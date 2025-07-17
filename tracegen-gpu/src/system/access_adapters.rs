@@ -4,24 +4,20 @@ use openvm_circuit::{
     arch::{CustomBorrow, DenseRecordArena, SizedRecord},
     system::memory::adapter::{
         records::{AccessLayout, AccessRecordMut},
-        AccessAdapterAir, AccessAdapterCols,
+        AccessAdapterCols,
     },
     utils::next_power_of_two_or_zero,
 };
-use openvm_stark_backend::{rap::get_air_name, AirRef};
-use p3_air::BaseAir;
+use openvm_stark_backend::prover::types::AirProvingContext;
 use stark_backend_gpu::{
-    base::DeviceMatrix, cuda::copy::MemCopyH2D, prelude::SC, prover_backend::GpuBackend, types::F,
+    base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
 
 use crate::{
     primitives::var_range::VariableRangeCheckerChipGPU, system::cuda::access_adapters::tracegen,
-    ChipUsageGetter, DeviceChip,
 };
 
-pub struct AccessAdapterChipGPU<const N: usize> {
-    air: Arc<AccessAdapterAir<N>>,
-}
+pub struct AccessAdapterChipGPU<const N: usize>;
 
 pub(crate) const NUM_ADAPTERS: usize = 5;
 
@@ -33,22 +29,9 @@ pub enum GenericAccessAdapterChipGPU {
     N32(AccessAdapterChipGPU<32>),
 }
 
-impl GenericAccessAdapterChipGPU {
-    pub fn trace_width(&self) -> usize {
-        match self {
-            GenericAccessAdapterChipGPU::N2(chip) => chip.trace_width(),
-            GenericAccessAdapterChipGPU::N4(chip) => chip.trace_width(),
-            GenericAccessAdapterChipGPU::N8(chip) => chip.trace_width(),
-            GenericAccessAdapterChipGPU::N16(chip) => chip.trace_width(),
-            GenericAccessAdapterChipGPU::N32(chip) => chip.trace_width(),
-        }
-    }
-}
-
 pub struct AccessAdapterInventoryGPU {
     _chips: [GenericAccessAdapterChipGPU; NUM_ADAPTERS],
     range_checker: Arc<VariableRangeCheckerChipGPU>,
-    arena: DenseRecordArena,
 }
 
 #[repr(C)]
@@ -123,33 +106,26 @@ pub(crate) fn generate_traces_from_records(
 }
 
 impl AccessAdapterInventoryGPU {
-    pub fn generate_traces(&self) -> [DeviceMatrix<F>; NUM_ADAPTERS] {
-        let records = self.arena.allocated();
+    pub fn new(range_checker: Arc<VariableRangeCheckerChipGPU>) -> Self {
+        Self {
+            _chips: [
+                GenericAccessAdapterChipGPU::N2(AccessAdapterChipGPU),
+                GenericAccessAdapterChipGPU::N4(AccessAdapterChipGPU),
+                GenericAccessAdapterChipGPU::N8(AccessAdapterChipGPU),
+                GenericAccessAdapterChipGPU::N16(AccessAdapterChipGPU),
+                GenericAccessAdapterChipGPU::N32(AccessAdapterChipGPU),
+            ],
+            range_checker,
+        }
+    }
+
+    pub fn generate_air_proving_ctxs(
+        &self,
+        arena: &DenseRecordArena,
+    ) -> [AirProvingContext<GpuBackend>; NUM_ADAPTERS] {
+        let records = arena.allocated();
         generate_traces_from_records(records, self.range_checker.clone())
-    }
-}
-
-impl<const N: usize> ChipUsageGetter for AccessAdapterChipGPU<N> {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
-        todo!()
-    }
-
-    fn trace_width(&self) -> usize {
-        <AccessAdapterAir<N> as BaseAir<F>>::width(&self.air)
-    }
-}
-
-impl<const N: usize> DeviceChip<SC, GpuBackend> for AccessAdapterChipGPU<N> {
-    fn air(&self) -> AirRef<SC> {
-        self.air.clone()
-    }
-
-    fn generate_trace(&self) -> DeviceMatrix<F> {
-        unimplemented!("the traces should be generated in access adapter inventory")
+            .map(AirProvingContext::simple_no_pis)
     }
 }
 
@@ -157,21 +133,23 @@ impl<const N: usize> DeviceChip<SC, GpuBackend> for AccessAdapterChipGPU<N> {
 mod tests {
     use std::array;
 
-    use openvm_circuit::{arch::MemoryConfig, system::poseidon2::Poseidon2PeripheryChip};
+    use openvm_circuit::arch::{testing::RANGE_CHECKER_BUS, MemoryConfig};
+    use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
     use openvm_stark_backend::{p3_field::FieldAlgebra, prover::hal::MatrixDimensions};
     use rand::{rngs::StdRng, Rng, SeedableRng};
     use stark_backend_gpu::{prelude::SC, types::F};
 
     use super::*;
-    use crate::testing::assert_eq_cpu_and_gpu_matrix;
+    use crate::testing::{assert_eq_cpu_and_gpu_matrix, GpuChipTestBuilder};
 
     #[test]
     fn test_access_adapters_cpu_gpu_equivalence() {
         let mem_config = MemoryConfig::default();
 
         let mut rng = StdRng::seed_from_u64(42);
-        let mut tester =
-            crate::testing::GpuChipTestBuilder::volatile(mem_config).with_variable_range_checker();
+        let decomp = mem_config.decomp;
+        let mut tester = GpuChipTestBuilder::volatile(mem_config)
+            .with_variable_range_checker(VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, decomp));
 
         let max_ptr = 20;
         let aligns = [4, 4, 4, 1];
@@ -214,21 +192,17 @@ mod tests {
             }
         }
 
-        tester
-            .memory
-            .controller
-            .finalize(None::<&mut Poseidon2PeripheryChip<F>>);
-
-        let allocated = tester
-            .memory_controller()
-            .memory
-            .access_adapter_inventory
-            .arena
-            .allocated();
-
+        let touched = tester.memory.memory.finalize(false);
+        let allocated = tester.memory.memory.access_adapter_records.allocated();
         let gpu_traces = generate_traces_from_records(allocated, tester.range_checker());
 
-        let all_memory_traces = tester.memory.controller.generate_air_proof_inputs::<SC>();
+        let all_memory_traces = tester
+            .memory
+            .controller
+            .generate_proving_ctx::<SC>(tester.memory.memory.access_adapter_records, touched)
+            .into_iter()
+            .map(|ctx| ctx.common_main.unwrap())
+            .collect::<Vec<_>>();
         let num_memory_traces = all_memory_traces.len();
         let cpu_traces: Vec<_> = all_memory_traces
             .into_iter()
@@ -236,14 +210,13 @@ mod tests {
             .collect::<Vec<_>>();
 
         for (cpu_trace, gpu_trace) in cpu_traces.into_iter().zip(gpu_traces.iter()) {
-            let expected_trace = Arc::new(cpu_trace.raw.common_main.unwrap());
             assert_eq!(
-                expected_trace.height() == 0,
+                cpu_trace.height() == 0,
                 gpu_trace.height() == 0,
                 "Exactly one of CPU and GPU traces is empty"
             );
-            if expected_trace.height() != 0 {
-                assert_eq_cpu_and_gpu_matrix(expected_trace, gpu_trace);
+            if cpu_trace.height() != 0 {
+                assert_eq_cpu_and_gpu_matrix(cpu_trace, gpu_trace);
             }
         }
     }

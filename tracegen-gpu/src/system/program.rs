@@ -1,41 +1,36 @@
 use std::{mem::size_of, sync::Arc};
 
-use openvm_circuit::{
-    system::program::{ProgramAir, ProgramExecutionCols},
-    utils::next_power_of_two_or_zero,
-};
+use openvm_circuit::{system::program::ProgramExecutionCols, utils::next_power_of_two_or_zero};
 use openvm_instructions::{program::Program, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::{
-    p3_field::FieldAlgebra, prover::hal::MatrixDimensions, rap::get_air_name, AirRef,
-    ChipUsageGetter,
+    p3_field::FieldAlgebra,
+    prover::{
+        hal::{MatrixDimensions, TraceCommitter},
+        types::{AirProvingContext, CommittedTraceData},
+    },
+    Chip,
 };
-use p3_air::BaseAir;
 use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::copy::MemCopyH2D,
-    prover_backend::GpuBackend,
-    types::{F, SC},
+    base::DeviceMatrix, cuda::copy::MemCopyH2D, gpu_device::GpuDevice, prover_backend::GpuBackend,
+    types::F,
 };
 
-use crate::{system::cuda, DeviceChip};
+use crate::system::cuda;
 
-pub struct ProgramChipGpu {
-    pub air: ProgramAir,
-    pub cached_trace: Option<DeviceMatrix<F>>,
-    pub exec_freqs: Vec<u32>,
+pub struct ProgramChipGPU {
+    pub cached: Option<CommittedTraceData<GpuBackend>>,
+    pub filtered_exec_freqs: Vec<u32>,
 }
 
-impl ProgramChipGpu {
-    pub fn new(air: ProgramAir) -> Self {
+impl ProgramChipGPU {
+    pub fn new() -> Self {
         Self {
-            air,
-            cached_trace: None,
-            exec_freqs: Vec::new(),
+            cached: None,
+            filtered_exec_freqs: Vec::new(),
         }
     }
 
-    pub fn generate_cached_trace(&mut self, program: Program<F>) {
-        assert!(self.cached_trace.is_none());
+    pub fn generate_cached_trace(program: Program<F>) -> DeviceMatrix<F> {
         let instructions = program
             .enumerate_by_pc()
             .into_iter()
@@ -71,58 +66,205 @@ impl ProgramChipGpu {
                 trace.width(),
                 &records,
                 num_records,
-                program.pc_base + num_records as u32 * program.step,
+                program.pc_base,
+                program.step,
                 SystemOpcode::TERMINATE.global_opcode().as_usize(),
             )
             .expect("Failed to generate cached trace");
         }
-        self.cached_trace = Some(trace);
+        trace
+    }
+
+    pub fn get_committed_trace(
+        trace: DeviceMatrix<F>,
+        device: &GpuDevice,
+    ) -> CommittedTraceData<GpuBackend> {
+        let (root, pcs_data) = device.commit(&[trace.clone()]);
+        CommittedTraceData {
+            commitment: root,
+            trace,
+            data: pcs_data,
+        }
     }
 }
 
-impl ChipUsageGetter for ProgramChipGpu {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.cached_trace.as_ref().map(|t| t.height()).unwrap_or(0)
-    }
-
-    fn trace_width(&self) -> usize {
-        BaseAir::<F>::width(&self.air)
+impl Default for ProgramChipGPU {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
-impl DeviceChip<SC, GpuBackend> for ProgramChipGpu {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air)
-    }
-
-    // TODO[stephen]: This currently generates the common main trace, but with the
-    // changes introduced in OpenVM's feat/new-exec-device this will generate the
-    // whole proving context (i.e. cached trace + common main).
-    fn generate_trace(&self) -> DeviceMatrix<F> {
-        let height = self.current_trace_height();
-        assert!(height > 0);
-        assert!(self.exec_freqs.len() == height);
+impl<RA> Chip<RA, GpuBackend> for ProgramChipGPU {
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
+        let cached = self.cached.clone().expect("Cached program must be loaded");
+        let height = cached.trace.height();
+        assert!(self.filtered_exec_freqs.len() == height);
         let buffer = self
-            .exec_freqs
+            .filtered_exec_freqs
             .iter()
             .map(|f| F::from_canonical_u32(*f))
             .collect::<Vec<_>>()
             .to_device()
             .unwrap();
-        DeviceMatrix::new(Arc::new(buffer), height, 1)
+        let trace = DeviceMatrix::new(Arc::new(buffer), height, 1);
+
+        AirProvingContext {
+            cached_mains: vec![cached],
+            common_main: Some(trace),
+            public_values: vec![],
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use openvm_circuit::system::program::trace::VmCommittedExe;
+    use openvm_instructions::{
+        exe::VmExe,
+        instruction::Instruction,
+        program::{Program, DEFAULT_PC_STEP},
+        LocalOpcode,
+        SystemOpcode::*,
+    };
+    use openvm_native_compiler::{
+        FieldArithmeticOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*,
+        NativeLoadStoreOpcode::*,
+    };
+    use openvm_rv32im_transpiler::BranchEqualOpcode::*;
+    use openvm_stark_backend::config::StarkGenericConfig;
+    use openvm_stark_sdk::{
+        config::{
+            baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+            FriParameters,
+        },
+        engine::{StarkEngine, StarkFriEngine},
+    };
+    use stark_backend_gpu::{engine::GpuBabyBearPoseidon2Engine, types::F};
+
+    use crate::{system::program::ProgramChipGPU, testing::assert_eq_cpu_and_gpu_matrix};
+
+    fn test_cached_committed_trace_data(program: Program<F>) {
+        let gpu_engine = GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(2));
+        let gpu_device = gpu_engine.device();
+        let gpu_trace = ProgramChipGPU::generate_cached_trace(program.clone());
+        let gpu_cached = ProgramChipGPU::get_committed_trace(gpu_trace, gpu_device);
+
+        let cpu_engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(2));
+        let cpu_exe = VmExe::new(program.clone());
+        let cpu_committed_exe =
+            VmCommittedExe::<BabyBearPoseidon2Config>::commit(cpu_exe, cpu_engine.config().pcs());
+        let cpu_cached = cpu_committed_exe.get_committed_trace();
+
+        assert_eq_cpu_and_gpu_matrix(cpu_cached.trace, &gpu_cached.trace);
+        assert_eq!(gpu_cached.commitment, cpu_cached.commitment);
+    }
 
     #[test]
-    fn test_program_tracegen() {
-        // TODO[stephen]: test ProgramChipGpu tracegen after feat/new-exec-device
-        println!("Skipping test_program_tracegen...");
+    fn test_program_cached_tracegen_1() {
+        let instructions = vec![
+            Instruction::large_from_isize(STOREW.global_opcode(), 2, 0, 0, 0, 1, 0, 1),
+            Instruction::large_from_isize(STOREW.global_opcode(), 1, 1, 0, 0, 1, 0, 1),
+            Instruction::from_isize(
+                NativeBranchEqualOpcode(BEQ).global_opcode(),
+                0,
+                0,
+                3 * DEFAULT_PC_STEP as isize,
+                1,
+                0,
+            ),
+            Instruction::from_isize(SUB.global_opcode(), 0, 0, 1, 1, 1),
+            Instruction::from_isize(
+                JAL.global_opcode(),
+                2,
+                -2 * (DEFAULT_PC_STEP as isize),
+                0,
+                1,
+                0,
+            ),
+            Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let program = Program::from_instructions(&instructions);
+        test_cached_committed_trace_data(program);
+    }
+
+    #[test]
+    fn test_program_cached_tracegen_2() {
+        let instructions = vec![
+            Instruction::large_from_isize(STOREW.global_opcode(), 5, 0, 0, 0, 1, 0, 1),
+            Instruction::from_isize(
+                NativeBranchEqualOpcode(BNE).global_opcode(),
+                0,
+                4,
+                3 * DEFAULT_PC_STEP as isize,
+                1,
+                0,
+            ),
+            Instruction::from_isize(
+                JAL.global_opcode(),
+                2,
+                -2 * DEFAULT_PC_STEP as isize,
+                0,
+                1,
+                0,
+            ),
+            Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::from_isize(
+                NativeBranchEqualOpcode(BEQ).global_opcode(),
+                0,
+                5,
+                -(DEFAULT_PC_STEP as isize),
+                1,
+                0,
+            ),
+        ];
+        let program = Program::from_instructions(&instructions);
+        test_cached_committed_trace_data(program);
+    }
+
+    #[test]
+    fn test_program_cached_tracegen_undefined_instructions() {
+        let instructions = vec![
+            Some(Instruction::large_from_isize(
+                STOREW.global_opcode(),
+                2,
+                0,
+                0,
+                0,
+                1,
+                0,
+                1,
+            )),
+            Some(Instruction::large_from_isize(
+                STOREW.global_opcode(),
+                1,
+                1,
+                0,
+                0,
+                1,
+                0,
+                1,
+            )),
+            Some(Instruction::from_isize(
+                NativeBranchEqualOpcode(BEQ).global_opcode(),
+                0,
+                2,
+                3 * DEFAULT_PC_STEP as isize,
+                1,
+                0,
+            )),
+            None,
+            None,
+            Some(Instruction::from_isize(
+                TERMINATE.global_opcode(),
+                0,
+                0,
+                0,
+                0,
+                0,
+            )),
+        ];
+        let program =
+            Program::new_without_debug_infos_with_option(&instructions, DEFAULT_PC_STEP, 0);
+        test_cached_committed_trace_data(program);
     }
 }

@@ -174,18 +174,21 @@ pub mod program {
             width: usize,
             d_records: *const std::ffi::c_void,
             num_records: usize,
-            terminate_pc: u32,
+            pc_base: u32,
+            pc_step: u32,
             terminate_opcode: usize,
         ) -> i32;
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn cached_tracegen<T>(
         d_trace: &DeviceBuffer<T>,
         height: usize,
         width: usize,
         d_records: &DeviceBuffer<T>,
         num_records: usize,
-        terminate_pc: u32,
+        pc_base: u32,
+        pc_step: u32,
         terminate_opcode: usize,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_program_cached_tracegen(
@@ -194,7 +197,8 @@ pub mod program {
             width,
             d_records.as_raw_ptr(),
             num_records,
-            terminate_pc,
+            pc_base,
+            pc_step,
             terminate_opcode,
         ))
     }
