@@ -164,10 +164,10 @@ pub fn get_ec_double_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct EcDoublePreCompute<'a> {
-    a: u8,
-    rs_addrs: [u8; 1],
     modulus: &'a BigUint,
     a_coeff: &'a BigUint,
+    rs_addrs: [u8; 1],
+    a: u8,
 }
 
 impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleStep<BLOCKS, BLOCK_SIZE> {

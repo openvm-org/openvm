@@ -151,9 +151,9 @@ pub fn get_ec_addne_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct EcAddNePreCompute<'a> {
-    a: u8,
-    rs_addrs: [u8; 2],
     modulus: &'a BigUint,
+    rs_addrs: [u8; 2],
+    a: u8,
 }
 
 impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeStep<BLOCKS, BLOCK_SIZE> {
