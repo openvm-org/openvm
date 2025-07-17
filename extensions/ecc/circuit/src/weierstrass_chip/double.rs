@@ -15,7 +15,7 @@ use openvm_circuit::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
         E2PreCompute, ExecutionBridge,
-        ExecutionError::InvalidInstruction,
+        ExecutionError::{self, InvalidInstruction},
         InsExecutorE1, InsExecutorE2, Result, VmSegmentState,
     },
     system::memory::{
@@ -431,6 +431,11 @@ unsafe fn execute_e12_setup_impl<
         .collect();
     let input_prime = BigUint::from_bytes_le(&prime_bytes);
 
+    if input_prime != *pre_compute.modulus {
+        vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+        return;
+    }
+
     // Extract second field element as the a coefficient
     let a_bytes: Vec<u8> = setup_input_data[BLOCKS / 2..]
         .iter()
@@ -439,15 +444,10 @@ unsafe fn execute_e12_setup_impl<
         .collect();
     let input_a = BigUint::from_bytes_le(&a_bytes);
 
-    // Assert that the inputs match the expected values
-    assert_eq!(
-        input_prime, *pre_compute.modulus,
-        "Setup: input prime must match field modulus"
-    );
-    assert_eq!(
-        input_a, *pre_compute.a_coeff,
-        "Setup: input a coefficient must match expected value"
-    );
+    if input_a != *pre_compute.a_coeff {
+        vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+        return;
+    }
 
     vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
     vm_state.instret += 1;
