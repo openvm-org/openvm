@@ -105,7 +105,7 @@ where
     pub fn keygen(config: AppConfig<VC>) -> Result<Self, AirInventoryError> {
         let app_engine = BabyBearPoseidon2Engine::new(config.app_fri_params.fri_params);
         let app_vm_pk = {
-            let vm_pk = config.app_vm_config.keygen(app_engine.config())?;
+            let vm_pk = config.app_vm_config.create_airs()?.keygen(&app_engine);
             assert!(
                 vm_pk.max_constraint_degree
                     <= config.app_fri_params.fri_params.max_constraint_degree()
@@ -466,8 +466,11 @@ pub fn leaf_keygen(
     leaf_vm_config: NativeConfig,
 ) -> Result<Arc<VmProvingKey<SC, NativeConfig>>, AirInventoryError> {
     let leaf_engine = BabyBearPoseidon2Engine::new(fri_params);
-    let leaf_vm_pk = info_span!("keygen", group = "leaf")
-        .in_scope(|| leaf_vm_config.keygen(leaf_engine.config()))?;
+    let leaf_vm_pk = info_span!("keygen", group = "leaf").in_scope(|| {
+        leaf_vm_config
+            .create_airs()
+            .map(|airs| airs.keygen(&leaf_engine))
+    })?;
     Ok(Arc::new(VmProvingKey {
         fri_params,
         vm_config: leaf_vm_config,

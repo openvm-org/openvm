@@ -20,7 +20,7 @@ use openvm_instructions::exe::{SparseMemoryImage, VmExe};
 use openvm_stark_backend::{
     config::{Com, StarkGenericConfig, Val},
     engine::StarkEngine,
-    keygen::types::MultiStarkVerifyingKey,
+    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField32},
     p3_util::log2_strict_usize,
     proof::Proof,
@@ -466,6 +466,17 @@ where
             pk: d_pk,
             chip_complex,
         })
+    }
+
+    pub fn new_with_keygen(
+        engine: E,
+        config: VC,
+    ) -> Result<(Self, MultiStarkProvingKey<E::SC>), VirtualMachineError> {
+        let circuit = config.create_airs()?;
+        let pk = circuit.keygen(&engine);
+        let d_pk = engine.device().transport_pk_to_device(&pk);
+        let vm = Self::new(engine, config, d_pk)?;
+        Ok((vm, pk))
     }
 
     pub fn config(&self) -> &VC {
