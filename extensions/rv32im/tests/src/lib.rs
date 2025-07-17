@@ -8,7 +8,7 @@ mod tests {
         system::memory::merkle::public_values::UserPublicValuesProof,
         utils::{air_test, air_test_with_min_segments, test_system_config_with_continuations},
     };
-    use openvm_instructions::{exe::VmExe, LocalOpcode, SystemOpcode};
+    use openvm_instructions::{exe::VmExe, instruction::Instruction, LocalOpcode, SystemOpcode};
     use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
     use openvm_rv32im_guest::hint_load_by_key_encode;
     use openvm_rv32im_transpiler::{
@@ -332,6 +332,7 @@ mod tests {
                 || MulHOpcode::iter().any(|op| op.global_opcode() == insn.opcode)
                 || DivRemOpcode::iter().any(|op| op.global_opcode() == insn.opcode)
             {
+                *insn = Instruction::default();
                 insn.opcode = SystemOpcode::PHANTOM.global_opcode();
             }
         }

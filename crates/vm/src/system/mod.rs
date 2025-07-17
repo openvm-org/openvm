@@ -6,7 +6,9 @@ use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
     VariableRangeCheckerChip,
 };
-use openvm_instructions::{LocalOpcode, PublishOpcode, SystemOpcode};
+use openvm_instructions::{
+    LocalOpcode, PhantomDiscriminant, PublishOpcode, SysPhantom, SystemOpcode,
+};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::{LookupBus, PermutationCheckBus},
@@ -32,14 +34,15 @@ use connector::VmConnectorAir;
 use openvm_stark_sdk::engine::StarkEngine;
 use program::ProgramAir;
 use public_values::PublicValuesAir;
+use rustc_hash::FxHashMap;
 
 use crate::{
     arch::{
         vm_poseidon2_config, AirInventory, AirInventoryError, BusIndexManager, ChipInventory,
         ChipInventoryError, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
-        ExecutorInventory, ExecutorInventoryError, MatrixRecordArena, RowMajorMatrixArena,
-        SystemConfig, VmAirWrapper, VmChipComplex, VmChipWrapper, VmCircuitConfig,
-        VmExecutionConfig, VmProverConfig, PUBLIC_VALUES_AIR_ID,
+        ExecutorInventory, ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor,
+        RowMajorMatrixArena, SystemConfig, VmAirWrapper, VmChipComplex, VmChipWrapper,
+        VmCircuitConfig, VmExecutionConfig, VmProverConfig, PUBLIC_VALUES_AIR_ID,
     },
     system::{
         connector::VmConnectorChip,
@@ -50,7 +53,10 @@ use crate::{
             MemoryAirInventory, MemoryController, TimestampedEquipartition, CHUNK,
         },
         native_adapter::{NativeAdapterAir, NativeAdapterStep},
-        phantom::{PhantomAir, PhantomChip, PhantomExecutor, PhantomFiller},
+        phantom::{
+            CycleEndPhantomExecutor, CycleStartPhantomExecutor, NopPhantomExecutor, PhantomAir,
+            PhantomChip, PhantomExecutor, PhantomFiller,
+        },
         poseidon2::{
             air::Poseidon2PeripheryAir, new_poseidon2_periphery_air, Poseidon2PeripheryChip,
         },
@@ -232,8 +238,27 @@ impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
             inventory.add_executor(public_values, [PublishOpcode::PUBLISH.global_opcode()])?;
         }
         let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
-        let phantom_chip = PhantomExecutor::new(Default::default(), phantom_opcode);
-        inventory.add_executor(phantom_chip, [phantom_opcode])?;
+        let mut phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor<F>>> =
+            FxHashMap::default();
+        // Use NopPhantomExecutor so the discriminant is set but `DebugPanic` is handled specially.
+        phantom_executors.insert(
+            PhantomDiscriminant(SysPhantom::DebugPanic as u16),
+            Arc::new(NopPhantomExecutor),
+        );
+        phantom_executors.insert(
+            PhantomDiscriminant(SysPhantom::Nop as u16),
+            Arc::new(NopPhantomExecutor),
+        );
+        phantom_executors.insert(
+            PhantomDiscriminant(SysPhantom::CtStart as u16),
+            Arc::new(CycleStartPhantomExecutor),
+        );
+        phantom_executors.insert(
+            PhantomDiscriminant(SysPhantom::CtEnd as u16),
+            Arc::new(CycleEndPhantomExecutor),
+        );
+        let phantom = PhantomExecutor::new(phantom_executors, phantom_opcode);
+        inventory.add_executor(phantom, [phantom_opcode])?;
 
         Ok(inventory)
     }
