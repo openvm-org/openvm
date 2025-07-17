@@ -38,10 +38,7 @@ use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
 
 use super::{curves::get_curve_type_from_modulus, WeierstrassAir};
-use crate::weierstrass_chip::curves::{
-    bls12_381::ec_add_ne_bls12_381, bn254::ec_add_ne_bn254, k256::ec_add_ne_k256,
-    p256::ec_add_ne_p256, CurveType,
-};
+use crate::weierstrass_chip::curves::{ec_add_ne, CurveType};
 
 // Assumes that (x1, y1), (x2, y2) both lie on the curve and are not the identity point.
 // Further assumes that x1, x2 are not equal in the coordinate field.
@@ -366,12 +363,10 @@ unsafe fn execute_e12_impl<
     });
 
     let output_data = match CURVE_TYPE {
-        x if x == CurveType::K256 as u8 => ec_add_ne_k256::<BLOCKS, BLOCK_SIZE>(read_data),
-        x if x == CurveType::P256 as u8 => ec_add_ne_p256::<BLOCKS, BLOCK_SIZE>(read_data),
-        x if x == CurveType::BN254 as u8 => ec_add_ne_bn254::<BLOCKS, BLOCK_SIZE>(read_data),
-        x if x == CurveType::BLS12_381 as u8 => {
-            ec_add_ne_bls12_381::<BLOCKS, BLOCK_SIZE>(read_data)
-        }
+        x if x == CurveType::K256 as u8 => ec_add_ne::<0, BLOCKS, BLOCK_SIZE>(read_data),
+        x if x == CurveType::P256 as u8 => ec_add_ne::<1, BLOCKS, BLOCK_SIZE>(read_data),
+        x if x == CurveType::BN254 as u8 => ec_add_ne::<2, BLOCKS, BLOCK_SIZE>(read_data),
+        x if x == CurveType::BLS12_381 as u8 => ec_add_ne::<3, BLOCKS, BLOCK_SIZE>(read_data),
 
         _ => ec_add_ne_generic::<BLOCKS, BLOCK_SIZE>(read_data, pre_compute.modulus),
     };

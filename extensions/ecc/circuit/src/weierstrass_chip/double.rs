@@ -38,15 +38,9 @@ use openvm_mod_circuit_builder::{
 use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
 
-use crate::weierstrass_chip::curves::{
-    bls12_381::ec_double_bls12_381, bn254::ec_double_bn254, k256::ec_double_k256,
-    p256::ec_double_p256,
-};
+use crate::weierstrass_chip::curves::{ec_double, CurveType};
 
-use super::{
-    curves::{get_curve_type, CurveType},
-    WeierstrassAir,
-};
+use super::{curves::get_curve_type, WeierstrassAir};
 
 pub fn ec_double_ne_expr(
     config: ExprBuilderConfig, // The coordinate field.
@@ -373,12 +367,10 @@ unsafe fn execute_e12_impl<
     };
 
     let output_data = match CURVE_TYPE {
-        x if x == CurveType::K256 as u8 => ec_double_k256::<BLOCKS, BLOCK_SIZE>(read_data),
-        x if x == CurveType::P256 as u8 => ec_double_p256::<BLOCKS, BLOCK_SIZE>(read_data),
-        x if x == CurveType::BN254 as u8 => ec_double_bn254::<BLOCKS, BLOCK_SIZE>(read_data),
-        x if x == CurveType::BLS12_381 as u8 => {
-            ec_double_bls12_381::<BLOCKS, BLOCK_SIZE>(read_data)
-        }
+        x if x == CurveType::K256 as u8 => ec_double::<0, BLOCKS, BLOCK_SIZE>(read_data),
+        x if x == CurveType::P256 as u8 => ec_double::<1, BLOCKS, BLOCK_SIZE>(read_data),
+        x if x == CurveType::BN254 as u8 => ec_double::<2, BLOCKS, BLOCK_SIZE>(read_data),
+        x if x == CurveType::BLS12_381 as u8 => ec_double::<3, BLOCKS, BLOCK_SIZE>(read_data),
         _ => ec_double_generic::<BLOCKS, BLOCK_SIZE>(
             read_data,
             pre_compute.modulus.clone(),
