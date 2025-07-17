@@ -13,8 +13,8 @@ pub mod test_utils {
         arch::{
             execution_mode::metered::Segment,
             testing::{memory::gen_pointer, VmChipTestBuilder},
-            MatrixRecordArena, PreflightExecutionOutput, Streams, VirtualMachine, VmCircuitConfig,
-            VmProverConfig, VmState,
+            MatrixRecordArena, PreflightExecutionOutput, Streams, VirtualMachine, VmProverConfig,
+            VmState,
         },
         utils::test_system_config,
     };
@@ -26,7 +26,6 @@ pub mod test_utils {
     use openvm_native_compiler::conversion::AS;
     use openvm_stark_backend::{
         config::Domain, p3_commit::PolynomialSpace, p3_field::PrimeField32,
-        prover::hal::DeviceDataTransporter,
     };
     use openvm_stark_sdk::{
         config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
@@ -91,9 +90,7 @@ pub mod test_utils {
         let input = input_stream.into();
 
         let engine = E::new(FriParameters::new_for_testing(1));
-        let pk = config.keygen(engine.config())?;
-        let d_pk = engine.device().transport_pk_to_device(&pk);
-        let vm = VirtualMachine::new(engine, config, d_pk)?;
+        let (vm, _) = VirtualMachine::new_with_keygen(engine, config)?;
         let ctx = vm.build_metered_ctx();
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         let mut segments = vm.executor().execute_metered(

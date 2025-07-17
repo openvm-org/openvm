@@ -83,10 +83,9 @@ where
 {
     setup_tracing();
     let engine = BabyBearPoseidon2Engine::new(fri_params);
-    let pk = config.keygen(engine.config())?;
+    let (mut vm, pk) =
+        VirtualMachine::<BabyBearPoseidon2Engine, VC>::new_with_keygen(engine, config)?;
     let vk = pk.get_vk();
-    let d_pk = engine.device().transport_pk_to_device(&pk);
-    let mut vm = VirtualMachine::<BabyBearPoseidon2Engine, VC>::new(engine, config, d_pk)?;
     let exe = exe.into();
     let input = input.into();
     let metered_ctx = vm.build_metered_ctx();

@@ -7,9 +7,7 @@ use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,
-    keygen::types::MultiStarkProvingKey,
     p3_field::Field,
-    prover::hal::ProverBackend,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -72,13 +70,6 @@ pub trait VmExecutionConfig<F> {
 
 pub trait VmCircuitConfig<SC: StarkGenericConfig> {
     fn create_airs(&self) -> Result<AirInventory<SC>, AirInventoryError>;
-
-    /// Generate the proving key and verifying key for the circuit defined by this config.
-    fn keygen(&self, stark_config: &SC) -> Result<MultiStarkProvingKey<SC>, AirInventoryError> {
-        let circuit = self.create_airs()?;
-        let pk = circuit.keygen(stark_config);
-        Ok(pk)
-    }
 }
 
 pub trait VmProverConfig<E>: VmConfig<E::SC>
@@ -90,6 +81,7 @@ where
 
     /// Create a [VmChipComplex] from the full [AirInventory], which should be the output of
     /// [VmCircuitConfig::create_airs].
+    #[allow(clippy::type_complexity)]
     fn create_chip_complex(
         &self,
         circuit: AirInventory<E::SC>,

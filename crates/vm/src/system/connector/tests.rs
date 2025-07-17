@@ -10,7 +10,7 @@ use openvm_stark_backend::{
     config::StarkGenericConfig,
     engine::StarkEngine,
     p3_field::FieldAlgebra,
-    prover::{cpu::CpuBackend, hal::DeviceDataTransporter, types::AirProvingContext},
+    prover::{cpu::CpuBackend, types::AirProvingContext},
 };
 use openvm_stark_sdk::{
     config::{
@@ -24,8 +24,7 @@ use openvm_stark_sdk::{
 use super::VmConnectorPvs;
 use crate::{
     arch::{
-        PreflightExecutionOutput, Streams, SystemConfig, VirtualMachine, VmCircuitConfig, VmState,
-        CONNECTOR_AIR_ID,
+        PreflightExecutionOutput, Streams, SystemConfig, VirtualMachine, VmState, CONNECTOR_AIR_ID,
     },
     system::{
         memory::{online::GuestMemory, AddressMap},
@@ -68,10 +67,8 @@ fn test_vm_connector_wrong_is_terminate() {
 fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingContext<PB>)) {
     let vm_config = SystemConfig::default();
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
-    let pk = vm_config.keygen(engine.config()).unwrap();
+    let (mut vm, pk) = VirtualMachine::new_with_keygen(engine, vm_config.clone()).unwrap();
     let vk = pk.get_vk();
-    let d_pk = engine.device().transport_pk_to_device(&pk);
-    let mut vm = VirtualMachine::new(engine, vm_config.clone(), d_pk).unwrap();
 
     let instructions = vec![Instruction::<F>::from_isize(
         TERMINATE.global_opcode(),

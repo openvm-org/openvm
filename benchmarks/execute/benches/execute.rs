@@ -35,10 +35,7 @@ use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
-    openvm_stark_backend::{
-        config::StarkGenericConfig, engine::StarkEngine, p3_field::Field,
-        prover::hal::DeviceDataTransporter,
-    },
+    openvm_stark_backend,
     p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -152,9 +149,7 @@ fn metering_setup() -> &'static (MeteredCtx, Vec<usize>) {
     METERED_CTX.get_or_init(|| {
         let config = ExecuteConfig::default();
         let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-        let pk = config.keygen(engine.config()).unwrap();
-        let d_pk = engine.device().transport_pk_to_device(&pk);
-        let vm = VirtualMachine::new(engine, config, d_pk).unwrap();
+        let (vm, _) = VirtualMachine::new_with_keygen(engine, config).unwrap();
         let ctx = vm.build_metered_ctx();
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         (ctx, executor_idx_to_air_idx)
