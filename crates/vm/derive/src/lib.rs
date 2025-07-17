@@ -333,7 +333,7 @@ pub fn ins_executor_e2_derive(input: TokenStream) -> TokenStream {
                 });
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
             // crate. Assume F is already generic of the field.
-            let (pre_compute_size_arms, pre_compute_e2_arms, set_trace_height_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
+            let (pre_compute_size_arms, pre_compute_e2_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 let pre_compute_size_arm = quote! {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>>::e2_pre_compute_size(x)
@@ -341,13 +341,10 @@ pub fn ins_executor_e2_derive(input: TokenStream) -> TokenStream {
                 let pre_compute_e2_arm = quote! {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>>::pre_compute_e2(x, chip_idx, pc, instruction, data)
                 };
-                let set_trace_height_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>>::set_trace_height(x, height)
-                };
                 let where_predicate = syn::parse_quote! {
                     #field_ty: ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>
                 };
-                (pre_compute_size_arm, pre_compute_e2_arm, set_trace_height_arm, where_predicate)
+                (pre_compute_size_arm, pre_compute_e2_arm, where_predicate)
             }));
             let where_clause = new_generics.make_where_clause();
             for predicate in where_predicates {
@@ -379,15 +376,6 @@ pub fn ins_executor_e2_derive(input: TokenStream) -> TokenStream {
                             #(#pre_compute_e2_arms,)*
                         }
                     }
-
-                    // fn set_trace_height(
-                    //     &mut self,
-                    //     height: usize,
-                    // ) {
-                    //     match self {
-                    //         #(#set_trace_height_arms,)*
-                    //     }
-                    // }
                 }
             }
                 .into()
@@ -581,7 +569,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     let execution_where_clause = quote! { where #(#execution_where_predicates),* };
     let circuit_where_clause = quote! { where #(#circuit_where_predicates),* };
     let prover_where_clause = quote! { where
-        E: StarkEngine,
+        E: openvm_stark_backend::engine::StarkEngine,
         Self: ::openvm_circuit::arch::VmConfig<E::SC>,
         #(#prover_where_predicates),*
     };
@@ -597,13 +585,13 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
             ::openvm_circuit::derive::InsExecutorE2,
             ::openvm_circuit::derive::InstructionExecutor,
         )]
-        pub enum #executor_type<F: Field> {
+        pub enum #executor_type<F: openvm_stark_backend::p3_field::Field> {
             #[any_enum]
             #source_name_upper(#source_executor_type),
             #(#executor_enum_fields)*
         }
 
-        impl<F: Field> ::openvm_circuit::arch::VmExecutionConfig<F> for #name #execution_where_clause {
+        impl<F: openvm_stark_backend::p3_field::Field> ::openvm_circuit::arch::VmExecutionConfig<F> for #name #execution_where_clause {
             type Executor = #executor_type<F>;
 
             fn create_executors(
@@ -615,7 +603,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
             }
         }
 
-        impl<SC: StarkGenericConfig> ::openvm_circuit::arch::VmCircuitConfig<SC> for #name #circuit_where_clause {
+        impl<SC: openvm_stark_backend::config::StarkGenericConfig> ::openvm_circuit::arch::VmCircuitConfig<SC> for #name #circuit_where_clause {
             fn create_airs(
                 &self,
             ) -> Result<::openvm_circuit::arch::AirInventory<SC>, ::openvm_circuit::arch::AirInventoryError> {

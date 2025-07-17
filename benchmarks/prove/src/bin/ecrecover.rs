@@ -2,30 +2,25 @@ use clap::Parser;
 use eyre::Result;
 use k256::ecdsa::{SigningKey, VerifyingKey};
 use num_bigint::BigUint;
-use openvm_algebra_circuit::{
-    ModularExtension, ModularExtensionExecutor, ModularExtensionPeriphery,
-};
+use openvm_algebra_circuit::{ModularExtension, ModularExtensionExecutor};
 use openvm_algebra_transpiler::ModularTranspilerExtension;
 use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::{
     arch::{instructions::exe::VmExe, InitFileGenerator, SystemConfig},
     derive::VmConfig,
+    system::SystemExecutor,
 };
 use openvm_ecc_circuit::{
-    CurveConfig, WeierstrassExtension, WeierstrassExtensionExecutor, WeierstrassExtensionPeriphery,
-    SECP256K1_CONFIG,
+    CurveConfig, WeierstrassExtension, WeierstrassExtensionExecutor, SECP256K1_CONFIG,
 };
 use openvm_ecc_transpiler::EccTranspilerExtension;
-use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
+use openvm_keccak256_circuit::{Keccak256, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
-use openvm_rv32im_circuit::{
-    Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
-    Rv32MExecutor, Rv32MPeriphery,
-};
+use openvm_rv32im_circuit::{Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
+use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{bench::run_with_metric_collection, p3_baby_bear::BabyBear};
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
@@ -50,7 +45,7 @@ fn make_input(signing_key: &SigningKey, msg: &[u8]) -> Vec<BabyBear> {
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Rv32ImEcRecoverConfig {
-    #[system]
+    #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
     pub base: Rv32I,

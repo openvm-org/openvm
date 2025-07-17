@@ -4,7 +4,9 @@ use clap::{command, Parser};
 use eyre::Result;
 use openvm_benchmarks_utils::{build_elf, get_programs_dir};
 use openvm_circuit::arch::{
-    instructions::exe::VmExe, DefaultSegmentationStrategy, InsExecutorE1, VmConfig,
+    instructions::exe::VmExe, DefaultSegmentationStrategy, InsExecutorE1, InsExecutorE2,
+    InstructionExecutor, MatrixRecordArena, SystemConfig, VmCircuitConfig, VmConfig,
+    VmExecutionConfig, VmLocalProver, VmProverConfig,
 };
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::conversion::CompilerOptions;
@@ -16,7 +18,7 @@ use openvm_sdk::{
         DEFAULT_ROOT_LOG_BLOWUP,
     },
     keygen::{leaf_keygen, AppProvingKey},
-    prover::{vm::local::VmLocalProver, AppProver, LeafProvingController},
+    prover::{AppProver, LeafProvingController},
     Sdk, StdIn,
 };
 use openvm_stark_backend::config::Val;
@@ -77,17 +79,18 @@ pub struct BenchmarkCli {
 }
 
 impl BenchmarkCli {
-    pub fn app_config<VC: VmConfig<BabyBear>>(&self, mut app_vm_config: VC) -> AppConfig<VC> {
+    pub fn app_config<VC>(&self, mut app_vm_config: VC) -> AppConfig<VC>
+    where
+        VC: AsMut<SystemConfig>,
+    {
         let app_log_blowup = self.app_log_blowup.unwrap_or(DEFAULT_APP_LOG_BLOWUP);
         let leaf_log_blowup = self.leaf_log_blowup.unwrap_or(DEFAULT_LEAF_LOG_BLOWUP);
 
-        app_vm_config.system_mut().profiling = self.profiling;
+        app_vm_config.as_mut().profiling = self.profiling;
         if let Some(max_segment_length) = self.max_segment_length {
-            app_vm_config
-                .system_mut()
-                .set_segmentation_strategy(Arc::new(
-                    DefaultSegmentationStrategy::new_with_max_segment_len(max_segment_length),
-                ));
+            app_vm_config.as_mut().set_segmentation_strategy(Arc::new(
+                DefaultSegmentationStrategy::new_with_max_segment_len(max_segment_length),
+            ));
         }
         AppConfig {
             app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
@@ -145,7 +148,7 @@ impl BenchmarkCli {
         init_file_name: Option<&str>,
     ) -> Result<Elf>
     where
-        VC: VmConfig<F>,
+        VC: VmConfig<SC>,
     {
         let profile = if self.profiling {
             "profiling"
@@ -166,9 +169,11 @@ impl BenchmarkCli {
         input_stream: StdIn,
     ) -> Result<()>
     where
-        VC: VmConfig<F>,
-        VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
-        VC::Periphery: Chip<SC>,
+        VC: VmExecutionConfig<F>
+            + VmCircuitConfig<SC>
+            + VmProverConfig<BabyBearPoseidon2Engine, RecordArena = MatrixRecordArena<F>>,
+        <VC as VmExecutionConfig<F>>::Executor:
+            InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F>,
     {
         let app_config = self.app_config(vm_config);
         bench_from_exe::<VC, BabyBearPoseidon2Engine>(
@@ -192,7 +197,7 @@ impl BenchmarkCli {
 /// 6. Verify STARK proofs.
 ///
 /// Returns the data necessary for proof aggregation.
-pub fn bench_from_exe<VC, E: StarkFriEngine<SC>>(
+pub fn bench_from_exe<VC, E: StarkFriEngine<SC = SC>>(
     bench_name: impl ToString,
     app_config: AppConfig<VC>,
     exe: impl Into<VmExe<F>>,
@@ -200,14 +205,17 @@ pub fn bench_from_exe<VC, E: StarkFriEngine<SC>>(
     leaf_vm_config: Option<NativeConfig>,
 ) -> Result<()>
 where
-    VC: VmConfig<F>,
-    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
-    VC::Periphery: Chip<SC>,
+    VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmProverConfig<E>,
+    <VC as VmExecutionConfig<F>>::Executor:
+        InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F, VC::RecordArena>,
+    NativeConfig: VmProverConfig<E>,
+    <NativeConfig as VmExecutionConfig<F>>::Executor:
+        InstructionExecutor<F, <NativeConfig as VmProverConfig<E>>::RecordArena>,
 {
     let bench_name = bench_name.to_string();
     // 1. Generate proving key from config.
     let app_pk = info_span!("keygen", group = &bench_name)
-        .in_scope(|| AppProvingKey::keygen(app_config.clone()));
+        .in_scope(|| AppProvingKey::keygen(app_config.clone()))?;
     // 2. Commit to the exe by generating cached trace for program.
     let committed_exe = info_span!("commit_exe", group = &bench_name)
         .in_scope(|| commit_app_exe(app_config.app_fri_params.fri_params, exe));
@@ -216,21 +224,22 @@ where
     // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with
     //    timer.
     let app_vk = app_pk.get_app_vk();
-    let prover =
-        AppProver::<VC, E>::new(app_pk.app_vm_pk, committed_exe).with_program_name(bench_name);
-    let app_proof = prover.generate_app_proof(input_stream);
+    let mut prover =
+        AppProver::<VC, E>::new(app_pk.app_vm_pk, committed_exe)?.with_program_name(bench_name);
+    let app_proof = prover.generate_app_proof(input_stream)?;
     // 6. Verify STARK proofs, including boundary conditions.
-    let sdk = Sdk::new();
+    let sdk = Sdk::<E>::new();
     sdk.verify_app_proof(&app_vk, &app_proof)
         .expect("Verification failed");
-    if let Some(leaf_vm_config) = leaf_vm_config {
-        let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params, leaf_vm_config);
-        let leaf_prover =
-            VmLocalProver::<SC, NativeConfig, E>::new(leaf_vm_pk, app_pk.leaf_committed_exe);
-        let leaf_controller = LeafProvingController {
-            num_children: AggregationTreeConfig::default().num_children_leaf,
-        };
-        leaf_controller.generate_proof(&leaf_prover, &app_proof);
-    }
+    // TODO[jpw]
+    // if let Some(leaf_vm_config) = leaf_vm_config {
+    //     let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params, leaf_vm_config);
+    //     let leaf_prover =
+    //         VmLocalProver::<E, NativeConfig>::new(leaf_vm_pk, app_pk.leaf_committed_exe);
+    //     let leaf_controller = LeafProvingController {
+    //         num_children: AggregationTreeConfig::default().num_children_leaf,
+    //     };
+    //     leaf_controller.generate_proof(&leaf_prover, &app_proof);
+    // }
     Ok(())
 }
