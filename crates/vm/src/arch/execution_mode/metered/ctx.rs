@@ -16,7 +16,7 @@ use crate::{
 
 pub const DEFAULT_PAGE_BITS: usize = 6;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub trace_heights: Vec<u32>,
     // TODO[jpw]: should this be in Ctrl?

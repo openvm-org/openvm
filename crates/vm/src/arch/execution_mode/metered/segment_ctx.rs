@@ -16,7 +16,7 @@ pub struct Segment {
     pub trace_heights: Vec<u32>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct SegmentationLimits {
     pub max_trace_height: u32,
     pub max_cells: usize,
@@ -33,7 +33,7 @@ impl Default for SegmentationLimits {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
     instret_last_segment_check: u64,

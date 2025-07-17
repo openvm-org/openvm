@@ -11,6 +11,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
+    engine::StarkEngine,
     interaction::{LookupBus, PermutationCheckBus},
     p3_field::{Field, PrimeField32},
     prover::{
@@ -20,22 +21,9 @@ use openvm_stark_backend::{
     },
     AirRef, Chip,
 };
-
-pub mod connector;
-pub mod memory;
-// Necessary for the PublicValuesChip
-pub mod native_adapter;
-pub mod phantom;
-pub mod poseidon2;
-pub mod program;
-pub mod public_values;
-
-use connector::VmConnectorAir;
-use openvm_stark_sdk::engine::StarkEngine;
-use program::ProgramAir;
-use public_values::PublicValuesAir;
 use rustc_hash::FxHashMap;
 
+use self::{connector::VmConnectorAir, program::ProgramAir, public_values::PublicValuesAir};
 use crate::{
     arch::{
         vm_poseidon2_config, AirInventory, AirInventoryError, BusIndexManager, ChipInventory,
@@ -64,6 +52,15 @@ use crate::{
         public_values::{PublicValuesChip, PublicValuesCoreAir, PublicValuesStep},
     },
 };
+
+pub mod connector;
+pub mod memory;
+// Necessary for the PublicValuesChip
+pub mod native_adapter;
+pub mod phantom;
+pub mod poseidon2;
+pub mod program;
+pub mod public_values;
 
 /// **If** internal poseidon2 chip exists, then its insertion index is 1.
 const POSEIDON2_INSERTION_IDX: usize = 1;

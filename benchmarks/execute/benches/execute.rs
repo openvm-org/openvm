@@ -3,50 +3,42 @@ use std::{path::Path, sync::OnceLock};
 use divan::Bencher;
 use eyre::Result;
 use openvm_algebra_circuit::{
-    Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
-    ModularExtensionExecutor, ModularExtensionPeriphery,
+    Fp2Extension, Fp2ExtensionExecutor, ModularExtension, ModularExtensionExecutor,
 };
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
-use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
+use openvm_bigint_circuit::{Int256, Int256Executor};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
     arch::{
-        execution_mode::{
-            e1::E1Ctx,
-            metered::{ctx::DEFAULT_PAGE_BITS, MeteredCtx},
-        },
+        execution_mode::{e1::E1Ctx, metered::MeteredCtx},
         instructions::exe::VmExe,
         interpreter::InterpretedInstance,
-        InitFileGenerator, SystemConfig, VirtualMachine, VmChipComplex, VmConfig,
+        *,
     },
     derive::VmConfig,
+    system::*,
 };
-use openvm_ecc_circuit::{
-    WeierstrassExtension, WeierstrassExtensionExecutor, WeierstrassExtensionPeriphery,
-};
+use openvm_ecc_circuit::{WeierstrassExtension, WeierstrassExtensionExecutor};
 use openvm_ecc_transpiler::EccTranspilerExtension;
-use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
+use openvm_keccak256_circuit::{Keccak256, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
-use openvm_pairing_circuit::{
-    PairingCurve, PairingExtension, PairingExtensionExecutor, PairingExtensionPeriphery,
-};
+use openvm_pairing_circuit::{PairingCurve, PairingExtension, PairingExtensionExecutor};
 use openvm_pairing_guest::bn254::BN254_COMPLEX_STRUCT_NAME;
 use openvm_pairing_transpiler::PairingTranspilerExtension;
-use openvm_rv32im_circuit::{
-    Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
-    Rv32MExecutor, Rv32MPeriphery,
-};
+use openvm_rv32im_circuit::{Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
+use openvm_sha256_circuit::{Sha256, Sha256Executor};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::{
-        default_engine, BabyBearPoseidon2Config, BabyBearPoseidon2Engine,
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+    engine::StarkFriEngine,
+    openvm_stark_backend::{
+        config::StarkGenericConfig, engine::StarkEngine, p3_field::Field,
+        prover::hal::DeviceDataTransporter,
     },
-    openvm_stark_backend::{self, p3_field::PrimeField32},
     p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -67,11 +59,11 @@ static AVAILABLE_PROGRAMS: &[&str] = &[
     "pairing",
 ];
 
-static SHARED_INTERACTIONS: OnceLock<Vec<usize>> = OnceLock::new();
+static METERED_CTX: OnceLock<(MeteredCtx, Vec<usize>)> = OnceLock::new();
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct ExecuteConfig {
-    #[system]
+    #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
     pub rv32i: Rv32I,
@@ -91,7 +83,7 @@ pub struct ExecuteConfig {
     pub fp2: Fp2Extension,
     #[extension]
     pub weierstrass: WeierstrassExtension,
-    #[extension]
+    #[extension(generics = true)]
     pub pairing: PairingExtension,
 }
 
@@ -134,12 +126,6 @@ fn main() {
     divan::main();
 }
 
-fn create_default_vm(
-) -> VirtualMachine<BabyBearPoseidon2Config, BabyBearPoseidon2Engine, ExecuteConfig> {
-    let vm_config = ExecuteConfig::default();
-    VirtualMachine::new(default_engine(), vm_config)
-}
-
 fn create_default_transpiler() -> Transpiler<BabyBear> {
     Transpiler::<BabyBear>::default()
         .with_extension(Rv32ITranspilerExtension)
@@ -162,12 +148,16 @@ fn load_program_executable(program: &str) -> Result<VmExe<BabyBear>> {
     Ok(VmExe::from_elf(elf, transpiler)?)
 }
 
-fn shared_interactions() -> &'static Vec<usize> {
-    SHARED_INTERACTIONS.get_or_init(|| {
-        let vm = create_default_vm();
-        let pk = vm.keygen();
-        let vk = pk.get_vk();
-        vk.num_interactions()
+fn metering_setup() -> &'static (MeteredCtx, Vec<usize>) {
+    METERED_CTX.get_or_init(|| {
+        let config = ExecuteConfig::default();
+        let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+        let pk = config.keygen(engine.config()).unwrap();
+        let d_pk = engine.device().transport_pk_to_device(&pk);
+        let vm = VirtualMachine::new(engine, config, d_pk).unwrap();
+        let ctx = vm.build_metered_ctx();
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        (ctx, executor_idx_to_air_idx)
     })
 }
 
@@ -177,7 +167,7 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
         .with_inputs(|| {
             let vm_config = ExecuteConfig::default();
             let exe = load_program_executable(program).expect("Failed to load program executable");
-            let interpreter = InterpretedInstance::new(vm_config, exe);
+            let interpreter = InterpretedInstance::new(vm_config, exe).unwrap();
             (interpreter, vec![])
         })
         .bench_values(|(interpreter, input)| {
@@ -194,23 +184,20 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
             let vm_config = ExecuteConfig::default();
             let exe = load_program_executable(program).expect("Failed to load program executable");
 
-            let chip_complex: VmChipComplex<BabyBear, _, _> =
-                vm_config.create_chip_complex().unwrap();
-            let interactions = shared_interactions();
-            let segmentation_strategy =
-                &<ExecuteConfig as VmConfig<BabyBear>>::system(&vm_config).segmentation_strategy;
+            let segmentation_strategy = &vm_config.as_ref().segmentation_strategy;
 
-            let ctx: MeteredCtx<DEFAULT_PAGE_BITS> =
-                MeteredCtx::new(&chip_complex, interactions.to_vec())
-                    .with_max_trace_height(segmentation_strategy.max_trace_height() as u32)
-                    .with_max_cells(segmentation_strategy.max_cells());
-            let interpreter = InterpretedInstance::new(vm_config, exe);
+            let (ctx, executor_idx_to_air_idx) = metering_setup();
+            let ctx = ctx
+                .clone()
+                .with_max_trace_height(segmentation_strategy.max_trace_height() as u32)
+                .with_max_cells(segmentation_strategy.max_cells());
+            let interpreter = InterpretedInstance::new(vm_config, exe).unwrap();
 
-            (interpreter, vec![], ctx)
+            (interpreter, vec![], ctx, executor_idx_to_air_idx)
         })
-        .bench_values(|(interpreter, input, ctx)| {
+        .bench_values(|(interpreter, input, ctx, executor_idx_to_air_idx)| {
             interpreter
-                .execute_e2(ctx, input)
+                .execute_e2(ctx, input, executor_idx_to_air_idx)
                 .expect("Failed to execute program");
         });
 }
