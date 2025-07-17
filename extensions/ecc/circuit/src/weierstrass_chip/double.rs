@@ -424,8 +424,7 @@ unsafe fn execute_e12_setup_impl<
     };
 
     // Extract first field element as the prime
-    let prime_bytes = setup_input_data[..BLOCKS / 2].as_flattened();
-    let input_prime = BigUint::from_bytes_le(prime_bytes);
+    let input_prime = BigUint::from_bytes_le(setup_input_data[..BLOCKS / 2].as_flattened());
 
     if input_prime != *pre_compute.modulus {
         vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
@@ -433,8 +432,7 @@ unsafe fn execute_e12_setup_impl<
     }
 
     // Extract second field element as the a coefficient
-    let a_bytes = setup_input_data[BLOCKS / 2..].as_flattened();
-    let input_a = BigUint::from_bytes_le(&a_bytes);
+    let input_a = BigUint::from_bytes_le(setup_input_data[BLOCKS / 2..].as_flattened());
 
     if input_a != *pre_compute.a_coeff {
         vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
@@ -455,12 +453,8 @@ fn ec_double_generic<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     let half_bytes = field_element_bytes / 2;
 
     // Extract coordinates from input data
-    let x1_bytes: Vec<u8> = input_data[..BLOCKS / 2].iter().flatten().copied().collect();
-    let y1_bytes: Vec<u8> = input_data[BLOCKS / 2..].iter().flatten().copied().collect();
-
-    // Convert to BigUint for modular arithmetic
-    let x1 = BigUint::from_bytes_le(&x1_bytes);
-    let y1 = BigUint::from_bytes_le(&y1_bytes);
+    let x1 = BigUint::from_bytes_le(input_data[..BLOCKS / 2].as_flattened());
+    let y1 = BigUint::from_bytes_le(input_data[BLOCKS / 2..].as_flattened());
 
     // Elliptic curve point doubling formula:
     // lambda = (3 * x1^2 + a) / (2 * y1) mod p

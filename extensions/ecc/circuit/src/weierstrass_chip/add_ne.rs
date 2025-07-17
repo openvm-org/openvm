@@ -433,32 +433,10 @@ fn ec_add_ne_generic<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     let half_bytes = field_element_bytes / 2;
 
     // Extract coordinates from input data
-    let x1_bytes: Vec<u8> = input_data[0][..BLOCKS / 2]
-        .iter()
-        .flatten()
-        .copied()
-        .collect();
-    let y1_bytes: Vec<u8> = input_data[0][BLOCKS / 2..]
-        .iter()
-        .flatten()
-        .copied()
-        .collect();
-    let x2_bytes: Vec<u8> = input_data[1][..BLOCKS / 2]
-        .iter()
-        .flatten()
-        .copied()
-        .collect();
-    let y2_bytes: Vec<u8> = input_data[1][BLOCKS / 2..]
-        .iter()
-        .flatten()
-        .copied()
-        .collect();
-
-    // Convert to BigUint for modular arithmetic
-    let x1 = BigUint::from_bytes_le(&x1_bytes);
-    let y1 = BigUint::from_bytes_le(&y1_bytes);
-    let x2 = BigUint::from_bytes_le(&x2_bytes);
-    let y2 = BigUint::from_bytes_le(&y2_bytes);
+    let x1 = BigUint::from_bytes_le(input_data[0][..BLOCKS / 2].as_flattened());
+    let y1 = BigUint::from_bytes_le(input_data[0][BLOCKS / 2..].as_flattened());
+    let x2 = BigUint::from_bytes_le(input_data[1][..BLOCKS / 2].as_flattened());
+    let y2 = BigUint::from_bytes_le(input_data[1][BLOCKS / 2..].as_flattened());
 
     // Elliptic curve point addition formula:
     // lambda = (y2 - y1) / (x2 - x1) mod p
