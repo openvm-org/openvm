@@ -2,7 +2,7 @@ use halo2curves_axiom::ff::PrimeField;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Num};
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CurveType {
     K256 = 0,
     P256 = 1,
@@ -21,7 +21,7 @@ pub(super) fn get_curve_type_from_modulus(modulus: &BigUint) -> Option<CurveType
         return Some(CurveType::K256);
     }
 
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secp256r1::Fq>() {
+    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secp256r1::Fp>() {
         return Some(CurveType::P256);
     }
 
@@ -43,8 +43,9 @@ pub(super) fn get_curve_type(modulus: &BigUint, a_coeff: &BigUint) -> Option<Cur
         return Some(CurveType::K256);
     }
 
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secp256r1::Fq>()
-        && a_coeff == &BigUint::from_i64(-(P256_NEG_A as i64)).unwrap()
+    let coeff_a = (-halo2curves_axiom::secp256r1::Fp::from(P256_NEG_A)).to_bytes();
+    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secp256r1::Fp>()
+        && a_coeff == &BigUint::from_bytes_le(&coeff_a)
     {
         return Some(CurveType::P256);
     }
@@ -73,7 +74,7 @@ pub fn ec_add_ne<const CURVE: usize, const BLOCKS: usize, const BLOCK_SIZE: usiz
             ec_add_ne_256bit::<halo2curves_axiom::secq256k1::Fq, BLOCKS, BLOCK_SIZE>(input_data)
         }
         x if x == CurveType::P256 as usize => {
-            ec_add_ne_256bit::<halo2curves_axiom::secp256r1::Fq, BLOCKS, BLOCK_SIZE>(input_data)
+            ec_add_ne_256bit::<halo2curves_axiom::secp256r1::Fp, BLOCKS, BLOCK_SIZE>(input_data)
         }
         x if x == CurveType::BN254 as usize => {
             ec_add_ne_256bit::<halo2curves_axiom::bn256::Fq, BLOCKS, BLOCK_SIZE>(input_data)
@@ -95,7 +96,7 @@ pub fn ec_double<const CURVE: usize, const BLOCKS: usize, const BLOCK_SIZE: usiz
             ec_double_256bit::<halo2curves_axiom::secq256k1::Fq, 0, BLOCKS, BLOCK_SIZE>(input_data)
         }
         x if x == CurveType::P256 as usize => {
-            ec_double_256bit::<halo2curves_axiom::secp256r1::Fq, P256_NEG_A, BLOCKS, BLOCK_SIZE>(
+            ec_double_256bit::<halo2curves_axiom::secp256r1::Fp, P256_NEG_A, BLOCKS, BLOCK_SIZE>(
                 input_data,
             )
         }
