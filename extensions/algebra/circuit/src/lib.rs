@@ -4,6 +4,8 @@ use std::{
 };
 
 use derive_more::derive::{Deref, DerefMut};
+use num_bigint::BigUint;
+use openvm_algebra_transpiler::{Fp2Opcode, Rv32ModularArithmeticOpcode};
 use openvm_circuit::{
     arch::{
         execution::ExecuteFunc,
@@ -131,15 +133,33 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
             flag_idx,
         };
 
-        let op = match local_opcode {
-            0 => Operation::Add,
-            1 => Operation::Sub,
-            2 => Operation::Mul,
-            3 => Operation::Div,
-            _ => return Ok((needs_setup, Operation::Add)), // Setup operations
-        };
+        if IS_FP2 {
+            let is_setup = local_opcode == Fp2Opcode::SETUP_ADDSUB as usize
+                || local_opcode == Fp2Opcode::SETUP_MULDIV as usize;
 
-        Ok((needs_setup, op))
+            let op = match local_opcode {
+                x if x == Fp2Opcode::ADD as usize => Operation::Add,
+                x if x == Fp2Opcode::SUB as usize => Operation::Sub,
+                x if x == Fp2Opcode::MUL as usize => Operation::Mul,
+                x if x == Fp2Opcode::DIV as usize => Operation::Div,
+                _ => unreachable!(),
+            };
+
+            Ok((is_setup, op))
+        } else {
+            let is_setup = local_opcode == Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize
+                || local_opcode == Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize;
+
+            let op = match local_opcode {
+                x if x == Rv32ModularArithmeticOpcode::ADD as usize => Operation::Add,
+                x if x == Rv32ModularArithmeticOpcode::SUB as usize => Operation::Sub,
+                x if x == Rv32ModularArithmeticOpcode::MUL as usize => Operation::Mul,
+                x if x == Rv32ModularArithmeticOpcode::DIV as usize => Operation::Div,
+                _ => unreachable!(),
+            };
+
+            Ok((is_setup, op))
+        }
     }
 }
 
@@ -393,43 +413,6 @@ unsafe fn execute_e2_generic_impl<
     execute_e12_generic_impl::<_, _, BLOCKS, BLOCK_SIZE>(&pre_compute.data, vm_state);
 }
 
-unsafe fn execute_e12_setup_impl<
-    F: PrimeField32,
-    CTX: E1ExecutionCtx,
-    const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
->(
-    pre_compute: &FieldExpressionPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
-) {
-    let rs_vals = pre_compute
-        .rs_addrs
-        .map(|addr| u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, addr as u32)));
-
-    let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = rs_vals.map(|address| {
-        debug_assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
-        from_fn(|i| vm_state.vm_read(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
-    });
-    let read_data: DynArray<u8> = read_data.into();
-
-    let writes = run_field_expression_precomputed::<true>(
-        pre_compute.expr,
-        pre_compute.flag_idx as usize,
-        &read_data.0,
-    );
-
-    let rd_val = u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));
-    debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
-
-    let data: [[u8; BLOCK_SIZE]; BLOCKS] = writes.into();
-    for (i, block) in data.into_iter().enumerate() {
-        vm_state.vm_write(RV32_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
-    }
-
-    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    vm_state.instret += 1;
-}
-
 unsafe fn execute_e12_impl<
     F: PrimeField32,
     CTX: E1ExecutionCtx,
@@ -499,6 +482,38 @@ unsafe fn execute_e12_generic_impl<
     let data: [[u8; BLOCK_SIZE]; BLOCKS] = writes.into();
     for (i, block) in data.into_iter().enumerate() {
         vm_state.vm_write(RV32_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
+    }
+
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
+}
+
+unsafe fn execute_e12_setup_impl<
+    F: PrimeField32,
+    CTX: E1ExecutionCtx,
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+>(
+    pre_compute: &FieldExpressionPreCompute,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    // Read the first input (which should be the prime)
+    let rs_vals = pre_compute
+        .rs_addrs
+        .map(|addr| u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, addr as u32)));
+
+    // Read the first point's data as the setup input
+    let setup_input_data: [[u8; BLOCK_SIZE]; BLOCKS] = {
+        let address = rs_vals[0];
+        from_fn(|i| vm_state.vm_read(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
+    };
+
+    // Extract first field element as the prime
+    let input_prime = BigUint::from_bytes_le(setup_input_data[..BLOCKS / 2].as_flattened());
+
+    if input_prime != pre_compute.expr.prime {
+        vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+        return;
     }
 
     vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
