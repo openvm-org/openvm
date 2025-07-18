@@ -1,5 +1,4 @@
-use halo2curves_axiom::ff::PrimeField;
-use halo2curves_axiom::secq256k1::Fq;
+use halo2curves_axiom::{ff::PrimeField, secq256k1::Fq};
 use num_bigint::BigUint;
 use num_traits::Num;
 

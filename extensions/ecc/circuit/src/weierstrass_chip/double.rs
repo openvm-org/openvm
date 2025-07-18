@@ -38,14 +38,13 @@ use openvm_mod_circuit_builder::{
 use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
 
-use crate::weierstrass_chip::curves::{
-    bls12_381::ec_double_bls12_381, bn254::ec_double_bn254, k256::ec_double_k256,
-    p256::ec_double_p256,
-};
-
 use super::{
     curves::{get_curve_type, CurveType},
     WeierstrassAir,
+};
+use crate::weierstrass_chip::curves::{
+    bls12_381::ec_double_bls12_381, bn254::ec_double_bn254, k256::ec_double_k256,
+    p256::ec_double_p256,
 };
 
 pub fn ec_double_ne_expr(
