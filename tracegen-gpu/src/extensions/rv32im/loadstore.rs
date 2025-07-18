@@ -217,8 +217,7 @@ mod test {
         if [STOREW, STOREB, STOREH].contains(&opcode) {
             mem_config.addr_space_sizes[PUBLIC_VALUES_AS as usize] = 1 << 29;
         }
-        let mut tester = GpuChipTestBuilder::volatile(mem_config)
-            .with_variable_range_checker(default_var_range_checker_bus());
+        let mut tester = GpuChipTestBuilder::volatile(mem_config, default_var_range_checker_bus());
 
         let mut harness = create_test_harness(&tester);
         for _ in 0..num_ops {

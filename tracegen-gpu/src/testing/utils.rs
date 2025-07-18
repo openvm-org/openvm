@@ -6,10 +6,18 @@ use openvm_circuit::{
         testing::{BITWISE_OP_LOOKUP_BUS, RANGE_CHECKER_BUS},
         MemoryConfig,
     },
-    system::memory::{adapter::records::arena_size_bound, online::TracingMemory},
+    system::memory::{
+        adapter::records::arena_size_bound, online::TracingMemory, SharedMemoryHelper,
+    },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupBus, var_range::VariableRangeCheckerBus,
+    bitwise_op_lookup::{
+        BitwiseOperationLookupBus, BitwiseOperationLookupChip, SharedBitwiseOperationLookupChip,
+    },
+    range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip, SharedRangeTupleCheckerChip},
+    var_range::{
+        SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
+    },
 };
 use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
@@ -19,7 +27,9 @@ use openvm_stark_backend::{
         types::AirProvingContext,
     },
 };
-use stark_backend_gpu::{base::DeviceMatrix, data_transporter::transport_device_matrix_to_host};
+use stark_backend_gpu::{
+    base::DeviceMatrix, data_transporter::transport_device_matrix_to_host, types::F,
+};
 
 // Asserts that two DeviceMatrix are equal
 pub fn assert_eq_gpu_matrix<T: Clone + Send + Sync + PartialEq + Debug>(
@@ -90,6 +100,24 @@ pub fn default_var_range_checker_bus() -> VariableRangeCheckerBus {
 
 pub fn default_bitwise_lookup_bus() -> BitwiseOperationLookupBus {
     BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS)
+}
+
+pub fn dummy_range_checker(bus: VariableRangeCheckerBus) -> SharedVariableRangeCheckerChip {
+    SharedVariableRangeCheckerChip::new(VariableRangeCheckerChip::new(bus))
+}
+
+pub fn dummy_bitwise_op_lookup(
+    bus: BitwiseOperationLookupBus,
+) -> SharedBitwiseOperationLookupChip<8> {
+    SharedBitwiseOperationLookupChip::new(BitwiseOperationLookupChip::new(bus))
+}
+
+pub fn dummy_range_tuple_checker(bus: RangeTupleCheckerBus<2>) -> SharedRangeTupleCheckerChip<2> {
+    SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::new(bus))
+}
+
+pub fn dummy_memory_helper(bus: VariableRangeCheckerBus, max_bits: usize) -> SharedMemoryHelper<F> {
+    SharedMemoryHelper::new(dummy_range_checker(bus), max_bits)
 }
 
 pub fn get_empty_air_proving_ctx<PB: ProverBackend>() -> AirProvingContext<PB> {

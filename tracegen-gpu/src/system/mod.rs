@@ -1,28 +1,23 @@
 use openvm_circuit::{
     arch::{DenseRecordArena, PUBLIC_VALUES_AIR_ID},
-    system::{
-        memory::{interface::MemoryInterface, online::GuestMemory, MemoryController},
-        SystemChipComplex, SystemRecords,
-    },
+    system::{memory::online::GuestMemory, SystemChipComplex, SystemRecords},
 };
 use openvm_stark_backend::{
     prover::types::{AirProvingContext, CommittedTraceData},
     Chip,
 };
-use stark_backend_gpu::{
-    data_transporter::transport_matrix_to_device,
-    prover_backend::GpuBackend,
-    types::{F, SC},
-};
+use stark_backend_gpu::{prover_backend::GpuBackend, types::F};
 
 use crate::system::{
-    connector::VmConnectorChipGPU, program::ProgramChipGPU, public_values::PublicValuesChipGPU,
+    connector::VmConnectorChipGPU, memory::MemoryInventoryGPU, program::ProgramChipGPU,
+    public_values::PublicValuesChipGPU,
 };
 
 pub mod access_adapters;
 pub mod boundary;
 pub mod connector;
 pub mod cuda;
+pub mod memory;
 pub mod phantom;
 pub mod poseidon2;
 pub mod program;
@@ -31,7 +26,7 @@ pub mod public_values;
 pub struct SystemChipInventoryGPU {
     pub program: ProgramChipGPU,
     pub connector: VmConnectorChipGPU,
-    pub memory: MemoryController<F>,
+    pub memory: MemoryInventoryGPU,
     pub public_values: Option<PublicValuesChipGPU>,
 }
 
@@ -41,12 +36,7 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
     }
 
     fn transport_init_memory_to_device(&mut self, memory: &GuestMemory) {
-        match &mut self.memory.interface_chip {
-            MemoryInterface::Volatile { .. } => {}
-            MemoryInterface::Persistent { initial_memory, .. } => {
-                *initial_memory = memory.memory.clone();
-            }
-        }
+        self.memory.set_initial_memory(memory.memory.clone());
     }
 
     fn generate_proving_ctx(
@@ -77,17 +67,9 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
             chip.generate_proving_ctx(arena)
         });
 
-        let cpu_memory_ctx = self
+        let memory_ctx = self
             .memory
-            .generate_proving_ctx::<SC>(access_adapter_records, touched_memory);
-        let memory_ctx = cpu_memory_ctx
-            .into_iter()
-            .map(|cpu_ctx| AirProvingContext::<GpuBackend> {
-                cached_mains: vec![],
-                common_main: Some(transport_matrix_to_device(cpu_ctx.common_main.unwrap())),
-                public_values: cpu_ctx.public_values,
-            })
-            .collect::<Vec<_>>();
+            .generate_proving_ctxs(access_adapter_records, touched_memory);
 
         [program_ctx, connector_ctx]
             .into_iter()

@@ -87,7 +87,7 @@ fn var_range_hybrid_test() {
 
     tester
         .build()
-        .load_air_proving_ctx(dummy_air, cpu_proving_ctx)
+        .load_air_proving_ctx(Arc::new(dummy_air), cpu_proving_ctx)
         .load_periphery(dummy_air, gpu_dummy_chip)
         .load_periphery(VariableRangeCheckerAir::new(bus), range_checker)
         .finalize()

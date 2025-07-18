@@ -5,7 +5,8 @@ use openvm_circuit::{
         instructions::instruction::Instruction,
         testing::{
             execution::air::ExecutionDummyAir, program::air::ProgramDummyAir, TestChipHarness,
-            EXECUTION_BUS, MEMORY_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS,
+            EXECUTION_BUS, MEMORY_BUS, MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS,
+            READ_INSTRUCTION_BUS,
         },
         Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
         InstructionExecutor, MatrixRecordArena, MemoryConfig, Streams, VmStateMut,
@@ -13,8 +14,9 @@ use openvm_circuit::{
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryBus},
-            MemoryController, SharedMemoryHelper,
+            MemoryAirInventory, SharedMemoryHelper,
         },
+        poseidon2::air::Poseidon2PeripheryAir,
         program::ProgramBus,
         SystemPort,
     },
@@ -34,8 +36,10 @@ use openvm_circuit_primitives::{
         VariableRangeCheckerChip,
     },
 };
+use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
     config::Val,
+    interaction::{LookupBus, PermutationCheckBus},
     p3_field::{Field, FieldAlgebra},
     prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::AnyRap,
@@ -62,6 +66,7 @@ use crate::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
         var_range::VariableRangeCheckerChipGPU,
     },
+    system::poseidon2::Poseidon2PeripheryChipGPU,
     testing::{
         execution::DeviceExecutionTester, memory::DeviceMemoryTester, program::DeviceProgramTester,
     },
@@ -116,7 +121,7 @@ pub struct GpuChipTestBuilder {
     pub program: DeviceProgramTester,
     pub streams: Streams<F>,
 
-    var_range_checker: Option<Arc<VariableRangeCheckerChipGPU>>,
+    var_range_checker: Arc<VariableRangeCheckerChipGPU>,
     bitwise_op_lookup: Option<Arc<BitwiseOperationLookupChipGPU<8>>>,
     range_tuple_checker: Option<Arc<RangeTupleCheckerChipGPU<2>>>,
 
@@ -127,7 +132,7 @@ pub struct GpuChipTestBuilder {
 
 impl Default for GpuChipTestBuilder {
     fn default() -> Self {
-        Self::volatile(MemoryConfig::default())
+        Self::volatile(MemoryConfig::default(), default_var_range_checker_bus())
     }
 }
 
@@ -137,35 +142,29 @@ impl GpuChipTestBuilder {
         Self::default()
     }
 
-    pub fn volatile(mem_config: MemoryConfig) -> Self {
+    pub fn volatile(mem_config: MemoryConfig, bus: VariableRangeCheckerBus) -> Self {
         setup_tracing_with_log_level(Level::INFO);
         let mem_bus = MemoryBus::new(MEMORY_BUS);
-        let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
-            RANGE_CHECKER_BUS,
-            mem_config.decomp,
+        let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(Arc::new(
+            VariableRangeCheckerChip::new(bus),
         )));
         Self {
-            memory: DeviceMemoryTester::new(
+            memory: DeviceMemoryTester::volatile(
                 default_tracing_memory(&mem_config, 1),
-                MemoryController::with_volatile_memory(mem_bus, mem_config, range_checker),
+                mem_bus,
+                mem_config,
+                range_checker.clone(),
             ),
             execution: DeviceExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
             program: DeviceProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
             streams: Default::default(),
-            var_range_checker: None,
+            var_range_checker: range_checker,
             bitwise_op_lookup: None,
             range_tuple_checker: None,
             rng: StdRng::seed_from_u64(0),
             default_register: 0,
             default_pointer: 0,
         }
-    }
-
-    pub fn with_variable_range_checker(mut self, bus: VariableRangeCheckerBus) -> Self {
-        self.var_range_checker = Some(Arc::new(VariableRangeCheckerChipGPU::hybrid(Arc::new(
-            VariableRangeCheckerChip::new(bus),
-        ))));
-        self
     }
 
     pub fn with_bitwise_op_lookup(mut self, bus: BitwiseOperationLookupBus) -> Self {
@@ -351,7 +350,7 @@ impl GpuChipTestBuilder {
     }
 
     pub fn memory_bridge(&self) -> MemoryBridge {
-        self.memory.controller.memory_bridge()
+        self.memory.memory_bridge()
     }
 
     pub fn execution_bus(&self) -> ExecutionBus {
@@ -363,15 +362,11 @@ impl GpuChipTestBuilder {
     }
 
     pub fn memory_bus(&self) -> MemoryBus {
-        self.memory.controller.memory_bus
-    }
-
-    pub fn memory_controller(&self) -> &MemoryController<F> {
-        &self.memory.controller
+        self.memory.mem_bus
     }
 
     pub fn address_bits(&self) -> usize {
-        self.memory.controller.mem_config().pointer_max_bits
+        self.memory.config.pointer_max_bits
     }
 
     pub fn rng(&mut self) -> &mut StdRng {
@@ -379,9 +374,7 @@ impl GpuChipTestBuilder {
     }
 
     pub fn range_checker(&self) -> Arc<VariableRangeCheckerChipGPU> {
-        self.var_range_checker
-            .clone()
-            .expect("Initialize GpuChipTestBuilder with .with_variable_range_checker()")
+        self.var_range_checker.clone()
     }
 
     pub fn bitwise_op_lookup(&self) -> Arc<BitwiseOperationLookupChipGPU<8>> {
@@ -396,15 +389,16 @@ impl GpuChipTestBuilder {
             .expect("Initialize GpuChipTestBuilder with .with_range_tuple_checker()")
     }
 
+    // WARNING: This CPU chip is meant for hybrid chip use, its usage WILL
+    // result in altered tracegen. For a dummy primitive chip for trace
+    // comparison, see utils::dummy_range_checker.
     pub fn cpu_range_checker(&self) -> SharedVariableRangeCheckerChip {
-        self.var_range_checker
-            .as_ref()
-            .expect("Initialize GpuChipTestBuilder with .with_variable_range_checker()")
-            .cpu_chip
-            .clone()
-            .unwrap()
+        self.var_range_checker.cpu_chip.clone().unwrap()
     }
 
+    // WARNING: This CPU chip is meant for hybrid chip use, its usage WILL
+    // result in altered tracegen. For a dummy primitive chip for trace
+    // comparison, see utils::dummy_bitwise_op_lookup.
     pub fn cpu_bitwise_op_lookup(&self) -> SharedBitwiseOperationLookupChip<8> {
         self.bitwise_op_lookup
             .as_ref()
@@ -414,6 +408,9 @@ impl GpuChipTestBuilder {
             .unwrap()
     }
 
+    // WARNING: This CPU chip is meant for hybrid chip use, its usage WILL
+    // result in altered tracegen. For a dummy primitive chip for trace
+    // comparison, see utils::dummy_range_tuple_checker.
     pub fn cpu_range_tuple_checker(&self) -> SharedRangeTupleCheckerChip<2> {
         self.range_tuple_checker
             .as_ref()
@@ -423,15 +420,19 @@ impl GpuChipTestBuilder {
             .unwrap()
     }
 
+    // WARNING: This utility is meant for hybrid chip use, its usage WILL
+    // result in altered tracegen. For use during trace comparison, see
+    // utils::dummy_memory_helper.
     pub fn cpu_memory_helper(&self) -> SharedMemoryHelper<F> {
-        self.memory.controller.helper()
+        SharedMemoryHelper::new(self.cpu_range_checker(), self.memory.config.clk_max_bits)
     }
 
     pub fn build(self) -> GpuChipTester {
         GpuChipTester {
-            var_range_checker: self.var_range_checker,
+            var_range_checker: Some(self.var_range_checker),
             bitwise_op_lookup: self.bitwise_op_lookup,
             range_tuple_checker: self.range_tuple_checker,
+            memory: Some(self.memory),
             ..Default::default()
         }
         .load(
@@ -447,6 +448,7 @@ impl GpuChipTestBuilder {
 pub struct GpuChipTester {
     pub airs: Vec<AirRef<SC>>,
     pub ctxs: Vec<AirProvingContext<GpuBackend>>,
+    pub memory: Option<DeviceMemoryTester>,
     pub var_range_checker: Option<Arc<VariableRangeCheckerChipGPU>>,
     pub bitwise_op_lookup: Option<Arc<BitwiseOperationLookupChipGPU<8>>>,
     pub range_tuple_checker: Option<Arc<RangeTupleCheckerChipGPU<2>>>,
@@ -482,15 +484,12 @@ impl GpuChipTester {
         self.load(air, gpu_chip, ())
     }
 
-    pub fn load_air_proving_ctx<A>(
+    pub fn load_air_proving_ctx(
         mut self,
-        air: A,
+        air: AirRef<SC>,
         proving_ctx: AirProvingContext<GpuBackend>,
-    ) -> Self
-    where
-        A: AnyRap<SC> + 'static,
-    {
-        self.airs.push(Arc::new(air) as AirRef<SC>);
+    ) -> Self {
+        self.airs.push(air);
         self.ctxs.push(proving_ctx);
         self
     }
@@ -542,30 +541,77 @@ impl GpuChipTester {
     }
 
     pub fn finalize(mut self) -> Self {
-        // TODO[stephen]: memory chips tracegen
-        if let Some(var_range_checker) = self.var_range_checker.clone() {
-            self = self.load(
+        if let Some(mut memory_tester) = self.memory.take() {
+            let is_persistent = memory_tester.inventory.continuation_enabled();
+            let touched_memory = memory_tester.memory.finalize::<F>(is_persistent);
+            let memory_bridge = memory_tester.memory_bridge();
+
+            for chip in memory_tester.chip_for_block.into_values() {
+                self = self.load_periphery(chip.0.air, chip);
+            }
+
+            let airs = MemoryAirInventory::<SC>::new(
+                memory_bridge,
+                &memory_tester.config,
+                memory_tester.range_bus,
+                is_persistent.then_some((
+                    PermutationCheckBus::new(MEMORY_MERKLE_BUS),
+                    PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
+                )),
+            )
+            .into_airs();
+            let ctxs = memory_tester
+                .inventory
+                .generate_proving_ctxs(memory_tester.memory.access_adapter_records, touched_memory);
+            for (air, ctx) in airs
+                .into_iter()
+                .zip(ctxs)
+                .filter(|(_, ctx)| ctx.common_main.is_some())
+            {
+                self = self.load_air_proving_ctx(air, ctx);
+            }
+
+            if let Some(hasher_chip) = memory_tester.hasher_chip {
+                let air: AirRef<SC> = match hasher_chip.as_ref() {
+                    Poseidon2PeripheryChipGPU::Register0(_) => {
+                        let config = Poseidon2Config::default();
+                        Arc::new(Poseidon2PeripheryAir::new(
+                            Arc::new(Poseidon2SubAir::<F, 0>::new(config.constants.into())),
+                            LookupBus::new(POSEIDON2_DIRECT_BUS),
+                        ))
+                    }
+                    Poseidon2PeripheryChipGPU::Register1(_) => {
+                        let config = Poseidon2Config::default();
+                        Arc::new(Poseidon2PeripheryAir::new(
+                            Arc::new(Poseidon2SubAir::<F, 1>::new(config.constants.into())),
+                            LookupBus::new(POSEIDON2_DIRECT_BUS),
+                        ))
+                    }
+                };
+                let ctx = hasher_chip.generate_proving_ctx(());
+                self = self.load_air_proving_ctx(air, ctx);
+            }
+        }
+        if let Some(var_range_checker) = self.var_range_checker.take() {
+            self = self.load_periphery(
                 VariableRangeCheckerAir::new(var_range_checker.cpu_chip.as_ref().unwrap().bus()),
                 var_range_checker,
-                (),
             );
         }
-        if let Some(bitwise_op_lookup) = self.bitwise_op_lookup.clone() {
-            self = self.load(
+        if let Some(bitwise_op_lookup) = self.bitwise_op_lookup.take() {
+            self = self.load_periphery(
                 BitwiseOperationLookupAir::<8>::new(
                     bitwise_op_lookup.cpu_chip.as_ref().unwrap().bus(),
                 ),
                 bitwise_op_lookup,
-                (),
             );
         }
-        if let Some(range_tuple_checker) = self.range_tuple_checker.clone() {
-            self = self.load(
+        if let Some(range_tuple_checker) = self.range_tuple_checker.take() {
+            self = self.load_periphery(
                 RangeTupleCheckerAir {
                     bus: *range_tuple_checker.cpu_chip.as_ref().unwrap().bus(),
                 },
                 range_tuple_checker,
-                (),
             );
         }
         self

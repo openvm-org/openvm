@@ -86,7 +86,7 @@ mod tests {
     use rand::{rngs::StdRng, Rng};
 
     use super::*;
-    use crate::testing::{default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness};
+    use crate::testing::{GpuChipTestBuilder, GpuTestChipHarness};
 
     const MAX_INS_CAPACITY: usize = 128;
     const TUPLE_CHECKER_SIZES: [u32; 2] = [
@@ -166,12 +166,9 @@ mod tests {
     #[test]
     fn rand_mul_tracegen_test() {
         let mut rng = create_seeded_rng();
-        let mut tester = GpuChipTestBuilder::default()
-            .with_variable_range_checker(default_var_range_checker_bus())
-            .with_range_tuple_checker(RangeTupleCheckerBus::new(
-                RANGE_TUPLE_CHECKER_BUS,
-                TUPLE_CHECKER_SIZES,
-            ));
+        let mut tester = GpuChipTestBuilder::default().with_range_tuple_checker(
+            RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES),
+        );
 
         let mut harness = create_test_harness(&tester);
         let num_ops = 100;

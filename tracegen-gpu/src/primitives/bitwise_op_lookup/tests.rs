@@ -107,7 +107,7 @@ fn bitwise_op_lookup_hybrid_test() {
 
     tester
         .build()
-        .load_air_proving_ctx(dummy_air, cpu_proving_ctx)
+        .load_air_proving_ctx(Arc::new(dummy_air), cpu_proving_ctx)
         .load_periphery(dummy_air, gpu_dummy_chip)
         .load_periphery(BitwiseOperationLookupAir::<8>::new(bus), bitwise)
         .finalize()

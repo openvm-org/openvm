@@ -1,10 +1,16 @@
-use std::{collections::HashMap, slice::from_raw_parts};
+use std::{collections::HashMap, sync::Arc};
 
 use openvm_circuit::{
-    arch::testing::memory::air::{MemoryDummyAir, MemoryDummyChip},
-    system::memory::{offline_checker::MemoryBus, online::TracingMemory, MemoryController},
-    utils::next_power_of_two_or_zero,
+    arch::{
+        testing::memory::air::{MemoryDummyAir, MemoryDummyChip},
+        MemoryConfig,
+    },
+    system::memory::{
+        offline_checker::{MemoryBridge, MemoryBus},
+        online::TracingMemory,
+    },
 };
+use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     prover::types::AirProvingContext,
@@ -15,29 +21,50 @@ use stark_backend_gpu::{
     base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
 
-use crate::testing::cuda::memory_testing;
+use crate::{
+    primitives::var_range::VariableRangeCheckerChipGPU,
+    system::{memory::MemoryInventoryGPU, poseidon2::Poseidon2PeripheryChipGPU},
+    testing::cuda::memory_testing,
+};
 
 pub struct DeviceMemoryTester {
     pub chip_for_block: HashMap<usize, FixedSizeMemoryTester>,
     pub memory: TracingMemory,
-    pub controller: MemoryController<F>,
+    pub inventory: MemoryInventoryGPU,
+    pub hasher_chip: Option<Arc<Poseidon2PeripheryChipGPU>>,
+
+    // Convenience fields, so we don't have to keep unwrapping
+    pub config: MemoryConfig,
+    pub mem_bus: MemoryBus,
+    pub range_bus: VariableRangeCheckerBus,
 }
 
 impl DeviceMemoryTester {
-    pub fn new(memory: TracingMemory, controller: MemoryController<F>) -> Self {
+    pub fn volatile(
+        memory: TracingMemory,
+        mem_bus: MemoryBus,
+        mem_config: MemoryConfig,
+        range_checker: Arc<VariableRangeCheckerChipGPU>,
+    ) -> Self {
         let mut chip_for_block = HashMap::new();
         for log_block_size in 0..6 {
             let block_size = 1 << log_block_size;
-            chip_for_block.insert(
-                block_size,
-                FixedSizeMemoryTester::new(controller.memory_bus, block_size),
-            );
+            chip_for_block.insert(block_size, FixedSizeMemoryTester::new(mem_bus, block_size));
         }
+        let range_bus = range_checker.cpu_chip.as_ref().unwrap().bus();
         Self {
             chip_for_block,
             memory,
-            controller,
+            inventory: MemoryInventoryGPU::volatile(mem_config.clone(), range_checker),
+            hasher_chip: None,
+            config: mem_config,
+            mem_bus,
+            range_bus,
         }
+    }
+
+    pub fn memory_bridge(&self) -> MemoryBridge {
+        MemoryBridge::new(self.mem_bus, self.config.clk_max_bits, self.range_bus)
     }
 
     pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {
@@ -100,7 +127,7 @@ where
     rng.gen_range(0..MAX_MEMORY - len) / len * len
 }
 
-pub struct FixedSizeMemoryTester(MemoryDummyChip<F>);
+pub struct FixedSizeMemoryTester(pub(crate) MemoryDummyChip<F>);
 
 impl FixedSizeMemoryTester {
     pub fn new(bus: MemoryBus, block_size: usize) -> Self {
@@ -136,30 +163,20 @@ impl ChipUsageGetter for FixedSizeMemoryTester {
 
 impl<RA> Chip<RA, GpuBackend> for FixedSizeMemoryTester {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
-        let height = next_power_of_two_or_zero(self.0.current_trace_height());
+        let height = self.0.current_trace_height().next_power_of_two();
         let width = self.0.trace_width();
 
-        if height == 0 {
-            return AirProvingContext {
-                cached_mains: vec![],
-                common_main: None,
-                public_values: vec![],
-            };
-        }
+        let mut records = self.0.trace.clone();
+        records.resize(height * width, F::ZERO);
+        let num_records = height;
+
         let trace = DeviceMatrix::<F>::with_capacity(height, width);
-
-        let records = &self.0.trace;
-        let num_records = records.len();
-
         unsafe {
-            let bytes_size = num_records * size_of::<F>();
-            let records_bytes = from_raw_parts(records.as_ptr() as *const u8, bytes_size);
-            let records = records_bytes.to_device().unwrap();
             memory_testing::tracegen(
                 trace.buffer(),
                 height,
                 width,
-                &records,
+                &records.to_device().unwrap(),
                 num_records,
                 self.0.air.block_size,
             )
