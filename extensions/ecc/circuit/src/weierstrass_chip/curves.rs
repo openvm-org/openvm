@@ -66,20 +66,20 @@ pub(super) fn get_curve_type(modulus: &BigUint, a_coeff: &BigUint) -> Option<Cur
 }
 
 #[inline(always)]
-pub fn ec_add_ne<const CURVE: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn ec_add_ne<const CURVE: u8, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
 ) -> [[u8; BLOCK_SIZE]; BLOCKS] {
     match CURVE {
-        x if x == CurveType::K256 as usize => {
+        x if x == CurveType::K256 as u8 => {
             ec_add_ne_256bit::<halo2curves_axiom::secq256k1::Fq, BLOCKS, BLOCK_SIZE>(input_data)
         }
         x if x == CurveType::P256 as usize => {
             ec_add_ne_256bit::<halo2curves_axiom::secp256r1::Fp, BLOCKS, BLOCK_SIZE>(input_data)
         }
-        x if x == CurveType::BN254 as usize => {
+        x if x == CurveType::BN254 as u8 => {
             ec_add_ne_256bit::<halo2curves_axiom::bn256::Fq, BLOCKS, BLOCK_SIZE>(input_data)
         }
-        x if x == CurveType::BLS12_381 as usize => {
+        x if x == CurveType::BLS12_381 as u8 => {
             ec_add_ne_bls12_381::<BLOCKS, BLOCK_SIZE>(input_data)
         }
         _ => panic!("Unsupported curve type: {}", CURVE),
@@ -88,22 +88,22 @@ pub fn ec_add_ne<const CURVE: usize, const BLOCKS: usize, const BLOCK_SIZE: usiz
 
 /// Dispatch elliptic curve point doubling based on const generic curve type
 #[inline(always)]
-pub fn ec_double<const CURVE: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn ec_double<const CURVE: u8, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     input_data: [[u8; BLOCK_SIZE]; BLOCKS],
 ) -> [[u8; BLOCK_SIZE]; BLOCKS] {
     match CURVE {
-        x if x == CurveType::K256 as usize => {
+        x if x == CurveType::K256 as u8 => {
             ec_double_256bit::<halo2curves_axiom::secq256k1::Fq, 0, BLOCKS, BLOCK_SIZE>(input_data)
         }
-        x if x == CurveType::P256 as usize => {
+        x if x == CurveType::P256 as u8 => {
             ec_double_256bit::<halo2curves_axiom::secp256r1::Fp, P256_NEG_A, BLOCKS, BLOCK_SIZE>(
                 input_data,
             )
         }
-        x if x == CurveType::BN254 as usize => {
+        x if x == CurveType::BN254 as u8 => {
             ec_double_256bit::<halo2curves_axiom::bn256::Fq, 0, BLOCKS, BLOCK_SIZE>(input_data)
         }
-        x if x == CurveType::BLS12_381 as usize => {
+        x if x == CurveType::BLS12_381 as u8 => {
             ec_double_bls12_381::<BLOCKS, BLOCK_SIZE>(input_data)
         }
         _ => panic!("Unsupported curve type: {}", CURVE),

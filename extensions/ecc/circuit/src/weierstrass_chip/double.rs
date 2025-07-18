@@ -405,20 +405,16 @@ unsafe fn execute_e12_impl<
         from_fn(|i| vm_state.vm_read(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
     };
 
-    let output_data = match CURVE_TYPE {
-        x if x == CurveType::K256 as u8 => ec_double::<0, BLOCKS, BLOCK_SIZE>(read_data),
-        x if x == CurveType::P256 as u8 => ec_double::<1, BLOCKS, BLOCK_SIZE>(read_data),
-        x if x == CurveType::BN254 as u8 => ec_double::<2, BLOCKS, BLOCK_SIZE>(read_data),
-        x if x == CurveType::BLS12_381 as u8 => ec_double::<3, BLOCKS, BLOCK_SIZE>(read_data),
-        _ => {
-            let read_data: DynArray<u8> = read_data.into();
-            run_field_expression_precomputed::<true>(
-                pre_compute.expr,
-                pre_compute.flag_idx as usize,
-                &read_data.0,
-            )
-            .into()
-        }
+    let output_data = if CURVE_TYPE == u8::MAX {
+        let read_data: DynArray<u8> = read_data.into();
+        run_field_expression_precomputed::<true>(
+            pre_compute.expr,
+            pre_compute.flag_idx as usize,
+            &read_data.0,
+        )
+        .into()
+    } else {
+        ec_double::<CURVE_TYPE, BLOCKS, BLOCK_SIZE>(read_data)
     };
 
     let rd_val = u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));

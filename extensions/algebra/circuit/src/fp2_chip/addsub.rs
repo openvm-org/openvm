@@ -12,6 +12,7 @@ use openvm_circuit_primitives::{
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionFiller,
+    FieldExpressionStep,
 };
 use openvm_rv32_adapters::{
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
@@ -94,14 +95,14 @@ pub fn get_fp2_addsub_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 ) -> Fp2Step<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
 
-    Fp2Step::new(
+    Fp2Step(FieldExpressionStep::new(
         Rv32VecHeapAdapterStep::new(pointer_max_bits),
         expr,
         offset,
         local_opcode_idx,
         opcode_flag_idx,
         "Fp2AddSub",
-    )
+    ))
 }
 
 pub fn get_fp2_addsub_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
