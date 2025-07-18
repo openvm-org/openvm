@@ -7,7 +7,6 @@ use std::{
 
 use derive_more::derive::{Deref, DerefMut};
 use num_bigint::BigUint;
-use openvm_algebra_circuit::FieldExprVecHeapStep;
 use openvm_circuit::{
     arch::{
         execution::ExecuteFunc,
@@ -33,7 +32,7 @@ use openvm_instructions::{
 };
 use openvm_mod_circuit_builder::{
     run_field_expression_precomputed, ExprBuilder, ExprBuilderConfig, FieldExpr,
-    FieldExpressionCoreAir, FieldExpressionFiller,
+    FieldExpressionCoreAir, FieldExpressionFiller, FieldExpressionStep,
 };
 use openvm_rv32_adapters::{
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
@@ -73,7 +72,7 @@ pub fn ec_add_ne_expr(
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
 #[derive(Clone, InstructionExecutor, Deref, DerefMut)]
 pub struct EcAddNeStep<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    FieldExprVecHeapStep<2, BLOCKS, BLOCK_SIZE>,
+    FieldExpressionStep<Rv32VecHeapAdapterStep<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
 );
 
 fn gen_base_expr(
@@ -118,7 +117,7 @@ pub fn get_ec_addne_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     offset: usize,
 ) -> EcAddNeStep<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus);
-    EcAddNeStep(FieldExprVecHeapStep::new(
+    EcAddNeStep(FieldExpressionStep::new(
         Rv32VecHeapAdapterStep::new(pointer_max_bits),
         expr,
         offset,

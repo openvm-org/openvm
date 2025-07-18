@@ -19,7 +19,7 @@ use openvm_rv32_adapters::{
 };
 
 use super::{Fp2Air, Fp2Chip, Fp2Step};
-use crate::Fp2;
+use crate::{FieldExprVecHeapStep, Fp2};
 
 pub fn fp2_muldiv_expr(
     config: ExprBuilderConfig,
@@ -135,7 +135,7 @@ pub fn get_fp2_muldiv_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 ) -> Fp2Step<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
 
-    Fp2Step(FieldExpressionStep::new(
+    FieldExprVecHeapStep(FieldExpressionStep::new(
         Rv32VecHeapAdapterStep::new(pointer_max_bits),
         expr,
         offset,

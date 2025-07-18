@@ -18,6 +18,8 @@ use openvm_rv32_adapters::{
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
 };
 
+use crate::FieldExprVecHeapStep;
+
 use super::{ModularAir, ModularChip, ModularStep};
 
 pub fn addsub_expr(
@@ -91,7 +93,7 @@ pub fn get_modular_addsub_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 ) -> ModularStep<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
 
-    ModularStep(FieldExpressionStep::new(
+    FieldExprVecHeapStep(FieldExpressionStep::new(
         Rv32VecHeapAdapterStep::new(pointer_max_bits),
         expr,
         offset,

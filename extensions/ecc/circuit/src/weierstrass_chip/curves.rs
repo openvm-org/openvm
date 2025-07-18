@@ -73,7 +73,7 @@ pub fn ec_add_ne<const CURVE: u8, const BLOCKS: usize, const BLOCK_SIZE: usize>(
         x if x == CurveType::K256 as u8 => {
             ec_add_ne_256bit::<halo2curves_axiom::secq256k1::Fq, BLOCKS, BLOCK_SIZE>(input_data)
         }
-        x if x == CurveType::P256 as usize => {
+        x if x == CurveType::P256 as u8 => {
             ec_add_ne_256bit::<halo2curves_axiom::secp256r1::Fp, BLOCKS, BLOCK_SIZE>(input_data)
         }
         x if x == CurveType::BN254 as u8 => {
