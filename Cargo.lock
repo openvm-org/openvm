@@ -4506,6 +4506,7 @@ version = "1.4.0-rc.0"
 dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
+ "halo2curves-axiom",
  "hex-literal 0.4.1",
  "lazy_static",
  "num-bigint 0.4.6",

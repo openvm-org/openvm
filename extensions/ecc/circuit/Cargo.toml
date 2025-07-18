@@ -23,7 +23,7 @@ openvm-ecc-transpiler = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 strum = { workspace = true }
-derive_more = { workspace = true }
+derive_more = { workspace = true, features = ["deref", "deref_mut"] }
 derive-new = { workspace = true }
 once_cell = { workspace = true, features = ["std"] }
 rand = { workspace = true }
@@ -31,6 +31,7 @@ serde = { workspace = true }
 serde_with = { workspace = true }
 lazy_static = { workspace = true }
 hex-literal = { workspace = true }
+halo2curves-axiom = { workspace = true }
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }
