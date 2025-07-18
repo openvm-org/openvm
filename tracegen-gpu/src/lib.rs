@@ -5,6 +5,9 @@ use openvm_stark_backend::{
 };
 use stark_backend_gpu::types::DeviceAirProofRawInput;
 
+#[macro_use]
+extern crate derive_new;
+
 pub mod dummy;
 pub mod extensions;
 pub mod primitives;

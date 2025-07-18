@@ -184,8 +184,7 @@ __global__ void rv32_load_store_tracegen(
         auto core = LoadStoreCore<RV32_REGISTER_NUM_LIMBS>();
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv32LoadStoreCols, core)), record.core);
     } else {
-        // Fill with 0s
-        row.fill_zero(0, width);
+        row.fill_zero(0, sizeof(Rv32LoadStoreCols<uint8_t>));
     }
 }
 
@@ -202,6 +201,7 @@ extern "C" int _rv32_load_store_tracegen(
     assert((height & (height - 1)) == 0);
     assert(width == sizeof(Rv32LoadStoreCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
+
     rv32_load_store_tracegen<<<grid, block>>>(
         d_trace,
         height,

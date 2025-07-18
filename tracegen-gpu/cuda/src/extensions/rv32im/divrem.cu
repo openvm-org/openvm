@@ -281,6 +281,7 @@ extern "C" int _rv32_div_rem_tracegen(
     assert(height >= rows_used);
     assert(width == sizeof(Rv32DivRemCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
+
     rv32_div_rem_tracegen<<<grid, block>>>(
         d_trace,
         height,

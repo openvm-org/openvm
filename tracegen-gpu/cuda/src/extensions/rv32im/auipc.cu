@@ -83,10 +83,7 @@ __global__ void auipc_tracegen(
         auto core = Rv32AuipcCore(BitwiseOperationLookup(bitwise_lookup_ptr, bitwise_num_bits));
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv32AuipcCols, core)), record.core);
     } else {
-#pragma unroll
-        for (size_t i = 0; i < sizeof(Rv32AuipcCols<uint8_t>); i++) {
-            row.write(i, 0);
-        }
+        row.fill_zero(0, sizeof(Rv32AuipcCols<uint8_t>));
     }
 }
 

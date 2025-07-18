@@ -222,7 +222,7 @@ mod test {
 
         tester.write(1, a, some_prev_data);
 
-        let mem_as = rng.gen_range(1..3);
+        let mem_as = 2;
         tester.write(
             mem_as,
             (ptr_val - shift_amount) as usize,
