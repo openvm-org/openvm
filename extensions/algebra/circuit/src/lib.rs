@@ -67,10 +67,10 @@ impl<const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct FieldExpressionPreCompute<'a, const NUM_READS: usize> {
-    a: u8,
+    expr: &'a FieldExpr,
     // NUM_READS <= 2 as in Rv32VecHeapAdapter
     rs_addrs: [u8; NUM_READS],
-    expr: &'a FieldExpr,
+    a: u8,
     flag_idx: u8,
 }
 

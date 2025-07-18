@@ -13,7 +13,7 @@ use openvm_circuit::{
         execution::ExecuteFunc,
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
-        E2PreCompute, ExecutionBridge,
+        DynArray, E2PreCompute, ExecutionBridge,
         ExecutionError::{self, InvalidInstruction},
         InsExecutorE1, InsExecutorE2, Result, VmSegmentState,
     },
@@ -32,7 +32,8 @@ use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_CELL_BITS,
 };
 use openvm_mod_circuit_builder::{
-    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionFiller,
+    run_field_expression_precomputed, ExprBuilder, ExprBuilderConfig, FieldExpr,
+    FieldExpressionCoreAir, FieldExpressionFiller,
 };
 use openvm_rv32_adapters::{
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
@@ -151,7 +152,7 @@ pub fn get_ec_addne_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct EcAddNePreCompute<'a> {
-    modulus: &'a BigUint,
+    expr: &'a FieldExpr,
     rs_addrs: [u8; 2],
     a: u8,
 }
@@ -187,7 +188,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeStep<BLOCKS, BLOCK
         *data = EcAddNePreCompute {
             a: a as u8,
             rs_addrs,
-            modulus: &self.expr.builder.prime,
+            expr: &self.expr,
         };
 
         let local_opcode = opcode.local_opcode_idx(self.offset);
@@ -220,7 +221,10 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE
 
         if is_setup {
             Ok(execute_e1_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
-        } else if let Some(curve_type) = get_curve_type_from_modulus(pre_compute.modulus) {
+        } else if let Some(curve_type) = {
+            let modulus = &pre_compute.expr.builder.prime;
+            get_curve_type_from_modulus(modulus)
+        } {
             match curve_type {
                 CurveType::K256 => {
                     Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>)
@@ -266,7 +270,10 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE
 
         if is_setup {
             Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
-        } else if let Some(curve_type) = get_curve_type_from_modulus(pre_compute.data.modulus) {
+        } else if let Some(curve_type) = {
+            let modulus = &pre_compute.data.expr.builder.prime;
+            get_curve_type_from_modulus(modulus)
+        } {
             match curve_type {
                 CurveType::K256 => {
                     Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>)
@@ -374,8 +381,10 @@ unsafe fn execute_e12_impl<
         x if x == CurveType::P256 as u8 => ec_add_ne::<1, BLOCKS, BLOCK_SIZE>(read_data),
         x if x == CurveType::BN254 as u8 => ec_add_ne::<2, BLOCKS, BLOCK_SIZE>(read_data),
         x if x == CurveType::BLS12_381 as u8 => ec_add_ne::<3, BLOCKS, BLOCK_SIZE>(read_data),
-
-        _ => ec_add_ne_generic::<BLOCKS, BLOCK_SIZE>(read_data, pre_compute.modulus),
+        _ => {
+            let read_data: DynArray<u8> = read_data.into();
+            run_field_expression_precomputed::<false>(pre_compute.expr, 0, &read_data.0).into()
+        }
     };
 
     let rd_val = u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));
@@ -411,101 +420,13 @@ unsafe fn execute_e12_setup_impl<
     };
 
     // Extract first field element as the prime
-    let prime_bytes = setup_input_data[..BLOCKS / 2].as_flattened();
-    let input_prime = BigUint::from_bytes_le(&prime_bytes);
+    let input_prime = BigUint::from_bytes_le(setup_input_data[..BLOCKS / 2].as_flattened());
 
-    if input_prime != *pre_compute.modulus {
+    if input_prime != pre_compute.expr.prime {
         vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
         return;
     }
 
     vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
     vm_state.instret += 1;
-}
-
-// Assumes that (x1, y1), (x2, y2) both lie on the curve and are not the identity point.
-// Further assumes that x1, x2 are not equal in the coordinate field.
-fn ec_add_ne_generic<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
-    field_modulus: &BigUint,
-) -> [[u8; BLOCK_SIZE]; BLOCKS] {
-    let field_element_bytes = BLOCKS * BLOCK_SIZE;
-    let half_bytes = field_element_bytes / 2;
-
-    // Extract coordinates from input data
-    let x1 = BigUint::from_bytes_le(input_data[0][..BLOCKS / 2].as_flattened());
-    let y1 = BigUint::from_bytes_le(input_data[0][BLOCKS / 2..].as_flattened());
-    let x2 = BigUint::from_bytes_le(input_data[1][..BLOCKS / 2].as_flattened());
-    let y2 = BigUint::from_bytes_le(input_data[1][BLOCKS / 2..].as_flattened());
-
-    // Elliptic curve point addition formula:
-    // lambda = (y2 - y1) / (x2 - x1) mod p
-    // x3 = lambda^2 - x1 - x2 mod p
-    // y3 = lambda * (x1 - x3) - y1 mod p
-
-    // Calculate lambda = (y2 - y1) / (x2 - x1) mod p
-    let y_diff = if y2 >= y1 {
-        (&y2 - &y1) % field_modulus
-    } else {
-        (field_modulus + &y2 - &y1) % field_modulus
-    };
-
-    let x_diff = if x2 >= x1 {
-        (&x2 - &x1) % field_modulus
-    } else {
-        (field_modulus + &x2 - &x1) % field_modulus
-    };
-
-    // Calculate modular inverse of x_diff using Extended Euclidean Algorithm
-    let x_diff_inv = x_diff
-        .modinv(field_modulus)
-        .expect("Modular inverse should exist for valid EC points");
-    let lambda = (&y_diff * &x_diff_inv) % field_modulus;
-
-    // Calculate x3 = lambda^2 - x1 - x2 mod p
-    let lambda_squared = (&lambda * &lambda) % field_modulus;
-    let x3 = (&lambda_squared + field_modulus + field_modulus - &x1 - &x2) % field_modulus;
-
-    // Calculate y3 = lambda * (x1 - x3) - y1 mod p
-    let x1_minus_x3 = if x1 >= x3 {
-        (&x1 - &x3) % field_modulus
-    } else {
-        (field_modulus + &x1 - &x3) % field_modulus
-    };
-
-    let y3 = {
-        let temp = (&lambda * &x1_minus_x3) % field_modulus;
-        if temp >= y1 {
-            (&temp - &y1) % field_modulus
-        } else {
-            (field_modulus + &temp - &y1) % field_modulus
-        }
-    };
-
-    // Convert results back to byte representation
-    let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
-
-    // Store x3 in first half of blocks
-    let x3_bytes = x3.to_bytes_le();
-    let x3_len = x3_bytes.len().min(half_bytes);
-    for (i, &byte) in x3_bytes[..x3_len].iter().enumerate() {
-        let block_idx = i / BLOCK_SIZE;
-        let byte_idx = i % BLOCK_SIZE;
-        if block_idx < BLOCKS / 2 {
-            output[block_idx][byte_idx] = byte;
-        }
-    }
-
-    // Store y3 in second half of blocks
-    let y3_bytes = y3.to_bytes_le();
-    let y3_len = y3_bytes.len().min(half_bytes);
-    for (i, &byte) in y3_bytes[..y3_len].iter().enumerate() {
-        let block_idx = (BLOCKS / 2) + (i / BLOCK_SIZE);
-        let byte_idx = i % BLOCK_SIZE;
-        if block_idx < BLOCKS {
-            output[block_idx][byte_idx] = byte;
-        }
-    }
-
-    output
 }

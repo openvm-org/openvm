@@ -14,7 +14,7 @@ use openvm_circuit::{
         execution::ExecuteFunc,
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
-        E2PreCompute, ExecutionBridge,
+        DynArray, E2PreCompute, ExecutionBridge,
         ExecutionError::{self, InvalidInstruction},
         InsExecutorE1, InsExecutorE2, Result, VmSegmentState,
     },
@@ -33,8 +33,8 @@ use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_CELL_BITS,
 };
 use openvm_mod_circuit_builder::{
-    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionFiller,
-    FieldVariable,
+    run_field_expression_precomputed, ExprBuilder, ExprBuilderConfig, FieldExpr,
+    FieldExpressionCoreAir, FieldExpressionFiller, FieldVariable,
 };
 use openvm_rv32_adapters::{
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
@@ -164,8 +164,7 @@ pub fn get_ec_double_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct EcDoublePreCompute<'a> {
-    modulus: &'a BigUint,
-    a_coeff: &'a BigUint,
+    expr: &'a FieldExpr,
     rs_addrs: [u8; 1],
     a: u8,
 }
@@ -194,8 +193,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleStep<BLOCKS, BLOC
         *data = EcDoublePreCompute {
             a: a as u8,
             rs_addrs,
-            modulus: &self.expr.builder.prime,
-            a_coeff: &self.expr.setup_values[0],
+            expr: &self.expr,
         };
 
         let local_opcode = opcode.local_opcode_idx(self.offset);
@@ -228,7 +226,11 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE
 
         if is_setup {
             Ok(execute_e1_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
-        } else if let Some(curve_type) = get_curve_type(pre_compute.modulus, pre_compute.a_coeff) {
+        } else if let Some(curve_type) = {
+            let modulus = &pre_compute.expr.builder.prime;
+            let a_coeff = &pre_compute.expr.setup_values[0];
+            get_curve_type(modulus, a_coeff)
+        } {
             match curve_type {
                 CurveType::K256 => {
                     Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>)
@@ -274,9 +276,11 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE
 
         if is_setup {
             Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
-        } else if let Some(curve_type) =
-            get_curve_type(pre_compute.data.modulus, pre_compute.data.a_coeff)
-        {
+        } else if let Some(curve_type) = {
+            let modulus = &pre_compute.data.expr.builder.prime;
+            let a_coeff = &pre_compute.data.expr.setup_values[0];
+            get_curve_type(modulus, a_coeff)
+        } {
             match curve_type {
                 CurveType::K256 => {
                     Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>)
@@ -385,11 +389,10 @@ unsafe fn execute_e12_impl<
         x if x == CurveType::P256 as u8 => ec_double::<1, BLOCKS, BLOCK_SIZE>(read_data),
         x if x == CurveType::BN254 as u8 => ec_double::<2, BLOCKS, BLOCK_SIZE>(read_data),
         x if x == CurveType::BLS12_381 as u8 => ec_double::<3, BLOCKS, BLOCK_SIZE>(read_data),
-        _ => ec_double_generic::<BLOCKS, BLOCK_SIZE>(
-            read_data,
-            pre_compute.modulus.clone(),
-            pre_compute.a_coeff.clone(),
-        ),
+        _ => {
+            let read_data: DynArray<u8> = read_data.into();
+            run_field_expression_precomputed::<false>(pre_compute.expr, 0, &read_data.0).into()
+        }
     };
 
     let rd_val = u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));
@@ -426,97 +429,19 @@ unsafe fn execute_e12_setup_impl<
     // Extract first field element as the prime
     let input_prime = BigUint::from_bytes_le(setup_input_data[..BLOCKS / 2].as_flattened());
 
-    if input_prime != *pre_compute.modulus {
+    if input_prime != pre_compute.expr.builder.prime {
         vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
         return;
     }
 
     // Extract second field element as the a coefficient
     let input_a = BigUint::from_bytes_le(setup_input_data[BLOCKS / 2..].as_flattened());
-
-    if input_a != *pre_compute.a_coeff {
+    let coeff_a = &pre_compute.expr.setup_values[0];
+    if input_a != *coeff_a {
         vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
         return;
     }
 
     vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
     vm_state.instret += 1;
-}
-
-#[inline(always)]
-fn ec_double_generic<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    input_data: [[u8; BLOCK_SIZE]; BLOCKS],
-    field_modulus: BigUint,
-    a_coeff: BigUint,
-) -> [[u8; BLOCK_SIZE]; BLOCKS] {
-    let field_element_bytes = BLOCKS * BLOCK_SIZE;
-    let half_bytes = field_element_bytes / 2;
-
-    // Extract coordinates from input data
-    let x1 = BigUint::from_bytes_le(input_data[..BLOCKS / 2].as_flattened());
-    let y1 = BigUint::from_bytes_le(input_data[BLOCKS / 2..].as_flattened());
-
-    // Elliptic curve point doubling formula:
-    // lambda = (3 * x1^2 + a) / (2 * y1) mod p
-    // x3 = lambda^2 - 2 * x1 mod p
-    // y3 = lambda * (x1 - x3) - y1 mod p
-
-    // Calculate lambda = (3 * x1^2 + a) / (2 * y1) mod p
-    let x1_squared = (&x1 * &x1) % &field_modulus;
-    let three_x1_squared = (&x1_squared * 3u32) % &field_modulus;
-    let numerator = (&three_x1_squared + &a_coeff) % &field_modulus;
-
-    let two_y1 = (&y1 * 2u32) % &field_modulus;
-    let two_y1_inv = two_y1
-        .modinv(&field_modulus)
-        .expect("Modular inverse should exist for valid EC points");
-    let lambda = (&numerator * &two_y1_inv) % &field_modulus;
-
-    // Calculate x3 = lambda^2 - 2 * x1 mod p
-    let lambda_squared = (&lambda * &lambda) % &field_modulus;
-    let two_x1 = (&x1 * 2u32) % &field_modulus;
-    let x3 = (&field_modulus + &lambda_squared - &two_x1) % &field_modulus;
-
-    // Calculate y3 = lambda * (x1 - x3) - y1 mod p
-    let x1_minus_x3 = if x1 >= x3 {
-        (&x1 - &x3) % &field_modulus
-    } else {
-        (&field_modulus + &x1 - &x3) % &field_modulus
-    };
-
-    let y3 = {
-        let temp = (&lambda * &x1_minus_x3) % &field_modulus;
-        if temp >= y1 {
-            (&temp - &y1) % &field_modulus
-        } else {
-            (&field_modulus + &temp - &y1) % &field_modulus
-        }
-    };
-
-    // Convert results back to byte representation
-    let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
-
-    // Store x3 in first half of blocks
-    let x3_bytes = x3.to_bytes_le();
-    let x3_len = x3_bytes.len().min(half_bytes);
-    for (i, &byte) in x3_bytes[..x3_len].iter().enumerate() {
-        let block_idx = i / BLOCK_SIZE;
-        let byte_idx = i % BLOCK_SIZE;
-        if block_idx < BLOCKS / 2 {
-            output[block_idx][byte_idx] = byte;
-        }
-    }
-
-    // Store y3 in second half of blocks
-    let y3_bytes = y3.to_bytes_le();
-    let y3_len = y3_bytes.len().min(half_bytes);
-    for (i, &byte) in y3_bytes[..y3_len].iter().enumerate() {
-        let block_idx = (BLOCKS / 2) + (i / BLOCK_SIZE);
-        let byte_idx = i % BLOCK_SIZE;
-        if block_idx < BLOCKS {
-            output[block_idx][byte_idx] = byte;
-        }
-    }
-
-    output
 }

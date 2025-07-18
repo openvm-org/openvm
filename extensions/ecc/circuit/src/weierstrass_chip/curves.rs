@@ -16,7 +16,7 @@ fn get_modulus_as_bigint<F: PrimeField>() -> BigUint {
     BigUint::from_str_radix(F::MODULUS.trim_start_matches("0x"), 16).unwrap()
 }
 
-pub fn get_curve_type_from_modulus(modulus: &BigUint) -> Option<CurveType> {
+pub(super) fn get_curve_type_from_modulus(modulus: &BigUint) -> Option<CurveType> {
     if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secq256k1::Fq>() {
         return Some(CurveType::K256);
     }
@@ -36,7 +36,7 @@ pub fn get_curve_type_from_modulus(modulus: &BigUint) -> Option<CurveType> {
     None
 }
 
-pub fn get_curve_type(modulus: &BigUint, a_coeff: &BigUint) -> Option<CurveType> {
+pub(super) fn get_curve_type(modulus: &BigUint, a_coeff: &BigUint) -> Option<CurveType> {
     if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secq256k1::Fq>()
         && a_coeff == &BigUint::ZERO
     {
