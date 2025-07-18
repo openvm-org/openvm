@@ -114,7 +114,7 @@ fn field_operation_256bit<
     };
 
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
-    field_element_to_blocks::<F, BLOCKS, BLOCK_SIZE>(&c, &mut output);
+    field_element_to_blocks(&c, &mut output);
     output
 }
 
@@ -160,8 +160,8 @@ fn fp2_operation_bn254<const BLOCKS: usize, const BLOCK_SIZE: usize, const OP: u
 fn fp2_operation_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize, const OP: u8>(
     input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
 ) -> [[u8; BLOCK_SIZE]; BLOCKS] {
-    let a = blocks_to_fp2_bls12_381(input_data[0].as_ref());
-    let b = blocks_to_fp2_bls12_381(input_data[1].as_ref());
+    let a = blocks_to_fp2_bls12_381::<BLOCKS, BLOCK_SIZE>(input_data[0].as_ref());
+    let b = blocks_to_fp2_bls12_381::<BLOCKS, BLOCK_SIZE>(input_data[1].as_ref());
     let c = match OP {
         x if x == Operation::Add as u8 => a + b,
         x if x == Operation::Sub as u8 => a - b,
@@ -185,13 +185,9 @@ pub fn blocks_to_field_element<F: PrimeField<Repr = [u8; 32]>>(blocks: &[u8]) ->
 }
 
 #[inline(always)]
-pub fn field_element_to_blocks<
-    F: PrimeField<Repr = [u8; 32]>,
-    const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
->(
+pub fn field_element_to_blocks<F: PrimeField<Repr = [u8; 32]>, const BLOCK_SIZE: usize>(
     field_element: &F,
-    output: &mut [[u8; BLOCK_SIZE]; BLOCKS],
+    output: &mut [[u8; BLOCK_SIZE]],
 ) {
     let bytes = field_element.to_repr();
     let mut byte_idx = 0;
@@ -218,9 +214,9 @@ pub fn blocks_to_field_element_bls12_381(blocks: &[u8]) -> halo2curves_axiom::bl
 }
 
 #[inline(always)]
-pub fn field_element_to_blocks_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn field_element_to_blocks_bls12_381<const BLOCK_SIZE: usize>(
     field_element: &halo2curves_axiom::bls12_381::Fq,
-    output: &mut [[u8; BLOCK_SIZE]; BLOCKS],
+    output: &mut [[u8; BLOCK_SIZE]],
 ) {
     let bytes = field_element.to_bytes();
     let mut byte_idx = 0;
@@ -252,30 +248,22 @@ fn fp2_to_blocks_bn254<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     fp2: &halo2curves_axiom::bn256::Fq2,
     output: &mut [[u8; BLOCK_SIZE]; BLOCKS],
 ) {
-    let mid = BLOCKS / 2;
-    let mut temp_c0 = [[0u8; BLOCK_SIZE]; BLOCKS];
-    let mut temp_c1 = [[0u8; BLOCK_SIZE]; BLOCKS];
-
-    field_element_to_blocks::<halo2curves_axiom::bn256::Fq, BLOCKS, BLOCK_SIZE>(
+    field_element_to_blocks::<halo2curves_axiom::bn256::Fq, BLOCK_SIZE>(
         &fp2.c0,
-        &mut temp_c0,
+        &mut output[..BLOCKS / 2],
     );
-    field_element_to_blocks::<halo2curves_axiom::bn256::Fq, BLOCKS, BLOCK_SIZE>(
+    field_element_to_blocks::<halo2curves_axiom::bn256::Fq, BLOCK_SIZE>(
         &fp2.c1,
-        &mut temp_c1,
+        &mut output[BLOCKS / 2..],
     );
-
-    output[..mid].copy_from_slice(&temp_c0[..mid]);
-    output[mid..].copy_from_slice(&temp_c1[..mid]);
 }
 
 #[inline(always)]
-fn blocks_to_fp2_bls12_381<const BLOCK_SIZE: usize>(
+fn blocks_to_fp2_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     blocks: &[[u8; BLOCK_SIZE]],
 ) -> halo2curves_axiom::bls12_381::Fq2 {
-    let mid = blocks.len() / 2;
-    let c0 = blocks_to_field_element_bls12_381(blocks[..mid].as_flattened());
-    let c1 = blocks_to_field_element_bls12_381(blocks[mid..].as_flattened());
+    let c0 = blocks_to_field_element_bls12_381(blocks[..BLOCKS / 2].as_flattened());
+    let c1 = blocks_to_field_element_bls12_381(blocks[BLOCKS / 2..].as_flattened());
     halo2curves_axiom::bls12_381::Fq2 { c0, c1 }
 }
 
@@ -284,13 +272,6 @@ fn fp2_to_blocks_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     fp2: &halo2curves_axiom::bls12_381::Fq2,
     output: &mut [[u8; BLOCK_SIZE]; BLOCKS],
 ) {
-    let mid = BLOCKS / 2;
-    let mut temp_c0 = [[0u8; BLOCK_SIZE]; BLOCKS];
-    let mut temp_c1 = [[0u8; BLOCK_SIZE]; BLOCKS];
-
-    field_element_to_blocks_bls12_381(&fp2.c0, &mut temp_c0);
-    field_element_to_blocks_bls12_381(&fp2.c1, &mut temp_c1);
-
-    output[..mid].copy_from_slice(&temp_c0[..mid]);
-    output[mid..].copy_from_slice(&temp_c1[..mid]);
+    field_element_to_blocks_bls12_381(&fp2.c0, &mut output[..BLOCKS / 2]);
+    field_element_to_blocks_bls12_381(&fp2.c1, &mut output[BLOCKS / 2..]);
 }

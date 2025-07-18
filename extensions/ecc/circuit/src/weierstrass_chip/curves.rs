@@ -1,6 +1,10 @@
 use halo2curves_axiom::ff::PrimeField;
 use num_bigint::BigUint;
 use num_traits::Num;
+use openvm_algebra_circuit::fields::{
+    blocks_to_field_element, blocks_to_field_element_bls12_381, field_element_to_blocks,
+    field_element_to_blocks_bls12_381,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CurveType {
@@ -126,8 +130,8 @@ fn ec_add_ne_256bit<
     let (x3, y3) = ec_add_ne_impl::<F>(x1, y1, x2, y2);
 
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
-    field_element_to_blocks::<F, BLOCKS, BLOCK_SIZE>(&x3, &mut output, 0);
-    field_element_to_blocks::<F, BLOCKS, BLOCK_SIZE>(&y3, &mut output, BLOCKS / 2);
+    field_element_to_blocks::<F, BLOCK_SIZE>(&x3, &mut output[..BLOCKS / 2]);
+    field_element_to_blocks::<F, BLOCK_SIZE>(&y3, &mut output[BLOCKS / 2..]);
     output
 }
 
@@ -146,8 +150,8 @@ fn ec_double_256bit<
     let (x3, y3) = ec_double_impl::<F, NEG_A>(x1, y1);
 
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
-    field_element_to_blocks::<F, BLOCKS, BLOCK_SIZE>(&x3, &mut output, 0);
-    field_element_to_blocks::<F, BLOCKS, BLOCK_SIZE>(&y3, &mut output, BLOCKS / 2);
+    field_element_to_blocks::<F, BLOCK_SIZE>(&x3, &mut output[..BLOCKS / 2]);
+    field_element_to_blocks::<F, BLOCK_SIZE>(&y3, &mut output[BLOCKS / 2..]);
     output
 }
 
@@ -165,8 +169,8 @@ fn ec_add_ne_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 
     // Final output
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
-    field_element_to_blocks_bls12_381(&x3, &mut output, 0);
-    field_element_to_blocks_bls12_381(&y3, &mut output, BLOCKS / 2);
+    field_element_to_blocks_bls12_381(&x3, &mut output[..BLOCKS / 2]);
+    field_element_to_blocks_bls12_381(&y3, &mut output[BLOCKS / 2..]);
     output
 }
 
@@ -182,8 +186,8 @@ fn ec_double_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 
     // Final output
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
-    field_element_to_blocks_bls12_381(&x3, &mut output, 0);
-    field_element_to_blocks_bls12_381(&y3, &mut output, BLOCKS / 2);
+    field_element_to_blocks_bls12_381(&x3, &mut output);
+    field_element_to_blocks_bls12_381(&y3, &mut output);
     output
 }
 
@@ -223,68 +227,4 @@ pub fn ec_double_impl<F: PrimeField, const NEG_A: u64>(x1: F, y1: F) -> (F, F) {
     let y3 = lambda * (x1 - x3) - y1;
 
     (x3, y3)
-}
-
-#[inline(always)]
-fn blocks_to_field_element<F: PrimeField<Repr = [u8; 32]>>(blocks: &[u8]) -> F {
-    let mut bytes = [0u8; 32];
-    let len = blocks.len().min(32);
-    bytes[..len].copy_from_slice(&blocks[..len]);
-
-    F::from_repr_vartime(bytes).unwrap()
-}
-
-#[inline(always)]
-fn field_element_to_blocks<
-    F: PrimeField<Repr = [u8; 32]>,
-    const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
->(
-    field_element: &F,
-    output: &mut [[u8; BLOCK_SIZE]; BLOCKS],
-    start_block: usize,
-) {
-    let bytes = field_element.to_repr();
-    let mut byte_idx = 0;
-
-    for block in output.iter_mut().skip(start_block) {
-        for byte in block.iter_mut() {
-            *byte = if byte_idx < bytes.len() {
-                bytes[byte_idx]
-            } else {
-                0
-            };
-            byte_idx += 1;
-        }
-    }
-}
-
-#[inline(always)]
-fn blocks_to_field_element_bls12_381(blocks: &[u8]) -> halo2curves_axiom::bls12_381::Fq {
-    let mut bytes = [0u8; 48];
-    let len = blocks.len().min(48);
-    bytes[..len].copy_from_slice(&blocks[..len]);
-
-    halo2curves_axiom::bls12_381::Fq::from_bytes(&bytes).unwrap()
-}
-
-#[inline(always)]
-fn field_element_to_blocks_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    field_element: &halo2curves_axiom::bls12_381::Fq,
-    output: &mut [[u8; BLOCK_SIZE]; BLOCKS],
-    start_block: usize,
-) {
-    let bytes = field_element.to_bytes();
-    let mut byte_idx = 0;
-
-    for block in output.iter_mut().skip(start_block) {
-        for byte in block.iter_mut() {
-            *byte = if byte_idx < bytes.len() {
-                bytes[byte_idx]
-            } else {
-                0
-            };
-            byte_idx += 1;
-        }
-    }
 }
