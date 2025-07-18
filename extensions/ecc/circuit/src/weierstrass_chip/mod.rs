@@ -11,7 +11,7 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionFiller};
 use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller};
 
-pub(crate) type WeierstrassAir<
+pub type WeierstrassAir<
     const NUM_READS: usize,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
@@ -20,13 +20,13 @@ pub(crate) type WeierstrassAir<
     FieldExpressionCoreAir,
 >;
 
-pub(crate) type WeierstrassStep<
+pub type WeierstrassStep<
     const NUM_READS: usize,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
 > = FieldExprVecHeapStep<NUM_READS, BLOCKS, BLOCK_SIZE>;
 
-pub(crate) type WeierstrassChip<
+pub type WeierstrassChip<
     F,
     const NUM_READS: usize,
     const BLOCKS: usize,
