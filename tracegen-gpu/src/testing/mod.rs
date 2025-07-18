@@ -138,7 +138,7 @@ impl Default for GpuChipTestBuilder {
 
 impl GpuChipTestBuilder {
     pub fn new() -> Self {
-        // TODO[stephen]: allow for custom test builder configuration
+        // TODO: allow for custom test builder configuration
         Self::default()
     }
 

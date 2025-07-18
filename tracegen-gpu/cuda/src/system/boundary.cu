@@ -57,7 +57,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
         COL_WRITE_VALUE(row, PersistentBoundaryCols, address_space, record.address_space);
         COL_WRITE_VALUE(row, PersistentBoundaryCols, leaf_label, record.ptr / PERSISTENT_CHUNK);
         if (row_idx % 2 == 0) {
-            // TODO[stephen]: init values should be read from MemoryImage
+            // TODO[INT-4453]: init values should be read from MemoryImage
             FpArray<8> init_values = FpArray<8>({0, 0, 0, 0, 0, 0, 0, 0});
             FpArray<8> init_hash =
                 poseidon2.hash_and_record<SBOX_DEGREE, SBOX_REGS, HALF_FULL_ROUNDS, PARTIAL_ROUNDS>(

@@ -125,9 +125,9 @@ extern "C" int _system_poseidon2_deduplicate_records(
     void *d_temp_storage = nullptr;
     cudaMallocAsync(&d_temp_storage, temp_storage_bytes, cudaStreamPerThread);
 
-    // TODO[stephen]: We currently can't use DeviceRadixSort because each key is
-    // 64 bytes, which causes Fp16Decomposer usage to exceed shared memory. We need
-    // to investigate better ways to sort, as merge sort is comparison-based.
+    // TODO: We currently can't use DeviceRadixSort since each key is 64 bytes
+    // which causes Fp16Decomposer usage to exceed shared memory. We need to
+    // investigate better ways to sort, as merge sort is comparison-based.
     cub::DeviceMergeSort::SortKeys(
         d_temp_storage,
         temp_storage_bytes,
