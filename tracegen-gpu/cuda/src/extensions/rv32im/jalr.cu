@@ -114,12 +114,8 @@ __global__ void jalr_tracegen(
             BitwiseOperationLookup(bitwise_lookup_ptr, bitwise_num_bits)
         );
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv32JalrCols, core)), full.core);
-
     } else {
-#pragma unroll
-        for (size_t i = 0; i < sizeof(Rv32JalrCols<uint8_t>); ++i) {
-            row.write(i, 0);
-        }
+        row.fill_zero(0, sizeof(Rv32JalrCols<uint8_t>));
     }
 }
 
@@ -138,6 +134,7 @@ extern "C" int _jalr_tracegen(
     assert(width == sizeof(Rv32JalrCols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height);
+
     jalr_tracegen<<<grid, block>>>(
         d_trace,
         height,

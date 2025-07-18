@@ -11,7 +11,7 @@ template <typename T> struct Rv32BaseAluAdapterCols {
     ExecutionState<T> from_state; // { pub pc: T, pub timestamp: T}
     T rd_ptr;
     T rs1_ptr;
-    T rs2; // Pointer if rs2 was a read, immediate value otherwise
+    T rs2;    // Pointer if rs2 was a read, immediate value otherwise
     T rs2_as; // 1 if rs2 was a read, 0 if an immediate
     MemoryReadAuxCols<T> reads_aux[2];
     MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS> writes_aux;
@@ -22,7 +22,7 @@ struct Rv32BaseAluAdapterRecord {
     uint32_t from_timestamp;
     uint32_t rd_ptr;
     uint32_t rs1_ptr;
-    uint32_t rs2; // Pointer if rs2 was a read, immediate value otherwise
+    uint32_t rs2;   // Pointer if rs2 was a read, immediate value otherwise
     uint8_t rs2_as; // 1 if rs2 was a read, 0 if an immediate
     MemoryReadAuxRecord reads_aux[2];
     MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS> writes_aux;
@@ -31,8 +31,7 @@ struct Rv32BaseAluAdapterRecord {
 struct Rv32BaseAluAdapter {
     MemoryAuxColsFactory mem_helper;
 
-    __device__ Rv32BaseAluAdapter(VariableRangeChecker range_checker)
-        : mem_helper(range_checker) {}
+    __device__ Rv32BaseAluAdapter(VariableRangeChecker range_checker) : mem_helper(range_checker) {}
 
     __device__ void fill_trace_row(RowSlice row, Rv32BaseAluAdapterRecord record) {
         COL_WRITE_VALUE(row, Rv32BaseAluAdapterCols, from_state.pc, record.from_pc);
@@ -65,7 +64,9 @@ struct Rv32BaseAluAdapter {
             }
         }
 
-        COL_WRITE_ARRAY(row, Rv32BaseAluAdapterCols, writes_aux.prev_data, record.writes_aux.prev_data);
+        COL_WRITE_ARRAY(
+            row, Rv32BaseAluAdapterCols, writes_aux.prev_data, record.writes_aux.prev_data
+        );
         mem_helper.fill(
             row.slice_from(COL_INDEX(Rv32BaseAluAdapterCols, writes_aux)),
             record.writes_aux.prev_timestamp,

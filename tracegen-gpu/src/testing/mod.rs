@@ -68,6 +68,8 @@ pub struct GpuChipTestBuilder {
     range_tuple_checker: Option<Arc<RangeTupleCheckerChipGPU<2>>>,
 
     rng: StdRng,
+    default_register: usize,
+    default_pointer: usize,
 }
 
 impl Default for GpuChipTestBuilder {
@@ -105,6 +107,8 @@ impl GpuChipTestBuilder {
             bitwise_op_lookup: None,
             range_tuple_checker: None,
             rng: StdRng::seed_from_u64(0),
+            default_register: 0,
+            default_pointer: 0,
         }
     }
 
@@ -187,6 +191,64 @@ impl GpuChipTestBuilder {
         self.write(address_space, pointer, value.map(F::from_canonical_usize));
     }
 
+    pub fn write_heap<const NUM_LIMBS: usize>(
+        &mut self,
+        register: usize,
+        pointer: usize,
+        writes: Vec<[F; NUM_LIMBS]>,
+    ) {
+        self.write(
+            1usize,
+            register,
+            pointer.to_le_bytes().map(F::from_canonical_u8),
+        );
+        if NUM_LIMBS.is_power_of_two() {
+            for (i, &write) in writes.iter().enumerate() {
+                self.write(2usize, pointer + i * NUM_LIMBS, write);
+            }
+        } else {
+            for (i, &write) in writes.iter().enumerate() {
+                let ptr = pointer + i * NUM_LIMBS;
+                for j in (0..NUM_LIMBS).step_by(4) {
+                    self.write::<4>(2usize, ptr + j, write[j..j + 4].try_into().unwrap());
+                }
+            }
+        }
+    }
+
+    pub fn get_default_register(&mut self, increment: usize) -> usize {
+        self.default_register += increment;
+        self.default_register - increment
+    }
+
+    pub fn get_default_pointer(&mut self, increment: usize) -> usize {
+        self.default_pointer += increment;
+        self.default_pointer - increment
+    }
+
+    pub fn write_heap_pointer_default(
+        &mut self,
+        reg_increment: usize,
+        pointer_increment: usize,
+    ) -> (usize, usize) {
+        let register = self.get_default_register(reg_increment);
+        let pointer = self.get_default_pointer(pointer_increment);
+        self.write(1, register, pointer.to_le_bytes().map(F::from_canonical_u8));
+        (register, pointer)
+    }
+
+    pub fn write_heap_default<const NUM_LIMBS: usize>(
+        &mut self,
+        reg_increment: usize,
+        pointer_increment: usize,
+        writes: Vec<[F; NUM_LIMBS]>,
+    ) -> (usize, usize) {
+        let register = self.get_default_register(reg_increment);
+        let pointer = self.get_default_pointer(pointer_increment);
+        self.write_heap(register, pointer, writes);
+        (register, pointer)
+    }
+
     pub fn system_port(&self) -> SystemPort {
         SystemPort {
             execution_bus: self.execution_bus(),
@@ -194,7 +256,6 @@ impl GpuChipTestBuilder {
             memory_bridge: self.memory_bridge(),
         }
     }
-
     pub fn execution_bridge(&self) -> ExecutionBridge {
         ExecutionBridge::new(self.execution.bus(), self.program.bus())
     }

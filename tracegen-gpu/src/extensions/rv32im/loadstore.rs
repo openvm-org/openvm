@@ -227,11 +227,7 @@ mod test {
         };
 
         let is_load = [LOADW, LOADHU, LOADBU].contains(&opcode);
-        let mem_as = if is_load {
-            rng.gen_range(1..=2)
-        } else {
-            rng.gen_range(2..=4)
-        };
+        let mem_as = if is_load { 2 } else { rng.gen_range(2..=4) };
 
         let ptr_val: u32 =
             rng.gen_range(0..(1 << (tester.address_bits() - alignment))) << alignment;

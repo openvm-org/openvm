@@ -142,6 +142,7 @@ __global__ void hintstore_tracegen(
     uint32_t bitwise_num_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    RowSlice row(trace + idx, height);
     // Dummy rows are assumed to already be filled with 0s
     if (idx < rows_used) {
         auto record_offset = record_offsets[idx].record_offset;
@@ -158,11 +159,8 @@ __global__ void hintstore_tracegen(
             pointer_max_bits,
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins)
         );
-        RowSlice row(trace + idx, height);
         step.fill_trace_row(row, record_header, data_write, local_idx);
     } else {
-        // Fill with 0s
-        RowSlice row(trace + idx, height);
         row.fill_zero(0, sizeof(Rv32HintStoreCols<uint8_t>));
     }
 }
@@ -182,6 +180,7 @@ extern "C" int _hintstore_tracegen(
 ) {
     assert(width == sizeof(Rv32HintStoreCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
+
     hintstore_tracegen<<<grid, block>>>(
         d_trace,
         height,

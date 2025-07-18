@@ -1,30 +1,29 @@
-#include "constants.cuh"
-#include "launcher.cuh"
-#include "histogram.cuh"
 #include "columns.cuh"
+#include "constants.cuh"
+#include "histogram.cuh"
 #include "keccakvm.cuh"
+#include "launcher.cuh"
 #include "utils.cuh"
 
 using namespace keccak256;
 
 // FROM https://github.com/mochimodev/cuda-hashing-algos/blob/master/keccak.cu
 
-__device__ __constant__ uint64_t CUDA_KECCAK_CONSTS[KECCAK_ROUND] = { 
-    0x0000000000000001, 0x0000000000008082, 0x800000000000808a, 0x8000000080008000, 
-    0x000000000000808b, 0x0000000080000001, 0x8000000080008081, 0x8000000000008009, 
-    0x000000000000008a, 0x0000000000000088, 0x0000000080008009, 0x000000008000000a, 
-    0x000000008000808b, 0x800000000000008b, 0x8000000000008089, 0x8000000000008003, 
-    0x8000000000008002, 0x8000000000000080, 0x000000000000800a, 0x800000008000000a, 
-    0x8000000080008081, 0x8000000000008080, 0x0000000080000001, 0x8000000080008008 };
+__device__ __constant__ uint64_t CUDA_KECCAK_CONSTS[KECCAK_ROUND] = {
+    0x0000000000000001, 0x0000000000008082, 0x800000000000808a, 0x8000000080008000,
+    0x000000000000808b, 0x0000000080000001, 0x8000000080008081, 0x8000000000008009,
+    0x000000000000008a, 0x0000000000000088, 0x0000000080008009, 0x000000008000000a,
+    0x000000008000808b, 0x800000000000008b, 0x8000000000008089, 0x8000000000008003,
+    0x8000000000008002, 0x8000000000000080, 0x000000000000800a, 0x800000008000000a,
+    0x8000000080008081, 0x8000000000008080, 0x0000000080000001, 0x8000000080008008
+};
 
-__device__ __forceinline__ uint64_t cuda_keccak_ROTL64(uint64_t a, uint64_t  b)
-{
+__device__ __forceinline__ uint64_t cuda_keccak_ROTL64(uint64_t a, uint64_t b) {
     return ROTL64(a, b);
 }
 
-__device__ void cuda_keccak_permutations(uint64_t* state)
-{
-    int64_t* A = reinterpret_cast<int64_t*>(state);
+__device__ void cuda_keccak_permutations(uint64_t *state) {
+    int64_t *A = reinterpret_cast<int64_t *>(state);
 
     int64_t *a00 = A, *a01 = A + 1, *a02 = A + 2, *a03 = A + 3, *a04 = A + 4;
     int64_t *a05 = A + 5, *a06 = A + 6, *a07 = A + 7, *a08 = A + 8, *a09 = A + 9;
@@ -148,17 +147,16 @@ __device__ void cuda_keccak_permutations(uint64_t* state)
 
 // END OF FROM https://github.com/mochimodev/cuda-hashing-algos/blob/master/keccak.cu
 
-
 __global__ void keccakf_kernel(
-    uint8_t* records,
+    uint8_t *records,
     size_t num_records,
-    size_t* record_offsets,
-    uint32_t* block_offsets,
+    size_t *record_offsets,
+    uint32_t *block_offsets,
     uint32_t total_num_blocks,
-    uint64_t* states,
+    uint64_t *states,
     uint32_t *bitwise_lookup_ptr,
-    uint32_t bitwise_num_bits) 
-{
+    uint32_t bitwise_num_bits
+) {
     auto record_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (record_idx >= num_records) {
         return;
@@ -170,13 +168,16 @@ __global__ void keccakf_kernel(
     auto record_len = record_mut.header.len;
     auto num_blocks = num_keccak_f(record_len);
     auto block_offset = block_offsets[record_idx];
-    auto this_rec_states = reinterpret_cast<uint64_t (*)[KECCAK_STATE_SIZE]>(states + block_offset * KECCAK_STATE_SIZE);
-    auto next_rec_states = reinterpret_cast<uint64_t (*)[KECCAK_STATE_SIZE]>(states + (block_offset + total_num_blocks) * KECCAK_STATE_SIZE);
+    auto this_rec_states =
+        reinterpret_cast<uint64_t(*)[KECCAK_STATE_SIZE]>(states + block_offset * KECCAK_STATE_SIZE);
+    auto next_rec_states = reinterpret_cast<uint64_t(*)[KECCAK_STATE_SIZE]>(
+        states + (block_offset + total_num_blocks) * KECCAK_STATE_SIZE
+    );
     uint64_t state[KECCAK_STATE_SIZE] = {0};
 
     auto last_block_len = record_len - (num_blocks - 1) * KECCAK_RATE_BYTES;
     for (size_t blk = 0; blk < num_blocks; blk++) {
-        uint8_t* chunk = input + blk * KECCAK_RATE_BYTES;
+        uint8_t *chunk = input + blk * KECCAK_RATE_BYTES;
         bool is_last_block = (blk == num_blocks - 1);
         for (int round = 0; round < NUM_ABSORB_ROUNDS; round++) {
             uint8_t i_bytes[8];
@@ -190,7 +191,7 @@ __global__ void keccakf_kernel(
                     int global_idx = round_base + i;
                     if (global_idx >= last_block_len) {
                         i_bytes[i] = 0;
-                        if (global_idx == last_block_len) 
+                        if (global_idx == last_block_len)
                             i_bytes[i] = 0x01;
                         else if (global_idx == KECCAK_RATE_BYTES - 1)
                             i_bytes[i] ^= 0x80;
@@ -206,7 +207,7 @@ __global__ void keccakf_kernel(
                     bitwise_lookup.add_xor(byte, s_byte);
                 }
                 state[round] ^= (static_cast<uint64_t>(byte) << (i * 8));
-            } 
+            }
         }
 #pragma unroll 8
         for (int i = 0; i < KECCAK_STATE_SIZE; i++) {
@@ -223,22 +224,22 @@ __global__ void keccakf_kernel(
 extern "C" int _keccakf_kernel(
     uint8_t *records,
     size_t num_records,
-    size_t* record_offsets,
-    uint32_t* block_offsets,
+    size_t *record_offsets,
+    uint32_t *block_offsets,
     uint32_t total_num_blocks,
-    uint64_t* states,
-    uint32_t* bitwise_lookup_ptr,
-    uint32_t bitwise_num_bits) 
-{
+    uint64_t *states,
+    uint32_t *bitwise_lookup_ptr,
+    uint32_t bitwise_num_bits
+) {
     auto [grid, block] = kernel_launch_params(num_records, 256);
     keccakf_kernel<<<grid, block>>>(
-        records, 
-        num_records, 
-        record_offsets, 
-        block_offsets, 
-        total_num_blocks, 
-        states, 
-        bitwise_lookup_ptr, 
+        records,
+        num_records,
+        record_offsets,
+        block_offsets,
+        total_num_blocks,
+        states,
+        bitwise_lookup_ptr,
         bitwise_num_bits
     );
     return cudaGetLastError();

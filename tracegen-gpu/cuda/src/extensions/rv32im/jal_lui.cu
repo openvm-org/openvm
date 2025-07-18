@@ -91,6 +91,7 @@ extern "C" int _jal_lui_tracegen(
     assert(width == sizeof(Rv32JalLuiCols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height);
+
     jal_lui_tracegen<<<grid, block>>>(
         d_trace,
         height,

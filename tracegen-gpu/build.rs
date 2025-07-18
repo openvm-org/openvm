@@ -97,6 +97,12 @@ fn main() {
 
     {
         let mut b = common.clone();
+        b.file("cuda/src/extensions/bigint.cu")
+            .compile("tracegen_gpu_bigint");
+    }
+
+    {
+        let mut b = common.clone();
         b.file("cuda/src/primitives/bitwise_op_lookup.cu")
             .file("cuda/src/primitives/var_range.cu")
             .file("cuda/src/primitives/range_tuple.cu")
