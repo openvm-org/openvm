@@ -183,7 +183,7 @@ where
     ///
     /// Note: if public values chip exists, then it will be the first entry and point to
     /// `usize::MAX`. This entry should never be used.
-    pub(crate) executor_idx_to_insertion_idx: Vec<usize>,
+    pub executor_idx_to_insertion_idx: Vec<usize>,
 }
 
 /// The collection of all chips in the VM. The chips should correspond 1-to-1 with the associated
@@ -497,7 +497,7 @@ where
     SC: StarkGenericConfig,
     PB: ProverBackend,
 {
-    pub(crate) fn new(airs: AirInventory<SC>) -> Self {
+    pub fn new(airs: AirInventory<SC>) -> Self {
         Self {
             airs,
             chips: Vec::new(),
