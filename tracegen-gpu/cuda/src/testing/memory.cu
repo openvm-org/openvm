@@ -13,7 +13,7 @@ template <size_t BLOCK_SIZE>
 __global__ void memory_testing_tracegen(
     Fp *trace,
     size_t height,
-    uint8_t *records,
+    Fp *records,
     size_t num_records
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -37,7 +37,7 @@ extern "C" int _memory_testing_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
+    Fp *d_records,
     size_t num_records,
     size_t block_size
 ) {

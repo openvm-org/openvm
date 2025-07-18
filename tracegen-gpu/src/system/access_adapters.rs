@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{ptr::null_mut, sync::Arc};
 
 use openvm_circuit::{
     arch::{CustomBorrow, DenseRecordArena, SizedRecord},
@@ -43,7 +43,10 @@ pub struct OffsetInfo {
 pub(crate) fn generate_traces_from_records(
     records: &[u8],
     range_checker: Arc<VariableRangeCheckerChipGPU>,
-) -> [DeviceMatrix<F>; NUM_ADAPTERS] {
+) -> [Option<DeviceMatrix<F>>; NUM_ADAPTERS] {
+    if records.is_empty() {
+        return [const { None }; NUM_ADAPTERS];
+    }
     // TODO: Temporary hack to get mut access to `records`, should have `self` or `&mut self` as a parameter
     // **SAFETY**: `records` should be non-empty at this point
     let records =
@@ -80,11 +83,17 @@ pub(crate) fn generate_traces_from_records(
     });
     let unpadded_heights: [_; NUM_ADAPTERS] = std::array::from_fn(|i| row_ids[i] as usize);
     let traces = std::array::from_fn(|i| match unpadded_heights[i] {
-        0 => DeviceMatrix::<F>::dummy(),
-        h => DeviceMatrix::<F>::with_capacity(next_power_of_two_or_zero(h), widths[i]),
+        0 => None,
+        h => Some(DeviceMatrix::<F>::with_capacity(
+            next_power_of_two_or_zero(h),
+            widths[i],
+        )),
     });
-    let trace_ptrs: [_; NUM_ADAPTERS] =
-        std::array::from_fn(|i| traces[i].buffer().as_mut_raw_ptr());
+    let trace_ptrs: [_; NUM_ADAPTERS] = std::array::from_fn(|i| {
+        traces[i]
+            .as_ref()
+            .map_or_else(null_mut, |t| t.buffer().as_mut_raw_ptr())
+    });
     let d_trace_ptrs = trace_ptrs.to_device().unwrap();
     let d_unpadded_heights = unpadded_heights.to_device().unwrap();
     let d_widths = widths.to_device().unwrap();
@@ -124,8 +133,13 @@ impl AccessAdapterInventoryGPU {
         arena: &DenseRecordArena,
     ) -> [AirProvingContext<GpuBackend>; NUM_ADAPTERS] {
         let records = arena.allocated();
-        generate_traces_from_records(records, self.range_checker.clone())
-            .map(AirProvingContext::simple_no_pis)
+        generate_traces_from_records(records, self.range_checker.clone()).map(|trace| {
+            AirProvingContext {
+                cached_mains: vec![],
+                common_main: trace,
+                public_values: vec![],
+            }
+        })
     }
 }
 
@@ -133,7 +147,13 @@ impl AccessAdapterInventoryGPU {
 mod tests {
     use std::array;
 
-    use openvm_circuit::arch::{testing::RANGE_CHECKER_BUS, MemoryConfig};
+    use openvm_circuit::{
+        arch::{
+            testing::{MEMORY_BUS, RANGE_CHECKER_BUS},
+            MemoryConfig,
+        },
+        system::memory::{offline_checker::MemoryBus, MemoryController},
+    };
     use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
     use openvm_stark_backend::{p3_field::FieldAlgebra, prover::hal::MatrixDimensions};
     use rand::{rngs::StdRng, Rng, SeedableRng};
@@ -148,8 +168,10 @@ mod tests {
 
         let mut rng = StdRng::seed_from_u64(42);
         let decomp = mem_config.decomp;
-        let mut tester = GpuChipTestBuilder::volatile(mem_config)
-            .with_variable_range_checker(VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, decomp));
+        let mut tester = GpuChipTestBuilder::volatile(
+            mem_config.clone(),
+            VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, decomp),
+        );
 
         let max_ptr = 20;
         let aligns = [4, 4, 4, 1];
@@ -194,11 +216,17 @@ mod tests {
 
         let touched = tester.memory.memory.finalize(false);
         let allocated = tester.memory.memory.access_adapter_records.allocated();
-        let gpu_traces = generate_traces_from_records(allocated, tester.range_checker());
+        let gpu_traces = generate_traces_from_records(allocated, tester.range_checker())
+            .into_iter()
+            .map(|trace| trace.unwrap_or_else(DeviceMatrix::dummy))
+            .collect::<Vec<_>>();
 
-        let all_memory_traces = tester
-            .memory
-            .controller
+        let mut controller = MemoryController::with_volatile_memory(
+            MemoryBus::new(MEMORY_BUS),
+            mem_config,
+            tester.cpu_range_checker(),
+        );
+        let all_memory_traces = controller
             .generate_proving_ctx::<SC>(tester.memory.memory.access_adapter_records, touched)
             .into_iter()
             .map(|ctx| ctx.common_main.unwrap())

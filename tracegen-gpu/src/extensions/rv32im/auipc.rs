@@ -77,10 +77,7 @@ mod tests {
     use stark_backend_gpu::prelude::F;
 
     use super::*;
-    use crate::testing::{
-        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-        GpuTestChipHarness,
-    };
+    use crate::testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness};
 
     const IMM_BITS: usize = 24;
     const MAX_INS_CAPACITY: usize = 128;
@@ -112,9 +109,8 @@ mod tests {
 
     #[test]
     fn rand_auipc_tracegen_test() {
-        let mut tester = GpuChipTestBuilder::default()
-            .with_variable_range_checker(default_var_range_checker_bus())
-            .with_bitwise_op_lookup(default_bitwise_lookup_bus());
+        let mut tester =
+            GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
         let mut rng = create_seeded_rng();
 
         let mut harness = create_test_harness(&tester);

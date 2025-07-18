@@ -95,10 +95,7 @@ mod tests {
     use test_case::test_case;
 
     use super::*;
-    use crate::testing::{
-        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-        GpuTestChipHarness,
-    };
+    use crate::testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness};
 
     const MAX_INS_CAPACITY: usize = 128;
     const TUPLE_CHECKER_SIZES: [u32; 2] = [
@@ -171,7 +168,6 @@ mod tests {
     #[test_case(MulHOpcode::MULHU, 100)]
     fn rand_mulh_tracegen_test(opcode: MulHOpcode, num_ops: usize) {
         let mut tester = GpuChipTestBuilder::default()
-            .with_variable_range_checker(default_var_range_checker_bus())
             .with_bitwise_op_lookup(default_bitwise_lookup_bus())
             .with_range_tuple_checker(RangeTupleCheckerBus::new(
                 RANGE_TUPLE_CHECKER_BUS,

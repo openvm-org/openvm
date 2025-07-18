@@ -83,8 +83,7 @@ mod test {
 
     use super::*;
     use crate::testing::{
-        default_bitwise_lookup_bus, default_var_range_checker_bus, memory::gen_pointer,
-        GpuChipTestBuilder, GpuTestChipHarness,
+        default_bitwise_lookup_bus, memory::gen_pointer, GpuChipTestBuilder, GpuTestChipHarness,
     };
 
     const MAX_INS_CAPACITY: usize = 128;
@@ -174,9 +173,8 @@ mod test {
     #[test_case(LessThanOpcode::SLT, 100)]
     #[test_case(LessThanOpcode::SLTU, 100)]
     fn less_than_gpu_chip_test(opcode: LessThanOpcode, num_ops: usize) {
-        let mut tester = GpuChipTestBuilder::default()
-            .with_variable_range_checker(default_var_range_checker_bus())
-            .with_bitwise_op_lookup(default_bitwise_lookup_bus());
+        let mut tester =
+            GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
         let mut rng = create_seeded_rng();
 
         let mut harness = create_test_harness(&tester);

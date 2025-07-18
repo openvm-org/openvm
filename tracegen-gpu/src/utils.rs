@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use derive_new::new;
 use openvm_stark_backend::{
-    prover::{cpu::CpuBackend, types::AirProvingContext},
+    prover::{cpu::CpuBackend, hal::MatrixDimensions, types::AirProvingContext},
     Chip,
 };
 use stark_backend_gpu::{
@@ -35,15 +35,24 @@ impl<RA, C: Chip<RA, CpuBackend<SC>>> HybridChip<RA, C> {
 impl<RA, C: Chip<RA, CpuBackend<SC>>> Chip<RA, GpuBackend> for HybridChip<RA, C> {
     fn generate_proving_ctx(&self, arena: RA) -> AirProvingContext<GpuBackend> {
         let ctx = self.cpu_chip.generate_proving_ctx(arena);
-        assert!(
-            ctx.cached_mains.is_empty(),
-            "CPU to GPU transfer of cached traces not supported"
-        );
-        let trace = transport_matrix_to_device(ctx.common_main.unwrap());
-        AirProvingContext {
-            cached_mains: vec![],
-            common_main: Some(trace),
-            public_values: ctx.public_values,
-        }
+        cpu_proving_ctx_to_gpu(ctx)
+    }
+}
+
+pub fn cpu_proving_ctx_to_gpu(
+    cpu_ctx: AirProvingContext<CpuBackend<SC>>,
+) -> AirProvingContext<GpuBackend> {
+    assert!(
+        cpu_ctx.cached_mains.is_empty(),
+        "CPU to GPU transfer of cached traces not supported"
+    );
+    let trace = cpu_ctx
+        .common_main
+        .filter(|trace| trace.height() > 0)
+        .map(transport_matrix_to_device);
+    AirProvingContext {
+        cached_mains: vec![],
+        common_main: trace,
+        public_values: cpu_ctx.public_values,
     }
 }

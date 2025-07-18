@@ -85,10 +85,7 @@ mod tests {
     use test_case::test_case;
 
     use super::*;
-    use crate::testing::{
-        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-        GpuTestChipHarness,
-    };
+    use crate::testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness};
 
     const IMM_BITS: usize = 12;
     const MAX_INS_CAPACITY: usize = 128;
@@ -174,9 +171,8 @@ mod tests {
     #[test_case(BranchLessThanOpcode::BGE, 100)]
     #[test_case(BranchLessThanOpcode::BGEU, 100)]
     fn test_branch_opcode(opcode: BranchLessThanOpcode, num_ops: usize) {
-        let mut tester = GpuChipTestBuilder::default()
-            .with_variable_range_checker(default_var_range_checker_bus())
-            .with_bitwise_op_lookup(default_bitwise_lookup_bus());
+        let mut tester =
+            GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
         let mut rng = create_seeded_rng();
         let mut harness = create_test_harness(&tester);
 

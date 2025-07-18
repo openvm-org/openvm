@@ -96,10 +96,7 @@ mod test {
     use test_case::test_case;
 
     use super::*;
-    use crate::testing::{
-        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-        GpuTestChipHarness,
-    };
+    use crate::testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness};
 
     // the max number of limbs we currently support DIVREM for is 32 (i.e. for U256s)
     const MAX_NUM_LIMBS: u32 = 32;
@@ -183,7 +180,6 @@ mod test {
     fn test_divrem_tracegen(opcode: DivRemOpcode, num_ops: usize) {
         let mut rng = create_seeded_rng();
         let mut tester = GpuChipTestBuilder::default()
-            .with_variable_range_checker(default_var_range_checker_bus())
             .with_bitwise_op_lookup(default_bitwise_lookup_bus())
             .with_range_tuple_checker(RangeTupleCheckerBus::new(
                 RANGE_TUPLE_CHECKER_BUS,

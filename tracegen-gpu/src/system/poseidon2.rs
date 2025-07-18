@@ -13,6 +13,7 @@ use stark_backend_gpu::{
 
 use crate::system::cuda::poseidon2;
 
+#[derive(Clone)]
 pub struct SharedBuffer<T> {
     pub buffer: Arc<DeviceBuffer<T>>,
     pub idx: Arc<DeviceBuffer<u32>>,

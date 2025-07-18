@@ -113,7 +113,10 @@ mod tests {
     use rand::Rng;
     use stark_backend_gpu::types::F;
 
-    use crate::{system::public_values::PublicValuesChipGPU, testing::GpuChipTestBuilder};
+    use crate::{
+        system::public_values::PublicValuesChipGPU,
+        testing::{dummy_memory_helper, GpuChipTestBuilder},
+    };
 
     #[test]
     #[should_panic(expected = "LogUp multiset equality check failed.")]
@@ -123,8 +126,9 @@ mod tests {
         let bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, mem_config.decomp);
         let num_custom_pvs = system_config.num_public_values;
         let max_degree = system_config.max_constraint_degree as u32 - 1;
+        let clk_max_bits = mem_config.clk_max_bits;
 
-        let mut tester = GpuChipTestBuilder::default().with_variable_range_checker(bus);
+        let mut tester = GpuChipTestBuilder::volatile(mem_config, bus);
         let mut rng = create_seeded_rng();
 
         let executor = PublicValuesStep::new(
@@ -200,7 +204,7 @@ mod tests {
                 num_custom_pvs,
                 max_degree,
             ),
-            tester.cpu_memory_helper(),
+            dummy_memory_helper(bus, clk_max_bits),
         );
         let mut cpu_arena = MatrixRecordArena::<F>::with_capacity(
             next_power_of_two_or_zero(num_custom_pvs),

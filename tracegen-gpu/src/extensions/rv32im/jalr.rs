@@ -149,9 +149,8 @@ mod tests {
 
     #[test]
     fn rand_jalr_tracegen_test() {
-        let mut tester = GpuChipTestBuilder::default()
-            .with_variable_range_checker(default_var_range_checker_bus())
-            .with_bitwise_op_lookup(default_bitwise_lookup_bus());
+        let mut tester =
+            GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
         let mut rng = create_seeded_rng();
 
         let mut harness = create_test_harness(&tester);

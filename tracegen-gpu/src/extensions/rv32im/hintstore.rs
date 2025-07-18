@@ -102,10 +102,7 @@ mod test {
     use Rv32HintStoreOpcode::*;
 
     use super::*;
-    use crate::testing::{
-        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-        GpuTestChipHarness,
-    };
+    use crate::testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness};
 
     const MAX_INS_CAPACITY: usize = 1024;
     type Harness = GpuTestChipHarness<
@@ -195,9 +192,8 @@ mod test {
     #[test]
     fn test_hintstore_tracegen() {
         let mut rng = create_seeded_rng();
-        let mut tester = GpuChipTestBuilder::default()
-            .with_variable_range_checker(default_var_range_checker_bus())
-            .with_bitwise_op_lookup(default_bitwise_lookup_bus());
+        let mut tester =
+            GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
         let mut harness = create_test_harness(&tester);
         let num_ops = 50;

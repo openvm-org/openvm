@@ -42,7 +42,7 @@ pub mod memory_testing {
             d_trace: *mut std::ffi::c_void,
             height: usize,
             width: usize,
-            d_records: *const u8,
+            d_records: *const std::ffi::c_void,
             num_records: usize,
             block_size: usize,
         ) -> i32;
@@ -52,7 +52,7 @@ pub mod memory_testing {
         d_trace: &DeviceBuffer<T>,
         height: usize,
         width: usize,
-        d_records: &DeviceBuffer<u8>,
+        d_records: &DeviceBuffer<T>,
         num_records: usize,
         block_size: usize,
     ) -> Result<(), CudaError> {
@@ -63,7 +63,7 @@ pub mod memory_testing {
             d_trace.as_mut_raw_ptr(),
             height,
             width,
-            d_records.as_ptr(),
+            d_records.as_raw_ptr(),
             num_records,
             block_size,
         ))
