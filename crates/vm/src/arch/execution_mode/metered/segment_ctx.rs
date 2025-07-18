@@ -2,10 +2,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
 
-/// Check segment every 100 instructions.
-const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 100;
-
-const DEFAULT_MAX_TRACE_HEIGHT: u32 = (1 << 23) - 100;
+const DEFAULT_MAX_TRACE_HEIGHT: u32 = (1 << 23) - 10000;
 const DEFAULT_MAX_CELLS: usize = 2_000_000_000; // 2B
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 
@@ -36,12 +33,10 @@ impl Default for SegmentationLimits {
 #[derive(Clone, Debug)]
 pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
-    instret_last_segment_check: u64,
     pub(crate) air_names: Vec<String>,
     widths: Vec<usize>,
     interactions: Vec<usize>,
-    segment_check_insns: u64,
-    segmentation_limits: SegmentationLimits,
+    pub(crate) segmentation_limits: SegmentationLimits,
 }
 
 impl SegmentationCtx {
@@ -51,9 +46,7 @@ impl SegmentationCtx {
             air_names,
             widths,
             interactions,
-            segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
             segmentation_limits: SegmentationLimits::default(),
-            instret_last_segment_check: 0,
         }
     }
 
@@ -69,11 +62,8 @@ impl SegmentationCtx {
         self.segmentation_limits.max_interactions = max_interactions;
     }
 
-    pub fn set_segment_check_insns(&mut self, segment_check_insns: u64) {
-        self.segment_check_insns = segment_check_insns;
-    }
-
     /// Calculate the total cells used based on trace heights and widths
+    #[inline(always)]
     fn calculate_total_cells(&self, trace_heights: &[u32]) -> usize {
         trace_heights
             .iter()
@@ -83,6 +73,7 @@ impl SegmentationCtx {
     }
 
     /// Calculate the total interactions based on trace heights and interaction counts
+    #[inline(always)]
     fn calculate_total_interactions(&self, trace_heights: &[u32]) -> usize {
         trace_heights
             .iter()
@@ -92,6 +83,7 @@ impl SegmentationCtx {
             .sum()
     }
 
+    #[inline(always)]
     fn should_segment(
         &self,
         instret: u64,
@@ -150,6 +142,7 @@ impl SegmentationCtx {
         false
     }
 
+    #[inline(always)]
     pub fn check_and_segment(
         &mut self,
         instret: u64,
@@ -157,23 +150,15 @@ impl SegmentationCtx {
         is_trace_height_constant: &[bool],
     ) -> bool {
         // Avoid checking segment too often.
-        if instret
-            < self
-                .instret_last_segment_check
-                .saturating_add(self.segment_check_insns)
-        {
-            return false;
-        }
-
         let ret = self.should_segment(instret, trace_heights, is_trace_height_constant);
         if ret {
             self.segment(instret, trace_heights);
         }
-        self.instret_last_segment_check = instret;
         ret
     }
 
     /// Try segment if there is at least one cycle
+    #[inline(always)]
     pub fn segment(&mut self, instret: u64, trace_heights: &[u32]) {
         let instret_start = self
             .segments
@@ -185,24 +170,5 @@ impl SegmentationCtx {
             num_insns,
             trace_heights: trace_heights.to_vec(),
         });
-    }
-
-    pub fn add_final_segment(&mut self, instret: u64, trace_heights: &[u32]) {
-        tracing::info!(
-            "Segment {:2} | instret {:9} | terminated",
-            self.segments.len(),
-            instret,
-        );
-        // Add the last segment
-        let instret_start = self
-            .segments
-            .last()
-            .map_or(0, |s| s.instret_start + s.num_insns);
-        let segment = Segment {
-            instret_start,
-            num_insns: instret - instret_start,
-            trace_heights: trace_heights.to_vec(),
-        };
-        self.segments.push(segment);
     }
 }
