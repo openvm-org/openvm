@@ -520,7 +520,7 @@ unsafe fn execute_e12_setup_impl<
     };
 
     // Extract first field element as the prime
-    let input_prime = BigUint::from_bytes_le(setup_input_data[..BLOCKS / 2].as_flattened());
+    let input_prime = BigUint::from_bytes_le(setup_input_data.as_flattened());
 
     if input_prime != pre_compute.expr.prime {
         vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
