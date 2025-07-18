@@ -264,7 +264,7 @@ where
         .with_max_cells(seg_strategy.max_cells());
         if !system_config.continuation_enabled {
             // force single segment
-            ctx.segmentation_ctx.set_segment_check_insns(u64::MAX);
+            ctx = ctx.with_segment_check_insns(u64::MAX);
         }
         ctx
     }
