@@ -1,7 +1,9 @@
 use itertools::{multiunzip, Itertools};
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
+    config::{Com, Val},
     engine::VerificationData,
+    p3_field::PrimeField32,
     prover::{hal::DeviceDataTransporter, types::AirProofRawInput},
 };
 use openvm_stark_sdk::{
@@ -9,7 +11,7 @@ use openvm_stark_sdk::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         setup_tracing, FriParameters,
     },
-    engine::{StarkEngine, StarkFriEngine, VerificationDataWithFriParams},
+    engine::{StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
 };
 
@@ -19,7 +21,7 @@ use crate::{
         InsExecutorE2, InstructionExecutor, MatrixRecordArena, PreflightExecutionOutput, Streams,
         VmCircuitConfig, VmExecutionConfig, VmProverConfig,
     },
-    system::memory::MemoryImage,
+    system::memory::{MemoryImage, CHUNK},
 };
 
 pub fn air_test<VC>(config: VC, exe: impl Into<VmExe<BabyBear>>)
@@ -41,6 +43,8 @@ pub fn air_test_with_min_segments<VC>(
     min_segments: usize,
 ) -> Option<MemoryImage>
 where
+    // NOTE: the compiler cannot figure out Val<SC>=BabyBear without the VmExecutionConfig and
+    // VmCircuitConfig bounds even though VmProverConfig already includes them
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmProverConfig<BabyBearPoseidon2Engine, RecordArena = MatrixRecordArena<BabyBear>>,
@@ -52,8 +56,15 @@ where
         log_blowup += 1;
     }
     let fri_params = FriParameters::new_for_testing(log_blowup);
-    let (final_memory, _) =
-        air_test_impl(fri_params, config, exe, input, min_segments, true).unwrap();
+    let (final_memory, _) = air_test_impl::<BabyBearPoseidon2Engine, VC>(
+        fri_params,
+        config,
+        exe,
+        input,
+        min_segments,
+        true,
+    )
+    .unwrap();
     final_memory
 }
 
@@ -61,30 +72,30 @@ where
 /// If `debug` is true, runs the debug prover.
 //
 // Same implementation as VmLocalProver, but we need to do something special to run the debug prover
-pub fn air_test_impl<VC>(
+#[allow(clippy::type_complexity)]
+pub fn air_test_impl<E, VC>(
     fri_params: FriParameters,
     config: VC,
-    exe: impl Into<VmExe<BabyBear>>,
-    input: impl Into<Streams<BabyBear>>,
+    exe: impl Into<VmExe<Val<E::SC>>>,
+    input: impl Into<Streams<Val<E::SC>>>,
     min_segments: usize,
     debug: bool,
 ) -> eyre::Result<(
     Option<MemoryImage>,
-    Vec<VerificationDataWithFriParams<BabyBearPoseidon2Config>>,
+    Vec<VerificationDataWithFriParams<E::SC>>,
 )>
 where
-    // NOTE: the compiler cannot figure out Val<SC>=BabyBear without the VmExecutionConfig and
-    // VmCircuitConfig bounds even though VmProverConfig already includes them
-    VC: VmExecutionConfig<BabyBear>
-        + VmCircuitConfig<BabyBearPoseidon2Config>
-        + VmProverConfig<BabyBearPoseidon2Engine, RecordArena = MatrixRecordArena<BabyBear>>,
-    <VC as VmExecutionConfig<BabyBear>>::Executor:
-        InsExecutorE1<BabyBear> + InsExecutorE2<BabyBear> + InstructionExecutor<BabyBear>,
+    E: StarkFriEngine,
+    Val<E::SC>: PrimeField32,
+    VC: VmProverConfig<E>,
+    VC::Executor: InsExecutorE1<Val<E::SC>>
+        + InsExecutorE2<Val<E::SC>>
+        + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+    Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
 {
     setup_tracing();
-    let engine = BabyBearPoseidon2Engine::new(fri_params);
-    let (mut vm, pk) =
-        VirtualMachine::<BabyBearPoseidon2Engine, VC>::new_with_keygen(engine, config)?;
+    let engine = E::new(fri_params);
+    let (mut vm, pk) = VirtualMachine::<E, VC>::new_with_keygen(engine, config)?;
     let vk = pk.get_vk();
     let exe = exe.into();
     let input = input.into();
