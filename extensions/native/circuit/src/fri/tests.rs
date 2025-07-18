@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 
 use itertools::Itertools;
-use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_circuit::arch::testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, FriOpcode::FRI_REDUCED_OPENING};
 use openvm_stark_backend::{
@@ -22,21 +22,20 @@ use super::{
 };
 use crate::{
     fri::{WorkloadCols, OVERALL_WIDTH, WL_WIDTH},
-    write_native_array,
+    write_native_array, FriReducedOpeningFiller,
 };
 
 const MAX_INS_CAPACITY: usize = 1024;
 type F = BabyBear;
+type Harness =
+    TestChipHarness<F, FriReducedOpeningStep, FriReducedOpeningAir, FriReducedOpeningChip<F>>;
 
-fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FriReducedOpeningChip<F> {
-    let mut chip = FriReducedOpeningChip::<F>::new(
-        FriReducedOpeningAir::new(tester.execution_bridge(), tester.memory_bridge()),
-        FriReducedOpeningStep::new(),
-        tester.memory_helper(),
-    );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
+    let air = FriReducedOpeningAir::new(tester.execution_bridge(), tester.memory_bridge());
+    let step = FriReducedOpeningStep::new();
+    let chip = FriReducedOpeningChip::new(FriReducedOpeningFiller, tester.memory_helper());
 
-    chip
+    Harness::with_capacity(step, air, chip, MAX_INS_CAPACITY)
 }
 
 fn compute_fri_mat_opening<F: Field>(
@@ -56,11 +55,7 @@ fn compute_fri_mat_opening<F: Field>(
     result
 }
 
-fn set_and_execute(
-    tester: &mut VmChipTestBuilder<F>,
-    chip: &mut FriReducedOpeningChip<F>,
-    rng: &mut StdRng,
-) {
+fn set_and_execute(tester: &mut VmChipTestBuilder<F>, harness: &mut Harness, rng: &mut StdRng) {
     let len = rng.gen_range(1..=28);
     let a_ptr = gen_pointer(rng, len);
     let b_ptr = gen_pointer(rng, len);
@@ -91,7 +86,7 @@ fn set_and_execute(
     }
 
     tester.execute(
-        chip,
+        harness,
         &Instruction::from_usize(
             FRI_REDUCED_OPENING.global_opcode(),
             [
@@ -126,14 +121,14 @@ fn set_and_execute(
 fn fri_mat_opening_air_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
-    let mut chip = create_test_chip(&tester);
+    let mut harness = create_test_chip(&tester);
 
     let num_ops = 28; // non-power-of-2 to also test padding
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng);
+        set_and_execute(&mut tester, &mut harness, &mut rng);
     }
 
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -148,9 +143,9 @@ fn fri_mat_opening_air_test() {
 fn run_negative_fri_mat_opening_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
-    let mut chip = create_test_chip(&tester);
+    let mut harness = create_test_chip(&tester);
 
-    set_and_execute(&mut tester, &mut chip, &mut rng);
+    set_and_execute(&mut tester, &mut harness, &mut rng);
 
     let modify_trace = |trace: &mut DenseMatrix<F>| {
         let mut values = trace.row_slice(0).to_vec();
@@ -164,7 +159,7 @@ fn run_negative_fri_mat_opening_test() {
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_and_prank_trace(harness, modify_trace)
         .finalize();
     tester.simple_test_with_expected_error(VerificationError::OodEvaluationMismatch);
 }

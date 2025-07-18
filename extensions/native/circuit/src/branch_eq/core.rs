@@ -4,10 +4,13 @@ use openvm_circuit::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         get_record_from_slice, AdapterTraceFiller, AdapterTraceStep, E2PreCompute,
-        EmptyAdapterCoreLayout, ExecuteFunc, RecordArena, Result, StepExecutorE1, StepExecutorE2,
-        TraceFiller, TraceStep, VmSegmentState, VmStateMut,
+        EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2,
+        InstructionExecutor, RecordArena, TraceFiller, VmSegmentState, VmStateMut,
     },
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
     utils::{transmute_field_to_u32, transmute_u32_to_field},
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -28,22 +31,28 @@ pub struct NativeBranchEqualCoreRecord<F> {
     pub is_beq: bool,
 }
 
-#[derive(derive_new::new)]
-
+#[derive(derive_new::new, Clone, Copy)]
 pub struct NativeBranchEqualStep<A> {
     adapter: A,
     pub offset: usize,
     pub pc_step: u32,
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for NativeBranchEqualStep<A>
+#[derive(derive_new::new)]
+pub struct NativeBranchEqualFiller<A> {
+    adapter: A,
+}
+
+impl<F, A, RA> InstructionExecutor<F, RA> for NativeBranchEqualStep<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, CTX, ReadData: Into<[F; 2]>, WriteData = ()>,
+    A: 'static + AdapterTraceStep<F, ReadData: Into<[F; 2]>, WriteData = ()>,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut NativeBranchEqualCoreRecord<F>),
+    >,
 {
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut NativeBranchEqualCoreRecord<F>);
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -51,17 +60,13 @@ where
         )
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<(), ExecutionError> {
         let &Instruction { opcode, c: imm, .. } = instruction;
-        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -86,10 +91,10 @@ where
     }
 }
 
-impl<F, CTX, A> TraceFiller<F, CTX> for NativeBranchEqualStep<A>
+impl<F, A> TraceFiller<F> for NativeBranchEqualFiller<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
@@ -128,7 +133,7 @@ impl<A> NativeBranchEqualStep<A> {
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut NativeBranchEqualPreCompute,
-    ) -> Result<(bool, bool, bool)> {
+    ) -> Result<(bool, bool, bool), ExecutionError> {
         let &Instruction {
             opcode,
             a,
@@ -174,7 +179,7 @@ impl<A> NativeBranchEqualStep<A> {
     }
 }
 
-impl<F, A> StepExecutorE1<F> for NativeBranchEqualStep<A>
+impl<F, A> InsExecutorE1<F> for NativeBranchEqualStep<A>
 where
     F: PrimeField32,
 {
@@ -189,7 +194,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let pre_compute: &mut NativeBranchEqualPreCompute = data.borrow_mut();
 
         let (a_is_imm, b_is_imm, is_bne) = self.pre_compute_impl(pc, inst, pre_compute)?;
@@ -209,7 +214,7 @@ where
     }
 }
 
-impl<F, A> StepExecutorE2<F> for NativeBranchEqualStep<A>
+impl<F, A> InsExecutorE2<F> for NativeBranchEqualStep<A>
 where
     F: PrimeField32,
 {
@@ -225,7 +230,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let pre_compute: &mut E2PreCompute<NativeBranchEqualPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 
@@ -255,7 +260,7 @@ unsafe fn execute_e1_impl<
     const IS_NE: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &NativeBranchEqualPreCompute = pre_compute.borrow();
     execute_e12_impl::<_, _, A_IS_IMM, B_IS_IMM, IS_NE>(pre_compute, vm_state);
@@ -269,7 +274,7 @@ unsafe fn execute_e2_impl<
     const IS_NE: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<NativeBranchEqualPreCompute> = pre_compute.borrow();
     vm_state
@@ -287,7 +292,7 @@ unsafe fn execute_e12_impl<
     const IS_NE: bool,
 >(
     pre_compute: &NativeBranchEqualPreCompute,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let rs1 = if A_IS_IMM {
         transmute_u32_to_field(&pre_compute.a_or_imm)

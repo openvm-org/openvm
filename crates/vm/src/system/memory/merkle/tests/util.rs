@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     p3_commit::PolynomialSpace,
     p3_field::Field,
     p3_matrix::dense::RowMajorMatrix,
-    prover::types::AirProofInput,
+    prover::types::AirProvingContext,
 };
 use openvm_stark_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
 
@@ -47,11 +47,11 @@ impl<const CHUNK: usize, F: Field> HashTestChip<CHUNK, F> {
         }
         RowMajorMatrix::new(rows, width)
     }
-    pub fn generate_air_proof_input<SC: StarkGenericConfig>(&self) -> AirProofInput<SC>
+    pub fn generate_air_proof_input<SC: StarkGenericConfig>(&self) -> AirProvingContext<SC>
     where
         Domain<SC>: PolynomialSpace<Val = F>,
     {
-        AirProofInput::simple_no_pis(self.trace())
+        AirProvingContext::simple_no_pis(self.trace())
     }
 }
 

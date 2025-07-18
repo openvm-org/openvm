@@ -141,10 +141,13 @@ pub struct Rv32MultAdapterRecord {
     pub writes_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
-#[derive(derive_new::new)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct Rv32MultAdapterStep;
 
-impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32MultAdapterStep
+#[derive(Clone, Copy, derive_new::new)]
+pub struct Rv32MultAdapterFiller;
+
+impl<F> AdapterTraceStep<F> for Rv32MultAdapterStep
 where
     F: PrimeField32,
 {
@@ -154,7 +157,7 @@ where
     type RecordMut<'a> = &'a mut Rv32MultAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
@@ -162,7 +165,7 @@ where
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -191,7 +194,7 @@ where
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
@@ -212,7 +215,9 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32MultAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32MultAdapterFiller {
+    const WIDTH: usize = size_of::<Rv32MultAdapterCols<u8>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &Rv32MultAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };

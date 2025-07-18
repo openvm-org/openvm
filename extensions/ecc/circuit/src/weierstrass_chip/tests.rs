@@ -1,11 +1,17 @@
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Num, Zero};
-use openvm_circuit::arch::testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+use openvm_circuit::arch::{
+    testing::{TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    MatrixRecordArena,
+};
 use openvm_circuit_primitives::{
     bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime},
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
 };
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{riscv::RV32_CELL_BITS, LocalOpcode};
@@ -14,7 +20,10 @@ use openvm_rv32_adapters::rv32_write_heap_default;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use super::{EcAddNeChip, EcDoubleChip};
+use crate::{
+    get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step, get_ec_double_air, get_ec_double_chip,
+    get_ec_double_step, EcDoubleStep, WeierstrassAir, WeierstrassChip,
+};
 
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
@@ -78,6 +87,60 @@ fn prime_limbs(expr: &FieldExpr) -> Vec<BabyBear> {
         .collect::<Vec<_>>()
 }
 
+type WeierstrassHarness = TestChipHarness<
+    F,
+    EcDoubleStep<2, BLOCK_SIZE>,
+    WeierstrassAir<1, 2, BLOCK_SIZE>,
+    WeierstrassChip<F, 1, 2, BLOCK_SIZE>,
+    MatrixRecordArena<F>,
+>;
+
+fn create_test_double_chips(
+    tester: &VmChipTestBuilder<F>,
+    config: ExprBuilderConfig,
+    offset: usize,
+    a_biguint: BigUint,
+) -> (
+    WeierstrassHarness,
+    (
+        BitwiseOperationLookupAir<RV32_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    ),
+) {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+    let air = get_ec_double_air(
+        tester.execution_bridge(),
+        tester.memory_bridge(),
+        config.clone(),
+        tester.range_checker().bus(),
+        bitwise_bus,
+        tester.address_bits(),
+        offset,
+        a_biguint.clone(),
+    );
+    let executor = get_ec_double_step(
+        config.clone(),
+        tester.range_checker().bus(),
+        tester.address_bits(),
+        offset,
+        a_biguint.clone(),
+    );
+    let chip = get_ec_double_chip(
+        config.clone(),
+        tester.memory_helper(),
+        tester.range_checker(),
+        bitwise_chip.clone(),
+        tester.address_bits(),
+        a_biguint,
+    );
+    let harness = WeierstrassHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+
+    (harness, (bitwise_chip.air, bitwise_chip))
+}
+
 #[test]
 fn test_add_ne() {
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
@@ -87,21 +150,36 @@ fn test_add_ne() {
         limb_bits: LIMB_BITS,
     };
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
 
-    let mut chip = EcAddNeChip::<F, 2, BLOCK_SIZE>::new(
+    let air = get_ec_addne_air::<2, BLOCK_SIZE>(
         tester.execution_bridge(),
         tester.memory_bridge(),
-        tester.memory_helper(),
+        config.clone(),
+        tester.range_checker().bus(),
+        bitwise_bus,
         tester.address_bits(),
-        config,
         Rv32WeierstrassOpcode::CLASS_OFFSET,
-        bitwise_chip.clone(),
-        tester.range_checker(),
     );
-    chip.0.set_trace_buffer_height(MAX_INS_CAPACITY);
+    let executor = get_ec_addne_step::<2, BLOCK_SIZE>(
+        config.clone(),
+        tester.range_checker().bus(),
+        tester.address_bits(),
+        Rv32WeierstrassOpcode::CLASS_OFFSET,
+    );
+    let chip = get_ec_addne_chip::<F, 2, BLOCK_SIZE>(
+        config.clone(),
+        tester.memory_helper(),
+        tester.range_checker(),
+        bitwise_chip.clone(),
+        tester.address_bits(),
+    );
 
-    assert_eq!(chip.0.step.0.expr.builder.num_variables, 3); // lambda, x3, y3
+    let mut harness = TestChipHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+
+    assert_eq!(harness.executor.expr.builder.num_variables, 3); // lambda, x3, y3
 
     let (p1_x, p1_y) = SampleEcPoints[0].clone();
     let (p2_x, p2_y) = SampleEcPoints[1].clone();
@@ -115,37 +193,40 @@ fn test_add_ne() {
     let p2_y_limbs =
         biguint_to_limbs::<NUM_LIMBS>(p2_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
 
-    let r = chip
-        .0
-        .step
-        .0
+    let r = harness
+        .executor
         .expr
         .execute(vec![p1_x, p1_y, p2_x, p2_y], vec![true]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     assert_eq!(r[1], SampleEcPoints[2].0);
     assert_eq!(r[2], SampleEcPoints[2].1);
 
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.step.0.expr).try_into().unwrap();
+    let prime_limbs: [BabyBear; NUM_LIMBS] =
+        prime_limbs(&harness.executor.expr).try_into().unwrap();
     let mut one_limbs = [BabyBear::ONE; NUM_LIMBS];
     one_limbs[0] = BabyBear::ONE;
     let setup_instruction = rv32_write_heap_default(
         &mut tester,
         vec![prime_limbs, one_limbs], // inputs[0] = prime, others doesn't matter
         vec![one_limbs, one_limbs],
-        chip.0.step.0.offset + Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+        harness.executor.offset + Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
     );
-    tester.execute(&mut chip, &setup_instruction);
+    tester.execute(&mut harness, &setup_instruction);
 
     let instruction = rv32_write_heap_default(
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![p2_x_limbs, p2_y_limbs],
-        chip.0.step.0.offset + Rv32WeierstrassOpcode::EC_ADD_NE as usize,
+        harness.executor.offset + Rv32WeierstrassOpcode::EC_ADD_NE as usize,
     );
 
-    tester.execute(&mut chip, &instruction);
+    tester.execute(&mut harness, &instruction);
 
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery((bitwise_chip.air, bitwise_chip))
+        .finalize();
 
     tester.simple_test().expect("Verification failed");
 }
@@ -158,20 +239,13 @@ fn test_double() {
         num_limbs: NUM_LIMBS,
         limb_bits: LIMB_BITS,
     };
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let mut chip = EcDoubleChip::<F, 2, BLOCK_SIZE>::new(
-        tester.execution_bridge(),
-        tester.memory_bridge(),
-        tester.memory_helper(),
-        tester.address_bits(),
+
+    let (mut harness, bitwise) = create_test_double_chips(
+        &tester,
         config,
         Rv32WeierstrassOpcode::CLASS_OFFSET,
-        bitwise_chip.clone(),
-        tester.range_checker(),
         BigUint::zero(),
     );
-    chip.0.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     let (p1_x, p1_y) = SampleEcPoints[1].clone();
     let p1_x_limbs =
@@ -179,33 +253,38 @@ fn test_double() {
     let p1_y_limbs =
         biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
 
-    assert_eq!(chip.0.step.0.expr.builder.num_variables, 3); // lambda, x3, y3
+    assert_eq!(harness.executor.expr.builder.num_variables, 3); // lambda, x3, y3
 
-    let r = chip.0.step.0.expr.execute(vec![p1_x, p1_y], vec![true]);
+    let r = harness.executor.expr.execute(vec![p1_x, p1_y], vec![true]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     assert_eq!(r[1], SampleEcPoints[3].0);
     assert_eq!(r[2], SampleEcPoints[3].1);
 
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.step.0.expr).try_into().unwrap();
+    let prime_limbs: [BabyBear; NUM_LIMBS] =
+        prime_limbs(&harness.executor.expr).try_into().unwrap();
     let a_limbs = [BabyBear::ZERO; NUM_LIMBS];
     let setup_instruction = rv32_write_heap_default(
         &mut tester,
         vec![prime_limbs, a_limbs], /* inputs[0] = prime, inputs[1] = a coeff of weierstrass
                                      * equation */
         vec![],
-        chip.0.step.0.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+        harness.executor.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
     );
-    tester.execute(&mut chip, &setup_instruction);
+    tester.execute(&mut harness, &setup_instruction);
 
     let instruction = rv32_write_heap_default(
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![],
-        chip.0.step.0.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
+        harness.executor.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
     );
 
-    tester.execute(&mut chip, &instruction);
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    tester.execute(&mut harness, &instruction);
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
 
     tester.simple_test().expect("Verification failed");
 }
@@ -223,21 +302,13 @@ fn test_p256_double() {
         16,
     )
     .unwrap();
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let mut chip = EcDoubleChip::<F, 2, BLOCK_SIZE>::new(
-        tester.execution_bridge(),
-        tester.memory_bridge(),
-        tester.memory_helper(),
-        tester.address_bits(),
+    let (mut harness, bitwise) = create_test_double_chips(
+        &tester,
         config,
         Rv32WeierstrassOpcode::CLASS_OFFSET,
-        bitwise_chip.clone(),
-        tester.range_checker(),
         a.clone(),
     );
-    chip.0.set_trace_buffer_height(MAX_INS_CAPACITY);
 
     // Testing data from: http://point-at-infinity.org/ecc/nisttv
     let p1_x = BigUint::from_str_radix(
@@ -255,9 +326,9 @@ fn test_p256_double() {
     let p1_y_limbs =
         biguint_to_limbs::<NUM_LIMBS>(p1_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
 
-    assert_eq!(chip.0.step.0.expr.builder.num_variables, 3); // lambda, x3, y3
+    assert_eq!(harness.executor.expr.builder.num_variables, 3); // lambda, x3, y3
 
-    let r = chip.0.step.0.expr.execute(vec![p1_x, p1_y], vec![true]);
+    let r = harness.executor.expr.execute(vec![p1_x, p1_y], vec![true]);
     assert_eq!(r.len(), 3); // lambda, x3, y3
     let expected_double_x = BigUint::from_str_radix(
         "7CF27B188D034F7E8A52380304B51AC3C08969E277F21B35A60B48FC47669978",
@@ -272,7 +343,8 @@ fn test_p256_double() {
     assert_eq!(r[1], expected_double_x);
     assert_eq!(r[2], expected_double_y);
 
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.step.0.expr).try_into().unwrap();
+    let prime_limbs: [BabyBear; NUM_LIMBS] =
+        prime_limbs(&harness.executor.expr).try_into().unwrap();
     let a_limbs =
         biguint_to_limbs::<NUM_LIMBS>(a.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
     let setup_instruction = rv32_write_heap_default(
@@ -280,22 +352,26 @@ fn test_p256_double() {
         vec![prime_limbs, a_limbs], /* inputs[0] = prime, inputs[1] = a coeff of weierstrass
                                      * equation */
         vec![],
-        chip.0.step.0.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+        harness.executor.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
     );
-    tester.execute(&mut chip, &setup_instruction);
+    tester.execute(&mut harness, &setup_instruction);
 
     let instruction = rv32_write_heap_default(
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![],
-        chip.0.step.0.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
+        harness.executor.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
     );
 
-    tester.execute(&mut chip, &instruction);
+    tester.execute(&mut harness, &instruction);
     // Adding another row to make sure there are dummy rows, and that the dummy row constraints are
     // satisfied
-    tester.execute(&mut chip, &instruction);
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    tester.execute(&mut harness, &instruction);
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
 
     tester.simple_test().expect("Verification failed");
 }

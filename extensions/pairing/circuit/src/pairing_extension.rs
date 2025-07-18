@@ -2,12 +2,14 @@ use derive_more::derive::From;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use openvm_circuit::{
-    arch::{VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
-    system::phantom::PhantomChip,
+    arch::{
+        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
+        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
+        VmExecutionExtension, VmProverExtension,
+    },
+    system::phantom::PhantomExecutor,
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
-use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_circuit::CurveConfig;
 use openvm_instructions::PhantomDiscriminant;
 use openvm_pairing_guest::{
@@ -17,7 +19,11 @@ use openvm_pairing_guest::{
     bn254::{BN254_ECC_STRUCT_NAME, BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
 use openvm_pairing_transpiler::PairingPhantom;
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    p3_field::{Field, PrimeField32},
+    prover::cpu::CpuBackend,
+};
 use serde::{Deserialize, Serialize};
 use strum::FromRepr;
 
@@ -57,38 +63,48 @@ impl PairingCurve {
     }
 }
 
-#[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
+#[derive(Clone, Debug, From, derive_new::new, Serialize, Deserialize)]
 pub struct PairingExtension {
     pub supported_curves: Vec<PairingCurve>,
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, InsExecutorE1, InsExecutorE2)]
-pub enum PairingExtensionExecutor<F: PrimeField32> {
-    Phantom(PhantomChip<F>),
+#[derive(Clone, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
+pub enum PairingExtensionExecutor<F: Field> {
+    Phantom(PhantomExecutor<F>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
-pub enum PairingExtensionPeriphery<F: PrimeField32> {
-    BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
-    Phantom(PhantomChip<F>),
-}
-
-impl<F: PrimeField32> VmExtension<F> for PairingExtension {
+impl<F: PrimeField32> VmExecutionExtension<F> for PairingExtension {
     type Executor = PairingExtensionExecutor<F>;
-    type Periphery = PairingExtensionPeriphery<F>;
 
-    fn build(
+    fn extend_execution(
         &self,
-        builder: &mut VmInventoryBuilder<F>,
-    ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
-        let inventory = VmInventory::new();
-
-        builder.add_phantom_sub_executor(
+        inventory: &mut ExecutorInventoryBuilder<F, PairingExtensionExecutor<F>>,
+    ) -> Result<(), ExecutorInventoryError> {
+        inventory.add_phantom_sub_executor(
             phantom::PairingHintSubEx,
             PhantomDiscriminant(PairingPhantom::HintFinalExp as u16),
         )?;
+        Ok(())
+    }
+}
 
-        Ok(inventory)
+impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for PairingExtension {
+    fn extend_circuit(&self, _inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
+        Ok(())
+    }
+}
+
+impl<SC, RA> VmProverExtension<SC, RA, CpuBackend<SC>> for PairingExtension
+where
+    SC: StarkGenericConfig,
+    RA: RowMajorMatrixArena<Val<SC>>,
+    Val<SC>: PrimeField32,
+{
+    fn extend_prover(
+        &self,
+        _inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+    ) -> Result<(), ChipInventoryError> {
+        Ok(())
     }
 }
 

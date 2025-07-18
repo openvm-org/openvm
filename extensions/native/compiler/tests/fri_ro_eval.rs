@@ -1,4 +1,4 @@
-use openvm_native_circuit::test_execute_program;
+use openvm_native_circuit::execute_program;
 use openvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler},
     conversion::{convert_program, CompilerOptions},
@@ -89,5 +89,5 @@ fn test_single_reduced_opening_eval() {
     let asm_code = compiler.code();
 
     let program = convert_program::<F, EF>(asm_code, CompilerOptions::default());
-    test_execute_program(program, vec![mat_opening]);
+    execute_program(program, vec![mat_opening]);
 }

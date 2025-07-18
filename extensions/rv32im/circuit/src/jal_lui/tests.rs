@@ -1,11 +1,9 @@
-use std::borrow::BorrowMut;
+use std::{borrow::BorrowMut, sync::Arc};
 
-use openvm_circuit::arch::{
-    testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    VmAirWrapper,
-};
+use openvm_circuit::arch::testing::{TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
+    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32JalLuiOpcode::{self, *};
@@ -25,51 +23,61 @@ use test_case::test_case;
 use super::{run_jal_lui, Rv32JalLuiChip, Rv32JalLuiCoreAir, Rv32JalLuiStep};
 use crate::{
     adapters::{
-        Rv32CondRdWriteAdapterAir, Rv32CondRdWriteAdapterCols, Rv32CondRdWriteAdapterStep,
-        Rv32RdWriteAdapterAir, Rv32RdWriteAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
-        RV_IS_TYPE_IMM_BITS,
+        Rv32CondRdWriteAdapterAir, Rv32CondRdWriteAdapterCols, Rv32CondRdWriteAdapterFiller,
+        Rv32CondRdWriteAdapterStep, Rv32RdWriteAdapterAir, Rv32RdWriteAdapterFiller,
+        Rv32RdWriteAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS,
     },
     jal_lui::{Rv32JalLuiCoreCols, ADDITIONAL_BITS},
     test_utils::get_verification_error,
+    Rv32JalLuiAir, Rv32JalLuiFiller,
 };
 
 const IMM_BITS: usize = 20;
 const LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
 const MAX_INS_CAPACITY: usize = 128;
+type Harness = TestChipHarness<F, Rv32JalLuiStep, Rv32JalLuiAir, Rv32JalLuiChip<F>>;
 
 type F = BabyBear;
 
 fn create_test_chip(
     tester: &VmChipTestBuilder<F>,
 ) -> (
-    Rv32JalLuiChip<F>,
-    SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    Harness,
+    (
+        BitwiseOperationLookupAir<RV32_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
-    let mut chip = Rv32JalLuiChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(
-                tester.memory_bridge(),
-                tester.execution_bridge(),
-            )),
-            Rv32JalLuiCoreAir::new(bitwise_bus),
-        ),
-        Rv32JalLuiStep::new(
-            Rv32CondRdWriteAdapterStep::new(Rv32RdWriteAdapterStep::new()),
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
+    let air = Rv32JalLuiAir::new(
+        Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(
+            tester.memory_bridge(),
+            tester.execution_bridge(),
+        )),
+        Rv32JalLuiCoreAir::new(bitwise_bus),
+    );
+    let executor = Rv32JalLuiStep::new(Rv32CondRdWriteAdapterStep::new(Rv32RdWriteAdapterStep));
+    let chip = Rv32JalLuiChip::<F>::new(
+        Rv32JalLuiFiller::new(
+            Rv32CondRdWriteAdapterFiller::new(Rv32RdWriteAdapterFiller),
             bitwise_chip.clone(),
         ),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
-    (chip, bitwise_chip)
+    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+
+    (harness, (bitwise_chip.air, bitwise_chip))
 }
 
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut Rv32JalLuiChip<F>,
+    harness: &mut Harness,
     rng: &mut StdRng,
     opcode: Rv32JalLuiOpcode,
     imm: Option<i32>,
@@ -85,7 +93,7 @@ fn set_and_execute(
     let needs_write = a != 0 || opcode == LUI;
 
     tester.execute_with_pc(
-        chip,
+        harness,
         &Instruction::large_from_isize(
             opcode.global_opcode(),
             a as isize,
@@ -120,13 +128,17 @@ fn set_and_execute(
 fn rand_jal_lui_test(opcode: Rv32JalLuiOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, bitwise_chip) = create_test_chip(&tester);
+    let (mut harness, bitwise) = create_test_chip(&tester);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
+        set_and_execute(&mut tester, &mut harness, &mut rng, opcode, None, None);
     }
 
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 //////////////////////////////////////////////////////////////////////////////////////
@@ -155,18 +167,18 @@ fn run_negative_jal_lui_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, bitwise_chip) = create_test_chip(&tester);
+    let (mut harness, bitwise) = create_test_chip(&tester);
 
     set_and_execute(
         &mut tester,
-        &mut chip,
+        &mut harness,
         &mut rng,
         opcode,
         initial_imm,
         initial_pc,
     );
 
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
         let (adapter_row, core_row) = trace_row.split_at_mut(adapter_width);
@@ -199,8 +211,8 @@ fn run_negative_jal_lui_test(
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
-        .load(bitwise_chip)
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
 }
@@ -317,11 +329,11 @@ fn overflow_negative_tests() {
 fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, _) = create_test_chip(&tester);
+    let (mut harness, _) = create_test_chip(&tester);
 
     set_and_execute(
         &mut tester,
-        &mut chip,
+        &mut harness,
         &mut rng,
         LUI,
         Some((1 << IMM_BITS) - 1),
@@ -329,7 +341,7 @@ fn execute_roundtrip_sanity_test() {
     );
     set_and_execute(
         &mut tester,
-        &mut chip,
+        &mut harness,
         &mut rng,
         JAL,
         Some((1 << RV_IS_TYPE_IMM_BITS) - 1),

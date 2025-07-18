@@ -5,31 +5,26 @@ use std::{
 
 use eyre::Result;
 use num_bigint::BigUint;
-use openvm_algebra_circuit::{
-    Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
-    ModularExtensionExecutor, ModularExtensionPeriphery,
-};
+use openvm_algebra_circuit::*;
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
+use openvm_bigint_circuit::*;
 use openvm_circuit::{
     arch::{
         execution_mode::e1::E1Ctx, interpreter::InterpretedInstance, InitFileGenerator,
         SystemConfig,
     },
     derive::VmConfig,
+    system::SystemExecutor,
     utils::air_test,
 };
 use openvm_ecc_circuit::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use openvm_instructions::exe::VmExe;
 use openvm_platform::memory::MEM_SIZE;
-use openvm_rv32im_circuit::{
-    Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32ImConfig, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery,
-    Rv32M, Rv32MExecutor, Rv32MPeriphery,
-};
+use openvm_rv32im_circuit::*;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{config::StarkGenericConfig, engine::StarkEngine, p3_field::Field};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
@@ -83,14 +78,14 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension),
     )?;
     let config = Rv32ImConfig::default();
-    let interpreter = InterpretedInstance::new(config, exe);
+    let interpreter = InterpretedInstance::new(config, exe)?;
     interpreter.execute(E1Ctx::new(None), vec![])?;
     Ok(())
 }
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32ModularFp2Int256Config {
-    #[system]
+    #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
     pub base: Rv32I,
@@ -146,7 +141,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
             .with_extension(ModularTranspilerExtension)
             .with_extension(Fp2TranspilerExtension),
     )?;
-    let interpreter = InterpretedInstance::new(config, openvm_exe);
+    let interpreter = InterpretedInstance::new(config, openvm_exe)?;
     interpreter.execute(E1Ctx::new(None), vec![])?;
     Ok(())
 }

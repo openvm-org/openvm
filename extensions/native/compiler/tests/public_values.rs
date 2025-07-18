@@ -1,8 +1,8 @@
-use openvm_circuit::arch::{SingleSegmentVmExecutor, VirtualMachine};
-use openvm_native_circuit::{test_execute_program, test_native_config};
+use openvm_circuit::{arch::PUBLIC_VALUES_AIR_ID, utils::air_test_impl};
+use openvm_native_circuit::{execute_program, test_native_config};
 use openvm_native_compiler::{asm::AsmBuilder, prelude::*};
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
-use openvm_stark_sdk::{config::baby_bear_poseidon2::default_engine, p3_baby_bear::BabyBear};
+use openvm_stark_sdk::{config::FriParameters, p3_baby_bear::BabyBear};
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
@@ -28,28 +28,17 @@ fn test_compiler_public_values() {
     }
 
     let program = builder.compile_isa();
-    let config = test_native_config();
-
-    let vm = VirtualMachine::new(default_engine(), config.clone());
-    let vm_pk = vm.keygen();
-    let vm_vk = vm_pk.get_vk();
-
-    let executor = SingleSegmentVmExecutor::new(config);
-
-    let max_trace_heights = executor
-        .execute_metered(program.clone().into(), vec![], &vm_vk.num_interactions())
-        .unwrap();
-
-    let exe_result = executor
-        .execute_and_compute_heights(program, vec![], &max_trace_heights)
-        .unwrap();
+    let mut config = test_native_config();
+    config.system.num_public_values = 2;
+    // This is to justify using log_blowup=1
+    assert!(config.as_ref().max_constraint_degree <= 3);
+    let fri_params = FriParameters::new_for_testing(1);
+    let (_, mut vdata) = air_test_impl(fri_params, config, program, vec![], 1, true).unwrap();
+    assert_eq!(vdata.len(), 1);
+    let proof = vdata.pop().unwrap().data.proof;
     assert_eq!(
-        exe_result
-            .public_values
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>(),
-        vec![public_value_0, public_value_1]
+        &proof.get_public_values()[PUBLIC_VALUES_AIR_ID],
+        &[public_value_0, public_value_1]
     );
 }
 
@@ -73,5 +62,5 @@ fn test_compiler_public_values_no_initial() {
     builder.halt();
 
     let program = builder.compile_isa();
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 }

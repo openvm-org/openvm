@@ -4,7 +4,7 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_circuit::arch::testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, FieldExtensionOpcode};
 use openvm_stark_backend::{
@@ -22,33 +22,36 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
 use crate::{
-    adapters::{NativeVectorizedAdapterAir, NativeVectorizedAdapterStep},
+    adapters::{
+        NativeVectorizedAdapterAir, NativeVectorizedAdapterFiller, NativeVectorizedAdapterStep,
+    },
     field_extension::run_field_extension,
     test_utils::write_native_array,
     FieldExtension, FieldExtensionAir, FieldExtensionChip, FieldExtensionCoreAir,
-    FieldExtensionCoreCols, FieldExtensionStep, EXT_DEG,
+    FieldExtensionCoreCols, FieldExtensionCoreFiller, FieldExtensionStep, EXT_DEG,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
+type Harness = TestChipHarness<F, FieldExtensionStep, FieldExtensionAir, FieldExtensionChip<F>>;
 
-fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FieldExtensionChip<F> {
-    let mut chip = FieldExtensionChip::<F>::new(
-        FieldExtensionAir::new(
-            NativeVectorizedAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-            FieldExtensionCoreAir::new(),
-        ),
-        FieldExtensionStep::new(NativeVectorizedAdapterStep::new()),
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
+    let air = FieldExtensionAir::new(
+        NativeVectorizedAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+        FieldExtensionCoreAir::new(),
+    );
+    let executor = FieldExtensionStep::new(NativeVectorizedAdapterStep::new());
+    let chip = FieldExtensionChip::<F>::new(
+        FieldExtensionCoreFiller::new(NativeVectorizedAdapterFiller),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
-    chip
+    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
 fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut FieldExtensionChip<F>,
+    harness: &mut Harness,
     rng: &mut StdRng,
     opcode: FieldExtensionOpcode,
     y: Option<[F; EXT_DEG]>,
@@ -60,7 +63,7 @@ fn set_and_execute(
     let x_ptr = gen_pointer(rng, EXT_DEG);
 
     tester.execute(
-        chip,
+        harness,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [
@@ -92,13 +95,13 @@ fn set_and_execute(
 fn rand_field_extension_test(opcode: FieldExtensionOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
-    let mut chip = create_test_chip(&tester);
+    let mut harness = create_test_chip(&tester);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None);
+        set_and_execute(&mut tester, &mut harness, &mut rng, opcode, None, None);
     }
 
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -127,10 +130,10 @@ fn run_negative_field_extension_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
-    let mut chip = create_test_chip(&tester);
-    set_and_execute(&mut tester, &mut chip, &mut rng, opcode, y, z);
+    let mut harness = create_test_chip(&tester);
+    set_and_execute(&mut tester, &mut harness, &mut rng, opcode, y, z);
 
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<F>| {
         let mut values = trace.row_slice(0).to_vec();
         let core_cols: &mut FieldExtensionCoreCols<F> =
@@ -163,7 +166,7 @@ fn run_negative_field_extension_test(
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_and_prank_trace(harness, modify_trace)
         .finalize();
     tester.simple_test_with_expected_error(error);
 }

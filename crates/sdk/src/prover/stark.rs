@@ -14,7 +14,11 @@ use crate::{
     NonRootCommittedExe, RootSC, StdIn, F, SC,
 };
 
-pub struct StarkProver<VC, E: StarkFriEngine<SC>> {
+pub struct StarkProver<VC, E>
+where
+    E: StarkFriEngine,
+    VC: VmProverConfig<E::SC, E::PB>,
+{
     pub app_prover: AppProver<VC, E>,
     pub agg_prover: AggStarkProver<E>,
 }

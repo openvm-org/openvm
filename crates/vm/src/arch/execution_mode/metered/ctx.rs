@@ -1,7 +1,6 @@
 use openvm_instructions::riscv::{
     RV32_IMM_AS, RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
 };
-use openvm_stark_backend::{p3_field::PrimeField32, ChipUsageGetter};
 
 use super::{
     memory_ctx::MemoryCtx,
@@ -10,16 +9,17 @@ use super::{
 use crate::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        VmChipComplex, VmSegmentState,
+        VmSegmentState,
     },
-    system::memory::dimensions::MemoryDimensions,
+    system::memory::{dimensions::MemoryDimensions, online::GuestMemory},
 };
 
 pub const DEFAULT_PAGE_BITS: usize = 6;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub trace_heights: Vec<u32>,
+    // TODO[jpw]: should this be in Ctrl?
     pub is_trace_height_constant: Vec<bool>,
 
     pub memory_ctx: MemoryCtx<PAGE_BITS>,
@@ -29,33 +29,7 @@ pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
 }
 
 impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
-    pub fn new<F: PrimeField32, E: ChipUsageGetter, P: ChipUsageGetter>(
-        chip_complex: &VmChipComplex<F, E, P>,
-        interactions: Vec<usize>,
-    ) -> Self {
-        let constant_trace_heights: Vec<_> = chip_complex.constant_trace_heights().collect();
-        let has_public_values_chip = chip_complex.config().has_public_values_chip();
-        let continuation_enabled = chip_complex.config().continuation_enabled;
-        let as_alignment = chip_complex
-            .memory_controller()
-            .memory
-            .address_space_alignment();
-        let memory_dimensions = chip_complex.config().memory_config.memory_dimensions();
-        let air_names = chip_complex.air_names();
-        let widths = chip_complex.get_air_widths();
-        Self::new_impl(
-            constant_trace_heights,
-            has_public_values_chip,
-            continuation_enabled,
-            as_alignment,
-            memory_dimensions,
-            air_names,
-            widths,
-            interactions,
-        )
-    }
-    #[allow(clippy::too_many_arguments)]
-    pub fn new_impl(
+    pub fn new(
         constant_trace_heights: Vec<Option<usize>>,
         has_public_values_chip: bool,
         continuations_enabled: bool,
@@ -85,11 +59,23 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         );
 
         // Assert that the indices are correct
-        debug_assert_eq!(&air_names[memory_ctx.boundary_idx], "Boundary");
+        debug_assert!(
+            air_names[memory_ctx.boundary_idx].contains("Boundary"),
+            "air_name={}",
+            air_names[memory_ctx.boundary_idx]
+        );
         if let Some(merkle_tree_index) = memory_ctx.merkle_tree_index {
-            debug_assert_eq!(&air_names[merkle_tree_index], "Merkle");
+            debug_assert!(
+                air_names[merkle_tree_index].contains("Merkle"),
+                "air_name={}",
+                air_names[merkle_tree_index]
+            );
         }
-        debug_assert_eq!(&air_names[memory_ctx.adapter_offset], "AccessAdapter<2>");
+        debug_assert!(
+            air_names[memory_ctx.adapter_offset].contains("AccessAdapterAir<2>"),
+            "air_name={}",
+            air_names[memory_ctx.adapter_offset]
+        );
 
         let segmentation_ctx = SegmentationCtx::new(air_names, widths, interactions);
 
@@ -223,13 +209,13 @@ impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    fn should_suspend<F>(vm_state: &mut VmSegmentState<F, Self>) -> bool {
+    fn should_suspend<F>(vm_state: &mut VmSegmentState<F, GuestMemory, Self>) -> bool {
         vm_state.ctx.check_and_segment(vm_state.instret);
         vm_state.instret == vm_state.ctx.instret_end
     }
 
     #[inline(always)]
-    fn on_terminate<F>(vm_state: &mut VmSegmentState<F, Self>) {
+    fn on_terminate<F>(vm_state: &mut VmSegmentState<F, GuestMemory, Self>) {
         vm_state
             .ctx
             .segmentation_ctx

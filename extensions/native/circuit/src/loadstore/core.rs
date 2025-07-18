@@ -9,12 +9,14 @@ use openvm_circuit::{
         get_record_from_slice,
         instructions::LocalOpcode,
         AdapterAirContext, AdapterTraceFiller, AdapterTraceStep, E2PreCompute,
-        EmptyAdapterCoreLayout, ExecuteFunc,
-        ExecutionError::{self, InvalidInstruction},
-        RecordArena, Result, StepExecutorE1, StepExecutorE2, TraceFiller, TraceStep,
-        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
+        EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2,
+        InstructionExecutor, RecordArena, TraceFiller, VmAdapterInterface, VmCoreAir,
+        VmSegmentState, VmStateMut,
     },
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -118,30 +120,31 @@ pub struct NativeLoadStoreCoreRecord<F, const NUM_CELLS: usize> {
     pub local_opcode: u8,
 }
 
-#[derive(Debug)]
+#[derive(derive_new::new, Debug, Clone, Copy)]
 pub struct NativeLoadStoreCoreStep<A, const NUM_CELLS: usize> {
     adapter: A,
     offset: usize,
 }
 
-impl<A, const NUM_CELLS: usize> NativeLoadStoreCoreStep<A, NUM_CELLS> {
-    pub fn new(adapter: A, offset: usize) -> Self {
-        Self { adapter, offset }
-    }
+#[derive(derive_new::new)]
+pub struct NativeLoadStoreCoreFiller<A, const NUM_CELLS: usize> {
+    adapter: A,
 }
 
-impl<F, CTX, A, const NUM_CELLS: usize> TraceStep<F, CTX> for NativeLoadStoreCoreStep<A, NUM_CELLS>
+impl<F, A, RA, const NUM_CELLS: usize> InstructionExecutor<F, RA>
+    for NativeLoadStoreCoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
-    A: 'static
-        + AdapterTraceStep<F, CTX, ReadData = (F, [F; NUM_CELLS]), WriteData = [F; NUM_CELLS]>,
+    A: 'static + AdapterTraceStep<F, ReadData = (F, [F; NUM_CELLS]), WriteData = [F; NUM_CELLS]>,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (
+            A::RecordMut<'buf>,
+            &'buf mut NativeLoadStoreCoreRecord<F, NUM_CELLS>,
+        ),
+    >,
 {
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (
-        A::RecordMut<'a>,
-        &'a mut NativeLoadStoreCoreRecord<F, NUM_CELLS>,
-    );
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -149,18 +152,14 @@ where
         )
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<(), ExecutionError> {
         let &Instruction { opcode, .. } = instruction;
 
-        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -192,11 +191,10 @@ where
     }
 }
 
-impl<F, CTX, A, const NUM_CELLS: usize> TraceFiller<F, CTX>
-    for NativeLoadStoreCoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> TraceFiller<F> for NativeLoadStoreCoreFiller<A, NUM_CELLS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
@@ -232,7 +230,7 @@ impl<A, const NUM_CELLS: usize> NativeLoadStoreCoreStep<A, NUM_CELLS> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut NativeLoadStorePreCompute<F>,
-    ) -> Result<NativeLoadStoreOpcode> {
+    ) -> Result<NativeLoadStoreOpcode, ExecutionError> {
         let &Instruction {
             opcode,
             a,
@@ -251,7 +249,7 @@ impl<A, const NUM_CELLS: usize> NativeLoadStoreCoreStep<A, NUM_CELLS> {
         let e = e.as_canonical_u32();
 
         if d != AS::Native as u32 || e != AS::Native as u32 {
-            return Err(InvalidInstruction(pc));
+            return Err(ExecutionError::InvalidInstruction(pc));
         }
 
         *data = NativeLoadStorePreCompute { a, b, c };
@@ -260,7 +258,7 @@ impl<A, const NUM_CELLS: usize> NativeLoadStoreCoreStep<A, NUM_CELLS> {
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> StepExecutorE1<F> for NativeLoadStoreCoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> InsExecutorE1<F> for NativeLoadStoreCoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
 {
@@ -275,7 +273,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let pre_compute: &mut NativeLoadStorePreCompute<F> = data.borrow_mut();
 
         let local_opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
@@ -290,7 +288,7 @@ where
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> StepExecutorE2<F> for NativeLoadStoreCoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> InsExecutorE2<F> for NativeLoadStoreCoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
 {
@@ -306,7 +304,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let pre_compute: &mut E2PreCompute<NativeLoadStorePreCompute<F>> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 
@@ -324,7 +322,7 @@ where
 
 unsafe fn execute_e1_loadw<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELLS: usize>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &NativeLoadStorePreCompute<F> = pre_compute.borrow();
     execute_e12_loadw::<_, _, NUM_CELLS>(pre_compute, vm_state);
@@ -332,7 +330,7 @@ unsafe fn execute_e1_loadw<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELLS
 
 unsafe fn execute_e1_storew<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELLS: usize>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &NativeLoadStorePreCompute<F> = pre_compute.borrow();
     execute_e12_storew::<_, _, NUM_CELLS>(pre_compute, vm_state);
@@ -340,7 +338,7 @@ unsafe fn execute_e1_storew<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELL
 
 unsafe fn execute_e1_hint_storew<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELLS: usize>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &NativeLoadStorePreCompute<F> = pre_compute.borrow();
     execute_e12_hint_storew::<_, _, NUM_CELLS>(pre_compute, vm_state);
@@ -348,7 +346,7 @@ unsafe fn execute_e1_hint_storew<F: PrimeField32, CTX: E1ExecutionCtx, const NUM
 
 unsafe fn execute_e2_loadw<F: PrimeField32, CTX: E2ExecutionCtx, const NUM_CELLS: usize>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<NativeLoadStorePreCompute<F>> = pre_compute.borrow();
     vm_state
@@ -359,7 +357,7 @@ unsafe fn execute_e2_loadw<F: PrimeField32, CTX: E2ExecutionCtx, const NUM_CELLS
 
 unsafe fn execute_e2_storew<F: PrimeField32, CTX: E2ExecutionCtx, const NUM_CELLS: usize>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<NativeLoadStorePreCompute<F>> = pre_compute.borrow();
     vm_state
@@ -370,7 +368,7 @@ unsafe fn execute_e2_storew<F: PrimeField32, CTX: E2ExecutionCtx, const NUM_CELL
 
 unsafe fn execute_e2_hint_storew<F: PrimeField32, CTX: E2ExecutionCtx, const NUM_CELLS: usize>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<NativeLoadStorePreCompute<F>> = pre_compute.borrow();
     vm_state
@@ -382,7 +380,7 @@ unsafe fn execute_e2_hint_storew<F: PrimeField32, CTX: E2ExecutionCtx, const NUM
 #[inline(always)]
 unsafe fn execute_e12_loadw<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELLS: usize>(
     pre_compute: &NativeLoadStorePreCompute<F>,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let [read_cell]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.c);
 
@@ -398,7 +396,7 @@ unsafe fn execute_e12_loadw<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELL
 #[inline(always)]
 unsafe fn execute_e12_storew<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELLS: usize>(
     pre_compute: &NativeLoadStorePreCompute<F>,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let [read_cell]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.c);
     let data_read: [F; NUM_CELLS] = vm_state.vm_read(AS::Native as u32, pre_compute.a);
@@ -413,7 +411,7 @@ unsafe fn execute_e12_storew<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CEL
 #[inline(always)]
 unsafe fn execute_e12_hint_storew<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELLS: usize>(
     pre_compute: &NativeLoadStorePreCompute<F>,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let [read_cell]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.c);
 

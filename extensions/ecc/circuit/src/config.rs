@@ -1,15 +1,20 @@
-use openvm_algebra_circuit::*;
-use openvm_circuit::arch::{InitFileGenerator, SystemConfig};
+use std::result::Result;
+
+use openvm_algebra_circuit::{ModularExtension, ModularExtensionExecutor};
+use openvm_circuit::{
+    arch::{InitFileGenerator, SystemConfig},
+    system::SystemExecutor,
+};
 use openvm_circuit_derive::VmConfig;
-use openvm_rv32im_circuit::*;
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_rv32im_circuit::{Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor};
+use openvm_stark_backend::{config::StarkGenericConfig, engine::StarkEngine, p3_field::Field};
 use serde::{Deserialize, Serialize};
 
 use super::*;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32WeierstrassConfig {
-    #[system]
+    #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
     pub base: Rv32I,

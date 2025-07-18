@@ -7,12 +7,14 @@ use openvm_circuit::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc,
-        ExecutionError::InvalidInstruction,
-        MinimalInstruction, RecordArena, Result, StepExecutorE1, StepExecutorE2, TraceFiller,
-        TraceStep, VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
+        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, InsExecutorE1,
+        InsExecutorE2, InstructionExecutor, MinimalInstruction, RecordArena, Result, TraceFiller,
+        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
@@ -261,7 +263,13 @@ pub struct ShiftCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub local_opcode: u8,
 }
 
+#[derive(Clone, Copy)]
 pub struct ShiftStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
+    pub offset: usize,
+}
+#[derive(Clone)]
+pub struct ShiftFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
@@ -269,6 +277,13 @@ pub struct ShiftStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, LIMB_BITS> {
+    pub fn new(adapter: A, offset: usize) -> Self {
+        assert_eq!(NUM_LIMBS % 2, 0, "Number of limbs must be divisible by 2");
+        Self { adapter, offset }
+    }
+}
+
+impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftFiller<A, NUM_LIMBS, LIMB_BITS> {
     pub fn new(
         adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
@@ -285,42 +300,39 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, 
     }
 }
 
-impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F, CTX>
+impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> InstructionExecutor<F, RA>
     for ShiftStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
+        + AdapterTraceStep<
             F,
-            CTX,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
         >,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (
+            A::RecordMut<'buf>,
+            &'buf mut ShiftCoreRecord<NUM_LIMBS, LIMB_BITS>,
+        ),
+    >,
 {
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (
-        A::RecordMut<'a>,
-        &'a mut ShiftCoreRecord<NUM_LIMBS, LIMB_BITS>,
-    );
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", ShiftOpcode::from_usize(opcode - self.offset))
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
-        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -347,11 +359,11 @@ where
     }
 }
 
-impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F, CTX>
-    for ShiftStep<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
+    for ShiftFiller<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
@@ -432,7 +444,7 @@ struct ShiftPreCompute {
     b: u8,
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<F>
     for ShiftStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
@@ -463,7 +475,7 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE2<F>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE2<F>
     for ShiftStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
@@ -503,7 +515,7 @@ unsafe fn execute_e12_impl<
     OP: ShiftOp,
 >(
     pre_compute: &ShiftPreCompute,
-    state: &mut VmSegmentState<F, CTX>,
+    state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let rs1 = state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs2 = if IS_IMM {
@@ -524,7 +536,7 @@ unsafe fn execute_e12_impl<
 
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_IMM: bool, OP: ShiftOp>(
     pre_compute: &[u8],
-    state: &mut VmSegmentState<F, CTX>,
+    state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &ShiftPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, state);
@@ -532,7 +544,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_IMM: bo
 
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const IS_IMM: bool, OP: ShiftOp>(
     pre_compute: &[u8],
-    state: &mut VmSegmentState<F, CTX>,
+    state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<ShiftPreCompute> = pre_compute.borrow();
     state.ctx.on_height_change(pre_compute.chip_idx as usize, 1);
@@ -555,7 +567,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, 
         if inst.d.as_canonical_u32() != RV32_REGISTER_AS
             || !(e_u32 == RV32_IMM_AS || e_u32 == RV32_REGISTER_AS)
         {
-            return Err(InvalidInstruction(pc));
+            return Err(ExecutionError::InvalidInstruction(pc));
         }
         let is_imm = e_u32 == RV32_IMM_AS;
         let c_u32 = c.as_canonical_u32();

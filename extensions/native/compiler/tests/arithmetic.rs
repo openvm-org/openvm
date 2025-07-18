@@ -1,5 +1,5 @@
-use openvm_circuit::arch::{ExecutionError, VirtualMachine};
-use openvm_native_circuit::{test_execute_program, NativeConfig};
+use openvm_circuit::arch::{ExecutionError, VmExecutor};
+use openvm_native_circuit::{execute_program, NativeConfig};
 use openvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler, AsmConfig},
     conversion::{convert_program, CompilerOptions},
@@ -8,7 +8,7 @@ use openvm_native_compiler::{
 use openvm_stark_backend::p3_field::{
     extension::BinomialExtensionField, Field, FieldAlgebra, FieldExtensionAlgebra,
 };
-use openvm_stark_sdk::{config::baby_bear_poseidon2::default_engine, p3_baby_bear::BabyBear};
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{thread_rng, Rng};
 
 const WORD_SIZE: usize = 1;
@@ -93,7 +93,7 @@ fn test_compiler_arithmetic() {
     builder.halt();
 
     let program = builder.clone().compile_isa();
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -116,7 +116,7 @@ fn test_compiler_arithmetic_2() {
     builder.halt();
 
     let program = builder.clone().compile_isa();
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -152,7 +152,7 @@ fn test_in_place_arithmetic() {
     builder.halt();
 
     let program = builder.clone().compile_isa();
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -177,7 +177,7 @@ fn test_field_immediate() {
     builder.halt();
 
     let program = builder.compile_isa();
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -249,10 +249,10 @@ fn test_ext_immediate() {
     builder.halt();
 
     let program = builder.clone().compile_isa();
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 
     let program = builder.compile_isa();
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -302,10 +302,10 @@ fn test_ext_felt_arithmetic() {
     builder.halt();
 
     let program = builder.clone().compile_isa();
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 
     let program = builder.compile_isa();
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -332,7 +332,7 @@ fn test_felt_equality() {
     println!("{}", asm_code);
 
     let program = convert_program::<F, EF>(asm_code, CompilerOptions::default());
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -369,7 +369,7 @@ fn test_ext_equality() {
     builder.halt();
 
     let program = builder.compile_isa();
-    test_execute_program(program, vec![]);
+    execute_program(program, vec![]);
 }
 
 #[test]
@@ -393,11 +393,7 @@ fn assert_failed_assertion(
     let program = builder.compile_isa();
 
     let config = NativeConfig::aggregation(4, 3);
-    let vm = VirtualMachine::new(default_engine(), config);
-
-    let vm_pk = vm.keygen();
-    let vm_vk = vm_pk.get_vk();
-
-    let result = vm.execute_metered(program, vec![], &vm_vk.num_interactions());
+    let executor = VmExecutor::new(config).unwrap();
+    let result = executor.execute_e1(program, vec![], None);
     assert!(matches!(result, Err(ExecutionError::Fail { .. })));
 }

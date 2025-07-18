@@ -6,8 +6,8 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, CustomBorrow, MultiRowLayout, MultiRowMetadata, RecordArena, Result,
-        SizedRecord, TraceFiller, TraceStep, VmStateMut,
+        get_record_from_slice, CustomBorrow, InstructionExecutor, MultiRowLayout, MultiRowMetadata,
+        RecordArena, Result, SizedRecord, TraceFiller, VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
@@ -41,7 +41,7 @@ use super::{
 use crate::{
     columns::NUM_KECCAK_VM_COLS,
     utils::{keccak256, keccak_f, num_keccak_f},
-    KeccakVmStep, KECCAK_DIGEST_BYTES, KECCAK_RATE_U16S, KECCAK_WORD_SIZE,
+    KeccakVmFiller, KeccakVmStep, KECCAK_DIGEST_BYTES, KECCAK_RATE_U16S, KECCAK_WORD_SIZE,
 };
 
 #[derive(Clone, Copy)]
@@ -128,23 +128,20 @@ impl SizedRecord<KeccakVmRecordLayout> for KeccakVmRecordMut<'_> {
     }
 }
 
-impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
-    type RecordLayout = KeccakVmRecordLayout;
-    type RecordMut<'a> = KeccakVmRecordMut<'a>;
-
+impl<F, RA> InstructionExecutor<F, RA> for KeccakVmStep
+where
+    F: PrimeField32,
+    for<'buf> RA: RecordArena<'buf, KeccakVmRecordLayout, KeccakVmRecordMut<'buf>>,
+{
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{:?}", Rv32KeccakOpcode::KECCAK256)
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<()> {
         let &Instruction {
             opcode,
             a,
@@ -163,7 +160,9 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
 
         let num_reads = len.div_ceil(KECCAK_WORD_SIZE);
         let num_blocks = num_keccak_f(len);
-        let record = arena.alloc(KeccakVmRecordLayout::new(KeccakVmMetadata { len }));
+        let record = state
+            .ctx
+            .alloc(KeccakVmRecordLayout::new(KeccakVmMetadata { len }));
 
         record.inner.from_pc = *state.pc;
         record.inner.timestamp = state.memory.timestamp();
@@ -205,7 +204,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
                     .memory
                     .increment_timestamp_by(KECCAK_REGISTER_READS as u32);
             }
-            let read = tracing_read::<_, KECCAK_WORD_SIZE>(
+            let read = tracing_read::<KECCAK_WORD_SIZE>(
                 state.memory,
                 RV32_MEMORY_AS,
                 record.inner.src + (idx * KECCAK_WORD_SIZE) as u32,
@@ -221,7 +220,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
 
         let digest = keccak256(&record.input[..len]);
         for (i, word) in digest.chunks_exact(KECCAK_WORD_SIZE).enumerate() {
-            tracing_write::<_, KECCAK_WORD_SIZE>(
+            tracing_write::<KECCAK_WORD_SIZE>(
                 state.memory,
                 RV32_MEMORY_AS,
                 record.inner.dst + (i * KECCAK_WORD_SIZE) as u32,
@@ -239,7 +238,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
     }
 }
 
-impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for KeccakVmStep {
+impl<F: PrimeField32> TraceFiller<F> for KeccakVmFiller {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,

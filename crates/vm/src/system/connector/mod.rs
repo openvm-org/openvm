@@ -15,9 +15,9 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProofInput,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter,
+    Chip, ChipUsageGetter,
 };
 use serde::{Deserialize, Serialize};
 
@@ -88,6 +88,26 @@ impl<F: Field> BaseAir<F> for VmConnectorAir {
 }
 
 impl VmConnectorAir {
+    pub fn new(
+        execution_bus: ExecutionBus,
+        program_bus: ProgramBus,
+        range_bus: VariableRangeCheckerBus,
+        timestamp_max_bits: usize,
+    ) -> Self {
+        assert!(
+            range_bus.range_max_bits * 2 >= timestamp_max_bits,
+            "Range checker not large enough: range_max_bits={}, timestamp_max_bits={}",
+            range_bus.range_max_bits,
+            timestamp_max_bits
+        );
+        Self {
+            execution_bus,
+            program_bus,
+            range_bus,
+            timestamp_max_bits,
+        }
+    }
+
     /// Returns (low_bits, high_bits) to range check.
     fn timestamp_limb_bits(&self) -> (usize, usize) {
         let range_max_bits = self.range_bus.range_max_bits;
@@ -194,34 +214,25 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
 }
 
 pub struct VmConnectorChip<F> {
-    pub air: VmConnectorAir,
     pub range_checker: SharedVariableRangeCheckerChip,
     pub boundary_states: [Option<ConnectorCols<u32>>; 2],
+    timestamp_max_bits: usize,
     _marker: PhantomData<F>,
 }
 
-impl<F: PrimeField32> VmConnectorChip<F> {
-    pub fn new(
-        execution_bus: ExecutionBus,
-        program_bus: ProgramBus,
-        range_checker: SharedVariableRangeCheckerChip,
-        timestamp_max_bits: usize,
-    ) -> Self {
+impl<F> VmConnectorChip<F> {
+    pub fn new(range_checker: SharedVariableRangeCheckerChip, timestamp_max_bits: usize) -> Self {
+        let range_bus = range_checker.bus();
         assert!(
-            range_checker.bus().range_max_bits * 2 >= timestamp_max_bits,
+            range_bus.range_max_bits * 2 >= timestamp_max_bits,
             "Range checker not large enough: range_max_bits={}, timestamp_max_bits={}",
-            range_checker.bus().range_max_bits,
+            range_bus.range_max_bits,
             timestamp_max_bits
         );
         Self {
-            air: VmConnectorAir {
-                execution_bus,
-                program_bus,
-                range_bus: range_checker.bus(),
-                timestamp_max_bits,
-            },
             range_checker,
             boundary_states: [None, None],
+            timestamp_max_bits,
             _marker: PhantomData,
         }
     }
@@ -245,25 +256,30 @@ impl<F: PrimeField32> VmConnectorChip<F> {
             timestamp_low_limb: 0, // will be computed during tracegen
         });
     }
+
+    fn timestamp_limb_bits(&self) -> (usize, usize) {
+        let range_max_bits = self.range_checker.bus().range_max_bits;
+        if self.timestamp_max_bits <= range_max_bits {
+            (self.timestamp_max_bits, 0)
+        } else {
+            (range_max_bits, self.timestamp_max_bits - range_max_bits)
+        }
+    }
 }
 
-impl<SC> Chip<SC> for VmConnectorChip<Val<SC>>
+impl<RA, SC> Chip<RA, CpuBackend<SC>> for VmConnectorChip<Val<SC>>
 where
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air)
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         let [initial_state, final_state] = self.boundary_states.map(|state| {
             let mut state = state.unwrap();
             // Decompose and range check timestamp
             let range_max_bits = self.range_checker.range_max_bits();
             let timestamp_low_limb = state.timestamp & ((1u32 << range_max_bits) - 1);
             state.timestamp_low_limb = timestamp_low_limb;
-            let (low_bits, high_bits) = self.air.timestamp_limb_bits();
+            let (low_bits, high_bits) = self.timestamp_limb_bits();
             self.range_checker.add_count(timestamp_low_limb, low_bits);
             self.range_checker
                 .add_count(state.timestamp >> range_max_bits, high_bits);
@@ -271,10 +287,10 @@ where
             state.map(Val::<SC>::from_canonical_u32)
         });
 
-        let trace = RowMajorMatrix::new(
+        let trace = Arc::new(RowMajorMatrix::new(
             [initial_state.flatten(), final_state.flatten()].concat(),
             self.trace_width(),
-        );
+        ));
 
         let mut public_values = Val::<SC>::zero_vec(VmConnectorPvs::<Val<SC>>::width());
         *public_values.as_mut_slice().borrow_mut() = VmConnectorPvs {
@@ -283,7 +299,7 @@ where
             exit_code: final_state.exit_code,
             is_terminate: final_state.is_terminate,
         };
-        AirProofInput::simple(trace, public_values)
+        AirProvingContext::simple(trace, public_values)
     }
 }
 

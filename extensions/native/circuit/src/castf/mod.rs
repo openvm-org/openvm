@@ -1,6 +1,6 @@
-use openvm_circuit::arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper};
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
-use crate::adapters::{ConvertAdapterAir, ConvertAdapterStep};
+use crate::adapters::{ConvertAdapterAir, ConvertAdapterFiller, ConvertAdapterStep};
 
 mod core;
 pub use core::*;
@@ -10,4 +10,4 @@ mod tests;
 
 pub type CastFAir = VmAirWrapper<ConvertAdapterAir<1, 4>, CastFCoreAir>;
 pub type CastFStep = CastFCoreStep<ConvertAdapterStep<1, 4>>;
-pub type CastFChip<F> = NewVmChipWrapper<F, CastFAir, CastFStep, MatrixRecordArena<F>>;
+pub type CastFChip<F> = VmChipWrapper<F, CastFCoreFiller<ConvertAdapterFiller<1, 4>>>;

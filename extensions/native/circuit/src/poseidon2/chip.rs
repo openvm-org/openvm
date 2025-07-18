@@ -3,13 +3,16 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        CustomBorrow, E2PreCompute, ExecuteFunc,
-        ExecutionError::InvalidInstruction,
-        MultiRowLayout, MultiRowMetadata, RecordArena, Result, SizedRecord, StepExecutorE1,
-        StepExecutorE2, TraceFiller, TraceStep, VmSegmentState, VmStateMut,
+        CustomBorrow, E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2,
+        InstructionExecutor, MultiRowLayout, MultiRowMetadata, RecordArena, SizedRecord,
+        TraceFiller, VmSegmentState, VmStateMut,
     },
     system::{
-        memory::{offline_checker::MemoryBaseAuxCols, online::TracingMemory, MemoryAuxColsFactory},
+        memory::{
+            offline_checker::MemoryBaseAuxCols,
+            online::{GuestMemory, TracingMemory},
+            MemoryAuxColsFactory,
+        },
         native_adapter::util::{
             memory_read_native, tracing_read_native, tracing_write_native_inplace,
         },
@@ -37,7 +40,12 @@ use crate::poseidon2::{
     CHUNK,
 };
 
+#[derive(Clone)]
 pub struct NativePoseidon2Step<F: Field, const SBOX_REGISTERS: usize> {
+    pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
+}
+
+pub struct NativePoseidon2Filler<F: Field, const SBOX_REGISTERS: usize> {
     // pre-computed Poseidon2 sub cols for dummy rows.
     empty_poseidon2_sub_cols: Vec<F>,
     pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
@@ -46,11 +54,7 @@ pub struct NativePoseidon2Step<F: Field, const SBOX_REGISTERS: usize> {
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_REGISTERS> {
     pub fn new(poseidon2_config: Poseidon2Config<F>) -> Self {
         let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
-        let empty_poseidon2_sub_cols = subchip.generate_trace(vec![[F::ZERO; CHUNK * 2]]).values;
-        Self {
-            empty_poseidon2_sub_cols,
-            subchip,
-        }
+        Self { subchip }
     }
 }
 
@@ -62,6 +66,17 @@ fn compress<F: PrimeField32, const SBOX_REGISTERS: usize>(
     let concatenated = std::array::from_fn(|i| if i < CHUNK { left[i] } else { right[i - CHUNK] });
     let permuted = subchip.permute(concatenated);
     (concatenated, std::array::from_fn(|i| permuted[i]))
+}
+
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Filler<F, SBOX_REGISTERS> {
+    pub fn new(poseidon2_config: Poseidon2Config<F>) -> Self {
+        let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
+        let empty_poseidon2_sub_cols = subchip.generate_trace(vec![[F::ZERO; CHUNK * 2]]).values;
+        Self {
+            empty_poseidon2_sub_cols,
+            subchip,
+        }
+    }
 }
 
 pub(super) const NUM_INITIAL_READS: usize = 6;
@@ -124,20 +139,21 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> SizedRecord<NativePoseidon2Re
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
+impl<F: PrimeField32, RA, const SBOX_REGISTERS: usize> InstructionExecutor<F, RA>
     for NativePoseidon2Step<F, SBOX_REGISTERS>
+where
+    for<'buf> RA: RecordArena<
+        'buf,
+        MultiRowLayout<NativePoseidon2Metadata>,
+        NativePoseidon2RecordMut<'buf, F, SBOX_REGISTERS>,
+    >,
 {
-    type RecordLayout = MultiRowLayout<NativePoseidon2Metadata>;
-    type RecordMut<'a> = NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS>;
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> openvm_circuit::arch::Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> openvm_circuit::arch::Result<()> {
+        let arena = state.ctx;
         let init_timestamp_u32 = state.memory.timestamp;
         if instruction.opcode == PERM_POS2.global_opcode()
             || instruction.opcode == COMP_POS2.global_opcode()
@@ -641,8 +657,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceStep<F, CTX>
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceFiller<F, CTX>
-    for NativePoseidon2Step<F, SBOX_REGISTERS>
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> TraceFiller<F>
+    for NativePoseidon2Filler<F, SBOX_REGISTERS>
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let inner_cols = {
@@ -783,14 +799,14 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize, CTX> TraceFiller<F, CTX>
         }
     }
 
-    fn fill_dummy_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+    fn fill_dummy_trace_row(&self, row_slice: &mut [F]) {
         let width = self.subchip.air.width();
         row_slice[..width].copy_from_slice(&self.empty_poseidon2_sub_cols);
     }
 }
 
 fn tracing_read_native_helper<F: PrimeField32, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     ptr: u32,
     base_aux: &mut MemoryBaseAuxCols<F>,
 ) -> [F; BLOCK_SIZE] {
@@ -839,7 +855,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SB
         pc: u32,
         inst: &Instruction<F>,
         pos2_data: &mut Pos2PreCompute<'a, F, SBOX_REGISTERS>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let &Instruction {
             opcode,
             a,
@@ -851,7 +867,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SB
         } = inst;
 
         if opcode != PERM_POS2.global_opcode() && opcode != COMP_POS2.global_opcode() {
-            return Err(InvalidInstruction(pc));
+            return Err(ExecutionError::InvalidInstruction(pc));
         }
 
         let a = a.as_canonical_u32();
@@ -861,10 +877,10 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SB
         let e = e.as_canonical_u32();
 
         if d != AS::Native as u32 {
-            return Err(InvalidInstruction(pc));
+            return Err(ExecutionError::InvalidInstruction(pc));
         }
         if e != AS::Native as u32 {
-            return Err(InvalidInstruction(pc));
+            return Err(ExecutionError::InvalidInstruction(pc));
         }
 
         *pos2_data = Pos2PreCompute {
@@ -883,7 +899,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SB
         pc: u32,
         inst: &Instruction<F>,
         verify_batch_data: &mut VerifyBatchPreCompute<'a, F, SBOX_REGISTERS>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let &Instruction {
             opcode,
             a,
@@ -897,7 +913,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SB
         } = inst;
 
         if opcode != VERIFY_BATCH.global_opcode() {
-            return Err(InvalidInstruction(pc));
+            return Err(ExecutionError::InvalidInstruction(pc));
         }
 
         let a = a.as_canonical_u32();
@@ -929,7 +945,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SB
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE1<F>
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> InsExecutorE1<F>
     for NativePoseidon2Step<F, SBOX_REGISTERS>
 {
     #[inline(always)]
@@ -946,7 +962,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE1<F>
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let &Instruction { opcode, .. } = inst;
 
         let is_pos2 = opcode == PERM_POS2.global_opcode() || opcode == COMP_POS2.global_opcode();
@@ -968,7 +984,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE1<F>
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE2<F>
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> InsExecutorE2<F>
     for NativePoseidon2Step<F, SBOX_REGISTERS>
 {
     #[inline(always)]
@@ -986,7 +1002,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE2<F>
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let &Instruction { opcode, .. } = inst;
 
         let is_pos2 = opcode == PERM_POS2.global_opcode() || opcode == COMP_POS2.global_opcode();
@@ -1020,7 +1036,7 @@ unsafe fn execute_pos2_e1_impl<
     const IS_PERM: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &Pos2PreCompute<F, SBOX_REGISTERS> = pre_compute.borrow();
     execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(pre_compute, vm_state);
@@ -1033,7 +1049,7 @@ unsafe fn execute_pos2_e2_impl<
     const IS_PERM: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<Pos2PreCompute<F, SBOX_REGISTERS>> = pre_compute.borrow();
     let height =
@@ -1049,7 +1065,7 @@ unsafe fn execute_verify_batch_e1_impl<
     const SBOX_REGISTERS: usize,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &VerifyBatchPreCompute<F, SBOX_REGISTERS> = pre_compute.borrow();
     execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS>(pre_compute, vm_state);
@@ -1061,7 +1077,7 @@ unsafe fn execute_verify_batch_e2_impl<
     const SBOX_REGISTERS: usize,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<VerifyBatchPreCompute<F, SBOX_REGISTERS>> = pre_compute.borrow();
     let height = execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS>(&pre_compute.data, vm_state);
@@ -1078,7 +1094,7 @@ unsafe fn execute_pos2_e12_impl<
     const IS_PERM: bool,
 >(
     pre_compute: &Pos2PreCompute<F, SBOX_REGISTERS>,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) -> u32 {
     let subchip = pre_compute.subchip;
 
@@ -1132,7 +1148,7 @@ unsafe fn execute_verify_batch_e12_impl<
     const SBOX_REGISTERS: usize,
 >(
     pre_compute: &VerifyBatchPreCompute<F, SBOX_REGISTERS>,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) -> u32 {
     // TODO: Add a flag `optimistic_execution`. When the flag is true, we trust all inputs
     // and skip all input validation computation during E1 execution.

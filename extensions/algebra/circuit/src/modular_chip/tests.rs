@@ -1,31 +1,37 @@
-use std::{array::from_fn, borrow::BorrowMut};
+use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 
 use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::arch::{
     instructions::LocalOpcode,
-    testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    testing::{TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    Arena, DenseRecordArena, InstructionExecutor, MatrixRecordArena,
 };
 use openvm_circuit_primitives::{
     bigint::utils::{big_uint_to_limbs, secp256k1_coord_prime, secp256k1_scalar_prime},
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, VmOpcode};
 use openvm_mod_circuit_builder::{
     test_utils::{biguint_to_limbs, generate_field_element},
-    ExprBuilderConfig,
+    ExprBuilderConfig, FieldExpressionCoreRecordMut,
 };
 use openvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
-use openvm_rv32_adapters::{rv32_write_heap_default, write_ptr_reg};
+use openvm_rv32_adapters::{rv32_write_heap_default, write_ptr_reg, Rv32VecHeapAdapterRecord};
 use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{
-    ModularAddSubChip, ModularIsEqualChip, ModularIsEqualCoreAir, ModularIsEqualCoreCols,
-    ModularMulDivChip,
+use crate::modular_chip::{
+    get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_step,
+    get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_step, ModularAir,
+    ModularChip, ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir,
+    ModularIsEqualCoreCols, ModularIsEqualFiller, ModularStep, VmModularIsEqualStep,
 };
 
 const NUM_LIMBS: usize = 32;
@@ -36,23 +42,70 @@ type F = BabyBear;
 
 #[cfg(test)]
 mod addsubtests {
-    use openvm_circuit::arch::InstructionExecutor;
-    use openvm_mod_circuit_builder::FieldExpressionCoreRecordMut;
-    use openvm_rv32_adapters::Rv32VecHeapAdapterRecord;
     use test_case::test_case;
 
     use super::*;
-    use crate::modular_chip::ModularDenseChip;
 
+    type Harness<RA> = TestChipHarness<
+        F,
+        ModularStep<1, NUM_LIMBS>,
+        ModularAir<1, NUM_LIMBS>,
+        ModularChip<F, 1, NUM_LIMBS>,
+        RA,
+    >;
     const ADD_LOCAL: usize = Rv32ModularArithmeticOpcode::ADD as usize;
 
-    fn set_and_execute_addsub<E: InstructionExecutor<F>>(
+    fn create_test_chip<RA: Arena>(
+        tester: &VmChipTestBuilder<F>,
+        config: ExprBuilderConfig,
+        offset: usize,
+    ) -> (
+        Harness<RA>,
+        (
+            BitwiseOperationLookupAir<RV32_CELL_BITS>,
+            SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        ),
+    ) {
+        let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+            bitwise_bus,
+        ));
+
+        let air = get_modular_addsub_air(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            config.clone(),
+            tester.range_checker().bus(),
+            bitwise_bus,
+            tester.address_bits(),
+            offset,
+        );
+        let executor = get_modular_addsub_step(
+            config.clone(),
+            tester.range_checker().bus(),
+            tester.address_bits(),
+            offset,
+        );
+        let chip = get_modular_addsub_chip(
+            config,
+            tester.memory_helper(),
+            tester.range_checker(),
+            bitwise_chip.clone(),
+            tester.address_bits(),
+        );
+        let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+
+        (harness, (bitwise_chip.air, bitwise_chip))
+    }
+    fn set_and_execute_addsub<RA: Arena>(
         tester: &mut VmChipTestBuilder<F>,
-        chip: &mut E,
+        harness: &mut Harness<RA>,
         modulus: &BigUint,
         is_setup: bool,
         offset: usize,
-    ) {
+    ) where
+        ModularStep<1, NUM_LIMBS>: InstructionExecutor<F, RA>,
+    {
         let mut rng = create_seeded_rng();
 
         let (a, b, op) = if is_setup {
@@ -114,7 +167,7 @@ mod addsubtests {
             ptr_as as isize,
             data_as as isize,
         );
-        tester.execute(chip, &instruction);
+        tester.execute(harness, &instruction);
 
         let expected_limbs = biguint_to_limbs::<NUM_LIMBS>(expected_answer, LIMB_BITS);
         let read_vals = tester.read::<NUM_LIMBS>(data_as, address3 as usize);
@@ -125,33 +178,26 @@ mod addsubtests {
     #[test_case(4, secp256k1_scalar_prime(), 50)]
     fn test_addsub(opcode_offset: usize, modulus: BigUint, num_ops: usize) {
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+        let offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
         let config = ExprBuilderConfig {
             modulus: modulus.clone(),
             num_limbs: NUM_LIMBS,
             limb_bits: LIMB_BITS,
         };
-        let offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
-        let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
         // doing 1xNUM_LIMBS reads and writes
-        let mut chip = ModularAddSubChip::<F, 1, NUM_LIMBS>::new(
-            tester.execution_bridge(),
-            tester.memory_bridge(),
-            tester.memory_helper(),
-            tester.address_bits(),
-            config,
-            offset,
-            bitwise_chip.clone(),
-            tester.range_checker(),
-        );
-        chip.0.set_trace_buffer_height(MAX_INS_CAPACITY);
+        let (mut harness, bitwise) =
+            create_test_chip::<MatrixRecordArena<F>>(&tester, config, offset);
 
         for i in 0..num_ops {
-            set_and_execute_addsub(&mut tester, &mut chip, &modulus, i == 0, offset);
+            set_and_execute_addsub(&mut tester, &mut harness, &modulus, i == 0, offset);
         }
 
-        let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+        let tester = tester
+            .build()
+            .load(harness)
+            .load_periphery(bitwise)
+            .finalize();
         tester.simple_test().expect("Verification failed");
     }
 
@@ -166,57 +212,32 @@ mod addsubtests {
         };
         let offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
 
-        let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-        let mut sparse_chip = ModularAddSubChip::<F, 1, NUM_LIMBS>::new(
-            tester.execution_bridge(),
-            tester.memory_bridge(),
-            tester.memory_helper(),
-            tester.address_bits(),
-            config.clone(),
-            offset,
-            bitwise_chip.clone(),
-            tester.range_checker(),
-        );
-        sparse_chip.0.set_trace_buffer_height(MAX_INS_CAPACITY);
+        let (mut sparse_harness, bitwise) =
+            create_test_chip::<MatrixRecordArena<F>>(&tester, config.clone(), offset);
 
         {
-            // Using a trick to create a dense chip using the air and step of the sparse chip
             // doing 1xNUM_LIMBS reads and writes
-            let tmp_chip = ModularAddSubChip::<F, 1, NUM_LIMBS>::new(
-                tester.execution_bridge(),
-                tester.memory_bridge(),
-                tester.memory_helper(),
-                tester.address_bits(),
-                config,
-                offset,
-                bitwise_chip.clone(),
-                tester.range_checker(),
-            );
-
-            let mut dense_chip =
-                ModularDenseChip::new(tmp_chip.0.air, tmp_chip.0.step, tester.memory_helper());
-            dense_chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+            let mut dense_harness = create_test_chip::<DenseRecordArena>(&tester, config, offset).0;
 
             for i in 0..num_ops {
-                set_and_execute_addsub(&mut tester, &mut dense_chip, &modulus, i == 0, offset);
+                set_and_execute_addsub(&mut tester, &mut dense_harness, &modulus, i == 0, offset);
             }
 
             type Record<'a> = (
                 &'a mut Rv32VecHeapAdapterRecord<2, 1, 1, NUM_LIMBS, NUM_LIMBS>,
                 FieldExpressionCoreRecordMut<'a>,
             );
-            let mut record_interpreter = dense_chip.arena.get_record_seeker::<Record, _>();
+            let mut record_interpreter = dense_harness.arena.get_record_seeker::<Record, _>();
             record_interpreter.transfer_to_matrix_arena(
-                &mut sparse_chip.0.arena,
-                dense_chip.step.0.get_record_layout::<F>(),
+                &mut sparse_harness.arena,
+                dense_harness.executor.get_record_layout::<F>(),
             );
         }
 
         let tester = tester
             .build()
-            .load(sparse_chip)
-            .load(bitwise_chip)
+            .load(sparse_harness)
+            .load_periphery(bitwise)
             .finalize();
         tester.simple_test().expect("Verification failed");
     }
@@ -229,10 +250,16 @@ mod muldivtests {
     use super::*;
 
     const MUL_LOCAL: usize = Rv32ModularArithmeticOpcode::MUL as usize;
+    type Harness = TestChipHarness<
+        F,
+        ModularStep<1, NUM_LIMBS>,
+        ModularAir<1, NUM_LIMBS>,
+        ModularChip<F, 1, NUM_LIMBS>,
+    >;
 
     fn set_and_execute_muldiv(
         tester: &mut VmChipTestBuilder<F>,
-        chip: &mut ModularMulDivChip<F, 1, NUM_LIMBS>,
+        harness: &mut Harness,
         modulus: &BigUint,
         is_setup: bool,
     ) {
@@ -290,14 +317,14 @@ mod muldivtests {
         tester.write(data_as, address2 as usize, b_limbs);
 
         let instruction = Instruction::from_isize(
-            VmOpcode::from_usize(chip.0.step.0.offset + op),
+            VmOpcode::from_usize(harness.executor.offset + op),
             addr_ptr3 as isize,
             addr_ptr1 as isize,
             addr_ptr2 as isize,
             ptr_as as isize,
             data_as as isize,
         );
-        tester.execute(chip, &instruction);
+        tester.execute(harness, &instruction);
 
         let expected_limbs = biguint_to_limbs::<NUM_LIMBS>(expected_answer, LIMB_BITS);
         let read_vals = tester.read::<NUM_LIMBS>(data_as, address3 as usize);
@@ -313,25 +340,45 @@ mod muldivtests {
             num_limbs: NUM_LIMBS,
             limb_bits: LIMB_BITS,
         };
+        let offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+            bitwise_bus,
+        ));
         // doing 1xNUM_LIMBS reads and writes
-        let mut chip = ModularMulDivChip::new(
+        let air = get_modular_muldiv_air(
             tester.execution_bridge(),
             tester.memory_bridge(),
-            tester.memory_helper(),
+            config.clone(),
+            tester.range_checker().bus(),
+            bitwise_bus,
             tester.address_bits(),
-            config,
-            Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset,
-            bitwise_chip.clone(),
-            tester.range_checker(),
+            offset,
         );
-        chip.0.set_trace_buffer_height(MAX_INS_CAPACITY);
+        let executor = get_modular_muldiv_step(
+            config.clone(),
+            tester.range_checker().bus(),
+            tester.address_bits(),
+            offset,
+        );
+        let chip = get_modular_muldiv_chip(
+            config,
+            tester.memory_helper(),
+            tester.range_checker(),
+            bitwise_chip.clone(),
+            tester.address_bits(),
+        );
+
+        let mut harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
 
         for i in 0..num_ops {
-            set_and_execute_muldiv(&mut tester, &mut chip, &modulus, i == 0);
+            set_and_execute_muldiv(&mut tester, &mut harness, &modulus, i == 0);
         }
-        let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+        let tester = tester
+            .build()
+            .load(harness)
+            .load_periphery((bitwise_chip.air, bitwise_chip))
+            .finalize();
 
         tester.simple_test().expect("Verification failed");
     }
@@ -339,7 +386,9 @@ mod muldivtests {
 
 #[cfg(test)]
 mod is_equal_tests {
-    use openvm_rv32_adapters::{Rv32IsEqualModAdapterAir, Rv32IsEqualModeAdapterStep};
+    use openvm_rv32_adapters::{
+        Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterFiller, Rv32IsEqualModAdapterStep,
+    };
     use openvm_stark_backend::{
         p3_air::BaseAir,
         p3_matrix::{
@@ -351,7 +400,14 @@ mod is_equal_tests {
     };
 
     use super::*;
-    use crate::modular_chip::{ModularIsEqualAir, VmModularIsEqualStep};
+
+    type Harness<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize> =
+        TestChipHarness<
+            F,
+            VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            ModularIsEqualAir<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            ModularIsEqualChip<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        >;
 
     fn create_test_chips<
         const NUM_LANES: usize,
@@ -363,33 +419,41 @@ mod is_equal_tests {
         modulus_limbs: [u8; TOTAL_LIMBS],
         offset: usize,
     ) -> (
-        ModularIsEqualChip<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-        SharedBitwiseOperationLookupChip<LIMB_BITS>,
+        Harness<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        (
+            BitwiseOperationLookupAir<LIMB_BITS>,
+            SharedBitwiseOperationLookupChip<LIMB_BITS>,
+        ),
     ) {
         let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let bitwise_chip = SharedBitwiseOperationLookupChip::<LIMB_BITS>::new(bitwise_bus);
+        let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<LIMB_BITS>::new(bitwise_bus));
 
-        let mut chip = ModularIsEqualChip::<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
-            ModularIsEqualAir::new(
-                Rv32IsEqualModAdapterAir::new(
-                    tester.execution_bridge(),
-                    tester.memory_bridge(),
-                    bitwise_bus,
-                    tester.address_bits(),
-                ),
-                ModularIsEqualCoreAir::new(modulus.clone(), bitwise_bus, offset),
+        let air = ModularIsEqualAir::new(
+            Rv32IsEqualModAdapterAir::new(
+                tester.execution_bridge(),
+                tester.memory_bridge(),
+                bitwise_bus,
+                tester.address_bits(),
             ),
-            VmModularIsEqualStep::new(
-                Rv32IsEqualModeAdapterStep::new(tester.address_bits(), bitwise_chip.clone()),
-                modulus_limbs,
+            ModularIsEqualCoreAir::new(modulus.clone(), bitwise_bus, offset),
+        );
+        let executor = VmModularIsEqualStep::new(
+            Rv32IsEqualModAdapterStep::new(tester.address_bits()),
+            offset,
+            modulus_limbs,
+        );
+        let chip = ModularIsEqualChip::<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
+            ModularIsEqualFiller::new(
+                Rv32IsEqualModAdapterFiller::new(tester.address_bits(), bitwise_chip.clone()),
                 offset,
+                modulus_limbs,
                 bitwise_chip.clone(),
             ),
             tester.memory_helper(),
         );
-        chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+        let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
 
-        (chip, bitwise_chip)
+        (harness, (bitwise_chip.air, bitwise_chip))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -399,7 +463,7 @@ mod is_equal_tests {
         const TOTAL_LIMBS: usize,
     >(
         tester: &mut VmChipTestBuilder<F>,
-        chip: &mut ModularIsEqualChip<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        harness: &mut Harness<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         rng: &mut StdRng,
         modulus: &BigUint,
         offset: usize,
@@ -434,7 +498,7 @@ mod is_equal_tests {
                 offset + Rv32ModularArithmeticOpcode::IS_EQ as usize,
             )
         };
-        tester.execute(chip, &instruction);
+        tester.execute(harness, &instruction);
     }
 
     //////////////////////////////////////////////////////////////////////////////////////
@@ -466,7 +530,7 @@ mod is_equal_tests {
         let modulus_limbs: [u8; TOTAL_LIMBS] =
             from_fn(|i| if i < vec.len() { vec[i] as u8 } else { 0 });
 
-        let (mut chip, bitwise_chip) = create_test_chips::<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>(
+        let (mut harness, bitwise) = create_test_chips::<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>(
             &mut tester,
             &modulus,
             modulus_limbs,
@@ -478,7 +542,7 @@ mod is_equal_tests {
         for i in 0..num_tests {
             set_and_execute_is_equal(
                 &mut tester,
-                &mut chip,
+                &mut harness,
                 &mut rng,
                 &modulus,
                 opcode_offset,
@@ -494,7 +558,7 @@ mod is_equal_tests {
         b[0] -= F::ONE;
         set_and_execute_is_equal(
             &mut tester,
-            &mut chip,
+            &mut harness,
             &mut rng,
             &modulus,
             opcode_offset,
@@ -504,7 +568,11 @@ mod is_equal_tests {
             Some(b),
         );
 
-        let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+        let tester = tester
+            .build()
+            .load(harness)
+            .load_periphery(bitwise)
+            .finalize();
         tester.simple_test().expect("Verification failed");
     }
 
@@ -533,7 +601,7 @@ mod is_equal_tests {
         let modulus_limbs: [u8; READ_LIMBS] =
             from_fn(|i| if i < vec.len() { vec[i] as u8 } else { 0 });
 
-        let (mut chip, bitwise_chip) = create_test_chips::<NUM_LANES, LANE_SIZE, READ_LIMBS>(
+        let (mut harness, bitwise) = create_test_chips::<NUM_LANES, LANE_SIZE, READ_LIMBS>(
             &mut tester,
             &modulus,
             modulus_limbs,
@@ -544,7 +612,7 @@ mod is_equal_tests {
 
         set_and_execute_is_equal(
             &mut tester,
-            &mut chip,
+            &mut harness,
             &mut rng,
             &modulus,
             opcode_offset,
@@ -554,7 +622,7 @@ mod is_equal_tests {
             None,
         );
 
-        let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+        let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
         let modify_trace = |trace: &mut DenseMatrix<F>| {
             let mut trace_row = trace.row_slice(0).to_vec();
             let cols: &mut ModularIsEqualCoreCols<_, READ_LIMBS> =
@@ -591,8 +659,8 @@ mod is_equal_tests {
         disable_debug_builder();
         let tester = tester
             .build()
-            .load_and_prank_trace(chip, modify_trace)
-            .load(bitwise_chip)
+            .load_and_prank_trace(harness, modify_trace)
+            .load_periphery(bitwise)
             .finalize();
         tester.simple_test_with_expected_error(expected_error);
     }

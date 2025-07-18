@@ -1,6 +1,6 @@
 use std::{array, borrow::BorrowMut};
 
-use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_circuit::arch::testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{
     conversion::AS,
@@ -22,35 +22,43 @@ use test_case::test_case;
 
 use super::{NativeLoadStoreChip, NativeLoadStoreCoreAir};
 use crate::{
-    adapters::{NativeLoadStoreAdapterAir, NativeLoadStoreAdapterCols, NativeLoadStoreAdapterStep},
+    adapters::{
+        NativeLoadStoreAdapterAir, NativeLoadStoreAdapterCols, NativeLoadStoreAdapterFiller,
+        NativeLoadStoreAdapterStep,
+    },
     test_utils::write_native_array,
-    NativeLoadStoreAir, NativeLoadStoreCoreCols, NativeLoadStoreStep,
+    NativeLoadStoreAir, NativeLoadStoreCoreCols, NativeLoadStoreCoreFiller, NativeLoadStoreStep,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
-const NUM_CELLS: usize = 1;
 type F = BabyBear;
+type Harness<const NUM_CELLS: usize> = TestChipHarness<
+    F,
+    NativeLoadStoreStep<NUM_CELLS>,
+    NativeLoadStoreAir<NUM_CELLS>,
+    NativeLoadStoreChip<F, NUM_CELLS>,
+>;
 
-fn create_test_chip(tester: &VmChipTestBuilder<F>) -> NativeLoadStoreChip<F, NUM_CELLS> {
-    let mut chip = NativeLoadStoreChip::<F, NUM_CELLS>::new(
-        NativeLoadStoreAir::new(
-            NativeLoadStoreAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
-            NativeLoadStoreCoreAir::new(NativeLoadStoreOpcode::CLASS_OFFSET),
-        ),
-        NativeLoadStoreStep::new(
-            NativeLoadStoreAdapterStep::new(NativeLoadStoreOpcode::CLASS_OFFSET),
-            NativeLoadStoreOpcode::CLASS_OFFSET,
-        ),
+fn create_test_chip<const NUM_CELLS: usize>(tester: &VmChipTestBuilder<F>) -> Harness<NUM_CELLS> {
+    let air = NativeLoadStoreAir::new(
+        NativeLoadStoreAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
+        NativeLoadStoreCoreAir::new(NativeLoadStoreOpcode::CLASS_OFFSET),
+    );
+    let executor = NativeLoadStoreStep::new(
+        NativeLoadStoreAdapterStep::new(NativeLoadStoreOpcode::CLASS_OFFSET),
+        NativeLoadStoreOpcode::CLASS_OFFSET,
+    );
+    let chip = NativeLoadStoreChip::<F, NUM_CELLS>::new(
+        NativeLoadStoreCoreFiller::new(NativeLoadStoreAdapterFiller),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
-    chip
+    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
-fn set_and_execute(
+fn set_and_execute<const NUM_CELLS: usize>(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut NativeLoadStoreChip<F, NUM_CELLS>,
+    harness: &mut Harness<NUM_CELLS>,
     rng: &mut StdRng,
     opcode: NativeLoadStoreOpcode,
 ) {
@@ -74,7 +82,7 @@ fn set_and_execute(
     }
 
     tester.execute(
-        chip,
+        harness,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [
@@ -104,15 +112,30 @@ fn set_and_execute(
 #[test_case(STOREW, 100)]
 #[test_case(HINT_STOREW, 100)]
 #[test_case(LOADW, 100)]
-fn rand_native_loadstore_test(opcode: NativeLoadStoreOpcode, num_ops: usize) {
+fn rand_native_loadstore_test_1(opcode: NativeLoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
-    let mut chip = create_test_chip(&tester);
+    let mut harness = create_test_chip::<1>(&tester);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode);
+        set_and_execute(&mut tester, &mut harness, &mut rng, opcode);
     }
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(harness).finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test_case(STOREW, 100)]
+#[test_case(HINT_STOREW, 100)]
+#[test_case(LOADW, 100)]
+fn rand_native_loadstore_test_4(opcode: NativeLoadStoreOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default_native();
+    let mut harness = create_test_chip::<4>(&tester);
+
+    for _ in 0..num_ops {
+        set_and_execute(&mut tester, &mut harness, &mut rng, opcode);
+    }
+    let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -124,7 +147,7 @@ fn rand_native_loadstore_test(opcode: NativeLoadStoreOpcode, num_ops: usize) {
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Clone, Copy, Default)]
-struct NativeLoadStorePrankValues {
+struct NativeLoadStorePrankValues<const NUM_CELLS: usize> {
     // Core cols
     pub data: Option<[F; NUM_CELLS]>,
     pub opcode_flags: Option<[bool; 3]>,
@@ -133,18 +156,18 @@ struct NativeLoadStorePrankValues {
     pub data_write_pointer: Option<F>,
 }
 
-fn run_negative_native_loadstore_test(
+fn run_negative_native_loadstore_test<const NUM_CELLS: usize>(
     opcode: NativeLoadStoreOpcode,
-    prank_vals: NativeLoadStorePrankValues,
+    prank_vals: NativeLoadStorePrankValues<NUM_CELLS>,
     error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
-    let mut chip = create_test_chip(&tester);
+    let mut harness = create_test_chip::<NUM_CELLS>(&tester);
 
-    set_and_execute(&mut tester, &mut chip, &mut rng, opcode);
+    set_and_execute(&mut tester, &mut harness, &mut rng, opcode);
 
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<F>| {
         let mut values = trace.row_slice(0).to_vec();
         let (adapter_row, core_row) = values.split_at_mut(adapter_width);
@@ -174,14 +197,14 @@ fn run_negative_native_loadstore_test(
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_and_prank_trace(harness, modify_trace)
         .finalize();
     tester.simple_test_with_expected_error(error);
 }
 
 #[test]
 fn negative_native_loadstore_tests() {
-    run_negative_native_loadstore_test(
+    run_negative_native_loadstore_test::<1>(
         STOREW,
         NativeLoadStorePrankValues {
             data_write_pointer: Some(F::ZERO),
@@ -190,7 +213,7 @@ fn negative_native_loadstore_tests() {
         VerificationError::OodEvaluationMismatch,
     );
 
-    run_negative_native_loadstore_test(
+    run_negative_native_loadstore_test::<1>(
         LOADW,
         NativeLoadStorePrankValues {
             data_write_pointer: Some(F::ZERO),
@@ -202,7 +225,7 @@ fn negative_native_loadstore_tests() {
 
 #[test]
 fn invalid_flags_native_loadstore_tests() {
-    run_negative_native_loadstore_test(
+    run_negative_native_loadstore_test::<1>(
         HINT_STOREW,
         NativeLoadStorePrankValues {
             opcode_flags: Some([false, false, false]),
@@ -211,7 +234,7 @@ fn invalid_flags_native_loadstore_tests() {
         VerificationError::ChallengePhaseError,
     );
 
-    run_negative_native_loadstore_test(
+    run_negative_native_loadstore_test::<1>(
         LOADW,
         NativeLoadStorePrankValues {
             opcode_flags: Some([false, false, true]),
@@ -226,7 +249,7 @@ fn invalid_data_native_loadstore_tests() {
     run_negative_native_loadstore_test(
         LOADW,
         NativeLoadStorePrankValues {
-            data: Some([F::ZERO; NUM_CELLS]),
+            data: Some([F::ZERO; 4]),
             ..Default::default()
         },
         VerificationError::ChallengePhaseError,

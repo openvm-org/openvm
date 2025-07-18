@@ -1,16 +1,23 @@
-use openvm_algebra_circuit::*;
-use openvm_circuit::arch::{InitFileGenerator, SystemConfig};
+use std::result::Result;
+
+use openvm_algebra_circuit::{
+    Fp2Extension, Fp2ExtensionExecutor, ModularExtension, ModularExtensionExecutor,
+};
+use openvm_circuit::{
+    arch::{InitFileGenerator, SystemConfig},
+    system::SystemExecutor,
+};
 use openvm_circuit_derive::VmConfig;
-use openvm_ecc_circuit::*;
-use openvm_rv32im_circuit::*;
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_ecc_circuit::{WeierstrassExtension, WeierstrassExtensionExecutor};
+use openvm_rv32im_circuit::{Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor};
+use openvm_stark_backend::{config::StarkGenericConfig, engine::StarkEngine, p3_field::Field};
 use serde::{Deserialize, Serialize};
 
 use super::*;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32PairingConfig {
-    #[system]
+    #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
     pub base: Rv32I,
@@ -24,7 +31,7 @@ pub struct Rv32PairingConfig {
     pub fp2: Fp2Extension,
     #[extension]
     pub weierstrass: WeierstrassExtension,
-    #[extension]
+    #[extension(generics = true)]
     pub pairing: PairingExtension,
 }
 

@@ -31,7 +31,9 @@ mod bn254 {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_stark_sdk::{openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear};
+    use openvm_stark_sdk::{
+        config::FriParameters, openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear,
+    };
     use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
     use rand::SeedableRng;
@@ -394,7 +396,14 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
         // Don't run debugger because it's slow
-        air_test_impl(get_testing_config(), openvm_exe, vec![io_all], 1, false);
+        air_test_impl(
+            FriParameters::new_for_testing(1),
+            get_testing_config(),
+            openvm_exe,
+            vec![io_all],
+            1,
+            false,
+        )?;
         Ok(())
     }
 
@@ -490,7 +499,9 @@ mod bls12_381 {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_stark_sdk::{openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear};
+    use openvm_stark_sdk::{
+        config::FriParameters, openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear,
+    };
     use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
     use rand::SeedableRng;
@@ -865,7 +876,14 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
         // Don't run debugger because it's slow
-        air_test_impl(get_testing_config(), openvm_exe, vec![io_all], 1, false);
+        air_test_impl(
+            FriParameters::new_for_testing(1),
+            get_testing_config(),
+            openvm_exe,
+            vec![io_all],
+            1,
+            false,
+        )?;
         Ok(())
     }
 

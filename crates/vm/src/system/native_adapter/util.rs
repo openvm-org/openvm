@@ -95,7 +95,7 @@ pub fn memory_write_native_from_state<Ctx, F, const N: usize>(
 /// access.
 #[inline(always)]
 pub fn timed_read_native<F, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     ptr: u32,
 ) -> (u32, [F; BLOCK_SIZE])
 where
@@ -108,7 +108,7 @@ where
 
 #[inline(always)]
 pub fn timed_write_native<F, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     ptr: u32,
     vals: [F; BLOCK_SIZE],
 ) -> (u32, [F; BLOCK_SIZE])
@@ -123,7 +123,7 @@ where
 /// Reads register value at `ptr` from memory and records the previous timestamp.
 #[inline(always)]
 pub fn tracing_read_native<F, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     ptr: u32,
     prev_timestamp: &mut u32,
 ) -> [F; BLOCK_SIZE]
@@ -138,7 +138,7 @@ where
 /// Writes `ptr, vals` into memory and records the previous timestamp and data.
 #[inline(always)]
 pub fn tracing_write_native<F, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     ptr: u32,
     vals: [F; BLOCK_SIZE],
     prev_timestamp: &mut u32,
@@ -154,7 +154,7 @@ pub fn tracing_write_native<F, const BLOCK_SIZE: usize>(
 /// Writes `ptr, vals` into memory and records the previous timestamp and data.
 #[inline(always)]
 pub fn tracing_write_native_inplace<F, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     ptr: u32,
     vals: [F; BLOCK_SIZE],
     cols: &mut MemoryWriteAuxCols<F, BLOCK_SIZE>,
@@ -170,7 +170,7 @@ pub fn tracing_write_native_inplace<F, const BLOCK_SIZE: usize>(
 /// If the read is an immediate, the previous timestamp will be set to `u32::MAX`.
 #[inline(always)]
 pub fn tracing_read_or_imm_native<F>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     addr_space: u32,
     ptr_or_imm: F,
     prev_timestamp: &mut u32,

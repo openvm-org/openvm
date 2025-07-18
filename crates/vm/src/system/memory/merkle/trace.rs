@@ -4,11 +4,12 @@ use std::{
 };
 
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    p3_field::{FieldAlgebra, PrimeField32},
+    config::{Domain, StarkGenericConfig, Val},
+    p3_commit::PolynomialSpace,
+    p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
-    prover::types::AirProofInput,
-    AirRef, Chip, ChipUsageGetter,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
+    ChipUsageGetter,
 };
 use tracing::instrument;
 
@@ -31,7 +32,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
         &mut self,
         initial_memory: &MemoryImage,
         final_memory: &Equipartition<F, CHUNK>,
-        hasher: &mut impl HasherChip<CHUNK, F>,
+        hasher: &impl HasherChip<CHUNK, F>,
     ) {
         assert!(self.final_state.is_none(), "Merkle chip already finalized");
         let mut tree = MerkleTree::from_memory(initial_memory, &self.air.memory_dimensions, hasher);
@@ -40,24 +41,26 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     }
 }
 
-impl<const CHUNK: usize, SC: StarkGenericConfig> Chip<SC> for MemoryMerkleChip<CHUNK, Val<SC>>
+impl<const CHUNK: usize, F> MemoryMerkleChip<CHUNK, F>
 where
-    Val<SC>: PrimeField32,
+    F: PrimeField32,
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+    // TODO: switch to using records
+    pub fn generate_proving_ctx<SC>(&mut self) -> AirProvingContext<CpuBackend<SC>>
+    where
+        SC: StarkGenericConfig,
+        Domain<SC>: PolynomialSpace<Val = F>,
+    {
         assert!(
             self.final_state.is_some(),
             "Merkle chip must finalize before trace generation"
         );
+        // TODO[jpw]: figure this out later, probably memory just shouldn't use Chip trait
         let FinalState {
             mut rows,
             init_root,
             final_root,
-        } = self.final_state.unwrap();
+        } = self.final_state.take().unwrap();
         // important that this sort be stable,
         // because we need the initial root to be first and the final root to be second
         rows.reverse();
@@ -79,9 +82,9 @@ where
             *trace_row.borrow_mut() = row;
         }
 
-        let trace = RowMajorMatrix::new(trace, width);
+        let trace = Arc::new(RowMajorMatrix::new(trace, width));
         let pvs = init_root.into_iter().chain(final_root).collect();
-        AirProofInput::simple(trace, pvs)
+        AirProvingContext::simple(trace, pvs)
     }
 }
 impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<CHUNK, F> {
@@ -100,7 +103,7 @@ impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<C
 }
 
 pub trait SerialReceiver<T> {
-    fn receive(&mut self, msg: T);
+    fn receive(&self, msg: T);
 }
 
 impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> SerialReceiver<&'a [F]>
@@ -108,7 +111,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> SerialReceiver<&'a [F]>
 {
     /// Receives a permutation preimage, pads with zeros to the permutation width, and records.
     /// The permutation preimage must have length at most the permutation width (panics otherwise).
-    fn receive(&mut self, perm_preimage: &'a [F]) {
+    fn receive(&self, perm_preimage: &'a [F]) {
         assert!(perm_preimage.len() <= PERIPHERY_POSEIDON2_WIDTH);
         let mut state = [F::ZERO; PERIPHERY_POSEIDON2_WIDTH];
         state[..perm_preimage.len()].copy_from_slice(perm_preimage);
@@ -118,7 +121,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> SerialReceiver<&'a [F]>
 }
 
 impl<'a, F: PrimeField32> SerialReceiver<&'a [F]> for Poseidon2PeripheryChip<F> {
-    fn receive(&mut self, perm_preimage: &'a [F]) {
+    fn receive(&self, perm_preimage: &'a [F]) {
         match self {
             Poseidon2PeripheryChip::Register0(chip) => chip.receive(perm_preimage),
             Poseidon2PeripheryChip::Register1(chip) => chip.receive(perm_preimage),

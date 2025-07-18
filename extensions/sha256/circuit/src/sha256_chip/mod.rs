@@ -3,12 +3,16 @@
 
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::arch::{
-    execution_mode::E1ExecutionCtx, E2PreCompute, MatrixRecordArena, NewVmChipWrapper, Result,
-    StepExecutorE1, StepExecutorE2,
+use openvm_circuit::{
+    arch::{
+        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2, VmChipWrapper,
+        VmSegmentState,
+    },
+    system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip, encoder::Encoder,
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip, encoder::Encoder, AlignedBytesBorrow,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -17,7 +21,7 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_sha256_air::{
-    get_sha256_num_blocks, Sha256StepHelper, SHA256_BLOCK_BITS, SHA256_ROWS_PER_BLOCK,
+    get_sha256_num_blocks, Sha256FillerHelper, SHA256_BLOCK_BITS, SHA256_ROWS_PER_BLOCK,
 };
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -29,10 +33,6 @@ mod trace;
 
 pub use air::*;
 pub use columns::*;
-use openvm_circuit::arch::{
-    execution_mode::E2ExecutionCtx, ExecuteFunc, ExecutionError::InvalidInstruction, VmSegmentState,
-};
-use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 
 #[cfg(test)]
 mod tests;
@@ -51,27 +51,30 @@ pub const SHA256_NUM_READ_ROWS: usize = SHA256_BLOCK_CELLS / SHA256_READ_SIZE;
 /// Maximum message length that this chip supports in bytes
 pub const SHA256_MAX_MESSAGE_LEN: usize = 1 << 29;
 
-pub type Sha256VmChip<F> = NewVmChipWrapper<F, Sha256VmAir, Sha256VmStep, MatrixRecordArena<F>>;
+pub type Sha256VmChip<F> = VmChipWrapper<F, Sha256VmFiller>;
 
+#[derive(derive_new::new, Clone)]
 pub struct Sha256VmStep {
-    pub inner: Sha256StepHelper,
-    pub padding_encoder: Encoder,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pub offset: usize,
     pub pointer_max_bits: usize,
 }
 
-impl Sha256VmStep {
+pub struct Sha256VmFiller {
+    pub inner: Sha256FillerHelper,
+    pub padding_encoder: Encoder,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    pub pointer_max_bits: usize,
+}
+
+impl Sha256VmFiller {
     pub fn new(
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-        offset: usize,
         pointer_max_bits: usize,
     ) -> Self {
         Self {
-            inner: Sha256StepHelper::new(),
+            inner: Sha256FillerHelper::new(),
             padding_encoder: Encoder::new(PaddingFlags::COUNT, 2, false),
             bitwise_lookup_chip,
-            offset,
             pointer_max_bits,
         }
     }
@@ -85,7 +88,7 @@ struct ShaPreCompute {
     c: u8,
 }
 
-impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
+impl<F: PrimeField32> InsExecutorE1<F> for Sha256VmStep {
     fn pre_compute_size(&self) -> usize {
         size_of::<ShaPreCompute>()
     }
@@ -95,7 +98,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E1ExecutionCtx,
     {
@@ -104,7 +107,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
         Ok(execute_e1_impl::<_, _>)
     }
 }
-impl<F: PrimeField32> StepExecutorE2<F> for Sha256VmStep {
+impl<F: PrimeField32> InsExecutorE2<F> for Sha256VmStep {
     fn e2_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<ShaPreCompute>>()
     }
@@ -115,7 +118,7 @@ impl<F: PrimeField32> StepExecutorE2<F> for Sha256VmStep {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -128,7 +131,7 @@ impl<F: PrimeField32> StepExecutorE2<F> for Sha256VmStep {
 
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_E1: bool>(
     pre_compute: &ShaPreCompute,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) -> u32 {
     let dst = vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32);
     let src = vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
@@ -170,14 +173,14 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_E1: bo
 
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &ShaPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, true>(pre_compute, vm_state);
 }
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<ShaPreCompute> = pre_compute.borrow();
     let height = execute_e12_impl::<F, CTX, false>(&pre_compute.data, vm_state);
@@ -192,7 +195,7 @@ impl Sha256VmStep {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut ShaPreCompute,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let Instruction {
             opcode,
             a,
@@ -204,7 +207,7 @@ impl Sha256VmStep {
         } = inst;
         let e_u32 = e.as_canonical_u32();
         if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
-            return Err(InvalidInstruction(pc));
+            return Err(ExecutionError::InvalidInstruction(pc));
         }
         *data = ShaPreCompute {
             a: a.as_canonical_u32() as u8,

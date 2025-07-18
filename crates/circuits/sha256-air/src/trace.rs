@@ -23,11 +23,11 @@ use crate::{
 
 /// A helper struct for the SHA256 trace generation.
 /// Also, separates the inner AIR from the trace generation.
-pub struct Sha256StepHelper {
+pub struct Sha256FillerHelper {
     pub row_idx_encoder: Encoder,
 }
 
-impl Default for Sha256StepHelper {
+impl Default for Sha256FillerHelper {
     fn default() -> Self {
         Self::new()
     }
@@ -37,7 +37,7 @@ impl Default for Sha256StepHelper {
 /// The first pass should do `get_block_trace` for every block and generate the invalid rows through
 /// `get_default_row` The second pass should go through all the blocks and call
 /// `generate_missing_cells`
-impl Sha256StepHelper {
+impl Sha256FillerHelper {
     pub fn new() -> Self {
         Self {
             row_idx_encoder: Encoder::new(18, 2, false),
@@ -334,7 +334,7 @@ impl Sha256StepHelper {
     /// Fills the `cols` as a padding row
     /// Note: we still need to correctly fill in the hash values, carries and intermeds
     pub fn generate_default_row<F: PrimeField32>(
-        self: &Sha256StepHelper,
+        self: &Sha256FillerHelper,
         cols: &mut Sha256RoundCols<F>,
     ) {
         cols.flags.row_idx =
@@ -474,7 +474,7 @@ impl Sha256StepHelper {
 /// Generates a trace for a standalone SHA256 computation (currently only used for testing)
 /// `records` consists of pairs of `(input_block, is_last_block)`.
 pub fn generate_trace<F: PrimeField32>(
-    step: &Sha256StepHelper,
+    step: &Sha256FillerHelper,
     bitwise_lookup_chip: &BitwiseOperationLookupChip<8>,
     width: usize,
     records: Vec<([u8; SHA256_BLOCK_U8S], bool)>,
@@ -508,7 +508,7 @@ pub fn generate_trace<F: PrimeField32>(
             prev_hash = SHA256_H;
         } else {
             local_block_idx += 1;
-            prev_hash = Sha256StepHelper::get_block_hash(&prev_hash, input);
+            prev_hash = Sha256FillerHelper::get_block_hash(&prev_hash, input);
         }
     }
     // first pass

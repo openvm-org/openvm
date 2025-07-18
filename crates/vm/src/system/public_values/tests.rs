@@ -5,7 +5,7 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilderWithPublicValues},
     p3_field::{Field, FieldAlgebra},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProofInput,
+    prover::types::AirProvingContext,
     rap::PartitionedBaseAir,
     utils::disable_debug_builder,
     verifier::VerificationError,
@@ -51,8 +51,11 @@ fn public_values_happy_path_1() {
     let trace = RowMajorMatrix::new_row(cols.flatten());
     let pvs = to_field_vec(vec![0, 0, 12]);
 
-    BabyBearPoseidon2Engine::run_test_fast(vec![air], vec![AirProofInput::simple(trace, pvs)])
-        .expect("Verification failed");
+    BabyBearPoseidon2Engine::run_test_fast(
+        vec![air],
+        vec![AirProvingContext::simple(Arc::new(trace), pvs)],
+    )
+    .expect("Verification failed");
 }
 
 #[test]
@@ -70,8 +73,11 @@ fn public_values_neg_pv_not_match() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(vec![air], vec![AirProofInput::simple(trace, pvs)])
-            .err(),
+        BabyBearPoseidon2Engine::run_test_fast(
+            vec![air],
+            vec![AirProvingContext::simple(Arc::new(trace), pvs)]
+        )
+        .err(),
         Some(VerificationError::OodEvaluationMismatch)
     );
 }
@@ -91,8 +97,11 @@ fn public_values_neg_index_out_of_bound() {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(vec![air], vec![AirProofInput::simple(trace, pvs)])
-            .err(),
+        BabyBearPoseidon2Engine::run_test_fast(
+            vec![air],
+            vec![AirProvingContext::simple(Arc::new(trace), pvs)]
+        )
+        .err(),
         Some(VerificationError::OodEvaluationMismatch)
     );
 }
@@ -129,8 +138,11 @@ fn public_values_neg_double_publish_impl(actual_pv: u32) {
 
     disable_debug_builder();
     assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(vec![air], vec![AirProofInput::simple(trace, pvs)])
-            .err(),
+        BabyBearPoseidon2Engine::run_test_fast(
+            vec![air],
+            vec![AirProvingContext::simple(Arc::new(trace), pvs)]
+        )
+        .err(),
         Some(VerificationError::OodEvaluationMismatch)
     );
 }

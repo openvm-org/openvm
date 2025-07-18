@@ -3,7 +3,7 @@ use crate::{
     system::memory::{dimensions::MemoryDimensions, CHUNK},
 };
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct BitSet {
     words: Box<[u64]>,
 }
@@ -33,7 +33,7 @@ impl BitSet {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MemoryCtx<const PAGE_BITS: usize> {
     pub page_indices: BitSet,
     memory_dimensions: MemoryDimensions,

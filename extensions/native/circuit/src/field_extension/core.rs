@@ -9,12 +9,14 @@ use openvm_circuit::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc,
-        ExecutionError::InvalidInstruction,
-        MinimalInstruction, RecordArena, Result, StepExecutorE1, StepExecutorE2, TraceFiller,
-        TraceStep, VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
+        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, InsExecutorE1,
+        InsExecutorE2, InstructionExecutor, MinimalInstruction, RecordArena, TraceFiller,
+        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
     },
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -150,19 +152,26 @@ pub struct FieldExtensionRecord<F> {
     pub local_opcode: u8,
 }
 
-#[derive(derive_new::new)]
+#[derive(derive_new::new, Clone, Copy)]
 pub struct FieldExtensionCoreStep<A> {
     adapter: A,
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for FieldExtensionCoreStep<A>
+#[derive(derive_new::new)]
+pub struct FieldExtensionCoreFiller<A> {
+    adapter: A,
+}
+
+impl<F, A, RA> InstructionExecutor<F, RA> for FieldExtensionCoreStep<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, CTX, ReadData = [[F; EXT_DEG]; 2], WriteData = [F; EXT_DEG]>,
+    A: 'static + AdapterTraceStep<F, ReadData = [[F; EXT_DEG]; 2], WriteData = [F; EXT_DEG]>,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut FieldExtensionRecord<F>),
+    >,
 {
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut FieldExtensionRecord<F>);
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -170,18 +179,14 @@ where
         )
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<(), ExecutionError> {
         let &Instruction { opcode, .. } = instruction;
 
-        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -207,10 +212,10 @@ where
     }
 }
 
-impl<F, CTX, A> TraceFiller<F, CTX> for FieldExtensionCoreStep<A>
+impl<F, A> TraceFiller<F> for FieldExtensionCoreFiller<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
@@ -253,7 +258,7 @@ impl<A> FieldExtensionCoreStep<A> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut FieldExtensionPreCompute,
-    ) -> Result<u8> {
+    ) -> Result<u8, ExecutionError> {
         let &Instruction {
             opcode,
             a,
@@ -275,10 +280,10 @@ impl<A> FieldExtensionCoreStep<A> {
         let e = e.as_canonical_u32();
 
         if d != AS::Native as u32 {
-            return Err(InvalidInstruction(pc));
+            return Err(ExecutionError::InvalidInstruction(pc));
         }
         if e != AS::Native as u32 {
-            return Err(InvalidInstruction(pc));
+            return Err(ExecutionError::InvalidInstruction(pc));
         }
 
         *data = FieldExtensionPreCompute { a, b, c };
@@ -287,7 +292,7 @@ impl<A> FieldExtensionCoreStep<A> {
     }
 }
 
-impl<F, A> StepExecutorE1<F> for FieldExtensionCoreStep<A>
+impl<F, A> InsExecutorE1<F> for FieldExtensionCoreStep<A>
 where
     F: PrimeField32,
 {
@@ -302,7 +307,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let pre_compute: &mut FieldExtensionPreCompute = data.borrow_mut();
 
         let opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
@@ -319,7 +324,7 @@ where
     }
 }
 
-impl<F, A> StepExecutorE2<F> for FieldExtensionCoreStep<A>
+impl<F, A> InsExecutorE2<F> for FieldExtensionCoreStep<A>
 where
     F: PrimeField32,
 {
@@ -335,7 +340,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let pre_compute: &mut E2PreCompute<FieldExtensionPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 
@@ -355,7 +360,7 @@ where
 
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const OPCODE: u8>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FieldExtensionPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, OPCODE>(pre_compute, vm_state);
@@ -363,7 +368,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const OPCODE: u8
 
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const OPCODE: u8>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FieldExtensionPreCompute> = pre_compute.borrow();
     vm_state
@@ -375,7 +380,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const OPCODE: u8
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const OPCODE: u8>(
     pre_compute: &FieldExtensionPreCompute,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let y: [F; EXT_DEG] = vm_state.vm_read::<F, EXT_DEG>(AS::Native as u32, pre_compute.b);
     let z: [F; EXT_DEG] = vm_state.vm_read::<F, EXT_DEG>(AS::Native as u32, pre_compute.c);
