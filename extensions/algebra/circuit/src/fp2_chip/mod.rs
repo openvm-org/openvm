@@ -10,15 +10,15 @@ pub use addsub::*;
 mod muldiv;
 pub use muldiv::*;
 
-pub(crate) type Fp2Air<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper<
+pub type Fp2Air<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper<
     Rv32VecHeapAdapterAir<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
     FieldExpressionCoreAir,
 >;
 
-pub(crate) type Fp2Step<const BLOCKS: usize, const BLOCK_SIZE: usize> =
+pub type Fp2Step<const BLOCKS: usize, const BLOCK_SIZE: usize> =
     FieldExprVecHeapStep<2, BLOCKS, BLOCK_SIZE>;
 
-pub(crate) type Fp2Chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> = VmChipWrapper<
+pub type Fp2Chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> = VmChipWrapper<
     F,
     FieldExpressionFiller<Rv32VecHeapAdapterFiller<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
 >;
