@@ -3,7 +3,10 @@ use std::sync::Arc;
 use derivative::Derivative;
 // use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
-    arch::{AirInventoryError, SystemConfig, VirtualMachine, VmCircuitConfig, VmConfig},
+    arch::{
+        AirInventoryError, SystemConfig, VirtualMachine, VirtualMachineError, VmCircuitConfig,
+        VmConfig,
+    },
     system::{memory::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
 };
 use openvm_continuations::verifier::{
@@ -45,13 +48,13 @@ use {
 use crate::{
     commit::babybear_digest_to_bn254,
     config::{AggStarkConfig, AppConfig},
-    keygen::perm::AirIdPermutation,
+    keygen::{dummy::dummy_internal_proof_riscv_app_vm, perm::AirIdPermutation},
     prover::vm::types::VmProvingKey,
     NonRootCommittedExe, RootSC, F, SC,
 };
 
 pub mod asm;
-// pub(crate) mod dummy;
+pub(crate) mod dummy;
 pub mod perm;
 #[cfg(feature = "evm-prove")]
 pub mod static_verifier;
@@ -254,29 +257,29 @@ fn check_recursive_verifier_size<SC: StarkGenericConfig>(
     }
 }
 
-/*
 impl AggStarkProvingKey {
     pub fn keygen(config: AggStarkConfig) -> Self {
         tracing::info_span!("agg_stark_keygen", group = "agg_stark_keygen")
             .in_scope(|| Self::dummy_proof_and_keygen(config).0)
     }
 
-    pub fn dummy_proof_and_keygen(config: AggStarkConfig) -> (Self, Proof<SC>) {
+    pub fn dummy_proof_and_keygen(
+        config: AggStarkConfig,
+    ) -> Result<(Self, Proof<SC>), VirtualMachineError> {
         let leaf_vm_config = config.leaf_vm_config();
         let internal_vm_config = config.internal_vm_config();
         let root_vm_config = config.root_verifier_vm_config();
 
         let leaf_engine = BabyBearPoseidon2Engine::new(config.leaf_fri_params);
-        let leaf_vm_pk = Arc::new({
-            let vm = VirtualMachine::new(leaf_engine, leaf_vm_config.clone());
-            let vm_pk = vm.keygen();
+        let leaf_vm_pk = {
+            let (vm, vm_pk) = VirtualMachine::new_with_keygen(leaf_engine, leaf_vm_config.clone())?;
             assert!(vm_pk.max_constraint_degree <= config.leaf_fri_params.max_constraint_degree());
-            VmProvingKey {
+            Arc::new(VmProvingKey {
                 fri_params: config.leaf_fri_params,
                 vm_config: leaf_vm_config,
                 vm_pk,
-            }
-        });
+            })
+        };
         let leaf_vm_vk = leaf_vm_pk.vm_pk.get_vk();
         check_recursive_verifier_size(
             &leaf_vm_vk,
@@ -285,17 +288,13 @@ impl AggStarkProvingKey {
         );
 
         let internal_engine = BabyBearPoseidon2Engine::new(config.internal_fri_params);
-        let internal_vm = VirtualMachine::new(internal_engine, internal_vm_config.clone());
-        let internal_vm_pk = Arc::new({
-            let vm_pk = internal_vm.keygen();
-            assert!(
-                vm_pk.max_constraint_degree <= config.internal_fri_params.max_constraint_degree()
-            );
-            VmProvingKey {
-                fri_params: config.internal_fri_params,
-                vm_config: internal_vm_config,
-                vm_pk,
-            }
+        let (internal_vm, vm_pk) =
+            VirtualMachine::new_with_keygen(internal_engine, internal_vm_config.clone())?;
+        assert!(vm_pk.max_constraint_degree <= config.internal_fri_params.max_constraint_degree());
+        let internal_vm_pk = Arc::new(VmProvingKey {
+            fri_params: config.internal_fri_params,
+            vm_config: internal_vm_config,
+            vm_pk,
         });
         let internal_vm_vk = internal_vm_pk.vm_pk.get_vk();
         check_recursive_verifier_size(
@@ -310,10 +309,7 @@ impl AggStarkProvingKey {
             compiler_options: config.compiler_options,
         }
         .build_program(&leaf_vm_vk, &internal_vm_vk);
-        let internal_committed_exe = Arc::new(VmCommittedExe::<SC>::commit(
-            internal_program.into(),
-            internal_vm.engine.config.pcs(),
-        ));
+        let internal_committed_exe = Arc::new(internal_vm.commit_exe(internal_program));
 
         let internal_proof = dummy_internal_proof_riscv_app_vm(
             leaf_vm_pk.clone(),
@@ -333,13 +329,9 @@ impl AggStarkProvingKey {
                 compiler_options: config.compiler_options,
             }
             .build_program(&leaf_vm_vk, &internal_vm_vk);
-            let root_committed_exe = Arc::new(VmCommittedExe::<RootSC>::commit(
-                root_program.into(),
-                root_engine.config.pcs(),
-            ));
+            let (vm, vm_pk) = VirtualMachine::new_with_keygen(root_engine, root_vm_config.clone())?;
+            let root_committed_exe = Arc::new(vm.commit_exe(root_program));
 
-            let vm = VirtualMachine::new(root_engine, root_vm_config.clone());
-            let mut vm_pk = vm.keygen();
             assert!(vm_pk.max_constraint_degree <= config.root_fri_params.max_constraint_degree());
 
             let vm_vk = vm_pk.get_vk();
@@ -387,7 +379,6 @@ impl AggStarkProvingKey {
             - (2 * DIGEST_SIZE)
     }
 }
-*/
 
 /// Proving key for the root verifier.
 /// Properties:
@@ -405,14 +396,10 @@ pub struct RootVerifierProvingKey {
     pub root_committed_exe: Arc<VmCommittedExe<RootSC>>,
     /// The constant trace heights, ordered by AIR ID.
     pub air_heights: Vec<usize>,
-    // TODO
-    // The constant trace heights in a semantic way for VM.
-    // pub vm_heights: VmComplexTraceHeights,
 }
 
-/*
 impl RootVerifierProvingKey {
-    pub fn air_id_permutation(&self) -> AirIdPermutation {
+    fn air_id_permutation(&self) -> AirIdPermutation {
         AirIdPermutation::compute(&self.air_heights)
     }
 }
@@ -459,7 +446,6 @@ impl AggProvingKey {
         }
     }
 }
-*/
 
 pub fn leaf_keygen(
     fri_params: FriParameters,
