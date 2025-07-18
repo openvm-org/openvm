@@ -29,6 +29,8 @@ mod trace;
 
 pub use air::*;
 pub use columns::*;
+pub use trace::*;
+
 use openvm_circuit::arch::{
     execution_mode::E2ExecutionCtx, ExecuteFunc, ExecutionError::InvalidInstruction, VmSegmentState,
 };
