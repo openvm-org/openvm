@@ -31,33 +31,33 @@ pub fn get_field_type(modulus: &BigUint) -> Option<FieldType> {
         return Some(FieldType::K256Coordinate);
     }
 
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secq256k1::Fp>() {
-        return Some(FieldType::K256Scalar);
-    }
+    // if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secq256k1::Fp>() {
+    //     return Some(FieldType::K256Scalar);
+    // }
 
     if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secp256r1::Fp>() {
         return Some(FieldType::P256Coordinate);
     }
 
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secp256r1::Fq>() {
-        return Some(FieldType::P256Scalar);
-    }
+    // if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secp256r1::Fq>() {
+    //     return Some(FieldType::P256Scalar);
+    // }
 
     if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bn256::Fq>() {
         return Some(FieldType::BN254Coordinate);
     }
 
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bn256::Fr>() {
-        return Some(FieldType::BN254Scalar);
-    }
+    // if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bn256::Fr>() {
+    //     return Some(FieldType::BN254Scalar);
+    // }
 
     if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bls12_381::Fq>() {
         return Some(FieldType::BLS12_381Coordinate);
     }
 
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bls12_381::Fr>() {
-        return Some(FieldType::BLS12_381Scalar);
-    }
+    // if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bls12_381::Fr>() {
+    //     return Some(FieldType::BLS12_381Scalar);
+    // }
 
     None
 }
