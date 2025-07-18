@@ -14,7 +14,7 @@ mod bn254 {
     use openvm_circuit::utils::{
         air_test, air_test_impl, air_test_with_min_segments, test_system_config_with_continuations,
     };
-    use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension};
+    use openvm_ecc_circuit::{CurveConfig, EccExtension, Rv32EccConfig, SwCurveCoeffs};
     use openvm_ecc_guest::{
         algebra::{field::FieldExtension, IntMod},
         AffinePoint,
@@ -53,14 +53,14 @@ mod bn254 {
             io: Default::default(),
             modular: ModularExtension::new(primes.to_vec()),
             fp2: Fp2Extension::new(primes_with_names),
-            weierstrass: WeierstrassExtension::new(vec![]),
+            ecc: EccExtension::new(vec![], vec![]),
             pairing: PairingExtension::new(vec![PairingCurve::Bn254]),
         }
     }
 
     #[cfg(test)]
-    fn test_rv32weierstrass_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
-        let mut config = Rv32WeierstrassConfig::new(curves);
+    fn test_rv32ecc_config(sw_curves: Vec<CurveConfig<SwCurveCoeffs>>) -> Rv32EccConfig {
+        let mut config = Rv32EccConfig::new(sw_curves, vec![]);
         config.system = test_system_config_with_continuations();
         config
     }
@@ -68,7 +68,7 @@ mod bn254 {
     #[test]
     fn test_bn_ec() -> Result<()> {
         let curve = PairingCurve::Bn254.curve_config();
-        let config = test_rv32weierstrass_config(vec![curve]);
+        let config = test_rv32ecc_config(vec![curve]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!("tests/programs"),
             "bn_ec",
@@ -471,7 +471,7 @@ mod bls12_381 {
             test_system_config_with_continuations,
         },
     };
-    use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension};
+    use openvm_ecc_circuit::{CurveConfig, EccExtension, Rv32EccConfig, SwCurveCoeffs};
     use openvm_ecc_guest::{
         algebra::{field::FieldExtension, IntMod},
         AffinePoint,
@@ -512,14 +512,14 @@ mod bls12_381 {
             io: Default::default(),
             modular: ModularExtension::new(primes.to_vec()),
             fp2: Fp2Extension::new(primes_with_names),
-            weierstrass: WeierstrassExtension::new(vec![]),
+            ecc: EccExtension::new(vec![], vec![]),
             pairing: PairingExtension::new(vec![PairingCurve::Bls12_381]),
         }
     }
 
     #[cfg(test)]
-    fn test_rv32weierstrass_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
-        let mut config = Rv32WeierstrassConfig::new(curves);
+    fn test_rv32ecc_config(sw_curves: Vec<CurveConfig<SwCurveCoeffs>>) -> Rv32EccConfig {
+        let mut config = Rv32EccConfig::new(sw_curves, vec![]);
         config.system = test_system_config_with_continuations();
         config
     }
@@ -530,10 +530,12 @@ mod bls12_381 {
             struct_name: BLS12_381_ECC_STRUCT_NAME.to_string(),
             modulus: BLS12_381_MODULUS.clone(),
             scalar: BLS12_381_ORDER.clone(),
-            a: BigUint::ZERO,
-            b: BigUint::from_u8(4).unwrap(),
+            coeffs: SwCurveCoeffs {
+                a: BigUint::ZERO,
+                b: BigUint::from_u8(4).unwrap(),
+            },
         };
-        let config = test_rv32weierstrass_config(vec![curve]);
+        let config = test_rv32ecc_config(vec![curve]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!("tests/programs"),
             "bls_ec",

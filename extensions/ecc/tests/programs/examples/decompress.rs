@@ -7,9 +7,11 @@ extern crate alloc;
 use hex_literal::hex;
 use openvm::io::read_vec;
 use openvm_ecc_guest::{
-    algebra::IntMod,
-    weierstrass::{FromCompressed, WeierstrassPoint},
-    Group,
+    algebra::{Field, IntMod},
+    ed25519::{Ed25519Coord, Ed25519Point},
+    edwards::TwistedEdwardsPoint,
+    weierstrass::WeierstrassPoint,
+    FromCompressed, Group,
 };
 use openvm_k256::{Secp256k1Coord, Secp256k1Point};
 
@@ -22,7 +24,6 @@ openvm_algebra_moduli_macros::moduli_declare! {
     Fp1mod4 { modulus = "0xffffffffffffffffffffffffffffffff000000000000000000000001" },
 }
 
-// const CURVE_B_5MOD8: Fp5mod8 = Fp5mod8::from_const_u8(3);
 const CURVE_B_5MOD8: Fp5mod8 = Fp5mod8::from_const_u8(6);
 
 const CURVE_A_1MOD4: Fp1mod4 = Fp1mod4::from_const_bytes(hex!(
@@ -44,7 +45,7 @@ openvm_ecc_sw_macros::sw_declare! {
     },
 }
 
-openvm::init!("openvm_init_decompress_k256.rs");
+openvm::init!("openvm_init_decompress_k256_ed25519.rs");
 
 // test decompression under an honest host
 pub fn main() {
@@ -53,35 +54,43 @@ pub fn main() {
     let y = Secp256k1Coord::from_le_bytes_unchecked(&bytes[32..64]);
     let rec_id = y.as_le_bytes()[0] & 1;
 
-    test_possible_decompression::<Secp256k1Point>(&x, &y, rec_id);
+    test_possible_sw_decompression::<Secp256k1Point>(&x, &y, rec_id);
     // x = 5 is not on the x-coordinate of any point on the Secp256k1 curve
-    test_impossible_decompression::<Secp256k1Point>(&Secp256k1Coord::from_u8(5), rec_id);
+    test_impossible_sw_decompression::<Secp256k1Point>(&Secp256k1Coord::from_u8(5), rec_id);
 
     let x = Fp5mod8::from_le_bytes_unchecked(&bytes[64..96]);
     let y = Fp5mod8::from_le_bytes_unchecked(&bytes[96..128]);
     let rec_id = y.as_le_bytes()[0] & 1;
 
-    test_possible_decompression::<CurvePoint5mod8>(&x, &y, rec_id);
+    test_possible_sw_decompression::<CurvePoint5mod8>(&x, &y, rec_id);
     // x = 0 is not on the x-coordinate of any point on the CurvePoint5mod8 curve
-    test_impossible_decompression::<CurvePoint5mod8>(&Fp5mod8::ZERO, rec_id);
+    test_impossible_sw_decompression::<CurvePoint5mod8>(&<Fp5mod8 as Field>::ZERO, rec_id);
     // this x is such that y^2 = x^3 + 6 = 0
     // we want to test the case where y^2 = 0 and rec_id = 1
     let x = Fp5mod8::from_le_bytes_unchecked(&hex!(
         "d634a701c3b9b8cbf7797988be3953b442863b74d2d5c4d5f1a9de3c0c256d90"
     ));
-    test_possible_decompression::<CurvePoint5mod8>(&x, &Fp5mod8::ZERO, 0);
-    test_impossible_decompression::<CurvePoint5mod8>(&x, 1);
+    test_possible_sw_decompression::<CurvePoint5mod8>(&x, &<Fp5mod8 as Field>::ZERO, 0);
+    test_impossible_sw_decompression::<CurvePoint5mod8>(&x, 1);
 
     let x = Fp1mod4::from_le_bytes_unchecked(&bytes[128..160]);
     let y = Fp1mod4::from_le_bytes_unchecked(&bytes[160..192]);
     let rec_id = y.as_le_bytes()[0] & 1;
 
-    test_possible_decompression::<CurvePoint1mod4>(&x, &y, rec_id);
+    test_possible_sw_decompression::<CurvePoint1mod4>(&x, &y, rec_id);
     // x = 1 is not on the x-coordinate of any point on the CurvePoint1mod4 curve
-    test_impossible_decompression::<CurvePoint1mod4>(&Fp1mod4::from_u8(1), rec_id);
+    test_impossible_sw_decompression::<CurvePoint1mod4>(&Fp1mod4::from_u8(1), rec_id);
+
+    // ed25519
+    let x = Ed25519Coord::from_le_bytes_unchecked(&bytes[192..224]);
+    let y = Ed25519Coord::from_le_bytes_unchecked(&bytes[224..256]);
+    let rec_id = x.as_le_bytes()[0] & 1;
+    test_possible_te_decompression::<Ed25519Point>(&x, &y, rec_id);
+    // y = 2 is not on the y-coordinate of any point on the Ed25519 curve
+    test_impossible_te_decompression::<Ed25519Point>(&Ed25519Coord::from_u8(2), rec_id);
 }
 
-fn test_possible_decompression<P: WeierstrassPoint + FromCompressed<P::Coordinate>>(
+fn test_possible_sw_decompression<P: WeierstrassPoint + FromCompressed<P::Coordinate>>(
     x: &P::Coordinate,
     y: &P::Coordinate,
     rec_id: u8,
@@ -91,7 +100,25 @@ fn test_possible_decompression<P: WeierstrassPoint + FromCompressed<P::Coordinat
     assert_eq!(p.y(), y);
 }
 
-fn test_impossible_decompression<P: WeierstrassPoint + FromCompressed<P::Coordinate>>(
+fn test_possible_te_decompression<P: TwistedEdwardsPoint + FromCompressed<P::Coordinate>>(
+    x: &P::Coordinate,
+    y: &P::Coordinate,
+    rec_id: u8,
+) {
+    let p = P::decompress(y.clone(), &rec_id).unwrap();
+    assert_eq!(p.x(), x);
+    assert_eq!(p.y(), y);
+}
+
+fn test_impossible_sw_decompression<P: WeierstrassPoint + FromCompressed<P::Coordinate>>(
+    x: &P::Coordinate,
+    rec_id: u8,
+) {
+    let p = P::decompress(x.clone(), &rec_id);
+    assert!(p.is_none());
+}
+
+fn test_impossible_te_decompression<P: TwistedEdwardsPoint + FromCompressed<P::Coordinate>>(
     x: &P::Coordinate,
     rec_id: u8,
 ) {

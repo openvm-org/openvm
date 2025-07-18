@@ -22,9 +22,7 @@ use openvm_circuit::{
     },
     derive::VmConfig,
 };
-use openvm_ecc_circuit::{
-    WeierstrassExtension, WeierstrassExtensionExecutor, WeierstrassExtensionPeriphery,
-};
+use openvm_ecc_circuit::{EccExtension, EccExtensionExecutor, EccExtensionPeriphery};
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
@@ -90,7 +88,7 @@ pub struct ExecuteConfig {
     #[extension]
     pub fp2: Fp2Extension,
     #[extension]
-    pub weierstrass: WeierstrassExtension,
+    pub ecc: EccExtension,
     #[extension]
     pub pairing: PairingExtension,
 }
@@ -114,7 +112,7 @@ impl Default for ExecuteConfig {
                 BN254_COMPLEX_STRUCT_NAME.to_string(),
                 bn_config.modulus.clone(),
             )]),
-            weierstrass: WeierstrassExtension::new(vec![bn_config.clone()]),
+            ecc: EccExtension::new(vec![bn_config.clone()], vec![]),
             pairing: PairingExtension::new(vec![PairingCurve::Bn254]),
         }
     }
