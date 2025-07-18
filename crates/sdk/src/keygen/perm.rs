@@ -3,7 +3,8 @@ use std::cmp::Reverse;
 use openvm_circuit::arch::{CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID};
 use openvm_continuations::verifier::common::types::SpecialAirIds;
 
-pub struct AirIdPermutation {
+/// Permutation of the AIR IDs to order them by forced trace heights.
+pub(super) struct AirIdPermutation {
     pub perm: Vec<usize>,
 }
 

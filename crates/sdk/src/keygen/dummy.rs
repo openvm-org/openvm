@@ -25,6 +25,7 @@ use openvm_stark_backend::config::Val;
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
+        baby_bear_poseidon2_root::BabyBearPoseidon2RootEngine,
         fri_params::standard_fri_params_with_100_bits_conjectured_security, FriParameters,
     },
     engine::StarkFriEngine,
@@ -33,23 +34,22 @@ use openvm_stark_sdk::{
     },
 };
 
-use crate::{
-    prover::vm::{
-        local::VmLocalProver, types::VmProvingKey, ContinuationVmProver, SingleSegmentVmProver,
-    },
-    NonRootCommittedExe, F, SC,
-};
+use crate::{prover::vm::types::VmProvingKey, NonRootCommittedExe, F, SC};
 
+/// Given a dummy internal proof, which is the input to the root verifier circuit, we will run
+/// tracegen on the root verifier circuit to determine the trace heights. These trace heights will
+/// become the fixed trace heights that we **force** the root verifier circuit's trace matrices to
+/// have.
+///
 /// Returns:
 /// - trace heights ordered by AIR ID
 /// - internal ordering of trace heights.
 ///
 /// All trace heights are rounded to the next power of two (or 0 -> 0).
 pub(super) fn compute_root_proof_heights(
-    root_vm_config: NativeConfig,
-    root_exe: VmExe<F>,
+    root_vm: &VirtualMachine<BabyBearPoseidon2RootEngine, NativeConfig>,
+    root_committed_exe: &VmCommittedExe<SC>,
     dummy_internal_proof: &Proof<SC>,
-    interactions: &[usize],
 ) -> (Vec<usize>, VmComplexTraceHeights) {
     let num_user_public_values = root_vm_config.system.num_public_values - 2 * DIGEST_SIZE;
     let root_input = RootVmVerifierInput {
