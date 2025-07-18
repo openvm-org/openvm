@@ -167,6 +167,7 @@ struct EcDoublePreCompute<'a> {
     expr: &'a FieldExpr,
     rs_addrs: [u8; 1],
     a: u8,
+    flag_idx: u8,
 }
 
 impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleStep<BLOCKS, BLOCK_SIZE> {
@@ -189,11 +190,31 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleStep<BLOCKS, BLOC
             return Err(InvalidInstruction(pc));
         }
 
+        let local_opcode = opcode.local_opcode_idx(self.offset);
+
+        // Pre-compute flag_idx
+        let needs_setup = self.expr.needs_setup();
+        let mut flag_idx = self.expr.num_flags() as u8;
+        if needs_setup {
+            // Find which opcode this is in our local_opcode_idx list
+            if let Some(opcode_position) = self
+                .local_opcode_idx
+                .iter()
+                .position(|&idx| idx == local_opcode)
+            {
+                // If this is NOT the last opcode (setup), get the corresponding flag_idx
+                if opcode_position < self.opcode_flag_idx.len() {
+                    flag_idx = self.opcode_flag_idx[opcode_position] as u8;
+                }
+            }
+        }
+
         let rs_addrs = [b as u8];
         *data = EcDoublePreCompute {
-            a: a as u8,
-            rs_addrs,
             expr: &self.expr,
+            rs_addrs,
+            a: a as u8,
+            flag_idx,
         };
 
         let local_opcode = opcode.local_opcode_idx(self.offset);
@@ -391,7 +412,12 @@ unsafe fn execute_e12_impl<
         x if x == CurveType::BLS12_381 as u8 => ec_double::<3, BLOCKS, BLOCK_SIZE>(read_data),
         _ => {
             let read_data: DynArray<u8> = read_data.into();
-            run_field_expression_precomputed::<false>(pre_compute.expr, 0, &read_data.0).into()
+            run_field_expression_precomputed::<true>(
+                pre_compute.expr,
+                pre_compute.flag_idx as usize,
+                &read_data.0,
+            )
+            .into()
         }
     };
 
