@@ -91,6 +91,9 @@ impl<F: PrimeField32> StepExecutorE1<F> for Sha256VmStep {
     fn pre_compute_size(&self) -> usize {
         size_of::<ShaPreCompute>()
     }
+    fn pre_compute_align(&self) -> usize {
+        align_of::<ShaPreCompute>()
+    }
 
     fn pre_compute_e1<Ctx>(
         &self,
@@ -110,6 +113,9 @@ impl<F: PrimeField32> StepExecutorE2<F> for Sha256VmStep {
     fn e2_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<ShaPreCompute>>()
     }
+    fn e2_pre_compute_align(&self) -> usize {
+        align_of::<E2PreCompute<ShaPreCompute>>()
+    }
 
     fn pre_compute_e2<Ctx>(
         &self,
@@ -122,7 +128,7 @@ impl<F: PrimeField32> StepExecutorE2<F> for Sha256VmStep {
         Ctx: E2ExecutionCtx,
     {
         let data: &mut E2PreCompute<ShaPreCompute> = data.borrow_mut();
-        data.chip_idx = chip_idx as u32;
+        data.chip_idx = chip_idx as u16;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
         Ok(execute_e2_impl::<_, _>)
     }

@@ -304,6 +304,10 @@ where
     fn pre_compute_size(&self) -> usize {
         size_of::<AuiPcPreCompute>()
     }
+    #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        align_of::<AuiPcPreCompute>()
+    }
 
     #[inline(always)]
     fn pre_compute_e1<Ctx: E1ExecutionCtx>(
@@ -342,6 +346,10 @@ where
     fn e2_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<AuiPcPreCompute>>()
     }
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        align_of::<E2PreCompute<AuiPcPreCompute>>()
+    }
 
     fn pre_compute_e2<Ctx>(
         &self,
@@ -354,7 +362,7 @@ where
         Ctx: E2ExecutionCtx,
     {
         let data: &mut E2PreCompute<AuiPcPreCompute> = data.borrow_mut();
-        data.chip_idx = chip_idx as u32;
+        data.chip_idx = chip_idx as u16;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
         Ok(|pre_compute, vm_state| {
             let pre_compute: &E2PreCompute<AuiPcPreCompute> = pre_compute.borrow();

@@ -374,6 +374,13 @@ where
             size_of::<RangeCheckPreCompute>(),
         )
     }
+    #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        std::cmp::max(
+            align_of::<JalPreCompute<F>>(),
+            align_of::<RangeCheckPreCompute>(),
+        )
+    }
 
     #[inline(always)]
     fn pre_compute_e1<Ctx: E1ExecutionCtx>(
@@ -409,6 +416,13 @@ where
             size_of::<E2PreCompute<RangeCheckPreCompute>>(),
         )
     }
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        std::cmp::max(
+            align_of::<E2PreCompute<JalPreCompute<F>>>(),
+            align_of::<E2PreCompute<RangeCheckPreCompute>>(),
+        )
+    }
 
     #[inline(always)]
     fn pre_compute_e2<Ctx: E2ExecutionCtx>(
@@ -424,13 +438,13 @@ where
 
         if is_jal {
             let pre_compute: &mut E2PreCompute<JalPreCompute<F>> = data.borrow_mut();
-            pre_compute.chip_idx = chip_idx as u32;
+            pre_compute.chip_idx = chip_idx as u16;
 
             self.pre_compute_jal_impl(pc, inst, &mut pre_compute.data)?;
             Ok(execute_jal_e2_impl)
         } else {
             let pre_compute: &mut E2PreCompute<RangeCheckPreCompute> = data.borrow_mut();
-            pre_compute.chip_idx = chip_idx as u32;
+            pre_compute.chip_idx = chip_idx as u16;
 
             self.pre_compute_range_check_impl(pc, inst, &mut pre_compute.data)?;
             Ok(execute_range_check_e2_impl)

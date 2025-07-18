@@ -939,6 +939,13 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE1<F>
             size_of::<VerifyBatchPreCompute<F, SBOX_REGISTERS>>(),
         )
     }
+    #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        std::cmp::max(
+            align_of::<Pos2PreCompute<F, SBOX_REGISTERS>>(),
+            align_of::<VerifyBatchPreCompute<F, SBOX_REGISTERS>>(),
+        )
+    }
 
     #[inline(always)]
     fn pre_compute_e1<Ctx: E1ExecutionCtx>(
@@ -978,6 +985,13 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE2<F>
             size_of::<E2PreCompute<VerifyBatchPreCompute<F, SBOX_REGISTERS>>>(),
         )
     }
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        std::cmp::max(
+            align_of::<E2PreCompute<Pos2PreCompute<F, SBOX_REGISTERS>>>(),
+            align_of::<E2PreCompute<VerifyBatchPreCompute<F, SBOX_REGISTERS>>>(),
+        )
+    }
 
     #[inline(always)]
     fn pre_compute_e2<Ctx: E2ExecutionCtx>(
@@ -994,7 +1008,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE2<F>
         if is_pos2 {
             let pre_compute: &mut E2PreCompute<Pos2PreCompute<F, SBOX_REGISTERS>> =
                 data.borrow_mut();
-            pre_compute.chip_idx = chip_idx as u32;
+            pre_compute.chip_idx = chip_idx as u16;
 
             self.pre_compute_pos2_impl(pc, inst, &mut pre_compute.data)?;
             if opcode == PERM_POS2.global_opcode() {
@@ -1005,7 +1019,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> StepExecutorE2<F>
         } else {
             let pre_compute: &mut E2PreCompute<VerifyBatchPreCompute<F, SBOX_REGISTERS>> =
                 data.borrow_mut();
-            pre_compute.chip_idx = chip_idx as u32;
+            pre_compute.chip_idx = chip_idx as u16;
 
             self.pre_compute_verify_batch_impl(pc, inst, &mut pre_compute.data)?;
             Ok(execute_verify_batch_e2_impl::<_, _, SBOX_REGISTERS>)

@@ -131,13 +131,14 @@ pub struct PreComputeInstruction<'a, F, CTX> {
 #[derive(Clone, AlignedBytesBorrow)]
 #[repr(C)]
 pub struct E2PreCompute<DATA> {
-    pub chip_idx: u32,
     pub data: DATA,
+    pub chip_idx: u16,
 }
 
 /// Trait for E1 execution
 pub trait InsExecutorE1<F> {
     fn pre_compute_size(&self) -> usize;
+    fn pre_compute_align(&self) -> usize;
 
     fn pre_compute_e1<Ctx>(
         &self,
@@ -153,6 +154,7 @@ pub trait InsExecutorE1<F> {
 
 pub trait InsExecutorE2<F> {
     fn e2_pre_compute_size(&self) -> usize;
+    fn e2_pre_compute_align(&self) -> usize;
 
     fn pre_compute_e2<Ctx>(
         &self,
@@ -173,6 +175,12 @@ where
     fn pre_compute_size(&self) -> usize {
         self.borrow().pre_compute_size()
     }
+
+    #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        self.borrow().pre_compute_align()
+    }
+
     #[inline(always)]
     fn pre_compute_e1<Ctx>(
         &self,
@@ -199,6 +207,12 @@ where
     fn e2_pre_compute_size(&self) -> usize {
         self.borrow().e2_pre_compute_size()
     }
+
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        self.borrow().e2_pre_compute_align()
+    }
+
     #[inline(always)]
     fn pre_compute_e2<Ctx>(
         &self,

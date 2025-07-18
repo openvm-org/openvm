@@ -63,8 +63,13 @@ struct BranchLtPreCompute {
 }
 
 impl<F: PrimeField32> StepExecutorE1<F> for Rv32BranchLessThan256Step {
+    #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<BranchLtPreCompute>()
+    }
+    #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        align_of::<BranchLtPreCompute>()
     }
 
     fn pre_compute_e1<Ctx>(
@@ -89,8 +94,13 @@ impl<F: PrimeField32> StepExecutorE1<F> for Rv32BranchLessThan256Step {
 }
 
 impl<F: PrimeField32> StepExecutorE2<F> for Rv32BranchLessThan256Step {
+    #[inline(always)]
     fn e2_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BranchLtPreCompute>>()
+    }
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        align_of::<E2PreCompute<BranchLtPreCompute>>()
     }
 
     fn pre_compute_e2<Ctx>(
@@ -104,7 +114,7 @@ impl<F: PrimeField32> StepExecutorE2<F> for Rv32BranchLessThan256Step {
         Ctx: E2ExecutionCtx,
     {
         let data: &mut E2PreCompute<BranchLtPreCompute> = data.borrow_mut();
-        data.chip_idx = chip_idx as u32;
+        data.chip_idx = chip_idx as u16;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
         let fn_ptr = match local_opcode {
             BranchLessThanOpcode::BLT => execute_e2_impl::<_, _, BltOp>,

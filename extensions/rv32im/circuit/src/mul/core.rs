@@ -269,6 +269,10 @@ where
     fn pre_compute_size(&self) -> usize {
         size_of::<MultiPreCompute>()
     }
+    #[inline(always)]
+    fn pre_compute_align(&self) -> usize {
+        align_of::<MultiPreCompute>()
+    }
     fn pre_compute_e1<Ctx>(
         &self,
         pc: u32,
@@ -292,6 +296,10 @@ where
     fn e2_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<MultiPreCompute>>()
     }
+    #[inline(always)]
+    fn e2_pre_compute_align(&self) -> usize {
+        align_of::<E2PreCompute<MultiPreCompute>>()
+    }
 
     fn pre_compute_e2<Ctx>(
         &self,
@@ -304,7 +312,7 @@ where
         Ctx: E2ExecutionCtx,
     {
         let pre_compute: &mut E2PreCompute<MultiPreCompute> = data.borrow_mut();
-        pre_compute.chip_idx = chip_idx as u32;
+        pre_compute.chip_idx = chip_idx as u16;
         self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
         Ok(execute_e2_impl)
     }

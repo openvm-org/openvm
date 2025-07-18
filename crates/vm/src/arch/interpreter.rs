@@ -1,6 +1,7 @@
 use std::{
     alloc::{alloc, dealloc, handle_alloc_error, Layout},
     borrow::{Borrow, BorrowMut},
+    iter::once,
     ptr::NonNull,
 };
 
@@ -29,8 +30,8 @@ use crate::{
 pub struct InterpretedInstance<F: PrimeField32, VC: VmConfig<F>> {
     exe: VmExe<F>,
     vm_config: VC,
-    e1_pre_compute_max_size: usize,
-    e2_pre_compute_max_size: usize,
+    e1_pre_compute_alloc: PreComputeAllocation,
+    e2_pre_compute_alloc: PreComputeAllocation,
 }
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -66,13 +67,14 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
         let exe = exe.into();
         let program = &exe.program;
         let chip_complex = vm_config.create_chip_complex().unwrap();
-        let e1_pre_compute_max_size = get_pre_compute_max_size(program, &chip_complex);
-        let e2_pre_compute_max_size = get_e2_pre_compute_max_size(program, &chip_complex);
+
+        let e1_pre_compute_alloc = get_pre_compute_alloc(program, &chip_complex);
+        let e2_pre_compute_alloc = get_e2_pre_compute_alloc(program, &chip_complex);
         Self {
             exe,
             vm_config,
-            e1_pre_compute_max_size,
-            e2_pre_compute_max_size,
+            e1_pre_compute_alloc,
+            e2_pre_compute_alloc,
         }
     }
 
@@ -89,10 +91,10 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
 
         // Start execution
         let program = &self.exe.program;
-        let pre_compute_max_size = self.e1_pre_compute_max_size;
-        let mut pre_compute_buf = self.alloc_pre_compute_buf(pre_compute_max_size);
-        let mut split_pre_compute_buf =
-            self.split_pre_compute_buf(&mut pre_compute_buf, pre_compute_max_size);
+        let pre_compute_alloc = &self.e1_pre_compute_alloc;
+        let pre_compute_buf =
+            AlignedBuf::uninit(pre_compute_alloc.total_size, pre_compute_alloc.max_align);
+        let mut split_pre_compute_buf = pre_compute_alloc.split_pre_compute_buf(&pre_compute_buf);
 
         let pre_compute_insts = get_pre_compute_instructions::<_, _, _, Ctx>(
             program,
@@ -121,10 +123,10 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
 
         // Start execution
         let program = &self.exe.program;
-        let pre_compute_max_size = self.e2_pre_compute_max_size;
-        let mut pre_compute_buf = self.alloc_pre_compute_buf(pre_compute_max_size);
-        let mut split_pre_compute_buf =
-            self.split_pre_compute_buf(&mut pre_compute_buf, pre_compute_max_size);
+        let pre_compute_alloc = &self.e2_pre_compute_alloc;
+        let pre_compute_buf =
+            AlignedBuf::uninit(pre_compute_alloc.total_size, pre_compute_alloc.max_align);
+        let mut split_pre_compute_buf = pre_compute_alloc.split_pre_compute_buf(&pre_compute_buf);
 
         let pre_compute_insts = get_e2_pre_compute_instructions::<_, _, _, Ctx>(
             program,
@@ -168,34 +170,6 @@ impl<F: PrimeField32, VC: VmConfig<F>> InterpretedInstance<F, VC> {
             StdRng::seed_from_u64(0),
             ctx,
         )
-    }
-
-    #[inline(always)]
-    fn alloc_pre_compute_buf(&self, pre_compute_max_size: usize) -> AlignedBuf {
-        let program = &self.exe.program;
-        let program_len = program.instructions_and_debug_infos.len();
-        let buf_len = program_len * pre_compute_max_size;
-        AlignedBuf::uninit(buf_len, pre_compute_max_size)
-    }
-
-    #[inline(always)]
-    fn split_pre_compute_buf<'a>(
-        &self,
-        pre_compute_buf: &'a mut AlignedBuf,
-        pre_compute_max_size: usize,
-    ) -> Vec<&'a mut [u8]> {
-        let program = &self.exe.program;
-        let program_len = program.instructions_and_debug_infos.len();
-        let buf_len = program_len * pre_compute_max_size;
-        let mut pre_compute_buf_ptr =
-            unsafe { std::slice::from_raw_parts_mut(pre_compute_buf.ptr, buf_len) };
-        let mut split_pre_compute_buf = Vec::with_capacity(program_len);
-        for _ in 0..program_len {
-            let (first, last) = pre_compute_buf_ptr.split_at_mut(pre_compute_max_size);
-            pre_compute_buf_ptr = last;
-            split_pre_compute_buf.push(first);
-        }
-        split_pre_compute_buf
     }
 }
 
@@ -288,63 +262,123 @@ unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     vm_state.exit_code = Ok(Some(pre_compute.exit_code));
 }
 
-fn get_pre_compute_max_size<F: PrimeField32, E: InsExecutorE1<F>, P>(
+struct PreComputeAllocation {
+    start_offset: Vec<usize>,
+    total_size: usize,
+    max_align: usize,
+}
+
+impl PreComputeAllocation {
+    fn new(size_and_align: &[(usize, usize)]) -> Self {
+        let mut total_size: usize = 0;
+        let mut max_align = 1;
+        let start_offset: Vec<_> = size_and_align
+            .iter()
+            .map(|&(size, align)| {
+                let start = total_size.div_ceil(align) * align;
+                total_size = start + size;
+                max_align = max_align.max(align);
+                start
+            })
+            .collect();
+        PreComputeAllocation {
+            start_offset,
+            total_size,
+            max_align,
+        }
+    }
+
+    #[inline(always)]
+    fn split_pre_compute_buf<'a>(&self, pre_compute_buf: &'a AlignedBuf) -> Vec<&'a mut [u8]> {
+        let mut split_pre_compute_buf = Vec::with_capacity(self.start_offset.len());
+        {
+            let mut pre_compute_buf_ptr =
+                unsafe { std::slice::from_raw_parts_mut(pre_compute_buf.ptr, self.total_size) };
+            for (&start, &end) in self
+                .start_offset
+                .iter()
+                .chain(once(&self.total_size))
+                .tuple_windows()
+            {
+                let (first, last) = pre_compute_buf_ptr.split_at_mut(end - start);
+                pre_compute_buf_ptr = last;
+                split_pre_compute_buf.push(first);
+            }
+            split_pre_compute_buf
+        }
+    }
+}
+
+fn get_pre_compute_alloc<F: PrimeField32, E: InsExecutorE1<F>, P>(
     program: &Program<F>,
     chip_complex: &VmChipComplex<F, E, P>,
-) -> usize {
-    program
+) -> PreComputeAllocation {
+    let size_align: Vec<_> = program
         .instructions_and_debug_infos
         .iter()
         .map(|inst_opt| {
             if let Some((inst, _)) = inst_opt {
                 if let Some(size) = system_opcode_pre_compute_size(inst) {
-                    size
+                    (size, system_opcode_pre_compute_align(inst).unwrap())
                 } else {
                     chip_complex
                         .inventory
                         .get_executor(inst.opcode)
-                        .map(|executor| executor.pre_compute_size())
+                        .map(|executor| (executor.pre_compute_size(), executor.pre_compute_align()))
                         .unwrap()
                 }
             } else {
-                0
+                (0, 1)
             }
         })
-        .max()
-        .unwrap()
-        .next_power_of_two()
+        .collect();
+
+    PreComputeAllocation::new(&size_align)
 }
 
-fn get_e2_pre_compute_max_size<F: PrimeField32, E: InsExecutorE2<F>, P>(
+fn get_e2_pre_compute_alloc<F: PrimeField32, E: InsExecutorE2<F>, P>(
     program: &Program<F>,
     chip_complex: &VmChipComplex<F, E, P>,
-) -> usize {
-    program
+) -> PreComputeAllocation {
+    let size_align: Vec<_> = program
         .instructions_and_debug_infos
         .iter()
         .map(|inst_opt| {
             if let Some((inst, _)) = inst_opt {
                 if let Some(size) = system_opcode_pre_compute_size(inst) {
-                    size
+                    (size, system_opcode_pre_compute_align(inst).unwrap())
                 } else {
                     chip_complex
                         .inventory
                         .get_executor(inst.opcode)
-                        .map(|executor| executor.e2_pre_compute_size())
+                        .map(|executor| {
+                            (
+                                executor.e2_pre_compute_size(),
+                                executor.e2_pre_compute_align(),
+                            )
+                        })
                         .unwrap()
                 }
             } else {
-                0
+                (0, 1)
             }
         })
-        .max()
-        .unwrap()
-        .next_power_of_two()
+        .collect();
+    PreComputeAllocation::new(&size_align)
 }
 
+#[inline(always)]
 fn system_opcode_pre_compute_size<F: PrimeField32>(inst: &Instruction<F>) -> Option<usize> {
     if inst.opcode == SystemOpcode::TERMINATE.global_opcode() {
         return Some(size_of::<TerminatePreCompute>());
+    }
+    None
+}
+
+#[inline(always)]
+fn system_opcode_pre_compute_align<F: PrimeField32>(inst: &Instruction<F>) -> Option<usize> {
+    if inst.opcode == SystemOpcode::TERMINATE.global_opcode() {
+        return Some(align_of::<TerminatePreCompute>());
     }
     None
 }

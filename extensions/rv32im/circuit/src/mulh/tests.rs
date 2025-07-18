@@ -5,7 +5,7 @@ use openvm_circuit::{
         testing::{
             memory::gen_pointer, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
-        InstructionExecutor, VmAirWrapper,
+        E2PreCompute, InstructionExecutor, VmAirWrapper,
     },
     utils::generate_long_number,
 };
