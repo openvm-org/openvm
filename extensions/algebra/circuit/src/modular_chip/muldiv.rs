@@ -12,13 +12,14 @@ use openvm_circuit_primitives::{
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionFiller,
-    FieldVariable, SymbolicExpr,
+    FieldExpressionStep, FieldVariable, SymbolicExpr,
 };
 use openvm_rv32_adapters::{
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
 };
 
 use super::{ModularAir, ModularChip, ModularStep};
+use crate::FieldExprVecHeapStep;
 
 pub fn muldiv_expr(
     config: ExprBuilderConfig,
@@ -29,17 +30,19 @@ pub fn muldiv_expr(
     let builder = Rc::new(RefCell::new(builder));
     let x = ExprBuilder::new_input(builder.clone());
     let y = ExprBuilder::new_input(builder.clone());
-    let (z_idx, z) = builder.borrow_mut().new_var();
+    let (z_idx, z) = (*builder).borrow_mut().new_var();
     let mut z = FieldVariable::from_var(builder.clone(), z);
-    let is_mul_flag = builder.borrow_mut().new_flag();
-    let is_div_flag = builder.borrow_mut().new_flag();
+    let is_mul_flag = (*builder).borrow_mut().new_flag();
+    let is_div_flag = (*builder).borrow_mut().new_flag();
     // constraint is x * y = z, or z * y = x
     let lvar = FieldVariable::select(is_mul_flag, &x, &z);
     let rvar = FieldVariable::select(is_mul_flag, &z, &x);
     // When it's SETUP op, x = p == 0, y = 0, both flags are false, and it still works: z * 0 - x =
     // 0, whatever z is.
     let constraint = lvar * y.clone() - rvar;
-    builder.borrow_mut().set_constraint(z_idx, constraint.expr);
+    (*builder)
+        .borrow_mut()
+        .set_constraint(z_idx, constraint.expr);
     let compute = SymbolicExpr::Select(
         is_mul_flag,
         Box::new(x.expr.clone() * y.expr.clone()),
@@ -49,10 +52,10 @@ pub fn muldiv_expr(
             Box::new(x.expr.clone()),
         )),
     );
-    builder.borrow_mut().set_compute(z_idx, compute);
+    (*builder).borrow_mut().set_compute(z_idx, compute);
     z.save_output();
 
-    let builder = builder.borrow().clone();
+    let builder = (*builder).borrow().clone();
 
     (
         FieldExpr::new(builder, range_bus, true),
@@ -106,14 +109,14 @@ pub fn get_modular_muldiv_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 ) -> ModularStep<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
 
-    ModularStep::new(
+    FieldExprVecHeapStep(FieldExpressionStep::new(
         Rv32VecHeapAdapterStep::new(pointer_max_bits),
         expr,
         offset,
         local_opcode_idx,
         opcode_flag_idx,
         "ModularMulDiv",
-    )
+    ))
 }
 
 pub fn get_modular_muldiv_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(

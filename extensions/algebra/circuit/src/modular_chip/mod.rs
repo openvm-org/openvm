@@ -25,12 +25,13 @@ pub type ModularAir<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper
 >;
 
 pub type ModularStep<const BLOCKS: usize, const BLOCK_SIZE: usize> =
-    FieldExprVecHeapStep<2, BLOCKS, BLOCK_SIZE>;
+    FieldExprVecHeapStep<BLOCKS, BLOCK_SIZE, false>;
 
 pub type ModularChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> = VmChipWrapper<
     F,
     FieldExpressionFiller<Rv32VecHeapAdapterFiller<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
 >;
+
 // Must have TOTAL_LIMBS = NUM_LANES * LANE_SIZE
 pub type ModularIsEqualAir<
     const NUM_LANES: usize,

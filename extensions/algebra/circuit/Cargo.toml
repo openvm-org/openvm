@@ -20,11 +20,12 @@ openvm-rv32im-circuit = { workspace = true }
 openvm-rv32-adapters = { workspace = true }
 openvm-algebra-transpiler = { workspace = true }
 
+halo2curves-axiom = { workspace = true }
 itertools = { workspace = true }
 num-bigint = { workspace = true, features = ["serde"] }
 num-traits = { workspace = true }
 rand = { workspace = true }
-derive_more = { workspace = true, features = ["from"] }
+derive_more = { workspace = true, features = ["from", "deref", "deref_mut"] }
 strum = { workspace = true }
 derive-new = { workspace = true }
 serde.workspace = true
@@ -32,12 +33,11 @@ serde_with = { workspace = true }
 eyre = { workspace = true }
 
 [dev-dependencies]
-halo2curves-axiom = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
-test-case = {workspace = true}
+test-case = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["derive_more"]

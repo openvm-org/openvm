@@ -12,14 +12,14 @@ use openvm_circuit_primitives::{
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionFiller,
-    SymbolicExpr,
+    FieldExpressionStep, SymbolicExpr,
 };
 use openvm_rv32_adapters::{
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
 };
 
 use super::{Fp2Air, Fp2Chip, Fp2Step};
-use crate::Fp2;
+use crate::{FieldExprVecHeapStep, Fp2};
 
 pub fn fp2_muldiv_expr(
     config: ExprBuilderConfig,
@@ -135,14 +135,14 @@ pub fn get_fp2_muldiv_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 ) -> Fp2Step<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
 
-    Fp2Step::new(
+    FieldExprVecHeapStep(FieldExpressionStep::new(
         Rv32VecHeapAdapterStep::new(pointer_max_bits),
         expr,
         offset,
         local_opcode_idx,
         opcode_flag_idx,
         "Fp2MulDiv",
-    )
+    ))
 }
 
 pub fn get_fp2_muldiv_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(

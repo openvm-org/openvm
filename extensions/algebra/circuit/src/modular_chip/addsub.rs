@@ -12,13 +12,14 @@ use openvm_circuit_primitives::{
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionFiller,
-    FieldVariable,
+    FieldExpressionStep, FieldVariable,
 };
 use openvm_rv32_adapters::{
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
 };
 
 use super::{ModularAir, ModularChip, ModularStep};
+use crate::FieldExprVecHeapStep;
 
 pub fn addsub_expr(
     config: ExprBuilderConfig,
@@ -32,12 +33,12 @@ pub fn addsub_expr(
     let x2 = ExprBuilder::new_input(builder.clone());
     let x3 = x1.clone() + x2.clone();
     let x4 = x1.clone() - x2.clone();
-    let is_add_flag = builder.borrow_mut().new_flag();
-    let is_sub_flag = builder.borrow_mut().new_flag();
+    let is_add_flag = (*builder).borrow_mut().new_flag();
+    let is_sub_flag = (*builder).borrow_mut().new_flag();
     let x5 = FieldVariable::select(is_sub_flag, &x4, &x1);
     let mut x6 = FieldVariable::select(is_add_flag, &x3, &x5);
     x6.save_output();
-    let builder = builder.borrow().clone();
+    let builder = (*builder).borrow().clone();
 
     (
         FieldExpr::new(builder, range_bus, true),
@@ -91,14 +92,14 @@ pub fn get_modular_addsub_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 ) -> ModularStep<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
 
-    ModularStep::new(
+    FieldExprVecHeapStep(FieldExpressionStep::new(
         Rv32VecHeapAdapterStep::new(pointer_max_bits),
         expr,
         offset,
         local_opcode_idx,
         opcode_flag_idx,
         "ModularAddSub",
-    )
+    ))
 }
 
 pub fn get_modular_addsub_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(

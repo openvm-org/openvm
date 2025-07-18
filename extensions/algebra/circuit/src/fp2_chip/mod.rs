@@ -16,7 +16,7 @@ pub type Fp2Air<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper<
 >;
 
 pub type Fp2Step<const BLOCKS: usize, const BLOCK_SIZE: usize> =
-    FieldExprVecHeapStep<2, BLOCKS, BLOCK_SIZE>;
+    FieldExprVecHeapStep<BLOCKS, BLOCK_SIZE, true>;
 
 pub type Fp2Chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> = VmChipWrapper<
     F,
