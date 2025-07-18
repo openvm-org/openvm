@@ -481,7 +481,7 @@ unsafe fn execute_e12_generic_impl<
     });
     let read_data: DynArray<u8> = read_data.into();
 
-    let writes = run_field_expression_precomputed::<false>(
+    let writes = run_field_expression_precomputed::<true>(
         pre_compute.expr,
         pre_compute.flag_idx as usize,
         &read_data.0,

@@ -73,12 +73,12 @@ pub fn field_operation<
 ) -> [[u8; BLOCK_SIZE]; BLOCKS] {
     match FIELD {
         x if x == FieldType::K256Coordinate as u8 => {
-            field_operation_256bit::<halo2curves_axiom::secq256k1::Fp, BLOCKS, BLOCK_SIZE, OP>(
+            field_operation_256bit::<halo2curves_axiom::secq256k1::Fq, BLOCKS, BLOCK_SIZE, OP>(
                 input_data,
             )
         }
         x if x == FieldType::K256Scalar as u8 => {
-            field_operation_256bit::<halo2curves_axiom::secq256k1::Fq, BLOCKS, BLOCK_SIZE, OP>(
+            field_operation_256bit::<halo2curves_axiom::secq256k1::Fp, BLOCKS, BLOCK_SIZE, OP>(
                 input_data,
             )
         }
