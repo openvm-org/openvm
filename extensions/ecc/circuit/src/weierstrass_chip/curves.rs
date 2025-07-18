@@ -1,6 +1,6 @@
 use halo2curves_axiom::ff::PrimeField;
 use num_bigint::BigUint;
-use num_traits::{FromPrimitive, Num};
+use num_traits::Num;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CurveType {
