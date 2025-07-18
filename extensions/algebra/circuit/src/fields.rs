@@ -4,10 +4,14 @@ use num_traits::Num;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FieldType {
-    K256 = 0,
-    P256 = 1,
-    BN254 = 2,
-    BLS12_381 = 3,
+    K256Coordinate = 0,
+    K256Scalar = 1,
+    P256Coordinate = 2,
+    P256Scalar = 3,
+    BN254Coordinate = 4,
+    BN254Scalar = 5,
+    BLS12_381Coordinate = 6,
+    BLS12_381Scalar = 7,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,21 +26,37 @@ fn get_modulus_as_bigint<F: PrimeField>() -> BigUint {
     BigUint::from_str_radix(F::MODULUS.trim_start_matches("0x"), 16).unwrap()
 }
 
-pub fn get_field_type_from_modulus(modulus: &BigUint) -> Option<FieldType> {
+pub fn get_field_type(modulus: &BigUint) -> Option<FieldType> {
+    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secq256k1::Fp>() {
+        return Some(FieldType::K256Coordinate);
+    }
+
     if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secq256k1::Fq>() {
-        return Some(FieldType::K256);
+        return Some(FieldType::K256Scalar);
     }
 
     if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secp256r1::Fp>() {
-        return Some(FieldType::P256);
+        return Some(FieldType::P256Coordinate);
+    }
+
+    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secp256r1::Fq>() {
+        return Some(FieldType::P256Scalar);
     }
 
     if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bn256::Fq>() {
-        return Some(FieldType::BN254);
+        return Some(FieldType::BN254Coordinate);
+    }
+
+    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bn256::Fr>() {
+        return Some(FieldType::BN254Scalar);
     }
 
     if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bls12_381::Fq>() {
-        return Some(FieldType::BLS12_381);
+        return Some(FieldType::BLS12_381Coordinate);
+    }
+
+    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bls12_381::Fr>() {
+        return Some(FieldType::BLS12_381Scalar);
     }
 
     None
@@ -52,23 +72,43 @@ pub fn field_operation<
     input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
 ) -> [[u8; BLOCK_SIZE]; BLOCKS] {
     match FIELD {
-        x if x == FieldType::K256 as u8 => {
+        x if x == FieldType::K256Coordinate as u8 => {
+            field_operation_256bit::<halo2curves_axiom::secq256k1::Fp, BLOCKS, BLOCK_SIZE, OP>(
+                input_data,
+            )
+        }
+        x if x == FieldType::K256Scalar as u8 => {
             field_operation_256bit::<halo2curves_axiom::secq256k1::Fq, BLOCKS, BLOCK_SIZE, OP>(
                 input_data,
             )
         }
-        x if x == FieldType::P256 as u8 => {
+        x if x == FieldType::P256Coordinate as u8 => {
             field_operation_256bit::<halo2curves_axiom::secp256r1::Fp, BLOCKS, BLOCK_SIZE, OP>(
                 input_data,
             )
         }
-        x if x == FieldType::BN254 as u8 => {
+        x if x == FieldType::P256Scalar as u8 => {
+            field_operation_256bit::<halo2curves_axiom::secp256r1::Fq, BLOCKS, BLOCK_SIZE, OP>(
+                input_data,
+            )
+        }
+        x if x == FieldType::BN254Coordinate as u8 => {
             field_operation_256bit::<halo2curves_axiom::bn256::Fq, BLOCKS, BLOCK_SIZE, OP>(
                 input_data,
             )
         }
-        x if x == FieldType::BLS12_381 as u8 => {
-            field_operation_bls12_381::<BLOCKS, BLOCK_SIZE, OP>(input_data)
+        x if x == FieldType::BN254Scalar as u8 => {
+            field_operation_256bit::<halo2curves_axiom::bn256::Fr, BLOCKS, BLOCK_SIZE, OP>(
+                input_data,
+            )
+        }
+        x if x == FieldType::BLS12_381Coordinate as u8 => {
+            field_operation_bls12_381_coordinate::<BLOCKS, BLOCK_SIZE, OP>(input_data)
+        }
+        x if x == FieldType::BLS12_381Scalar as u8 => {
+            field_operation_256bit::<halo2curves_axiom::bls12_381::Fr, BLOCKS, BLOCK_SIZE, OP>(
+                input_data,
+            )
         }
         _ => panic!("Unsupported field type: {}", FIELD),
     }
@@ -84,10 +124,10 @@ pub fn fp2_operation<
     input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
 ) -> [[u8; BLOCK_SIZE]; BLOCKS] {
     match FIELD {
-        x if x == FieldType::BN254 as u8 => {
+        x if x == FieldType::BN254Coordinate as u8 => {
             fp2_operation_bn254::<BLOCKS, BLOCK_SIZE, OP>(input_data)
         }
-        x if x == FieldType::BLS12_381 as u8 => {
+        x if x == FieldType::BLS12_381Coordinate as u8 => {
             fp2_operation_bls12_381::<BLOCKS, BLOCK_SIZE, OP>(input_data)
         }
         _ => panic!("Unsupported field type for Fp2: {}", FIELD),
@@ -119,11 +159,15 @@ fn field_operation_256bit<
 }
 
 #[inline(always)]
-fn field_operation_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize, const OP: u8>(
+fn field_operation_bls12_381_coordinate<
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+    const OP: u8,
+>(
     input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
 ) -> [[u8; BLOCK_SIZE]; BLOCKS] {
-    let a = blocks_to_field_element_bls12_381(input_data[0].as_flattened());
-    let b = blocks_to_field_element_bls12_381(input_data[1].as_flattened());
+    let a = blocks_to_field_element_bls12_381_coordinate(input_data[0].as_flattened());
+    let b = blocks_to_field_element_bls12_381_coordinate(input_data[1].as_flattened());
     let c = match OP {
         x if x == Operation::Add as u8 => a + b,
         x if x == Operation::Sub as u8 => a - b,
@@ -133,7 +177,7 @@ fn field_operation_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize, const
     };
 
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
-    field_element_to_blocks_bls12_381(&c, &mut output);
+    field_element_to_blocks_bls12_381_coordinate(&c, &mut output);
     output
 }
 
@@ -205,7 +249,9 @@ pub fn field_element_to_blocks<F: PrimeField<Repr = [u8; 32]>, const BLOCK_SIZE:
 }
 
 #[inline(always)]
-pub fn blocks_to_field_element_bls12_381(blocks: &[u8]) -> halo2curves_axiom::bls12_381::Fq {
+pub fn blocks_to_field_element_bls12_381_coordinate(
+    blocks: &[u8],
+) -> halo2curves_axiom::bls12_381::Fq {
     let mut bytes = [0u8; 48];
     let len = blocks.len().min(48);
     bytes[..len].copy_from_slice(&blocks[..len]);
@@ -214,7 +260,7 @@ pub fn blocks_to_field_element_bls12_381(blocks: &[u8]) -> halo2curves_axiom::bl
 }
 
 #[inline(always)]
-pub fn field_element_to_blocks_bls12_381<const BLOCK_SIZE: usize>(
+pub fn field_element_to_blocks_bls12_381_coordinate<const BLOCK_SIZE: usize>(
     field_element: &halo2curves_axiom::bls12_381::Fq,
     output: &mut [[u8; BLOCK_SIZE]],
 ) {
@@ -262,8 +308,8 @@ fn fp2_to_blocks_bn254<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 fn blocks_to_fp2_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     blocks: &[[u8; BLOCK_SIZE]],
 ) -> halo2curves_axiom::bls12_381::Fq2 {
-    let c0 = blocks_to_field_element_bls12_381(blocks[..BLOCKS / 2].as_flattened());
-    let c1 = blocks_to_field_element_bls12_381(blocks[BLOCKS / 2..].as_flattened());
+    let c0 = blocks_to_field_element_bls12_381_coordinate(blocks[..BLOCKS / 2].as_flattened());
+    let c1 = blocks_to_field_element_bls12_381_coordinate(blocks[BLOCKS / 2..].as_flattened());
     halo2curves_axiom::bls12_381::Fq2 { c0, c1 }
 }
 
@@ -272,6 +318,6 @@ fn fp2_to_blocks_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     fp2: &halo2curves_axiom::bls12_381::Fq2,
     output: &mut [[u8; BLOCK_SIZE]; BLOCKS],
 ) {
-    field_element_to_blocks_bls12_381(&fp2.c0, &mut output[..BLOCKS / 2]);
-    field_element_to_blocks_bls12_381(&fp2.c1, &mut output[BLOCKS / 2..]);
+    field_element_to_blocks_bls12_381_coordinate(&fp2.c0, &mut output[..BLOCKS / 2]);
+    field_element_to_blocks_bls12_381_coordinate(&fp2.c1, &mut output[BLOCKS / 2..]);
 }

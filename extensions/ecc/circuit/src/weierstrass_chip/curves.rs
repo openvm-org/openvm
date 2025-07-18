@@ -2,8 +2,8 @@ use halo2curves_axiom::ff::PrimeField;
 use num_bigint::BigUint;
 use num_traits::Num;
 use openvm_algebra_circuit::fields::{
-    blocks_to_field_element, blocks_to_field_element_bls12_381, field_element_to_blocks,
-    field_element_to_blocks_bls12_381,
+    blocks_to_field_element, blocks_to_field_element_bls12_381_coordinate, field_element_to_blocks,
+    field_element_to_blocks_bls12_381_coordinate, FieldType,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,26 +18,6 @@ const P256_NEG_A: u64 = 3;
 
 fn get_modulus_as_bigint<F: PrimeField>() -> BigUint {
     BigUint::from_str_radix(F::MODULUS.trim_start_matches("0x"), 16).unwrap()
-}
-
-pub(super) fn get_curve_type_from_modulus(modulus: &BigUint) -> Option<CurveType> {
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secq256k1::Fq>() {
-        return Some(CurveType::K256);
-    }
-
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secp256r1::Fp>() {
-        return Some(CurveType::P256);
-    }
-
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bn256::Fq>() {
-        return Some(CurveType::BN254);
-    }
-
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bls12_381::Fq>() {
-        return Some(CurveType::BLS12_381);
-    }
-
-    None
 }
 
 pub(super) fn get_curve_type(modulus: &BigUint, a_coeff: &BigUint) -> Option<CurveType> {
@@ -70,32 +50,32 @@ pub(super) fn get_curve_type(modulus: &BigUint, a_coeff: &BigUint) -> Option<Cur
 }
 
 #[inline(always)]
-pub fn ec_add_ne<const CURVE: u8, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn ec_add_ne<const FIELD_TYPE: u8, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
 ) -> [[u8; BLOCK_SIZE]; BLOCKS] {
-    match CURVE {
-        x if x == CurveType::K256 as u8 => {
+    match FIELD_TYPE {
+        x if x == FieldType::K256Coordinate as u8 => {
             ec_add_ne_256bit::<halo2curves_axiom::secq256k1::Fq, BLOCKS, BLOCK_SIZE>(input_data)
         }
-        x if x == CurveType::P256 as u8 => {
+        x if x == FieldType::P256Coordinate as u8 => {
             ec_add_ne_256bit::<halo2curves_axiom::secp256r1::Fp, BLOCKS, BLOCK_SIZE>(input_data)
         }
-        x if x == CurveType::BN254 as u8 => {
+        x if x == FieldType::BN254Coordinate as u8 => {
             ec_add_ne_256bit::<halo2curves_axiom::bn256::Fq, BLOCKS, BLOCK_SIZE>(input_data)
         }
-        x if x == CurveType::BLS12_381 as u8 => {
+        x if x == FieldType::BLS12_381Coordinate as u8 => {
             ec_add_ne_bls12_381::<BLOCKS, BLOCK_SIZE>(input_data)
         }
-        _ => panic!("Unsupported curve type: {}", CURVE),
+        _ => panic!("Unsupported field type: {}", FIELD_TYPE),
     }
 }
 
 /// Dispatch elliptic curve point doubling based on const generic curve type
 #[inline(always)]
-pub fn ec_double<const CURVE: u8, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn ec_double<const CURVE_TYPE: u8, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     input_data: [[u8; BLOCK_SIZE]; BLOCKS],
 ) -> [[u8; BLOCK_SIZE]; BLOCKS] {
-    match CURVE {
+    match CURVE_TYPE {
         x if x == CurveType::K256 as u8 => {
             ec_double_256bit::<halo2curves_axiom::secq256k1::Fq, 0, BLOCKS, BLOCK_SIZE>(input_data)
         }
@@ -110,7 +90,7 @@ pub fn ec_double<const CURVE: u8, const BLOCKS: usize, const BLOCK_SIZE: usize>(
         x if x == CurveType::BLS12_381 as u8 => {
             ec_double_bls12_381::<BLOCKS, BLOCK_SIZE>(input_data)
         }
-        _ => panic!("Unsupported curve type: {}", CURVE),
+        _ => panic!("Unsupported curve type: {}", CURVE_TYPE),
     }
 }
 
@@ -160,17 +140,21 @@ fn ec_add_ne_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
 ) -> [[u8; BLOCK_SIZE]; BLOCKS] {
     // Extract coordinates
-    let x1 = blocks_to_field_element_bls12_381(input_data[0][..BLOCKS / 2].as_flattened());
-    let y1 = blocks_to_field_element_bls12_381(input_data[0][BLOCKS / 2..].as_flattened());
-    let x2 = blocks_to_field_element_bls12_381(input_data[1][..BLOCKS / 2].as_flattened());
-    let y2 = blocks_to_field_element_bls12_381(input_data[1][BLOCKS / 2..].as_flattened());
+    let x1 =
+        blocks_to_field_element_bls12_381_coordinate(input_data[0][..BLOCKS / 2].as_flattened());
+    let y1 =
+        blocks_to_field_element_bls12_381_coordinate(input_data[0][BLOCKS / 2..].as_flattened());
+    let x2 =
+        blocks_to_field_element_bls12_381_coordinate(input_data[1][..BLOCKS / 2].as_flattened());
+    let y2 =
+        blocks_to_field_element_bls12_381_coordinate(input_data[1][BLOCKS / 2..].as_flattened());
 
     let (x3, y3) = ec_add_ne_impl::<halo2curves_axiom::bls12_381::Fq>(x1, y1, x2, y2);
 
     // Final output
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
-    field_element_to_blocks_bls12_381(&x3, &mut output[..BLOCKS / 2]);
-    field_element_to_blocks_bls12_381(&y3, &mut output[BLOCKS / 2..]);
+    field_element_to_blocks_bls12_381_coordinate(&x3, &mut output[..BLOCKS / 2]);
+    field_element_to_blocks_bls12_381_coordinate(&y3, &mut output[BLOCKS / 2..]);
     output
 }
 
@@ -179,15 +163,15 @@ fn ec_double_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     input_data: [[u8; BLOCK_SIZE]; BLOCKS],
 ) -> [[u8; BLOCK_SIZE]; BLOCKS] {
     // Extract coordinates
-    let x1 = blocks_to_field_element_bls12_381(input_data[..BLOCKS / 2].as_flattened());
-    let y1 = blocks_to_field_element_bls12_381(input_data[BLOCKS / 2..].as_flattened());
+    let x1 = blocks_to_field_element_bls12_381_coordinate(input_data[..BLOCKS / 2].as_flattened());
+    let y1 = blocks_to_field_element_bls12_381_coordinate(input_data[BLOCKS / 2..].as_flattened());
 
     let (x3, y3) = ec_double_impl::<halo2curves_axiom::bls12_381::Fq, 0>(x1, y1);
 
     // Final output
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
-    field_element_to_blocks_bls12_381(&x3, &mut output);
-    field_element_to_blocks_bls12_381(&y3, &mut output);
+    field_element_to_blocks_bls12_381_coordinate(&x3, &mut output);
+    field_element_to_blocks_bls12_381_coordinate(&y3, &mut output);
     output
 }
 

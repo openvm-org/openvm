@@ -23,9 +23,33 @@ use openvm_mod_circuit_builder::{
 use openvm_rv32_adapters::Rv32VecHeapAdapterStep;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use self::fields::{
-    field_operation, fp2_operation, get_field_type_from_modulus, FieldType, Operation,
-};
+use self::fields::{field_operation, fp2_operation, get_field_type, FieldType, Operation};
+
+macro_rules! generate_field_dispatch {
+    (
+        $field_type:expr,
+        $op:expr,
+        $blocks:expr,
+        $block_size:expr,
+        $is_fp2:expr,
+        $execute_fn:ident,
+        [$(($curve:ident, $operation:ident)),* $(,)?]
+    ) => {
+        match ($field_type, $op) {
+            $(
+                (FieldType::$curve, Operation::$operation) => Ok($execute_fn::<
+                    _,
+                    _,
+                    $blocks,
+                    $block_size,
+                    $is_fp2,
+                    { FieldType::$curve as u8 },
+                    { Operation::$operation as u8 },
+                >),
+            )*
+        }
+    };
+}
 
 pub mod fp2_chip;
 pub mod modular_chip;
@@ -144,154 +168,50 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
             Ok(execute_e1_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
         } else if let Some(field_type) = {
             let modulus = &pre_compute.expr.prime;
-            get_field_type_from_modulus(modulus)
+            get_field_type(modulus)
         } {
-            match (field_type, op) {
-                (FieldType::BN254, Operation::Add) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::BN254 as u8 },
-                    { Operation::Add as u8 },
-                >),
-                (FieldType::BN254, Operation::Sub) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::BN254 as u8 },
-                    { Operation::Sub as u8 },
-                >),
-                (FieldType::BN254, Operation::Mul) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::BN254 as u8 },
-                    { Operation::Mul as u8 },
-                >),
-                (FieldType::BN254, Operation::Div) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::BN254 as u8 },
-                    { Operation::Div as u8 },
-                >),
-                (FieldType::BLS12_381, Operation::Add) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::BLS12_381 as u8 },
-                    { Operation::Add as u8 },
-                >),
-                (FieldType::BLS12_381, Operation::Sub) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::BLS12_381 as u8 },
-                    { Operation::Sub as u8 },
-                >),
-                (FieldType::BLS12_381, Operation::Mul) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::BLS12_381 as u8 },
-                    { Operation::Mul as u8 },
-                >),
-                (FieldType::BLS12_381, Operation::Div) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::BLS12_381 as u8 },
-                    { Operation::Div as u8 },
-                >),
-                (FieldType::K256, Operation::Add) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::K256 as u8 },
-                    { Operation::Add as u8 },
-                >),
-                (FieldType::K256, Operation::Sub) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::K256 as u8 },
-                    { Operation::Sub as u8 },
-                >),
-                (FieldType::K256, Operation::Mul) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::K256 as u8 },
-                    { Operation::Mul as u8 },
-                >),
-                (FieldType::K256, Operation::Div) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::K256 as u8 },
-                    { Operation::Div as u8 },
-                >),
-                (FieldType::P256, Operation::Add) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::P256 as u8 },
-                    { Operation::Add as u8 },
-                >),
-                (FieldType::P256, Operation::Sub) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::P256 as u8 },
-                    { Operation::Sub as u8 },
-                >),
-                (FieldType::P256, Operation::Mul) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::P256 as u8 },
-                    { Operation::Mul as u8 },
-                >),
-                (FieldType::P256, Operation::Div) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::P256 as u8 },
-                    { Operation::Div as u8 },
-                >),
-            }
+            generate_field_dispatch!(
+                field_type,
+                op,
+                BLOCKS,
+                BLOCK_SIZE,
+                IS_FP2,
+                execute_e1_impl,
+                [
+                    (K256Coordinate, Add),
+                    (K256Coordinate, Sub),
+                    (K256Coordinate, Mul),
+                    (K256Coordinate, Div),
+                    (K256Scalar, Add),
+                    (K256Scalar, Sub),
+                    (K256Scalar, Mul),
+                    (K256Scalar, Div),
+                    (P256Coordinate, Add),
+                    (P256Coordinate, Sub),
+                    (P256Coordinate, Mul),
+                    (P256Coordinate, Div),
+                    (P256Scalar, Add),
+                    (P256Scalar, Sub),
+                    (P256Scalar, Mul),
+                    (P256Scalar, Div),
+                    (BN254Coordinate, Add),
+                    (BN254Coordinate, Sub),
+                    (BN254Coordinate, Mul),
+                    (BN254Coordinate, Div),
+                    (BN254Scalar, Add),
+                    (BN254Scalar, Sub),
+                    (BN254Scalar, Mul),
+                    (BN254Scalar, Div),
+                    (BLS12_381Coordinate, Add),
+                    (BLS12_381Coordinate, Sub),
+                    (BLS12_381Coordinate, Mul),
+                    (BLS12_381Coordinate, Div),
+                    (BLS12_381Scalar, Add),
+                    (BLS12_381Scalar, Sub),
+                    (BLS12_381Scalar, Mul),
+                    (BLS12_381Scalar, Div),
+                ]
+            )
         } else {
             Ok(execute_e1_generic_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
         }
@@ -325,154 +245,50 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
             Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
         } else if let Some(field_type) = {
             let modulus = &pre_compute.data.expr.prime;
-            get_field_type_from_modulus(modulus)
+            get_field_type(modulus)
         } {
-            match (field_type, op) {
-                (FieldType::BN254, Operation::Add) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::BN254 as u8 },
-                    { Operation::Add as u8 },
-                >),
-                (FieldType::BN254, Operation::Sub) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::BN254 as u8 },
-                    { Operation::Sub as u8 },
-                >),
-                (FieldType::BN254, Operation::Mul) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::BN254 as u8 },
-                    { Operation::Mul as u8 },
-                >),
-                (FieldType::BN254, Operation::Div) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::BN254 as u8 },
-                    { Operation::Div as u8 },
-                >),
-                (FieldType::BLS12_381, Operation::Add) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::BLS12_381 as u8 },
-                    { Operation::Add as u8 },
-                >),
-                (FieldType::BLS12_381, Operation::Sub) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::BLS12_381 as u8 },
-                    { Operation::Sub as u8 },
-                >),
-                (FieldType::BLS12_381, Operation::Mul) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::BLS12_381 as u8 },
-                    { Operation::Mul as u8 },
-                >),
-                (FieldType::BLS12_381, Operation::Div) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::BLS12_381 as u8 },
-                    { Operation::Div as u8 },
-                >),
-                (FieldType::K256, Operation::Add) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::K256 as u8 },
-                    { Operation::Add as u8 },
-                >),
-                (FieldType::K256, Operation::Sub) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::K256 as u8 },
-                    { Operation::Sub as u8 },
-                >),
-                (FieldType::K256, Operation::Mul) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::K256 as u8 },
-                    { Operation::Mul as u8 },
-                >),
-                (FieldType::K256, Operation::Div) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::K256 as u8 },
-                    { Operation::Div as u8 },
-                >),
-                (FieldType::P256, Operation::Add) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::P256 as u8 },
-                    { Operation::Add as u8 },
-                >),
-                (FieldType::P256, Operation::Sub) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::P256 as u8 },
-                    { Operation::Sub as u8 },
-                >),
-                (FieldType::P256, Operation::Mul) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::P256 as u8 },
-                    { Operation::Mul as u8 },
-                >),
-                (FieldType::P256, Operation::Div) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    IS_FP2,
-                    { FieldType::P256 as u8 },
-                    { Operation::Div as u8 },
-                >),
-            }
+            generate_field_dispatch!(
+                field_type,
+                op,
+                BLOCKS,
+                BLOCK_SIZE,
+                IS_FP2,
+                execute_e2_impl,
+                [
+                    (K256Coordinate, Add),
+                    (K256Coordinate, Sub),
+                    (K256Coordinate, Mul),
+                    (K256Coordinate, Div),
+                    (K256Scalar, Add),
+                    (K256Scalar, Sub),
+                    (K256Scalar, Mul),
+                    (K256Scalar, Div),
+                    (P256Coordinate, Add),
+                    (P256Coordinate, Sub),
+                    (P256Coordinate, Mul),
+                    (P256Coordinate, Div),
+                    (P256Scalar, Add),
+                    (P256Scalar, Sub),
+                    (P256Scalar, Mul),
+                    (P256Scalar, Div),
+                    (BN254Coordinate, Add),
+                    (BN254Coordinate, Sub),
+                    (BN254Coordinate, Mul),
+                    (BN254Coordinate, Div),
+                    (BN254Scalar, Add),
+                    (BN254Scalar, Sub),
+                    (BN254Scalar, Mul),
+                    (BN254Scalar, Div),
+                    (BLS12_381Coordinate, Add),
+                    (BLS12_381Coordinate, Sub),
+                    (BLS12_381Coordinate, Mul),
+                    (BLS12_381Coordinate, Div),
+                    (BLS12_381Scalar, Add),
+                    (BLS12_381Scalar, Sub),
+                    (BLS12_381Scalar, Mul),
+                    (BLS12_381Scalar, Div),
+                ]
+            )
         } else {
             Ok(execute_e2_generic_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
         }
