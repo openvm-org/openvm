@@ -19,15 +19,15 @@ pub use muldiv::*;
 #[cfg(test)]
 mod tests;
 
-pub(crate) type ModularAir<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper<
+pub type ModularAir<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper<
     Rv32VecHeapAdapterAir<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
     FieldExpressionCoreAir,
 >;
 
-pub(crate) type ModularStep<const BLOCKS: usize, const BLOCK_SIZE: usize> =
+pub type ModularStep<const BLOCKS: usize, const BLOCK_SIZE: usize> =
     FieldExprVecHeapStep<2, BLOCKS, BLOCK_SIZE>;
 
-pub(crate) type ModularChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> = VmChipWrapper<
+pub type ModularChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> = VmChipWrapper<
     F,
     FieldExpressionFiller<Rv32VecHeapAdapterFiller<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
 >;
