@@ -27,11 +27,11 @@ fn get_modulus_as_bigint<F: PrimeField>() -> BigUint {
 }
 
 pub fn get_field_type(modulus: &BigUint) -> Option<FieldType> {
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secq256k1::Fp>() {
+    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secq256k1::Fq>() {
         return Some(FieldType::K256Coordinate);
     }
 
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secq256k1::Fq>() {
+    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secq256k1::Fp>() {
         return Some(FieldType::K256Scalar);
     }
 
