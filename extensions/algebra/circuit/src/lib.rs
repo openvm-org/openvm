@@ -88,7 +88,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
         pc: u32,
         inst: &Instruction<F>,
         data: &mut FieldExpressionPreCompute<'a>,
-    ) -> Result<(bool, Operation)> {
+    ) -> Result<Option<Operation>> {
         let Instruction {
             opcode,
             a,
@@ -137,28 +137,36 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
             let is_setup = local_opcode == Fp2Opcode::SETUP_ADDSUB as usize
                 || local_opcode == Fp2Opcode::SETUP_MULDIV as usize;
 
-            let op = match local_opcode {
-                x if x == Fp2Opcode::ADD as usize => Operation::Add,
-                x if x == Fp2Opcode::SUB as usize => Operation::Sub,
-                x if x == Fp2Opcode::MUL as usize => Operation::Mul,
-                x if x == Fp2Opcode::DIV as usize => Operation::Div,
-                _ => unreachable!(),
+            let op = if is_setup {
+                None
+            } else {
+                match local_opcode {
+                    x if x == Fp2Opcode::ADD as usize => Some(Operation::Add),
+                    x if x == Fp2Opcode::SUB as usize => Some(Operation::Sub),
+                    x if x == Fp2Opcode::MUL as usize => Some(Operation::Mul),
+                    x if x == Fp2Opcode::DIV as usize => Some(Operation::Div),
+                    _ => unreachable!(),
+                }
             };
 
-            Ok((is_setup, op))
+            Ok(op)
         } else {
             let is_setup = local_opcode == Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize
                 || local_opcode == Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize;
 
-            let op = match local_opcode {
-                x if x == Rv32ModularArithmeticOpcode::ADD as usize => Operation::Add,
-                x if x == Rv32ModularArithmeticOpcode::SUB as usize => Operation::Sub,
-                x if x == Rv32ModularArithmeticOpcode::MUL as usize => Operation::Mul,
-                x if x == Rv32ModularArithmeticOpcode::DIV as usize => Operation::Div,
-                _ => unreachable!(),
+            let op = if is_setup {
+                None
+            } else {
+                match local_opcode {
+                    x if x == Rv32ModularArithmeticOpcode::ADD as usize => Some(Operation::Add),
+                    x if x == Rv32ModularArithmeticOpcode::SUB as usize => Some(Operation::Sub),
+                    x if x == Rv32ModularArithmeticOpcode::MUL as usize => Some(Operation::Mul),
+                    x if x == Rv32ModularArithmeticOpcode::DIV as usize => Some(Operation::Div),
+                    _ => unreachable!(),
+                }
             };
 
-            Ok((is_setup, op))
+            Ok(op)
         }
     }
 }
@@ -182,58 +190,60 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
     {
         let pre_compute: &mut FieldExpressionPreCompute = data.borrow_mut();
 
-        let (is_setup, op) = self.pre_compute_impl(pc, inst, pre_compute)?;
+        let op = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        if is_setup {
-            Ok(execute_e1_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
-        } else if let Some(field_type) = {
-            let modulus = &pre_compute.expr.prime;
-            get_field_type(modulus)
-        } {
-            generate_field_dispatch!(
-                field_type,
-                op,
-                BLOCKS,
-                BLOCK_SIZE,
-                IS_FP2,
-                execute_e1_impl,
-                [
-                    (K256Coordinate, Add),
-                    (K256Coordinate, Sub),
-                    (K256Coordinate, Mul),
-                    (K256Coordinate, Div),
-                    (K256Scalar, Add),
-                    (K256Scalar, Sub),
-                    (K256Scalar, Mul),
-                    (K256Scalar, Div),
-                    (P256Coordinate, Add),
-                    (P256Coordinate, Sub),
-                    (P256Coordinate, Mul),
-                    (P256Coordinate, Div),
-                    (P256Scalar, Add),
-                    (P256Scalar, Sub),
-                    (P256Scalar, Mul),
-                    (P256Scalar, Div),
-                    (BN254Coordinate, Add),
-                    (BN254Coordinate, Sub),
-                    (BN254Coordinate, Mul),
-                    (BN254Coordinate, Div),
-                    (BN254Scalar, Add),
-                    (BN254Scalar, Sub),
-                    (BN254Scalar, Mul),
-                    (BN254Scalar, Div),
-                    (BLS12_381Coordinate, Add),
-                    (BLS12_381Coordinate, Sub),
-                    (BLS12_381Coordinate, Mul),
-                    (BLS12_381Coordinate, Div),
-                    (BLS12_381Scalar, Add),
-                    (BLS12_381Scalar, Sub),
-                    (BLS12_381Scalar, Mul),
-                    (BLS12_381Scalar, Div),
-                ]
-            )
+        if let Some(op) = op {
+            if let Some(field_type) = {
+                let modulus = &pre_compute.expr.prime;
+                get_field_type(modulus)
+            } {
+                generate_field_dispatch!(
+                    field_type,
+                    op,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    IS_FP2,
+                    execute_e1_impl,
+                    [
+                        (K256Coordinate, Add),
+                        (K256Coordinate, Sub),
+                        (K256Coordinate, Mul),
+                        (K256Coordinate, Div),
+                        (K256Scalar, Add),
+                        (K256Scalar, Sub),
+                        (K256Scalar, Mul),
+                        (K256Scalar, Div),
+                        (P256Coordinate, Add),
+                        (P256Coordinate, Sub),
+                        (P256Coordinate, Mul),
+                        (P256Coordinate, Div),
+                        (P256Scalar, Add),
+                        (P256Scalar, Sub),
+                        (P256Scalar, Mul),
+                        (P256Scalar, Div),
+                        (BN254Coordinate, Add),
+                        (BN254Coordinate, Sub),
+                        (BN254Coordinate, Mul),
+                        (BN254Coordinate, Div),
+                        (BN254Scalar, Add),
+                        (BN254Scalar, Sub),
+                        (BN254Scalar, Mul),
+                        (BN254Scalar, Div),
+                        (BLS12_381Coordinate, Add),
+                        (BLS12_381Coordinate, Sub),
+                        (BLS12_381Coordinate, Mul),
+                        (BLS12_381Coordinate, Div),
+                        (BLS12_381Scalar, Add),
+                        (BLS12_381Scalar, Sub),
+                        (BLS12_381Scalar, Mul),
+                        (BLS12_381Scalar, Div),
+                    ]
+                )
+            } else {
+                Ok(execute_e1_generic_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
+            }
         } else {
-            Ok(execute_e1_generic_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
+            Ok(execute_e1_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
         }
     }
 }
@@ -259,62 +269,63 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
         let pre_compute: &mut E2PreCompute<FieldExpressionPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 
-        let (is_setup, op) = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        let op = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
 
-        if is_setup {
-            Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
-        } else if let Some(field_type) = {
-            let modulus = &pre_compute.data.expr.prime;
-            get_field_type(modulus)
-        } {
-            generate_field_dispatch!(
-                field_type,
-                op,
-                BLOCKS,
-                BLOCK_SIZE,
-                IS_FP2,
-                execute_e2_impl,
-                [
-                    (K256Coordinate, Add),
-                    (K256Coordinate, Sub),
-                    (K256Coordinate, Mul),
-                    (K256Coordinate, Div),
-                    (K256Scalar, Add),
-                    (K256Scalar, Sub),
-                    (K256Scalar, Mul),
-                    (K256Scalar, Div),
-                    (P256Coordinate, Add),
-                    (P256Coordinate, Sub),
-                    (P256Coordinate, Mul),
-                    (P256Coordinate, Div),
-                    (P256Scalar, Add),
-                    (P256Scalar, Sub),
-                    (P256Scalar, Mul),
-                    (P256Scalar, Div),
-                    (BN254Coordinate, Add),
-                    (BN254Coordinate, Sub),
-                    (BN254Coordinate, Mul),
-                    (BN254Coordinate, Div),
-                    (BN254Scalar, Add),
-                    (BN254Scalar, Sub),
-                    (BN254Scalar, Mul),
-                    (BN254Scalar, Div),
-                    (BLS12_381Coordinate, Add),
-                    (BLS12_381Coordinate, Sub),
-                    (BLS12_381Coordinate, Mul),
-                    (BLS12_381Coordinate, Div),
-                    (BLS12_381Scalar, Add),
-                    (BLS12_381Scalar, Sub),
-                    (BLS12_381Scalar, Mul),
-                    (BLS12_381Scalar, Div),
-                ]
-            )
+        if let Some(op) = op {
+            if let Some(field_type) = {
+                let modulus = &pre_compute.data.expr.prime;
+                get_field_type(modulus)
+            } {
+                generate_field_dispatch!(
+                    field_type,
+                    op,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    IS_FP2,
+                    execute_e2_impl,
+                    [
+                        (K256Coordinate, Add),
+                        (K256Coordinate, Sub),
+                        (K256Coordinate, Mul),
+                        (K256Coordinate, Div),
+                        (K256Scalar, Add),
+                        (K256Scalar, Sub),
+                        (K256Scalar, Mul),
+                        (K256Scalar, Div),
+                        (P256Coordinate, Add),
+                        (P256Coordinate, Sub),
+                        (P256Coordinate, Mul),
+                        (P256Coordinate, Div),
+                        (P256Scalar, Add),
+                        (P256Scalar, Sub),
+                        (P256Scalar, Mul),
+                        (P256Scalar, Div),
+                        (BN254Coordinate, Add),
+                        (BN254Coordinate, Sub),
+                        (BN254Coordinate, Mul),
+                        (BN254Coordinate, Div),
+                        (BN254Scalar, Add),
+                        (BN254Scalar, Sub),
+                        (BN254Scalar, Mul),
+                        (BN254Scalar, Div),
+                        (BLS12_381Coordinate, Add),
+                        (BLS12_381Coordinate, Sub),
+                        (BLS12_381Coordinate, Mul),
+                        (BLS12_381Coordinate, Div),
+                        (BLS12_381Scalar, Add),
+                        (BLS12_381Scalar, Sub),
+                        (BLS12_381Scalar, Mul),
+                        (BLS12_381Scalar, Div),
+                    ]
+                )
+            } else {
+                Ok(execute_e2_generic_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
+            }
         } else {
-            Ok(execute_e2_generic_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
+            Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
         }
     }
 }
-
 unsafe fn execute_e1_setup_impl<
     F: PrimeField32,
     CTX: E1ExecutionCtx,
